@@ -159,7 +159,7 @@ public:
             bool itemsEnd = it == msg->Items.end();
 
             if ((!refEnd && !itemsEnd && refIt->Lsn < it->Lsn) || itemsEnd) {
-                Y_FAIL("lost blob");
+                Y_ABORT("lost blob");
             } else if ((!refEnd && !itemsEnd && it->Lsn < refIt->Lsn) || refEnd) {
                 // no matching reference item for returned one -- possibly write succeeded or delete hasn't completed yet
                 auto& item = *it++;
@@ -174,7 +174,7 @@ public:
                         // restore deleted blob
                         State.ConfirmedState.emplace(it->first, std::move(it->second));
                    } else {
-                        Y_FAIL("extra blob Lsn# %" PRIu64 " Id# %016" PRIx64, item.Lsn, item.Id);
+                        Y_ABORT("extra blob Lsn# %" PRIu64 " Id# %016" PRIx64, item.Lsn, item.Id);
                    }
                 }
             } else {
@@ -251,7 +251,7 @@ public:
                 } else {
                     option -= deleteScore;
                 }
-                Y_FAIL("this point should be unreachable");
+                Y_ABORT("this point should be unreachable");
             }
             if (exit) {
                 break;
@@ -413,7 +413,7 @@ public:
             HFunc(TEvIncrHugeReadResult, Handle);
             HFunc(TEvIncrHugeDeleteResult, Handle);
             default:
-                Y_FAIL("unexpected message 0x%08" PRIx32, type);
+                Y_ABORT("unexpected message 0x%08" PRIx32, type);
         }
     }
 };

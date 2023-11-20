@@ -47,7 +47,7 @@ namespace NActors {
         }
 
         void AddElapsedCycles(ui32 activityType, i64 elapsed) {
-            Y_VERIFY_DEBUG(activityType < Stats->MaxActivityType());
+            Y_DEBUG_ABORT_UNLESS(activityType < Stats->MaxActivityType());
             RelaxedStore(&Stats->ElapsedTicks, RelaxedLoad(&Stats->ElapsedTicks) + elapsed);
             RelaxedStore(&Stats->ElapsedTicksByActivity[activityType], RelaxedLoad(&Stats->ElapsedTicksByActivity[activityType]) + elapsed);
         }

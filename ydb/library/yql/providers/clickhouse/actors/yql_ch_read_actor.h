@@ -12,6 +12,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateClickHo
     IHTTPGateway::TPtr gateway,
     NCH::TSource&& params,
     ui64 inputIndex,
+    TCollectStatsLevel statsLevel,
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
     const NActors::TActorId& computeActorId,

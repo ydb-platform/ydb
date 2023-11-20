@@ -38,7 +38,7 @@ void TBackgroundController::CheckDeadlines() {
     for (auto&& i : ActiveCompactionInfo) {
         if (TMonotonic::Now() - i.second.GetStartTime() > NOlap::TCompactionLimits::CompactionTimeout) {
             AFL_EMERG(NKikimrServices::TX_COLUMNSHARD)("event", "deadline_compaction");
-            Y_VERIFY_DEBUG(false);
+            Y_DEBUG_ABORT_UNLESS(false);
         }
     }
 }
@@ -47,12 +47,13 @@ void TBackgroundController::CheckDeadlinesIndexation() {
     for (auto&& i : ActiveIndexationTasks) {
         if (TMonotonic::Now() - i.second > NOlap::TCompactionLimits::CompactionTimeout) {
             AFL_EMERG(NKikimrServices::TX_COLUMNSHARD)("event", "deadline_compaction")("task_id", i.first);
-            Y_VERIFY_DEBUG(false);
+            Y_DEBUG_ABORT_UNLESS(false);
         }
     }
 }
 
 void TBackgroundController::StartIndexing(const NOlap::TColumnEngineChanges& changes) {
+    LastIndexationInstant = TMonotonic::Now();
     Y_ABORT_UNLESS(ActiveIndexationTasks.emplace(changes.GetTaskIdentifier(), TMonotonic::Now()).second);
 }
 

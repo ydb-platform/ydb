@@ -1,0 +1,23 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:11:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT * FROM $result_top;
+	^
+        <tmp_path>/program.sql:<main>:9:16: Warning: At function: PersistableRepr, At function: OrderedSqlProject
+        	$result_top = (SELECT subkey, Length(key) as l, key FROM $data_limited);
+	               ^
+            <tmp_path>/program.sql:<main>:7:18: Warning: At function: RemoveSystemMembers
+            	$data_limited = (select * from Input order by key || value limit 1 offset $offset);
+	                 ^
+                <tmp_path>/program.sql:<main>:7:60: Warning: At function: Take, At function: Skip, At function: Coalesce
+                	$data_limited = (select * from Input order by key || value limit 1 offset $offset);
+	                                                           ^
+                    <tmp_path>/program.sql:<main>:5:23: Warning: At function: Coalesce
+                    	$offset = ($cnt + 10) ?? 0;
+	                      ^
+                        <tmp_path>/program.sql:<main>:5:17: Warning: At function: +
+                        	$offset = ($cnt + 10) ?? 0;
+	                ^
+                            <tmp_path>/program.sql:<main>:5:17: Warning: Integral type implicit bitcast: Optional<Uint64> and Int32
+                            	$offset = ($cnt + 10) ?? 0;
+	                ^

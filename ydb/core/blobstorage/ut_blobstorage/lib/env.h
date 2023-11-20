@@ -702,7 +702,6 @@ struct TEnvironmentSetup {
         Cerr << "Invoking SetVDiskReadOnly for vdisk " << vdiskId.ToString() << Endl;
         auto response = Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-        PDiskMockStates[{nodeId, pdiskId}]->SetReadOnly(vdiskId, value);
     }
 
     void UpdateDriveStatus(ui32 nodeId, ui32 pdiskId, NKikimrBlobStorage::EDriveStatus status,
@@ -774,7 +773,7 @@ struct TEnvironmentSetup {
             } else if (auto *msg = res->CastAsLocal<TEvents::TEvUndelivered>()) {
                 Y_ABORT_UNLESS(msg->SourceType == TEvBlobStorage::EvVStatus);
             } else {
-                Y_FAIL();
+                Y_ABORT();
             }
 
             // sleep for a while

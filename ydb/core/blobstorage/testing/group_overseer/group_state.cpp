@@ -32,7 +32,7 @@ namespace NKikimr::NTesting {
             if (!block.Confirmed || block.Confirmed->Generation < gen.Generation || gen.Same(*block.Confirmed)) {
                 block.Confirmed.emplace(gen);
             } else {
-                Y_FAIL("incorrect successful block");
+                Y_ABORT("incorrect successful block");
             }
         }
     }
@@ -85,11 +85,11 @@ namespace NKikimr::NTesting {
 
         auto& v = putInFlight.mapped();
         if (v.IsBlocked && (msg.Status != NKikimrProto::BLOCKED && msg.Status != NKikimrProto::ERROR)) {
-            Y_FAIL("incorrect TEvPut result status code -- was BLOCKED at the begin of the query");
+            Y_ABORT("incorrect TEvPut result status code -- was BLOCKED at the begin of the query");
         }
 
         if (v.IsCollected && msg.Status != NKikimrProto::ERROR) {
-            Y_FAIL("incorrect TEvPut result status code -- was already beyond the barrier at begin of the query");
+            Y_ABORT("incorrect TEvPut result status code -- was already beyond the barrier at begin of the query");
         }
 
         if (msg.Status == NKikimrProto::OK) {
@@ -103,12 +103,12 @@ namespace NKikimr::NTesting {
 
     template<>
     void TGroupState::ExamineQueryEvent(const TQueryId&, const TEvBlobStorage::TEvPatch&) {
-        Y_FAIL("not implemented");
+        Y_ABORT("not implemented");
     }
 
     template<>
     void TGroupState::ExamineResultEvent(const TQueryId&, const TEvBlobStorage::TEvPatchResult&) {
-        Y_FAIL("not implemented");
+        Y_ABORT("not implemented");
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -116,12 +116,12 @@ namespace NKikimr::NTesting {
 
     template<>
     void TGroupState::ExamineQueryEvent(const TQueryId&, const TEvBlobStorage::TEvInplacePatch&) {
-        Y_FAIL("not implemented");
+        Y_ABORT("not implemented");
     }
 
     template<>
     void TGroupState::ExamineResultEvent(const TQueryId&, const TEvBlobStorage::TEvInplacePatchResult&) {
-        Y_FAIL("not implemented");
+        Y_ABORT("not implemented");
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -394,7 +394,7 @@ namespace NKikimr::NTesting {
                 return EBlobState::POSSIBLY_COLLECTED;
 
             case EConfidence::CONFIRMED:
-                Y_FAIL(); // must never reach this point -- blob must be deleted from the map when this state occurs
+                Y_ABORT(); // must never reach this point -- blob must be deleted from the map when this state occurs
         }
     }
 

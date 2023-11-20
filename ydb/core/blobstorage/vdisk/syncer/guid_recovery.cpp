@@ -168,7 +168,7 @@ namespace NKikimr {
                 case EDecision::Inconsistency:
                     str << " Explanation# \"" << Explanation << "\"";
                     break;
-                default: Y_FAIL("Unexpected case");
+                default: Y_ABORT("Unexpected case");
             }
             str << "]";
         }
@@ -378,7 +378,7 @@ namespace NKikimr {
                     case TSyncVal::InProgress:  return HandleQuorumInProgress(quorumDecision);
                     case TSyncVal::Final:       return HandleQuorumFinal(quorumDecision);
                     default:
-                        Y_FAIL("Unexpected case");
+                        Y_ABORT("Unexpected case");
                 }
             }
 
@@ -415,7 +415,7 @@ namespace NKikimr {
                                 finalQuorum.Update(x.VDiskIdShort);
                                 break;
                             }
-                            default: Y_FAIL("Unexpected case");
+                            default: Y_ABORT("Unexpected case");
                         }
                     } else {
                         noAnswer++;
@@ -479,7 +479,7 @@ namespace NKikimr {
                             << LocallyRecoveredState;
                         return TDecision::Inconsistency(str.Str());
                     }
-                    default: Y_FAIL("Unexpected case");
+                    default: Y_ABORT("Unexpected case");
                 }
             }
 
@@ -501,7 +501,7 @@ namespace NKikimr {
                                 return TDecision::LostData(step, guid, false);
                             }
                             default:
-                                Y_FAIL("Unexpected case");
+                                Y_ABORT("Unexpected case");
                         }
                         break;
                     }
@@ -520,7 +520,7 @@ namespace NKikimr {
                                 return CheckLocalAndRemoteGuid(quorumDecision, d);
                             }
                             default:
-                                Y_FAIL("Unexpected case");
+                                Y_ABORT("Unexpected case");
                         }
                         break;
                     }
@@ -538,7 +538,7 @@ namespace NKikimr {
                                 return CheckLocalAndRemoteGuid(quorumDecision, d);
                             }
                             default:
-                                Y_FAIL("Unexpected case");
+                                Y_ABORT("Unexpected case");
                         }
                         break;
                     }
@@ -556,11 +556,11 @@ namespace NKikimr {
                                 return CheckLocalAndRemoteGuid(quorumDecision, d);
                             }
                             default:
-                                Y_FAIL("Unexpected case");
+                                Y_ABORT("Unexpected case");
                         }
                         break;
                     }
-                    default: Y_FAIL("Unexpected case");
+                    default: Y_ABORT("Unexpected case");
                 }
             }
 
@@ -588,7 +588,7 @@ namespace NKikimr {
                         auto d = TDecision::Good(guid);
                         return CheckLocalAndRemoteGuid(quorumDecision, d);
                     }
-                    default: Y_FAIL("Unexpected case");
+                    default: Y_ABORT("Unexpected case");
                 }
             }
 
@@ -751,7 +751,7 @@ namespace NKikimr {
                             Finish(ctx, *Decision);
                             break;
                         }
-                        default: Y_FAIL("Unexpected case");
+                        default: Y_ABORT("Unexpected case");
                     }
                 }
             }
@@ -809,7 +809,7 @@ namespace NKikimr {
                         SettleDataLossPhase(ctx);
                         break;
                     }
-                    default: Y_FAIL("Unexpected case");
+                    default: Y_ABORT("Unexpected case");
                 }
             }
 
@@ -875,7 +875,7 @@ namespace NKikimr {
                         break;
                     case PhaseSettleDataLoss:
                         break;
-                    default: Y_FAIL("Unexpected case");
+                    default: Y_ABORT("Unexpected case");
                 }
             }
 

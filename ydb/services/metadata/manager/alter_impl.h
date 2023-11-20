@@ -192,7 +192,7 @@ private:
 protected:
     using TBase::Manager;
     virtual void InitState() override {
-        TBase::Become(&TModificationActor<TObject>::StateMain);
+        TBase::UnsafeBecome(&TModificationActor<TObject>::StateMain);
     }
 
     virtual bool BuildRestoreObjectIds() override {

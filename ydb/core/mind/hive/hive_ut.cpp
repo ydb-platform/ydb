@@ -542,11 +542,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             NKikimrProto::EReplyStatus expectedStatus = NKikimrProto::OK) {
         bool seenEvDeleteTabletResult = false;
         TTestActorRuntime::TEventObserver prevObserverFunc;
-        prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+        prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == TEvTabletBase::EvDeleteTabletResult) {
                 seenEvDeleteTabletResult = true;
             }
-            return prevObserverFunc(runtime, event);
+            return prevObserverFunc(event);
         });
         TActorId senderB = runtime.AllocateEdgeActor(nodeIndex);
         runtime.SendToPipe(hiveTablet, senderB, ev.Release(), 0, GetPipeConfigWithRetries());
@@ -567,11 +567,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         bool seenEvDeleteTabletResult = false;
         TTestActorRuntime::TEventObserver prevObserverFunc;
-        prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+        prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == TEvTabletBase::EvDeleteTabletResult) {
                 seenEvDeleteTabletResult = true;
             }
-            return prevObserverFunc(runtime, event);
+            return prevObserverFunc(event);
         });
         TActorId senderB = runtime.AllocateEdgeActor(nodeIndex);
         runtime.SendToPipe(hiveTablet, senderB, ev.Release(), 0, GetPipeConfigWithRetries());
@@ -1007,12 +1007,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
 
         TTestActorRuntime::TEventObserver prevObserverFunc;
-        prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+        prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult) {
                 event->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->MutableRecord()->
                 MutablePathDescription()->MutableDomainDescription()->MutableProcessingParams()->SetHive(subHiveTablet);
             }
-            return prevObserverFunc(runtime, event);
+            return prevObserverFunc(event);
         });
 
         Ctest << "Creating new tenant" << Endl;
@@ -1072,12 +1072,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
 
         TTestActorRuntime::TEventObserver prevObserverFunc;
-        prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+        prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult) {
                 event->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->MutableRecord()->
                 MutablePathDescription()->MutableDomainDescription()->MutableProcessingParams()->SetHive(subHiveTablet);
             }
-            return prevObserverFunc(runtime, event);
+            return prevObserverFunc(event);
         });
 
         SendKillLocal(runtime, 0);
@@ -1185,12 +1185,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
 
         TTestActorRuntime::TEventObserver prevObserverFunc;
-        prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+        prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult) {
                 event->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->MutableRecord()->
                 MutablePathDescription()->MutableDomainDescription()->MutableProcessingParams()->SetHive(subHiveTablet);
             }
-            return prevObserverFunc(runtime, event);
+            return prevObserverFunc(event);
         });
 
         SendKillLocal(runtime, 1);
@@ -1297,12 +1297,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
 
         TTestActorRuntime::TEventObserver prevObserverFunc;
-        prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+        prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult) {
                 event->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->MutableRecord()->
                 MutablePathDescription()->MutableDomainDescription()->MutableProcessingParams()->SetHive(subHiveTablet);
             }
-            return prevObserverFunc(runtime, event);
+            return prevObserverFunc(event);
         });
 
         SendKillLocal(runtime, 1);
@@ -1416,12 +1416,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
 
         TTestActorRuntime::TEventObserver prevObserverFunc;
-        prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+        prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult) {
                 event->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->MutableRecord()->
                 MutablePathDescription()->MutableDomainDescription()->MutableProcessingParams()->SetHive(subHiveTablet);
             }
-            return prevObserverFunc(runtime, event);
+            return prevObserverFunc(event);
         });
 
         SendKillLocal(runtime, 0);
@@ -1510,12 +1510,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
 
             TTestActorRuntime::TEventObserver prevObserverFunc;
-            prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
                 if (event->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult) {
                     event->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->MutableRecord()->
                     MutablePathDescription()->MutableDomainDescription()->MutableProcessingParams()->SetHive(subHiveTablet);
                 }
-                return prevObserverFunc(runtime, event);
+                return prevObserverFunc(event);
             });
 
             SendKillLocal(runtime, 1);
@@ -1611,12 +1611,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
 
             TTestActorRuntime::TEventObserver prevObserverFunc;
-            prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
                 if (event->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult) {
                     event->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->MutableRecord()->
                     MutablePathDescription()->MutableDomainDescription()->MutableProcessingParams()->SetHive(subHiveTablet);
                 }
-                return prevObserverFunc(runtime, event);
+                return prevObserverFunc(event);
             });
 
             SendKillLocal(runtime, 1);
@@ -1840,7 +1840,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         MakeSureTabletIsUp(runtime, tabletId, 0);
 
         TVector<THolder<IEventHandle>> blockedCommits;
-        auto blockCommits = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto blockCommits = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTablet::TEvCommit::EventType: {
                     auto* msg = ev->Get<TEvTablet::TEvCommit>();
@@ -4265,6 +4265,76 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(updatedOnFirstNode, 2);
     }
 
+    Y_UNIT_TEST(TestSpreadNeighboursDifferentOwners) {
+        static constexpr ui64 TABLETS_PER_OWNER = 6;
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true);
+        TActorId senderA = runtime.AllocateEdgeActor();
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        // wait for creation of nodes
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, 2);
+            runtime.DispatchEvents(options);
+        }
+
+        struct TTestOwner {
+            const ui64 Id;
+            ui64 Idx = 0;
+
+            TTestOwner(ui64 id) : Id(id) {}
+
+            ui64 CreateNewTablet(TTestBasicRuntime& runtime, ui64 hiveTablet) {
+                auto ev = MakeHolder<TEvHive::TEvCreateTablet>(Id, ++Idx, TTabletTypes::Dummy, BINDED_CHANNELS);
+                ev->Record.SetObjectId(1);
+                return SendCreateTestTablet(runtime, hiveTablet, Id, std::move(ev), 0, true);
+            }
+        };
+
+        TTestOwner owner1(MakeDefaultHiveID(1));
+        TTestOwner owner2(MakeDefaultHiveID(2));
+
+        for (ui64 i = 0; i < TABLETS_PER_OWNER; ++i) {
+            ui64 tablet1;
+            ui64 tablet2;
+            if (i * 2 < TABLETS_PER_OWNER) {
+                tablet1 = owner1.CreateNewTablet(runtime, hiveTablet);
+                tablet2 = owner2.CreateNewTablet(runtime, hiveTablet);
+            } else {
+                tablet1 = owner2.CreateNewTablet(runtime, hiveTablet);
+                tablet2 = owner1.CreateNewTablet(runtime, hiveTablet);
+            }
+            MakeSureTabletIsUp(runtime, tablet1, 0);
+            MakeSureTabletIsUp(runtime, tablet2, 0);
+        }
+
+        runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvRequestHiveInfo());
+        TAutoPtr<IEventHandle> handle;
+        TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+
+        struct TTestTabletInfo {
+            ui64 OwnerId;
+            ui64 NodeId;
+
+            bool operator<(const TTestTabletInfo& other) const {
+                return std::tie(OwnerId, NodeId) < std::tie(other.OwnerId, other.NodeId);
+            }
+        };
+        std::map<TTestTabletInfo, ui64> distribution;
+
+        for (const auto& tablet : response->Record.GetTablets()) {
+            distribution[{tablet.GetTabletOwner().GetOwner(), tablet.GetNodeID()}]++;
+        }
+
+        // Each node should have half tablet from each owner
+        for (const auto& p : distribution) {
+            UNIT_ASSERT_VALUES_EQUAL(p.second, TABLETS_PER_OWNER / 2);
+        }
+    }
+
     Y_UNIT_TEST(TestHiveBalancerDifferentResources) {
         static constexpr ui64 TABLETS_PER_NODE = 4;
         TTestBasicRuntime runtime(2, false);
@@ -4958,11 +5028,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
 
         // Block group assignment
-        runtime.SetObserverFunc([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+        runtime.SetObserverFunc([](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerSelectGroups) {
                 return TTestActorRuntime::EEventAction::DROP;
             }
-            return TTestActorRuntime::DefaultObserverFunc(runtime, event);
+            return TTestActorRuntime::DefaultObserverFunc(event);
         });
 
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
@@ -5186,11 +5256,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         // Setup observer that would drop EvDeleteTabletResult messages
         TTestActorRuntime::TEventObserver prevObserverFunc;
-        prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+        prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == TEvTabletBase::EvDeleteTabletResult) {
                 return TTestActorRuntime::EEventAction::DROP;
             }
-            return prevObserverFunc(runtime, event);
+            return prevObserverFunc(event);
         });
 
         // Delete tablet while it is locked
@@ -5671,6 +5741,85 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         for (auto tablet : tablets) {
             WaitForTabletIsUp(runtime, tablet, 1);
         }
+    }
+
+    Y_UNIT_TEST(TestLocalRegistrationInSharedHive) {
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true);
+
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::SchemeShard, TTabletTypes::SchemeShard), &CreateFlatTxSchemeShard);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0); // root hive good
+        MakeSureTabletIsUp(runtime, TTestTxConfig::SchemeShard, 0); // root ss good
+
+        TActorId sender = runtime.AllocateEdgeActor(0);
+        InitSchemeRoot(runtime, sender);
+
+        // Create subdomain
+        ui32 txId = 100;
+        TSubDomainKey subdomainKey;
+        do {
+            auto modifyScheme = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
+            modifyScheme->Record.SetTxId(++txId);
+            auto* transaction = modifyScheme->Record.AddTransaction();
+            transaction->SetWorkingDir("/dc-1");
+            transaction->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExtSubDomain);
+            auto* subdomain = transaction->MutableSubDomain();
+            subdomain->SetName("tenant1");
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, modifyScheme.Release());
+            TAutoPtr<IEventHandle> handle;
+            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
+            if (reply) {
+                subdomainKey = TSubDomainKey(reply->Record.GetSchemeshardId(), reply->Record.GetPathId());
+                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
+                break;
+            }
+        } while (true);
+
+        // Create shared hive
+        THolder<TEvHive::TEvCreateTablet> createSharedHive = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, TTabletTypes::Hive, BINDED_CHANNELS);
+        createSharedHive->Record.AddAllowedDomains();
+        createSharedHive->Record.MutableAllowedDomains(0)->SetSchemeShard(TTestTxConfig::SchemeShard);
+        createSharedHive->Record.MutableAllowedDomains(0)->SetPathId(1);
+        ui64 sharedHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createSharedHive), 0, false);
+        MakeSureTabletIsUp(runtime, sharedHiveTablet, 0); // shared hive good
+
+        // Setup resolving shared hive for subdomain
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult) {
+                auto* record = event->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->MutableRecord();
+                TSubDomainKey resolvingSubdomainKey(record->GetPathOwnerId(), record->GetPathId());
+                if (resolvingSubdomainKey == subdomainKey) {
+                    record->MutablePathDescription()->MutableDomainDescription()->SetSharedHive(sharedHiveTablet);   
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        // Start local for subdomain
+        SendKillLocal(runtime, 1);
+        CreateLocalForTenant(runtime, 1, "/dc-1/tenant1");
+        
+        bool seenLocalRegistrationInSharedHive = false;
+        TTestActorRuntime::TEventObserver prevObserverFunc;
+        prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvLocal::EvRegisterNode) {
+                const auto& record = event->Get<TEvLocal::TEvRegisterNode>()->Record;
+                if (record.GetHiveId() == sharedHiveTablet 
+                    && !record.GetServicedDomains().empty()
+                    && TSubDomainKey(record.GetServicedDomains().Get(0)) == subdomainKey) {
+                        seenLocalRegistrationInSharedHive = true;
+                    }
+            }
+            return prevObserverFunc(event);
+        });
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvLocal::EvRegisterNode, 2);
+        runtime.DispatchEvents(options);
+        UNIT_ASSERT(seenLocalRegistrationInSharedHive);
     }
 }
 

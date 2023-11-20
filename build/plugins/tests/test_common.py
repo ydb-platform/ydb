@@ -1,4 +1,3 @@
-import pytest
 import _common as pc
 
 
@@ -33,16 +32,3 @@ def test_filter_out_by_keyword():
     assert pc.filter_out_by_keyword(['x', 'A', 'A', 'A', 'B', 'y'], 'A') == ['x', 'y']
     assert pc.filter_out_by_keyword(['x', 'A', 'A', 'A', 'B', 'y', 'A'], 'A') == ['x', 'y']
     assert pc.filter_out_by_keyword(['x', 'A', 'A', 'A', 'B', 'y', 'A', 'F', 'z'], 'A') == ['x', 'y', 'z']
-
-
-test_data = [
-    [[1, 2, 3], 1, [[1], [2], [3]]],
-    [[1, 2, 3], 2, [[1, 2], [3]]],
-    [[1, 2, 3, 4], 2, [[1, 2], [3, 4]]],
-    [[1], 5, [[1]]],
-]
-
-
-@pytest.mark.parametrize('lst, chunk_size, expected', test_data, ids=[str(num + 1) for num in range(len(test_data))])
-def test_generate_chunks(lst, chunk_size, expected):
-    assert list(pc.generate_chunks(lst, chunk_size)) == expected

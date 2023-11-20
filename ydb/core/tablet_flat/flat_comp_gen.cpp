@@ -573,8 +573,8 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
 
     TStats newStats;
     for (const auto& partView : newParts) {
-        Y_VERIFY_DEBUG(partView->Epoch == result->Epoch);
-        Y_VERIFY_DEBUG(!KnownParts.contains(partView->Label),
+        Y_DEBUG_ABORT_UNLESS(partView->Epoch == result->Epoch);
+        Y_DEBUG_ABORT_UNLESS(!KnownParts.contains(partView->Label),
             "New part %s is already known", partView->Label.ToString().data());
         newStats += TStats(partView);
     }
@@ -994,7 +994,7 @@ void TGenCompactionStrategy::SubmitTask(
             BeginGenCompaction(taskId, generation);
         });
 
-    Y_VERIFY_DEBUG(task.TaskId != 0, "Resource broker returned unexpected zero task id");
+    Y_DEBUG_ABORT_UNLESS(task.TaskId != 0, "Resource broker returned unexpected zero task id");
 }
 
 void TGenCompactionStrategy::UpdateTask(

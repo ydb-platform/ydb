@@ -274,7 +274,7 @@ private:
         auto added = FlagDoneCalled | (success ? FlagDoneSuccess : 0);
         bool attached;
         do {
-            Y_VERIFY_DEBUG(!(flags & FlagDoneCalled), "OnDone called more than once");
+            Y_DEBUG_ABORT_UNLESS(!(flags & FlagDoneCalled), "OnDone called more than once");
             attached = flags & FlagAttached;
         } while (!Flags.compare_exchange_weak(flags, flags | added, std::memory_order_acq_rel));
 
@@ -340,7 +340,7 @@ private:
             ReadInProgress = MakeHolder<typename IContext::TEvReadFinished>();
             Stream.Read(&ReadInProgress->Record, OnReadDoneTag.Prepare());
         } else {
-            Y_VERIFY_DEBUG(false, "Multiple outstanding reads are unsafe in grpc streaming");
+            Y_DEBUG_ABORT_UNLESS(false, "Multiple outstanding reads are unsafe in grpc streaming");
         }
 
         return true;
@@ -367,11 +367,11 @@ private:
 
         // Take current in-progress read first
         auto read = std::move(ReadInProgress);
-        Y_VERIFY_DEBUG(read && !ReadInProgress);
+        Y_DEBUG_ABORT_UNLESS(read && !ReadInProgress);
 
         // Decrement read counter before sending reply
         auto was = ReadQueue--;
-        Y_VERIFY_DEBUG(was > 0);
+        Y_DEBUG_ABORT_UNLESS(was > 0);
 
         read->Success = status == NGrpc::EQueueEventStatus::OK;
         if (Counters && read->Success) {
@@ -383,7 +383,7 @@ private:
             // This was the last read, check if write side has already finished
             auto flags = Flags.load(std::memory_order_acquire);
             while ((flags & FlagRegistered) && (flags & FlagFinishDone) && ReadQueue.load() == 0) {
-                Y_VERIFY_DEBUG(flags & FlagFinishCalled);
+                Y_DEBUG_ABORT_UNLESS(flags & FlagFinishCalled);
                 if (Flags.compare_exchange_weak(flags, flags & ~FlagRegistered, std::memory_order_acq_rel)) {
                     LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] deregistering request Name# %s peer# %s (read done)",
                         this, Name, this->GetPeerName().c_str());
@@ -393,7 +393,7 @@ private:
             }
         } else {
             // We need to perform another read (likely unsafe)
-            Y_VERIFY_DEBUG(false, "Multiple outstanding reads are unsafe in grpc streaming");
+            Y_DEBUG_ABORT_UNLESS(false, "Multiple outstanding reads are unsafe in grpc streaming");
             ReadInProgress = MakeHolder<typename IContext::TEvReadFinished>();
             Stream.Read(&ReadInProgress->Record, OnReadDoneTag.Prepare());
         }
@@ -456,8 +456,8 @@ private:
                 return true;
             }
 
-            Y_VERIFY_DEBUG(!WriteQueue);
-            Y_VERIFY_DEBUG(!(flags & FlagWriteAndFinish));
+            Y_DEBUG_ABORT_UNLESS(!WriteQueue);
+            Y_DEBUG_ABORT_UNLESS(!(flags & FlagWriteAndFinish));
 
             Flags |= (FlagWriteActive | (status ? FlagWriteAndFinish : 0));
         }
@@ -486,18 +486,18 @@ private:
 
         with_lock (WriteLock) {
             auto flags = Flags.load(std::memory_order_acquire);
-            Y_VERIFY_DEBUG(flags & FlagWriteActive);
+            Y_DEBUG_ABORT_UNLESS(flags & FlagWriteActive);
             wasWriteAndFinish = flags & FlagWriteAndFinish;
 
             if (WriteQueue) {
-                Y_VERIFY_DEBUG(!wasWriteAndFinish);
+                Y_DEBUG_ABORT_UNLESS(!wasWriteAndFinish);
                 // Take the next item from the queue
                 next = std::move(WriteQueue.front());
                 WriteQueue.pop_front();
                 if (!WriteQueue && (flags & FlagFinishCalled)) {
                     // FlagFinishCalled set during FlagWriteActive
                     // Combine the last message with Finish
-                    Y_VERIFY_DEBUG(!(flags & FlagFinishDone));
+                    Y_DEBUG_ABORT_UNLESS(!(flags & FlagFinishDone));
                     Flags |= FlagWriteAndFinish;
                     nextStatus = &*Status;
                 }
@@ -506,7 +506,7 @@ private:
                 do {
                     if (!wasWriteAndFinish && (flags & FlagFinishCalled)) {
                         // FlagFinishCalled set during FlagWriteActive
-                        Y_VERIFY_DEBUG(!(flags & FlagFinishDone));
+                        Y_DEBUG_ABORT_UNLESS(!(flags & FlagFinishDone));
                         nextStatus = &*Status;
                     }
                 } while (!Flags.compare_exchange_weak(flags, flags & ~FlagWriteActive, std::memory_order_acq_rel));
@@ -548,7 +548,7 @@ private:
 
         flags = Flags.load(std::memory_order_acquire);
         do {
-            Y_VERIFY_DEBUG(!(flags & FlagFinishCalled));
+            Y_DEBUG_ABORT_UNLESS(!(flags & FlagFinishCalled));
             finish = !(flags & FlagWriteActive);
         } while (!Flags.compare_exchange_weak(flags, flags | FlagFinishCalled, std::memory_order_acq_rel));
 
@@ -569,7 +569,7 @@ private:
 
         auto flags = (Flags |= FlagFinishDone);
         Y_ABORT_UNLESS(flags & FlagFinishCalled);
-        Y_VERIFY_DEBUG(!(flags & FlagWriteActive));
+        Y_DEBUG_ABORT_UNLESS(!(flags & FlagWriteActive));
 
         switch (Status->error_code()) {
             case grpc::StatusCode::UNAUTHENTICATED:
@@ -694,7 +694,7 @@ private:
                 : Owner(nullptr)
             {
                 size_t threads;
-                Y_VERIFY_DEBUG((threads = owner->Threads.fetch_add(1, std::memory_order_acquire)) == 0,
+                Y_DEBUG_ABORT_UNLESS((threads = owner->Threads.fetch_add(1, std::memory_order_acquire)) == 0,
                     "Detected usage from %" PRISZT " threads", threads + 1);
                 Owner = owner;
             }
@@ -708,7 +708,7 @@ private:
             ~TSingleThreadedGuard() {
                 if (Owner) {
                     size_t threads;
-                    Y_VERIFY_DEBUG((threads = Owner->Threads.fetch_sub(1, std::memory_order_release)) == 1,
+                    Y_DEBUG_ABORT_UNLESS((threads = Owner->Threads.fetch_sub(1, std::memory_order_release)) == 1,
                         "Detected usage from %" PRISZT " threads", threads);
                 }
             }

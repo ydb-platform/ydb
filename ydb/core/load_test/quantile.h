@@ -21,7 +21,7 @@ namespace NKikimr {
         ::NMonitoring::TDynamicCounters::TCounterPtr Samples;
 
         struct TCompareTimestamp {
-            bool operator ()(const TItem& x, TInstant y) {
+            bool operator ()(const TItem& x, TMonotonic y) {
                 return x.Timestamp < y;
             }
         };

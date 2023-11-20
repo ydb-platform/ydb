@@ -7,6 +7,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/util/operation_queue.h>
 
+#include <library/cpp/actors/core/monotonic_provider.h>
 #include <library/cpp/actors/core/log.h>
 
 // TODO: TOperationQueueWithTimer is a good candidate for core/util, but since

@@ -146,6 +146,11 @@ private:
         ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
     }
 
+    static bool IsHiddenHeader(const TString& headerName) {
+        return stricmp(headerName.data(), "Authorization") == 0
+            || stricmp(headerName.data(), "X-Ya-Service-Ticket") == 0;
+    }
+
     static TString DumpRequest(const NMonitoring::IMonHttpRequest& request) {
         TStringBuilder result;
         result << "{";
@@ -155,7 +160,7 @@ private:
 
         result << " Headers {";
         for (const auto& header : request.GetHeaders()) {
-            if (stricmp(header.Name().data(), "Authorization") == 0) {
+            if (IsHiddenHeader(header.Name())) {
                 continue;
             }
 

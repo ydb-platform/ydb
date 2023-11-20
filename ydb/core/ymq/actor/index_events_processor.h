@@ -74,13 +74,11 @@ private:
     STRICT_STFUNC(StateFunc,
           HFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
           HFunc(NKqp::TEvKqp::TEvQueryResponse, HandleQueryResponse);
-          HFunc(NKqp::TEvKqp::TEvProcessResponse, HandleProcessResponse);
           HFunc(TEvents::TEvPoisonPill, HandlePoisonPill);
           IgnoreFunc(NKqp::TEvKqp::TEvCloseSessionResponse);
     )
 
     void HandleQueryResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
-    void HandleProcessResponse(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx);
 
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
 

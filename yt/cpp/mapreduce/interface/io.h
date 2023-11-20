@@ -113,7 +113,13 @@ class IFileReader
 class IFileWriter
     : public TThrRefBase
     , public IOutputStream
-{ };
+{
+public:
+    virtual size_t GetBufferMemoryUsage() const
+    {
+        return 0;
+    }
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -532,7 +538,7 @@ TTableReaderPtr<typename NDetail::TProtoOneOfUnique<Ts...>::TType> CreateProtoMu
     const TTableReaderOptions& options = {});
 
 ///
-/// @brief Create a homogenous protobuf multi table reader from a stream.
+/// @brief Create a homogeneous protobuf multi table reader from a stream.
 ///
 /// @tparam T Protobuf message type to read (must be inherited from `Message`).
 ///

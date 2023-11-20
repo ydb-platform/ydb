@@ -70,7 +70,7 @@ std::shared_ptr<arrow::RecordBatch> TPortionInfoWithBlobs::GetBatch(const ISnaps
                 Y_ABORT_UNLESS(blobs[i.BlobRange].size() == i.BlobRange.Size);
             }
             CachedBatch = PortionInfo.AssembleInBatch(*data, result, blobs);
-            Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(*CachedBatch, result.GetIndexInfo().GetReplaceKey()));
+            Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(*CachedBatch, result.GetIndexInfo().GetReplaceKey()));
         }
         return *CachedBatch;
     } else if (CachedBatch) {

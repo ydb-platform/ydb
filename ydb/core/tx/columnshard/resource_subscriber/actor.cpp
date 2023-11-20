@@ -34,6 +34,7 @@ void TActor::Handle(NKikimr::NResourceBroker::TEvResourceBroker::TEvResourceAllo
     Y_ABORT_UNLESS(it != Tasks.end());
     auto task = it->second;
     Tasks.erase(it);
+    task->GetContext().GetCounters()->OnReply(task->GetMemoryAllocation());
     if (Aborted) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "result_resources_on_abort")("task_id", ev->Get()->TaskId)("task", task->DebugString());
         std::make_unique<TResourcesGuard>(ev->Get()->TaskId, task->GetExternalTaskId(), *task, SelfId(), task->GetContext());
@@ -43,7 +44,6 @@ void TActor::Handle(NKikimr::NResourceBroker::TEvResourceBroker::TEvResourceAllo
     } else {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "result_resources")("task_id", ev->Get()->TaskId)("task", task->DebugString());
         task->OnAllocationSuccess(ev->Get()->TaskId, SelfId());
-        task->GetContext().GetCounters()->OnReply(task->GetMemoryAllocation());
     }
 }
 

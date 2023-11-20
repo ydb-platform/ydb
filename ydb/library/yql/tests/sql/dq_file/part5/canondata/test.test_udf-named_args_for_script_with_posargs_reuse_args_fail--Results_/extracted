@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:18:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select $udf(name, age, age as age) as val from $data; -- age is reused as named after positional
+	^
+        <tmp_path>/program.sql:<main>:18:8: Error: At function: NamedApply
+        	select $udf(name, age, age as age) as val from $data; -- age is reused as named after positional
+	       ^
+            <tmp_path>/program.sql:<main>:14:17: Error: Callable is produced here
+            	$udf = Python3::AppendInfo(Callable<(name:String, [age:Int32?, region:Int32?])->String>, $udfScript);
+	                ^
+                <tmp_path>/program.sql:<main>:18:8: Error: Argument with name age was already used for positional argument #2
+                	select $udf(name, age, age as age) as val from $data; -- age is reused as named after positional
+	       ^

@@ -112,7 +112,7 @@ struct TKesusTablet::TTxInit : public TTxBase {
                         }
                         break;
                     default:
-                        Y_FAIL("Unexpected SysParam value %" PRIu64, id);
+                        Y_ABORT("Unexpected SysParam value %" PRIu64, id);
                 }
                 if (!sysParamsRowset.Next())
                     return false;

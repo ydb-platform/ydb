@@ -1177,7 +1177,7 @@ namespace NSchemeShardUT_Private {
         }
 
         if (!found) {
-            UNIT_ASSERT_C(found, "Unexpected status: " << Ydb::StatusIds::StatusCode_Name(result));
+            UNIT_ASSERT_C(found, "Unexpected status: " << Ydb::StatusIds::StatusCode_Name(result) << " issues: " << ev->Record.GetResponse().GetEntry().GetIssues());
         }
 
         return ev->Record;
@@ -1676,14 +1676,6 @@ namespace NSchemeShardUT_Private {
         return std::make_unique<TEvIndexBuilder::TEvCreateRequest>(id, dbName, std::move(settings));
     }
 
-    TStringBuilder PrintIssues(const ::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage >& issues) {
-        TStringBuilder result;
-        for (const auto& x: issues) {
-            result << "ISSUE( severity: " << x.severity() << "; message: " << x.message() << ") ";
-        }
-        return result;
-    }
-
     void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TBuildIndexConfig &cfg) {
         auto sender = runtime.AllocateEdgeActor();
         auto request = CreateBuildIndexRequest(id, dbName, src, cfg);
@@ -1720,7 +1712,7 @@ namespace NSchemeShardUT_Private {
                             "status mismatch"
                                 << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())
                                 << " expected "  << Ydb::StatusIds::StatusCode_Name(expectedStatus)
-                                << " issues was " << PrintIssues(event->Record.GetIssues()));
+                                << " issues was " << event->Record.GetIssues());
     }
 
     void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
@@ -1737,7 +1729,7 @@ namespace NSchemeShardUT_Private {
                             "status mismatch"
                                 << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())
                                 << " expected "  << Ydb::StatusIds::StatusCode_Name(expectedStatus)
-                                << " issues was " << PrintIssues(event->Record.GetIssues()));
+                                << " issues was " << event->Record.GetIssues());
     }
 
     void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
@@ -1783,7 +1775,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(event);
 
         Cerr << "BUILDINDEX RESPONSE CANCEL: " << event->ToString() << Endl;
-        CheckExpectedStatusCode(expectedStatuses, event->Record.GetStatus(), PrintIssues(event->Record.GetIssues()));
+        CheckExpectedStatusCode(expectedStatuses, event->Record.GetStatus(), TStringBuilder{} << event->Record.GetIssues());
 
         return event->Record;
     }
@@ -1804,7 +1796,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(event);
 
         Cerr << "BUILDINDEX RESPONSE LIST: " << event->ToString() << Endl;
-        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), 400000, PrintIssues(event->Record.GetIssues()));
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), 400000, event->Record.GetIssues());
         return event->Record;
     }
 
@@ -1823,7 +1815,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(event);
 
         Cerr << "BUILDINDEX RESPONSE Get: " << event->ToString() << Endl;
-        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), 400000, PrintIssues(event->Record.GetIssues()));
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), 400000, event->Record.GetIssues());
         return event->Record;
     }
 
@@ -1849,7 +1841,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(event);
 
         Cerr << "BUILDINDEX RESPONSE Forget: " << event->ToString() << Endl;
-        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus, PrintIssues(event->Record.GetIssues()));
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus, event->Record.GetIssues());
 
         return event->Record;
     }
@@ -2187,7 +2179,7 @@ namespace NSchemeShardUT_Private {
     }
 
     TTestActorRuntimeBase::TEventObserver SetSuppressObserver(TTestActorRuntime &runtime, TVector<THolder<IEventHandle> > &suppressed, ui32 type) {
-        return runtime.SetObserverFunc([&suppressed, type](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        return runtime.SetObserverFunc([&suppressed, type](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == type) {
                 suppressed.push_back(std::move(ev));
                 return TTestActorRuntime::EEventAction::DROP;
@@ -2257,5 +2249,67 @@ namespace NSchemeShardUT_Private {
         TVector<std::pair<ui64, TString>> data;
         data.push_back({1, message});
         NKikimr::NPQ::CmdWrite(&runtime, tabletId, edge, partitionId, "sourceid0", msgSeqNo, data, false, {}, true, cookie, 0);
+    }
+
+    void WriteRow(TTestActorRuntime& runtime, const TString& key, const TString& value, ui64 tabletId) {
+        NKikimrMiniKQL::TResult result;
+        TString error;
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
+            (
+                (let key '( '('key (Utf8 '%s) ) ) )
+                (let row '( '('value (Utf8 '%s) ) ) )
+                (return (AsList (UpdateRow '__user__Table key row) ))
+            )
+        )", key.c_str(), value.c_str()), result, error);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+    }
+
+    void WriteRowPg(TTestActorRuntime& runtime, const TString& key, ui32 value, ui64 tabletId) {
+        NKikimrMiniKQL::TResult result;
+        TString error;
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
+            (
+                (let key '( '('key (Utf8 '%s) ) ) )
+                (let row '( '('value (PgConst '%u (PgType 'int4)) ) ) )
+                (return (AsList (UpdateRow '__user__Table key row) ))
+            )
+        )", key.c_str(), value), result, error);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+    }
+
+    void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<ui32>& recordIds)
+    {
+        auto tableDesc = DescribePath(runtime, tablePath, true, true);
+        const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
+        UNIT_ASSERT(partitionIdx < tablePartitions.size());
+
+        auto ev = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
+        ev->Record.SetTableId(tableDesc.GetPathId());
+
+        auto& scheme = *ev->Record.MutableRowScheme();
+        for (ui32 tag : keyTags) {
+            scheme.AddKeyColumnIds(tag);
+        }
+        for (ui32 tag : valueTags) {
+            scheme.AddValueColumnIds(tag);
+        }
+
+        for (ui32 i : recordIds) {
+            auto key = TVector<TCell>{TCell::Make(i)};
+            auto value = TVector<TCell>{TCell::Make(i)};
+            Cerr << value[0].AsBuf().Size() << Endl;
+
+            auto& row = *ev->Record.AddRows();
+            row.SetKeyColumns(TSerializedCellVec::Serialize(key));
+            row.SetValueColumns(TSerializedCellVec::Serialize(value));
+        }
+
+        const auto& sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, tablePartitions[partitionIdx].GetDatashardId(), sender, ev.Release());
+        runtime.GrabEdgeEvent<TEvDataShard::TEvUploadRowsResponse>(sender);
     }
 }

@@ -58,5 +58,15 @@ struct TDqComputeEvents {
     static_assert(EvEnd < EventSpaceBegin((TDqEvents::ES_DQ_COMPUTE + 1)));
 };
 
+struct TDqSpillingEvents {
+    enum EDqSpillingEvents {
+        EvWrite = EventSpaceBegin(TDqEvents::ES_DQ_COMPUTE) + 100,
+        EvWriteResult,
+        EvRead,
+        EvReadResult,
+        EvError,
+    };
+};
+
 } // namespace NDq
 } // namespace NYql

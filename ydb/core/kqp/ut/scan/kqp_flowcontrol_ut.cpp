@@ -101,12 +101,12 @@ void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity) {
     NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
     ui32 writesBlockedNoSpace = 0;
-    auto nodes = FindPlanNodes(plan, "WritesBlockedNoSpace");
+    auto nodes = FindPlanNodes(plan, "Pop.WaitTimeUs.Sum");
     for (auto& node : nodes) {
         writesBlockedNoSpace += node.GetIntegerSafe();
     }
 
-    UNIT_ASSERT_EQUAL(hasBlockedByCapacity, writesBlockedNoSpace > 0);
+    UNIT_ASSERT_EQUAL_C(hasBlockedByCapacity, writesBlockedNoSpace > 0, *res.PlanJson);
 }
 
 Y_UNIT_TEST(FlowControl_Unlimited) {

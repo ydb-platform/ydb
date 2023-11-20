@@ -13,6 +13,8 @@
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/interconnect/events_local.h>
 
+#include <util/generic/set.h>
+
 namespace NFq {
 
 struct TEvYdbCompute {
@@ -44,6 +46,17 @@ struct TEvYdbCompute {
 
         EvSynchronizeRequest,
         EvSynchronizeResponse,
+
+        EvListDatabasesRequest,
+        EvListDatabasesResponse,
+
+        EvCheckDatabaseRequest,
+        EvCheckDatabaseResponse,
+        EvAddDatabaseRequest,
+        EvAddDatabaseResponse,
+
+        EvInvalidateSynchronizationRequest,
+        EvInvalidateSynchronizationResponse,
 
         EvEnd
     };
@@ -227,6 +240,14 @@ struct TEvYdbCompute {
         NYql::TIssues Issues;
     };
 
+    struct TEvListDatabasesRequest : public NActors::TEventLocal<TEvListDatabasesRequest, EvListDatabasesRequest> {
+    };
+
+    struct TEvListDatabasesResponse : public NActors::TEventLocal<TEvListDatabasesResponse, EvListDatabasesResponse> {
+        TSet<TString> Paths;
+        NYql::TIssues Issues;
+    };
+
     struct TEvInitializerResponse : public NActors::TEventLocal<TEvInitializerResponse, EvInitializerResponse> {
         TEvInitializerResponse(NYql::TIssues issues, NYdb::EStatus status)
             : Issues(std::move(issues))
@@ -365,6 +386,57 @@ struct TEvYdbCompute {
         TString Scope;
         NYql::TIssues Issues;
         NYdb::EStatus Status;
+    };
+
+    struct TEvCheckDatabaseRequest : public NActors::TEventLocal<TEvCheckDatabaseRequest, EvCheckDatabaseRequest> {
+        TEvCheckDatabaseRequest(const TString& path)
+            : Path(path)
+        {}
+
+        TString Path;
+    };
+
+    struct TEvCheckDatabaseResponse : public NActors::TEventLocal<TEvCheckDatabaseResponse, EvCheckDatabaseResponse> {
+        TEvCheckDatabaseResponse(bool isExists)
+            : IsExists(isExists)
+        {}
+
+        TEvCheckDatabaseResponse(const NYql::TIssues& issues)
+            : IsExists(false)
+            , Issues(issues)
+        {}
+
+        bool IsExists = false;
+        NYql::TIssues Issues;
+    };
+
+    struct TEvAddDatabaseRequest : public NActors::TEventLocal<TEvAddDatabaseRequest, EvAddDatabaseRequest> {
+        TEvAddDatabaseRequest(const TString& path)
+            : Path(path)
+        {}
+
+        TString Path;
+    };
+
+    struct TEvAddDatabaseResponse : public NActors::TEventLocal<TEvAddDatabaseResponse, EvAddDatabaseResponse> {
+        TEvAddDatabaseResponse()
+        {}
+    };
+
+    struct TEvInvalidateSynchronizationRequest : public NActors::TEventLocal<TEvInvalidateSynchronizationRequest, EvInvalidateSynchronizationRequest> {
+        TEvInvalidateSynchronizationRequest(const TString& scope)
+            : Scope(scope)
+        {}
+
+        TString Scope;
+    };
+
+    struct TEvInvalidateSynchronizationResponse : public NActors::TEventLocal<TEvInvalidateSynchronizationRequest, EvInvalidateSynchronizationRequest> {
+        TEvInvalidateSynchronizationResponse(NYql::TIssues issues)
+            : Issues(std::move(issues))
+        {}
+
+        NYql::TIssues Issues;
     };
 };
 

@@ -8,8 +8,6 @@ IF (PY2)
         build_java_codenav_index.py
         build_java_with_error_prone.py
         build_java_with_error_prone2.py
-        build_mn.py
-        build_pln_header.py
         cat.py
         cgo1_wrapper.py
         check_config_h.py
@@ -44,7 +42,6 @@ IF (PY2)
         gen_aar_gradle_script.py
         gen_java_codenav_entry.py
         gen_java_codenav_protobuf.py
-        gen_mx_table.py
         gen_py3_reg.py
         gen_py_reg.py
         gen_test_apk_gradle_script.py
@@ -67,7 +64,6 @@ IF (PY2)
         mkver.py
         pack_ios.py
         pack_jcoverage_resources.py
-        perl_wrapper.py
         postprocess_go_fbs.py
         preprocess.py
         py_compile.py

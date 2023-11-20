@@ -19,6 +19,7 @@ public:
     using TRequestHandler = std::function<void(TAtomicSharedPtr<TStreamSocket> socket)>;
 
 public:
+    TLdapSimpleServer(ui16 port, const std::pair<TLdapMockResponses, TLdapMockResponses>& responses);
     TLdapSimpleServer(ui16 port, const TLdapMockResponses& responses);
     ~TLdapSimpleServer();
 
@@ -27,8 +28,7 @@ public:
     int GetPort() const;
     TString GetAddress() const;
 
-    void SetBindResponse(const std::pair<TBindRequestInfo, TBindResponseInfo>& response);
-    void SetSearchReasponse(const std::pair<TSearchRequestInfo, TSearchResponseInfo>& response);
+    void UpdateResponses();
 
 private:
     const int Port;
@@ -36,7 +36,8 @@ private:
     THolder<IThreadFactory::IThread> ListenerThread;
     THolder<TInetStreamSocket> SendFinishSocket;
 
-    TLdapMockResponses Responses;
+    std::pair<TLdapMockResponses, TLdapMockResponses> Responses;
+    std::atomic_bool UseFirstSetResponses = true;
 };
 
 }

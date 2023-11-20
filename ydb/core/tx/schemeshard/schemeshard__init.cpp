@@ -68,7 +68,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         for (const auto& item : Self->PathsById) {
             if (item.second->DbRefCount == 0 && item.second->Dropped()) {
-                Y_VERIFY_DEBUG(!underOperation.contains(item.first));
+                Y_DEBUG_ABORT_UNLESS(!underOperation.contains(item.first));
                 Self->CleanDroppedPathsCandidates.insert(item.first);
             }
         }
@@ -79,7 +79,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
             auto path = Self->PathsById.at(item.first);
             if (path->DbRefCount == 1 && path->AllChildrenCount == 0 && path->Dropped()) {
-                Y_VERIFY_DEBUG(!underOperation.contains(item.first));
+                Y_DEBUG_ABORT_UNLESS(!underOperation.contains(item.first));
                 Self->CleanDroppedSubDomainsCandidates.insert(item.first);
             }
         }
@@ -1371,7 +1371,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 pathRows.pop_front();
             }
 
-            Y_VERIFY_DEBUG(IsSorted(pathRows.begin(), pathRows.end()));
+            Y_DEBUG_ABORT_UNLESS(IsSorted(pathRows.begin(), pathRows.end()));
 
             for (auto& rec: pathRows) {
                 TPathElement::TPtr path = MakePathElement(rec);
@@ -3617,7 +3617,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     auto settings = tableInfo->BackupSettings.MutableS3Settings();
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, s3SerializedSettings));
                 } else {
-                    Y_FAIL("Unknown settings");
+                    Y_ABORT("Unknown settings");
                 }
 
                 if (scanSettings) {
@@ -3885,6 +3885,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 break;
             case ETabletType::BlobDepot:
                 Self->TabletCounters->Simple()[COUNTER_BLOB_DEPOT_COUNT].Add(1);
+                break;
+            case ETabletType::StatisticsAggregator:
+                Self->TabletCounters->Simple()[COUNTER_STATISTICS_AGGREGATOR_COUNT].Add(1);
                 break;
             default:
                 Y_FAIL_S("dont know how to interpret tablet type"
@@ -4726,11 +4729,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         } catch (const TNotReadyTabletException &) {
             return false;
         } catch (const TSchemeErrorTabletException &ex) {
-            Y_FAIL("there must be no leaked scheme error exceptions: %s", ex.what());
+            Y_ABORT("there must be no leaked scheme error exceptions: %s", ex.what());
         } catch (const std::exception& ex) {
-            Y_FAIL("there must be no leaked exceptions: %s", ex.what());
+            Y_ABORT("there must be no leaked exceptions: %s", ex.what());
         } catch (...) {
-            Y_FAIL("there must be no leaked exceptions");
+            Y_ABORT("there must be no leaked exceptions");
         }
     }
 

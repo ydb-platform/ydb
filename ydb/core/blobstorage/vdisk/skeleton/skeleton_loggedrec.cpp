@@ -296,7 +296,7 @@ namespace NKikimr {
         }
 
         intptr_t Put(ILoggedRec *rec) {
-            Y_VERIFY_DEBUG(rec);
+            Y_DEBUG_ABORT_UNLESS(rec);
             intptr_t id = ++Counter;
             Queue.Push(TItem(id, rec));
             return id;

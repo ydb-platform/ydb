@@ -161,7 +161,7 @@ void TAllPDisks::ActorSetupCmd(NActors::TActorSystemSetup *setup, ui32 node,
                                            TPDiskCategory(deviceType, 0).GetRaw()));
         pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
-        const NPDisk::TMainKey mainKey = {NPDisk::YdbDefaultPDiskSequence};
+        const NPDisk::TMainKey mainKey{ .Keys = { NPDisk::YdbDefaultPDiskSequence }, .IsInitialized = true };
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(),
                     mainKey, counters), TMailboxType::Revolving, 0);
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(inst.PDiskActorID, std::move(pDiskSetup)));
@@ -476,5 +476,5 @@ void TConfiguration::PoisonVDisks() {
 
 void TConfiguration::PoisonPDisks() {
     // FIXME: implement
-    Y_VERIFY_DEBUG(false);
+    Y_DEBUG_ABORT_UNLESS(false);
 }

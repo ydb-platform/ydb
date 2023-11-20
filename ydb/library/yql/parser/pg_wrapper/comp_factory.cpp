@@ -104,20 +104,20 @@ NUdf::TUnboxedValue CreatePgString(i32 typeLen, ui32 targetTypeId, TStringBuf da
 }
 
 void *MkqlAllocSetAlloc(MemoryContext context, Size size) {
-    auto fullSize = size + PallocHdrSize;
-    auto ptr = (char *)MKQLAllocDeprecated(fullSize);
-    auto ret = (void*)(ptr + PallocHdrSize);
-    *(MemoryContext *)(((char *)ret) - sizeof(void *)) = context;
-    ((TAllocState::TListEntry*)ptr)->Link(TlsAllocState->CurrentPAllocList);
-    return ret;
+    auto fullSize = size + sizeof(TMkqlPAllocHeader);
+    auto header = (TMkqlPAllocHeader*)MKQLAllocWithSize(fullSize, EMemorySubPool::Default);
+    header->Size = size;
+    header->U.Entry.Link(TlsAllocState->CurrentPAllocList);
+    header->Self = context;
+    return header + 1;
 }
 
 void MkqlAllocSetFree(MemoryContext context, void* pointer) {
     if (pointer) {
-        auto original = (void*)((char*)pointer - PallocHdrSize);
+        auto header = ((TMkqlPAllocHeader*)pointer) - 1;
         // remove this block from list
-        ((TAllocState::TListEntry*)original)->Unlink();
-        MKQLFreeDeprecated(original);
+        header->U.Entry.Unlink();
+        MKQLFreeWithSize(header, header->Size, EMemorySubPool::Default);
     }
 }
 
@@ -127,12 +127,13 @@ void* MkqlAllocSetRealloc(MemoryContext context, void* pointer, Size size) {
         return nullptr;
     }
 
-    void* ret = MkqlAllocSetAlloc(context, size);
+    auto ret = MkqlAllocSetAlloc(context, size);
     if (pointer) {
-        memmove(ret, pointer, size);
+        auto header = ((TMkqlPAllocHeader*)pointer) - 1;
+        memmove(ret, pointer, header->Size);
+        MkqlAllocSetFree(context, pointer);
     }
 
-    MkqlAllocSetFree(context, pointer);
     return ret;
 }
 
@@ -1107,10 +1108,10 @@ NUdf::TUnboxedValuePod ConvertFromPgValue(NUdf::TUnboxedValuePod value, TMaybe<N
     case NUdf::EDataSlot::String:
     case NUdf::EDataSlot::Utf8:
         if (IsCString) {
-            auto x = (const char*)value.AsBoxed().Get() + PallocHdrSize;
+            auto x = (const char*)PointerDatumFromPod(value);
             return MakeString(TStringBuf(x));
         } else {
-            auto x = (const text*)((const char*)value.AsBoxed().Get() + PallocHdrSize);
+            auto x = (const text*)PointerDatumFromPod(value);
             return MakeString(GetVarBuf(x));
         }
     default:
@@ -1791,7 +1792,7 @@ struct TToPgExec {
 
                     tmp.resize(len);
                     NUdf::ZeroMemoryContext(tmp.data() + sizeof(void*));
-                    memcpy(tmp.data() + sizeof(void*) + VARHDRSZ, item.AsStringRef().Data(), len - VARHDRSZ);
+                    memcpy(tmp.data() + sizeof(void*) + VARHDRSZ, item.AsStringRef().Data(), len - VARHDRSZ - sizeof(void*));
                     UpdateCleanVarSize((text*)(tmp.data() + sizeof(void*)), item.AsStringRef().Size());
                 }
 
@@ -3076,7 +3077,7 @@ void PgDestroyContext(const std::string_view& contextType, void* ctx) {
     } else if (contextType == "WinAgg") {
         TWithDefaultMiniKQLAlloc::FreeWithSize(ctx, sizeof(WindowAggState));
     } else {
-        Y_FAIL("Unsupported context type");
+        Y_ABORT("Unsupported context type");
     }
 }
 
@@ -3533,12 +3534,12 @@ public:
     }
 
     NUdf::TStringRef AsCStringBuffer(const NUdf::TUnboxedValue& value) const override {
-        auto x = (const char*)value.AsBoxed().Get() + PallocHdrSize;
+        auto x = (const char*)PointerDatumFromPod(value);
         return { x, strlen(x) + 1};
     }
 
     NUdf::TStringRef AsTextBuffer(const NUdf::TUnboxedValue& value) const override {
-        auto x = (const text*)((const char*)value.AsBoxed().Get() + PallocHdrSize);
+        auto x = (const text*)PointerDatumFromPod(value);
         return { (const char*)x, GetFullVarSize(x) };
     }
 
@@ -3557,7 +3558,7 @@ public:
     }
 
     NUdf::TStringRef AsFixedStringBuffer(const NUdf::TUnboxedValue& value, ui32 length) const override {
-        auto x = (const char*)value.AsBoxed().Get() + PallocHdrSize;
+        auto x = (const char*)PointerDatumFromPod(value);
         return { x, length };
     }
 };
@@ -3742,7 +3743,7 @@ public:
             callInfo->nargs = 3;
             callInfo->fncollation = DEFAULT_COLLATION_OID;
             callInfo->isnull = false;
-            callInfo->args[0] = { (Datum)str.c_str(), false };
+            callInfo->args[0] = { (Datum)str.Data(), false };
             callInfo->args[1] = { ObjectIdGetDatum(NMiniKQL::MakeTypeIOParam(*this)), false };
             callInfo->args[2] = { Int32GetDatum(-1), false };
 
@@ -3775,7 +3776,7 @@ public:
         PG_END_TRY();
     }
 
-    TConvertResult NativeTextFromNativeBinary(const TString& binary) const {
+    TConvertResult NativeTextFromNativeBinary(const TStringBuf binary) const {
         NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         NMiniKQL::TPAllocScope scope;
         Datum datum = 0;
@@ -4256,16 +4257,26 @@ TCoerceResult PgNativeBinaryCoerce(const TStringBuf binary, void* typeDesc, i32 
     return static_cast<TPgTypeDescriptor*>(typeDesc)->Coerce(binary, typmod);
 }
 
-TConvertResult PgNativeBinaryFromNativeText(const TString& str, ui32 pgTypeId) {
-    auto* typeDesc = TypeDescFromPgTypeId(pgTypeId);
-    Y_ABORT_UNLESS(typeDesc);
+TConvertResult PgNativeBinaryFromNativeText(const TString& str, void* typeDesc) {
+    if (!typeDesc) {
+        return {{}, "invalid type descriptor"};
+    }
     return static_cast<TPgTypeDescriptor*>(typeDesc)->NativeBinaryFromNativeText(str);
 }
 
-TConvertResult PgNativeTextFromNativeBinary(const TString& binary, ui32 pgTypeId) {
-    auto* typeDesc = TypeDescFromPgTypeId(pgTypeId);
-    Y_ABORT_UNLESS(typeDesc);
+TConvertResult PgNativeBinaryFromNativeText(const TString& str, ui32 pgTypeId) {
+    return PgNativeBinaryFromNativeText(str, TypeDescFromPgTypeId(pgTypeId));
+}
+
+TConvertResult PgNativeTextFromNativeBinary(const TStringBuf binary, void* typeDesc) {
+    if (!typeDesc) {
+        return {{}, "invalid type descriptor"};
+    }
     return static_cast<TPgTypeDescriptor*>(typeDesc)->NativeTextFromNativeBinary(binary);
+}
+
+TConvertResult PgNativeTextFromNativeBinary(const TStringBuf binary, ui32 pgTypeId) {
+    return PgNativeTextFromNativeBinary(binary, TypeDescFromPgTypeId(pgTypeId));
 }
 
 } // namespace NKikimr::NPg

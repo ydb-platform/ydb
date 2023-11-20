@@ -48,7 +48,7 @@ namespace NKikimr {
                 case TBlobState::ESituation::Lost:
                     break;
                 case TBlobState::ESituation::Sent:
-                    Y_FAIL("unexpected state");
+                    Y_ABORT("unexpected state");
             }
 
             return false;
@@ -192,7 +192,7 @@ namespace NKikimr {
                             case TBlobState::ESituation::Present:
                             case TBlobState::ESituation::Sent:
                                 // unexpected state
-                                Y_VERIFY_DEBUG(false);
+                                Y_DEBUG_ABORT_UNLESS(false);
                                 [[fallthrough]];
                             case TBlobState::ESituation::Error:
                                 state.WholeSituation = TBlobState::ESituation::Error;
@@ -202,7 +202,7 @@ namespace NKikimr {
                 }
                 return EStrategyOutcome::DONE;
             } else {
-                Y_FAIL("must not reach this point");
+                Y_ABORT("must not reach this point");
             }
         }
     };

@@ -5,36 +5,40 @@
 #include <util/system/file.h>
 
 namespace NYT {
+namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TJobWriter::TStream::TStream(int fd)
-    : TStream(Duplicate(fd))
+TJobWriterStream::TJobWriterStream(int fd)
+    : TJobWriterStream(Duplicate(fd))
 { }
 
-TJobWriter::TStream::TStream(const TFile& file)
+TJobWriterStream::TJobWriterStream(const TFile& file)
     : FdFile(file)
     , FdOutput(FdFile)
-    , BufferedOutput(&FdOutput, BUFFER_SIZE)
+    , BufferedOutput(&FdOutput, BufferSize)
 { }
 
-TJobWriter::TStream::~TStream()
-{
-}
+TJobWriterStream::~TJobWriterStream()
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TJobWriter::TJobWriter(size_t outputTableCount)
 {
     for (size_t i = 0; i < outputTableCount; ++i) {
-        Streams_.emplace_back(MakeHolder<TStream>(int(i * 3 + 1)));
+        Streams_.emplace_back(MakeHolder<NDetail::TJobWriterStream>(int(i * 3 + 1)));
     }
 }
 
 TJobWriter::TJobWriter(const TVector<TFile>& fileList)
 {
     for (const auto& f : fileList) {
-        Streams_.emplace_back(MakeHolder<TStream>(f));
+        Streams_.emplace_back(MakeHolder<NDetail::TJobWriterStream>(f));
     }
 }
 
@@ -58,7 +62,7 @@ void TJobWriter::OnRowFinished(size_t)
 
 size_t TJobWriter::GetBufferMemoryUsage() const
 {
-    return TStream::BUFFER_SIZE * GetStreamCount();
+    return NDetail::TJobWriterStream::BufferSize * GetStreamCount();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -66,6 +70,36 @@ size_t TJobWriter::GetBufferMemoryUsage() const
 THolder<IProxyOutput> CreateRawJobWriter(size_t outputTableCount)
 {
     return ::MakeHolder<TJobWriter>(outputTableCount);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TSingleStreamJobWriter::TSingleStreamJobWriter(size_t tableIndex)
+    : TableIndex_(tableIndex)
+    , Stream_(MakeHolder<NDetail::TJobWriterStream>(int(tableIndex * 3 + 1)))
+{ }
+
+size_t TSingleStreamJobWriter::GetStreamCount() const
+{
+    return 1;
+}
+
+IOutputStream* TSingleStreamJobWriter::GetStream(size_t tableIndex) const
+{
+    if (tableIndex != TableIndex_) {
+        ythrow TIOException() <<
+            "Table index " << tableIndex <<
+            " does not match this SignleTableJobWriter with index " << TableIndex_;
+    }
+    return &Stream_->BufferedOutput;
+}
+
+void TSingleStreamJobWriter::OnRowFinished(size_t)
+{ }
+
+size_t TSingleStreamJobWriter::GetBufferMemoryUsage() const
+{
+    return NDetail::TJobWriterStream::BufferSize * GetStreamCount();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

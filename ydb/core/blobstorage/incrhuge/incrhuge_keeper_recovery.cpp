@@ -170,7 +170,7 @@ namespace NKikimr {
                 switch (chunk.GetState()) {
                     case NKikimrVDiskData::TIncrHugeChunks::Complete: state = "Complete"; break;
                     case NKikimrVDiskData::TIncrHugeChunks::WriteIntent: state = "WriteIntent"; break;
-                    default: Y_FAIL("unexpected case");
+                    default: Y_ABORT("unexpected case");
                 }
 
                 TChunkSerNum chunkSerNum(chunk.GetChunkSerNum());
@@ -229,7 +229,7 @@ namespace NKikimr {
                         break;
 
                     default:
-                        Y_FAIL("unexpected case");
+                        Y_ABORT("unexpected case");
                 }
 
                 const TChunkSerNum chunkSerNum(chunk.GetChunkSerNum());
@@ -402,11 +402,11 @@ namespace NKikimr {
                                 *existing = locator;
                             } else if (chunk.ChunkSerNum < existingChunk.ChunkSerNum) {
                                 // fail as is breaks our order of processing -- old chunks first, then new chunks
-                                Y_FAIL("unexpected order of chunks");
+                                Y_ABORT("unexpected order of chunks");
                             } else {
                                 // chunks are the same; this could happen if defragmenter was processing the current
                                 // chunk we were writing into, but this is completely incorrect behavior
-                                Y_FAIL("duplicate records; Old# %s New# %s ChunkSerNum# %s index# %" PRIu32,
+                                Y_ABORT("duplicate records; Old# %s New# %s ChunkSerNum# %s index# %" PRIu32,
                                         existing->ToString().data(), locator.ToString().data(),
                                         existingChunk.ChunkSerNum.ToString().data(), index);
                             }
@@ -444,7 +444,7 @@ namespace NKikimr {
                             std::move(scanResult.Index)});
                 }
             } else {
-                Y_FAIL("can't recover");
+                Y_ABORT("can't recover");
             }
         }
 

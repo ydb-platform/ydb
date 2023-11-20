@@ -275,7 +275,7 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
             break;
         }
         case TRule_grouping_element::ALT_NOT_SET:
-            Y_FAIL("You should change implementation according to grammar changes");
+            Y_ABORT("You should change implementation according to grammar changes");
     }
     return true;
 }

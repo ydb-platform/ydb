@@ -415,6 +415,14 @@ public:
         const TGetOperationOptions& options = TGetOperationOptions()) = 0;
 
     ///
+    /// @brief Get operation attributes.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#get_operation)
+    virtual TOperationAttributes GetOperation(
+        const TString& alias,
+        const TGetOperationOptions& options = TGetOperationOptions()) = 0;
+
+    ///
     /// @brief List operations satisfying given filters.
     ///
     /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#list_operations)

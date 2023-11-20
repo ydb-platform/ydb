@@ -30,7 +30,7 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
             ui64 coordinatorId = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
 
             ui64 lastMediatorStep = 0;
-            auto observeMediatorSteps = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+            auto observeMediatorSteps = [&](TAutoPtr<IEventHandle>& ev) -> auto {
                 switch (ev->GetTypeRewrite()) {
                     case TEvMediatorQueueStep::EventType: {
                         auto* msg = ev->Get<TEvMediatorQueueStep>();
@@ -493,7 +493,7 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
             runtime.SimulateSleep(TDuration::Seconds(1));
 
             std::vector<ui64> emptySteps;
-            auto stepsObserver = [&](auto&, auto& ev) {
+            auto stepsObserver = [&](auto& ev) {
                 switch (ev->GetTypeRewrite()) {
                     case TEvTxCoordinator::TEvCoordinatorStep::EventType: {
                         auto* msg = ev->template Get<TEvTxCoordinator::TEvCoordinatorStep>();

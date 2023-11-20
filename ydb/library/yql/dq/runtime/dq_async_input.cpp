@@ -7,14 +7,28 @@ class TDqAsyncInputBuffer : public TDqInputImpl<TDqAsyncInputBuffer, IDqAsyncInp
     using TBaseImpl = TDqInputImpl<TDqAsyncInputBuffer, IDqAsyncInputBuffer>;
     friend TBaseImpl;
 public:
-    TDqAsyncInputBuffer(ui64 inputIndex, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, bool collectProfileStats)
+    TDqAsyncInputBufferStats PushStats;
+    TDqInputStats PopStats;
+
+    TDqAsyncInputBuffer(ui64 inputIndex, const TString& type, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, TCollectStatsLevel level)
         : TBaseImpl(inputType, maxBufferBytes)
-        , InputIndex(inputIndex)
-        , BasicStats(InputIndex)
-        , ProfileStats(collectProfileStats ? &BasicStats : nullptr) {}
+    {
+        PopStats.Level = level;
+        PushStats.Level = level;
+        PushStats.InputIndex = inputIndex;
+        PushStats.Type = type;
+    }
 
     ui64 GetInputIndex() const override {
-        return InputIndex;
+        return PushStats.InputIndex;
+    }
+
+    const TDqAsyncInputBufferStats& GetPushStats() const override {
+        return PushStats;
+    }
+
+    const TDqInputStats& GetPopStats() const override {
+        return PopStats;
     }
 
     void Push(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) override {
@@ -24,20 +38,15 @@ public:
         }
     }
 
-    const TDqAsyncInputBufferStats* GetStats() const override {
-        return &BasicStats;
+    virtual void Push(TDqSerializedBatch&&, i64) override {
+        YQL_ENSURE(!"Unimplemented");
     }
-
-private:
-    const ui64 InputIndex;
-    TDqAsyncInputBufferStats BasicStats;
-    TDqAsyncInputBufferStats* ProfileStats = nullptr;
 };
 
 IDqAsyncInputBuffer::TPtr CreateDqAsyncInputBuffer(
-    ui64 inputIndex, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, bool collectStats)
+    ui64 inputIndex, const TString& type, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, TCollectStatsLevel level)
 {
-    return new TDqAsyncInputBuffer(inputIndex, inputType, maxBufferBytes, collectStats);
+    return new TDqAsyncInputBuffer(inputIndex, type, inputType, maxBufferBytes, level);
 }
 
 } // namespace NYql::NDq

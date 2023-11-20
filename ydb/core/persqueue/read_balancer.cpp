@@ -2,10 +2,11 @@
 
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/counters_pq.pb.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/string_utils/base64/base64.h>
-
+#include <library/cpp/random_provider/random_provider.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -122,7 +123,7 @@ bool TPersQueueReadBalancer::TTxInit::Execute(TTransactionContext& txc, const TA
     } catch (const TNotReadyTabletException&) {
         return false;
     } catch (...) {
-       Y_FAIL("there must be no leaked exceptions");
+       Y_ABORT("there must be no leaked exceptions");
     }
     return true;
 }
@@ -182,9 +183,10 @@ void TPersQueueReadBalancer::TTxWrite::Complete(const TActorContext &ctx) {
     Self->WaitingResponse.clear();
 
     Self->NoGroupsInBase = false;
-
-    Self->Inited = true;
-    Self->InitDone(ctx);
+    if (!Self->Inited) {
+        Self->Inited = true;
+        Self->InitDone(ctx);
+    }
 }
 
 struct TPersQueueReadBalancer::TTxWritePartitionStats : public ITransaction {
@@ -504,6 +506,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         res->Record.SetTxId(ev->Get()->Record.GetTxId());
         res->Record.SetOrigin(TabletID());
         ctx.Send(ev->Sender, res.Release());
+        return;
     }
     WaitingResponse.push_back(ev->Sender);
 
@@ -590,7 +593,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 
     for (auto& p : PartitionsInfo) {
         if (partitionsInfo.find(p.first) == partitionsInfo.end()) {
-            Y_FAIL("deleting of partitions is not fully supported yet");
+            Y_ABORT("deleting of partitions is not fully supported yet");
             deletedPartitions.push_back(p.first);
         }
     }
@@ -1089,7 +1092,7 @@ void TPersQueueReadBalancer::TClientInfo::AddSession(const ui32 group, const THa
 
 void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext&)
 {
-    Y_FAIL("");
+    Y_ABORT("");
     RegisterEvents.push_back(ev->Release().Release());
 }
 

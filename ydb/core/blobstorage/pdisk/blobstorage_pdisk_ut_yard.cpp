@@ -534,7 +534,7 @@ YARD_UNIT_TEST(TestDamagedFirstRecordToKeep) {
         MakeDirIfNotExist(databaseDirectory.c_str());
     }
     TPDiskInfo info;
-    const NPDisk::TMainKey mainKey = {NPDisk::YdbDefaultPDiskSequence};
+    const NPDisk::TMainKey mainKey{ .Keys = { NPDisk::YdbDefaultPDiskSequence } };
     bool isOk = ReadPDiskFormatInfo(dataPath, mainKey, info, false, tc.SectorMap);
     UNIT_ASSERT_VALUES_EQUAL(isOk, true);
 
@@ -881,7 +881,7 @@ YARD_UNIT_TEST(TestFormatInfo) {
     FormatPDiskForTest(dataPath, tc.PDiskGuid, chunkSize, 1 << 30, false, tc.SectorMap);
 
     TPDiskInfo info;
-    const NPDisk::TMainKey mainKey = {NPDisk::YdbDefaultPDiskSequence};
+    const NPDisk::TMainKey mainKey{.Keys = { NPDisk::YdbDefaultPDiskSequence } };
     bool isOk = ReadPDiskFormatInfo(dataPath, mainKey, info, false, tc.SectorMap);
     UNIT_ASSERT_VALUES_EQUAL(isOk, true);
     UNIT_ASSERT_VALUES_EQUAL(info.TextMessage, "Info");
@@ -916,7 +916,7 @@ YARD_UNIT_TEST(TestRestartAtNonceJump) {
         MakeDirIfNotExist(databaseDirectory.c_str());
     }
     TPDiskInfo info;
-    const NPDisk::TMainKey mainKey = {NPDisk::YdbDefaultPDiskSequence};
+    const NPDisk::TMainKey mainKey{ .Keys = { NPDisk::YdbDefaultPDiskSequence } };
     bool isOk = ReadPDiskFormatInfo(dataPath, mainKey, info, false, tc.SectorMap);
     UNIT_ASSERT_VALUES_EQUAL(isOk, true);
     // Destroy data in chunks starting at# SystemChunkCount + 1
@@ -946,7 +946,7 @@ YARD_UNIT_TEST(TestRestartAtChunkEnd) {
         MakeDirIfNotExist(databaseDirectory.c_str());
     }
     TPDiskInfo info;
-    const NPDisk::TMainKey mainKey = {NPDisk::YdbDefaultPDiskSequence};
+    const NPDisk::TMainKey mainKey{ .Keys = { NPDisk::YdbDefaultPDiskSequence } };
     bool isOk = ReadPDiskFormatInfo(dataPath, mainKey, info, false, tc.SectorMap);
     UNIT_ASSERT_VALUES_EQUAL(isOk, true);
     // Destroy data in chunks starting at# SystemChunkCount + 1

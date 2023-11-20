@@ -112,7 +112,7 @@ namespace NUdf {
                 case 0: return ToUnboxedValue(FirstName);
                 case 1: return ToUnboxedValue(LastName);
                 case 2: return NUdf::TUnboxedValuePod(Age);
-                default: Y_FAIL("Unexpected");
+                default: Y_ABORT("Unexpected");
             }
         }
     };
@@ -140,7 +140,7 @@ namespace NUdf {
                 case 3: return Tags.empty() ?
                     NUdf::TUnboxedValuePod() :
                     NUdf::TUnboxedValuePod(new TListRef<TTagList>(Tags));
-                default: Y_FAIL("Unexpected");
+                default: Y_ABORT("Unexpected");
             }
         }
     };
@@ -305,7 +305,7 @@ namespace {
                 case 1: return ToUnboxedValue(std::get<1>(Tuple));
                 case 2: return ToUnboxedValue(std::get<2>(Tuple));
                 case 3: return ToUnboxedValue(std::get<3>(Tuple));
-                default: Y_FAIL("Unexpected");
+                default: Y_ABORT("Unexpected");
             }
         }
     };

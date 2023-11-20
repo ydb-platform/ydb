@@ -324,6 +324,7 @@ PEERDIR(
     library/cpp/ytalloc/api
 
     yt/yt/build
+    
     yt/yt/core/misc/isa_crc64
 
     yt/yt_proto/yt/core

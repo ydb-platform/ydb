@@ -53,6 +53,7 @@
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
+#include <ydb/library/yql/utils/aws_credentials.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 
@@ -668,6 +669,7 @@ private:
 class TS3ReadActor : public TActorBootstrapped<TS3ReadActor>, public IDqComputeActorAsyncInput {
 public:
     TS3ReadActor(ui64 inputIndex,
+        TCollectStatsLevel statsLevel,
         const TTxId& txId,
         IHTTPGateway::TPtr gateway,
         const THolderFactory& holderFactory,
@@ -713,6 +715,7 @@ public:
             TaskQueueDataLimit = TaskCounters->GetCounter("QueueDataLimit");
             TaskQueueDataLimit->Add(ReadActorFactoryCfg.DataInflight);
         }
+        IngressStats.Level = statsLevel;
     }
 
     void Bootstrap() {
@@ -791,10 +794,13 @@ private:
     void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {}
     void LoadState(const NDqProto::TSourceState&) final {}
     void CommitState(const NDqProto::TCheckpoint&) final {}
-    ui64 GetInputIndex() const final { return InputIndex; }
 
-    ui64 GetIngressBytes() override {
-        return IngressBytes;
+    ui64 GetInputIndex() const final {
+        return InputIndex;
+    }
+
+    const TDqAsyncStats& GetIngressStats() const override {
+        return IngressStats;
     }
 
     TDuration GetCpuTime() override {
@@ -875,6 +881,10 @@ private:
             ContainerCache.Clear();
         }
 
+        if (!total) {
+            IngressStats.TryPause();
+        }
+
         return total;
     }
     bool LastFileWasProcessed() const {
@@ -887,10 +897,16 @@ private:
         const auto path = result->Get()->Path;
         const auto httpCode = result->Get()->Result.HttpResponseCode;
         const auto requestId = result->Get()->RequestId;
-        IngressBytes += result->Get()->Result.size();
         LOG_D("TS3ReadActor", "ID: " << id << ", Path: " << path << ", read size: " << result->Get()->Result.size() << ", HTTP response code: " << httpCode << ", request id: [" << requestId << "]");
         if (200 == httpCode || 206 == httpCode) {
             auto size = result->Get()->Result.size();
+
+            // in TS3ReadActor all files (aka Splits) are loaded in single Chunks
+            IngressStats.Bytes += size;
+            IngressStats.Chunks++;
+            IngressStats.Splits++;
+            IngressStats.Resume();
+
             QueueTotalDataSize += size;
             if (Counters) {
                 QueueBlockCount->Inc();
@@ -952,6 +968,7 @@ private:
     TPlainContainerCache ContainerCache;
 
     const ui64 InputIndex;
+    TDqAsyncStats IngressStats;
     const TTxId TxId;
     const NActors::TActorId ComputeActorId;
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
@@ -971,7 +988,6 @@ private:
     NActors::TActorId FileQueueActor;
     const bool AddPathIndex;
     const ui64 SizeLimit;
-    ui64 IngressBytes = 0;
     TDuration CpuTime;
 
     std::queue<std::tuple<IHTTPGateway::TContent, ui64>> Blocks;
@@ -2219,6 +2235,7 @@ class TS3StreamReadActor : public TActorBootstrapped<TS3StreamReadActor>, public
 public:
     TS3StreamReadActor(
         ui64 inputIndex,
+        TCollectStatsLevel statsLevel,
         const TTxId& txId,
         IHTTPGateway::TPtr gateway,
         const THolderFactory& holderFactory,
@@ -2276,6 +2293,7 @@ public:
             TaskQueueDataLimit->Add(ReadActorFactoryCfg.DataInflight);
             RawInflightSize = TaskCounters->GetCounter("RawInflightSize");
         }
+        IngressStats.Level = statsLevel;
     }
 
     void Bootstrap() {
@@ -2443,10 +2461,13 @@ private:
     void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {}
     void LoadState(const NDqProto::TSourceState&) final {}
     void CommitState(const NDqProto::TCheckpoint&) final {}
-    ui64 GetInputIndex() const final { return InputIndex; }
 
-    ui64 GetIngressBytes() override {
-        return IngressBytes;
+    ui64 GetInputIndex() const final {
+        return InputIndex; 
+    }
+
+    const TDqAsyncStats& GetIngressStats() const final {
+        return IngressStats;
     }
 
     TDuration GetCpuTime() override {
@@ -2502,6 +2523,8 @@ private:
             ContainerCache.Clear();
             ArrowTupleContainerCache.Clear();
             ArrowRowContainerCache.Clear();
+        } else if(!total) {
+            IngressStats.TryPause();
         }
         return total;
     }
@@ -2581,7 +2604,9 @@ private:
 
     void HandleNextBlock(TEvPrivate::TEvNextBlock::TPtr& next) {
         YQL_ENSURE(!ReadSpec->Arrow);
-        IngressBytes += next->Get()->IngressDelta;
+        IngressStats.Bytes += next->Get()->IngressDelta;
+        IngressStats.Chunks++;
+        IngressStats.Resume();
         CpuTime += next->Get()->CpuTimeDelta;
         if (Counters) {
             QueueBlockCount->Inc();
@@ -2592,7 +2617,9 @@ private:
 
     void HandleNextRecordBatch(TEvPrivate::TEvNextRecordBatch::TPtr& next) {
         YQL_ENSURE(ReadSpec->Arrow);
-        IngressBytes += next->Get()->IngressDelta;
+        IngressStats.Bytes += next->Get()->IngressDelta;
+        IngressStats.Chunks++;
+        IngressStats.Resume();
         CpuTime += next->Get()->CpuTimeDelta;
         if (Counters) {
             QueueBlockCount->Inc();
@@ -2603,7 +2630,11 @@ private:
 
     void HandleFileFinished(TEvPrivate::TEvFileFinished::TPtr& ev) {
         CoroActors.erase(ev->Sender);
-        IngressBytes += ev->Get()->IngressDelta;
+        if (ev->Get()->IngressDelta) {
+            IngressStats.Bytes += ev->Get()->IngressDelta;
+            IngressStats.Chunks++;
+            IngressStats.Resume();
+        }
         CpuTime += ev->Get()->CpuTimeDelta;
 
         auto it = RetryStuffForFile.find(ev->Sender);
@@ -2629,6 +2660,7 @@ private:
             TaskDownloadCount->Dec();
         }
         CompletedFiles++;
+        IngressStats.Splits++;
         if (!ObjectPathCache.empty()) {
             TryRegisterCoro();
         } else {
@@ -2656,6 +2688,7 @@ private:
     TPlainContainerCache ArrowRowContainerCache;
 
     const ui64 InputIndex;
+    TDqAsyncStats IngressStats;
     const TTxId TxId;
     const NActors::TActorId ComputeActorId;
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
@@ -2673,7 +2706,6 @@ private:
     size_t CompletedFiles = 0;
     const TReadSpec::TPtr ReadSpec;
     std::deque<TReadyBlock> Blocks;
-    ui64 IngressBytes = 0;
     TDuration CpuTime;
     mutable TInstant LastMemoryReport = TInstant::Now();
     TReadBufferCounter::TPtr QueueBufferCounter;
@@ -2847,6 +2879,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     IHTTPGateway::TPtr gateway,
     NS3::TSource&& params,
     ui64 inputIndex,
+    TCollectStatsLevel statsLevel,
     const TTxId& txId,
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
@@ -2865,7 +2898,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     ReadPathsList(params, taskParams, readRanges, paths);
 
     const auto token = secureParams.Value(params.GetToken(), TString{});
-    const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
+    const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, false, ConvertBasicToAwsToken);
     const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
 
     const auto& settings = params.GetSettings();
@@ -2915,7 +2948,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         const auto structType = static_cast<TStructType*>(outputItemType);
 
         const auto readSpec = std::make_shared<TReadSpec>();
-        readSpec->Arrow = params.GetArrow();
+        readSpec->Arrow = params.GetFormat() == "parquet";
         readSpec->ParallelRowGroupCount = params.GetParallelRowGroupCount();
         readSpec->RowGroupReordering = params.GetRowGroupReordering();
         readSpec->ParallelDownloadCount = params.GetParallelDownloadCount();
@@ -3001,7 +3034,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
 #undef SET_FLAG
 #undef SUPPORTED_FLAGS
-        const auto actor = new TS3StreamReadActor(inputIndex, txId, std::move(gateway), holderFactory, params.GetUrl(), authToken, pathPattern, pathPatternVariant,
+        const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authToken, pathPattern, pathPatternVariant,
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
                                                   cfg, counters, taskCounters, fileSizeLimit, memoryQuotaManager);
 
@@ -3011,7 +3044,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         if (const auto it = settings.find("sizeLimit"); settings.cend() != it)
             sizeLimit = FromString<ui64>(it->second);
 
-        const auto actor = new TS3ReadActor(inputIndex, txId, std::move(gateway), holderFactory, params.GetUrl(), authToken, pathPattern, pathPatternVariant,
+        const auto actor = new TS3ReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authToken, pathPattern, pathPatternVariant,
                                             std::move(paths), addPathIndex, computeActorId, sizeLimit, retryPolicy,
                                             cfg, counters, taskCounters, fileSizeLimit);
         return {actor, actor};

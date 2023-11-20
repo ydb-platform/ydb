@@ -216,7 +216,7 @@ namespace {
             return GenerateZstdTestData(keyPrefix, count);
         case ECompressionCodec::Invalid:
             UNIT_ASSERT_C(false, "Invalid compression codec");
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
     }
 
@@ -288,7 +288,7 @@ namespace {
     using TDelayFunc = std::function<bool(TAutoPtr<IEventHandle>&)>;
 
     auto SetDelayObserver(TTestActorRuntime& runtime, THolder<IEventHandle>& delayed, TDelayFunc delayFunc) {
-        return runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        return runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (delayFunc(ev)) {
                 delayed.Reset(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
@@ -463,7 +463,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         env.TestWaitNotification(runtime, txId);
 
         bool uploadResponseDropped = false;
-        runtime.SetObserverFunc([&uploadResponseDropped](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&uploadResponseDropped](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsResponse) {
                 uploadResponseDropped = true;
                 return TTestActorRuntime::EEventAction::DROP;
@@ -487,7 +487,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         }
 
         TMaybe<NKikimrTxDataShard::TShardOpResult> result;
-        runtime.SetObserverFunc([&result](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&result](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvSchemaChanged) {
                 const auto& record = ev->Get<TEvDataShard::TEvSchemaChanged>()->Record;
                 if (record.HasOpResult()) {
@@ -522,7 +522,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         runtime.GetAppData().ZstdBlockSizeForTest = 113; // one row
 
         ui32 uploadRowsCount = 0;
-        runtime.SetObserverFunc([&uploadRowsCount](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&uploadRowsCount](TAutoPtr<IEventHandle>& ev) {
             uploadRowsCount += ui32(ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsResponse);
             return TTestActorRuntime::EEventAction::PROCESS;
         });
@@ -729,6 +729,54 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         TestGetImport(runtime, txId, "/MyRoot");
     }
 
+    Y_UNIT_TEST(ExportImportPg) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "pgint4" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRows(runtime, "/MyRoot/Table", 0, {1}, {2}, {55555});
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: "Backup1"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        TestImport(runtime, txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "Backup1"
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+    }
+
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldCountWrittenBytesAndRows) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -736,7 +784,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         const auto data = GenerateTestData(Codec, "a", 2);
 
         TMaybe<NKikimrTxDataShard::TShardOpResult> result;
-        runtime.SetObserverFunc([&result](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&result](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() != TEvDataShard::EvSchemaChanged) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
@@ -801,7 +849,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
 
         ui32 total = 0;
         ui32 overloads = 0;
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsResponse) {
                 ++total;
                 const auto& record = ev->Get<TEvDataShard::TEvS3UploadRowsResponse>()->Record;
@@ -1557,9 +1605,16 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
-        const auto initialStatus = expectedStatus == Ydb::StatusIds::PRECONDITION_FAILED
-            ? expectedStatus
-            : Ydb::StatusIds::SUCCESS;
+        auto initialStatus = Ydb::StatusIds::SUCCESS;
+        switch (expectedStatus) {
+        case Ydb::StatusIds::BAD_REQUEST:
+        case Ydb::StatusIds::PRECONDITION_FAILED:
+            initialStatus = expectedStatus;
+            break;
+        default:
+            break;
+        }
+
         TestImport(runtime, schemeshardId, ++id, dbName, Sprintf(request.data(), port), userSID, initialStatus);
         env.TestWaitNotification(runtime, id, schemeshardId);
 
@@ -1813,7 +1868,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", {{"a", 100}});
 
         TVector<TString> billRecords;
-        runtime.SetObserverFunc([&billRecords](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&billRecords](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() != NMetering::TEvMetering::EvWriteMeteringJson) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
@@ -1864,7 +1919,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", {{"a", 100}});
 
         TVector<TString> billRecords;
-        runtime.SetObserverFunc([&billRecords](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&billRecords](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() != NMetering::TEvMetering::EvWriteMeteringJson) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
@@ -2234,6 +2289,26 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               }
             }
         )", Ydb::StatusIds::CANCELLED);
+    }
+
+    Y_UNIT_TEST(ShouldFailOnNonUniqDestinationPaths) {
+        TTestBasicRuntime runtime;
+
+        auto unusedTestData = THashMap<TString, TString>();
+        Run(runtime, std::move(unusedTestData), R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "a"
+                destination_path: "/MyRoot/Table"
+              }
+              items {
+                source_prefix: "b"
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", Ydb::StatusIds::BAD_REQUEST);
     }
 
     void CancelShouldSucceed(TDelayFunc delayFunc) {

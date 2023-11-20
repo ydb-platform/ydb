@@ -21,6 +21,7 @@
 
 #include <ydb/core/util/pb.h>
 
+#include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/digest/multi.h>
@@ -55,7 +56,7 @@ namespace NKikimr {
                 case EQueueClientType::VPatch:   return "VPatch";
             }
 
-            Y_FAIL("unexpected EQueueClientType");
+            Y_ABORT("unexpected EQueueClientType");
         }
 
         // backpressure queue client identifier; ui32 means NodeId of DS Proxy actor, TVDiskID -- replication job identifier.
@@ -103,7 +104,7 @@ namespace NKikimr {
                         break;
 
                     default:
-                        Y_FAIL("unexpected case");
+                        Y_ABORT("unexpected case");
                 }
             }
 
@@ -370,8 +371,8 @@ namespace NKikimr {
             : Ctx(ctx)
             , Event(std::move(event))
         {
-            Y_VERIFY_DEBUG(Ctx.ExtQueueId != NKikimrBlobStorage::EVDiskQueueId::Unknown);
-            Y_VERIFY_DEBUG(Ctx.IntQueueId != NKikimrBlobStorage::EVDiskInternalQueueId::IntUnknown);
+            Y_DEBUG_ABORT_UNLESS(Ctx.ExtQueueId != NKikimrBlobStorage::EVDiskQueueId::Unknown);
+            Y_DEBUG_ABORT_UNLESS(Ctx.IntQueueId != NKikimrBlobStorage::EVDiskInternalQueueId::IntUnknown);
         }
     };
 
@@ -437,7 +438,7 @@ namespace NKikimr {
 
     private:
         const TInstant Start;
-        ui64 Size;
+        ui64 Size = 0;
         ::NMonitoring::TDynamicCounters::TCounterPtr CounterPtr;
         NVDiskMon::TLtcHistoPtr HistoPtr;
         bool Finalized = false;
@@ -836,7 +837,7 @@ namespace NKikimr {
         }
 
         ui64 GetBufferBytes(ui64 idx) const {
-            Y_VERIFY_DEBUG(idx < Record.ItemsSize());
+            Y_DEBUG_ABORT_UNLESS(idx < Record.ItemsSize());
             if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) {
                 return GetPayload(idx).GetSize();
             } else {
@@ -1372,7 +1373,7 @@ namespace NKikimr {
             if (doNotKeep) {
                 r->SetDoNotKeep(true);
             }
-            Y_VERIFY_DEBUG(keep + doNotKeep <= 1);
+            Y_DEBUG_ABORT_UNLESS(keep + doNotKeep <= 1);
         }
 
         void SetBlobData(NKikimrBlobStorage::TQueryResult& item, TRope&& data) {
@@ -1404,7 +1405,7 @@ namespace NKikimr {
             if (doNotKeep) {
                 r->SetDoNotKeep(true);
             }
-            Y_VERIFY_DEBUG(keep + doNotKeep <= 1);
+            Y_DEBUG_ABORT_UNLESS(keep + doNotKeep <= 1);
         }
 
         bool HasBlob(const NKikimrBlobStorage::TQueryResult& result) const {
@@ -3074,5 +3075,7 @@ namespace NKikimr {
             Record.set_status(NKikimrProto::EReplyStatus_Name(NKikimrProto::ERROR));
         }
     };
+
+    struct TEvPermitGarbageCollection : TEventLocal<TEvPermitGarbageCollection, TEvBlobStorage::EvPermitGarbageCollection> {};
 
 } // NKikimr

@@ -250,7 +250,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             default:
-                Y_FAIL();
+                Y_ABORT();
             }
         }
 

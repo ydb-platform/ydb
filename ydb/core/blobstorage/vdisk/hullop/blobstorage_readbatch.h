@@ -16,7 +16,7 @@ namespace NKikimr {
 
     public:
         void Set(TValue first, TValue last) {
-            Y_VERIFY_DEBUG(first <= last);
+            Y_DEBUG_ABORT_UNLESS(first <= last);
 
             auto begin = std::lower_bound(Ranges.begin(), Ranges.end(), first,
                     [](const TRange& x, const TValue& y) { return x.second < y; });
@@ -29,13 +29,13 @@ namespace NKikimr {
             }
 
             if (begin != Ranges.end() && begin->first <= first) {
-                Y_VERIFY_DEBUG(first <= begin->second);
+                Y_DEBUG_ABORT_UNLESS(first <= begin->second);
                 first = begin->first;
                 begin->second = Max(begin->second, last);
             }
 
             if (end != Ranges.end() && end->first <= last) {
-                Y_VERIFY_DEBUG(last <= end->second);
+                Y_DEBUG_ABORT_UNLESS(last <= end->second);
                 Count -= end->second - end->first;
                 end->first = Min(end->first, first);
                 last = end->second;
@@ -64,7 +64,7 @@ namespace NKikimr {
             TValue prev;
             for (size_t i = 0; i < Ranges.size(); ++i) {
                 const TRange& r = Ranges[i];
-                Y_VERIFY_DEBUG(i == 0 || prev < r.first);
+                Y_DEBUG_ABORT_UNLESS(i == 0 || prev < r.first);
                 prev = r.second;
                 bm.Set(r.first, r.second);
             }
@@ -207,7 +207,7 @@ namespace NKikimr {
             ++NextRequestCookie;
 
             // move stored items to their place and advance Iterator
-            Y_VERIFY_DEBUG(it - outIt == static_cast<ssize_t>(otherItems.size()));
+            Y_DEBUG_ABORT_UNLESS(it - outIt == static_cast<ssize_t>(otherItems.size()));
             Iterator = outIt;
             std::move(otherItems.begin(), otherItems.end(), Iterator);
 

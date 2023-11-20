@@ -5,6 +5,7 @@
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/fake_coordinator.h>
 
 #include <library/cpp/actors/interconnect/events_local.h>
 #include <library/cpp/actors/interconnect/interconnect_impl.h>
@@ -15,6 +16,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 
 #include <google/protobuf/text_format.h>
 #include <library/cpp/malloc/api/malloc.h>
@@ -39,6 +41,8 @@ using namespace NKikimrNodeBroker;
 
 namespace {
 
+const TString DOMAIN_NAME = "dc-1";
+
 void SetupLogging(TTestActorRuntime& runtime)
 {
     NActors::NLog::EPriority priority = ENABLE_DETAILED_NODE_BROKER_LOG ? NLog::PRI_TRACE : NLog::PRI_ERROR;
@@ -59,7 +63,22 @@ void SetupServices(TTestActorRuntime &runtime,
     TAppPrepare app;
 
     app.ClearDomainsAndHive();
-    app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1").Release());
+    ui32 domainUid = TTestTxConfig::DomainUid;
+    ui32 ssId = 0;
+    ui32 planResolution = 50;
+    ui64 schemeRoot = TTestTxConfig::SchemeShard;
+    auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
+        DOMAIN_NAME, domainUid, schemeRoot, ssId, ssId, TVector<ui32>{ssId},
+        domainUid, TVector<ui32>{}, planResolution,
+        TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(domainUid, 1)},
+        TVector<ui64>{},
+        TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(domainUid, 1)},
+        DefaultPoolKinds(2));
+
+    TVector<ui64> ids = runtime.GetTxAllocatorTabletIds();
+    ids.insert(ids.end(), domain->TxAllocators.begin(), domain->TxAllocators.end());
+    runtime.SetTxAllocatorTabletIds(ids);
+    app.AddDomain(domain.Release());
 
     { // setup channel profiles
         TIntrusivePtr<TChannelProfiles> channelProfiles = new TChannelProfiles;
@@ -146,6 +165,7 @@ void SetupServices(TTestActorRuntime &runtime,
         SetupSharedPageCache(runtime, nodeIndex, NFake::TCaches{
             .Shared = 1,
         });
+        SetupSchemeCache(runtime, nodeIndex, DOMAIN_NAME);
     }
 
     runtime.Initialize(app.Unwrap());
@@ -164,6 +184,8 @@ void SetupServices(TTestActorRuntime &runtime,
         runtime.DispatchEvents(options);
     }
 
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::SchemeShard, TTabletTypes::SchemeShard), &CreateFlatTxSchemeShard);
+    BootFakeCoordinator(runtime, TTestTxConfig::Coordinator, MakeIntrusive<TFakeCoordinator::TState>());
     auto aid = CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeNodeBrokerID(0), TTabletTypes::NodeBroker), &CreateNodeBroker);
     runtime.EnableScheduleForActor(aid, true);
 }
@@ -239,6 +261,7 @@ MakeRegistrationRequest(const TString &host,
                         ui16 port,
                         const TString &resolveHost,
                         const TString &address,
+                        const TString &path = DOMAIN_NAME,
                         ui64 dc = 0,
                         ui64 room = 0,
                         ui64 rack = 0,
@@ -256,6 +279,7 @@ MakeRegistrationRequest(const TString &host,
     loc.SetRack(ToString(rack));
     loc.SetUnit(ToString(body));
     event->Record.SetFixedNodeId(fixed);
+    event->Record.SetPath(path);
     return event;
 }
 
@@ -272,9 +296,11 @@ void CheckRegistration(TTestActorRuntime &runtime,
                        TStatus::ECode code = TStatus::OK,
                        ui32 nodeId = 0,
                        ui64 expire = 0,
-                       bool fixed = false)
+                       bool fixed = false,
+                       const TString &path = DOMAIN_NAME,
+                       const TMaybe<TKikimrScopeId> &scopeId = {})
 {
-    auto event = MakeRegistrationRequest(host, port, resolveHost, address, dc, room, rack, body, fixed);
+    auto event = MakeRegistrationRequest(host, port, resolveHost, address, path, dc, room, rack, body, fixed);
     runtime.SendToPipe(MakeNodeBrokerID(0), sender, event.Release(), 0, GetPipeConfigWithRetries());
 
     TAutoPtr<IEventHandle> handle;
@@ -296,6 +322,10 @@ void CheckRegistration(TTestActorRuntime &runtime,
         UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetUnit(), ToString(body));
         if (expire)
             UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetExpire(), expire);
+        if (scopeId) {
+            UNIT_ASSERT_VALUES_EQUAL(rec.GetScopeTabletId(), scopeId->GetSchemeshardId());
+            UNIT_ASSERT_VALUES_EQUAL(rec.GetScopePathId(), scopeId->GetPathItemId());
+        }
     }
 }
 
@@ -1100,7 +1130,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
 
             void Install() {
                 if (!Installed) {
-                    PrevObserverFunc = Runtime.SetObserverFunc([this](auto&, auto& event) {
+                    PrevObserverFunc = Runtime.SetObserverFunc([this](auto& event) {
                         return this->OnEvent(event);
                     });
                     INodeBrokerHooks::Set(this);
@@ -1151,7 +1181,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                     }
                 }
 
-                return PrevObserverFunc(Runtime, ev);
+                return PrevObserverFunc(ev);
             }
 
         private:
@@ -1238,6 +1268,111 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckLeaseExtension(runtime, sender, 1024, TStatus::OK, epoch);
         CheckLeaseExtension(runtime, sender, 1088, TStatus::OK, epoch);
     }
+
+    Y_UNIT_TEST(DoNotReuseDynnodeIdsBelowMinDynamicNodeId)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // There should be no dynamic nodes initially.
+        auto epoch = GetEpoch(runtime, sender);
+    
+        // Register node 1024.
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, 1024, epoch.GetNextEnd());
+        
+        // Update config and restart NodeBroker
+        auto dnConfig = runtime.GetAppData().DynamicNameserviceConfig;
+        dnConfig->MinDynamicNodeId += 64;
+        dnConfig->MaxDynamicNodeId += 64;
+        RestartNodeBroker(runtime);
+    
+        // Wait until epoch expiration.
+        WaitForEpochUpdate(runtime, sender);
+        epoch = GetEpoch(runtime, sender);
+        CheckLeaseExtension(runtime, sender, 1024, TStatus::OK, epoch);
+        CheckNodeInfo(runtime, sender, 1024, TStatus::OK);
+
+        WaitForEpochUpdate(runtime, sender);
+        CheckNodeInfo(runtime, sender, 1024, TStatus::OK);
+
+        // Wait until node's lease expires
+        WaitForEpochUpdate(runtime, sender);
+        WaitForEpochUpdate(runtime, sender);
+        WaitForEpochUpdate(runtime, sender);
+        WaitForEpochUpdate(runtime, sender);
+        epoch = GetEpoch(runtime, sender);
+
+        CheckNodeInfo(runtime, sender, 1024, TStatus::WRONG_REQUEST);
+
+        // Register node 1088.
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.5",
+                          1, 2, 3, 5, TStatus::OK, 1088, epoch.GetNextEnd());
+    }
+
+    Y_UNIT_TEST(ResolveScopeIdForServerless)
+    {
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime);
+        TActorId sender = runtime.AllocateEdgeActor();
+        auto epoch = GetEpoch(runtime, sender);
+        ui32 txId = 100;
+
+        // Create shared subdomain
+        TSubDomainKey sharedSubdomainKey;
+        do {
+            auto modifyScheme = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
+            modifyScheme->Record.SetTxId(++txId);
+            auto* transaction = modifyScheme->Record.AddTransaction();
+            transaction->SetWorkingDir(DOMAIN_NAME);
+            transaction->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExtSubDomain);
+            auto* subdomain = transaction->MutableSubDomain();
+            subdomain->SetName("SharedDB");
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, modifyScheme.Release());
+            TAutoPtr<IEventHandle> handle;
+            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
+            if (reply) {
+                sharedSubdomainKey = TSubDomainKey(reply->Record.GetSchemeshardId(), reply->Record.GetPathId());
+                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
+                break;
+            }
+        } while (true);
+
+        // Check dynamic node in shared subdomain
+        TKikimrScopeId sharedScopeId{sharedSubdomainKey.GetSchemeShard(), sharedSubdomainKey.GetPathId()};
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net",
+                          "1.2.3.4", 1, 2, 3, 4, TStatus::OK, 1024,
+                          epoch.GetNextEnd(), false, "/dc-1/SharedDB",
+                          sharedScopeId);
+
+        // Create serverless subdomain that associated with shared
+        TSubDomainKey serverlessSubdomainKey;
+        do {
+            auto modifyScheme = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
+            modifyScheme->Record.SetTxId(++txId);
+            auto* transaction = modifyScheme->Record.AddTransaction();
+            transaction->SetWorkingDir(DOMAIN_NAME);
+            transaction->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExtSubDomain);
+            auto* subdomain = transaction->MutableSubDomain();
+            subdomain->SetName("ServerlessDB");
+            subdomain->MutableResourcesDomainKey()->CopyFrom(sharedSubdomainKey);
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, modifyScheme.Release());
+            TAutoPtr<IEventHandle> handle;
+            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
+            if (reply) {
+                serverlessSubdomainKey = TSubDomainKey(reply->Record.GetSchemeshardId(), reply->Record.GetPathId());
+                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
+                break;
+            }
+        } while (true);
+        
+        // Check that dynamic node in serverless subdomain has shared scope id
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net",
+                          "1.2.3.5", 1, 2, 3, 5, TStatus::OK, 1056,
+                          epoch.GetNextEnd(), false, "/dc-1/ServerlessDB",
+                          sharedScopeId);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
@@ -1294,7 +1429,7 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         TVector<NKikimrNodeBroker::TListNodes> listRequests;
         TVector<NKikimrNodeBroker::TResolveNode> resolveRequests;
 
-        auto logRequests = [&](TTestActorRuntimeBase &, TAutoPtr<IEventHandle> &event) -> auto {
+        auto logRequests = [&](TAutoPtr<IEventHandle> &event) -> auto {
             if (event->GetTypeRewrite() == TEvNodeBroker::EvListNodes)
                 listRequests.push_back(event->Get<TEvNodeBroker::TEvListNodes>()->Record);
             else if (event->GetTypeRewrite() == TEvNodeBroker::EvResolveNode)

@@ -704,6 +704,8 @@ struct TEvBlobStorage {
         EvGetLogoBlobIndexStatRequest,
         EvReadMetadata,
         EvWriteMetadata,
+        EvPermitGarbageCollection,
+        EvReplInvoke,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -851,7 +853,6 @@ struct TEvBlobStorage {
         // node controller internal messages
         EvRegisterNodeRetry = EvPut + 14 * 512,
         EvAskRestartPDisk,
-        EvAskRestartVDisk,
         EvRestartPDisk,
         EvRestartPDiskResult,
         EvNodeWardenQueryGroupInfo,
@@ -863,6 +864,7 @@ struct TEvBlobStorage {
         EvNodeConfigGather,
         EvNodeWardenQueryStorageConfig,
         EvNodeWardenStorageConfig,
+        EvAskRestartVDisk,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -1719,7 +1721,7 @@ struct TEvBlobStorage {
             , MinGeneration(minGeneration)
             , BlockedGeneration(blockedGeneration)
         {
-            Y_VERIFY_DEBUG(status != NKikimrProto::OK);
+            Y_DEBUG_ABORT_UNLESS(status != NKikimrProto::OK);
         }
 
         TEvDiscoverResult(const TLogoBlobID &id, ui32 minGeneration, const TString &buffer)
@@ -2370,7 +2372,7 @@ static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlob
         case NKikimrBlobStorage::EPutHandleClass::UserData:
             return NKikimrBlobStorage::EVDiskQueueId::PutUserData;
         default:
-            Y_FAIL("Unexpected case");
+            Y_ABORT("Unexpected case");
     }
 }
 
@@ -2386,7 +2388,7 @@ static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlob
             case NKikimrBlobStorage::EGetHandleClass::LowRead:
                 return NKikimrBlobStorage::EVDiskQueueId::GetLowRead;
             default:
-                Y_FAIL("Unexpected case");
+                Y_ABORT("Unexpected case");
         }
     }
 

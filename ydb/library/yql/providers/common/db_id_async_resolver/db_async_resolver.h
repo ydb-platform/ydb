@@ -44,7 +44,6 @@ inline TString DatabaseTypeToMdbUrlPath(EDatabaseType databaseType) {
 
     switch (databaseType) {
         case EDatabaseType::ClickHouse:
-            return dump;
         case EDatabaseType::PostgreSQL:
             return dump;
         default:
@@ -80,6 +79,14 @@ struct TDatabaseResolverResponse {
         ui32 Port = 0;
         TString Database;
         bool Secure = false;
+
+        TString ToDebugString() const { 
+            return TStringBuilder() << "endpoint=" << Endpoint
+                                    << ", host=" << Host
+                                    << ", port=" << Port
+                                    << ", database=" << Database
+                                    << ", secure=" << ToString(Secure);
+        };
     };
 
     // key - (database id, database type), value - resolved database params

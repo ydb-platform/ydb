@@ -4,36 +4,23 @@ namespace NKikimr::NOlap::NCompaction {
 
 void TMergedColumn::AppendBlob(const TString& data, const TColumnRecord& columnChunk) {
     RecordsCount += columnChunk.GetMeta().GetNumRowsVerified();
-    auto remained = Portions.back().AppendBlob(data, columnChunk);
+    ui32 remained;
+    std::shared_ptr<arrow::Array> dataArray = Portions.back().AppendBlob(data, columnChunk, remained);
     while (remained) {
         Y_ABORT_UNLESS(Portions.back().IsFullPortion());
         NewPortion();
-        remained = Portions.back().AppendSlice(remained);
+        remained = Portions.back().AppendSlice(dataArray, dataArray->length() - remained, remained);
     }
     if (Portions.back().IsFullPortion()) {
         NewPortion();
     }
 }
 
-void TMergedColumn::AppendSlice(const std::shared_ptr<arrow::RecordBatch>& data) {
-    RecordsCount += data->num_rows();
+void TMergedColumn::AppendSlice(const std::shared_ptr<arrow::Array>& data, const ui32 startIndex, const ui32 length) {
+    RecordsCount += length;
     Y_ABORT_UNLESS(data);
-    Y_ABORT_UNLESS(data->num_columns() == 1);
-    auto remained = data->column(0);
-    while (remained = Portions.back().AppendSlice(remained)) {
-        Y_ABORT_UNLESS(Portions.back().IsFullPortion());
-        NewPortion();
-    }
-    if (Portions.back().IsFullPortion()) {
-        NewPortion();
-    }
-}
-
-void TMergedColumn::AppendSlice(const std::shared_ptr<arrow::Array>& data) {
-    RecordsCount += data->length();
-    Y_ABORT_UNLESS(data);
-    auto remained = data;
-    while (remained = Portions.back().AppendSlice(remained)) {
+    ui32 remained = length;
+    while (remained = Portions.back().AppendSlice(data, startIndex + length - remained, remained)) {
         Y_ABORT_UNLESS(Portions.back().IsFullPortion());
         NewPortion();
     }

@@ -819,90 +819,81 @@ public:
 
         TStatTimer timerFull(CodeGen_FullTime);
         timerFull.Acquire();
-        bool hasCode = false;
         {
             TStatTimer timerGen(CodeGen_GenerateTime);
             timerGen.Acquire();
             for (auto it = nodes.crbegin(); nodes.crend() != it; ++it) {
                 if (const auto codegen = dynamic_cast<ICodegeneratorRootNode*>(it->Get())) {
-                    try {
-                        codegen->GenerateFunctions(*Codegen);
-                        hasCode = true;
-                    } catch (const TNoCodegen&) {
-                        hasCode = false;
-                        break;
-                    }
+                    codegen->GenerateFunctions(*Codegen);
                 }
             }
             timerGen.Release();
             timerGen.Report(stats);
         }
 
-        if (hasCode) {
-            if (optLLVM.Contains("--dump-generated")) {
-                Cerr << "############### Begin generated module ###############" << Endl;
+        if (optLLVM.Contains("--dump-generated")) {
+            Cerr << "############### Begin generated module ###############" << Endl;
+            Codegen->GetModule().print(llvm::errs(), nullptr);
+            Cerr << "################ End generated module ################" << Endl;
+        }
+
+        TStatTimer timerComp(CodeGen_CompileTime);
+        timerComp.Acquire();
+
+        NYql::NCodegen::TCodegenStats codegenStats;
+        Codegen->GetStats(codegenStats);
+        MKQL_ADD_STAT(stats, CodeGen_TotalFunctions, codegenStats.TotalFunctions);
+        MKQL_ADD_STAT(stats, CodeGen_TotalInstructions, codegenStats.TotalInstructions);
+        MKQL_SET_MAX_STAT(stats, CodeGen_MaxFunctionInstructions, codegenStats.MaxFunctionInstructions);
+        if (optLLVM.Contains("--dump-stats")) {
+            Cerr << "TotalFunctions: " << codegenStats.TotalFunctions << Endl;
+            Cerr << "TotalInstructions: " << codegenStats.TotalInstructions << Endl;
+            Cerr << "MaxFunctionInstructions: " << codegenStats.MaxFunctionInstructions << Endl;
+        }
+
+        if (optLLVM.Contains("--dump-perf-map")) {
+            Codegen->TogglePerfJITEventListener();
+        }
+
+        if (codegenStats.TotalFunctions >= TotalFunctionsLimit ||
+            codegenStats.TotalInstructions >= TotalInstructionsLimit ||
+            codegenStats.MaxFunctionInstructions >= MaxFunctionInstructionsLimit) {
+            Codegen.reset();
+        } else {
+            Codegen->Verify();
+            Codegen->Compile(GetCompileOptions(optLLVM), &CompileStats);
+
+            MKQL_ADD_STAT(stats, CodeGen_FunctionPassTime, CompileStats.FunctionPassTime);
+            MKQL_ADD_STAT(stats, CodeGen_ModulePassTime, CompileStats.ModulePassTime);
+            MKQL_ADD_STAT(stats, CodeGen_FinalizeTime, CompileStats.FinalizeTime);
+        }
+
+        timerComp.Release();
+        timerComp.Report(stats);
+
+        if (Codegen) {
+            if (optLLVM.Contains("--dump-compiled")) {
+                Cerr << "############### Begin compiled module ###############" << Endl;
                 Codegen->GetModule().print(llvm::errs(), nullptr);
-                Cerr << "################ End generated module ################" << Endl;
+                Cerr << "################ End compiled module ################" << Endl;
             }
 
-            TStatTimer timerComp(CodeGen_CompileTime);
-            timerComp.Acquire();
-
-            NYql::NCodegen::TCodegenStats codegenStats;
-            Codegen->GetStats(codegenStats);
-            MKQL_ADD_STAT(stats, CodeGen_TotalFunctions, codegenStats.TotalFunctions);
-            MKQL_ADD_STAT(stats, CodeGen_TotalInstructions, codegenStats.TotalInstructions);
-            MKQL_SET_MAX_STAT(stats, CodeGen_MaxFunctionInstructions, codegenStats.MaxFunctionInstructions);
-            if (optLLVM.Contains("--dump-stats")) {
-                Cerr << "TotalFunctions: " << codegenStats.TotalFunctions << Endl;
-                Cerr << "TotalInstructions: " << codegenStats.TotalInstructions << Endl;
-                Cerr << "MaxFunctionInstructions: " << codegenStats.MaxFunctionInstructions << Endl;
+            if (optLLVM.Contains("--asm-compiled")) {
+                Cerr << "############### Begin compiled asm ###############" << Endl;
+                Codegen->ShowGeneratedFunctions(&Cerr);
+                Cerr << "################ End compiled asm ################" << Endl;
             }
 
-            if (optLLVM.Contains("--dump-perf-map")) {
-                Codegen->TogglePerfJITEventListener();
+            ui64 count = 0U;
+            for (const auto& node : nodes) {
+                if (const auto codegen = dynamic_cast<ICodegeneratorRootNode*>(node.Get())) {
+                    codegen->FinalizeFunctions(*Codegen);
+                    ++count;
+                }
             }
 
-            if (codegenStats.TotalFunctions >= TotalFunctionsLimit ||
-                codegenStats.TotalInstructions >= TotalInstructionsLimit ||
-                codegenStats.MaxFunctionInstructions >= MaxFunctionInstructionsLimit) {
-                Codegen.reset();
-            } else {
-                Codegen->Verify();
-                Codegen->Compile(GetCompileOptions(optLLVM), &CompileStats);
-
-                MKQL_ADD_STAT(stats, CodeGen_FunctionPassTime, CompileStats.FunctionPassTime);
-                MKQL_ADD_STAT(stats, CodeGen_ModulePassTime, CompileStats.ModulePassTime);
-                MKQL_ADD_STAT(stats, CodeGen_FinalizeTime, CompileStats.FinalizeTime);
-            }
-
-            timerComp.Release();
-            timerComp.Report(stats);
-
-            if (Codegen) {
-                if (optLLVM.Contains("--dump-compiled")) {
-                    Cerr << "############### Begin compiled module ###############" << Endl;
-                    Codegen->GetModule().print(llvm::errs(), nullptr);
-                    Cerr << "################ End compiled module ################" << Endl;
-                }
-
-                if (optLLVM.Contains("--asm-compiled")) {
-                    Cerr << "############### Begin compiled asm ###############" << Endl;
-                    Codegen->ShowGeneratedFunctions(&Cerr);
-                    Cerr << "################ End compiled asm ################" << Endl;
-                }
-
-                ui64 count = 0U;
-                for (const auto& node : nodes) {
-                    if (const auto codegen = dynamic_cast<ICodegeneratorRootNode*>(node.Get())) {
-                        codegen->FinalizeFunctions(*Codegen);
-                        ++count;
-                    }
-                }
-
-                if (count) {
-                    MKQL_ADD_STAT(stats, Mkql_CodegenFunctions, count);
-                }
+            if (count) {
+                MKQL_ADD_STAT(stats, Mkql_CodegenFunctions, count);
             }
         }
 

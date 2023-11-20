@@ -43,6 +43,7 @@ target_link_libraries(providers-yt-provider PUBLIC
   core-url_lister-interface
   yql-dq-integration
   yql-dq-opt
+  yql-dq-type_ann
   library-yql-minikql
   providers-common-codec
   providers-common-config
@@ -106,6 +107,7 @@ target_sources(providers-yt-provider PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_table_desc.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_dq_integration.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_dq_optimize.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_dq_hybrid.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_wide_flow.cpp
 )

@@ -15,12 +15,12 @@ public:
     }
 
     inline static TStatus Error(const TStringBuf& error) {
-        Y_VERIFY_DEBUG(!error.empty());
+        Y_DEBUG_ABORT_UNLESS(!error.empty());
         return TStatus(TString(error));
     }
 
     inline static TStatus Error(TString&& error) {
-        Y_VERIFY_DEBUG(!error.empty());
+        Y_DEBUG_ABORT_UNLESS(!error.empty());
         return TStatus(std::move(error));
     }
 

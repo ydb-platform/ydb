@@ -24,6 +24,18 @@ public:
     }
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        if (TransformIsFinished) {
+            return TStatus::Ok;
+        }
+
+        const TStatus status = DoTransformInternal(input, output, ctx);
+        if (status == TStatus::Ok) {
+            TransformIsFinished = true;
+        }
+        return status;
+    }
+
+    TStatus DoTransformInternal(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
         if (!TKqlQueryList::Match(input.Get())) {
             return TStatus::Error;
         }
@@ -79,6 +91,7 @@ public:
 private:
     TAutoPtr<IGraphTransformer> QueryBlockTransformer;
     size_t CurrentBlock = 0;
+    bool TransformIsFinished = false;
 };
 
 } // namespace

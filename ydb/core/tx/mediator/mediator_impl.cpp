@@ -1,6 +1,7 @@
 #include "mediator_impl.h"
 
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 namespace NKikimr {
 namespace NTxMediator {
@@ -113,7 +114,7 @@ void TTxMediator::DoConfigure(const TEvSubDomain::TEvConfigure &ev, const TActor
                      , "tablet# " << TabletID() << " actor# " << SelfId()
                     << " Apply TEvMediatorConfiguration Version# " << record.GetVersion()
                     << " recive empty coordinators set");
-        Y_FAIL("empty coordinators set");
+        Y_ABORT("empty coordinators set");
         return;
     }
 
@@ -266,7 +267,7 @@ void TTxMediator::ProcessForeignStep(const TActorId &sender, const NKikimrTx::TE
     Y_UNUSED(info);
     Y_UNUSED(ctx);
 
-    Y_FAIL("TODO");
+    Y_ABORT("TODO");
 }
 
 void TTxMediator::Handle(TEvTxCoordinator::TEvCoordinatorStep::TPtr &ev, const TActorContext &ctx) {

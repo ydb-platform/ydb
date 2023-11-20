@@ -135,6 +135,27 @@ public:
                         return;
                     }
 
+                    case NKikimrScheme::EStatus::StatusSchemeError: {
+                        Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
+                            response.GetSchemeShardReason(), {}));
+                        this->Die(ctx);
+                        return;
+                    }
+
+                    case NKikimrScheme::EStatus::StatusPreconditionFailed: {
+                        Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                            response.GetSchemeShardReason(), {}));
+                        this->Die(ctx);
+                        return;
+                    }
+
+                    case NKikimrScheme::EStatus::StatusInvalidParameter: {
+                        Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+                            response.GetSchemeShardReason(), {}));
+                        this->Die(ctx);
+                        return;
+                    }
+
                     default:
                         break;
                 }

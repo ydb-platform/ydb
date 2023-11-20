@@ -34,21 +34,45 @@ void ProduceSingleOutputValue(
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TOptions>
-TTransactionalCommandBase<
+void TTransactionalCommandBase<
     TOptions,
     typename std::enable_if_t<std::is_convertible_v<TOptions&, NApi::TTransactionalOptions&>>
->::TTransactionalCommandBase()
+>::Register(TRegistrar registrar)
 {
-    this->RegisterParameter("transaction_id", this->Options.TransactionId)
-        .Optional();
-    this->RegisterParameter("ping", this->Options.Ping)
-        .Optional();
-    this->RegisterParameter("ping_ancestor_transactions", this->Options.PingAncestors)
-        .Optional();
-    this->RegisterParameter("suppress_transaction_coordinator_sync", this->Options.SuppressTransactionCoordinatorSync)
-        .Optional();
-    this->RegisterParameter("suppress_upstream_sync", this->Options.SuppressUpstreamSync)
-        .Optional();
+    registrar.template ParameterWithUniversalAccessor<NObjectClient::TTransactionId>(
+        "transaction_id",
+        [] (TThis* command) -> auto& {
+            return command->Options.TransactionId;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<bool>(
+        "ping",
+        [] (TThis* command) -> auto& {
+            return command->Options.Ping;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<bool>(
+        "ping_ancestor_transactions",
+        [] (TThis* command) -> auto& {
+            return command->Options.PingAncestors;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<bool>(
+        "suppress_transaction_coordinator_sync",
+        [] (TThis* command) -> auto& {
+            return command->Options.SuppressTransactionCoordinatorSync;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<bool>(
+        "suppress_upstream_sync",
+        [] (TThis* command) ->bool& {
+            return command->Options.SuppressUpstreamSync;
+        })
+        .Optional(/*init*/ false);
 }
 
 template <class TOptions>
@@ -87,109 +111,197 @@ NApi::ITransactionPtr TTransactionalCommandBase<
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TOptions>
-TMutatingCommandBase<
+void TMutatingCommandBase<
     TOptions,
     typename std::enable_if_t<std::is_convertible_v<TOptions&, NApi::TMutatingOptions&>>
->::TMutatingCommandBase()
+>::Register(TRegistrar registrar)
 {
-    this->RegisterParameter("mutation_id", this->Options.MutationId)
-        .Optional();
-    this->RegisterParameter("retry", this->Options.Retry)
-        .Optional();
+    registrar.template ParameterWithUniversalAccessor<NRpc::TMutationId>(
+        "mutation_id",
+        [] (TThis* command) -> auto& {
+            return command->Options.MutationId;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<bool>(
+        "retry",
+        [] (TThis* command) -> auto& {
+            return command->Options.Retry;
+        })
+        .Optional(/*init*/ false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TOptions>
-TReadOnlyMasterCommandBase<
+void TReadOnlyMasterCommandBase<
     TOptions,
     typename std::enable_if_t<std::is_convertible_v<TOptions&, NApi::TMasterReadOptions&>>
->::TReadOnlyMasterCommandBase()
+>::Register(TRegistrar registrar)
 {
-    this->RegisterParameter("read_from", this->Options.ReadFrom)
-        .Optional();
-    this->RegisterParameter("disable_per_user_cache", this->Options.DisablePerUserCache)
-        .Optional();
-    this->RegisterParameter("expire_after_successful_update_time", this->Options.ExpireAfterSuccessfulUpdateTime)
-        .Optional();
-    this->RegisterParameter("expire_after_failed_update_time", this->Options.ExpireAfterFailedUpdateTime)
-        .Optional();
-    this->RegisterParameter("success_staleness_bound", this->Options.SuccessStalenessBound)
-        .Optional();
-    this->RegisterParameter("cache_sticky_group_size", this->Options.CacheStickyGroupSize)
-        .Optional();
+    registrar.template ParameterWithUniversalAccessor<NApi::EMasterChannelKind>(
+        "read_from",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReadFrom;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<bool>(
+        "disable_per_user_cache",
+        [] (TThis* command) -> auto& {
+            return command->Options.DisablePerUserCache;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<TDuration>(
+        "expire_after_successful_update_time",
+        [] (TThis* command) -> auto& {
+            return command->Options.ExpireAfterSuccessfulUpdateTime;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<TDuration>(
+        "expire_after_failed_update_time",
+        [] (TThis* command) -> auto& {
+            return command->Options.ExpireAfterFailedUpdateTime;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<TDuration>(
+        "success_staleness_bound",
+        [] (TThis* command) -> auto& {
+            return command->Options.SuccessStalenessBound;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<std::optional<int>>(
+        "cache_sticky_group_size",
+        [] (TThis* command) -> auto& {
+            return command->Options.CacheStickyGroupSize;
+        })
+        .Optional(/*init*/ false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TOptions>
-TReadOnlyTabletCommandBase<
+void TReadOnlyTabletCommandBase<
     TOptions,
     typename std::enable_if_t<std::is_convertible_v<TOptions&, NApi::TTabletReadOptions&>>
->::TReadOnlyTabletCommandBase()
+>::Register(TRegistrar registrar)
 {
-    this->RegisterParameter("read_from", this->Options.ReadFrom)
-        .Optional();
-    this->RegisterParameter("rpc_hedging_delay", this->Options.RpcHedgingDelay)
-        .Optional();
-    this->RegisterParameter("timestamp", this->Options.Timestamp)
-        .Optional();
-    this->RegisterParameter("retention_timestamp", this->Options.RetentionTimestamp)
-        .Optional();
+    registrar.template ParameterWithUniversalAccessor<NHydra::EPeerKind>(
+        "read_from",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReadFrom;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<std::optional<TDuration>>(
+        "rpc_hedging_delay",
+        [] (TThis* command) -> auto& {
+            return command->Options.RpcHedgingDelay;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<NTransactionClient::TTimestamp>(
+        "timestamp",
+        [] (TThis* command) -> auto& {
+            return command->Options.Timestamp;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<NTransactionClient::TTimestamp>(
+        "retention_timestamp",
+        [] (TThis* command) -> auto& {
+            return command->Options.RetentionTimestamp;
+        })
+        .Optional(/*init*/ false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TOptions>
-TSuppressableAccessTrackingCommandBase<
+void TSuppressableAccessTrackingCommandBase<
     TOptions,
     typename std::enable_if_t<std::is_convertible_v<TOptions&, NApi::TSuppressableAccessTrackingOptions&>>
->::TSuppressableAccessTrackingCommandBase()
+>::Register(TRegistrar registrar)
 {
-    this->RegisterParameter("suppress_access_tracking", this->Options.SuppressAccessTracking)
-        .Optional();
-    this->RegisterParameter("suppress_modification_tracking", this->Options.SuppressModificationTracking)
-        .Optional();
-    this->RegisterParameter("suppress_expiration_timeout_renewal", this->Options.SuppressExpirationTimeoutRenewal)
-        .Optional();
+    registrar.template ParameterWithUniversalAccessor<bool>(
+        "suppress_access_tracking",
+        [] (TThis* command) -> auto& {
+            return command->Options.SuppressAccessTracking;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<bool>(
+        "suppress_modification_tracking",
+        [] (TThis* command) -> auto& {
+            return command->Options.SuppressModificationTracking;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<bool>(
+        "suppress_expiration_timeout_renewal",
+        [] (TThis* command) -> auto& {
+            return command->Options.SuppressExpirationTimeoutRenewal;
+        })
+        .Optional(/*init*/ false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TOptions>
-TPrerequisiteCommandBase<
+void TPrerequisiteCommandBase<
     TOptions,
     typename std::enable_if_t<std::is_convertible_v<TOptions&, NApi::TPrerequisiteOptions&>>
->::TPrerequisiteCommandBase()
+>::Register(TRegistrar registrar)
 {
-    this->RegisterParameter("prerequisite_transaction_ids", this->Options.PrerequisiteTransactionIds)
-        .Optional();
-    this->RegisterParameter("prerequisite_revisions", this->Options.PrerequisiteRevisions)
-        .Optional();
+    registrar.template ParameterWithUniversalAccessor<std::vector<NTransactionClient::TTransactionId>>(
+        "prerequisite_transaction_ids",
+        [] (TThis* command) -> auto& {
+            return command->Options.PrerequisiteTransactionIds;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<std::vector<NApi::TPrerequisiteRevisionConfigPtr>>(
+        "prerequisite_revisions",
+        [] (TThis* command) -> auto& {
+            return command->Options.PrerequisiteRevisions;
+        })
+        .Optional(/*init*/ false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TOptions>
-TTimeoutCommandBase<
+void TTimeoutCommandBase<
     TOptions,
     typename std::enable_if_t<std::is_convertible_v<TOptions&, NApi::TTimeoutOptions&>>
->::TTimeoutCommandBase()
+>::Register(TRegistrar registrar)
 {
-    this->RegisterParameter("timeout", this->Options.Timeout)
-        .Optional();
+    registrar.template ParameterWithUniversalAccessor<std::optional<TDuration>>(
+        "timeout",
+        [] (TThis* command) -> auto& {
+            return command->Options.Timeout;
+        })
+        .Optional(/*init*/ false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TOptions>
-TTabletReadCommandBase<
+void TTabletReadCommandBase<
     TOptions,
     typename std::enable_if_t<std::is_convertible_v<TOptions&, TTabletTransactionOptions&>>
->::TTabletReadCommandBase()
+>::Register(TRegistrar registrar)
 {
-    this->RegisterParameter("transaction_id", this->Options.TransactionId)
-        .Optional();
+    registrar.template ParameterWithUniversalAccessor<NTransactionClient::TTransactionId>(
+        "transaction_id",
+        [] (TThis* command) -> auto& {
+            return command->Options.TransactionId;
+        })
+        .Optional(/*init*/ false);
 }
 
 template <class TOptions>
@@ -209,14 +321,23 @@ NApi::IClientBasePtr TTabletReadCommandBase<
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TOptions>
-TTabletWriteCommandBase<
+void TTabletWriteCommandBase<
     TOptions,
     typename std::enable_if_t<std::is_convertible_v<TOptions&, TTabletWriteOptions&>>
->::TTabletWriteCommandBase()
+>::Register(TRegistrar registrar)
 {
-    this->RegisterParameter("atomicity", this->Options.Atomicity)
+    registrar.template ParameterWithUniversalAccessor<NTransactionClient::EAtomicity>(
+        "atomicity",
+        [] (TThis* command) -> auto& {
+            return command->Options.Atomicity;
+        })
         .Default();
-    this->RegisterParameter("durability", this->Options.Durability)
+
+    registrar.template ParameterWithUniversalAccessor<NTransactionClient::EDurability>(
+        "durability",
+        [] (TThis* command) -> auto& {
+            return command->Options.Durability;
+        })
         .Default();
 }
 
@@ -251,22 +372,46 @@ bool TTabletWriteCommandBase<
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TOptions>
-TSelectRowsCommandBase<
+void TSelectRowsCommandBase<
     TOptions,
     typename std::enable_if_t<std::is_convertible_v<TOptions&, NApi::TSelectRowsOptionsBase&>>
->::TSelectRowsCommandBase()
+>::Register(TRegistrar registrar)
 {
-    this->RegisterParameter("range_expansion_limit", this->Options.RangeExpansionLimit)
-        .Optional();
-    this->RegisterParameter("max_subqueries", this->Options.MaxSubqueries)
+    registrar.template ParameterWithUniversalAccessor<ui64>(
+        "range_expansion_limit",
+        [] (TThis* command) -> auto& {
+            return command->Options.RangeExpansionLimit;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<int>(
+        "max_subqueries",
+        [] (TThis* command) -> auto& {
+            return command->Options.MaxSubqueries;
+        })
         .GreaterThan(0)
-        .Optional();
-    this->RegisterParameter("udf_registry_path", this->Options.UdfRegistryPath)
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<std::optional<TString>>(
+        "udf_registry_path",
+        [] (TThis* command) -> auto& {
+            return command->Options.UdfRegistryPath;
+        })
         .Default();
-    this->RegisterParameter("verbose_logging", this->Options.VerboseLogging)
-        .Optional();
-    this->RegisterParameter("new_range_inference", this->Options.NewRangeInference)
-        .Optional();
+
+    registrar.template ParameterWithUniversalAccessor<bool>(
+        "verbose_logging",
+        [] (TThis* command) -> auto& {
+            return command->Options.VerboseLogging;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.template ParameterWithUniversalAccessor<bool>(
+        "new_range_inference",
+        [] (TThis* command) -> auto& {
+            return command->Options.NewRangeInference;
+        })
+        .Optional(/*init*/ false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

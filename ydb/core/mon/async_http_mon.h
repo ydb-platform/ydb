@@ -3,6 +3,9 @@
 #include <library/cpp/monlib/service/monservice.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/service/pages/index_mon_page.h>
+#include <library/cpp/monlib/service/pages/resources/css_mon_page.h>
+#include <library/cpp/monlib/service/pages/resources/fonts_mon_page.h>
+#include <library/cpp/monlib/service/pages/resources/js_mon_page.h>
 #include <library/cpp/monlib/service/pages/tablesorter/css_mon_page.h>
 #include <library/cpp/monlib/service/pages/tablesorter/js_mon_page.h>
 

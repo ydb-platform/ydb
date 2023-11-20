@@ -12,17 +12,8 @@ extern const TString WorkingDirectoryParamName;
 extern const TString WorkingDirectoryDontInitParamName; // COMPAT(aozeritsky)
 extern const TString UseMetaParamName; // COMPAT(aozeritsky)
 
-class IStringSource: public NDq::IDqAsyncInputBuffer {
-public:
-    virtual ~IStringSource() = default;
-    virtual void PushString(TVector<TString>&& batch, i64 space) = 0;
-};
-
-class IStringSink: public NDq::IDqAsyncOutputBuffer {
-public:
-    virtual ~IStringSink() = default;
-    virtual ui64 PopString(TVector<TString>& batch, ui64 bytes) = 0;
-};
+void SaveRopeToPipe(IOutputStream& output, const TRope& rope);
+void LoadRopeFromPipe(IInputStream& input, TRope& rope);
 
 class IInputChannel : public TThrRefBase, private TNonCopyable {
 public:
@@ -93,7 +84,7 @@ public:
 
     virtual ITaskRunner::TPtr GetOld(const NDq::TDqTaskSettings& task, const TString& traceId = "") = 0;
 
-    virtual TIntrusivePtr<NDq::IDqTaskRunner> Get(const NDq::TDqTaskSettings& task, const TString& traceId = "TODO") = 0;
+    virtual TIntrusivePtr<NDq::IDqTaskRunner> Get(const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TString& traceId = "TODO") = 0;
 };
 
 

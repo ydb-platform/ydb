@@ -45,7 +45,7 @@ namespace NKikimr::NBlobDepot {
                 }
 
                 default:
-                    Y_FAIL("unexpected request type for decommission proxy Type# 0x%08" PRIx32, type);
+                    Y_ABORT("unexpected request type for decommission proxy Type# 0x%08" PRIx32, type);
             }
             Send(SelfId(), response.release(), 0, id);
         }

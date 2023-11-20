@@ -275,7 +275,7 @@ void TBoardSubscriberTest::DropByDisconnect() {
         UNIT_ASSERT(event->Get()->InfoEntries.empty());
     }
 
-    auto prevObserverFunc = Context->SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+    auto prevObserverFunc = Context->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             case TEvStateStorage::TEvReplicaBoardPublish::EventType: {
                 if (ev->Recipient != replicas[0]) {

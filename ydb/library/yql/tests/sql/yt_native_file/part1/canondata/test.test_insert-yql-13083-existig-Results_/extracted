@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:4:13: Warning: At function: YtPublish!
+    	INSERT INTO Output1
+	            ^
+        <tmp_path>/program.sql:<main>:4:13: Warning: Sort order of written data differs from the order of "Output1" table content. Result table content will be ordered by key(asc)
+        	INSERT INTO Output1
+	            ^
+    <tmp_path>/program.sql:<main>:13:13: Warning: At function: YtPublish!
+    	INSERT INTO Output2
+	            ^
+        <tmp_path>/program.sql:<main>:13:13: Warning: Sort order of written data differs from the order of "Output2" table content. Result table content will be ordered by key(asc)
+        	INSERT INTO Output2
+	            ^

@@ -152,6 +152,11 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
     return it->second;
 }
 
+const TUserInfo* TUsersInfoStorage::GetIfExists(const TString& user) const {
+    auto it = UsersInfo.find(user);
+    return it != UsersInfo.end() ? &it->second : nullptr;
+}
+
 TUserInfo* TUsersInfoStorage::GetIfExists(const TString& user) {
     auto it = UsersInfo.find(user);
     return it != UsersInfo.end() ? &it->second : nullptr;

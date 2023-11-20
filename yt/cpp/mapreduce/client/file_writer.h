@@ -27,6 +27,7 @@ public:
 protected:
     void DoWrite(const void* buf, size_t len) override;
     void DoFinish() override;
+    size_t GetBufferMemoryUsage() const override;
 
 private:
     TRetryfulWriter RetryfulWriter_;

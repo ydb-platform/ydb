@@ -425,6 +425,8 @@ private:
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
 
+    bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
+
 private:
     TStack<TInstant> ScheduledCleanups;
     TString NotSupportedReason;
@@ -451,6 +453,10 @@ private:
     TTabletCountersBase *TabletCounters;
 
     TInstant InfoCollectorStartTime;
+
+private:
+    TString GenerateStat();
+    void GenerateNodeState(IOutputStream&);
 
 public:
     TCms(const TActorId &tablet, TTabletStorageInfo *info)

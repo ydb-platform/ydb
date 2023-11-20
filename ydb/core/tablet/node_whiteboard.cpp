@@ -8,6 +8,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/process_stats.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/base/nameservice.h>
 #include "tablet_counters.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/util/tuples.h>
@@ -24,6 +25,7 @@ class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService>
         enum EEv {
             EvUpdateRuntimeStats = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvCleanupDeadTablets,
+            EvUpdateClockSkew,
             EvEnd
         };
 
@@ -31,6 +33,7 @@ class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService>
 
         struct TEvUpdateRuntimeStats : TEventLocal<TEvUpdateRuntimeStats, EvUpdateRuntimeStats> {};
         struct TEvCleanupDeadTablets : TEventLocal<TEvCleanupDeadTablets, EvCleanupDeadTablets> {};
+        struct TEvUpdateClockSkew : TEventLocal<TEvUpdateClockSkew, EvUpdateClockSkew> {};
     };
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -63,6 +66,7 @@ public:
         }
         ctx.Send(ctx.SelfID, new TEvPrivate::TEvUpdateRuntimeStats());
         ctx.Schedule(TDuration::Seconds(60), new TEvPrivate::TEvCleanupDeadTablets());
+        ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateClockSkew());
         Become(&TNodeWhiteboardService::StateFunc);
     }
 
@@ -72,6 +76,8 @@ protected:
     std::unordered_map<ui32, NKikimrWhiteboard::TPDiskStateInfo> PDiskStateInfo;
     std::unordered_map<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo, THash<TVDiskID>> VDiskStateInfo;
     std::unordered_map<ui32, NKikimrWhiteboard::TBSGroupStateInfo> BSGroupStateInfo;
+    i64 MaxClockSkewWithPeerUs;
+    ui32 MaxClockSkewPeerId;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
     THolder<NTracing::ITraceCollection> TabletIntrospectionData;
     TProcStat ProcessStats;
@@ -382,6 +388,7 @@ protected:
     STRICT_STFUNC(StateFunc,
         HFunc(TEvWhiteboard::TEvTabletStateUpdate, Handle);
         HFunc(TEvWhiteboard::TEvTabletStateRequest, Handle);
+        HFunc(TEvWhiteboard::TEvClockSkewUpdate, Handle);
         HFunc(TEvWhiteboard::TEvNodeStateUpdate, Handle);
         HFunc(TEvWhiteboard::TEvNodeStateDelete, Handle);
         HFunc(TEvWhiteboard::TEvNodeStateRequest, Handle);
@@ -409,6 +416,7 @@ protected:
         HFunc(TEvWhiteboard::TEvSignalBodyRequest, Handle);
         HFunc(TEvPrivate::TEvUpdateRuntimeStats, Handle);
         HFunc(TEvPrivate::TEvCleanupDeadTablets, Handle);
+        HFunc(TEvPrivate::TEvUpdateClockSkew, Handle);
     )
 
     void Handle(TEvWhiteboard::TEvTabletStateUpdate::TPtr &ev, const TActorContext &ctx) {
@@ -419,6 +427,14 @@ protected:
         }
         if (CheckedMerge(tabletStateInfo, ev->Get()->Record) >= 100) {
             tabletStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+        }
+    }
+
+    void Handle(TEvWhiteboard::TEvClockSkewUpdate::TPtr &ev, const TActorContext &) {
+        i64 skew = ev->Get()->Record.GetClockSkewUs();
+        if (abs(skew) > abs(MaxClockSkewWithPeerUs)) {
+            MaxClockSkewWithPeerUs = skew;
+            MaxClockSkewPeerId = ev->Get()->Record.GetPeerNodeId();
         }
     }
 
@@ -596,7 +612,9 @@ protected:
                 maxDiskUsage = std::max(maxDiskUsage, 1.0 - avail);
             }
         }
-        SystemStateInfo.SetMaxDiskUsage(maxDiskUsage);
+        if (PDiskStateInfo.size() > 0) {
+            SystemStateInfo.SetMaxDiskUsage(maxDiskUsage);
+        }
         if (pDiskFlag == NKikimrWhiteboard::EFlag::Yellow) {
             switch (yellowFlags) {
             case 1:
@@ -638,30 +656,6 @@ protected:
         if (!SystemStateInfo.HasSystemState() || SystemStateInfo.GetSystemState() != eFlag) {
             SystemStateInfo.SetSystemState(eFlag);
             SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
-        }
-
-        const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters = AppData(ctx)->Counters;
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> interconnectCounters = GetServiceCounters(counters, "interconnect");
-        ui64 clockSkew = 0;
-        ui32 peerId = 0;
-        interconnectCounters->EnumerateSubgroups([&interconnectCounters, &clockSkew, &peerId](const TString &name, const TString &value) -> void {
-            if (name == "peer") {
-                TIntrusivePtr<::NMonitoring::TDynamicCounters> peerCounters = interconnectCounters->GetSubgroup(name, value);
-                ::NMonitoring::TDynamicCounters::TCounterPtr connectedCounter = peerCounters->GetCounter("ClockSkewMicrosec");
-                ui64 skew = abs(connectedCounter->Val());
-                if (skew > clockSkew) {
-                    clockSkew = skew;
-                    TStringBuf tokenBuf(value);
-                    TString tok(tokenBuf.NextTok(':'));
-                    if (tok) {
-                        peerId = std::stoi(tok);
-                    }
-                }
-            }
-        });
-        if (clockSkew > 0) {
-            SystemStateInfo.SetClockSkewMicrosec(clockSkew);
-            SystemStateInfo.SetClockSkewPeerId(peerId);
         }
     }
 
@@ -965,6 +959,13 @@ protected:
             }
         }
         ctx.Schedule(TDuration::Seconds(60), new TEvPrivate::TEvCleanupDeadTablets());
+    }
+
+    void Handle(TEvPrivate::TEvUpdateClockSkew::TPtr &, const TActorContext &ctx) {
+        SystemStateInfo.SetMaxClockSkewWithPeerUs(MaxClockSkewWithPeerUs);
+        SystemStateInfo.SetMaxClockSkewPeerId(MaxClockSkewPeerId);
+        MaxClockSkewWithPeerUs = 0;
+        ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateClockSkew());
     }
 };
 

@@ -145,7 +145,7 @@ namespace NKikimr {
                     return;
                 }
 
-                Y_VERIFY_DEBUG(sourceVDisk != SelfVDiskId);
+                Y_DEBUG_ABORT_UNLESS(sourceVDisk != SelfVDiskId);
 
                 // handle locks
                 if (NeighborsPtr->IsLocked(sourceVDisk)) {
@@ -184,8 +184,10 @@ namespace NKikimr {
                     return;
                 }
 
-                // cut the log (according to confirmed old synced state)
-                CutLog(ctx, sourceVDisk, oldSyncState.SyncedLsn);
+                if (!SlCtx->IsReadOnlyVDisk) {
+                    // cut the log (according to confirmed old synced state)
+                    CutLog(ctx, sourceVDisk, oldSyncState.SyncedLsn);
+                }
                 // process the request further asyncronously
                 NeighborsPtr->Lock(sourceVDisk, oldSyncState.SyncedLsn);
                 auto aid = ctx.Register(CreateSyncLogReaderActor(SlCtx, VDiskIncarnationGuid, ev, ctx.SelfID, KeeperId,
@@ -244,7 +246,7 @@ namespace NKikimr {
             }
 
             void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-                Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::SyncLogId);
+                Y_DEBUG_ABORT_UNLESS(ev->Get()->SubRequestId == TDbMon::SyncLogId);
                 auto aid = ctx.RegisterWithSameMailbox(CreateGetHttpInfoActor(SlCtx->VCtx, GInfo, ev, SelfId(), KeeperId,
                     NeighborsPtr));
                 ActiveActors.Insert(aid);

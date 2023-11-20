@@ -11,6 +11,7 @@
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/core/persqueue/pq_database.h>
 #include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -67,7 +68,7 @@ ECodec<UseMigrationProtocol> CodecByName(const TString& codec) {
         if constexpr (!UseMigrationProtocol) {
             return (i32)Ydb::Topic::CODEC_UNSPECIFIED;
         }
-        Y_FAIL("Unsupported codec enum");
+        Y_ABORT("Unsupported codec enum");
     }
     return codecIt->second;
 }
@@ -214,8 +215,8 @@ void TWriteSessionActor<UseMigrationProtocol>::Bootstrap(const TActorContext& ct
     const auto& pqConfig = AppData(ctx)->PQConfig;
     SrcIdTableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping
                                                                     : ESourceIdTableGeneration::SrcIdMeta2;
-    SelectSourceIdQuery = GetSourceIdSelectQueryFromPath(pqConfig.GetSourceIdTablePath(),SrcIdTableGeneration);
-    UpdateSourceIdQuery = GetUpdateIdSelectQueryFromPath(pqConfig.GetSourceIdTablePath(), SrcIdTableGeneration);
+    SelectSourceIdQuery = GetSelectSourceIdQueryFromPath(pqConfig.GetSourceIdTablePath(),SrcIdTableGeneration);
+    UpdateSourceIdQuery = GetUpdateSourceIdQueryFromPath(pqConfig.GetSourceIdTablePath(), SrcIdTableGeneration);
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "Select srcid query: " << SelectSourceIdQuery);
 
     Request->GetStreamCtx()->Attach(ctx.SelfID);
@@ -936,7 +937,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NKqp::TEvKqp::TEvQueryResp
             LastSourceIdUpdate = ctx.Now();
         }
     } else {
-        Y_FAIL("Wrong state");
+        Y_ABORT("Wrong state");
     }
 }
 
@@ -999,16 +1000,6 @@ void TWriteSessionActor<UseMigrationProtocol>::SendUpdateSrcIdsRequests(const TA
 
     SourceIdUpdatesInflight++;
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-}
-
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr &ev, const TActorContext &ctx) {
-    auto& record = ev->Get()->Record;
-
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session cookie: " << Cookie << " sessionId: " << OwnerCookie << " sourceID "
-            << SourceId << " escaped " << EncodedSourceId.EscapedSourceId << " discover partition error - " << record);
-
-    CloseSession("Internal error on discovering partition", PersQueue::ErrorCode::ERROR, ctx);
 }
 
 template<bool UseMigrationProtocol>

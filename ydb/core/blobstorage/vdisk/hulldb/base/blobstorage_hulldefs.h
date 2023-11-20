@@ -56,7 +56,7 @@ namespace NKikimr {
         }
 
         const TDiskPart &SwearOne() const {
-            Y_VERIFY_DEBUG(Begin + 1 == End);
+            Y_DEBUG_ABORT_UNLESS(Begin + 1 == End);
             return *Begin;
         }
 

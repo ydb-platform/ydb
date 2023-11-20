@@ -1358,13 +1358,13 @@ ConvertToMiniKQL(TExprContainer::TPtr expr,
             for (const auto& x : tablesToResolve) {
                 requests.push_back(x.second.Request);
             }
-            Y_VERIFY_DEBUG(dbSchemeResolver);
+            Y_DEBUG_ABORT_UNLESS(dbSchemeResolver);
             dbSchemeResolver->ResolveTables(requests).Subscribe(
                 [ctx, promise, expr, compiler](const TFuture<IDbSchemeResolver::TTableResults>& future) mutable {
                 try {
                     const auto& results = future.GetValue();
                     auto& tablesToResolve = ctx->GetTablesToResolve();
-                    Y_VERIFY_DEBUG(tablesToResolve.size() == results.size(), "tablesToResolve.size() != results.size()");
+                    Y_DEBUG_ABORT_UNLESS(tablesToResolve.size() == results.size(), "tablesToResolve.size() != results.size()");
                     ui32 i = 0;
                     for (auto& x : tablesToResolve) {
                         const auto& response = results[i];
@@ -1500,7 +1500,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(IDbSchemeResolver::TEvents::TEvResolveTablesResult, Handle)
             default:
-                Y_FAIL("Unknown event");
+                Y_ABORT("Unknown event");
         }
     }
 
@@ -1511,7 +1511,7 @@ private:
         try {
             const auto& results = ev->Get()->Result;
             auto& tablesToResolve = CompileCtx->GetTablesToResolve();
-            Y_VERIFY_DEBUG(tablesToResolve.size() == results.size(), "tablesToResolve.size() != results.size()");
+            Y_DEBUG_ABORT_UNLESS(tablesToResolve.size() == results.size(), "tablesToResolve.size() != results.size()");
 
             TVector<NYql::TIssue> resolveErrors;
             ui32 i = 0;
@@ -1590,7 +1590,7 @@ private:
         do {
             status = ExpandApply(Expr->Root, Expr->Root, Expr->Context);
         } while (status.Level == IGraphTransformer::TStatus::Repeat);
-        Y_VERIFY_DEBUG(status.Level == IGraphTransformer::TStatus::Ok ||
+        Y_DEBUG_ABORT_UNLESS(status.Level == IGraphTransformer::TStatus::Ok ||
                      status.Level == IGraphTransformer::TStatus::Error);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             errors = Expr->Context.IssueManager.GetIssues();

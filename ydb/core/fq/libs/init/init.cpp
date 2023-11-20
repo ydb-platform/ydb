@@ -177,7 +177,7 @@ void Init(
         &protoConfig.GetGateways().GetHttpGateway(),
         yqCounters->GetSubgroup("subcomponent", "http_gateway"));
 
-    const auto connectorClient = NYql::NConnector::MakeClientGRPC(protoConfig.GetGateways().GetConnector());
+    const auto connectorClient = NYql::NConnector::MakeClientGRPC(protoConfig.GetGateways().GetGeneric().GetConnector());
 
     if (protoConfig.GetTokenAccessor().GetEnabled()) {
         const auto& tokenAccessorConfig = protoConfig.GetTokenAccessor();
@@ -257,8 +257,8 @@ void Init(
         lwmOptions.MkqlProgramHardMemoryLimit = protoConfig.GetResourceManager().GetMkqlTaskHardMemoryLimit();
         lwmOptions.MkqlMinAllocSize = mkqlAllocSize;
         lwmOptions.TaskRunnerActorFactory = NYql::NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory(
-            [=](const NYql::NDq::TDqTaskSettings& task, const NYql::NDq::TLogFunc&) {
-                return lwmOptions.Factory->Get(task);
+            [=](const NYql::NDq::TDqTaskSettings& task, NYql::NDqProto::EDqStatsMode statsMode, const NYql::NDq::TLogFunc&) {
+                return lwmOptions.Factory->Get(task, statsMode);
             });
         if (protoConfig.GetRateLimiter().GetDataPlaneEnabled()) {
             lwmOptions.QuoterServiceActorId = NFq::YqQuoterServiceActorId();

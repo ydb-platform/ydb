@@ -11,10 +11,13 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/statestorage.h>
 #include <library/cpp/mime/types/mime.h>
+#include <library/cpp/lwtrace/all.h>
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <util/system/fstat.h>
 #include <util/stream/file.h>
 #include "viewer.h"
 #include "viewer_request.h"
+#include "viewer_probes.h"
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/core/util/wildcard.h>
 #include "browse_pq.h"
@@ -82,6 +85,7 @@ public:
         Become(&TThis::StateWork);
         NActors::TMon* mon = AppData(ctx)->Mon;
         if (mon) {
+            NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(VIEWER_PROVIDER));
             const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetViewerAllowedSIDs();
             TVector<TString> allowedSIDs;
             for (const auto& sid : protoAllowedSIDs) {

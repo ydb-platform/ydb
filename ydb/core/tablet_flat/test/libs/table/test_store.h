@@ -24,8 +24,10 @@ namespace NTest {
 
         struct TEggs {
             bool Rooted;
-            TVector<TPageId> IndexGroupsPages;
-            TVector<TPageId> IndexHistoricPages;
+            TVector<TPageId> GroupIndexes;
+            TVector<TPageId> HistoricIndexes;
+            TVector<NPage::TBtreeIndexMeta> BTreeGroupIndexes;
+            TVector<NPage::TBtreeIndexMeta> BTreeHistoricIndexes;
             TData *Scheme;
             TData *Blobs;
             TData *ByKey;
@@ -104,6 +106,11 @@ namespace NTest {
                     });
         }
 
+        ui64 GetDataBytes(ui32 room) const noexcept
+        {
+            return DataBytes[room];
+        }
+
         TData* GetMeta() const noexcept
         {
             return Meta ? &Meta : nullptr;
@@ -115,7 +122,7 @@ namespace NTest {
         TEggs LegacyEggs() const noexcept
         {
             if (PageCollectionPagesCount(MainPageCollection) == 0) {
-                Y_FAIL("Cannot construct an empty part");
+                Y_ABORT("Cannot construct an empty part");
             }
 
             Y_ABORT_UNLESS(!Rooted, "Legacy store must not be rooted");
@@ -126,6 +133,8 @@ namespace NTest {
             return {
                 Rooted,
                 { Indexes.back() }, 
+                { },
+                { },
                 { },
                 GetPage(MainPageCollection, Scheme),
                 GetPage(MainPageCollection, Globs),
@@ -142,11 +151,11 @@ namespace NTest {
             NUtil::NBin::TOut out(stream);
 
             if (Groups > 1) {
-                Y_FAIL("Cannot dump TStore with multiple column groups");
+                Y_ABORT("Cannot dump TStore with multiple column groups");
             } else if (!PageCollections[MainPageCollection]) {
-                Y_FAIL("Cannot dump TStore with empty leader page collection");
+                Y_ABORT("Cannot dump TStore with empty leader page collection");
             } else if (PageCollections[GetOuterRoom()] || PageCollections[GetExternRoom()]) {
-                Y_FAIL("TStore has auxillary rooms, cannot be dumped");
+                Y_ABORT("TStore has auxillary rooms, cannot be dumped");
             }
 
             /* Dump pages as is, without any special markup as it already
@@ -180,7 +189,7 @@ namespace NTest {
                 got = in.Load(begin,  to.mutable_end() - begin);
 
                 if (got + sizeof(NPage::TLabel) != label.Size) {
-                    Y_FAIL("Stausage loading stalled in middle of page");
+                    Y_ABORT("Stausage loading stalled in middle of page");
                 } else if (label.Type == EPage::Scheme) {
                     /* Required for Read(Evolution < 16), hack for old style
                         scheme pages without leading label. It was ecoded in
@@ -214,6 +223,9 @@ namespace NTest {
             Y_ABORT_UNLESS(!Finished, "This store is already finished");
             NPageCollection::Checksum(page); /* will catch uninitialised values */
 
+            if (type == EPage::DataPage) {
+                DataBytes[group] += page.size();
+            }
             TPageId id = PageCollections[group].size();
             PageCollections[group].push_back(std::move(page));
             PageTypes[group].push_back(type);
@@ -274,6 +286,7 @@ namespace NTest {
             , GlobOffset(globOffset)
             , PageCollections(groups + 2)
             , PageTypes(groups + 2)
+            , DataBytes(groups + 2)
         { }
 
         ui32 NextGlobOffset() const {
@@ -286,6 +299,7 @@ namespace NTest {
         const ui32 GlobOffset;
         TVector<TVector<TSharedData>> PageCollections;
         TVector<TVector<EPage>> PageTypes;
+        TVector<ui64> DataBytes;
 
         /*_ Sometimes will be replaced just with one root TPageId */
 

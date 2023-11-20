@@ -61,7 +61,48 @@ namespace CityHash_v1_0_2
 typedef uint8_t uint8;
 typedef uint32_t uint32;
 typedef uint64_t uint64;
-typedef std::pair<uint64, uint64> uint128;
+
+/// NB: Original CityHash library uses `typedef std::pair<uint64, uint64> uint128`,
+/// but ClickHouse's patched version uses its own struct uint128 with low64 and high64 fields.
+/// As we need to maintain it somehow in a monorepository, this particular uint128 implementation
+/// aims to be compatible with both library versions.
+/// https://github.com/ClickHouse/ClickHouse/blob/2442c71e273c041448bc5e0b5a406dedcd9e006c/contrib/cityhash102/include/city.h#L69
+struct uint128
+{
+  union {
+    uint64 low64;
+    uint64 first;
+  };
+  union {
+    uint64 high64;
+    uint64 second;
+  };
+
+  uint128() : low64(0), high64(0) {}
+  uint128(uint64 low64_, uint64 high64_) : low64(low64_), high64(high64_) {}
+
+  // Implicit conversion from std::pair for compatibility.
+  uint128(std::pair<uint64, uint64> other)
+    : first(other.first), second(other.second)
+  { }
+
+  std::pair<uint64, uint64> toPair() const {
+    return std::pair{first, second};
+  }
+
+  // Implicit conversion to std::pair for compatibility.
+  operator std::pair<uint64, uint64>() const {
+    return toPair();
+  };
+
+  friend auto operator==(uint128 a, uint128 b) {
+    return a.toPair() == b.toPair();
+  }
+
+  friend auto operator<=>(uint128 a, uint128 b) {
+    return a.toPair() <=> b.toPair();
+  }
+};
 
 
 inline uint64 Uint128Low64(const uint128& x) { return x.first; }

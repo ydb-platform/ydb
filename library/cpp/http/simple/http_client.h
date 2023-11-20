@@ -271,6 +271,6 @@ TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequestReliable(const T&
             throw;
         }
     }
-    Y_FAIL(); // We should never be here.
+    Y_ABORT(); // We should never be here.
     return 0;
 }

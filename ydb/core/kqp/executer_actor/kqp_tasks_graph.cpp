@@ -1,7 +1,7 @@
 #include "kqp_tasks_graph.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 
@@ -516,7 +516,7 @@ void TShardKeyRanges::AddPoint(TSerializedCellVec&& point) {
 }
 
 void TShardKeyRanges::AddRange(TSerializedTableRange&& range) {
-    Y_VERIFY_DEBUG(!range.Point);
+    Y_DEBUG_ABORT_UNLESS(!range.Point);
     if (!IsFullRange()) {
         Ranges.emplace_back(std::move(range));
     }
@@ -526,7 +526,7 @@ void TShardKeyRanges::Add(TSerializedPointOrRange&& pointOrRange) {
     if (!IsFullRange()) {
         Ranges.emplace_back(std::move(pointOrRange));
         if (std::holds_alternative<TSerializedTableRange>(Ranges.back())) {
-            Y_VERIFY_DEBUG(!std::get<TSerializedTableRange>(Ranges.back()).Point);
+            Y_DEBUG_ABORT_UNLESS(!std::get<TSerializedTableRange>(Ranges.back()).Point);
         }
     }
 }
@@ -536,7 +536,7 @@ void TShardKeyRanges::CopyFrom(const TVector<TSerializedPointOrRange>& ranges) {
         Ranges = ranges;
         for (auto& x : Ranges) {
             if (std::holds_alternative<TSerializedTableRange>(x)) {
-                Y_VERIFY_DEBUG(!std::get<TSerializedTableRange>(x).Point);
+                Y_DEBUG_ABORT_UNLESS(!std::get<TSerializedTableRange>(x).Point);
             }
         }
     }
@@ -657,7 +657,7 @@ void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpTransaction_TDataTaskM
                 protoRanges->AddKeyPoints(x.GetBuffer());
             } else {
                 auto& x = std::get<TSerializedTableRange>(range);
-                Y_VERIFY_DEBUG(!x.Point);
+                Y_DEBUG_ABORT_UNLESS(!x.Point);
                 auto& keyRange = *protoRanges->AddKeyRanges();
                 x.Serialize(keyRange);
             }
@@ -674,7 +674,7 @@ void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpTransaction_TScanTaskM
             auto& keyRange = *proto->AddKeyRanges();
             if (std::holds_alternative<TSerializedTableRange>(range)) {
                 auto& x = std::get<TSerializedTableRange>(range);
-                Y_VERIFY_DEBUG(!x.Point);
+                Y_DEBUG_ABORT_UNLESS(!x.Point);
                 x.Serialize(keyRange);
             } else {
                 const auto& x = std::get<TSerializedCellVec>(range);
@@ -714,7 +714,7 @@ void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpReadRangesSourceSettin
                 }
             } else {
                 auto& x = std::get<TSerializedTableRange>(range);
-                Y_VERIFY_DEBUG(!x.Point);
+                Y_DEBUG_ABORT_UNLESS(!x.Point);
                 auto& keyRange = *protoRanges->AddKeyRanges();
                 x.Serialize(keyRange);
             }
@@ -748,6 +748,8 @@ void FillEndpointDesc(NDqProto::TEndpoint& endpoint, const TTask& task) {
 void FillChannelDesc(const TKqpTasksGraph& tasksGraph, NDqProto::TChannel& channelDesc, const TChannel& channel,
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion) {
     channelDesc.SetId(channel.Id);
+    channelDesc.SetSrcStageId(channel.SrcStageId.StageId);
+    channelDesc.SetDstStageId(channel.DstStageId.StageId);
     channelDesc.SetSrcTaskId(channel.SrcTask);
     channelDesc.SetDstTaskId(channel.DstTask);
 
@@ -858,19 +860,19 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
             case ETableKind::Unknown:
             case ETableKind::External:
             case ETableKind::SysView: {
-                protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
+                protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
                 break;
             }
             case ETableKind::Datashard: {
                 if (AppData()->FeatureFlags.GetEnableArrowFormatAtDatashard()) {
-                    protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW);
+                    protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
                 } else {
-                    protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
+                    protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
                 }
                 break;
             }
             case ETableKind::Olap: {
-                protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW);
+                protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
                 break;
             }
         }
@@ -884,6 +886,10 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
                 protoTaskMeta.SetEnableShardsSequentialScan(task.Meta.GetEnableShardsSequentialScanUnsafe());
             }
             protoTaskMeta.SetReadType(ReadTypeToProto(task.Meta.ReadInfo.ReadType));
+
+            for (auto&& i : task.Meta.ReadInfo.GroupByColumnNames) {
+                protoTaskMeta.AddGroupByColumnNames(i.data(), i.size());
+            }
 
             for (auto columnType : task.Meta.ReadInfo.ResultColumnsTypes) {
                 auto* protoResultColumn = protoTaskMeta.AddResultColumns();

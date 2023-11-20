@@ -30,7 +30,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
             switch (info->DecommitStatus) {
                 case NKikimrBlobStorage::TGroupDecommitStatus::NONE:
                 case NKikimrBlobStorage::TGroupDecommitStatus::PENDING:
-                    Y_FAIL("unexpected DecommitStatus for dynamic group with bound BlobDepotId");
+                    Y_ABORT("unexpected DecommitStatus for dynamic group with bound BlobDepotId");
 
                 case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
                     // create proxy that will be used by blob depot agent to fetch underlying data

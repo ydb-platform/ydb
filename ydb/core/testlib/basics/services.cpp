@@ -134,6 +134,7 @@ namespace NPDisk {
         pageCollectionCacheConfig->CacheConfig = new TCacheCacheConfig(caches.Shared, nullptr, nullptr, nullptr);
         pageCollectionCacheConfig->TotalAsyncQueueInFlyLimit = caches.AsyncQueue;
         pageCollectionCacheConfig->TotalScanQueueInFlyLimit = caches.ScanQueue;
+        pageCollectionCacheConfig->Counters = MakeIntrusive<TSharedPageCacheCounters>(runtime.GetDynamicCounters(nodeIndex));
 
         runtime.AddLocalService(MakeSharedPageCacheId(0),
             TActorSetupCmd(

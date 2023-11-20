@@ -131,53 +131,49 @@ std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable
                 //
                 if (graph.first.StartsWith("Graph=") || graph.first.StartsWith("Precompute=")) {
                     // YQv1 raw
-                    if (auto* ingressNode = graph.second.GetValueByPath("TaskRunner.Stage=Total.IngressS3SourceBytes.sum")) {
-                        ingress += ingressNode->GetIntegerSafe();
+                    if (auto* stageTotalNode = graph.second.GetValueByPath("TaskRunner.Stage=Total")) {
+                        if (stageTotalNode->GetType() == NJson::JSON_MAP) {
+                            for (const auto& metric : stageTotalNode->GetMapSafe()) {
+                                // Ingress.....Bytes i.e. IngressS3SourceBytes
+                                if (metric.first.StartsWith("Ingress") && metric.first.EndsWith("Bytes")) {
+                                    if (auto* sumNode = metric.second.GetValueByPath("sum")) {
+                                        ingress += sumNode->GetIntegerSafe();
+                                    }
+                                }
+                            }
+                        }
                     }
                 } else if (graph.first.StartsWith("ResultSet") || graph.first.StartsWith("Sink") || graph.first.StartsWith("Precompute_")) {
                     // YQv2
-                    if (auto* ingressNode = graph.second.GetValueByPath("IngressObjectStorageBytes.sum")) {
-                        // prettyfied
+                    if (auto* ingressNode = graph.second.GetValueByPath("TotalIngressBytes.sum")) {
                         ingress += ingressNode->GetIntegerSafe();
-                    } else if (graph.second.GetType() == NJson::JSON_MAP) {
-                        for (const auto& stage : graph.second.GetMapSafe()) {
-                            if (auto* ingressNode = stage.second.GetValueByPath("IngressBytes=S3Source.sum")) {
-                                // raw old
-                                ingress += ingressNode->GetIntegerSafe();
-                            } else if (auto* ingressNode = stage.second.GetValueByPath("IngressBytes=S3Source.Input.Bytes.sum")) {
-                                // raw new
-                                ingress += ingressNode->GetIntegerSafe();
-                            }
-                        }
                     }
                 }
             }
         }
     }
 
-    if (ingress) {
-        auto ingressMBytes = (ingress + 1_MB - 1) >> 20; // round up to 1 MB boundary
-        if (ingressMBytes < 10) {
-            ingressMBytes = 10;
-        }
-
-        auto now = Now();
-        result.emplace_back(TBillRecord()
-            .Id(jobId + "_i")
-            .Schema("yq.ingress.v1")
-            .FolderId(TScope(scope).ParseFolder())
-            .SourceWt(now)
-            .SourceId(sourceId)
-            .Usage(TBillRecord::TUsage()
-                .Type(TBillRecord::TUsage::EType::Delta)
-                .Unit(TBillRecord::TUsage::EUnit::MByte)
-                .Quantity(ingressMBytes)
-                .Start(now)
-                .Finish(now)
-            )
-            .ToString()
-        );
+    auto ingressMBytes = (ingress + 1_MB - 1) >> 20; // round up to 1 MB boundary
+    if (ingressMBytes < 10) {
+        ingressMBytes = 10;
     }
+
+    auto now = Now();
+    result.emplace_back(TBillRecord()
+        .Id(jobId + "_i")
+        .Schema("yq.ingress.v1")
+        .FolderId(TScope(scope).ParseFolder())
+        .SourceWt(now)
+        .SourceId(sourceId)
+        .Usage(TBillRecord::TUsage()
+            .Type(TBillRecord::TUsage::EType::Delta)
+            .Unit(TBillRecord::TUsage::EUnit::MByte)
+            .Quantity(ingressMBytes)
+            .Start(now)
+            .Finish(now)
+        )
+        .ToString()
+    );
 
     return result;
 }
@@ -279,6 +275,12 @@ TString GetPrettyStatistics(const TString& statistics) {
     NJson::TJsonReaderConfig jsonConfig;
     NJson::TJsonValue stat;
     if (NJson::ReadJsonTree(statistics, &jsonConfig, &stat)) {
+
+        //  EXP 
+        if (stat.GetValueByPath("Columns")) {
+            return statistics;
+        }
+
         for (const auto& p : stat.GetMap()) {
             // YQv1
             if (p.first.StartsWith("Graph=") || p.first.StartsWith("Precompute=")) {
@@ -304,8 +306,10 @@ TString GetPrettyStatistics(const TString& statistics) {
                 writer.OnBeginMap();
                     AggregateNode(writer, p.second, "TotalTasks", "TasksCount");
                     AggregateNode(writer, p.second, "TotalCpuTimeUs", "CpuTimeUs");
-                    AggregateNode(writer, p.second, "IngressBytes=S3Source", "IngressObjectStorageBytes");
-                    AggregateNode(writer, p.second, "EgressBytes=S3Sink", "EgressObjectStorageBytes");
+                    AggregateNode(writer, p.second, "Ingress=S3Source.Ingress.Bytes", "IngressObjectStorageBytes");
+                    AggregateNode(writer, p.second, "Egress=S3Sink.Egress.Bytes", "EgressObjectStorageBytes");
+                    RemapNode(writer, p.second, "TotalIngressBytes", "TotalIngressBytes");
+                    RemapNode(writer, p.second, "TotalEgressBytes", "TotalEgressBytes");
                 writer.OnEndMap();
             }
         }

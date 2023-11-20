@@ -20,13 +20,27 @@ using NApi::TMaintenanceFilter;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TBuildSnapshotCommand::TBuildSnapshotCommand()
+void TBuildSnapshotCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("cell_id", Options.CellId);
-    RegisterParameter("set_read_only", Options.SetReadOnly)
-        .Optional();
-    RegisterParameter("wait_for_snapshot_completion", Options.WaitForSnapshotCompletion)
-        .Optional();
+    registrar.ParameterWithUniversalAccessor<NHydra::TCellId>(
+        "cell_id",
+        [] (TThis* command) -> auto& {
+            return command->Options.CellId;
+        });
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "set_read_only",
+        [] (TThis* command) -> auto& {
+            return command->Options.SetReadOnly;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "wait_for_snapshot_completion",
+        [] (TThis* command) -> auto& {
+            return command->Options.WaitForSnapshotCompletion;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TBuildSnapshotCommand::DoExecute(ICommandContextPtr context)
@@ -41,14 +55,28 @@ void TBuildSnapshotCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TBuildMasterSnapshotsCommand::TBuildMasterSnapshotsCommand()
+void TBuildMasterSnapshotsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("set_read_only", Options.SetReadOnly)
-        .Optional();
-    RegisterParameter("wait_for_snapshot_completion", Options.WaitForSnapshotCompletion)
-        .Optional();
-    RegisterParameter("retry", Options.Retry)
-        .Optional();
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "set_read_only",
+        [] (TThis* command) -> auto& {
+            return command->Options.SetReadOnly;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "wait_for_snapshot_completion",
+        [] (TThis* command) -> auto& {
+            return command->Options.WaitForSnapshotCompletion;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "retry",
+        [] (TThis* command) -> auto& {
+            return command->Options.Retry;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TBuildMasterSnapshotsCommand::DoExecute(ICommandContextPtr context)
@@ -69,9 +97,9 @@ void TBuildMasterSnapshotsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TExitReadOnlyCommand::TExitReadOnlyCommand()
+void TExitReadOnlyCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("cell_id", CellId_);
+    registrar.Parameter("cell_id", &TThis::CellId_);
 }
 
 void TExitReadOnlyCommand::DoExecute(ICommandContextPtr context)
@@ -84,10 +112,14 @@ void TExitReadOnlyCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TMasterExitReadOnlyCommand::TMasterExitReadOnlyCommand()
+void TMasterExitReadOnlyCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("retry", Options.Retry)
-        .Optional();
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "retry",
+        [] (TThis* command) -> auto& {
+            return command->Options.Retry;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TMasterExitReadOnlyCommand::DoExecute(ICommandContextPtr context)
@@ -100,9 +132,9 @@ void TMasterExitReadOnlyCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDiscombobulateNonvotingPeersCommand::TDiscombobulateNonvotingPeersCommand()
+void TDiscombobulateNonvotingPeersCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("cell_id", CellId_);
+    registrar.Parameter("cell_id", &TThis::CellId_);
 }
 
 void TDiscombobulateNonvotingPeersCommand::DoExecute(ICommandContextPtr context)
@@ -115,10 +147,10 @@ void TDiscombobulateNonvotingPeersCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSwitchLeaderCommand::TSwitchLeaderCommand()
+void TSwitchLeaderCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("cell_id", CellId_);
-    RegisterParameter("new_leader_address", NewLeaderAddress_);
+    registrar.Parameter("cell_id", &TThis::CellId_);
+    registrar.Parameter("new_leader_address", &TThis::NewLeaderAddress_);
 }
 
 void TSwitchLeaderCommand::DoExecute(ICommandContextPtr context)
@@ -131,11 +163,16 @@ void TSwitchLeaderCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TResetStateHashCommand::TResetStateHashCommand()
+void TResetStateHashCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("cell_id", CellId_);
-    RegisterParameter("new_state_hash", Options.NewStateHash)
-        .Optional();
+    registrar.Parameter("cell_id", &TThis::CellId_);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<ui64>>(
+        "new_state_hash",
+        [] (TThis* command) -> auto& {
+            return command->Options.NewStateHash;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TResetStateHashCommand::DoExecute(ICommandContextPtr context)
@@ -148,15 +185,30 @@ void TResetStateHashCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-THealExecNodeCommand::THealExecNodeCommand()
+void THealExecNodeCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("address", Address_);
-    RegisterParameter("locations", Options.Locations)
-        .Optional();
-    RegisterParameter("alert_types_to_reset", Options.AlertTypesToReset)
-        .Optional();
-    RegisterParameter("force_reset", Options.ForceReset)
-        .Optional();
+    registrar.Parameter("address", &TThis::Address_);
+
+    registrar.ParameterWithUniversalAccessor<std::vector<TString>>(
+        "locations",
+        [] (TThis* command) -> auto& {
+            return command->Options.Locations;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::vector<TString>>(
+        "alert_types_to_reset",
+        [] (TThis* command) -> auto& {
+            return command->Options.AlertTypesToReset;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "force_reset",
+        [] (TThis* command) -> auto& {
+            return command->Options.ForceReset;
+        })
+        .Optional(/*init*/ false);
 }
 
 void THealExecNodeCommand::DoExecute(ICommandContextPtr context)
@@ -169,9 +221,9 @@ void THealExecNodeCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSuspendCoordinatorCommand::TSuspendCoordinatorCommand()
+void TSuspendCoordinatorCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("coordinator_cell_id", CoordinatorCellId_);
+    registrar.Parameter("coordinator_cell_id", &TThis::CoordinatorCellId_);
 }
 
 void TSuspendCoordinatorCommand::DoExecute(ICommandContextPtr context)
@@ -184,9 +236,9 @@ void TSuspendCoordinatorCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TResumeCoordinatorCommand::TResumeCoordinatorCommand()
+void TResumeCoordinatorCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("coordinator_cell_id", CoordinatorCellId_);
+    registrar.Parameter("coordinator_cell_id", &TThis::CoordinatorCellId_);
 }
 
 void TResumeCoordinatorCommand::DoExecute(ICommandContextPtr context)
@@ -199,13 +251,22 @@ void TResumeCoordinatorCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TMigrateReplicationCardsCommand::TMigrateReplicationCardsCommand()
+void TMigrateReplicationCardsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("chaos_cell_id", ChaosCellId_);
-    RegisterParameter("destination_cell_id", Options.DestinationCellId)
-        .Optional();
-    RegisterParameter("replication_card_ids", Options.ReplicationCardIds)
-        .Optional();
+    registrar.Parameter("chaos_cell_id", &TThis::ChaosCellId_);
+
+    registrar.ParameterWithUniversalAccessor<TCellId>(
+        "destination_cell_id",
+        [] (TThis* command) -> auto& {
+            return command->Options.DestinationCellId;
+        })
+        .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<std::vector<NChaosClient::TReplicationCardId>>(
+        "replication_card_ids",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReplicationCardIds;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TMigrateReplicationCardsCommand::DoExecute(ICommandContextPtr context)
@@ -218,9 +279,9 @@ void TMigrateReplicationCardsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSuspendChaosCellsCommand::TSuspendChaosCellsCommand()
+void TSuspendChaosCellsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("cell_ids", CellIds_);
+    registrar.Parameter("cell_ids", &TThis::CellIds_);
 }
 
 void TSuspendChaosCellsCommand::DoExecute(ICommandContextPtr context)
@@ -233,9 +294,9 @@ void TSuspendChaosCellsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TResumeChaosCellsCommand::TResumeChaosCellsCommand()
+void TResumeChaosCellsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("cell_ids", CellIds_);
+    registrar.Parameter("cell_ids", &TThis::CellIds_);
 }
 
 void TResumeChaosCellsCommand::DoExecute(ICommandContextPtr context)
@@ -248,9 +309,9 @@ void TResumeChaosCellsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSuspendTabletCellsCommand::TSuspendTabletCellsCommand()
+void TSuspendTabletCellsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("cell_ids", CellIds_);
+    registrar.Parameter("cell_ids", &TThis::CellIds_);
 }
 
 void TSuspendTabletCellsCommand::DoExecute(ICommandContextPtr context)
@@ -263,9 +324,9 @@ void TSuspendTabletCellsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TResumeTabletCellsCommand::TResumeTabletCellsCommand()
+void TResumeTabletCellsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("cell_ids", CellIds_);
+    registrar.Parameter("cell_ids", &TThis::CellIds_);
 }
 
 void TResumeTabletCellsCommand::DoExecute(ICommandContextPtr context)
@@ -278,12 +339,12 @@ void TResumeTabletCellsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TAddMaintenanceCommand::TAddMaintenanceCommand()
+void TAddMaintenanceCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("component", Component_);
-    RegisterParameter("address", Address_);
-    RegisterParameter("type", Type_);
-    RegisterParameter("comment", Comment_);
+    registrar.Parameter("component", &TThis::Component_);
+    registrar.Parameter("address", &TThis::Address_);
+    registrar.Parameter("type", &TThis::Type_);
+    registrar.Parameter("comment", &TThis::Comment_);
 }
 
 void TAddMaintenanceCommand::DoExecute(ICommandContextPtr context)
@@ -301,42 +362,42 @@ void TAddMaintenanceCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRemoveMaintenanceCommand::TRemoveMaintenanceCommand()
+void TRemoveMaintenanceCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("component", Component_);
-    RegisterParameter("address", Address_);
+    registrar.Parameter("component", &TThis::Component_);
+    registrar.Parameter("address", &TThis::Address_);
 
-    RegisterParameter("id", Id_)
+    registrar.Parameter("id", &TThis::Id_)
         .Default();
 
-    RegisterParameter("ids", Ids_)
+    registrar.Parameter("ids", &TThis::Ids_)
         .Default();
 
-    RegisterParameter("user", User_)
+    registrar.Parameter("user", &TThis::User_)
         .Default();
-    RegisterParameter("mine", Mine_)
+    registrar.Parameter("mine", &TThis::Mine_)
         .Optional();
 
-    RegisterParameter("type", Type_)
+    registrar.Parameter("type", &TThis::Type_)
         .Optional();
 
-    RegisterParameter("all", All_)
+    registrar.Parameter("all", &TThis::All_)
         .Optional();
 
-    RegisterPostprocessor([&] {
-        THROW_ERROR_EXCEPTION_IF(Id_ && Ids_,
+    registrar.Postprocessor([&] (TThis* config) {
+        THROW_ERROR_EXCEPTION_IF(config->Id_ && config->Ids_,
             "At most one of {\"id\", \"ids\"} can be specified at the same time");
 
-        THROW_ERROR_EXCEPTION_IF(Ids_ && Ids_->empty(),
+        THROW_ERROR_EXCEPTION_IF(config->Ids_ && config->Ids_->empty(),
             "\"ids\" must not be empty if specified");
 
-        THROW_ERROR_EXCEPTION_IF(!Id_ && !Ids_ && !User_ && !Mine_ && !Type_ && !All_,
+        THROW_ERROR_EXCEPTION_IF(!config->Id_ && !config->Ids_ && !config->User_ && !config->Mine_ && !config->Type_ && !config->All_,
             "\"all\" must be specified explicitly");
 
-        THROW_ERROR_EXCEPTION_IF(Mine_ && User_,
+        THROW_ERROR_EXCEPTION_IF(config->Mine_ && config->User_,
             "Cannot specify both \"user\" and \"mine\"");
 
-        THROW_ERROR_EXCEPTION_IF(All_ && (User_ || Mine_ || Type_ || Id_ || Ids_),
+        THROW_ERROR_EXCEPTION_IF(config->All_ && (config->User_ || config->Mine_ || config->Type_ || config->Id_ || config->Ids_),
             "\"all\" cannot be used with other options");
     });
 }
@@ -408,10 +469,10 @@ void TRemoveMaintenanceCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDisableChunkLocationsCommand::TDisableChunkLocationsCommand()
+void TDisableChunkLocationsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("node_address", NodeAddress_);
-    RegisterParameter("location_uuids", LocationUuids_)
+    registrar.Parameter("node_address", &TThis::NodeAddress_);
+    registrar.Parameter("location_uuids", &TThis::LocationUuids_)
         .Default();
 }
 
@@ -433,10 +494,10 @@ void TDisableChunkLocationsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDestroyChunkLocationsCommand::TDestroyChunkLocationsCommand()
+void TDestroyChunkLocationsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("node_address", NodeAddress_);
-    RegisterParameter("location_uuids", LocationUuids_)
+    registrar.Parameter("node_address", &TThis::NodeAddress_);
+    registrar.Parameter("location_uuids", &TThis::LocationUuids_)
         .Default();
 }
 
@@ -458,10 +519,10 @@ void TDestroyChunkLocationsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TResurrectChunkLocationsCommand::TResurrectChunkLocationsCommand()
+void TResurrectChunkLocationsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("node_address", NodeAddress_);
-    RegisterParameter("location_uuids", LocationUuids_)
+    registrar.Parameter("node_address", &TThis::NodeAddress_);
+    registrar.Parameter("location_uuids", &TThis::LocationUuids_)
         .Default();
 }
 
@@ -483,9 +544,9 @@ void TResurrectChunkLocationsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRequestRestartCommand::TRequestRestartCommand()
+void TRequestRestartCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("node_address", NodeAddress_);
+    registrar.Parameter("node_address", &TThis::NodeAddress_);
 }
 
 void TRequestRestartCommand::DoExecute(ICommandContextPtr context)

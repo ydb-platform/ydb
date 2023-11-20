@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(Secret) {
         }
 
         void CheckRuntime(TTestActorRuntime& runtime) {
-            const auto pred = [this](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event)->TTestActorRuntimeBase::EEventAction {
+            const auto pred = [this](TAutoPtr<IEventHandle>& event)->TTestActorRuntimeBase::EEventAction {
                 if (event->HasBuffer() && !event->HasEvent()) {
                 } else if (!event->HasEvent()) {
                 } else {

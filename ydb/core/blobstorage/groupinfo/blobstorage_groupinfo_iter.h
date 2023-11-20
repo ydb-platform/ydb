@@ -134,12 +134,12 @@ namespace NKikimr {
         }
 
         friend bool operator ==(const TRootIteratorBase& x, const TRootIteratorBase& y) {
-            Y_VERIFY_DEBUG(x.Topology == y.Topology);
+            Y_DEBUG_ABORT_UNLESS(x.Topology == y.Topology);
             return x.AtEnd == y.AtEnd;
         }
 
         friend bool operator !=(const TRootIteratorBase& x, const TRootIteratorBase& y) {
-            Y_VERIFY_DEBUG(x.Topology == y.Topology);
+            Y_DEBUG_ABORT_UNLESS(x.Topology == y.Topology);
             return x.AtEnd != y.AtEnd;
         }
     };

@@ -40,7 +40,7 @@ namespace {
                     returnItemType = returnType->Cast<TListExprType>()->GetItemType();
                     break;
                 default:
-                    Y_FAIL("unexpected return type");
+                    Y_ABORT("unexpected return type");
             }
 
             if (returnItemType->GetKind() != ETypeAnnotationKind::Struct) {

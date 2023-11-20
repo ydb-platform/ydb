@@ -350,6 +350,13 @@ const T& VectorAtOr(const std::vector<T>& vector, ssize_t index, const T& defaul
     return index < static_cast<ssize_t>(vector.size()) ? vector[index] : defaultValue;
 }
 
+template <class T>
+bool CheckIfValuesUnique(std::vector<T> vector)
+{
+    std::sort(vector.begin(), vector.end());
+    return std::unique(vector.begin(), vector.end()) == vector.end();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

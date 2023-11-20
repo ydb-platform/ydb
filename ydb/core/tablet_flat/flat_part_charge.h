@@ -404,8 +404,8 @@ namespace NTable {
             bool ready = true;
 
             if (first) {
-                Y_VERIFY_DEBUG(first <= last);
-                Y_VERIFY_DEBUG(!key1Page || key1Page == first);
+                Y_DEBUG_ABORT_UNLESS(first <= last);
+                Y_DEBUG_ABORT_UNLESS(!key1Page || key1Page == first);
 
                 ui64 items = 0;
                 ui64 bytes = 0;
@@ -502,8 +502,8 @@ namespace NTable {
             bool ready = true;
 
             if (first) {
-                Y_VERIFY_DEBUG(first >= last);
-                Y_VERIFY_DEBUG(!key1Page || key1Page == first);
+                Y_DEBUG_ABORT_UNLESS(first >= last);
+                Y_DEBUG_ABORT_UNLESS(!key1Page || key1Page == first);
 
                 ui64 items = 0;
                 ui64 bytes = 0;
@@ -617,7 +617,7 @@ namespace NTable {
 
             // Directly use the history group scheme
             const auto& scheme = Part->Scheme->HistoryGroup;
-            Y_VERIFY_DEBUG(scheme.ColsKeyIdx.size() == 3);
+            Y_DEBUG_ABORT_UNLESS(scheme.ColsKeyIdx.size() == 3);
 
             // Directly use the histroy key defaults with correct sort order
             const TKeyCellDefaults* keyDefaults = Part->Scheme->HistoryKeys.Get();

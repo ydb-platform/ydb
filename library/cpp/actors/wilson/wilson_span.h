@@ -65,7 +65,7 @@ namespace NWilson {
             {}
 
             ~TData() {
-                Y_VERIFY_DEBUG(Sent || Ignored);
+                Y_DEBUG_ABORT_UNLESS(Sent || Ignored);
             }
         };
 
@@ -237,7 +237,7 @@ namespace NWilson {
         }
 
         void VerifyNotSent() {
-            Y_VERIFY_DEBUG(!Data || !Data->Sent, "span has been ended");
+            Y_DEBUG_ABORT_UNLESS(!Data || !Data->Sent, "span has been ended");
         }
     };
 

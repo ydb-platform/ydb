@@ -137,14 +137,14 @@ public:
         NDq::TDqTaskRunnerSettings settings;
         settings.OptLLVM = "OFF"; // Don't use LLVM for local execution
         settings.SecureParams = secureParams;
-        settings.CollectBasicStats = true;
-        settings.CollectProfileStats = true;
+        settings.StatsMode = NDqProto::DQ_STATS_MODE_BASIC;
         auto runner = NDq::MakeDqTaskRunner(executionContext, settings, {});
         auto runnerSettings = NDq::TDqTaskSettings(&task);
 
         {
             auto guard = runner->BindAllocator(State->Settings->MemoryLimit.Get().GetOrElse(0));
-            runner->Prepare(runnerSettings, limits);
+            NDq::TDqTaskRunnerExecutionContextDefault execCtx;
+            runner->Prepare(runnerSettings, limits, execCtx);
         }
 
         TVector<NDq::TDqSerializedBatch> rows;
@@ -165,11 +165,11 @@ public:
                     break;
                 }
                 if (!fillSettings.Discard) {
-                    if (fillSettings.AllResultsBytesLimit && runner->GetOutputChannel(0)->GetStats()->Bytes >= *fillSettings.AllResultsBytesLimit) {
+                    if (fillSettings.AllResultsBytesLimit && runner->GetOutputChannel(0)->GetPopStats().Bytes >= *fillSettings.AllResultsBytesLimit) {
                         result.Truncated = true;
                         break;
                     }
-                    if (fillSettings.RowsLimitPerWrite && runner->GetOutputChannel(0)->GetStats()->RowsOut >= *fillSettings.RowsLimitPerWrite) {
+                    if (fillSettings.RowsLimitPerWrite && runner->GetOutputChannel(0)->GetPopStats().Rows >= *fillSettings.RowsLimitPerWrite) {
                         result.Truncated = true;
                         break;
                     }
@@ -246,7 +246,12 @@ private:
         } else {
             mode = NDq::EChannelMode::CHANNEL_WIDE_BLOCK;
         }
-        pipeline->Add(NDq::CreateDqBuildPhyStagesTransformer(false, *pipeline->GetTypeAnnotationContext(), mode), "BuildPhy");
+        pipeline->Add(
+            NDq::CreateDqBuildPhyStagesTransformer(
+                State_->Settings->SpillingEngine.Get().GetOrElse(TDqSettings::TDefault::SpillingEngine) != TDqSettings::ESpillingEngine::Disable,
+                *pipeline->GetTypeAnnotationContext(), mode
+            ),
+            "BuildPhy");
         pipeline->Add(NDqs::CreateDqsRewritePhyCallablesTransformer(*pipeline->GetTypeAnnotationContext()), "RewritePhyCallables");
     }
 
@@ -254,6 +259,95 @@ private:
 
 private:
     TDqStatePtr State_;
+};
+
+TExprNode::TPtr DqMarkBlockStage(const TDqPhyStage& stage, TExprContext& ctx) {
+    using NDq::TDqStageSettings;
+    TDqStageSettings settings = NDq::TDqStageSettings::Parse(stage);
+    if (settings.BlockStatus.Defined()) {
+        return stage.Ptr();
+    }
+
+    TExprNode::TPtr root = stage.Program().Body().Ptr();
+
+    // scalar channel as output
+    if (root->IsCallable("FromFlow")) {
+        root = root->HeadPtr();
+    }
+    if (root->IsCallable("WideFromBlocks")) {
+        root = root->HeadPtr();
+    }
+
+    const TTypeAnnotationNode* nodeType = root->GetTypeAnn();
+    YQL_ENSURE(nodeType);
+    auto blockStatus = IsWideSequenceBlockType(*nodeType) ? TDqStageSettings::EBlockStatus::Full : TDqStageSettings::EBlockStatus::None;
+    bool stop = false;
+
+    VisitExpr(root, [&](const TExprNode::TPtr& node) {
+        if (stop || node->IsLambda() || node->IsArgument()) {
+            return false;
+        }
+
+        if (node->IsCallable("WideToBlocks") && node->Head().IsCallable("ToFlow") && node->Head().Head().IsArgument()) {
+            // scalar channel as input
+            return false;
+        }
+
+        const TTypeAnnotationNode* nodeType = node->GetTypeAnn();
+        YQL_ENSURE(nodeType);
+
+        if (nodeType->GetKind() != ETypeAnnotationKind::Stream && nodeType->GetKind() != ETypeAnnotationKind::Flow) {
+            return false;
+        }
+
+        const bool isBlock = IsWideSequenceBlockType(*nodeType);
+        if (blockStatus == TDqStageSettings::EBlockStatus::Full && !isBlock ||
+            blockStatus == TDqStageSettings::EBlockStatus::None && isBlock)
+        {
+            blockStatus = TDqStageSettings::EBlockStatus::Partial;
+        }
+
+        if (blockStatus == TDqStageSettings::EBlockStatus::Partial) {
+            stop = true;
+            return false;
+        }
+
+        return true;
+    });
+
+    YQL_CLOG(INFO, CoreDq) << "Setting block status for stage #" << settings.LogicalId << " = " << ToString(blockStatus);
+    return Build<TDqPhyStage>(ctx, stage.Pos())
+        .InitFrom(stage)
+        .Settings(settings.SetBlockStatus(blockStatus).BuildNode(ctx, stage.Settings().Pos()))
+        .Done().Ptr();
+}
+
+struct TDqsFinalPipelineConfigurator : public IPipelineConfigurator {
+public:
+    TDqsFinalPipelineConfigurator() = default;
+private:
+    void AfterCreate(TTransformationPipeline*) const final {}
+
+    void AfterTypeAnnotation(TTransformationPipeline*) const final {}
+
+    void AfterOptimize(TTransformationPipeline* pipeline) const final {
+        auto typeCtx = pipeline->GetTypeAnnotationContext();
+        pipeline->Add(CreateFunctorTransformer(
+            [typeCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                TOptimizeExprSettings optSettings{typeCtx.Get()};
+                optSettings.VisitLambdas = false;
+                return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+                    TExprBase expr{node};
+                    if (auto stage = expr.Maybe<TDqPhyStage>()) {
+                        return DqMarkBlockStage(stage.Cast(), ctx);
+                    }
+                    return node;
+                }, ctx, optSettings);
+            }
+        ),
+        "DqAfterPeephole",
+        TIssuesIds::DEFAULT_ERROR);
+    }
 };
 
 class TDqExecTransformer: public TExecTransformerBase, TCounters
@@ -1745,8 +1839,10 @@ private:
 
     IGraphTransformer::TStatus PeepHole(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) const {
         TDqsPipelineConfigurator peepholeConfig(State);
+        TDqsFinalPipelineConfigurator finalPeepholeConfg;
         TPeepholeSettings peepholeSettings;
         peepholeSettings.CommonConfig = &peepholeConfig;
+        peepholeSettings.FinalConfig = &finalPeepholeConfg;
         bool hasNonDeterministicFunctions;
         auto status = PeepHoleOptimizeNode(input, output, ctx, *State->TypeCtx, nullptr, hasNonDeterministicFunctions, peepholeSettings);
         if (status.Level != TStatus::Ok) {

@@ -44,7 +44,7 @@ struct TPDiskMockState::TImpl {
     std::unordered_map<TString, ui32> Blocks;
     TIntervalSet<ui64> Corrupted;
     NPDisk::TStatusFlags StatusFlags;
-    THashSet<TVDiskID> ReadOnlyVDisks;
+    THashSet<ui32> ReadOnlyVDisks;
     TString StateErrorReason;
 
     TImpl(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize)
@@ -102,7 +102,7 @@ struct TPDiskMockState::TImpl {
     template<typename TQuery>
     std::variant<TOwner*, std::tuple<NKikimrProto::EReplyStatus, TString>> FindOwner(TQuery *msg) {
         if (const auto it = Owners.find(msg->Owner); it == Owners.end()) {
-            Y_FAIL("invalid Owner");
+            Y_ABORT("invalid Owner");
         } else if (it->second.Slain) {
             return std::make_tuple(NKikimrProto::INVALID_OWNER, "VDisk is slain");
         } else if (msg->OwnerRound != it->second.OwnerRound) {
@@ -192,7 +192,7 @@ struct TPDiskMockState::TImpl {
         } else if (owner.CommittedChunks.erase(chunkIdx)) {
             owner.ReservedChunks.insert(chunkIdx);
         } else {
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 
@@ -264,14 +264,14 @@ struct TPDiskMockState::TImpl {
 
     void SetReadOnly(const TVDiskID& vDiskId, bool isReadOnly) {
         if (isReadOnly) {
-            ReadOnlyVDisks.insert(vDiskId);
+            ReadOnlyVDisks.insert(vDiskId.GroupID);
         } else {
-            ReadOnlyVDisks.erase(vDiskId);
+            ReadOnlyVDisks.erase(vDiskId.GroupID);
         }
     }
 
     bool IsReadOnly(const TVDiskID& vDiskId) const {
-        return ReadOnlyVDisks.contains(vDiskId);
+        return ReadOnlyVDisks.contains(vDiskId.GroupID);
     }
 };
 
@@ -501,7 +501,7 @@ public:
                 results.emplace_back(new IEventHandle(recipient, SelfId(), p.release()));
             };
             if (const auto it = Impl.Owners.find(msg->Owner); it == Impl.Owners.end()) {
-                Y_FAIL("invalid Owner");
+                Y_ABORT("invalid Owner");
             } else if (it->second.Slain) {
                 addRes(NKikimrProto::INVALID_OWNER, "VDisk is slain");
             } else if (msg->OwnerRound != it->second.OwnerRound) {
@@ -593,7 +593,7 @@ public:
         NKikimrProto::EReplyStatus status = NKikimrProto::OK;
         TString errorReason;
         if (const auto it = Impl.Owners.find(msg->Owner); it == Impl.Owners.end()) {
-            Y_FAIL("invalid Owner");
+            Y_ABORT("invalid Owner");
         } else if (it->second.Slain) {
             status = NKikimrProto::INVALID_OWNER;
             errorReason = "VDisk is slain";

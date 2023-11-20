@@ -256,6 +256,7 @@
   - verrsrc.h
   - versionhelpers.h
   - vfw.h
+  - w32api/winioctl.h
   - wbemidl.h
   - websocket.h
   - winapifamily.h

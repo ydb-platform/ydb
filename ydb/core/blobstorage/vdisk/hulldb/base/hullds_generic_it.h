@@ -40,7 +40,7 @@ namespace NKikimr {
         }
 
         void Next() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
 
             if (!Iter1.Valid()) {
                 Iter2.Next();
@@ -125,7 +125,7 @@ namespace NKikimr {
         }
 
         void Prev() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
 
             if (!Iter1.Valid()) {
                 Iter2.Prev();
@@ -173,7 +173,7 @@ namespace NKikimr {
         template <class TKey, class TIter, class TRecordMerger, class TPQueue>
         void PutToMerger(TRecordMerger *merger, TPQueue &pqueue) {
             using TIterPtr = std::shared_ptr<TIter>;
-            Y_VERIFY_DEBUG(!pqueue.empty());
+            Y_DEBUG_ABORT_UNLESS(!pqueue.empty());
             TStackVec<TIterPtr, 32> tmp;
             TIterPtr it = pqueue.top();
             pqueue.pop();
@@ -195,10 +195,10 @@ namespace NKikimr {
         TString ToString(TPQueue &pqueue) {
             using TIterPtr = std::shared_ptr<TIter>;
             TStringStream str;
-            Y_VERIFY_DEBUG(!pqueue.empty());
+            Y_DEBUG_ABORT_UNLESS(!pqueue.empty());
             TStackVec<TIterPtr, 32> tmp;
             TIterPtr it = pqueue.top();
-            Y_VERIFY_DEBUG(it->Valid());
+            Y_DEBUG_ABORT_UNLESS(it->Valid());
             pqueue.pop();
             tmp.push_back(it);
             str << it->ToString();
@@ -269,7 +269,7 @@ namespace NKikimr {
         }
 
         TKey GetCurKey() const {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             return PQueue.top()->GetCurKey();
         }
 
@@ -296,7 +296,7 @@ namespace NKikimr {
         void Next() {
             TIterPtr it = PQueue.top();
             PQueue.pop();
-            Y_VERIFY_DEBUG(it->Valid());
+            Y_DEBUG_ABORT_UNLESS(it->Valid());
             TKey curKey = it->GetCurKey();
             it->Next();
             if (it->Valid()) {
@@ -365,7 +365,7 @@ namespace NKikimr {
         }
 
         TKey GetCurKey() const {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             return PQueue.top()->GetCurKey();
         }
 
@@ -393,7 +393,7 @@ namespace NKikimr {
         void Prev() {
             TIterPtr it = PQueue.top();
             PQueue.pop();
-            Y_VERIFY_DEBUG(it->Valid());
+            Y_DEBUG_ABORT_UNLESS(it->Valid());
             TKey curKey = it->GetCurKey();
             it->Prev();
             if (it->Valid()) {

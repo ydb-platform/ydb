@@ -126,6 +126,8 @@ STATEFN(TQueueLeader::StateInit) {
         // interface
         cFunc(TEvPoisonPill::EventType, PassAway); // from service
         hFunc(TSqsEvents::TEvGetConfiguration, HandleGetConfigurationWhileIniting); // from action actors
+        hFunc(TSqsEvents::TEvActionCounterChanged, HandleActionCounterChanged);
+        hFunc(TSqsEvents::TEvLocalCounterChanged, HandleLocalCounterChanged);
         hFunc(TSqsEvents::TEvExecute, HandleExecuteWhileIniting); // from action actors
         hFunc(TSqsEvents::TEvClearQueueAttributesCache, HandleClearQueueAttributesCache); // from set queue attributes
         hFunc(TSqsEvents::TEvPurgeQueue, HandlePurgeQueue); // from purge queue actor
@@ -152,6 +154,8 @@ STATEFN(TQueueLeader::StateWorking) {
         // interface
         cFunc(TEvPoisonPill::EventType, PassAway); // from service
         hFunc(TSqsEvents::TEvGetConfiguration, HandleGetConfigurationWhileWorking); // from action actors
+        hFunc(TSqsEvents::TEvActionCounterChanged, HandleActionCounterChanged);
+        hFunc(TSqsEvents::TEvLocalCounterChanged, HandleLocalCounterChanged);
         hFunc(TSqsEvents::TEvExecute, HandleExecuteWhileWorking); // from action actors
         hFunc(TSqsEvents::TEvClearQueueAttributesCache, HandleClearQueueAttributesCache); // from set queue attributes
         hFunc(TSqsEvents::TEvPurgeQueue, HandlePurgeQueue); // from purge queue actor
@@ -187,7 +191,7 @@ void TQueueLeader::PassAway() {
     }
     GetConfigurationRequests_.clear();
 
-    Y_ABORT_UNLESS(ExecuteRequests_.empty());
+    Y_ABORT_UNLESS(ExecuteRequests_.empty() || CurrentStateFunc() == &TThis::StateInit);
 
     if (DeduplicationCleanupActor_) {
         Send(DeduplicationCleanupActor_, new TEvPoisonPill());
@@ -234,7 +238,7 @@ void TQueueLeader::HandleWakeup(TEvWakeup::TPtr& ev) {
         break;
     }
     default:
-        Y_FAIL("Unknown wakeup tag: %lu", ev->Get()->Tag);
+        Y_ABORT("Unknown wakeup tag: %lu", ev->Get()->Tag);
     }
 }
 
@@ -343,6 +347,62 @@ void TQueueLeader::HandleGetConfigurationWhileWorking(TSqsEvents::TEvGetConfigur
         LWPROBE(QueueAttributesCacheMiss, ev->Get()->UserName, ev->Get()->QueueName, ev->Get()->RequestId);
         GetConfigurationRequests_.emplace_back(ev);
         AskQueueAttributes();
+    }
+}
+
+void TQueueLeader::HandleActionCounterChanged(TSqsEvents::TEvActionCounterChanged::TPtr& ev) {
+    auto actionNumber = ev->Get()->Record.GetAction();
+    if (actionNumber > EAction::ActionsArraySize) {
+        LOG_SQS_DEBUG("Action with number " << actionNumber << " doesn't exist.");
+        return;
+    }
+    EAction action = static_cast<EAction>(actionNumber);
+    if (!IsActionForMessage(action) && !Counters_->NeedToShowDetailedCounters()) {
+        return;
+    }
+    ui32 errorsCount = ev->Get()->Record.GetErrorsCount();
+    TCountersCouple<TActionCounters*> actionCountersCouple{nullptr, nullptr};
+    if (IsActionForQueue(action)) {
+        actionCountersCouple.SqsCounters = &Counters_->SqsActionCounters[action];
+        if (errorsCount > 0) {
+            ADD_COUNTER(actionCountersCouple.SqsCounters, Errors, errorsCount);
+        } else {
+            INC_COUNTER(actionCountersCouple.SqsCounters, Success);
+        }
+    }
+    if (IsActionForQueueYMQ(action)) {
+        actionCountersCouple.YmqCounters = &Counters_->YmqActionCounters[action];
+        if (errorsCount > 0) {
+            ADD_COUNTER(actionCountersCouple.YmqCounters, Errors, errorsCount);
+        } else {
+            INC_COUNTER(actionCountersCouple.YmqCounters, Success);
+        }
+    }
+    if (actionCountersCouple.Defined()) {
+        COLLECT_HISTOGRAM_COUNTER_COUPLE(actionCountersCouple, Duration, ev->Get()->Record.GetDurationMs());
+        auto workingDuration = ev->Get()->Record.GetWorkingDurationMs();
+        LOG_SQS_DEBUG("Request " << action << " working duration: " << workingDuration << "ms");
+        COLLECT_HISTOGRAM_COUNTER_COUPLE(actionCountersCouple, WorkingDuration, workingDuration);
+    }
+}
+
+void TQueueLeader::HandleLocalCounterChanged(TSqsEvents::TEvLocalCounterChanged::TPtr& ev) {
+    switch (ev->Get()->CounterType) {
+        case TSqsEvents::TEvLocalCounterChanged::ECounterType::ReceiveMessageImmediateDuration:
+            if (auto* detailedCounters = Counters_ ? Counters_->GetDetailedCounters() : nullptr) {
+                COLLECT_HISTOGRAM_COUNTER(detailedCounters, ReceiveMessageImmediate_Duration, ev->Get()->Value);
+            }
+            break;
+        case TSqsEvents::TEvLocalCounterChanged::ECounterType::ReceiveMessageEmptyCount:
+            INC_COUNTER_COUPLE(Counters_, ReceiveMessage_EmptyCount, empty_receive_attempts_count_per_second);
+            break;
+        case TSqsEvents::TEvLocalCounterChanged::ECounterType::MessagesPurged:
+            ADD_COUNTER_COUPLE(Counters_, MessagesPurged, purged_count_per_second, ev->Get()->Value);
+            break;
+        case TSqsEvents::TEvLocalCounterChanged::ECounterType::ClientMessageProcessingDuration:
+            COLLECT_HISTOGRAM_COUNTER(Counters_, ClientMessageProcessing_Duration, ev->Get()->Value);
+            COLLECT_HISTOGRAM_COUNTER(Counters_, client_processing_duration_milliseconds, ev->Get()->Value);
+            break;
     }
 }
 
@@ -553,6 +613,17 @@ void TQueueLeader::OnMessageSent(const TString& requestId, size_t index, const T
     if (reqInfo.AnswersGot == reqInfo.Statuses.size()) {
         auto answer = MakeHolder<TSqsEvents::TEvSendMessageBatchResponse>();
         answer->Statuses.swap(reqInfo.Statuses);
+        ui64 bytesWritten = 0;
+        for (auto& message : reqInfo.Event->Get()->Messages) {
+            bytesWritten += message.Body.Size();
+        }
+
+        INC_COUNTER_COUPLE(Counters_, SendMessage_Count, sent_count_per_second);
+        ADD_COUNTER_COUPLE(Counters_, SendMessage_BytesWritten, sent_bytes_per_second, bytesWritten);
+        if (messageStatus.Status == TSqsEvents::TEvSendMessageBatchResponse::ESendMessageStatus::AlreadySent) {
+            INC_COUNTER_COUPLE(Counters_, SendMessage_DeduplicationCount, deduplicated_count_per_second);
+        }
+
         Send(reqInfo.Event->Sender, answer.Release());
         SendMessageRequests_.erase(reqInfo.Event->Get()->RequestId);
         DecActiveMessageRequests(shard);
@@ -1117,6 +1188,28 @@ void TQueueLeader::WaitAddMessagesToInflyOrTryAnotherShard(TReceiveMessageBatchR
 
 void TQueueLeader::Reply(TReceiveMessageBatchRequestProcessing& reqInfo) {
     const ui64 shard = reqInfo.GetCurrentShard();
+    if (!reqInfo.Answer->Failed && !reqInfo.Answer->OverLimit) {
+        int receiveCount = 0;
+        int messageCount = 0;
+        ui64 bytesRead = 0;
+
+        for (auto& message : reqInfo.Answer->Messages) {
+            receiveCount += message.ReceiveCount;
+            messageCount++;
+            bytesRead += message.Data.size();
+
+            const TDuration messageResideDuration = TActivationContext::Now() - message.SentTimestamp;
+            COLLECT_HISTOGRAM_COUNTER(Counters_, MessageReside_Duration, messageResideDuration.MilliSeconds());
+            COLLECT_HISTOGRAM_COUNTER(Counters_, reside_duration_milliseconds, messageResideDuration.MilliSeconds());
+        }
+
+        if (messageCount > 0) {
+            COLLECT_HISTOGRAM_COUNTER(Counters_, MessageReceiveAttempts, receiveCount);
+            COLLECT_HISTOGRAM_COUNTER(Counters_, receive_attempts_count_rate, receiveCount);
+            ADD_COUNTER_COUPLE(Counters_, ReceiveMessage_Count, received_count_per_second, messageCount);
+            ADD_COUNTER_COUPLE(Counters_, ReceiveMessage_BytesRead, received_bytes_per_second, bytesRead);
+        }
+    }
     Send(reqInfo.Event->Sender, std::move(reqInfo.Answer));
     ReceiveMessageRequests_.erase(reqInfo.Event->Get()->RequestId);
     DecActiveMessageRequests(shard);
@@ -1208,6 +1301,15 @@ void TQueueLeader::OnMessageDeleted(const TString& requestId, ui64 shard, size_t
     }
 
     if (reqInfo.AnswersGot == req->Get()->Messages.size()) {
+        auto& statuses = reqInfo.Answer->Statuses;
+        const ui64 deleted_number = std::count_if(
+            statuses.cbegin(),
+            statuses.cend(),
+            [](auto& messageResult) { 
+                return messageResult.Status == TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK;
+            });
+        ADD_COUNTER_COUPLE(Counters_, DeleteMessage_Count, deleted_count_per_second, deleted_number);
+
         Send(req->Sender, reqInfo.Answer.Release());
         DeleteMessageRequests_.erase(key);
         DecActiveMessageRequests(shard);
@@ -2033,6 +2135,13 @@ void TQueueLeader::OnInflyLoaded(ui64 shard, const TSqsEvents::TEvExecuted::TRec
         shardInfo.InflyVersion = val["inflyVersion"];
         LOG_SQS_DEBUG("Infly version for shard " << TLogQueueName(UserName_, QueueName_, shard) << ": " << shardInfo.InflyVersion);
 
+        if (!val["messageCount"].HaveValue() ||
+            !val["inflyCount"].HaveValue() ||
+            !val["readOffset"].HaveValue() ||
+            !val["createdTimestamp"].HaveValue()
+        ) {
+            return;  
+        }
         SetMessagesCount(shard, val["messageCount"]);
         SetInflyMessagesCount(shard, val["inflyCount"]);
         shardInfo.ReadOffset = val["readOffset"];

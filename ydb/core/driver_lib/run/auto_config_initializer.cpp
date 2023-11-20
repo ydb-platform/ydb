@@ -257,6 +257,14 @@ namespace NKikimr::NAutoConfigInitializer {
         config->SetIoExecutor(pools.IOPoolId);
         serviceExecutor->SetExecutorId(pools.ICPoolId);
 
+        if (!config->HasActorSystemProfile()) {
+            if (cpuCount <= 4) {
+                config->SetActorSystemProfile(NKikimrConfig::TActorSystemConfig::LOW_CPU_CONSUMPTION);
+            } else {
+                config->SetActorSystemProfile(NKikimrConfig::TActorSystemConfig::LOW_LATENCY);
+            }
+        }
+
         TVector<NKikimrConfig::TActorSystemConfig::TExecutor *> executors;
         for (ui32 poolIdx = 0; poolIdx < poolCount; ++poolIdx) {
             executors.push_back(config->AddExecutor());

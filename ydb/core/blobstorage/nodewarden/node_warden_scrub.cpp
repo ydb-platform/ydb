@@ -19,7 +19,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerScrubQueryStartQuantum::TP
             case TVDiskRecord::EScrubState::QUERY_START_QUANTUM:
             case TVDiskRecord::EScrubState::IN_PROGRESS:
             case TVDiskRecord::EScrubState::QUANTUM_FINISHED_AND_WAITING_FOR_NEXT_ONE:
-                Y_FAIL("inconsistent ScrubState# %" PRIu32, vdisk.ScrubState);
+                Y_ABORT("inconsistent ScrubState# %" PRIu32, vdisk.ScrubState);
         }
         // issue request to BS_CONTROLLER
         const TVSlotId vslotId = it->first;
@@ -38,7 +38,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerScrubStartQuantum::TPtr ev
             case TVDiskRecord::EScrubState::IDLE:
             case TVDiskRecord::EScrubState::IN_PROGRESS:
             case TVDiskRecord::EScrubState::QUANTUM_FINISHED:
-                Y_FAIL("inconsistent ScrubState# %" PRIu32, vdisk.ScrubState);
+                Y_ABORT("inconsistent ScrubState# %" PRIu32, vdisk.ScrubState);
 
             case TVDiskRecord::EScrubState::QUANTUM_FINISHED_AND_WAITING_FOR_NEXT_ONE:
                 vdisk.QuantumFinished.Clear();
@@ -65,7 +65,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerScrubQuantumFinished::TPtr
             case TVDiskRecord::EScrubState::QUERY_START_QUANTUM:
             case TVDiskRecord::EScrubState::QUANTUM_FINISHED:
             case TVDiskRecord::EScrubState::QUANTUM_FINISHED_AND_WAITING_FOR_NEXT_ONE:
-                Y_FAIL("inconsistent ScrubState# %" PRIu32, vdisk.ScrubState);
+                Y_ABORT("inconsistent ScrubState# %" PRIu32, vdisk.ScrubState);
         }
         // forward request to BS_CONTROLLER
         SendToController(std::make_unique<TEvBlobStorage::TEvControllerScrubQuantumFinished>(r));

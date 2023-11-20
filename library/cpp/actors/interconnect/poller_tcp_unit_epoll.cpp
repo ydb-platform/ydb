@@ -13,7 +13,7 @@ namespace NInterconnect {
             ::epoll_event event = {0, {.fd = stream}};
             if (::epoll_ctl(epoll, EPOLL_CTL_DEL, stream, &event)) {
                 Cerr << "epoll_ctl errno: " << errno << Endl;
-                Y_FAIL("epoll delete error!");
+                Y_ABORT("epoll delete error!");
             }
         }
 
@@ -24,14 +24,14 @@ namespace NInterconnect {
             event.data.fd = stream;
             if (::epoll_ctl(epoll, EPOLL_CTL_ADD, stream, &event)) {
                 Cerr << "epoll_ctl errno: " << errno << Endl;
-                Y_FAIL("epoll add error!");
+                Y_ABORT("epoll add error!");
             }
         }
 
         int
         Initialize() {
             const auto epoll = ::epoll_create(10000);
-            Y_VERIFY_DEBUG(epoll > 0);
+            Y_DEBUG_ABORT_UNLESS(epoll > 0);
             return epoll;
         }
 
@@ -92,7 +92,7 @@ namespace NInterconnect {
             ::epoll_pwait(epoll, events, EVENTS_BUF_SIZE, 200, &sigmask);
 
         if (result == -1 && errno != EINTR)
-            Y_FAIL("epoll wait error!");
+            Y_ABORT("epoll wait error!");
 
         auto& side = GetSide<WriteOp>();
         side.ProcessInput();

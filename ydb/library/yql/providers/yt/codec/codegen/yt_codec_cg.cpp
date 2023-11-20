@@ -188,12 +188,11 @@ public:
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, funcAddr, PointerType::getUnqual(funType), "ptr", Block_);
             CallInst::Create(funType, funcPtr, { typeConst, elemPtr, buf }, "", Block_);
         }
-        TCodegenContext ctx(*Codegen_);
-        ctx.Func = Func_;
-        if constexpr (Flat)
-            ValueCleanup(EValueRepresentation::Any, elemPtr, ctx, Block_);
-        else
-            ValueUnRef(EValueRepresentation::Any, elemPtr, ctx, Block_);
+        if constexpr (!Flat) {
+            TCodegenContext ctx(*Codegen_);
+            ctx.Func = Func_;
+            ValueUnRef(GetValueRepresentation(type), elemPtr, ctx, Block_);
+        }
     }
 
     void GenerateData(Value* elemPtr, Value* buf, NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags) {
@@ -366,12 +365,11 @@ public:
                     CallInst::Create(module.getFunction("WriteString"), { buf, bytePtr, size }, "", Block_);
                 }
 
-                TCodegenContext ctx(*Codegen_);
-                ctx.Func = Func_;
-                if constexpr (Flat)
-                    ValueCleanup(EValueRepresentation::String, elemPtr, ctx, Block_);
-                else
+                if constexpr (!Flat) {
+                    TCodegenContext ctx(*Codegen_);
+                    ctx.Func = Func_;
                     ValueUnRef(EValueRepresentation::String, elemPtr, ctx, Block_);
+                }
 
                 BranchInst::Create(done, Block_);
             }
@@ -430,12 +428,11 @@ public:
 
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, funcAddr, PointerType::getUnqual(funType), "ptr", Block_);
         CallInst::Create(funType, funcPtr, { typeConst, elemPtr, buf }, "", Block_);
-        TCodegenContext ctx(*Codegen_);
-        ctx.Func = Func_;
-        if constexpr (Flat)
-            ValueCleanup(EValueRepresentation::Any, elemPtr, ctx, Block_);
-        else
+        if constexpr (!Flat) {
+            TCodegenContext ctx(*Codegen_);
+            ctx.Func = Func_;
             ValueUnRef(EValueRepresentation::Any, elemPtr, ctx, Block_);
+        }
     }
 
 private:

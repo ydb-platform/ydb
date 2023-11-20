@@ -25,4 +25,5 @@ target_sources(columnshard-blobs_action-tier PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/write.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/read.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/storage.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/tier/remove.cpp
 )

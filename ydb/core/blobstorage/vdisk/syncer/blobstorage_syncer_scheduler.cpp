@@ -228,7 +228,7 @@ namespace NKikimr {
             // fill in SchedulerQueue
             for (const auto &x : *SyncerData->Neighbors) {
                 if (!x.Myself) {
-                    Y_VERIFY_DEBUG(x.Get().PeerSyncState.LastSyncStatus != TSyncStatusVal::Running);
+                    Y_DEBUG_ABORT_UNLESS(x.Get().PeerSyncState.LastSyncStatus != TSyncStatusVal::Running);
                     SchedulerQueue.push(&x);
                 }
             }
@@ -284,7 +284,7 @@ namespace NKikimr {
                    SchedulerQueue.top()->Get().PeerSyncState.SchTime <= now) {
                 TVDiskInfoPtr tmp = SchedulerQueue.top();
                 SchedulerQueue.pop();
-                Y_VERIFY_DEBUG(tmp->Get().PeerSyncState.LastSyncStatus != TSyncStatusVal::Running);
+                Y_DEBUG_ABORT_UNLESS(tmp->Get().PeerSyncState.LastSyncStatus != TSyncStatusVal::Running);
                 auto task = std::make_unique<TSyncerJobTask>(TSyncerJobTask::EJustSync, GInfo->GetVDiskId(tmp->OrderNumber),
                     GInfo->GetActorId(tmp->OrderNumber), tmp->Get().PeerSyncState, JobCtx);
                 const TActorId aid = ctx.Register(CreateSyncerJob(SyncerContext, std::move(task), ctx.SelfID));
@@ -299,7 +299,7 @@ namespace NKikimr {
         }
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-            Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::SyncerInfoId);
+            Y_DEBUG_ABORT_UNLESS(ev->Get()->SubRequestId == TDbMon::SyncerInfoId);
             // create an actor to handle request
             auto actor = std::make_unique<TSyncerSchedulerHttpActor>(SyncerContext, GInfo, SyncerData, ev, ctx.SelfID);
             auto aid = ctx.RegisterWithSameMailbox(actor.release());

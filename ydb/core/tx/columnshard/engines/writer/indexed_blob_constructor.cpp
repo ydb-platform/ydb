@@ -14,7 +14,7 @@ TIndexedWriteController::TIndexedWriteController(const TActorId& dstActor, const
 {
     for (auto&& bInfo : BlobsSplitted) {
         auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(bInfo.GetData(), Action));
-        BlobData.emplace_back(TBlobRange::FromBlobId(task.GetBlobId()), bInfo.GetSpecialKeys(), bInfo.GetRowsCount(), bInfo.GetRawBytes(), AppData()->TimeProvider->Now());
+        BlobData.emplace_back(TBlobRange::FromBlobId(task.GetBlobId()), bInfo.GetSpecialKeysSafe(), bInfo.GetRowsCount(), bInfo.GetRawBytes(), AppData()->TimeProvider->Now());
     }
     ResourceUsage.SourceMemorySize = WriteData.GetSize();
 }

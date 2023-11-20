@@ -361,7 +361,7 @@ namespace NMonitoring {
             case ECompression::UNKNOWN:
                 return nullptr;
         }
-        Y_FAIL("invalid compression algorithm");
+        Y_ABORT("invalid compression algorithm");
     }
 
     THolder<IFramedCompressStream> CompressedOutput(IOutputStream* out, ECompression alg) {
@@ -377,7 +377,7 @@ namespace NMonitoring {
             case ECompression::UNKNOWN:
                 return nullptr;
         }
-        Y_FAIL("invalid compression algorithm");
+        Y_ABORT("invalid compression algorithm");
     }
 
 }

@@ -1,5 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
+/* skip double format */
 USE plato;
 
 define action $action1($x) as

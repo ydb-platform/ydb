@@ -295,13 +295,15 @@ private:
                         taskPtr,
                         computeActorType,
                         Options.TaskRunnerActorFactory,
-                        taskCounters));
+                        taskCounters,
+                        ev->Get()->Record.GetStatsMode()));
                 } else {
                     actor.Reset(CreateWorkerActor(
                         Options.RuntimeData,
                         traceId,
                         Options.TaskRunnerActorFactory,
-                        Options.AsyncIoFactory));
+                        Options.AsyncIoFactory,
+                        Options.UseSpilling));
                 }
                 allocationInfo.WorkerActors.emplace_back(RegisterChild(
                     actor.Release(), createComputeActor ? NYql::NDq::TEvDq::TEvAbortExecution::Unavailable("Aborted by LWM").Release() : nullptr

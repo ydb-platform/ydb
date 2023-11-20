@@ -4,7 +4,6 @@ RECURSE(
     dq
     minikql
     parser
-    protobuf_udf
     protos
     providers
     public

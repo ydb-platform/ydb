@@ -41,14 +41,14 @@ void TBufferBaseT<PointerType>::Assign(PointerType data, size_t size) noexcept {
 
 template <>
 void TBufferBaseT<void*>::Cut(size_t offset) noexcept {
-    Y_VERIFY_DEBUG(offset <= Size);
+    Y_DEBUG_ABORT_UNLESS(offset <= Size);
     Data = static_cast<char*>(Data) + offset;
     TBufferBase::Size -= offset;
 }
 
 template <>
 void TBufferBaseT<const void*>::Cut(size_t offset) noexcept {
-    Y_VERIFY_DEBUG(offset <= Size);
+    Y_DEBUG_ABORT_UNLESS(offset <= Size);
     Data = static_cast<const char*>(Data) + offset;
     TBufferBase::Size -= offset;
 }

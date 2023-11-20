@@ -51,7 +51,7 @@ class TDiscoverVDiskWorker {
             , Ingress(item.GetIngress())
             , Status(item.GetStatus())
         {
-            Y_VERIFY_DEBUG(item.HasBlobID() && item.HasIngress() && item.HasStatus());
+            Y_DEBUG_ABORT_UNLESS(item.HasBlobID() && item.HasIngress() && item.HasStatus());
         }
     };
 
@@ -137,7 +137,7 @@ public:
                 break;
 
             default:
-                Y_FAIL("unexpected reply status# %s", NKikimrProto::EReplyStatus_Name(status).data());
+                Y_ABORT("unexpected reply status# %s", NKikimrProto::EReplyStatus_Name(status).data());
         }
 
         return true;
@@ -412,7 +412,7 @@ private:
                     break;
 
                 default:
-                    Y_FAIL("unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
+                    Y_ABORT("unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
             }
         }
 
@@ -637,7 +637,7 @@ public:
                 break;
 
             default:
-                Y_FAIL("unexpected item status# %s", NKikimrProto::EReplyStatus_Name(resp.Status).data());
+                Y_ABORT("unexpected item status# %s", NKikimrProto::EReplyStatus_Name(resp.Status).data());
         }
 
         Y_ABORT_UNLESS(RequestsInFlight || Responded, "Status# %s GetInFlight# %s GetBlockFinished# %s",
@@ -719,7 +719,7 @@ public:
                 break;
 
             default:
-                Y_FAIL("unexpected TEvVGetBlockResult status# %s", NKikimrProto::EReplyStatus_Name(quorumStatus).data());
+                Y_ABORT("unexpected TEvVGetBlockResult status# %s", NKikimrProto::EReplyStatus_Name(quorumStatus).data());
         }
 
         Y_ABORT_UNLESS(RequestsInFlight || Responded);

@@ -40,7 +40,7 @@ ICounterImplPtr TSolomonRegistry::RegisterCounter(
     TSensorOptions options)
 {
     return SelectImpl<ICounterImpl, TSimpleCounter, TPerCpuCounter>(options.Hot, [&, this] (const auto& counter) {
-        DoRegister([this, name, tags, options, counter] () {
+        DoRegister([this, name, tags, options = std::move(options), counter] () {
             auto reader = [ptr = counter.Get()] {
                 return ptr->GetValue();
             };
@@ -59,7 +59,7 @@ ITimeCounterImplPtr TSolomonRegistry::RegisterTimeCounter(
     return SelectImpl<ITimeCounterImpl, TSimpleTimeCounter, TPerCpuTimeCounter>(
         options.Hot,
         [&, this] (const auto& counter) {
-            DoRegister([this, name, tags, options, counter] () {
+            DoRegister([this, name, tags, options = std::move(options), counter] () {
                 auto set = FindSet(name, options);
                 set->AddTimeCounter(New<TTimeCounterState>(counter, Tags_.Encode(tags), tags));
             });
@@ -76,7 +76,7 @@ IGaugeImplPtr TSolomonRegistry::RegisterGauge(
             gauge->Update(std::numeric_limits<double>::quiet_NaN());
         }
 
-        DoRegister([this, name, tags, options, gauge] () {
+        DoRegister([this, name, tags, options = std::move(options), gauge] () {
             auto reader = [ptr = gauge.Get()] {
                 return ptr->GetValue();
             };
@@ -94,7 +94,7 @@ ITimeGaugeImplPtr TSolomonRegistry::RegisterTimeGauge(
 {
     auto gauge = New<TSimpleTimeGauge>();
 
-    DoRegister([this, name, tags, options, gauge] () {
+    DoRegister([this, name, tags, options = std::move(options), gauge] () {
         auto reader = [ptr = gauge.Get()] {
             return ptr->GetValue().SecondsFloat();
         };
@@ -112,7 +112,7 @@ ISummaryImplPtr TSolomonRegistry::RegisterSummary(
     TSensorOptions options)
 {
     return SelectImpl<ISummaryImpl, TSimpleSummary<double>, TPerCpuSummary<double>>(options.Hot, [&, this] (const auto& summary) {
-        DoRegister([this, name, tags, options, summary] () {
+        DoRegister([this, name, tags, options = std::move(options), summary] () {
             auto set = FindSet(name, options);
             set->AddSummary(New<TSummaryState>(summary, Tags_.Encode(tags), tags));
         });
@@ -125,7 +125,7 @@ IGaugeImplPtr TSolomonRegistry::RegisterGaugeSummary(
     TSensorOptions options)
 {
     auto gauge = New<TSimpleGauge>();
-    DoRegister([this, name, tags, options, gauge] () {
+    DoRegister([this, name, tags, options = std::move(options), gauge] () {
         auto set = FindSet(name, options);
         set->AddSummary(New<TSummaryState>(gauge, Tags_.Encode(tags), tags));
     });
@@ -139,7 +139,7 @@ ITimeGaugeImplPtr TSolomonRegistry::RegisterTimeGaugeSummary(
     TSensorOptions options)
 {
     auto gauge = New<TSimpleTimeGauge>();
-    DoRegister([this, name, tags, options, gauge] () {
+    DoRegister([this, name, tags, options = std::move(options), gauge] () {
         auto set = FindSet(name, options);
         set->AddTimerSummary(New<TTimerSummaryState>(gauge, Tags_.Encode(tags), tags));
     });
@@ -155,7 +155,7 @@ ITimerImplPtr TSolomonRegistry::RegisterTimerSummary(
     return SelectImpl<ITimerImpl, TSimpleSummary<TDuration>, TPerCpuSummary<TDuration>>(
         options.Hot,
         [&, this] (const auto& timer) {
-            DoRegister([this, name, tags, options, timer] () {
+            DoRegister([this, name, tags, options = std::move(options), timer] () {
                 auto set = FindSet(name, options);
                 set->AddTimerSummary(New<TTimerSummaryState>(timer, Tags_.Encode(tags), tags));
             });
@@ -168,7 +168,7 @@ ITimerImplPtr TSolomonRegistry::RegisterTimeHistogram(
     TSensorOptions options)
 {
     auto hist = New<THistogram>(options);
-    DoRegister([this, name, tags, options, hist] () {
+    DoRegister([this, name, tags, options = std::move(options), hist] () {
         auto set = FindSet(name, options);
         set->AddTimeHistogram(New<THistogramState>(hist, Tags_.Encode(tags), tags));
     });
@@ -181,7 +181,7 @@ IHistogramImplPtr TSolomonRegistry::RegisterGaugeHistogram(
     TSensorOptions options)
 {
     auto hist = New<THistogram>(options);
-    DoRegister([this, name, tags, options, hist] () {
+    DoRegister([this, name, tags, options = std::move(options), hist] () {
         auto set = FindSet(name, options);
         set->AddGaugeHistogram(New<THistogramState>(hist, Tags_.Encode(tags), tags));
     });
@@ -194,7 +194,7 @@ IHistogramImplPtr TSolomonRegistry::RegisterRateHistogram(
     TSensorOptions options)
 {
     auto hist = New<THistogram>(options);
-    DoRegister([this, name, tags, options, hist] () {
+    DoRegister([this, name, tags, options = std::move(options), hist] () {
         auto set = FindSet(name, options);
         set->AddRateHistogram(New<THistogramState>(hist, Tags_.Encode(tags), tags));
     });
@@ -208,7 +208,7 @@ void TSolomonRegistry::RegisterFuncCounter(
     const TRefCountedPtr& owner,
     std::function<i64()> reader)
 {
-    DoRegister([this, name, tags, options, owner, reader] () {
+    DoRegister([this, name, tags, options = std::move(options), owner, reader] () {
         auto set = FindSet(name, options);
         set->AddCounter(New<TCounterState>(owner, reader, Tags_.Encode(tags), tags));
     });
@@ -221,7 +221,7 @@ void TSolomonRegistry::RegisterFuncGauge(
     const TRefCountedPtr& owner,
     std::function<double()> reader)
 {
-    DoRegister([this, name, tags, options, owner, reader] () {
+    DoRegister([this, name, tags, options = std::move(options), owner, reader] () {
         auto set = FindSet(name, options);
         set->AddGauge(New<TGaugeState>(owner, reader, Tags_.Encode(tags), tags));
     });
@@ -233,7 +233,7 @@ void TSolomonRegistry::RegisterProducer(
     TSensorOptions options,
     const ISensorProducerPtr& producer)
 {
-    DoRegister([this, prefix, tags, options, producer] () {
+    DoRegister([this, prefix, tags, options = std::move(options), producer] () {
         Producers_.AddProducer(New<TProducerState>(prefix, tags, options, producer));
     });
 }

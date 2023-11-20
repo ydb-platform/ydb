@@ -7,21 +7,30 @@ on:
         type: string
         default: "ydb/"
         description: "limit build and test to specific target"
-      sanitizer:
+      build_preset:
         type: choice
-        default: "none"
-        description: "sanitizer type"
+        default: "relwithdebinfo"
+        description: "Build preset"
         options:
-          - none
-          - address
-          - memory
-          - thread
-          - undefined
-          - leak
-      runner_label:
-        type: string
-        default: "ya-make"
-        description: "runner label"
+          - relwithdebinfo
+          - release-asan
+          - release-tsan
+      test_size:
+        type: choice
+        default: "small,medium,large"
+        description: "test size to run"
+        options:
+          - small
+          - small,medium
+          - small,medium,large
+      test_type:
+        type: choice
+        default: "unittest,py3test,py2test,pytest"
+        description: "type of tests to run"
+        options:
+          - unittest
+          - py3test,py2test,pytest
+          - unittest,py3test,py2test,pytest
       run_build:
         type: boolean
         default: true
@@ -30,30 +39,57 @@ on:
         type: boolean
         default: true
         description: "run tests"
-      testmo_source:
+      test_threads:
         type: string
-        default: "ya-x86-64"
-        description: "testmo source"
+        default: "28"
+        description: "Test threads count"
+      link_threads:
+        type: string
+        default: "8"
+        description: "link threads count"
+      runner_label:
+        type: string
+        default: "ya-make"
+        description: "runner label"
+      cache_tests:
+        type: boolean
+        default: false
+        description: "Use cache for tests"
   workflow_call:
     inputs:
       build_target:
         type: string
         default: "ydb/"
-      sanitizer:
+      build_preset:
         type: string
-        default: "none"
+        default: "relwithdebinfo"
+      test_size:
+        type: string
+        default: "small,medium,large"
+      test_type:
+        type: string
+        default: "unittest,py3test,py2test,pytest"
       run_build:
         type: boolean
         default: true
       run_tests:
         type: boolean
         default: true
+      test_threads:
+        type: string
+        default: 28
+        description: "Test threads count"
+      link_threads:
+        type: string
+        default: 8
+        description: "link threads count"
       runner_label:
         type: string
         default: "ya-make"
-      testmo_source:
-        type: string
-        default: "ya-x86-64"
+      cache_tests:
+        type: boolean
+        default: false
+        description: "Use cache for tests"
 
 jobs:
   main:
@@ -62,8 +98,12 @@ jobs:
       runner_kind: provisioned
       runner_label: ${{ inputs.runner_label }}
       build_target: ${{ inputs.build_target }}
-      sanitizer: ${{ inputs.sanitizer }}
+      build_preset: ${{ inputs.build_preset }}
       run_build: ${{ inputs.run_build }}
       run_tests: ${{ inputs.run_tests }}
-      log_suffix: ${{ inputs.testmo_source }}
+      test_size: ${{ inputs.test_size }}
+      test_type: ${{ inputs.test_type }}
+      link_threads: ${{ inputs.link_threads }}
+      test_threads: ${{ inputs.test_threads }}
+      cache_tests: ${{ inputs.cache_tests }}
     secrets: inherit

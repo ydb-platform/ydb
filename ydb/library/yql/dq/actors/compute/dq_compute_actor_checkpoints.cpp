@@ -244,7 +244,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvInjectCheckpoint::TPtr&
 
     StartCheckpoint(ev->Get()->Record.GetCheckpoint());
     LOG_PCP_D("TEvInjectCheckpoint");
-    ComputeActor->ResumeExecution();
+    ComputeActor->ResumeExecution(EResumeSource::CheckpointInject);
 }
 
 void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvSaveTaskStateResult::TPtr& ev) {
@@ -342,7 +342,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
         NDqProto::TComputeActorState state = CombineForeignState(StateLoadPlan, ev->Get()->States, taskIds);
         ComputeActor->LoadState(std::move(state));
     } else {
-        Y_FAIL("Unprocessed state type %s (%d)",
+        Y_ABORT("Unprocessed state type %s (%d)",
             NDqProto::NDqStateLoadPlan::EStateType_Name(StateLoadPlan.GetStateType()).c_str(),
             static_cast<int>(StateLoadPlan.GetStateType()));
     }
@@ -473,7 +473,7 @@ void TDqComputeActorCheckpoints::RegisterCheckpoint(const NDqProto::TCheckpoint&
         YQL_ENSURE(PendingCheckpoint.Checkpoint->GetId() == checkpoint.GetId());
     }
     LOG_PCP_D("Got checkpoint barrier from channel " << channelId);
-    ComputeActor->ResumeExecution();
+    ComputeActor->ResumeExecution(EResumeSource::CheckpointRegister);
 }
 
 void TDqComputeActorCheckpoints::StartCheckpoint(const NDqProto::TCheckpoint& checkpoint) {

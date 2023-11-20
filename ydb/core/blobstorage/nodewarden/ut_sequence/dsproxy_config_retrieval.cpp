@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(NodeWardenDsProxyConfigRetrieval) {
 
         TActorId clientId;
         TTestActorRuntimeBase::TEventObserver prev = runtime.SetObserverFunc(
-                [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+                [&](TAutoPtr<IEventHandle>& ev) {
             if (auto *msg = ev->CastAsLocal<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()) {
                 for (const auto& group : msg->Record.GetServiceSet().GetGroups()) {
                     if (group.GetGroupID() == groupId && !allowConfiguring) {
@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(NodeWardenDsProxyConfigRetrieval) {
                     clientId = {};
                 }
             }
-            return prev(runtime, ev);
+            return prev(ev);
         });
 
         Setup(runtime);

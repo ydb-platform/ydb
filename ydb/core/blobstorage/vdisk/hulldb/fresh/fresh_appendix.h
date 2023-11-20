@@ -62,7 +62,7 @@ namespace NKikimr {
         TFreshAppendix &operator=(TFreshAppendix &&) = default;
 
         void Add(const TKey &key, const TMemRec &memRec) {
-            Y_VERIFY_DEBUG(SortedRecs.empty() || SortedRecs.back().Key < key);
+            Y_DEBUG_ABORT_UNLESS(SortedRecs.empty() || SortedRecs.back().Key < key);
             SortedRecs.push_back({key, memRec});
             MemConsumed.Add(sizeof(TRecord));
         }
@@ -125,7 +125,7 @@ namespace NKikimr {
         }
 
         void Next() {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             ++It;
         }
 
@@ -137,12 +137,12 @@ namespace NKikimr {
         }
 
         TKey GetCurKey() const {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             return It->Key;
         }
 
         TMemRec GetMemRec() const {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             return It->MemRec;
         }
 
@@ -272,7 +272,7 @@ namespace NKikimr {
         ui64 Inserts = 0;
 
         void UpdateMetadataOnAdd(const TAppendix &a, ui64 firstLsn, ui64 lastLsn) {
-            Y_VERIFY_DEBUG(firstLsn != ui64(-1) && firstLsn <= lastLsn && LastLsn < lastLsn && !a.Empty());
+            Y_DEBUG_ABORT_UNLESS(firstLsn != ui64(-1) && firstLsn <= lastLsn && LastLsn < lastLsn && !a.Empty());
             Inserts += a.GetSize();
             if (FirstLsn == ui64(-1)) {
                 FirstLsn = firstLsn;

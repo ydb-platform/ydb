@@ -323,7 +323,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
@@ -336,7 +336,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
@@ -349,7 +349,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
@@ -362,7 +362,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
@@ -457,6 +457,9 @@ public:
             if (Tenant->IsExternalSysViewProcessor) {
                 subdomain.SetExternalSysViewProcessor(true);
             }
+            if (Tenant->IsExternalStatisticsAggregator) {
+                subdomain.SetExternalStatisticsAggregator(true);
+            }
         }
 
         if (SharedTenant) {
@@ -478,6 +481,9 @@ public:
             }
             if (Tenant->IsExternalSysViewProcessor) {
                 subdomain.SetExternalSysViewProcessor(true);
+            }
+            if (Tenant->IsExternalStatisticsAggregator) {
+                subdomain.SetExternalStatisticsAggregator(true);
             }
         }
         if (tablets) {
@@ -878,7 +884,7 @@ public:
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, HandleSubdomain);
 
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
@@ -891,7 +897,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
@@ -1188,6 +1194,7 @@ TTenantsManager::TTenant::TTenant(const TString &path,
     , IsExternalSubdomain(false)
     , IsExternalHive(false)
     , IsExternalSysViewProcessor(false)
+    , IsExternalStatisticsAggregator(false)
     , AreResourcesShared(false)
 {
 }
@@ -2021,7 +2028,7 @@ void TTenantsManager::ProcessTenantActions(TTenant::TPtr tenant, const TActorCon
     } else if (tenant->State == TTenant::REMOVING_POOLS) {
         DeleteTenantPools(tenant, ctx);
     } else {
-        Y_FAIL("unexpected tenant state %u", (ui32)tenant->State);
+        Y_ABORT("unexpected tenant state %u", (ui32)tenant->State);
     }
 }
 
@@ -2130,7 +2137,7 @@ void TTenantsManager::SendTenantNotifications(TTenant::TPtr tenant,
         else if (action == TTenant::REMOVE)
             Counters.Inc(code, COUNTER_REMOVE_RESPONSES);
         else
-            Y_FAIL("unexpected action value (%" PRIu32 ")", static_cast<ui32>(action));
+            Y_ABORT("unexpected action value (%" PRIu32 ")", static_cast<ui32>(action));
     }
     tenant->Subscribers.clear();
 }
@@ -2265,6 +2272,7 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
                 << " isExternalSubDomain=" << tenant->IsExternalSubdomain
                 << " isExternalHive=" << tenant->IsExternalHive
                 << " isExternalSysViewProcessor=" << tenant->IsExternalSysViewProcessor
+                << " isExternalStatisticsAggregator=" << tenant->IsExternalStatisticsAggregator
                 << " areResourcesShared=" << tenant->AreResourcesShared
                 << " sharedDomainId=" << tenant->SharedDomainId);
 
@@ -2286,6 +2294,7 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
                 NIceDb::TUpdate<Schema::Tenants::IsExternalSubDomain>(tenant->IsExternalSubdomain),
                 NIceDb::TUpdate<Schema::Tenants::IsExternalHive>(tenant->IsExternalHive),
                 NIceDb::TUpdate<Schema::Tenants::IsExternalSysViewProcessor>(tenant->IsExternalSysViewProcessor),
+                NIceDb::TUpdate<Schema::Tenants::IsExternalStatisticsAggregator>(tenant->IsExternalStatisticsAggregator),
                 NIceDb::TUpdate<Schema::Tenants::AreResourcesShared>(tenant->AreResourcesShared),
                 NIceDb::TUpdate<Schema::Tenants::CreateIdempotencyKey>(tenant->CreateIdempotencyKey));
 
@@ -2390,6 +2399,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         bool isExternalSubDomain = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalSubDomain>(false);
         bool isExternalHive = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalHive>(false);
         bool isExternalSysViewProcessor = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalSysViewProcessor>(false);
+        bool isExternalStatisticsAggregator = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalStatisticsAggregator>(false);
         const bool areResourcesShared = tenantRowset.GetValueOrDefault<Schema::Tenants::AreResourcesShared>(false);
 
         TTenant::TPtr tenant = new TTenant(path, state, userToken);
@@ -2409,6 +2419,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         tenant->IsExternalSubdomain = isExternalSubDomain;
         tenant->IsExternalHive = isExternalHive;
         tenant->IsExternalSysViewProcessor = isExternalSysViewProcessor;
+        tenant->IsExternalStatisticsAggregator = isExternalStatisticsAggregator;
         tenant->AreResourcesShared = areResourcesShared;
 
         if (tenantRowset.HaveValue<Schema::Tenants::SchemaOperationQuotas>()) {
@@ -2482,7 +2493,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         pool->State = state;
 
         auto tenant = GetTenant(path);
-        Y_VERIFY_DEBUG(tenant, "loaded pool for unknown tenant %s", path.data());
+        Y_DEBUG_ABORT_UNLESS(tenant, "loaded pool for unknown tenant %s", path.data());
         if (tenant) {
             tenant->StoragePools[kind] = pool;
 
@@ -2507,7 +2518,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         ui64 count = slotRowset.GetValue<Schema::TenantUnits::Count>();
 
         auto tenant = GetTenant(path);
-        Y_VERIFY_DEBUG(tenant, "loaded units <%s, %s>(%" PRIu64 ") for unknown tenant %s",
+        Y_DEBUG_ABORT_UNLESS(tenant, "loaded units <%s, %s>(%" PRIu64 ") for unknown tenant %s",
                        kind.data(), zone.data(), count, path.data());
         if (tenant) {
             tenant->ComputationalUnits[std::make_pair(kind, zone)] = count;
@@ -2534,7 +2545,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         TString kind = registeredRowset.GetValue<Schema::RegisteredUnits::Kind>();
 
         auto tenant = GetTenant(path);
-        Y_VERIFY_DEBUG(tenant, "loaded registered unit %s:%" PRIu32 " for unknown tenant %s",
+        Y_DEBUG_ABORT_UNLESS(tenant, "loaded registered unit %s:%" PRIu32 " for unknown tenant %s",
                        host.data(), port, path.data());
         if (tenant) {
             TAllocatedComputationalUnit unit{host, port, kind};

@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(TBlockBlobStorageTest) {
 
         TVector<THolder<IEventHandle>> blocked;
         size_t passed = 0;
-        auto blockErrors = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto blockErrors = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::TEvBlockResult::EventType: {
                     auto* msg = ev->Get<TEvBlobStorage::TEvBlockResult>();

@@ -54,7 +54,7 @@ inline std::tuple<ui32, ui32, ui32> DecomposeVDiskServiceId(const TActorId& acto
     const ui32 nodeId = actorId.NodeId();
     const ui32 pdiskId = (ui32)ptr[4] | (ui32)ptr[5] << 8 | (ui32)ptr[6] << 16 | (ui32)ptr[7] << 24;
     const ui32 vslotId = (ui32)ptr[8] | (ui32)ptr[9] << 8 | (ui32)ptr[10] << 16 | (ui32)ptr[11] << 24;
-    Y_VERIFY_DEBUG(actorId == MakeBlobStorageVDiskID(nodeId, pdiskId, vslotId));
+    Y_DEBUG_ABORT_UNLESS(actorId == MakeBlobStorageVDiskID(nodeId, pdiskId, vslotId));
     return {nodeId, pdiskId, vslotId};
 }
 

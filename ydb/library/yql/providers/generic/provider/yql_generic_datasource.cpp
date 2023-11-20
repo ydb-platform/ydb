@@ -3,6 +3,7 @@
 #include "yql_generic_provider_impl.h"
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
@@ -21,6 +22,7 @@ namespace NYql {
         public:
             TGenericDataSource(TGenericState::TPtr state)
                 : State_(state)
+                , ConfigurationTransformer_(MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{GenericProviderName}))
                 , IODiscoveryTransformer_(CreateGenericIODiscoveryTransformer(State_))
                 , LoadMetaDataTransformer_(CreateGenericLoadTableMetadataTransformer(State_))
                 , TypeAnnotationTransformer_(CreateGenericDataSourceTypeAnnotationTransformer(State_))
@@ -36,7 +38,7 @@ namespace NYql {
                 if (node.IsCallable(TCoDataSource::CallableName())) {
                     if (node.Child(0)->Content() == GenericProviderName) {
                         auto clusterName = node.Child(1)->Content();
-                        if (!State_->Configuration->HasCluster(clusterName)) {
+                        if (clusterName != NCommon::ALL_CLUSTERS && !State_->Configuration->HasCluster(clusterName)) {
                             ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()),
                                                 TStringBuilder() << "Unknown cluster name: " << clusterName));
                             return false;
@@ -54,6 +56,10 @@ namespace NYql {
                     return TGenDataSource::Match(node.Child(1));
                 }
                 return TypeAnnotationTransformer_->CanParse(node);
+            }
+
+            IGraphTransformer& GetConfigurationTransformer() override {
+                return *ConfigurationTransformer_;
             }
 
             IGraphTransformer& GetIODiscoveryTransformer() override {
@@ -140,6 +146,7 @@ namespace NYql {
 
         private:
             const TGenericState::TPtr State_;
+            const THolder<IGraphTransformer> ConfigurationTransformer_;
             const THolder<IGraphTransformer> IODiscoveryTransformer_;
             const THolder<IGraphTransformer> LoadMetaDataTransformer_;
             const THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;

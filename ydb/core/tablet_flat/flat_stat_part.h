@@ -59,7 +59,9 @@ public:
 
     EReady Start() {
         auto ready = Pos.Seek(0);
-        FillKey();
+        if (ready != EReady::Page) {
+            FillKey();
+        }
 
         for (auto& g : AltGroups) {
             if (g.Pos.Seek(0) == EReady::Page) {
@@ -108,7 +110,7 @@ public:
         if (!HistoryGroups.empty()) {
             auto& h = HistoryGroups[0];
             const auto& hscheme = Part->Scheme->HistoryGroup;
-            Y_VERIFY_DEBUG(hscheme.ColsKeyIdx.size() == 3);
+            Y_DEBUG_ABORT_UNLESS(hscheme.ColsKeyIdx.size() == 3);
             while (h.Pos.IsValid() && h.Pos.GetRecord()->Cell(hscheme.ColsKeyIdx[0]).AsValue<TRowId>() < nextRowId) {
                 // eagerly include all history up to the next row id
                 if (rowCount) AddPageSize(stats.DataSize, h.Pos.GetPageId(), h.GroupId);
@@ -233,7 +235,7 @@ private:
                 stats.Add(rel.Size, channel);
                 ++prevPage;
             } else if (!rel.IsHead()) {
-                Y_FAIL("Got unaligned NPage::TFrames head record");
+                Y_ABORT("Got unaligned NPage::TFrames head record");
             } else {
                 break;
             }

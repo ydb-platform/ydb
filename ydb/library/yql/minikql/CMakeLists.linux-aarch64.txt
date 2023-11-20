@@ -16,6 +16,7 @@ add_subdirectory(dom)
 add_subdirectory(invoke_builtins)
 add_subdirectory(jsonpath)
 add_subdirectory(perf)
+add_subdirectory(protobuf_udf)
 add_subdirectory(ut)
 
 add_library(library-yql-minikql)

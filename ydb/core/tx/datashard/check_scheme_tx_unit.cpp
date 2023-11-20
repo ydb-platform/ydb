@@ -303,7 +303,7 @@ bool TCheckSchemeTxUnit::CheckSchemaVersion(TActiveTransaction *activeTx, ui64 t
     const auto proposed = op.HasTableSchemaVersion() ? op.GetTableSchemaVersion() : 0;
 
     const auto res = CheckSchemaVersion(activeTx, proposed, current, current + 1);
-    Y_VERIFY_DEBUG(res, "Unexpected schema version mutation");
+    Y_DEBUG_ABORT_UNLESS(res, "Unexpected schema version mutation");
 
     return true;
 }
@@ -516,7 +516,7 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
     }
 
     auto res = CheckSchemaVersion(activeTx, proposedSchemaVersion, curSchemaVersion, curSchemaVersion + 1);
-    Y_VERIFY_DEBUG(res, "Unexpected schema version mutation");
+    Y_DEBUG_ABORT_UNLESS(res, "Unexpected schema version mutation");
     return true;
 }
 

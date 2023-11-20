@@ -43,7 +43,7 @@ public:
         if (typeId) {
             auto iter = TypeByIdMap.find(typeId);
             if (iter != TypeByIdMap.end()) {
-                Y_VERIFY_DEBUG(iter->second);
+                Y_DEBUG_ABORT_UNLESS(iter->second);
                 return iter->second;
             }
         }

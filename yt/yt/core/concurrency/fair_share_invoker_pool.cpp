@@ -149,7 +149,7 @@ public:
         {
             auto now = GetInstant();
 
-            auto guard = WriterGuard(InvokerQueueStatesLock_);
+            auto guard = Guard(InvokerQueueStatesLock_);
 
             auto& queueState = InvokerQueueStates_[index];
             queueState.OnActionEnqueued(now);
@@ -174,7 +174,7 @@ protected:
 
         auto now = GetInstant();
 
-        auto guard = ReaderGuard(InvokerQueueStatesLock_);
+        auto guard = Guard(InvokerQueueStatesLock_);
 
         const auto& queueState = InvokerQueueStates_[index];
         return queueState.GetInvokerStatistics(now);
@@ -190,7 +190,9 @@ private:
     public:
         void OnActionEnqueued(TInstant now)
         {
-            UpdateTotalWaitTime(now);
+            UpdateLatestObservedTime(now);
+
+            TotalWaitTime_ += LatestObservedTime_ - now;
             ActionEnqueueTimes_.push(now);
             ++EnqueuedActionCount_;
         }
@@ -198,19 +200,20 @@ private:
         void OnActionDequeued()
         {
             YT_VERIFY(!ActionEnqueueTimes_.empty());
-            YT_VERIFY(LastTotalWaitTimeUpdateTime_);
 
             auto actionEnqueueTime = ActionEnqueueTimes_.front();
-            auto actionRecordedWaitTime = *LastTotalWaitTimeUpdateTime_ - actionEnqueueTime;
-            TotalWaitTime_ -= actionRecordedWaitTime;
-
+            TotalWaitTime_ -= LatestObservedTime_ - actionEnqueueTime;
             ActionEnqueueTimes_.pop();
             ++DequeuedActionCount_;
+
+            if (ActionEnqueueTimes_.empty()) {
+                YT_VERIFY(TotalWaitTime_ == TDuration::Zero());
+            }
         }
 
         TInvokerStatistics GetInvokerStatistics(TInstant now) const
         {
-            UpdateTotalWaitTime(now);
+            UpdateLatestObservedTime(now);
 
             auto waitingActionCount = std::ssize(ActionEnqueueTimes_);
             auto averageWaitTime = waitingActionCount > 0
@@ -228,21 +231,27 @@ private:
     private:
         TRingQueue<TInstant> ActionEnqueueTimes_;
         mutable TDuration TotalWaitTime_;
-        mutable std::optional<TInstant> LastTotalWaitTimeUpdateTime_;
+        mutable TInstant LatestObservedTime_;
         i64 EnqueuedActionCount_ = 0;
         i64 DequeuedActionCount_ = 0;
 
-        void UpdateTotalWaitTime(TInstant now) const
+        void UpdateLatestObservedTime(TInstant now) const
         {
-            auto singleActionWaitTimeDelta = now - LastTotalWaitTimeUpdateTime_.value_or(now);
-            int waitingActionCount = std::ssize(ActionEnqueueTimes_);
-            TotalWaitTime_ += waitingActionCount * singleActionWaitTimeDelta;
+            if (now <= LatestObservedTime_) {
+                return;
+            }
 
-            LastTotalWaitTimeUpdateTime_ = now;
+            if (!ActionEnqueueTimes_.empty()) {
+                auto singleActionWaitTimeDelta = now - LatestObservedTime_;
+                int waitingActionCount = std::ssize(ActionEnqueueTimes_);
+                TotalWaitTime_ += waitingActionCount * singleActionWaitTimeDelta;
+            }
+
+            LatestObservedTime_ = now;
         }
     };
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, InvokerQueueStatesLock_);
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, InvokerQueueStatesLock_);
     std::vector<TInvokerQueueState> InvokerQueueStates_;
 
     IFairShareCallbackQueuePtr Queue_;
@@ -316,7 +325,7 @@ private:
         YT_VERIFY(IsValidInvokerIndex(bucketIndex));
 
         {
-            auto guard = WriterGuard(InvokerQueueStatesLock_);
+            auto guard = Guard(InvokerQueueStatesLock_);
 
             auto& queueState = InvokerQueueStates_[bucketIndex];
             queueState.OnActionDequeued();

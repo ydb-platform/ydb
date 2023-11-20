@@ -1,0 +1,32 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:6:1: Warning: At function: RemovePrefixMembers, At function: RemoveSystemMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:13:5: Warning: At function: CalcOverWindow
+        	    Input4 as zz
+	    ^
+            <tmp_path>/program.sql:<main>:9:5: Warning: At function: WinOnRows, At function: Rank
+            	    RANK(cast(subkey as uint32) / 10 % 2) over w as rank,
+	    ^
+                <tmp_path>/program.sql:<main>:9:38: Warning: At function: %
+                	    RANK(cast(subkey as uint32) / 10 % 2) over w as rank,
+	                                     ^
+                    <tmp_path>/program.sql:<main>:9:33: Warning: At function: /
+                    	    RANK(cast(subkey as uint32) / 10 % 2) over w as rank,
+	                                ^
+                        <tmp_path>/program.sql:<main>:9:33: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                        	    RANK(cast(subkey as uint32) / 10 % 2) over w as rank,
+	                                ^
+            <tmp_path>/program.sql:<main>:10:5: Warning: At function: DenseRank
+            	    DENSE_RANK(cast(subkey as uint32) / 10 % 2) over w as dense_rank,
+	    ^
+                <tmp_path>/program.sql:<main>:10:44: Warning: At function: %
+                	    DENSE_RANK(cast(subkey as uint32) / 10 % 2) over w as dense_rank,
+	                                           ^
+                    <tmp_path>/program.sql:<main>:10:39: Warning: At function: /
+                    	    DENSE_RANK(cast(subkey as uint32) / 10 % 2) over w as dense_rank,
+	                                      ^
+                        <tmp_path>/program.sql:<main>:10:39: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                        	    DENSE_RANK(cast(subkey as uint32) / 10 % 2) over w as dense_rank,
+	                                      ^

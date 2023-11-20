@@ -113,7 +113,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
                 break;
 
             default:
-                Y_FAIL("unexpected newStatus# %s", NKikimrProto::EReplyStatus_Name(newStatus).data());
+                Y_ABORT("unexpected newStatus# %s", NKikimrProto::EReplyStatus_Name(newStatus).data());
         }
 
         for (const auto& result : record.GetResult()) {

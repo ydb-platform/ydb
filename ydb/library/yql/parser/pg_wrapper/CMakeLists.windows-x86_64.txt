@@ -120,6 +120,7 @@ target_compile_options(yql-parser-pg_wrapper PRIVATE
   -Dpg_hmac_update=yql_pg_hmac_update
   -Dpg_hmac_init=yql_pg_hmac_init
   -Dpg_hmac_create=yql_pg_hmac_create
+  -Dpg_pwritev_with_retry=yql_pg_pwritev_with_retry
   -DUSE_CURRENT_UDF_ABI_VERSION
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
@@ -134,10 +135,9 @@ target_include_directories(yql-parser-pg_wrapper PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/sort
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/common
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/port/win32
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/port/win32_msvc
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/port/win32_msvc
 )
 target_link_libraries(yql-parser-pg_wrapper PUBLIC
   contrib-libs-cxxsupp
@@ -947,31 +947,55 @@ target_sources(yql-parser-pg_wrapper PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/pg_kernels.17.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/pg_kernels.18.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/pg_kernels.19.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/backend/port/win32/crashdump.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/backend/port/win32/signal.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/backend/port/win32/socket.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/backend/port/win32/timer.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/backend/port/win32_sema.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/backend/port/win32_shmem.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/dirmod.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/dlopen.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/getaddrinfo.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/getopt.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/getrusage.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/gettimeofday.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/inet_aton.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/kill.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/open.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/pread.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/pwrite.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/pwritev.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/system.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/win32common.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/win32env.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/win32error.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/win32fseek.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/win32ntdll.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/win32security.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/win32setlocale.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/win32stat.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/port/win32/crashdump.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/port/win32/signal.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/port/win32/socket.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/port/win32/timer.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/port/win32_sema.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/port/win32_shmem.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/dirmod.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/dlopen.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/getaddrinfo.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/getopt.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/getrusage.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/gettimeofday.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/inet_aton.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/kill.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/open.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/pread.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/pwrite.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/pwritev.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/system.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/win32common.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/win32env.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/win32error.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/win32fseek.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/win32ntdll.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/win32security.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/win32setlocale.c
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/port/win32stat.c
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/copy_src.py
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_wrapper/copy_src.py
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/copy_src.sh
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_wrapper/copy_src.sh
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/generate_kernels.py
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_wrapper/generate_kernels.py
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/generate_patch.sh
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_wrapper/generate_patch.sh
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/vars.txt
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_wrapper/vars.txt
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/verify.sh
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_wrapper/verify.sh
 )

@@ -58,6 +58,7 @@ struct TEvWhiteboard{
         EvPDiskStateDelete,
         EvVDiskStateGenerationChange,
         EvVDiskDropDonors,
+        EvClockSkewUpdate,
         EvEnd
     };
 
@@ -379,6 +380,20 @@ struct TEvWhiteboard{
         }
     };
 
+    static TEvSystemStateUpdate *CreateSharedCacheStatsUpdateRequest(ui64 memUsedBytes, ui64 memLimitBytes) {
+        TEvSystemStateUpdate *request = new TEvSystemStateUpdate();
+        auto *pb = request->Record.MutableSharedCacheStats();
+        pb->SetUsedBytes(memUsedBytes);
+        pb->SetLimitBytes(memLimitBytes);
+        return request;
+    }
+
+    static TEvSystemStateUpdate *CreateTotalSessionsUpdateRequest(ui32 totalSessions) {
+        TEvSystemStateUpdate *request = new TEvSystemStateUpdate();
+        request->Record.SetTotalSessions(totalSessions);
+        return request;
+    }
+
     struct TEvSystemStateAddEndpoint : TEventLocal<TEvSystemStateAddEndpoint, EvSystemStateAddEndpoint> {
         TString Name;
         TString Address;
@@ -416,6 +431,15 @@ struct TEvWhiteboard{
     struct TEvSystemStateRequest : public TEventPB<TEvSystemStateRequest, NKikimrWhiteboard::TEvSystemStateRequest, EvSystemStateRequest> {};
 
     struct TEvSystemStateResponse : public TEventPB<TEvSystemStateResponse, NKikimrWhiteboard::TEvSystemStateResponse, EvSystemStateResponse> {};
+
+    struct TEvClockSkewUpdate : TEventPB<TEvClockSkewUpdate, NKikimrWhiteboard::TNodeClockSkew, EvClockSkewUpdate> {
+        TEvClockSkewUpdate() = default;
+
+        TEvClockSkewUpdate(const ui32 peerNodeId, i64 clockSkewUs) {
+            Record.SetPeerNodeId(peerNodeId);
+            Record.SetClockSkewUs(clockSkewUs);
+        }
+    };
 
     struct TEvNodeStateUpdate : TEventPB<TEvNodeStateUpdate, NKikimrWhiteboard::TNodeStateInfo, EvNodeStateUpdate> {
         TEvNodeStateUpdate() = default;

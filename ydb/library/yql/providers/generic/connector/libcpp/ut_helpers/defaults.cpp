@@ -9,6 +9,7 @@ namespace NYql::NConnector::NTest {
 
     extern const TString DEFAULT_PG_HOST = "localhost";
     extern const TString PG_SOURCE_TYPE = "PostgreSQL";
+    extern const TString DEFAULT_PG_SCHEMA = "public";
 
     extern const TString DEFAULT_CH_HOST = "rc1a-d6dv17lv47v5mcop.db.yandex.net";
     extern const TString DEFAULT_CH_ENDPOINT = TStringBuilder() << DEFAULT_CH_HOST << ':' << DEFAULT_CH_PORT;

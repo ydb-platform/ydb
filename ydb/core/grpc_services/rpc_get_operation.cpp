@@ -62,7 +62,7 @@ class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvG
         case TOperationId::BUILD_INDEX:
             return new NSchemeShard::TEvIndexBuilder::TEvGetRequest(DatabaseName, RawOperationId_);
         default:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
     }
 

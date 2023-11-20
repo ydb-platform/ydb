@@ -411,7 +411,7 @@ void TActiveTransaction::FillVolatileTxData(TDataShard *self,
     } else if (IsSnapshotTx()) {
         BuildSnapshotTx();
     } else {
-        Y_FAIL("Unexpected FillVolatileTxData call");
+        Y_ABORT("Unexpected FillVolatileTxData call");
     }
 
     TrackMemory();

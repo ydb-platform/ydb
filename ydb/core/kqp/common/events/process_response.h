@@ -7,9 +7,8 @@
 namespace NKikimr::NKqp::NPrivateEvents {
 
 struct TEvProcessResponse: public TEventPB<TEvProcessResponse, NKikimrKqp::TEvProcessResponse,
-    TKqpEvents::EvProcessResponse> {
-    static THolder<TEvProcessResponse> Error(Ydb::StatusIds::StatusCode ydbStatus, const TString& error);
-    static THolder<TEvProcessResponse> Success();
+    TKqpEvents::EvProcessResponse>
+{
 };
 
 } // namespace NKikimr::NKqp::NPrivateEvents

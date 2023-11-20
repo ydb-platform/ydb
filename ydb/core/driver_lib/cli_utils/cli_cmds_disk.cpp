@@ -47,7 +47,7 @@ public:
 
         MainKey = {};
         for (auto& key : MainKeyTmp) {
-            MainKey.push_back(key);
+            MainKey.Keys.push_back(key);
         }
     }
 
@@ -174,12 +174,12 @@ public:
             ythrow yexception() << "missing main-key param";
 
         for (auto& key : MainKeyTmp) {
-            MainKey.push_back(key);
+            MainKey.Keys.push_back(key);
         }
     }
 
     virtual int Run(TConfig&) override {
-        FormatPDisk(Path, DiskSize, SectorSize, ChunkSize, Guid, ChunkKey, LogKey, SysLogKey, MainKey.back(), TextMessage,
+        FormatPDisk(Path, DiskSize, SectorSize, ChunkSize, Guid, ChunkKey, LogKey, SysLogKey, MainKey.Keys.back(), TextMessage,
                 IsErasureEncode, false, nullptr, true);
         return 0;
     }

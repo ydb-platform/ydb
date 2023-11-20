@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_syncneighbors.h>
 #include <ydb/core/blobstorage/vdisk/common/sublog.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <library/cpp/random_provider/random_provider.h>
 
 using namespace NKikimrServices;
 using namespace NKikimr::NSync;
@@ -298,7 +299,7 @@ namespace NKikimr {
                 case EFirstRunStep::ACTION_WriteFinalLocally:
                     WriteFinalLocally(ctx);
                     break;
-                default: Y_FAIL("Unexpected step: %s", EFirstRunStepToStr(startStep));
+                default: Y_ABORT("Unexpected step: %s", EFirstRunStepToStr(startStep));
             }
         }
 
@@ -518,7 +519,7 @@ namespace NKikimr {
                 }
                 case WaitForCommitter:
                     break;
-                default: Y_FAIL("Unexpected case");
+                default: Y_ABORT("Unexpected case");
             }
         }
 

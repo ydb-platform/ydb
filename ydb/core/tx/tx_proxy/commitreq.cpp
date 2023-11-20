@@ -157,7 +157,7 @@ private:
     }
 
     void HandleResolve(TEvResolveTablesResponse::TPtr& ev, const TActorContext& ctx) {
-        Y_VERIFY_DEBUG(ev->Sender == ResolveActorID);
+        Y_DEBUG_ABORT_UNLESS(ev->Sender == ResolveActorID);
         ResolveActorID = { };
 
         auto* msg = ev->Get();
@@ -907,7 +907,7 @@ private:
         Y_UNUSED(shardId);
 
         ++TabletErrors;
-        Y_VERIFY_DEBUG(TabletsToPrepare > 0);
+        Y_DEBUG_ABORT_UNLESS(TabletsToPrepare > 0);
         if (!--TabletsToPrepare) {
             LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
                 "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
@@ -1035,7 +1035,7 @@ IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices& services, const ui6
         return new TCommitWritesReq(services, txid, std::move(ev), mon);
     }
 
-    Y_FAIL("Unexpected transaction proposal");
+    Y_ABORT("Unexpected transaction proposal");
 }
 
 

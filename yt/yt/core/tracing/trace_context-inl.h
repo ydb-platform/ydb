@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/concurrency/thread_affinity.h>
 
+#include <library/cpp/yt/misc/tls.h>
+
 #include <atomic>
 
 namespace NYT::NTracing {
@@ -179,7 +181,7 @@ std::optional<TTag> TTraceContext::SetAllocationTag(const TString& key, TTag new
 
 namespace NDetail {
 
-extern thread_local TTraceContext* CurrentTraceContext;
+extern YT_THREAD_LOCAL(TTraceContext*) CurrentTraceContext;
 
 TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext);
 

@@ -123,7 +123,7 @@ namespace NKikimr::NStorage {
                     ScatterTasks.erase(jt);
                 }
             } else {
-                Y_VERIFY_DEBUG(false);
+                Y_DEBUG_ABORT_UNLESS(false);
             }
         }
     }

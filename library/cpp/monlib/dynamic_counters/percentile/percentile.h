@@ -34,8 +34,7 @@ struct TPercentileTracker : public TPercentileBase {
 
     // shift frame (call periodically)
     void Update() {
-        TVector<size_t> totals(BUCKET_COUNT);
-        totals.resize(BUCKET_COUNT);
+        std::array<size_t, BUCKET_COUNT> totals;
         size_t total = 0;
         for (size_t i = 0; i < BUCKET_COUNT; ++i) {
             size_t item = Items[i].load(std::memory_order_relaxed);

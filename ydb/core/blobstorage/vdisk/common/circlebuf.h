@@ -34,7 +34,7 @@ public:
         }
 
         bool operator ==(const TIterator &i) {
-            Y_VERIFY_DEBUG(Vec == i.Vec);
+            Y_DEBUG_ABORT_UNLESS(Vec == i.Vec);
             return Pos == i.Pos;
         }
 

@@ -4,6 +4,8 @@
 
 #include <yt/yt/core/misc/serialize.h>
 
+#include <yt/yt/core/rpc/public.h>
+
 #include <yt/yt/core/yson/public.h>
 
 #include <yt/yt_proto/yt/core/ytree/proto/attributes.pb.h>
@@ -53,6 +55,14 @@ void ValidateYPathResolutionDepth(const NYPath::TYPath& path, int depth);
 //! IAttributeDictionary::ListKeys and IAttributeDictionary::FindYson for those not capable
 //! of providing a custom efficient implementation.
 std::vector<IAttributeDictionary::TKeyValuePair> ListAttributesPairs(const IAttributeDictionary& attributes);
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Creates typed context and deserializes it. Throws if deserialization fails.
+template <class TReq, class TRsp>
+TIntrusivePtr<TTypedYPathServiceContext<TReq, TRsp>> DeserializeAsTypedOrThrow(
+    const IYPathServiceContextPtr& context,
+    const NRpc::THandlerInvocationOptions& options);
 
 ////////////////////////////////////////////////////////////////////////////////
 

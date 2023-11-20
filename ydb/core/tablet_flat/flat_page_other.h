@@ -34,9 +34,9 @@ namespace NPage {
         void Put(TRowId row, ui16 tag, ui32 bytes) noexcept
         {
             if (row < Last && Last != Max<TRowId>()) {
-                Y_FAIL("Frame items have to follow sorted by row");
+                Y_ABORT("Frame items have to follow sorted by row");
             } else if (tag >= TagsCount) {
-                Y_FAIL("Frame item component tag is out of range");
+                Y_ABORT("Frame item component tag is out of range");
             } else if (Last != row) {
                 Flush();
             }

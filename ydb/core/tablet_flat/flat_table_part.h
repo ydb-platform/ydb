@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "flat_part_scheme.h"
+#include "flat_page_btree_index.h"
 #include "flat_page_index.h"
 #include "flat_page_data.h"
 #include "flat_page_blobs.h"
@@ -48,8 +49,11 @@ namespace NTable {
 
         struct TIndexPages {
             using TPageId = NPage::TPageId;
+            using TBtreeIndexMeta = NPage::TBtreeIndexMeta;
             const TVector<TPageId> Groups;
             const TVector<TPageId> Historic;
+            const TVector<TBtreeIndexMeta> BTreeGroups;
+            const TVector<TBtreeIndexMeta> BTreeHistoric;
         };
 
         struct TParams {

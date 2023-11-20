@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:22:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject
+    	select * from $i;
+	^
+        <tmp_path>/program.sql:<main>:20:46: Error: At function: Nth, At function: EnsureTupleSize
+        	$i, $j, $k = (PROCESS plato.Input USING $udf(TableRows()));
+	                                             ^
+            <tmp_path>/program.sql:<main>:20:15: Error: Expected tuple type of size: 3, but got: 2
+            	$i, $j, $k = (PROCESS plato.Input USING $udf(TableRows()));
+	              ^

@@ -103,7 +103,7 @@ struct TBlobStorageMock : TActorBootstrapped<TBlobStorageMock> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvGet, Handle);
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
    }
 };

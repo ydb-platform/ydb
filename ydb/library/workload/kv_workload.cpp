@@ -71,7 +71,7 @@ TRowsVerifyer RowsVerifyer;
 void Fail() {
     // Note: sleep helps to detect more fails
     std::this_thread::sleep_for(std::chrono::seconds(3));
-    Y_FAIL();
+    Y_ABORT();
 }
 
 void AddResultSet(const NYdb::TResultSet& resultSet, TVector<TRow>& rows) {
@@ -356,7 +356,7 @@ TQueryInfoList TKvWorkloadGenerator::Mixed() {
 
         auto upsertQuery = Upsert(std::move(rows));
 
-        upsertQuery.front().DataQueryResultCallback = [](NYdb::NTable::TDataQueryResult queryResult) {
+        auto callback = [](auto queryResult) {
             if (queryResult.IsSuccess()) {
                 // Note: helps to keep old values too
                 if (RandomNumber<ui32>(1000) == 0) {
@@ -364,6 +364,8 @@ TQueryInfoList TKvWorkloadGenerator::Mixed() {
                 }
             }
         };
+        upsertQuery.front().DataQueryResultCallback = callback;
+        upsertQuery.front().GenericQueryResultCallback = callback;
 
         return upsertQuery;
     } else { // read
@@ -394,7 +396,7 @@ TQueryInfoList TKvWorkloadGenerator::Mixed() {
             auto selectQuery = Select(std::move(rows));
 
             if (checkRow) {
-                selectQuery.front().DataQueryResultCallback = [](NYdb::NTable::TDataQueryResult queryResult) {
+                auto callback = [](auto queryResult) {
                     if (queryResult.IsSuccess()) {
                         TVector<TRow> readRows;
                         for (auto& resultSet : queryResult.GetResultSets()) {
@@ -407,6 +409,8 @@ TQueryInfoList TKvWorkloadGenerator::Mixed() {
                         VerifyRows(lastRow, std::move(readRows), queryStatus);
                     }
                 };
+                selectQuery.front().DataQueryResultCallback = callback;
+                selectQuery.front().GenericQueryResultCallback = callback;
             }
 
             return selectQuery;

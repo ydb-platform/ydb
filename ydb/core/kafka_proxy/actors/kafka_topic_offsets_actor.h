@@ -33,10 +33,10 @@ public:
     
     virtual void ApplyResponse(TTabletInfo&, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr&,
                                const TActorContext&) override {
-        Y_FAIL();
+        Y_ABORT();
     }
     bool ApplyResponse(NKikimr::TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr&, const TActorContext&) override {
-        Y_FAIL();
+        Y_ABORT();
     }
 
     void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) override;

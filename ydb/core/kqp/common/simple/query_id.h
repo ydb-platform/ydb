@@ -1,6 +1,5 @@
 #pragma once
 #include "settings.h"
-#include <ydb/public/api/protos/ydb_value.pb.h>
 
 #include <util/generic/string.h>
 

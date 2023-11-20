@@ -239,7 +239,7 @@ private:
                     break;
 
                 default:
-                    Y_FAIL("unexpected message type 0x%08" PRIx32, type);
+                    Y_ABORT("unexpected message type 0x%08" PRIx32, type);
             }
 
             if (ev->GetChannel() != expected) {
@@ -248,7 +248,7 @@ private:
                     << " reply channel mismatch"
                     << " received# " << ev->GetChannel()
                     << " expected# " << expected);
-                Y_VERIFY_DEBUG(false);
+                Y_DEBUG_ABORT_UNLESS(false);
             }
         }
 
@@ -377,7 +377,7 @@ private:
                             break;
 
                         default:
-                            Y_FAIL();
+                            Y_ABORT();
                     }
 
                     Queue.Unwind(msgId, sequenceId, expectedMsgId, expectedSequenceId);
@@ -391,7 +391,7 @@ private:
         } catch (const TExFatal& ex) {
             const TString msg = TStringBuilder() << "fatal error: " << ex.what();
             QLOG_CRIT_S("BSQ38", msg);
-            Y_VERIFY_DEBUG(false, "%s %s", LogPrefix.data(), msg.data());
+            Y_DEBUG_ABORT_UNLESS(false, "%s %s", LogPrefix.data(), msg.data());
             ResetConnection(ctx, NKikimrProto::ERROR, msg, TDuration::Zero());
             return;
         }
@@ -902,7 +902,7 @@ private:
             DEFINE_EVENTS(XX)
 #undef XX
             default:
-                Y_FAIL("unexpected event Type# 0x%08" PRIx32, type);
+                Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);
         }
 #endif
         switch (type) {
@@ -955,7 +955,7 @@ private:
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die)
 
             default:
-                Y_FAIL("unexpected event Type# 0x%08" PRIx32, type);
+                Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);
         }
     }
 };

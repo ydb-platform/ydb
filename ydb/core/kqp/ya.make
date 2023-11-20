@@ -62,6 +62,7 @@ RECURSE(
     executer_actor
     expr_nodes
     federated_query
+    finalize_script_service
     gateway
     host
     node_service

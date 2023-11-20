@@ -191,7 +191,8 @@ void TClientReader::CreateRequest(const TMaybe<ui32>& rangeIndex, const TMaybe<u
 
         try {
             const auto proxyName = GetProxyForHeavyRequest(Context_);
-            Response_ = Context_.HttpClient->Request(GetFullUrl(proxyName, Context_, header), requestId, header);
+            UpdateHeaderForProxyIfNeed(proxyName, Context_, header);
+            Response_ = Context_.HttpClient->Request(GetFullUrlForProxy(proxyName, Context_, header), requestId, header);
 
             Input_ = Response_->GetResponseStream();
 

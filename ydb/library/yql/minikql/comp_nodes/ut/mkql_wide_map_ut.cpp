@@ -162,6 +162,49 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideMapTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
+    Y_UNIT_TEST_LLVM(TestPasstroughtFieldsAsIs) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const auto dataType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i32>::Id));
+        const auto tupleType = pb.NewTupleType({dataType, dataType, dataType});
+
+        const auto data1 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(1)), pb.NewOptional(pb.NewDataLiteral<i32>(-5)), pb.NewOptional(pb.NewDataLiteral<i32>(-1))});
+        const auto data2 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(2)), pb.NewOptional(pb.NewDataLiteral<i32>(-4)), pb.NewOptional(pb.NewDataLiteral<i32>(-2))});
+        const auto data3 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(3)), pb.NewOptional(pb.NewDataLiteral<i32>(-7)), pb.NewOptional(pb.NewDataLiteral<i32>(-3))});
+        const auto data4 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(4)), pb.NewEmptyOptional(dataType), pb.NewOptional(pb.NewDataLiteral<i32>(-4))});
+
+        const auto list = pb.NewList(tupleType, {data1, data2, data3, data4});
+
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideMap(pb.ExpandMap(pb.ToFlow(list),
+            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
+            [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front(), pb.Minus(items[1u]), items.back()}; }),
+            [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }
+        ));
+
+        const auto graph = setup.BuildGraph(pgmReturn);
+        const auto iterator = graph->GetValue().GetListIterator();
+        NUdf::TUnboxedValue item;
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), -1);
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), -2);
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), -3);
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 4);
+        UNIT_ASSERT(!item.GetElement(1));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), -4);
+        UNIT_ASSERT(!iterator.Next(item));
+        UNIT_ASSERT(!iterator.Next(item));
+    }
+
     Y_UNIT_TEST_LLVM(TestPasstroughtFieldSplitAsIs) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -244,6 +287,45 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideMapTest) {
         UNIT_ASSERT(!item.GetElement(0));
         UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 8);
         UNIT_ASSERT(!item.GetElement(2));
+        UNIT_ASSERT(!iterator.Next(item));
+        UNIT_ASSERT(!iterator.Next(item));
+    }
+
+    Y_UNIT_TEST_LLVM(TestPasstroughtFieldSplitAndFirstUnused) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const auto dataType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i32>::Id));
+        const auto tupleType = pb.NewTupleType({dataType, dataType, dataType});
+
+        const auto data1 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(1)), pb.NewOptional(pb.NewDataLiteral<i32>(-5)), pb.NewOptional(pb.NewDataLiteral<i32>(-3))});
+        const auto data2 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(2)), pb.NewOptional(pb.NewDataLiteral<i32>(-4)), pb.NewOptional(pb.NewDataLiteral<i32>(-6))});
+        const auto data3 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(3)), pb.NewOptional(pb.NewDataLiteral<i32>(-7)), pb.NewOptional(pb.NewDataLiteral<i32>(-9))});
+        const auto data4 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(4)), pb.NewEmptyOptional(dataType), pb.NewOptional(pb.NewDataLiteral<i32>(-1))});
+
+        const auto list = pb.NewList(tupleType, {data1, data2, data3, data4});
+
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideMap(pb.ExpandMap(pb.ToFlow(list),
+            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
+            [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[1U], pb.AggrAdd(items.front(), items.back()), items[1U]}; }),
+            [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple({items[1], items[2]}); }
+        ));
+
+        const auto graph = setup.BuildGraph(pgmReturn);
+        const auto iterator = graph->GetValue().GetListIterator();
+        NUdf::TUnboxedValue item;
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), -2);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), -5);
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), -4);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), -4);
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), -6);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), -7);
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 3);
+        UNIT_ASSERT(!item.GetElement(1));
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }

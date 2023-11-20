@@ -121,6 +121,19 @@ description: "В статье приведены примеры кода под�
   asyncio.run(ydb_init())
   ```
 
+- C# (.NET)
+
+  ```C#
+  using Ydb.Sdk;
+
+  var config = new DriverConfig(
+      endpoint: "grpc://localhost:2136",
+      database: "/local"
+  );
+
+  await using var driver = await Driver.CreateInitialized(config);
+  ```
+
 - PHP
 
   ```php

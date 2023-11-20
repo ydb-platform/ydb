@@ -65,7 +65,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_PROGRESS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
+        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "execute");
         Y_ABORT_UNLESS(Self->ProgressTxInFlight);
 
         size_t removedCount = Self->ProgressTxController->CleanExpiredTxs(txc);
@@ -128,7 +128,7 @@ public:
                     break;
                 }
                 default: {
-                    Y_FAIL("Unexpected TxKind");
+                    Y_ABORT("Unexpected TxKind");
                 }
             }
 
@@ -147,7 +147,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_S_DEBUG(TxPrefix() << "complete" << TxSuffix());
+        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "complete");
 
         for (auto& rec : TxEvents) {
             ctx.Send(rec.Target, rec.Event.Release(), 0, rec.Cookie);
@@ -159,8 +159,7 @@ public:
             auto event = res.MakeEvent(Self->TabletID());
             ctx.Send(res.TxInfo.Source, event.release(), 0, res.TxInfo.Cookie);
         }
-
-        Self->EnqueueBackgroundActivities();
+        Self->SetupIndexation();
     }
 
 private:

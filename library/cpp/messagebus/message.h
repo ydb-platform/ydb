@@ -86,7 +86,7 @@ namespace NBus {
             } else if (LocalFlags == NPrivate::MESSAGE_IN_WORK && !inWork) {
                 LocalFlags = 0;
             } else {
-                Y_FAIL("impossible combination of flag and parameter: %s %d",
+                Y_ABORT("impossible combination of flag and parameter: %s %d",
                        inWork ? "true" : "false", unsigned(LocalFlags));
             }
         }

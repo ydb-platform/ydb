@@ -340,7 +340,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         } else if (status == NKikimrProto::ERROR || status == NKikimrProto::VDISK_ERROR_STATE) {
             ++GetBlockErrors;
         } else {
-            Y_FAIL("status: %s" , NKikimrProto::EReplyStatus_Name(status).data());
+            Y_ABORT("status: %s" , NKikimrProto::EReplyStatus_Name(status).data());
         }
 
         // Not Minimal Restorable, but minimal needed for write to succseed
@@ -431,7 +431,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
             } else if (recordStatus == NKikimrProto::NODATA) {
                 vDiskData.IsAllRead = true;
             } else {
-                Y_FAIL("status: %s" , NKikimrProto::EReplyStatus_Name(recordStatus).data());
+                Y_ABORT("status: %s" , NKikimrProto::EReplyStatus_Name(recordStatus).data());
             }
         }
         if (record.ResultSize() < vDiskData.LastRequestSize && !vDiskData.IsError && !record.GetIsRangeOverflow()) {

@@ -132,7 +132,7 @@ namespace NKikimr {
             TLsnSeg seg,
             EOpMode mode)
     {
-        Y_VERIFY_DEBUG(blocks);
+        Y_DEBUG_ABORT_UNLESS(blocks);
 
         // update blocks cache with newly inserted elements
         TFreshAppendixBlocks::TIterator it(HullDs->HullCtx, blocks.get());
@@ -203,7 +203,7 @@ namespace NKikimr {
     }
 
     void THullDbRecovery::UpdateBarrierCache(const std::shared_ptr<TFreshAppendixBarriers>& barriers) {
-        Y_VERIFY_DEBUG(barriers);
+        Y_DEBUG_ABORT_UNLESS(barriers);
 
         // update barriers cache with newly inserted elements
         TFreshAppendixBarriers::TIterator it(HullDs->HullCtx, barriers.get());

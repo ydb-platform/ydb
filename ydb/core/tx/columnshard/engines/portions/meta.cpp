@@ -43,6 +43,7 @@ bool TPortionMeta::DeserializeFromProto(const NKikimrTxColumnShard::TIndexPortio
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DeserializeFromProto")("error", "incorrect portion meta")("meta", portionMeta.DebugString());
         return false;
     }
+    Y_ABORT_UNLESS(Produced != TPortionMeta::EProduced::UNSPECIFIED);
 
     if (portionMeta.HasPrimaryKeyBorders()) {
         ReplaceKeyEdges = std::make_shared<NArrow::TFirstLastSpecialKeys>(portionMeta.GetPrimaryKeyBorders(), indexInfo.GetReplaceKey());
@@ -83,7 +84,7 @@ std::optional<NKikimrTxColumnShard::TIndexPortionMeta> TPortionMeta::SerializeTo
             portionMeta.SetIsEvicted(true);
             break;
         case TPortionMeta::EProduced::INACTIVE:
-            Y_FAIL("Unexpected inactive case");
+            Y_ABORT("Unexpected inactive case");
             //portionMeta->SetInactive(true);
             break;
     }
@@ -114,7 +115,7 @@ TString TPortionMeta::DebugString() const {
 }
 
 TString TPortionAddress::DebugString() const {
-    return TStringBuilder() << "(granule_id=" << GranuleId << ";portion_id=" << PortionId << ")";
+    return TStringBuilder() << "(path_id=" << PathId << ";portion_id=" << PortionId << ")";
 }
 
 }

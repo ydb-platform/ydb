@@ -130,4 +130,19 @@ IYPathServicePtr IYPathService::FromMethod(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TReq, class TRsp>
+TIntrusivePtr<TTypedYPathServiceContext<TReq, TRsp>> DeserializeAsTypedOrThrow(
+    const IYPathServiceContextPtr& context,
+    const NRpc::THandlerInvocationOptions& options)
+{
+    auto typedContext = New<TTypedYPathServiceContext<TReq, TRsp>>(context, options);
+    if (!typedContext->DeserializeRequest()) {
+        THROW_ERROR_EXCEPTION("Error deserializing request");
+    }
+
+    return typedContext;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NYTree

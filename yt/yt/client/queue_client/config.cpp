@@ -55,6 +55,8 @@ void TQueueStaticExportConfig::Register(TRegistrar registrar)
     registrar.Parameter("export_period", &TThis::ExportPeriod)
         .GreaterThan(TDuration::Zero());
     registrar.Parameter("export_directory", &TThis::ExportDirectory);
+    registrar.Parameter("output_table_name_pattern", &TThis::OutputTableNamePattern)
+        .Default("%UNIX_TS-%PERIOD");
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->ExportPeriod.GetValue() % TDuration::Seconds(1).GetValue() != 0) {

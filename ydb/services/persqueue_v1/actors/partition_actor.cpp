@@ -11,6 +11,7 @@
 
 #include <google/protobuf/util/time_util.h>
 
+#include <library/cpp/string_utils/base64/base64.h>
 #include <util/charset/utf8.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
@@ -292,7 +293,14 @@ void SetBatchSourceId(PersQueue::V1::MigrationStreamingReadServerMessage::DataBa
 
 void SetBatchSourceId(Topic::StreamReadMessage::ReadResponse::Batch* batch, TString value) {
     Y_ABORT_UNLESS(batch);
-    batch->set_producer_id(std::move(value));
+    if (IsUtf(value)) {
+        batch->set_producer_id(std::move(value));
+    } else {
+        TString res = Base64Encode(value);
+        batch->set_producer_id(res);
+        (*batch->mutable_write_session_meta())["_encoded_producer_id"] = res;
+
+    }
 }
 
 void SetBatchExtraField(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch, TString key, TString value) {

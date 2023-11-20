@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(TBusStarterTest) {
         }
 
         TJobHandler Never(TBusJob*, TBusMessage*) {
-            Y_FAIL("happens");
+            Y_ABORT("happens");
             throw 1;
         }
     };

@@ -306,7 +306,7 @@ TOperationAttributes ParseOperationAttributes(const TNode& node)
     if (auto typeNode = mapNode.FindPtr("type")) {
         result.Type = FromString<EOperationType>(typeNode->AsString());
     } else if (auto operationTypeNode = mapNode.FindPtr("operation_type")) {
-        // COMPAT(levysotsky): "operation_type" is a deprecated synonim for "type".
+        // COMPAT(levysotsky): "operation_type" is a deprecated synonym for "type".
         // This branch should be removed when all clusters are updated.
         result.Type = FromString<EOperationType>(operationTypeNode->AsString());
     }
@@ -418,6 +418,18 @@ TOperationAttributes GetOperation(
 {
     THttpHeader header("GET", "get_operation");
     header.MergeParameters(SerializeParamsForGetOperation(operationId, options));
+    auto result = RetryRequestWithPolicy(retryPolicy, context, header);
+    return ParseOperationAttributes(NodeFromYsonString(result.Response));
+}
+
+TOperationAttributes GetOperation(
+    const IRequestRetryPolicyPtr& retryPolicy,
+    const TClientContext& context,
+    const TString& alias,
+    const TGetOperationOptions& options)
+{
+    THttpHeader header("GET", "get_operation");
+    header.MergeParameters(SerializeParamsForGetOperation(alias, options));
     auto result = RetryRequestWithPolicy(retryPolicy, context, header);
     return ParseOperationAttributes(NodeFromYsonString(result.Response));
 }
@@ -663,6 +675,8 @@ public:
 
         auto hostName = GetProxyForHeavyRequest(context);
         auto requestId = CreateGuidAsString();
+
+        UpdateHeaderForProxyIfNeed(hostName, context, header);
 
         Response_ = context.HttpClient->Request(GetFullUrl(hostName, context, header), requestId, header);
         ResponseStream_ = Response_->GetResponseStream();

@@ -10,6 +10,7 @@ add_subdirectory(ut_background_compaction)
 add_subdirectory(ut_build_index)
 add_subdirectory(ut_change_collector)
 add_subdirectory(ut_change_exchange)
+add_subdirectory(ut_common)
 add_subdirectory(ut_compaction)
 add_subdirectory(ut_erase_rows)
 add_subdirectory(ut_followers)
@@ -167,6 +168,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_exchange_split.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_record.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_record_body_serializer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_record_cdc_serializer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_sender.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_sender_async_index.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_sender_cdc_stream.cpp

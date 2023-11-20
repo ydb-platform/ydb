@@ -13,7 +13,7 @@ template <typename T>
 void FinishOrDie(T* pThis, const char* className) noexcept
 {
     auto fail = [&] (const char* what) {
-        Y_FAIL(
+        Y_ABORT(
             "\n\n"
             "Destructor of %s caught exception during Finish: %s.\n"
             "Some data is probably has not been written.\n"

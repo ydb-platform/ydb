@@ -21,6 +21,7 @@ target_link_libraries(ydb-core-tx-datashard-ut_sequence PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-tx-datashard
+  tx-datashard-ut_common
   library-cpp-getopt
   cpp-regex-pcre
   library-cpp-svnversion
@@ -43,7 +44,6 @@ target_link_options(ydb-core-tx-datashard-ut_sequence PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-datashard-ut_sequence PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/ut_sequence/datashard_ut_sequence.cpp
 )
 set_property(

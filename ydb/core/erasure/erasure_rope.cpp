@@ -2555,7 +2555,7 @@ void TRopeErasureType::BlockSplitRange(ECrcMode crcMode, ui64 blobSize, ui64 who
             }
         }
     }
-    Y_VERIFY_DEBUG(outRange->EndPartIdx != Max<ui64>());
+    Y_DEBUG_ABORT_UNLESS(outRange->EndPartIdx != Max<ui64>());
 }
 
 void MirrorSplit(TRopeErasureType::ECrcMode crcMode, const TRopeErasureType &type, const TRope& buffer,
@@ -2695,8 +2695,8 @@ void TRopeErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool
         ythrow TWithBackTrace<yexception>() << "Incorrect partSet size, received " << partSet.Parts.size()
             << " while expected " << (erasure.DataParts + erasure.ParityParts);
     }
-    Y_VERIFY_DEBUG(restoreFullData || restoreParts);
-    Y_VERIFY_DEBUG(erasure.Prime <= MAX_LINES_IN_BLOCK);
+    Y_DEBUG_ABORT_UNLESS(restoreFullData || restoreParts);
+    Y_DEBUG_ABORT_UNLESS(erasure.Prime <= MAX_LINES_IN_BLOCK);
     switch (erasure.ErasureFamily) {
         case TRopeErasureType::ErasureMirror:
             if (restoreParts) {

@@ -1,6 +1,7 @@
 #include "counters.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/sys_view/service/db_counters.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
@@ -8,7 +9,6 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
-#include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -98,9 +98,10 @@ struct TYdbRpcCounters {
 
 class TYdbCounterBlock : public NGrpc::ICounterBlock {
 protected:
-    bool Streaming = false;
-    bool Percentile = false;
+    const bool Streaming = false;
 
+    TYdbRpcCounters YdbCounters;
+private:
     // "Internal" counters
     // TODO: Switch to public YDB counters
     ::NMonitoring::TDynamicCounters::TCounterPtr TotalCounter;
@@ -115,12 +116,15 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestsWithoutDatabase;
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestsWithoutToken;
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestsWithoutTls;
-    NMonitoring::TPercentileTrackerLg<4, 3, 15> RequestHistMs;
-    std::array<::NMonitoring::TDynamicCounters::TCounterPtr, 2>  GRpcStatusCounters;
+    ::NMonitoring::THistogramPtr Histo;
 
-    TYdbRpcCounters YdbCounters;
 
-private:
+    std::function<void()> InitFn;
+    std::once_flag OnceFlag;
+
+    void InitOnce() {
+        std::call_once(OnceFlag, InitFn);
+    }
 
     std::shared_ptr<TResponseStatusCounter> GetResponseCounterByStatus(ui32 status) {
         auto it = YdbCounters.ResponseByStatus.find(status);
@@ -132,52 +136,62 @@ private:
 
 public:
     TYdbCounterBlock(const ::NMonitoring::TDynamicCounterPtr& counters, const char* serviceName,
-        const char* requestName, bool percentile, bool streaming,
+        const char* requestName, bool streaming,
         bool forDatabase = false, ::NMonitoring::TDynamicCounterPtr internalGroup = {});
 
     void CountNotOkRequest() override {
+        InitOnce();
         NotOkRequestCounter->Inc();
         YdbCounters.RequestRpcError->Inc();
     }
 
     void CountNotOkResponse() override {
+        InitOnce();
         NotOkResponseCounter->Inc();
         YdbCounters.ResponseRpcError->Inc();
     }
 
     void CountNotAuthenticated() override {
+        InitOnce();
         NotAuthenticated->Inc();
         YdbCounters.ResponseRpcNotAuthenticated->Inc();
     }
 
     void CountResourceExhausted() override {
+        InitOnce();
         ResourceExhausted->Inc();
         YdbCounters.ResponseRpcResourceExhausted->Inc();
     }
 
     void CountRequestsWithoutDatabase() override {
+        InitOnce();
         RequestsWithoutDatabase->Inc();
     }
 
     void CountRequestsWithoutToken() override {
+        InitOnce();
         RequestsWithoutToken->Inc();
     }
 
     void CountRequestWithoutTls() override {
+        InitOnce();
         RequestsWithoutTls->Inc();
     }
 
     void CountRequestBytes(ui32 requestSize) override {
+        InitOnce();
         *RequestBytes += requestSize;
         *YdbCounters.RequestBytes += requestSize;
     }
 
     void CountResponseBytes(ui32 responseSize) override {
+        InitOnce();
         *ResponseBytes += responseSize;
         *YdbCounters.ResponseBytes += responseSize;
     }
 
     void StartProcessing(ui32 requestSize) override {
+        InitOnce();
         TotalCounter->Inc();
         InflyCounter->Inc();
         *RequestBytes += requestSize;
@@ -192,6 +206,7 @@ public:
     void FinishProcessing(ui32 requestSize, ui32 responseSize, bool ok, ui32 status,
         TDuration requestDuration) override
     {
+        InitOnce();
         InflyCounter->Dec();
         *InflyRequestBytes -= requestSize;
         *ResponseBytes += responseSize;
@@ -207,19 +222,11 @@ public:
             *GetResponseCounterByStatus(status) += 1;
         }
 
-        if (Percentile) {
-            RequestHistMs.Increment(requestDuration.MilliSeconds());
-        }
+        Histo->Collect(requestDuration.MilliSeconds());
     }
 
     NGrpc::ICounterBlockPtr Clone() override {
         return this;
-    }
-
-    void Update() {
-        if (Percentile) {
-            RequestHistMs.Update();
-        }
     }
 };
 
@@ -291,10 +298,9 @@ TYdbRpcCounters::TYdbRpcCounters(const ::NMonitoring::TDynamicCounterPtr& counte
 }
 
 TYdbCounterBlock::TYdbCounterBlock(const ::NMonitoring::TDynamicCounterPtr& counters, const char* serviceName,
-    const char* requestName, bool percentile, bool streaming,
+    const char* requestName, bool streaming,
     bool forDatabase, ::NMonitoring::TDynamicCounterPtr internalGroup)
     : Streaming(streaming)
-    , Percentile(percentile)
     , YdbCounters(counters, serviceName, requestName, forDatabase)
 {
     // group for all counters
@@ -305,26 +311,29 @@ TYdbCounterBlock::TYdbCounterBlock(const ::NMonitoring::TDynamicCounterPtr& coun
         group = GetServiceCounters(counters, "grpc")->GetSubgroup("subsystem", "serverStats");
     }
 
-    // aggregated (non-request-specific counters)
-    NotOkRequestCounter = group->GetCounter("notOkRequest", true);
-    NotOkResponseCounter = group->GetCounter("notOkResponse", true);
-    RequestBytes = group->GetCounter("requestBytes", true);
-    InflyRequestBytes = group->GetCounter("inflyRequestBytes", false);
-    ResponseBytes = group->GetCounter("responseBytes", true);
-    NotAuthenticated = group->GetCounter("notAuthenticated", true);
-    ResourceExhausted = group->GetCounter("resourceExhausted", true);
-    RequestsWithoutDatabase = group->GetCounter("requestsWithoutDatabase", true);
-    RequestsWithoutToken = group->GetCounter("requestsWithoutToken", true);
-    RequestsWithoutTls = group->GetCounter("requestsWithoutTls", true);
-
     // subgroup for request-specific counters
     auto subgroup = group->GetSubgroup(streaming ? "stream" : "request", requestName);
-    TotalCounter = subgroup->GetCounter("total", true);
-    InflyCounter = subgroup->GetCounter("infly", false);
 
-    if (Percentile) {
-        RequestHistMs.Initialize(group, "event", "request", "ms", {0.5f, 0.9f, 0.99f, 0.999f, 1.0f});
-    }
+    InitFn = [this, group, subgroup] () {
+        // aggregated (non-request-specific counters)
+        NotOkRequestCounter = group->GetCounter("notOkRequest", true);
+        NotOkResponseCounter = group->GetCounter("notOkResponse", true);
+        RequestBytes = group->GetCounter("requestBytes", true);
+        InflyRequestBytes = group->GetCounter("inflyRequestBytes", false);
+        ResponseBytes = group->GetCounter("responseBytes", true);
+        NotAuthenticated = group->GetCounter("notAuthenticated", true);
+        ResourceExhausted = group->GetCounter("resourceExhausted", true);
+        RequestsWithoutDatabase = group->GetCounter("requestsWithoutDatabase", true);
+        RequestsWithoutToken = group->GetCounter("requestsWithoutToken", true);
+        RequestsWithoutTls = group->GetCounter("requestsWithoutTls", true);
+
+        TotalCounter = subgroup->GetCounter("total", true);
+        InflyCounter = subgroup->GetCounter("infly", false);
+
+        auto h = NMonitoring::ExplicitHistogram(
+            NMonitoring::TBucketBounds{5, 10, 50, 100, 500, 1000, 5000, 10000, 20000, 60000});
+        Histo = subgroup->GetHistogram("LatencyMs", std::move(h));
+    };
 }
 
 using TYdbCounterBlockPtr = TIntrusivePtr<TYdbCounterBlock>;
@@ -364,9 +373,9 @@ using TYdbCounterBlockPtr = TIntrusivePtr<TYdbCounterBlock>;
 class TYdbDbCounterBlock : public TYdbCounterBlock {
 public:
     TYdbDbCounterBlock(const ::NMonitoring::TDynamicCounterPtr& counters, const char* serviceName,
-        const char* requestName, bool percentile, bool streaming,
+        const char* requestName, bool streaming,
         ::NMonitoring::TDynamicCounterPtr internalGroup = {})
-        : TYdbCounterBlock(counters, serviceName, requestName, percentile, streaming, true, internalGroup)
+        : TYdbCounterBlock(counters, serviceName, requestName, streaming, true, internalGroup)
     {}
 
     void ToProto(NKikimrSysView::TDbGRpcCounters& counters) {
@@ -459,7 +468,7 @@ public:
         }
 
         return CounterBlocks.InsertIfAbsentWithInit(key, [&] {
-            return new TYdbDbCounterBlock(Counters, serviceName.c_str(), requestName.c_str(), false, false, InternalGroup);
+            return new TYdbDbCounterBlock(Counters, serviceName.c_str(), requestName.c_str(), false, InternalGroup);
         });
     }
 
@@ -538,24 +547,22 @@ private:
 
 class TYdbCounterBlockWrapper : public NGrpc::ICounterBlock {
     TYdbCounterBlockPtr Common;
-    TString ServiceName;
-    TString RequestName;
-    bool Percentile = false;
-    bool Streaming = false;
+    const TString ServiceName;
+    const TString RequestName;
+    const bool Streaming = false;
 
     ::NMonitoring::TDynamicCounterPtr Root;
     TYdbDbCounterBlockPtr Db;
 
 public:
     TYdbCounterBlockWrapper(TYdbCounterBlockPtr common, const TString& serviceName, const TString& requestName,
-        bool percentile, bool streaming)
+        bool streaming)
         : Common(common)
         , ServiceName(serviceName)
         , RequestName(requestName)
-        , Percentile(percentile)
         , Streaming(streaming)
         , Root(new ::NMonitoring::TDynamicCounters)
-        , Db(new TYdbDbCounterBlock(Root, serviceName.c_str(), requestName.c_str(), percentile, streaming, Root))
+        , Db(new TYdbDbCounterBlock(Root, serviceName.c_str(), requestName.c_str(), streaming, Root))
     {}
 
     void CountNotOkRequest() override {
@@ -616,7 +623,7 @@ public:
     }
 
     NGrpc::ICounterBlockPtr Clone() override {
-        return new TYdbCounterBlockWrapper(Common, ServiceName, RequestName, Percentile, Streaming);
+        return new TYdbCounterBlockWrapper(Common, ServiceName, RequestName, Streaming);
     }
 
     void UseDatabase(const TString& database) override {
@@ -631,77 +638,23 @@ public:
     }
 };
 
-class TUpdaterActor
-    : public TActor<TUpdaterActor>
-{
-    TVector<TYdbCounterBlockPtr> Counters;
-
-public:
-    enum : ui32 {
-        EvRegisterItem = EventSpaceBegin(TEvents::ES_PRIVATE),
-    };
-
-    struct TEvRegisterItem
-        : TEventLocal<TEvRegisterItem, EvRegisterItem>
-    {
-        TYdbCounterBlockPtr Counters;
-
-        TEvRegisterItem(TYdbCounterBlockPtr counters)
-            : Counters(std::move(counters))
-        {}
-    };
-
-public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::GRPC_UPDATER;
-    }
-
-    TUpdaterActor()
-        : TActor(&TThis::StateFunc)
-    {}
-
-    void HandleWakeup(const TActorContext& ctx) {
-        ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
-        for (const auto& counter : Counters) {
-            counter->Update();
-        }
-    }
-
-    void Handle(TEvRegisterItem::TPtr& ev, const TActorContext& ctx) {
-        Counters.push_back(std::move(ev->Get()->Counters));
-        if (Counters.size() == 1) {
-            HandleWakeup(ctx);
-        }
-    }
-
-    STRICT_STFUNC(StateFunc, {
-        CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
-        HFunc(TEvRegisterItem, Handle)
-    })
-};
-
 TServiceCounterCB::TServiceCounterCB(::NMonitoring::TDynamicCounterPtr counters, TActorSystem *actorSystem)
     : Counters(std::move(counters))
     , ActorSystem(actorSystem)
 {
     if (ActorSystem) {
-        ActorId = ActorSystem->Register(new TUpdaterActor);
         Singleton<TGRpcDbCountersRegistry>()->Initialize(ActorSystem);
     }
 }
 
 NGrpc::ICounterBlockPtr TServiceCounterCB::operator()(const char* serviceName,
-    const char* requestName, bool percentile, bool streaming) const
+    const char* requestName, bool streaming) const
 {
-    auto block = MakeIntrusive<TYdbCounterBlock>(Counters, serviceName, requestName, percentile, streaming);
-
-    if (ActorSystem) {
-        ActorSystem->Send(ActorId, new TUpdaterActor::TEvRegisterItem(block));
-    }
+    auto block = MakeIntrusive<TYdbCounterBlock>(Counters, serviceName, requestName, streaming);
 
     NGrpc::ICounterBlockPtr res(block);
     if (ActorSystem && AppData(ActorSystem)->FeatureFlags.GetEnableDbCounters()) {
-        res = MakeIntrusive<TYdbCounterBlockWrapper>(block, serviceName, requestName, percentile, streaming);
+        res = MakeIntrusive<TYdbCounterBlockWrapper>(block, serviceName, requestName, streaming);
     }
 
     return res;

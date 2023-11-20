@@ -13,35 +13,6 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TKey, class TValue>
-TSyncExpiringCache<TKey, TValue>::TEntry::TEntry(
-    NProfiling::TCpuInstant lastAccessTime,
-    NProfiling::TCpuInstant lastUpdateTime,
-    TValue value)
-    : LastAccessTime(lastAccessTime)
-    , LastUpdateTime(lastUpdateTime)
-    , Value(std::move(value))
-{ }
-
-template <class TKey, class TValue>
-TSyncExpiringCache<TKey, TValue>::TEntry::TEntry(TSyncExpiringCache<TKey, TValue>::TEntry&& entry)
-    : LastAccessTime(entry.LastAccessTime.load())
-    , LastUpdateTime(entry.LastUpdateTime)
-    , Value(std::move(entry.Value))
-{ }
-
-template <class TKey, class TValue>
-typename TSyncExpiringCache<TKey, TValue>::TEntry&
-TSyncExpiringCache<TKey, TValue>::TEntry::operator=(typename TSyncExpiringCache<TKey, TValue>::TEntry&& other)
-{
-    LastAccessTime = other.LastAccessTime.load();
-    LastUpdateTime = other.LastUpdateTime;
-    Value = std::move(other.Value);
-    return *this;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-template <class TKey, class TValue>
 TSyncExpiringCache<TKey, TValue>::TSyncExpiringCache(
     TValueCalculator valueCalculator,
     std::optional<TDuration> expirationTimeout,
@@ -63,11 +34,9 @@ std::optional<TValue> TSyncExpiringCache<TKey, TValue>::Find(const TKey& key)
 
     auto guard = ReaderGuard(MapLock_);
 
-    auto it = Map_.find(key);
-    if (it != Map_.end()) {
+    if (auto it = Map_.find(key); it != Map_.end()) {
         auto& entry = it->second;
         if (entry.LastUpdateTime >= deadline) {
-            entry.LastAccessTime = now;
             return entry.Value;
         }
     }
@@ -84,11 +53,9 @@ TValue TSyncExpiringCache<TKey, TValue>::Get(const TKey& key)
     {
         auto guard = ReaderGuard(MapLock_);
 
-        auto it = Map_.find(key);
-        if (it != Map_.end()) {
+        if (auto it = Map_.find(key); it != Map_.end()) {
             auto& entry = it->second;
             if (entry.LastUpdateTime >= deadline) {
-                entry.LastAccessTime = now;
                 return entry.Value;
             }
         }
@@ -101,11 +68,9 @@ TValue TSyncExpiringCache<TKey, TValue>::Get(const TKey& key)
 
         auto it = Map_.find(key);
         if (it != Map_.end()) {
-            it->second = {now, now, std::move(result)};
+            it->second = {now, std::move(result)};
         } else {
-            auto emplaceResult = Map_.emplace(
-                key,
-                TEntry(now, now, std::move(result)));
+            auto emplaceResult = Map_.emplace(key, TEntry{now, std::move(result)});
             YT_VERIFY(emplaceResult.second);
             it = emplaceResult.first;
         }
@@ -127,11 +92,9 @@ std::vector<TValue> TSyncExpiringCache<TKey, TValue>::Get(const std::vector<TKey
         auto guard = ReaderGuard(MapLock_);
 
         for (int i = 0; i < std::ssize(keys); ++i) {
-            auto it = Map_.find(keys[i]);
-            if (it != Map_.end()) {
+            if (auto it = Map_.find(keys[i]); it != Map_.end()) {
                 auto& entry = it->second;
                 if (entry.LastUpdateTime >= deadline) {
-                    entry.LastAccessTime = now;
                     foundValues.push_back(entry.Value);
                     continue;
                 }
@@ -166,9 +129,9 @@ std::vector<TValue> TSyncExpiringCache<TKey, TValue>::Get(const std::vector<TKey
         for (auto index : missingValueIndexes) {
             const auto& value = values[index];
             if (auto it = Map_.find(keys[index]); it != Map_.end()) {
-                it->second = {now, now, value};
+                it->second = {now, value};
             } else {
-                EmplaceOrCrash(Map_, keys[index], TEntry(now, now, value));
+                EmplaceOrCrash(Map_, keys[index], TEntry{now, value});
             }
         }
     }
@@ -177,20 +140,23 @@ std::vector<TValue> TSyncExpiringCache<TKey, TValue>::Get(const std::vector<TKey
 }
 
 template <class TKey, class TValue>
-std::optional<TValue> TSyncExpiringCache<TKey, TValue>::Set(const TKey& key, TValue value)
+template <class K>
+std::optional<TValue> TSyncExpiringCache<TKey, TValue>::Set(K&& key, TValue value)
 {
     auto now = NProfiling::GetCpuInstant();
+    auto deadline = now - ExpirationTimeout_.load();
 
     auto guard = WriterGuard(MapLock_);
 
-    if (auto it = Map_.find(key);
-        it != Map_.end())
-    {
-        auto oldValue = std::move(it->second.Value);
-        it->second = {now, now, std::move(value)};
+    if (auto it = Map_.find(key); it != Map_.end()) {
+        auto oldValue = it->second.LastUpdateTime >= deadline
+            ? std::make_optional(std::move(it->second.Value))
+            : std::nullopt;
+
+        it->second = {now, std::move(value)};
         return oldValue;
     } else {
-        EmplaceOrCrash(Map_, key, TEntry(now, now, std::move(value)));
+        EmplaceOrCrash(Map_, std::forward<K>(key), TEntry{now, std::move(value)});
         return {};
     }
 }
@@ -231,7 +197,7 @@ void TSyncExpiringCache<TKey, TValue>::DeleteExpiredItems()
     {
         auto guard = ReaderGuard(MapLock_);
         for (const auto& [key, entry] : Map_) {
-            if (entry.LastAccessTime < deadline) {
+            if (entry.LastUpdateTime < deadline) {
                 keysToRemove.push_back(key);
             }
         }
@@ -241,16 +207,14 @@ void TSyncExpiringCache<TKey, TValue>::DeleteExpiredItems()
         return;
     }
 
-    std::vector<TValue> valuesToRemove;
-    valuesToRemove.reserve(keysToRemove.size());
     {
         auto guard = WriterGuard(MapLock_);
         for (const auto& key : keysToRemove) {
-            auto it = Map_.find(key);
-            auto& entry = it->second;
-            if (entry.LastAccessTime < deadline) {
-                valuesToRemove.push_back(std::move(entry.Value));
-                Map_.erase(it);
+            if (auto it = Map_.find(key); it != Map_.end()) {
+                auto& entry = it->second;
+                if (entry.LastUpdateTime < deadline) {
+                    Map_.erase(it);
+                }
             }
         }
     }

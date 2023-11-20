@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(6.78.1)
+VERSION(6.88.3)
 
 LICENSE(MPL-2.0)
 
@@ -22,7 +22,6 @@ PY_SRCS(
     _hypothesis_ftz_detector.py
     _hypothesis_pytestplugin.py
     hypothesis/__init__.py
-    hypothesis/_error_if_old.py
     hypothesis/_settings.py
     hypothesis/configuration.py
     hypothesis/control.py
@@ -30,7 +29,6 @@ PY_SRCS(
     hypothesis/database.py
     hypothesis/entry_points.py
     hypothesis/errors.py
-    hypothesis/executors.py
     hypothesis/extra/__init__.py
     hypothesis/extra/_array_helpers.py
     hypothesis/extra/_patching.py

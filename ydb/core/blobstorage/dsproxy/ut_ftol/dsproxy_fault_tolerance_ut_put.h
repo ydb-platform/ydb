@@ -52,7 +52,7 @@ public:
                         break;
 
                     default:
-                        Y_FAIL("unexpected status %s", NKikimrProto::EReplyStatus_Name(result->Status).data());
+                        Y_ABORT("unexpected status %s", NKikimrProto::EReplyStatus_Name(result->Status).data());
                 }
             };
 

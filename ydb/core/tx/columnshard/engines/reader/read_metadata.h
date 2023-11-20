@@ -1,7 +1,6 @@
 #pragma once
 #include "conveyor_task.h"
 #include "description.h"
-#include "read_context.h"
 #include "read_filter_merger.h"
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/tx/columnshard/blob.h>
@@ -21,6 +20,8 @@ class TScanIteratorBase;
 }
 
 namespace NKikimr::NOlap {
+
+class TReadContext;
 
 struct TReadStats {
     TInstant BeginTimestamp;
@@ -109,9 +110,8 @@ public:
     bool IsDescSorted() const { return Sorting == ESorting::DESC; }
     bool IsSorted() const { return IsAscSorted() || IsDescSorted(); }
 
-    virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetResultYqlSchema() const = 0;
     virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const = 0;
-    virtual std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const NOlap::TReadContext& readContext) const = 0;
+    virtual std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const std::shared_ptr<NOlap::TReadContext>& readContext) const = 0;
 
     // TODO:  can this only be done for base class?
     friend IOutputStream& operator << (IOutputStream& out, const TReadMetadataBase& meta) {
@@ -133,16 +133,29 @@ private:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
     std::vector<ui32> AllColumns;
     std::vector<ui32> ResultColumnsIds;
+    std::vector<ui32> RequestColumns;
     mutable std::map<TSnapshot, ISnapshotSchema::TPtr> SchemasByVersionCache;
     mutable ISnapshotSchema::TPtr EmptyVersionSchemaCache;
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
 
     NIndexedReader::TSortableBatchPosition BuildSortedPosition(const NArrow::TReplaceKey& key) const;
-    std::shared_ptr<IDataReader> BuildReader(const NOlap::TReadContext& context, const TConstPtr& self) const;
+    std::shared_ptr<IDataReader> BuildReader(const std::shared_ptr<NOlap::TReadContext>& context) const;
+
+    const std::vector<ui32>& GetResultColumnIds() const {
+        return ResultColumnsIds;
+    }
 
     const std::vector<ui32>& GetAllColumns() const {
         return AllColumns;
+    }
+
+    std::set<ui32> GetProcessingColumnIds() const {
+        std::set<ui32> result;
+        for (auto&& i : GetProgram().GetProcessingColumns()) {
+            result.emplace(ResultIndexSchema->GetIndexInfo().GetColumnId(i));
+        }
+        return result;
     }
     std::shared_ptr<TSelectInfo> SelectInfo;
     std::vector<TCommittedBlob> CommittedBlobs;
@@ -229,19 +242,6 @@ public:
         return ResultIndexSchema->GetIndexInfo().GetReplaceKey();
     }
 
-    std::vector<TNameTypeInfo> GetResultYqlSchema() const override {
-        auto& indexInfo = ResultIndexSchema->GetIndexInfo();
-        auto resultSchema = GetResultSchema();
-        Y_ABORT_UNLESS(resultSchema);
-        std::vector<NTable::TTag> columnIds;
-        columnIds.reserve(resultSchema->num_fields());
-        for (const auto& field: resultSchema->fields()) {
-            TString name = TStringBuilder() << field->name();
-            columnIds.emplace_back(indexInfo.GetColumnId(name));
-        }
-        return indexInfo.GetColumns(columnIds);
-    }
-
     std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {
         return ResultIndexSchema->GetIndexInfo().GetPrimaryKey();
     }
@@ -256,7 +256,7 @@ public:
         return SelectInfo->Stats().Blobs;
     }
 
-    std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const NOlap::TReadContext& readContext) const override;
+    std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const std::shared_ptr<NOlap::TReadContext>& readContext) const override;
 
     void Dump(IOutputStream& out) const override {
         out << "columns: " << GetSchemaColumnsCount()
@@ -293,11 +293,9 @@ public:
         , TabletId(tabletId)
     {}
 
-    std::vector<std::pair<TString, NScheme::TTypeInfo>> GetResultYqlSchema() const override;
-
     std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const override;
 
-    std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const NOlap::TReadContext& readContext) const override;
+    std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const std::shared_ptr<NOlap::TReadContext>& readContext) const override;
 };
 
 }

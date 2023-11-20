@@ -299,8 +299,7 @@ struct TGetDomainLevelKernelExec : public TUnaryKernelExec<TGetDomainLevelKernel
 };
 END_SIMPLE_ARROW_UDF(TGetDomainLevel, TGetDomainLevelKernelExec::Do);
 
-SIMPLE_UDF_OPTIONS(TGetSignificantDomain, char*(TAutoMap<char*>, TOptional<TListType<char*>>),
-                    builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TGetSignificantDomain, char*(TAutoMap<char*>, TOptional<TListType<char*>>), 1) {
     const std::string_view url(args[0].AsStringRef());
     const std::string_view host(GetOnlyHost(url));
     std::vector<std::string_view> parts;

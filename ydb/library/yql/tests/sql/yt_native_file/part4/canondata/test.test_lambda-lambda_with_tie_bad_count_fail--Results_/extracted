@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:10:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	SELECT $func(key, subkey) as func FROM Input;
+	^
+        <tmp_path>/program.sql:<main>:6:23: Error: At function: Concat, At function: Concat
+        	  return $x || "_" || $y;
+	                      ^
+            <tmp_path>/program.sql:<main>:5:12: Error: At function: Nth, At function: EnsureTupleSize
+            	  $y, $x = AsTuple($x, $y, $x);
+	           ^
+                <tmp_path>/program.sql:<main>:5:12: Error: Expected tuple type of size: 2, but got: 3
+                	  $y, $x = AsTuple($x, $y, $x);
+	           ^

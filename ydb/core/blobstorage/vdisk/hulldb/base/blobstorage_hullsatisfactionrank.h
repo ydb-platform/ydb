@@ -331,7 +331,7 @@ namespace NKikimr {
         using TDecimal = TSatisfactionRank::TValue;
 
         void Update(EHullDbType dbType, const TSatisfactionRank &rank) {
-            Y_VERIFY_DEBUG(dbType < EHullDbType::Max);
+            Y_DEBUG_ABORT_UNLESS(dbType < EHullDbType::Max);
             CurRanks[ui32(dbType)] = rank.GetValue();
         }
 

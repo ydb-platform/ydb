@@ -35,7 +35,7 @@ private:
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         default:
-            Y_FAIL("TKqpCompileComputationPatternService: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+            Y_ABORT("TKqpCompileComputationPatternService: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
     }
 
@@ -69,11 +69,11 @@ private:
             compilationIntervalMs -= static_cast<i64>(timer.Get().MilliSeconds());
         }
 
+        Counters->CompileComputationPatternsQueueSize->Set(PatternsToCompile.size() - PatternToCompileIndex);
+
         if (PatternToCompileIndex == patternsToCompileSize) {
             PatternsToCompile.clear();
         }
-
-        Counters->CompileComputationPatternsQueueSize->Set(PatternsToCompile.size());
 
         ScheduleWakeup(ctx);
     }

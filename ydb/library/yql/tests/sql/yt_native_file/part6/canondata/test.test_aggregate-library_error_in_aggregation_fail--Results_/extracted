@@ -1,0 +1,17 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:6:1: Error: At function: RemovePrefixMembers, At function: RemoveSystemMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject
+    	select * from (
+	^
+        <tmp_path>/program.sql:<main>:7:1: Error: At function: OrderedFilter, At function: PersistableRepr, At function: SqlProject
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:9:15: Error: At function: AssumeColumnOrderPartial
+            	FROM Input as a
+	              ^
+                <tmp_path>/program.sql:<main>:8:17: Error: At function: Aggregate, At function: AggApply
+                	    a.key as x, sum(b.value)
+	                ^
+                    <tmp_path>/program.sql:<main>:8:17: Error: Unsupported column type: String
+                    	    a.key as x, sum(b.value)
+	                ^

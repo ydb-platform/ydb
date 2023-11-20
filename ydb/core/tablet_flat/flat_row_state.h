@@ -64,7 +64,7 @@ namespace NTable {
                     Rop = (Rop == ERowOp::Absent ? ERowOp::Erase : ERowOp::Reset);
                     return false; /* current row shouldn't be processed */
                 default:
-                    Y_FAIL("Unexpected row rolling operation code: %" PRIu8, ui8(op));
+                    Y_ABORT("Unexpected row rolling operation code: %" PRIu8, ui8(op));
             }
         }
 
@@ -110,7 +110,7 @@ namespace NTable {
             }
 
             if (Touch(other.Rop)) {
-                Y_VERIFY_DEBUG(State.size() == other.State.size());
+                Y_DEBUG_ABORT_UNLESS(State.size() == other.State.size());
                 for (TPos i = 0; i < other.State.size(); ++i) {
                     if (State[i] != ECellOp::Empty || other.State[i] == ECellOp::Empty) {
                         continue;

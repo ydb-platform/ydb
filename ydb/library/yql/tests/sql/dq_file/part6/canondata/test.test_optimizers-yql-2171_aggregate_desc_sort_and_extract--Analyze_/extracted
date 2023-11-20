@@ -1,0 +1,77 @@
+<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
+
+    <tmp_path>/program.sql:<main>: Info: Type annotation
+    
+        <tmp_path>/program.sql:<main>:16:1: Info: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject
+        	SELECT age_dec, info.* FROM $top_users_by_age_dec AS top JOIN $data AS info ON top.age_dec = info.age / 10 ORDER BY name;
+	^
+            <tmp_path>/program.sql:<main>:16:54: Info: At function: OrderedMap
+            	SELECT age_dec, info.* FROM $top_users_by_age_dec AS top JOIN $data AS info ON top.age_dec = info.age / 10 ORDER BY name;
+	                                                     ^
+                <tmp_path>/program.sql:<main>:16:54: Info: At function: EquiJoin, At function: RemoveSystemMembers
+                	SELECT age_dec, info.* FROM $top_users_by_age_dec AS top JOIN $data AS info ON top.age_dec = info.age / 10 ORDER BY name;
+	                                                     ^
+                    <tmp_path>/program.sql:<main>:13:1: Info: At function: Take
+                    	LIMIT 2);
+	^
+                        <tmp_path>/program.sql:<main>:7:26: Info: At function: Sort, At function: PersistableRepr, At function: SqlProject
+                        	$top_users_by_age_dec = (SELECT
+	                         ^
+                            <tmp_path>/program.sql:<main>:10:6: Info: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: FlatMap, At function: AsList, At function: AddMember
+                            	FROM $data
+	     ^
+                                <tmp_path>/program.sql:<main>:11:14: Info: At function: /
+                                	GROUP BY age / 10 as age_dec
+	             ^
+                                    <tmp_path>/program.sql:<main>:11:14: Info: Integral type implicit bitcast: Optional<Uint32> and Int32
+                                    	GROUP BY age / 10 as age_dec
+	             ^
+                <tmp_path>/program.sql:<main>:16:54: Info: At function: RemoveSystemMembers, At function: OrderedMap, At function: AddMember
+                	SELECT age_dec, info.* FROM $top_users_by_age_dec AS top JOIN $data AS info ON top.age_dec = info.age / 10 ORDER BY name;
+	                                                     ^
+                    <tmp_path>/program.sql:<main>:16:103: Info: At function: /
+                    	SELECT age_dec, info.* FROM $top_users_by_age_dec AS top JOIN $data AS info ON top.age_dec = info.age / 10 ORDER BY name;
+	                                                                                                      ^
+                        <tmp_path>/program.sql:<main>:16:103: Info: Integral type implicit bitcast: Optional<Uint32> and Int32
+                        	SELECT age_dec, info.* FROM $top_users_by_age_dec AS top JOIN $data AS info ON top.age_dec = info.age / 10 ORDER BY name;
+	                                                                                                      ^
+    <tmp_path>/program.sql:<main>: Info: Optimization
+    
+        <tmp_path>/program.sql:<main>:16:1: Info: Failed to execute callable with name: ResWrite!, you possibly used cross provider/cluster operations or pulled not materialized result in refselect mode
+        	SELECT age_dec, info.* FROM $top_users_by_age_dec AS top JOIN $data AS info ON top.age_dec = info.age / 10 ORDER BY name;
+	^
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:16:1: Warning: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT age_dec, info.* FROM $top_users_by_age_dec AS top JOIN $data AS info ON top.age_dec = info.age / 10 ORDER BY name;
+	^
+        <tmp_path>/program.sql:<main>:16:54: Warning: At function: OrderedMap
+        	SELECT age_dec, info.* FROM $top_users_by_age_dec AS top JOIN $data AS info ON top.age_dec = info.age / 10 ORDER BY name;
+	                                                     ^
+            <tmp_path>/program.sql:<main>:16:54: Warning: At function: EquiJoin, At function: RemoveSystemMembers
+            	SELECT age_dec, info.* FROM $top_users_by_age_dec AS top JOIN $data AS info ON top.age_dec = info.age / 10 ORDER BY name;
+	                                                     ^
+                <tmp_path>/program.sql:<main>:13:1: Warning: At function: Take
+                	LIMIT 2);
+	^
+                    <tmp_path>/program.sql:<main>:7:26: Warning: At function: Sort, At function: PersistableRepr, At function: SqlProject
+                    	$top_users_by_age_dec = (SELECT
+	                         ^
+                        <tmp_path>/program.sql:<main>:10:6: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: FlatMap, At function: AsList, At function: AddMember
+                        	FROM $data
+	     ^
+                            <tmp_path>/program.sql:<main>:11:14: Warning: At function: /
+                            	GROUP BY age / 10 as age_dec
+	             ^
+                                <tmp_path>/program.sql:<main>:11:14: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                                	GROUP BY age / 10 as age_dec
+	             ^
+            <tmp_path>/program.sql:<main>:16:54: Warning: At function: RemoveSystemMembers, At function: OrderedMap, At function: AddMember
+            	SELECT age_dec, info.* FROM $top_users_by_age_dec AS top JOIN $data AS info ON top.age_dec = info.age / 10 ORDER BY name;
+	                                                     ^
+                <tmp_path>/program.sql:<main>:16:103: Warning: At function: /
+                	SELECT age_dec, info.* FROM $top_users_by_age_dec AS top JOIN $data AS info ON top.age_dec = info.age / 10 ORDER BY name;
+	                                                                                                      ^
+                    <tmp_path>/program.sql:<main>:16:103: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                    	SELECT age_dec, info.* FROM $top_users_by_age_dec AS top JOIN $data AS info ON top.age_dec = info.age / 10 ORDER BY name;
+	                                                                                                      ^

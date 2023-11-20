@@ -100,6 +100,12 @@ public:
         return false;
     }
 
+    void GetRequiredChildren(const TExprNode& node, TExprNode::TListType& children) override {
+        if (CanExecute(node)) {
+            children.push_back(node.ChildPtr(0));
+        }
+    }
+
     const THashMap<TString, TString>* GetClusterTokens() override {
         return &State_->Configuration->Tokens;
     }

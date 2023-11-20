@@ -49,8 +49,21 @@ namespace NKikimr::NBsController {
             }
 
             if (RealmLevelBegin || RealmLevelEnd || DomainLevelBegin || DomainLevelEnd) {
-                if (RealmLevelEnd < RealmLevelBegin || DomainLevelEnd < DomainLevelBegin) {
-                    throw TExFitGroupError() << "XxxLevelBegin must be less than or equal to XxxLevelEnd";
+                TStringStream err;
+                bool needComma = false;
+                if (RealmLevelEnd < RealmLevelBegin) {
+                    needComma = true;
+                    err << "RealmLevelBegin = " << RealmLevelBegin << " must be less than or equal to RealmLevelEnd = " << RealmLevelEnd;
+                }
+                if (DomainLevelEnd < DomainLevelBegin) {
+                    if (needComma) {
+                        err << ", ";
+                    }
+                    err << "DomainLevelBegin = " << DomainLevelBegin
+                        << " must be less than or equal to DomainLevelEnd = " << DomainLevelEnd;
+                }
+                if (!err.empty()) {
+                    throw TExFitGroupError() << err.Str();
                 }
             } else {
                 RealmLevelBegin = 10;
@@ -68,12 +81,12 @@ namespace NKikimr::NBsController {
         ui32 GetDomainLevelBegin() const { return DomainLevelBegin; }
         ui32 GetDomainLevelEnd() const { return DomainLevelEnd; }
 
-        void AllocateGroup(TGroupMapper &mapper, TGroupId groupId, TGroupMapper::TGroupDefinition &group,
+        void AllocateGroup(TGroupMapper &mapper, TGroupId groupId, TGroupMapper::TGroupDefinition &group, TGroupMapper::TGroupConstraintsDefinition& constrainsts,
                 const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TGroupMapper::TForbiddenPDisks forbid,
                 i64 requiredSpace) const {
             TString error;
             for (const bool requireOperational : {true, false}) {
-                if (mapper.AllocateGroup(groupId, group, replacedDisks, forbid, requiredSpace, requireOperational, error)) {
+                if (mapper.AllocateGroup(groupId, group, constrainsts, replacedDisks, forbid, requiredSpace, requireOperational, error)) {
                     return;
                 }
             }
@@ -81,8 +94,8 @@ namespace NKikimr::NBsController {
         }
 
         // returns pair of previous VDisk and PDisk id's
-        std::pair<TVDiskIdShort, TPDiskId> SanitizeGroup(TGroupMapper &mapper, TGroupId groupId, TGroupMapper::TGroupDefinition &group,
-                TGroupMapper::TForbiddenPDisks forbid, i64 requiredSpace) const {
+        std::pair<TVDiskIdShort, TPDiskId> SanitizeGroup(TGroupMapper &mapper, TGroupId groupId, TGroupMapper::TGroupDefinition &group, TGroupMapper::TGroupConstraintsDefinition&,
+                const THashMap<TVDiskIdShort, TPDiskId>& /*replacedDisks*/, TGroupMapper::TForbiddenPDisks forbid, i64 requiredSpace) const {
             TString error;
             auto misplacedVDisks = mapper.FindMisplacedVDisks(group);
             if (misplacedVDisks.Disks.size() == 0) {
@@ -91,7 +104,7 @@ namespace NKikimr::NBsController {
                 for (const bool requireOperational : {true, false}) {
                     for (const auto& replacedDisk : misplacedVDisks.Disks) {
                         TPDiskId pdiskId = group[replacedDisk.FailRealm][replacedDisk.FailDomain][replacedDisk.VDisk];
-                        if (mapper.TargetMisplacedVDisk(groupId, group, replacedDisk, forbid, requiredSpace, 
+                        if (mapper.TargetMisplacedVDisk(groupId, group, replacedDisk, forbid, requiredSpace,
                                 requireOperational, error)) {
                             return {replacedDisk, pdiskId};
                         }
@@ -101,7 +114,8 @@ namespace NKikimr::NBsController {
             throw TExFitGroupError() << "failed to sanitize group: " << error;
         }
 
-        bool ResizeGroup(TGroupMapper::TGroupDefinition& group) const {
+        template<class T>
+        bool ResizeGroup(TGroupMapper::TGroupDefinitionBase<T>& group) const {
             if (!group) {
                 group.resize(NumFailRealms);
                 for (auto &realm : group) {

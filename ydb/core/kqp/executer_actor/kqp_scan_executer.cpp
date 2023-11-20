@@ -27,7 +27,6 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/log.h>
-#include <util/system/info.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -148,77 +147,6 @@ private:
     }
 
 private:
-
-    ui32 GetMaxTasksAggregation(TStageInfo& stageInfo, const ui32 previousTasksCount, const ui32 nodesCount) const {
-        if (AggregationSettings.HasAggregationComputeThreads()) {
-            return std::max<ui32>(1, AggregationSettings.GetAggregationComputeThreads());
-        } else if (nodesCount) {
-            const TStagePredictor& predictor = stageInfo.Meta.Tx.Body->GetCalculationPredictor(stageInfo.Id.StageId);
-            return predictor.CalcTasksOptimalCount(TStagePredictor::GetUsableThreads(), previousTasksCount / nodesCount) * nodesCount;
-        } else {
-            return 1;
-        }
-    }
-
-    void BuildComputeTasks(TStageInfo& stageInfo) {
-        auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-
-        ui32 partitionsCount = 1;
-        ui32 inputTasks = 0;
-        bool isShuffle = false;
-        for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
-            const auto& input = stage.GetInputs(inputIndex);
-
-            // Current assumptions:
-            // 1. `Broadcast` can not be the 1st stage input unless it's a single input
-            // 2. All stage's inputs, except 1st one, must be a `Broadcast` or `UnionAll`
-            if (inputIndex == 0) {
-                if (stage.InputsSize() > 1) {
-                    YQL_ENSURE(input.GetTypeCase() != NKqpProto::TKqpPhyConnection::kBroadcast);
-                }
-            } else {
-                switch (input.GetTypeCase()) {
-                    case NKqpProto::TKqpPhyConnection::kBroadcast:
-                    case NKqpProto::TKqpPhyConnection::kHashShuffle:
-                    case NKqpProto::TKqpPhyConnection::kUnionAll:
-                    case NKqpProto::TKqpPhyConnection::kMerge:
-                    case NKqpProto::TKqpPhyConnection::kStreamLookup:
-                        break;
-                    default:
-                        YQL_ENSURE(false, "Unexpected connection type: " << (ui32)input.GetTypeCase());
-                }
-            }
-
-            auto& originStageInfo = TasksGraph.GetStageInfo(TStageId(stageInfo.Id.TxId, input.GetStageIndex()));
-
-            switch (input.GetTypeCase()) {
-                case NKqpProto::TKqpPhyConnection::kHashShuffle: {
-                    inputTasks += originStageInfo.Tasks.size();
-                    isShuffle = true;
-                    break;
-                }
-
-                case NKqpProto::TKqpPhyConnection::kMap:
-                case NKqpProto::TKqpPhyConnection::kStreamLookup:
-                    partitionsCount = originStageInfo.Tasks.size();
-                    break;
-
-                default:
-                    break;
-            }
-        }
-
-        if (isShuffle) {
-            partitionsCount = std::max(partitionsCount, GetMaxTasksAggregation(stageInfo, inputTasks, ShardsOnNode.size()));
-        }
-
-        for (ui32 i = 0; i < partitionsCount; ++i) {
-            auto& task = TasksGraph.AddTask(stageInfo);
-            task.Meta.Type = TTaskMeta::TTaskType::Compute;
-            LOG_D("Stage " << stageInfo.Id << " create compute task: " << task.Id);
-        }
-    }
-
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
         TSet<ui64> shardIds;
@@ -264,12 +192,15 @@ private:
 
             LOG_D("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());
 
-            Y_VERIFY_DEBUG(!stage.GetIsEffectsStage());
+            Y_DEBUG_ABORT_UNLESS(!stage.GetIsEffectsStage());
 
             if (stage.SourcesSize() > 0) {
                 switch (stage.GetSources(0).GetTypeCase()) {
                     case NKqpProto::TKqpSource::kReadRangesSource:
-                        BuildScanTasksFromSource(stageInfo, {});
+                        BuildScanTasksFromSource(
+                            stageInfo,
+                            /* shardsResolved */ true,
+                            /* limitTasksPerNode */ false);
                         break;
                     default:
                         YQL_ENSURE(false, "unknown source type");
@@ -277,7 +208,7 @@ private:
             } else if (stageInfo.Meta.ShardOperations.empty()) {
                 BuildComputeTasks(stageInfo);
             } else if (stageInfo.Meta.IsSysView()) {
-                BuildSysViewScanTasks(stageInfo, {});
+                BuildSysViewScanTasks(stageInfo);
             } else if (stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()) {
                 HasOlapTable = true;
                 BuildScanTasksFromShards(stageInfo);
@@ -364,10 +295,11 @@ private:
     }
 
 public:
-    void Finalize() {
+
+    void FillResponseStats(Ydb::StatusIds::StatusCode status) {
         auto& response = *ResponseEv->Record.MutableResponse();
 
-        response.SetStatus(Ydb::StatusIds::SUCCESS);
+        response.SetStatus(status);
 
         if (Stats) {
             ReportEventElapsedTime();
@@ -375,12 +307,23 @@ public:
             Stats->FinishTs = TInstant::Now();
             Stats->Finish();
 
-            if (CollectFullStats(Request.StatsMode)) {
+            if (Stats->CollectStatsByLongTasks || CollectFullStats(Request.StatsMode)) {
                 const auto& tx = Request.Transactions[0].Body;
                 auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
                 response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
             }
+
+            if (Stats->CollectStatsByLongTasks) {
+                const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
+                if (!txPlansWithStats.empty()) {
+                    LOG_N("Full stats: " << txPlansWithStats);
+                }
+            }
         }
+    }
+
+    void Finalize() {
+        FillResponseStats(Ydb::StatusIds::SUCCESS);
 
         LWTRACK(KqpScanExecuterFinalize, ResponseEv->Orbit, TxId, LastTaskId, LastComputeActorId, ResponseEv->ResultsSize());
 
@@ -398,7 +341,7 @@ private:
 
         Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), GetSnapshot(),
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, AppData()->EnableKqpSpilling,
-            Request.RlPath, ExecuterSpan, std::move(ResourcesSnapshot), ExecuterRetriesConfig, false /* isDataQuery */,
+            Request.RlPath, ExecuterSpan, std::move(ResourcesSnapshot), ExecuterRetriesConfig, /* useDataQueryPool */ false, /* localComputeTasks */ false,
             Request.MkqlMemoryLimit, nullptr, false, GetUserRequestContext());
 
         LOG_D("Execute scan tx, PendingComputeTasks: " << TasksGraph.GetTasks().size());

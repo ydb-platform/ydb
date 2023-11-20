@@ -7,6 +7,17 @@
 
 #include <util/datetime/base.h>
 
+namespace NKikimrConfig {
+    class TLogConfig;
+    class TTableServiceConfig;
+    class TQueryServiceConfig;
+    class TMetadataProviderConfig;
+}
+
+namespace NKikimrKqp {
+    class TKqpSetting;
+    class TKqpProxyNodeResources;
+}
 
 namespace NKikimr::NKqp {
 

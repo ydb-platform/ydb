@@ -25,12 +25,58 @@ namespace NYql {
             , State_(state)
         {
             using TSelf = TGenericDataSourceTypeAnnotationTransformer;
+            AddHandler({TCoConfigure::CallableName()}, Hndl(&TSelf::HandleConfig));
             AddHandler({TGenReadTable::CallableName()}, Hndl(&TSelf::HandleReadTable));
             AddHandler({TGenSourceSettings::CallableName()}, Hndl(&TSelf::HandleSourceSettings));
         }
 
+        TStatus HandleConfig(const TExprNode::TPtr& input, TExprContext& ctx) {
+            if (!EnsureMinArgsCount(*input, 2, ctx)) {
+                return TStatus::Error;
+            }
+
+            if (!EnsureWorldType(*input->Child(TCoConfigure::idx_World), ctx)) {
+                return TStatus::Error;
+            }
+
+            if (!EnsureSpecificDataSource(*input->Child(TCoConfigure::idx_DataSource), GenericProviderName, ctx)) {
+                return TStatus::Error;
+            }
+
+            input->SetTypeAnn(input->Child(TCoConfigure::idx_World)->GetTypeAnn());
+            return TStatus::Ok;
+        }
+
+        TStatus AnnotateFilterPredicate(const TExprNode::TPtr& input, size_t childIndex, const TStructExprType* itemType, TExprContext& ctx) {
+            if (childIndex >= input->ChildrenSize()) {
+                return TStatus::Error;
+            }
+
+            auto& filterLambda = input->ChildRef(childIndex);
+            if (!EnsureLambda(*filterLambda, ctx)) {
+                return TStatus::Error;
+            }
+
+            if (!UpdateLambdaAllArgumentsTypes(filterLambda, {itemType}, ctx)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (const auto* filterLambdaType = filterLambda->GetTypeAnn()) {
+                if (filterLambdaType->GetKind() != ETypeAnnotationKind::Data) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+                const TDataExprType* dataExprType = static_cast<const TDataExprType*>(filterLambdaType);
+                if (dataExprType->GetSlot() != EDataSlot::Bool) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else {
+                return IGraphTransformer::TStatus::Repeat;
+            }
+            return TStatus::Ok;
+        }
+
         TStatus HandleSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-            if (!EnsureArgsCount(*input, 4, ctx)) {
+            if (!EnsureArgsCount(*input, 5, ctx)) {
                 return TStatus::Error;
             }
 
@@ -76,6 +122,12 @@ namespace NYql {
                 }
             }
 
+            // Filter
+            const TStatus filterAnnotationStatus = AnnotateFilterPredicate(input, TGenSourceSettings::idx_FilterPredicate, structExprType, ctx);
+            if (filterAnnotationStatus != TStatus::Ok) {
+                return filterAnnotationStatus;
+            }
+
             blockRowTypeItems.push_back(ctx.MakeType<TItemExprType>(
                 BlockLengthColumnName, ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64))));
             const TTypeAnnotationNode* typeAnnotationNode = ctx.MakeType<TStructExprType>(blockRowTypeItems);
@@ -90,7 +142,7 @@ namespace NYql {
 
         TStatus HandleReadTable(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             Y_UNUSED(output);
-            if (!EnsureArgsCount(*input, 4, ctx)) {
+            if (!EnsureArgsCount(*input, 5, ctx)) {
                 return TStatus::Error;
             }
 
@@ -149,6 +201,12 @@ namespace NYql {
                 itemType = ctx.MakeType<TStructExprType>(items);
 
                 YQL_CLOG(DEBUG, ProviderGeneric) << "struct column order" << (static_cast<const TStructExprType*>(itemType))->ToString();
+            }
+
+            // Filter
+            const TStatus filterAnnotationStatus = AnnotateFilterPredicate(input, TGenReadTable::idx_FilterPredicate, itemType, ctx);
+            if (filterAnnotationStatus != TStatus::Ok) {
+                return filterAnnotationStatus;
             }
 
             input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{

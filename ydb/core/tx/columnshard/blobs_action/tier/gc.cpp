@@ -24,6 +24,12 @@ bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, cons
         TActorContext::AsActorContext().Send(self.SelfId(), std::make_unique<NColumnShard::TEvPrivate::TEvGarbageCollectionFinished>(taskAction));
         return false;
     } else {
+        for (auto&& i : DraftBlobIds) {
+            Counters->OnReply(i.BlobSize());
+        }
+        for (auto&& i : DeleteBlobIds) {
+            Counters->OnReply(i.BlobSize());
+        }
         return true;
     }
 }

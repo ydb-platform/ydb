@@ -25,6 +25,7 @@ const i64 PQReadDefaultFreeSpace = 16_MB;
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     NPq::NProto::TDqPqTopicSource&& settings,
     ui64 inputIndex,
+    TCollectStatsLevel statsLevel,
     TTxId txId,
     ui64 taskId,
     const THashMap<TString, TString>& secureParams,

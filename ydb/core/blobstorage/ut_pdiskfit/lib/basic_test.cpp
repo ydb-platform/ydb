@@ -182,7 +182,7 @@ class TFakeVDisk
                         break;
 
                     case ECommitState::DELETED:
-                        Y_FAIL();
+                        Y_ABORT();
                 }
             }
             str << '}';
@@ -541,7 +541,7 @@ public:
                 std::swap(chunk, ChunksToForget.back());
                 ChunksToForget.pop_back();
             } else {
-                Y_FAIL("unexpected option");
+                Y_ABORT("unexpected option");
             }
         }
     }
@@ -958,7 +958,7 @@ public:
             HFunc(NPDisk::TEvChunkWriteResult, Handle);
             HFunc(NPDisk::TEvChunkReadResult, Handle);
             HFunc(NPDisk::TEvChunkForgetResult, Handle);
-            default: Y_FAIL("unexpected message 0x%08" PRIx32, type);
+            default: Y_ABORT("unexpected message 0x%08" PRIx32, type);
         }
     }
 };

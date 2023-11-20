@@ -24,7 +24,7 @@ namespace NKikimr::NBlobDepot {
         template<typename T>
         T& Obtain() {
             T *sp = static_cast<T*>(this);
-            Y_VERIFY_DEBUG(sp && sp == dynamic_cast<T*>(this));
+            Y_DEBUG_ABORT_UNLESS(sp && sp == dynamic_cast<T*>(this));
             return *sp;
         }
 
@@ -62,7 +62,7 @@ namespace NKikimr::NBlobDepot {
             } else if (auto *error = std::get_if<TError>(&Outcome)) {
                 s << "Error# '" << EscapeC(error->ErrorReason) << '\'';
             } else {
-                Y_FAIL();
+                Y_ABORT();
             }
         }
 

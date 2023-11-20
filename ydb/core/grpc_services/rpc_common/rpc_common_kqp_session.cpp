@@ -83,7 +83,6 @@ private:
     void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
-            hFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
             hFunc(TEvents::TEvWakeup, Handle);
         }
     }
@@ -143,19 +142,6 @@ private:
             Request->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, kqpResponse.GetError()));
         }
         return Reply(kqpResponse.GetYdbStatus());
-    }
-
-    void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev) {
-        const auto& record = ev->Get()->Record;
-        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-            // KQP should not send TEvProcessResponse with SUCCESS for CreateSession rpc.
-            // We expect TEvKqp::TEvCreateSessionResponse instead.
-            static const TString err = "Unexpected TEvProcessResponse with success status for CreateSession request";
-            Request->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, err));
-            Reply(Ydb::StatusIds::INTERNAL_ERROR);
-        } else {
-            return ReplyResponseError(record);
-        }
     }
 
     void Reply(Ydb::StatusIds::StatusCode status) {

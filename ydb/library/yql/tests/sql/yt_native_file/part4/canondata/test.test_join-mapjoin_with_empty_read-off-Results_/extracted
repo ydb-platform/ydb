@@ -1,0 +1,38 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:12:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject
+    	select * from Input as a
+	^
+        <tmp_path>/program.sql:<main>:12:24: Warning: At function: EquiJoin, At function: RemoveSystemMembers
+        	select * from Input as a
+	                       ^
+            <tmp_path>/program.sql:<main>:10:60: Warning: At function: Take, At function: Skip, At function: Coalesce
+            	$in1 = (select key from Input where key != "" order by key limit 10 offset $offset);
+	                                                           ^
+                <tmp_path>/program.sql:<main>:8:23: Warning: At function: Coalesce
+                	$offset = ($cnt + 10) ?? 0;
+	                      ^
+                    <tmp_path>/program.sql:<main>:8:17: Warning: At function: +
+                    	$offset = ($cnt + 10) ?? 0;
+	                ^
+                        <tmp_path>/program.sql:<main>:8:17: Warning: Integral type implicit bitcast: Optional<Uint64> and Int32
+                        	$offset = ($cnt + 10) ?? 0;
+	                ^
+    <tmp_path>/program.sql:<main>:19:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject
+    	select * from Input as a
+	^
+        <tmp_path>/program.sql:<main>:19:24: Warning: At function: EquiJoin, At function: RemoveSystemMembers
+        	select * from Input as a
+	                       ^
+            <tmp_path>/program.sql:<main>:17:47: Warning: At function: Take, At function: Coalesce
+            	$in2 = (select key from Input where key != "" limit $limit);
+	                                              ^
+                <tmp_path>/program.sql:<main>:15:23: Warning: At function: Coalesce
+                	$limit = ($cnt / 100) ?? 0;
+	                      ^
+                    <tmp_path>/program.sql:<main>:15:16: Warning: At function: /
+                    	$limit = ($cnt / 100) ?? 0;
+	               ^
+                        <tmp_path>/program.sql:<main>:15:16: Warning: Integral type implicit bitcast: Optional<Uint64> and Int32
+                        	$limit = ($cnt / 100) ?? 0;
+	               ^

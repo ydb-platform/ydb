@@ -607,17 +607,17 @@ public:
             TStackVec<ui32, TypicalHandoffCount> *choosenHandoffForParts, ui8 depth = 0)
     {
         auto &choosen = *choosenHandoffForParts;
-        Y_VERIFY_DEBUG(choosen.size() == handoffParts.size());
+        Y_DEBUG_ABORT_UNLESS(choosen.size() == handoffParts.size());
         if (depth >= handoffParts.size()) {
             return true;
         }
         ui32 partIdx = handoffParts[depth];
         for (ui32 idx = 0; idx < handoffForParts[partIdx].size(); ++idx) {
-            Y_VERIFY_DEBUG(depth < choosen.size());
+            Y_DEBUG_ABORT_UNLESS(depth < choosen.size());
             choosen[depth] = handoffForParts[partIdx][idx];
             bool isCorrect = true;
             for (ui32 prevDepth = 0; prevDepth < depth; ++prevDepth) {
-                Y_VERIFY_DEBUG(prevDepth < choosen.size());
+                Y_DEBUG_ABORT_UNLESS(prevDepth < choosen.size());
                 isCorrect &= (choosen[depth] != choosen[prevDepth]);
             }
             bool hasAnswer = false;
@@ -827,7 +827,7 @@ public:
             hFunc(TEvBlobStorage::TEvPutResult, Handle);
             IgnoreFunc(TEvBlobStorage::TEvVPatchResult);
         default:
-            Y_FAIL("Received unknown event");
+            Y_ABORT("Received unknown event");
         };
     }
 
@@ -839,7 +839,7 @@ public:
             hFunc(TEvBlobStorage::TEvVMovedPatchResult, Handle);
             IgnoreFunc(TEvBlobStorage::TEvVPatchResult);
         default:
-            Y_FAIL("Received unknown event");
+            Y_ABORT("Received unknown event");
         };
     }
 
@@ -851,7 +851,7 @@ public:
             hFunc(TEvBlobStorage::TEvVPatchFoundParts, Handle);
             hFunc(TEvBlobStorage::TEvVPatchResult, Handle);
         default:
-            Y_FAIL("Received unknown event");
+            Y_ABORT("Received unknown event");
         };
     }
 };

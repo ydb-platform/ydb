@@ -2,6 +2,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mon.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_internal_interface.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/time_provider/time_provider.h>
+
 
 namespace NKikimr {
 
@@ -242,7 +244,7 @@ namespace NKikimr {
         if (SuccessfulRecovery) {
             bool emptyLog = (RecoveryLogFirstLsn == Max<ui64>()) && RecoveryLogLastLsn == 0;
             if (!StartingPoints.empty() && emptyLog) {
-                Y_FAIL("Empty log with none empty entry points; State# %s", ToString().data());
+                Y_ABORT("Empty log with none empty entry points; State# %s", ToString().data());
             }
         }
     }

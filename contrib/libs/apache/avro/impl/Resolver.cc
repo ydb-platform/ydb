@@ -710,8 +710,8 @@ NonUnionToUnionParser::NonUnionToUnionParser(ResolverFactory &factory,
                                              const NodePtr &writer,
                                              const NodePtr &reader,
                                              const CompoundLayout &offsets) : Resolver(),
-                                                                              offset_(offsets.offset()),
                                                                               choice_(0),
+                                                                              offset_(offsets.offset()),
                                                                               choiceOffset_(offsets.at(0).offset()),
                                                                               setFuncOffset_(offsets.at(1).offset()) {
 #ifndef NDEBUG

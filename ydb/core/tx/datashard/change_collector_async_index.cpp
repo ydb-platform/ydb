@@ -52,7 +52,7 @@ static THashMap<TTag, TPos> MakeTagToPos(const C& container, E extractor) {
 
     for (ui32 i = 0; i < container.size(); ++i) {
         const auto tag = extractor(container.at(i));
-        Y_VERIFY_DEBUG(!tagToPos.contains(tag));
+        Y_DEBUG_ABORT_UNLESS(!tagToPos.contains(tag));
         tagToPos.emplace(tag, i);
     }
 
@@ -227,7 +227,7 @@ TArrayRef<TTag> TAsyncIndexChangeCollector::GetTagsToSelect(const TTableId& tabl
     case ERowOp::Reset:
         return it->second.IndexColumns;
     default:
-        Y_FAIL("unreachable");
+        Y_ABORT("unreachable");
     }
 }
 

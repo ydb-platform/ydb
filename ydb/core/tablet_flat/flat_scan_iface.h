@@ -143,7 +143,7 @@ namespace NTable {
     class IVersionScan : public IScan {
     private:
         EScan Feed(TArrayRef<const TCell>, const TRow&) noexcept override final {
-            Y_FAIL("Unexpected unversioned call");
+            Y_ABORT("Unexpected unversioned call");
         }
 
     public:

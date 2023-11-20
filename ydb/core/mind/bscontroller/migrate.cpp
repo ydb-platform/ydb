@@ -1,4 +1,6 @@
 #include "impl.h"
+#include <ydb/core/base/feature_flags.h>
+
 
 namespace NKikimr {
 namespace NBsController {
@@ -206,7 +208,7 @@ public:
 
             const ui32 version = state.GetValue<Schema::State::SchemaVersion>();
             if (Schema::CurrentSchemaVersion >= Schema::BoxHostMigrationSchemaVersion && version < Schema::BoxHostMigrationSchemaVersion) {
-                Y_FAIL("unsupported schema");
+                Y_ABORT("unsupported schema");
             }
             hasInstanceId = state.HaveValue<Schema::State::InstanceId>();
         }

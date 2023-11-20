@@ -1031,7 +1031,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestTransformations)
             /* ExpectedTransposedFunction */ TPiecewiseLinearFunction<double>::Linear(42, 0.1, 42, 1.2),
         },
         {
-            /* Name */ "discontinous",
+            /* Name */ "discontinuous",
             /* Function */ BuildFunctionFromPoints<double>({{0, 0}, {1, 1}, {1, 2}, {2, 3}}),
             /* ExpectedTransposedFunction */ BuildFunctionFromPoints<double>({{0, 0}, {1, 1}, {2, 1}, {3, 2}}),
         },

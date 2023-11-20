@@ -23,7 +23,7 @@ namespace NTable {
                 TIntrusiveConstPtr<TKeyCellDefaults> keyDefaults,
                 const TRemap* remap,
                 IPages *env,
-                NMem::TTreeIterator iterator)
+                NMem::TTreeIterator&& iterator)
             : MemTable(memTable)
             , KeyCellDefaults(std::move(keyDefaults))
             , Remap(remap)
@@ -126,7 +126,7 @@ namespace NTable {
 
         TDbTupleRef GetKey() const
         {
-            Y_VERIFY_DEBUG(IsValid());
+            Y_DEBUG_ABORT_UNLESS(IsValid());
 
             const ui32 len = MemTable->Scheme->Keys->Size();
             const auto *key = RowIt.GetKey();
@@ -242,10 +242,10 @@ namespace NTable {
                               NTable::ITransactionMapSimplePtr committedTransactions,
                               NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
         {
-            Y_VERIFY_DEBUG(IsValid(), "Attempt to access an invalid row");
+            Y_DEBUG_ABORT_UNLESS(IsValid(), "Attempt to access an invalid row");
 
             auto* chain = GetCurrentVersion();
-            Y_VERIFY_DEBUG(chain, "Unexpected empty chain");
+            Y_DEBUG_ABORT_UNLESS(chain, "Unexpected empty chain");
 
             // Skip uncommitted deltas
             while (chain->RowVersion.Step == Max<ui64>() && !committedTransactions.Find(chain->RowVersion.TxId)) {
@@ -310,10 +310,10 @@ namespace NTable {
                 NTable::ITransactionMapSimplePtr committedTransactions,
                 NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
         {
-            Y_VERIFY_DEBUG(IsValid(), "Attempt to access an invalid row");
+            Y_DEBUG_ABORT_UNLESS(IsValid(), "Attempt to access an invalid row");
 
             auto* chain = GetCurrentVersion();
-            Y_VERIFY_DEBUG(chain, "Unexpected empty chain");
+            Y_DEBUG_ABORT_UNLESS(chain, "Unexpected empty chain");
 
             // Skip uncommitted deltas
             while (chain->RowVersion.Step == Max<ui64>()) {
@@ -339,7 +339,7 @@ namespace NTable {
 
         void Next()
         {
-            Y_VERIFY_DEBUG(IsValid(), "Calling Next on an exhausted iterator");
+            Y_DEBUG_ABORT_UNLESS(IsValid(), "Calling Next on an exhausted iterator");
 
             Key.clear();
             CurrentVersion = nullptr;
@@ -349,7 +349,7 @@ namespace NTable {
 
         void Prev()
         {
-            Y_VERIFY_DEBUG(IsValid(), "Calling Prev on an exhausted iterator");
+            Y_DEBUG_ABORT_UNLESS(IsValid(), "Calling Prev on an exhausted iterator");
 
             Key.clear();
             CurrentVersion = nullptr;
@@ -368,7 +368,7 @@ namespace NTable {
             } else if (op == ELargeObj::Inline) {
                 row.Set(pos, op, up.Value);
             } else if (op != ELargeObj::Extern) {
-                Y_FAIL("Got an unknown ELargeObj reference type");
+                Y_ABORT("Got an unknown ELargeObj reference type");
             } else {
                 const auto ref = up.Value.AsValue<ui64>();
 
@@ -388,11 +388,11 @@ namespace NTable {
 
         const NMem::TUpdate* GetCurrentVersion() const noexcept
         {
-            Y_VERIFY_DEBUG(IsValid(), "Attempt to access an invalid row");
+            Y_DEBUG_ABORT_UNLESS(IsValid(), "Attempt to access an invalid row");
 
             if (!CurrentVersion) {
                 CurrentVersion = RowIt.GetValue();
-                Y_VERIFY_DEBUG(CurrentVersion, "Unexpected empty chain");
+                Y_DEBUG_ABORT_UNLESS(CurrentVersion, "Unexpected empty chain");
             }
 
             return CurrentVersion;

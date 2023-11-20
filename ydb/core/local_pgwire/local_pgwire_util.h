@@ -27,6 +27,7 @@ struct TTransactionState {
 struct TConnectionState {
     TString SessionId;
     TTransactionState Transaction;
+    uint32_t ConnectionNum = 0;
 };
 
 struct TParsedStatement {
@@ -54,6 +55,7 @@ struct TEvEvents {
         EvProxyCompleted = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvUpdateStatement,
         EvSingleQuery,
+        EvCancelRequest,
         EvEnd
     };
 
@@ -91,6 +93,10 @@ struct TEvEvents {
         static std::unique_ptr<NPG::TEvPGEvents::TEvQueryResponse> Reply() {
             return std::make_unique<NPG::TEvPGEvents::TEvQueryResponse>();
         }
+    };
+
+    struct TEvCancelRequest : NActors::TEventLocal<TEvCancelRequest, EvCancelRequest> {
+        TEvCancelRequest() = default;
     };
 };
 

@@ -187,7 +187,6 @@ private:
             HFunc(TEvents::TEvWakeup, Handle);
             HFunc(TRpcServices::TEvGrpcNextReply, Handle);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
-            HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, Handle);
@@ -228,6 +227,8 @@ private:
             nullptr
         );
 
+        ev->Record.MutableRequest()->SetCollectDiagnostics(req->Getcollect_full_diagnostics());
+
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
             NYql::TIssues issues;
             issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Internal error"));
@@ -255,7 +256,7 @@ private:
             GRpcResponsesSize_ -= GRpcResponsesSizeQueue_.front();
             GRpcResponsesSizeQueue_.pop();
         }
-        Y_VERIFY_DEBUG(GRpcResponsesSizeQueue_.empty() == (GRpcResponsesSize_ == 0));
+        Y_DEBUG_ABORT_UNLESS(GRpcResponsesSizeQueue_.empty() == (GRpcResponsesSize_ == 0));
         LastDataStreamTimestamp_ = TAppData::TimeProvider->Now();
 
         if (WaitOnSeqNo_ && RpcBufferSize_ > GRpcResponsesSize_) {
@@ -314,21 +315,13 @@ private:
                     response.mutable_result()->mutable_query_stats()->set_query_ast(kqpResponse.GetQueryAst());
                 }
 
+                response.mutable_result()->set_query_full_diagnostics(kqpResponse.GetQueryDiagnostics());
+
                 Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
                 Request_->SendSerializedResult(std::move(out), record.GetYdbStatus());
             }
         }
         ReplyFinishStream(record.GetYdbStatus(), issues);
-    }
-
-    void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext&) {
-        const auto& kqpResponse = ev->Get()->Record;
-        NYql::TIssues issues;
-        if (kqpResponse.HasError()) {
-            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, kqpResponse.GetError()));
-        }
-
-        ReplyFinishStream(kqpResponse.GetYdbStatus(), issues);
     }
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
@@ -499,7 +492,7 @@ private:
 } // namespace
 
 void DoExecuteScanQueryRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
-    ui64 rpcBufferSize = f.GetAppConfig()->GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
+    ui64 rpcBufferSize = f.GetChannelBufferSize();
     auto* req = dynamic_cast<TEvStreamExecuteScanQueryRequest*>(p.release());
     Y_ABORT_UNLESS(req != nullptr, "Wrong using of TGRpcRequestWrapper");
     f.RegisterActor(new TStreamExecuteScanQueryRPC(req, rpcBufferSize));

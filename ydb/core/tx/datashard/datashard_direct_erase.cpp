@@ -228,7 +228,7 @@ bool TDirectTxErase::CheckRequest(TDataShard* self, const NKikimrTxDataShard::TE
     case EStatus::Error:
         return false;
     case EStatus::PageFault:
-        Y_FAIL("Unexpected");
+        Y_ABORT("Unexpected");
     }
 }
 

@@ -108,7 +108,7 @@ TVector<TTableCompactionChanges> TCompactionLogic::ApplyChanges()
 
 void TCompactionLogic::PrepareTableSnapshot(ui32 table, NTable::TSnapEdge edge, TTableSnapshotContext *snapContext) {
     TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(table);
-    Y_VERIFY_DEBUG(tableInfo);
+    Y_DEBUG_ABORT_UNLESS(tableInfo);
     TCompactionLogicState::TInMem &inMem = tableInfo->InMem;
 
     Y_ABORT_UNLESS(edge.TxStamp != Max<ui64>(), "TxStamp of snapshot is undefined");
@@ -211,7 +211,7 @@ void TCompactionLogic::TriggerSharedPageCacheMemTableCompaction(ui32 table, ui64
         } else {
             // there was a race and we finished some compaction while our message was waiting
             // so let's notify that we completed it
-            Y_VERIFY_DEBUG(tableInfo->SharedPageCacheMemTableRegistration);
+            Y_DEBUG_ABORT_UNLESS(tableInfo->SharedPageCacheMemTableRegistration);
             if (auto& registration = tableInfo->SharedPageCacheMemTableRegistration) {
                 SharedPageCacheMemTableObserver->CompactionComplete(registration);
             }
@@ -314,7 +314,7 @@ void TCompactionLogic::ProvideSharedPageCacheMemTableRegistration(ui32 table, TI
     if (tableInfo) {
         registration->SetConsumption(tableInfo->InMem.EstimatedSize);
 
-        Y_VERIFY_DEBUG(!tableInfo->SharedPageCacheMemTableRegistration);
+        Y_DEBUG_ABORT_UNLESS(!tableInfo->SharedPageCacheMemTableRegistration);
         tableInfo->SharedPageCacheMemTableRegistration = std::move(registration);
     }
 }
@@ -339,7 +339,7 @@ THolder<NTable::ICompactionStrategy> TCompactionLogic::CreateStrategy(
                     tableId, Backend, Broker, Time, TaskNameSuffix);
 
         default:
-            Y_FAIL("Unsupported strategy %s", NKikimrSchemeOp::ECompactionStrategy_Name(strategy).c_str());
+            Y_ABORT("Unsupported strategy %s", NKikimrSchemeOp::ECompactionStrategy_Name(strategy).c_str());
     }
 }
 
@@ -554,7 +554,7 @@ bool TCompactionLogic::BeginMemTableCompaction(ui64 taskId, ui32 tableId)
         break;
 
     default:
-        Y_FAIL("Invalid inMem.State");
+        Y_ABORT("Invalid inMem.State");
     }
 
     ui64 forcedCompactionId = 0;
@@ -618,7 +618,7 @@ TCompactionLogic::HandleCompaction(
             inMem.CompactionTask.CompactionId = 0;
             break;
         default:
-            Y_FAIL("must not happens, state=%d", (int)inMem.State);
+            Y_ABORT("must not happens, state=%d", (int)inMem.State);
         }
 
         if (tableInfo->ForcedCompactionState == EForcedCompactionState::CompactingMem) {

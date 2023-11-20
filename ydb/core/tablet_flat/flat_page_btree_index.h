@@ -9,23 +9,38 @@ namespace NKikimr::NTable::NPage {
     
     /*
         TKey binary layout
-        .---------.---------------.
+        .-------------------------.
         | Non-null cell bitmap    | for all schema key columns
-        .---------.---------------.      -.
+        .-------------------------.      -.
         | value OR offs           | col_1 |
-        .---------.---------------.       |
+        .-------------------------.       |
         |       .    .    .       |       | for each non-null column
-        .---------.---------------.       |
+        .-------------------------.       |
         | value OR offs           | col_K |
         .-.------.--.-------.-----.      -'
         | |      |  |       |     | var-size values
         '-'------'--'-------'-----'
 
+        TKey fixed binary layout
+        .-------------------------.      -.
+        | value                   | col_1 |
+        .-------------------------.       |
+        |       .    .    .       |       | for each schema column, non-null
+        .-------------------------.       |
+        | value                   | col_K |
+        '-------------------------'      -'
+
         TBtreeIndexNode page binary layout
         - TLabel - page label
         - THeader - page header
-        - TKey[N] - keys data                <-- var-size
         - TPgSize[N] - keys offsets
+        - TKey[N] - keys data                <-- var-size
+        - TChild[N+1] - children
+
+        TBtreeIndexNode fixed page binary layout
+        - TLabel - page label
+        - THeader - page header
+        - TKey[N] - keys data                <-- fixed-size
         - TChild[N+1] - children
     */
 
@@ -34,91 +49,48 @@ namespace NKikimr::NTable::NPage {
         using TColumns = TArrayRef<const TPartScheme::TColumn>;
 
 #pragma pack(push,1)
-    public:
         struct THeader {
             TRecIdx KeysCount;
             TPgSize KeysSize;
+            ui8 FixedKeySize;
         } Y_PACKED;
 
-        static_assert(sizeof(THeader) == 8, "Invalid TBtreeIndexNode THeader size");
+        static_assert(sizeof(THeader) == 9, "Invalid TBtreeIndexNode THeader size");
 
-        struct TKey {
-            struct TCellsIter {
-                TCellsIter(const TKey* key, TColumns columns)
-                    : Key(key)
-                    , Columns(columns)
-                    , Pos(0)
-                {
-                    Ptr = (char*)Key + key->NullBitmapLength(columns.size());
-                }
-
-                TPos Count()
-                {
-                    return Columns.size();
-                }
-
-                TCell Next()
-                {
-                    Y_ABORT_UNLESS(Pos < Columns.size());
-
-                    if (Key->IsNull(Pos)) {
-                        Pos++;
-                        return { };
-                    }
-
-                    TCell result;
-
-                    if (Columns[Pos].IsFixed) {
-                        result = TCell(Ptr, Columns[Pos].FixedSize);
-                    } else {
-                        auto *ref = TDeref<TDataRef>::At(Ptr);
-                        result = TCell(TDeref<const char>::At(Ptr, ref->Offset), ref->Size);
-                    }
-                    Ptr += Columns[Pos].FixedSize; // fixed data or data ref size
-                    Pos++;
-
-                    return result;
-                }
-
-            private:
-                const TKey* const Key;
-                const TColumns Columns;
-                TPos Pos;
-                const char* Ptr;
-            };
-
-            static TPos NullBitmapLength(TPos capacity) {
+        struct TIsNullBitmap {
+            static TPos Length(TPos capacity) {
                 // round up (capacity / 8)
                 return (capacity + 7) >> 3;
             }
 
             bool IsNull(TPos pos) const {
-                ui8 x = IsNullBitmap[pos >> 3];
+                ui8 x = reinterpret_cast<const ui8*>(this)[pos >> 3];
                 return (x >> (pos & 7)) & 1;
             }
 
             void SetNull(TPos pos) {
-                ui8& x = IsNullBitmap[pos >> 3];
+                ui8& x = reinterpret_cast<ui8*>(this)[pos >> 3];
                 x |= (1 << (pos & 7));
             }
 
-            // 1 = null
-            ui8 IsNullBitmap[0];
+            // 1 bit = null
+            ui8 IsNullBitmap_;
         } Y_PACKED;
 
-        static_assert(sizeof(TKey) == 0, "Invalid TBtreeIndexNode TKey size");
+        static_assert(sizeof(TIsNullBitmap) == 1, "Invalid TBtreeIndexNode TIsNullBitmap size");
 
         struct TChild {
             TPageId PageId;
             TRowId Count;
             TRowId ErasedCount;
-            ui64 Size;
+            ui64 DataSize;
 
             auto operator<=>(const TChild&) const = default;
 
             TString ToString() const noexcept
             {
-                return TStringBuilder() << "PageId: " << PageId << " Count: " << Count << " Size: " << Size;
+                // copy values to prevent 'reference binding to misaligned address' error
+                return TStringBuilder() << "PageId: " << TPageId(PageId) << " Count: " << TRowId(Count) << " Erased: " << TRowId(ErasedCount) << " DataSize: " << ui64(DataSize);
             }
         } Y_PACKED;
 
@@ -126,25 +98,79 @@ namespace NKikimr::NTable::NPage {
 
 #pragma pack(pop)
 
+        struct TCellsIter {
+            TCellsIter(const char* ptr, TColumns columns)
+                : IsNullBitmap(nullptr)
+                , Columns(columns)
+                , Ptr(ptr)
+            {
+            }
+
+            TCellsIter(const TIsNullBitmap* isNullBitmap, TColumns columns)
+                : IsNullBitmap(isNullBitmap)
+                , Columns(columns)
+                , Ptr(reinterpret_cast<const char*>(IsNullBitmap) + IsNullBitmap->Length(columns.size()))
+            {
+            }
+
+            TPos Count()
+            {
+                return Columns.size();
+            }
+
+            TCell Next()
+            {
+                Y_ABORT_UNLESS(Pos < Columns.size());
+
+                if (IsNullBitmap && IsNullBitmap->IsNull(Pos)) {
+                    Pos++;
+                    return { };
+                }
+
+                TCell result;
+
+                if (Columns[Pos].IsFixed) {
+                    result = TCell(Ptr, Columns[Pos].FixedSize);
+                } else {
+                    Y_ABORT_UNLESS(IsNullBitmap, "Can't have references in fixed format");
+                    auto *ref = TDeref<TDataRef>::At(Ptr);
+                    result = TCell(TDeref<const char>::At(Ptr, ref->Offset), ref->Size);
+                }
+                Ptr += Columns[Pos].FixedSize; // fixed data or data ref size
+                Pos++;
+
+                return result;
+            }
+
+        private:
+            const TIsNullBitmap* const IsNullBitmap;
+            const TColumns Columns;
+            const char* Ptr;
+            TPos Pos = 0;
+        };
+
     public:
         TBtreeIndexNode(TSharedData raw)
-            : Raw(std::move(raw)) 
+            : Raw(std::move(raw))
         {
             const auto data = NPage::TLabelWrapper().Read(Raw, EPage::BTreeIndex);
             Y_ABORT_UNLESS(data == ECodec::Plain && data.Version == 0);
 
-            auto *header = TDeref<const THeader>::At(data.Page.data());
-            Keys.Count = header->KeysCount;
+            Header = TDeref<const THeader>::At(data.Page.data());
             size_t offset = sizeof(THeader);
 
-            Keys.Base = Raw.data();
-            offset += header->KeysSize;
+            if (IsFixedFormat()) {
+                Y_ABORT_UNLESS(Header->KeysSize == static_cast<TPgSize>(Header->KeysCount) * Header->FixedKeySize);
+                Keys = TDeref<const TRecordsEntry>::At(Header, offset);
+            } else {
+                Keys = Raw.data();
+                Offsets = TDeref<const TRecordsEntry>::At(Header, offset);
+                offset += Header->KeysCount * sizeof(TRecordsEntry);
+            }
+            offset += Header->KeysSize;
 
-            Keys.Offsets = TDeref<const TRecordsEntry>::At(header, offset);
-            offset += Keys.Count * sizeof(TRecordsEntry);
-
-            Children = TDeref<const TChild>::At(header, offset);
-            offset += (1 + Keys.Count) * sizeof(TChild);
+            Children = TDeref<const TChild>::At(Header, offset);
+            offset += (1 + Header->KeysCount) * sizeof(TChild);
 
             Y_ABORT_UNLESS(offset == data.Page.size());
         }
@@ -154,14 +180,30 @@ namespace NKikimr::NTable::NPage {
             return ReadUnaligned<NPage::TLabel>(Raw.data());
         }
 
-        TRecIdx GetKeysCount() const noexcept
+        bool IsFixedFormat() const noexcept
         {
-            return Keys.Count;
+            return Header->FixedKeySize != Max<ui8>();
         }
 
-        TKey::TCellsIter GetKeyCells(TRecIdx pos, TColumns columns) const noexcept
+        TRecIdx GetKeysCount() const noexcept
         {
-            return TKey::TCellsIter(Keys.Record(pos), columns);
+            return Header->KeysCount;
+        }
+
+        TRecIdx GetChildrenCount() const noexcept
+        {
+            return GetKeysCount() + 1;
+        }
+
+        TCellsIter GetKeyCells(TRecIdx pos, TColumns columns) const noexcept
+        {
+            if (IsFixedFormat()) {
+                const char* ptr = TDeref<const char>::At(Keys, pos * Header->FixedKeySize);
+                return TCellsIter(ptr, columns);
+            } else {
+                const TIsNullBitmap* isNullBitmap = TDeref<const TIsNullBitmap>::At(Keys, Offsets[pos].Offset);
+                return TCellsIter(isNullBitmap, columns);
+            }
         }
 
         const TChild& GetChild(TPos pos) const noexcept
@@ -169,12 +211,73 @@ namespace NKikimr::NTable::NPage {
             return Children[pos];
         }
 
-        // TODO: Seek methods will go here
+        TRecIdx Seek(TRowId rowId, std::optional<TRecIdx> on = { }) const noexcept
+        {
+            const TRecIdx childrenCount = GetChildrenCount();
+            if (on >= childrenCount) {
+                Y_DEBUG_ABORT_UNLESS(false, "Should point to some child");
+                on = { };
+            }
+
+            const auto cmp = [](TRowId rowId, const TChild& child) {
+                return rowId < child.Count;
+            };
+
+            TRecIdx result;
+            if (!on) {
+                // Use a full binary search
+                result = std::upper_bound(Children, Children + childrenCount, rowId, cmp) - Children;
+            } else if (Children[*on].Count <= rowId) {
+                // Try a short linear search first
+                result = *on;
+                for (int linear = 0; linear < 4; ++linear) {
+                    result++;
+                    Y_ABORT_UNLESS(result < childrenCount, "Should always seek some child");
+                    if (Children[result].Count > rowId) {
+                        return result;
+                    }
+                }
+
+                // Binary search from the next record
+                result = std::upper_bound(Children + result + 1, Children + childrenCount, rowId, cmp) - Children;
+            } else { // Children[*on].Count > rowId
+                // Try a short linear search first
+                result = *on;
+                for (int linear = 0; linear < 4; ++linear) {
+                    if (result == 0) {
+                        return 0;
+                    }
+                    if (Children[result - 1].Count <= rowId) {
+                        return result;
+                    }
+                    result--;
+                }
+
+                // Binary search up to current record
+                result = std::upper_bound(Children, Children + result, rowId, cmp) - Children;
+            }
+
+            Y_ABORT_UNLESS(result < childrenCount, "Should always seek some child");
+            return result;
+        }
 
     private:
         TSharedData Raw;
-        TBlockWithRecords<TKey> Keys;
-        const TChild* Children;
+        const THeader* Header = nullptr;
+        const void* Keys = nullptr;
+        const TRecordsEntry* Offsets = nullptr;
+        const TChild* Children = nullptr;
     };
 
+    struct TBtreeIndexMeta : public TBtreeIndexNode::TChild {
+        size_t LevelsCount;
+        ui64 IndexSize;
+
+        auto operator<=>(const TBtreeIndexMeta&) const = default;
+
+        TString ToString() const noexcept
+        {
+            return TStringBuilder() << TBtreeIndexNode::TChild::ToString() << " LevelsCount: " << LevelsCount << " IndexSize: " << IndexSize;
+        }
+    };
 }

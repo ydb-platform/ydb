@@ -1,4 +1,4 @@
-#include "datashard_ut_common.h"
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_active_transaction.h"
 
 #include <ydb/core/base/hive.h>
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(DataShardReassign) {
         bool captureCheckResult = true;
         TVector<THolder<IEventHandle>> capturedReassign;
         TVector<THolder<IEventHandle>> capturedCheckResult;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::TEvPutResult::EventType: {
                     auto* msg = ev->Get<TEvBlobStorage::TEvPutResult>();

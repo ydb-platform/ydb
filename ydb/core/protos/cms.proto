@@ -106,6 +106,7 @@ message TAction {
     ADD_DEVICES = 7;
     REPLACE_DEVICES = 8;
     REMOVE_DEVICES = 9;
+    REBOOT_HOST = 10; // Same as SHUTDOWN_HOST, but forcibly allowed if host is down
   }
 
   optional EType     Type = 1;

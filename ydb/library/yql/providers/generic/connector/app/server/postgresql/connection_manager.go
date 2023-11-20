@@ -24,6 +24,22 @@ func (r rows) Close() error {
 	return nil
 }
 
+func (r rows) MakeAcceptors() ([]any, error) {
+	fields := r.FieldDescriptions()
+	acceptors := make([]any, 0, len(fields))
+
+	for _, field := range fields {
+		acceptor, err := acceptorFromOID(field.DataTypeOID)
+		if err != nil {
+			return nil, fmt.Errorf("get acceptor from OID: %w", err)
+		}
+
+		acceptors = append(acceptors, acceptor)
+	}
+
+	return acceptors, nil
+}
+
 type Connection struct {
 	*pgx.Conn
 	logger utils.QueryLogger
@@ -41,7 +57,7 @@ func (c Connection) Query(ctx context.Context, query string, args ...any) (utils
 	return rows{Rows: out}, err
 }
 
-var _ utils.ConnectionManager[*Connection] = (*connectionManager)(nil)
+var _ utils.ConnectionManager = (*connectionManager)(nil)
 
 type connectionManager struct {
 	utils.ConnectionManagerBase
@@ -52,7 +68,7 @@ func (c *connectionManager) Make(
 	ctx context.Context,
 	logger log.Logger,
 	dsi *api_common.TDataSourceInstance,
-) (*Connection, error) {
+) (utils.Connection, error) {
 	if dsi.GetCredentials().GetBasic() == nil {
 		return nil, fmt.Errorf("currently only basic auth is supported")
 	}
@@ -92,15 +108,20 @@ func (c *connectionManager) Make(
 		return nil, fmt.Errorf("open connection: %w", err)
 	}
 
+	// set schema (public by default)
+	if _, err = conn.Exec(ctx, fmt.Sprintf("set search_path='%s'", dsi.GetPgOptions().GetSchema())); err != nil {
+		return nil, fmt.Errorf("exec: %w", err)
+	}
+
 	queryLogger := c.QueryLoggerFactory.Make(logger)
 
 	return &Connection{conn, queryLogger}, nil
 }
 
-func (c *connectionManager) Release(logger log.Logger, conn *Connection) {
+func (c *connectionManager) Release(logger log.Logger, conn utils.Connection) {
 	utils.LogCloserError(logger, conn, "close posgresql connection")
 }
 
-func NewConnectionManager(cfg utils.ConnectionManagerBase) utils.ConnectionManager[*Connection] {
+func NewConnectionManager(cfg utils.ConnectionManagerBase) utils.ConnectionManager {
 	return &connectionManager{ConnectionManagerBase: cfg}
 }

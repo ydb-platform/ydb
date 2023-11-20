@@ -64,10 +64,6 @@ public:
         Y_ABORT_UNLESS(Size() > 0 && Position < (ui64)Column(0).length());
     }
 
-    size_t Hash() const {
-        return TypedHash(Column(0), Position, Column(0).type_id());
-    }
-
     template<typename T>
     bool operator == (const TReplaceKeyTemplate<T>& key) const {
         Y_ABORT_UNLESS(Size() == key.Size());
@@ -123,20 +119,20 @@ public:
 
     template<typename T>
     std::partial_ordering CompareColumnValueNotNull(int column, const TReplaceKeyTemplate<T>& key, int keyColumn) const {
-        Y_VERIFY_DEBUG(Column(column).type_id() == key.Column(keyColumn).type_id());
+        Y_DEBUG_ABORT_UNLESS(Column(column).type_id() == key.Column(keyColumn).type_id());
 
         return TypedCompare<true>(Column(column), Position, key.Column(keyColumn), key.Position);
     }
 
     template<typename T>
     std::partial_ordering CompareColumnValue(int column, const TReplaceKeyTemplate<T>& key, int keyColumn) const {
-        Y_VERIFY_DEBUG(Column(column).type_id() == key.Column(keyColumn).type_id());
+        Y_DEBUG_ABORT_UNLESS(Column(column).type_id() == key.Column(keyColumn).type_id());
 
         return TypedCompare<false>(Column(column), Position, key.Column(keyColumn), key.Position);
     }
 
     int Size() const {
-        Y_VERIFY_DEBUG(Columns);
+        Y_DEBUG_ABORT_UNLESS(Columns);
         return Columns->size();
     }
 
@@ -145,15 +141,15 @@ public:
     }
 
     const arrow::Array& Column(int i) const {
-        Y_VERIFY_DEBUG(Columns);
-        Y_VERIFY_DEBUG((size_t)i < Columns->size());
-        Y_VERIFY_DEBUG((*Columns)[i]);
+        Y_DEBUG_ABORT_UNLESS(Columns);
+        Y_DEBUG_ABORT_UNLESS((size_t)i < Columns->size());
+        Y_DEBUG_ABORT_UNLESS((*Columns)[i]);
         return *(*Columns)[i];
     }
 
     std::shared_ptr<arrow::Array> ColumnPtr(int i) const {
-        Y_VERIFY_DEBUG(Columns);
-        Y_VERIFY_DEBUG((size_t)i < Columns->size());
+        Y_DEBUG_ABORT_UNLESS(Columns);
+        Y_DEBUG_ABORT_UNLESS((size_t)i < Columns->size());
         return (*Columns)[i];
     }
 
@@ -204,93 +200,24 @@ public:
     }
 
     static TReplaceKeyTemplate<TArrayVecPtr> FromScalar(const std::shared_ptr<arrow::Scalar>& s) {
-        Y_VERIFY_DEBUG(IsGoodScalar(s));
+        Y_DEBUG_ABORT_UNLESS(IsGoodScalar(s));
         auto res = MakeArrayFromScalar(*s, 1);
         Y_ABORT_UNLESS(res.status().ok(), "%s", res.status().ToString().c_str());
         return TReplaceKeyTemplate<TArrayVecPtr>(std::make_shared<TArrayVec>(1, *res), 0);
     }
 
     static std::shared_ptr<arrow::Scalar> ToScalar(const TReplaceKeyTemplate<TArrayVecPtr>& key, int colNumber = 0) {
-        Y_VERIFY_DEBUG(colNumber < key.Size());
+        Y_DEBUG_ABORT_UNLESS(colNumber < key.Size());
         auto& column = key.Column(colNumber);
         auto res = column.GetScalar(key.GetPosition());
         Y_ABORT_UNLESS(res.status().ok(), "%s", res.status().ToString().c_str());
-        Y_VERIFY_DEBUG(IsGoodScalar(*res));
+        Y_DEBUG_ABORT_UNLESS(IsGoodScalar(*res));
         return *res;
     }
 
 private:
     TArrayVecPtr Columns = nullptr;
     ui64 Position = 0;
-
-    static size_t TypedHash(const arrow::Array& ar, int pos, arrow::Type::type typeId) {
-        switch (typeId) {
-            case arrow::Type::NA:
-            case arrow::Type::BOOL:
-                break;
-            case arrow::Type::UINT8:
-                return THash<ui8>()(static_cast<const arrow::UInt8Array&>(ar).Value(pos));
-            case arrow::Type::INT8:
-                return THash<i8>()(static_cast<const arrow::Int8Array&>(ar).Value(pos));
-            case arrow::Type::UINT16:
-                return THash<ui16>()(static_cast<const arrow::UInt16Array&>(ar).Value(pos));
-            case arrow::Type::INT16:
-                return THash<i16>()(static_cast<const arrow::Int16Array&>(ar).Value(pos));
-            case arrow::Type::UINT32:
-                return THash<ui32>()(static_cast<const arrow::UInt32Array&>(ar).Value(pos));
-            case arrow::Type::INT32:
-                return THash<i32>()(static_cast<const arrow::Int32Array&>(ar).Value(pos));
-            case arrow::Type::UINT64:
-                return THash<ui64>()(static_cast<const arrow::UInt64Array&>(ar).Value(pos));
-            case arrow::Type::INT64:
-                return THash<i64>()(static_cast<const arrow::Int64Array&>(ar).Value(pos));
-            case arrow::Type::HALF_FLOAT:
-                break;
-            case arrow::Type::FLOAT:
-                return THash<float>()(static_cast<const arrow::FloatArray&>(ar).Value(pos));
-            case arrow::Type::DOUBLE:
-                return THash<double>()(static_cast<const arrow::DoubleArray&>(ar).Value(pos));
-            case arrow::Type::STRING: {
-                const auto& str = static_cast<const arrow::StringArray&>(ar).GetView(pos);
-                return THash<std::string_view>()(std::string_view(str.data(), str.size()));
-            }
-            case arrow::Type::BINARY: {
-                const auto& str = static_cast<const arrow::BinaryArray&>(ar).GetView(pos);
-                return THash<std::string_view>()(std::string_view(str.data(), str.size()));
-            }
-            case arrow::Type::FIXED_SIZE_BINARY:
-            case arrow::Type::DATE32:
-            case arrow::Type::DATE64:
-                break;
-            case arrow::Type::TIMESTAMP:
-                return THash<i64>()(static_cast<const arrow::TimestampArray&>(ar).Value(pos));
-            case arrow::Type::TIME32:
-                return THash<i32>()(static_cast<const arrow::Time32Array&>(ar).Value(pos));
-            case arrow::Type::TIME64:
-                return THash<i64>()(static_cast<const arrow::Time64Array&>(ar).Value(pos));
-            case arrow::Type::DURATION:
-                return THash<i64>()(static_cast<const arrow::DurationArray&>(ar).Value(pos));
-            case arrow::Type::DECIMAL256:
-            case arrow::Type::DECIMAL:
-            case arrow::Type::DENSE_UNION:
-            case arrow::Type::DICTIONARY:
-            case arrow::Type::EXTENSION:
-            case arrow::Type::FIXED_SIZE_LIST:
-            case arrow::Type::INTERVAL_DAY_TIME:
-            case arrow::Type::INTERVAL_MONTHS:
-            case arrow::Type::LARGE_BINARY:
-            case arrow::Type::LARGE_LIST:
-            case arrow::Type::LARGE_STRING:
-            case arrow::Type::LIST:
-            case arrow::Type::MAP:
-            case arrow::Type::MAX_ID:
-            case arrow::Type::SPARSE_UNION:
-            case arrow::Type::STRUCT:
-                Y_FAIL("not implemented");
-                break;
-        }
-        return 0;
-    }
 
     template <bool notNull>
     static std::partial_ordering TypedCompare(const arrow::Array& lhs, int lpos, const arrow::Array& rhs, int rpos) {
@@ -353,7 +280,7 @@ private:
             case arrow::Type::MAX_ID:
             case arrow::Type::SPARSE_UNION:
             case arrow::Type::STRUCT:
-                Y_FAIL("not implemented");
+                Y_ABORT("not implemented");
                 break;
         }
         return std::partial_ordering::equivalent;
@@ -419,18 +346,4 @@ public:
 };
 
 }
-
-template<>
-struct THash<NKikimr::NArrow::TReplaceKey> {
-    inline ui64 operator()(const NKikimr::NArrow::TReplaceKey& x) const noexcept {
-        return x.Hash();
-    }
-};
-
-template<>
-struct THash<NKikimr::NArrow::TRawReplaceKey> {
-    inline ui64 operator()(const NKikimr::NArrow::TRawReplaceKey& x) const noexcept {
-        return x.Hash();
-    }
-};
 

@@ -6,20 +6,10 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 namespace NYql::NConnector {
-    bool ErrorIsUninitialized(const NApi::TError& error) noexcept {
-        return error.status() == Ydb::StatusIds_StatusCode::StatusIds_StatusCode_SUCCESS && error.message().empty();
-    }
-
-    bool ErrorIsSuccess(const NApi::TError& error) {
-        YQL_ENSURE(error.status() != Ydb::StatusIds_StatusCode::StatusIds_StatusCode_STATUS_CODE_UNSPECIFIED,
-                   "error status code is not initialized");
-
-        auto ok = error.status() == Ydb::StatusIds_StatusCode::StatusIds_StatusCode_SUCCESS;
-        if (ok) {
-            YQL_ENSURE(error.issues_size() == 0, "request succeeded, but issues are not empty");
-        }
-
-        return ok;
+    NApi::TError NewSuccess() {
+        NApi::TError error;
+        error.set_status(Ydb::StatusIds_StatusCode::StatusIds_StatusCode_SUCCESS);
+        return error;
     }
 
     TIssues ErrorToIssues(const NApi::TError& error) {
@@ -53,8 +43,6 @@ namespace NYql::NConnector {
     }
 
     void ErrorToExprCtx(const NApi::TError& error, TExprContext& ctx, const TPosition& position, const TString& summary) {
-        YQL_ENSURE(!ErrorIsSuccess(error));
-
         // add high-level error
         TStringBuilder ss;
         ss << summary << ": status=" << Ydb::StatusIds_StatusCode_Name(error.status()) << ", message=" << error.message();
@@ -68,15 +56,15 @@ namespace NYql::NConnector {
         }
     }
 
-    NApi::TError ErrorFromGRPCStatus(const grpc::Status& status) {
+    NApi::TError ErrorFromGRPCStatus(const NGrpc::TGrpcStatus& status) {
         NApi::TError result;
 
-        if (status.error_code() == grpc::StatusCode::OK) {
+        if (status.GRpcStatusCode == grpc::OK) {
             result.set_status(Ydb::StatusIds_StatusCode::StatusIds_StatusCode_SUCCESS);
         } else {
             // FIXME: more appropriate error code for network error
             result.set_status(Ydb::StatusIds_StatusCode::StatusIds_StatusCode_INTERNAL_ERROR);
-            result.set_message(status.error_message());
+            result.set_message(status.Msg);
         }
 
         return result;

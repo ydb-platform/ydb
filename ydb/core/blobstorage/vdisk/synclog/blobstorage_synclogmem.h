@@ -58,7 +58,7 @@ namespace NKikimr {
             }
 
             ui64 GetFirstLsn() const {
-                Y_VERIFY_DEBUG(!Empty());
+                Y_DEBUG_ABORT_UNLESS(!Empty());
                 return ((TRecordHdr *)Data())->Lsn;
             }
 
@@ -147,7 +147,7 @@ namespace NKikimr {
             }
 
             void Next() {
-                Y_VERIFY_DEBUG(Valid());
+                Y_DEBUG_ABORT_UNLESS(Valid());
                 Pos = Pos->Next();
             }
 
@@ -156,7 +156,7 @@ namespace NKikimr {
             }
 
             const TRecordHdr *Get() const {
-                Y_VERIFY_DEBUG(Valid());
+                Y_DEBUG_ABORT_UNLESS(Valid());
                 return Pos;
             }
         private:
@@ -268,7 +268,7 @@ namespace NKikimr {
             {}
 
             TSyncLogPageSnap operator[] (size_type n) {
-                Y_VERIFY_DEBUG(n < size());
+                Y_DEBUG_ABORT_UNLESS(n < size());
                 if (n + 1 == size())
                     return TSyncLogPageSnap(LastPageHeader, TBase::operator[](n));
                 else
@@ -276,7 +276,7 @@ namespace NKikimr {
             }
 
             TSyncLogPageSnap operator[] (size_type n) const {
-                Y_VERIFY_DEBUG(n < size());
+                Y_DEBUG_ABORT_UNLESS(n < size());
                 if (n + 1 == size())
                     return TSyncLogPageSnap(LastPageHeader, TBase::operator[](n));
                 else
@@ -377,12 +377,12 @@ namespace NKikimr {
             }
 
             ui64 GetFirstLsn() const {
-                Y_VERIFY_DEBUG(!Empty());
+                Y_DEBUG_ABORT_UNLESS(!Empty());
                 return Pages[0].GetFirstLsn();
             }
 
             ui64 GetLastLsn() const {
-                Y_VERIFY_DEBUG(!Empty());
+                Y_DEBUG_ABORT_UNLESS(!Empty());
                 return Pages[Size() - 1].GetLastLsn();
             }
 
@@ -423,7 +423,7 @@ namespace NKikimr {
             {}
 
             void SeekToFirst() {
-                Y_VERIFY_DEBUG(Snap);
+                Y_DEBUG_ABORT_UNLESS(Snap);
                 It = Snap->Pages.begin();
             }
 
@@ -436,12 +436,12 @@ namespace NKikimr {
             }
 
             void Next() {
-                Y_VERIFY_DEBUG(Valid());
+                Y_DEBUG_ABORT_UNLESS(Valid());
                 ++It;
             }
 
             void Prev() {
-                Y_VERIFY_DEBUG(Snap && It > Snap->Pages.begin() && It <= Snap->Pages.end());
+                Y_DEBUG_ABORT_UNLESS(Snap && It > Snap->Pages.begin() && It <= Snap->Pages.end());
                 --It;
             }
 
@@ -491,7 +491,7 @@ namespace NKikimr {
             void Next();
 
             const TRecordHdr *Get() const {
-                Y_VERIFY_DEBUG(Valid());
+                Y_DEBUG_ABORT_UNLESS(Valid());
                 return Hdr;
             }
 
@@ -519,12 +519,12 @@ namespace NKikimr {
             typedef TSyncLogPages::iterator TPageIterator;
 
             ui64 GetFirstLsn() const {
-                Y_VERIFY_DEBUG(!Empty());
+                Y_DEBUG_ABORT_UNLESS(!Empty());
                 return Pages.front()->GetFirstLsn();
             }
 
             ui64 GetLastLsn() const {
-                Y_VERIFY_DEBUG(!Empty());
+                Y_DEBUG_ABORT_UNLESS(!Empty());
                 return Pages.back()->GetLastLsn();
             }
 

@@ -26,6 +26,7 @@ public:
     bool Plain;
     bool EncodeUtf8;
     i64 MemoryLimit = 256_MB;
+    int NestingLevelLimit = 0;
 
     std::optional<int> StringLengthLimit;
 

@@ -1,5 +1,6 @@
 #include "dq_compute_actor_impl.h"
 #include "dq_compute_actor.h"
+#include "dq_task_runner_exec_ctx.h"
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 
@@ -53,11 +54,13 @@ public:
             };
         }
 
-        auto taskRunner = TaskRunnerFactory(Task, logger);
+        auto taskRunner = TaskRunnerFactory(Task, RuntimeSettings.StatsMode, logger);
         SetTaskRunner(taskRunner);
-        PrepareTaskRunner();
+        auto wakeup = [this]{ ContinueExecute(EResumeSource::CABootstrapWakeup); };
+        TDqTaskRunnerExecutionContext execCtx(TxId, RuntimeSettings.UseSpilling, std::move(wakeup));
+        PrepareTaskRunner(execCtx);
 
-        ContinueExecute();
+        ContinueExecute(EResumeSource::CABootstrap);
     }
 
     void FillExtraStats(NDqProto::TDqComputeActorStats* /* dst */, bool /* last */) {

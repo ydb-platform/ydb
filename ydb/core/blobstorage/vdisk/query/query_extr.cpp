@@ -67,7 +67,7 @@ namespace NKikimr {
         template<typename TMerger>
         bool IsBlobDeleted(const TLogoBlobID &id, const TMerger &merger) {
             const auto &status = BarriersEssence->Keep(id, merger.GetMemRec(), merger.GetMemRecsMerged(),
-                QueryCtx->HullCtx->AllowKeepFlags);
+                QueryCtx->HullCtx->AllowKeepFlags, true /*allowGarbageCollection*/);
             return !status.KeepData;
         }
 
@@ -125,7 +125,8 @@ namespace NKikimr {
                     NMatrix::TVectorType missingParts = mustHave - actuallyHave;
 
                     // If we don't have something locally we return NOT_YET unless that blob is going to be collected
-                    auto status = IsBlobDeleted(query->LogoBlobID, Merger) ? NKikimrProto::NODATA :
+                    auto status = mustHave.Empty() ? NKikimrProto::NODATA : // we do not have any parts of this blob
+                        IsBlobDeleted(query->LogoBlobID, Merger) ? NKikimrProto::NODATA :
                         missingParts.Empty() ? NKikimrProto::OK : NKikimrProto::NOT_YET;
 
                     // Add result
@@ -197,7 +198,7 @@ namespace NKikimr {
             for (rit.SeekToFirst(); rit.Valid(); rit.Next()) {
                 const NReadBatcher::TDataItem *it = rit.Get();
                 const TQuery *query = static_cast<const TQuery*>(it->Cookie);
-                Y_VERIFY_DEBUG(query->LogoBlobID.PartId() == 0);
+                Y_DEBUG_ABORT_UNLESS(query->LogoBlobID.PartId() == 0);
                 const ui64 *cookiePtr = query->HasCookie ? &query->CookieVal : nullptr;
 
                 ui64 ingr = it->Ingress.Raw();
@@ -210,7 +211,7 @@ namespace NKikimr {
                 NReadBatcher::TDataItem::EType t = it->GetType();
                 switch (t) {
                     case NReadBatcher::TDataItem::ET_CLEAN:
-                        Y_FAIL("Impossible case");
+                        Y_ABORT("Impossible case");
                     case NReadBatcher::TDataItem::ET_NODATA:
                         // put NODATA
                         Result->AddResult(NKikimrProto::NODATA, it->Id, cookiePtr, pingr);

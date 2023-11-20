@@ -10,7 +10,7 @@ import re
 import tempfile
 import shutil
 
-from collections import namedtuple, defaultdict
+from collections import namedtuple, defaultdict, OrderedDict
 from functools import partial
 import codecs
 import decimal
@@ -18,6 +18,7 @@ from threading import Lock
 
 import pytest
 import yatest.common
+import cyson
 
 import logging
 import getpass
@@ -39,6 +40,18 @@ def get_param(name, default=None):
 def get_gateway_cfg_suffix():
     default_suffix = None
     return get_param('gateway_config_suffix', default_suffix) or ''
+
+
+def do_custom_query_check(res, sql_query):
+    custom_check = re.search(r"/\* custom check:(.*)\*/", sql_query)
+    if not custom_check:
+        return False
+    custom_check = custom_check.group(1)
+    yt_res_yson = res.results
+    yt_res_yson = cyson.loads(yt_res_yson) if yt_res_yson else cyson.loads("[]")
+    yt_res_yson = replace_vals(yt_res_yson)
+    assert eval(custom_check), 'Condition "%(custom_check)s" fails\nResult:\n %(yt_res_yson)s\n' % locals()
+    return True
 
 
 def get_gateway_cfg_filename():
@@ -667,16 +680,21 @@ def get_udfs_path(extra_paths=None):
     except Exception:
         udfs_project_path = None
 
+    try:
+        ydb_udfs_project_path = yql_binary_path('ydb/library/yql/test/common/test_framework/udfs_deps')
+    except Exception:
+        ydb_udfs_project_path = None
+
     merged_udfs_path = yql_output_path('yql_udfs')
     with udfs_lock:
         if not os.path.isdir(merged_udfs_path):
             os.mkdir(merged_udfs_path)
 
-        udfs_paths = [udfs_project_path, udfs_bin_path, udfs_build_path, ydb_udfs_build_path, contrib_ydb_udfs_build_path, rthub_udfs_build_path, kwyt_udfs_build_path]
+        udfs_paths = [udfs_project_path, ydb_udfs_project_path, udfs_bin_path, udfs_build_path, ydb_udfs_build_path, contrib_ydb_udfs_build_path, rthub_udfs_build_path, kwyt_udfs_build_path]
         if extra_paths is not None:
             udfs_paths += extra_paths
 
-        log('process search UDF in: %s, %s, %s' % (udfs_project_path, udfs_bin_path, udfs_build_path))
+        log('process search UDF in: %s, %s, %s, %s' % (udfs_project_path, ydb_udfs_project_path, udfs_bin_path, udfs_build_path))
         for _udfs_path in udfs_paths:
             if _udfs_path:
                 for dirpath, dnames, fnames in os.walk(_udfs_path):
@@ -783,14 +801,18 @@ def normalize_table_yson(y):
     if isinstance(y, list):
         return [normalize_table_yson(i) for i in y]
     if isinstance(y, dict):
-        normDict = dict()
-        for k, v in six.iteritems(y):
+        normDict = OrderedDict()
+        for k, v in sorted(six.iteritems(y), key=lambda x: x[0], reverse=True):
             if k == "_other":
                 normDict[normalize_table_yson(k)] = sorted(normalize_table_yson(v))
             elif v != "Void" and v is not None and not isinstance(v, YsonEntity):
                 normDict[normalize_table_yson(k)] = normalize_table_yson(v)
         return normDict
     return y
+
+
+def dump_table_yson(res_yson):
+    return cyson.dumps(sorted(normalize_table_yson(cyson.loads('[' + res_yson + ']'))), format="pretty")
 
 
 def normalize_source_code_path(s):

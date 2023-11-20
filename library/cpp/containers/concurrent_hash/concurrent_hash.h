@@ -96,7 +96,7 @@ public:
         TBucket& bucket = GetBucketForKey(key);
         TGuard<TLock> guard(bucket.Mutex);
         if (!bucket.Map.insert(std::make_pair(key, value)).second) {
-            Y_FAIL("non-unique key");
+            Y_ABORT("non-unique key");
         }
     }
 

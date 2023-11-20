@@ -6,6 +6,17 @@ namespace NYql::NConnector::NTest {
 
     using namespace fmt::literals;
 
+#define DEFINE_SIMPLE_TYPE_SETTER(T, primitiveTypeId, value_name)         \
+    template <>                                                           \
+    void SetSimpleValue(const T& value, Ydb::TypedValue* proto) {         \
+        proto->mutable_type()->set_type_id(::Ydb::Type::primitiveTypeId); \
+        proto->mutable_value()->Y_CAT(set_, value_name)(value);           \
+    }
+
+    DEFINE_SIMPLE_TYPE_SETTER(bool, BOOL, bool_value);
+    DEFINE_SIMPLE_TYPE_SETTER(i32, INT32, int32_value);
+    DEFINE_SIMPLE_TYPE_SETTER(ui32, UINT32, uint32_value);
+
     void CreatePostgreSQLExternalDataSource(
         const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr,
         const TString& dataSourceName,
@@ -14,7 +25,9 @@ namespace NYql::NConnector::NTest {
         int port,
         const TString& login,
         const TString& password,
-        bool useTls)
+        bool useTls,
+        const TString& databaseName,
+        const TString& schema)
     {
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();
@@ -29,7 +42,9 @@ namespace NYql::NConnector::NTest {
                 LOGIN="{login}",
                 PASSWORD_SECRET_NAME="{data_source_name}_password",
                 USE_TLS="{use_tls}",
-                PROTOCOL="{protocol}"
+                PROTOCOL="{protocol}",
+                DATABASE_NAME="{database}",
+                SCHEMA="{schema}"
             );
         )",
             "data_source_name"_a = dataSourceName,
@@ -39,7 +54,9 @@ namespace NYql::NConnector::NTest {
             "password"_a = password,
             "use_tls"_a = useTls ? "TRUE" : "FALSE",
             "protocol"_a = NApi::EProtocol_Name(protocol),
-            "source_type"_a = PG_SOURCE_TYPE);
+            "source_type"_a = PG_SOURCE_TYPE,
+            "database"_a = databaseName,
+            "schema"_a = schema);
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     }
@@ -53,7 +70,8 @@ namespace NYql::NConnector::NTest {
         const TString& password,
         bool useTls,
         const TString& serviceAccountId,
-        const TString& serviceAccountIdSignature)
+        const TString& serviceAccountIdSignature,
+        const TString& databaseName)
     {
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();
@@ -71,7 +89,8 @@ namespace NYql::NConnector::NTest {
                 LOGIN="{login}",
                 PASSWORD_SECRET_NAME="{data_source_name}_password",
                 USE_TLS="{use_tls}",
-                PROTOCOL="{protocol}"
+                PROTOCOL="{protocol}",
+                DATABASE_NAME="{database}"
             );
         )",
             "cluster_id"_a = clickHouseClusterId,
@@ -82,7 +101,8 @@ namespace NYql::NConnector::NTest {
             "protocol"_a = NYql::NConnector::NApi::EProtocol_Name(protocol),
             "service_account_id"_a = serviceAccountId,
             "service_account_id_signature"_a = serviceAccountIdSignature,
-            "source_type"_a = ToString(NYql::EDatabaseType::ClickHouse));
+            "source_type"_a = ToString(NYql::EDatabaseType::ClickHouse),
+            "database"_a = databaseName);
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     }

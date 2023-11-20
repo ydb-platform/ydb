@@ -8,7 +8,7 @@ namespace NKikimr::NOlap {
 
 void TCompactColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     TBase::DoDebugString(out);
-    out << "original_granule=" << GranuleMeta->GetGranuleId() << ";";
+    out << "original_granule=" << GranuleMeta->GetPathId() << ";";
     if (ui32 switched = SwitchedPortions.size()) {
         out << "switch " << switched << " portions:(";
         for (auto& portionInfo : SwitchedPortions) {
@@ -87,13 +87,13 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits
         Y_ABORT_UNLESS(!portionInfo->HasRemoveSnapshot());
         SwitchedPortions.emplace_back(*portionInfo);
         AFL_VERIFY(PortionsToRemove.emplace(portionInfo->GetAddress(), *portionInfo).second);
-        Y_ABORT_UNLESS(portionInfo->GetGranule() == GranuleMeta->GetGranuleId());
+        Y_ABORT_UNLESS(portionInfo->GetPathId() == GranuleMeta->GetPathId());
     }
     Y_ABORT_UNLESS(SwitchedPortions.size());
 }
 
 TCompactColumnEngineChanges::~TCompactColumnEngineChanges() {
-    Y_VERIFY_DEBUG(!NActors::TlsActivationContext || !NeedGranuleStatusProvide);
+    Y_DEBUG_ABORT_UNLESS(!NActors::TlsActivationContext || !NeedGranuleStatusProvide);
 }
 
 THashSet<TPortionAddress> TCompactColumnEngineChanges::GetTouchedPortions() const {

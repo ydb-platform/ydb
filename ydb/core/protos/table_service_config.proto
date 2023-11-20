@@ -1,0 +1,273 @@
+package NKikimrConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TTableServiceConfig {
+    message TShardsScanningPolicy {
+        optional uint32 AggregationGroupByLimit = 1 [default = 256];
+        optional uint32 AggregationNoGroupLimit = 2 [default = 1024];
+        optional uint32 ScanLimit = 3 [default = 16];
+        optional bool ParallelScanningAvailable = 4 [default = false];
+        optional uint32 ShardSplitFactor = 5 [default = 1];
+    }
+
+    message TResourceManager {
+        message TRetrySettings {
+            optional uint32 StartDelayMs = 1;
+            optional uint32 MaxDelayMs = 2;
+        }
+        message TInfoExchangerSettings {
+            optional TRetrySettings PublisherSettings = 1;
+            optional TRetrySettings SubscriberSettings = 2;
+            optional TRetrySettings ExchangerSettings = 3;
+        }
+        optional uint32 ComputeActorsCount = 1 [default = 1000];
+        optional uint64 ChannelBufferSize = 2 [default = 8388608];              //  8 MB
+        reserved 3;
+        optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 31457280];   // 30 MB
+        optional uint64 MkqlHeavyProgramMemoryLimit = 5 [default = 31457280];   // 30 MB
+        optional uint64 QueryMemoryLimit = 6 [default = 32212254720];           // 30 GB
+        optional uint32 PublishStatisticsIntervalSec = 7 [default = 2];
+        optional bool EnableInstantMkqlMemoryAlloc = 8 [default = true];
+        reserved 9;  // optional uint32 InstantMkqlMemoryAllocWaitTimeMs = 9 [default = 20];
+        reserved 10; // optional uint32 InstantMkqlMemoryAllocStepTimeMs = 10 [default = 1];
+
+        optional uint64 MaxTotalChannelBuffersSize = 11 [default = 2147483648]; // 2 GB
+        optional uint64 MinChannelBufferSize = 12 [default = 2048];          // 2 KB
+
+        reserved 13;
+        reserved 14;
+        optional TShardsScanningPolicy ShardsScanningPolicy = 16;
+        optional uint64 KqpPatternCacheCapacityBytes = 17 [default = 104857600]; // 100 MiB, 0 is for disable
+        optional bool EnablePublishResourcesByExchanger = 18 [default = true];
+        optional TInfoExchangerSettings InfoExchangerSettings = 19;
+        optional uint64 KqpPatternCachePatternAccessTimesBeforeTryToCompile = 20 [default = 5];
+        optional uint64 KqpPatternCacheCompiledCapacityBytes = 21 [default = 104857600]; // 100 MiB
+    }
+
+    message TSpillingServiceConfig {
+        message TLocalFileConfig {
+            optional bool Enable = 1 [default = false];
+            optional string Root = 2 [default = "/tmp/kikimr_spilling/"];
+            optional uint64 MaxTotalSize = 3 [default = 21474836480];  // 20 GiB
+            optional uint64 MaxFileSize = 4 [default = 5368709120];    // 5 GiB
+            optional uint64 MaxFilePartSize = 5 [default = 104857600]; // 100 MB
+
+            message TIoThreadPoolConfig {
+                optional uint32 WorkersCount = 1 [default = 2];
+                optional uint32 QueueSize = 2 [default = 1000];
+            };
+            optional TIoThreadPoolConfig IoThreadPool = 6;
+        }
+
+        optional TLocalFileConfig LocalFileConfig = 1;
+    }
+
+    message TCompileComputationPatternServiceConfig {
+        optional uint64 WakeupIntervalMs = 1 [default = 1000]; // 1 sec
+    }
+
+    message TQueryPhaseLimits {
+        optional uint32 AffectedShardsLimit = 1;
+        optional uint32 ReadsetCountLimit = 2;
+        optional uint64 ComputeNodeMemoryLimitBytes = 3;
+        optional uint64 TotalReadSizeLimitBytes = 4;
+    }
+
+    message TQueryLimits {
+        optional TQueryPhaseLimits PhaseLimits = 1;
+        optional uint32 SchemeQueryTimeoutMs = 2 [default = 600000];
+        optional uint32 DataQueryTimeoutMs = 3 [default = 300000];
+        optional uint32 ScanQueryTimeoutMs = 4 [default = 600000];
+        optional uint32 ResultRowsLimit = 5;
+    }
+
+    message TShutdownSettings {
+        optional uint32 ShutdownTimeoutMs = 1 [default = 30000];
+        optional uint32 HardTimeoutMs = 2 [default = 10000];
+        optional uint32 SoftTimeoutMs = 3 [default = 2000];
+    }
+
+    message TSessionBalancerSettings {
+        optional bool Enabled = 1 [default = false];
+
+        enum EEnableTier  {
+            TIER_DISABLED = 1;
+            TIER_ENABLED_FOR_SESSIONS_WITH_SUPPORT = 2;
+            TIER_ENABLED_FOR_ALL = 3;
+        }
+
+        enum EBalancingStrategy {
+            BALANCE_BY_CPU = 1;
+            BALANCE_BY_COUNT = 2;
+            BALANCE_BY_CPU_AND_COUNT = 3;
+        }
+
+        // MaxSessionsShutdownInFlightSize option determines the number of sessions
+        // that we can keep in shutdown state at the moment.
+        optional uint32 MaxSessionsShutdownInFlightSize = 2 [default = 1];
+        //         GREEN ZONE         YELLOW ZONE               RED ZONE
+        //                     MinCV                   MaxCV
+        //    < MinCV           |                        |     > MaxCV
+        //                      |                        |
+        //        .....................................................
+        //
+        //  GREEN ZONE  -  balancer doesn't kick sessions in GREEN ZONE
+        //  RED ZONE    -  balancer kick sessions until GREEN ZONE reached.
+        //  YELLOW ZONE -  balancer kick sessions only if node was in the RED ZONE.
+        //  If node was in the GREEN ZONE balancer doesn't kick sessions.
+        optional uint32 MinCVTreshold = 3 [default = 10];
+        optional uint32 MaxCVTreshold = 4 [default = 20];
+        // timeout (in milliseconds)
+        // After HardSessionShutdownTimeoutMs session will be terminated.
+        optional uint32 HardSessionShutdownTimeoutMs = 5 [default = 30000];
+        // timeout (in milliseconds)
+        // After SoftSessionShutdownTimeoutMs milliseconds
+        // session will not accept new query requests.
+        optional uint32 SoftSessionShutdownTimeoutMs = 6 [default = 15000];
+        // Minimum number of sessions on node to start balancing. If number of sessions on node
+        // less than MinNodeSessions, balancer will not be able to kick session from node.
+        optional uint32 MinNodeSessions = 7 [default = 10];
+        // If LocalDatacenterPolicy is true, balancer will count only local datacenter
+        // proxies in the statistics.
+        optional bool LocalDatacenterPolicy = 8 [default = true];
+
+        optional double MinCpuBalancerThreshold = 9 [default = 0.5];
+
+        optional uint32 BoardPublishIntervalMs = 10 [default = 1000];
+        optional uint32 BoardLookupIntervalMs = 11 [default = 30000];
+        optional EEnableTier EnableTier = 12 [ default = TIER_ENABLED_FOR_SESSIONS_WITH_SUPPORT ];
+        optional EBalancingStrategy Strategy = 13 [ default = BALANCE_BY_COUNT ];
+        optional bool SupportRemoteSessionCreation = 14 [ default = false ];
+    }
+
+    message TQueryReplayConfig {
+        // Flag that enables QueryReplay
+        optional bool Enabled = 1 [default = false];
+
+        // Unified Agent URI to collect messages
+        optional string UnifiedAgentUri = 2 [default = "unix:///tmp/ydb-cp-replay-log.sock"];
+        // Unified Agent Client setting: MaxMessageSizeMB
+        optional uint32 GrpcMaxMessageSizeMB = 3 [default = 8];
+        // Unified Agent Client setting: InflightLimitMB
+        optional uint32 InflightLimitMB = 4 [default = 8];
+
+        // Leaky bucket settings: size of bucket and bucket bucket duration.
+        // We allow to log LeakyBucketQuotaBucketSize queries
+        // per LeakyBucketQuotaBucketDurationSeconds.
+        optional uint32 LeakyBucketQuotaBucketSize = 5 [ default = 1000];
+        optional uint32 LeakyBucketQuotaBucketDurationSeconds = 6 [default = 60];
+    }
+
+    message TAggregationConfig {
+        optional uint32 DSScanMinimalThreads = 30 [default = 4];
+        optional uint32 DSBaseSortScanThreads = 32 [default = 16];
+        optional uint32 DSBaseJoinScanThreads = 33 [default = 16];
+
+        optional uint32 AggregationComputeThreads = 37;
+
+        optional uint32 CSScanThreadsPerNode = 38;
+
+        optional uint64 CollectLongTasksStatsTimeoutMs = 22 [default = 10000]; // 10 sec
+    }
+
+    message TExecuterRetriesConfig {
+        optional uint32 MinDelayToRetryMs = 1 [default = 10];
+        optional uint32 MaxDelayToRetryMs = 2 [default = 400];
+        optional uint32 MaxRetryNumber = 3 [default = 10];
+    }
+
+    message TIteratorReadsRetrySettings {
+        optional uint32 StartDelayMs = 1;
+        optional uint32 MaxDelayMs = 8;
+
+        optional uint32 MaxShardRetries = 2;
+        optional uint32 MaxShardResolves = 3;
+        optional double UnsertaintyRatio = 4;
+        optional double Multiplier = 5;
+        optional uint32 IteratorResponseTimeoutMs = 6;
+        optional uint32 MaxTotalRetries = 7;
+    }
+
+    message TIteratorReadQuotaSettings {
+        optional uint32 MaxRows = 1;
+        optional uint32 MaxBytes = 2;
+    }
+
+    optional uint32 QueryLimitBytes = 1;
+    optional uint32 ParametersLimitBytes = 2;
+    optional uint32 SessionsLimitPerNode = 3;
+    reserved 4; // obsolete: optional uint32 SessionQueryCacheSize = 4 [default = 1000];
+    reserved 5; // UseCompileService (always true)
+    optional uint32 CompileQueryCacheSize = 6 [default = 1000];
+    optional uint32 CompileMaxActiveRequests = 7 [default = 4];
+    optional uint32 CompileRequestQueueSize = 8 [default = 1000];
+    optional bool UseSchemeCacheMetadata = 9 [default = true];
+    optional bool UseSessionBusyStatus = 10 [default = true];
+    reserved 11; // (deprecated) AllowUnsafeCommit
+    optional uint32 CompileTimeoutMs = 12 [default = 60000];
+    optional TResourceManager ResourceManager = 13;
+    optional TQueryLimits QueryLimits = 14;
+    optional uint32 SqlVersion = 15;
+    optional TSpillingServiceConfig SpillingServiceConfig = 16;
+    optional TShutdownSettings ShutdownSettings = 17;
+    optional TSessionBalancerSettings SessionBalancerSettings = 18;
+    reserved 19; // ForceNewEnginePercent
+    optional uint32 CompileQueryCacheTTLSec = 20 [default = 0];
+    optional TQueryReplayConfig QueryReplayConfig = 21;
+    reserved 22; // ForceNewEngineLevel
+    reserved 23; // optional bool EnableKqpSessionActor = 23 [default = true];
+    reserved 24; // optional bool EnableKqpPatternCacheLiteral = 24 [default = false];
+    reserved 25; // optional bool EnableKqpPatternCacheCompute = 25 [default = false];
+
+    optional bool EnableKqpScanQuerySourceRead = 26 [default = false];
+    optional bool EnableKqpDataQuerySourceRead = 27 [default = true];
+    optional uint64 SessionIdleDurationSeconds = 28 [default = 600];
+    optional TAggregationConfig AggregationConfig = 29;
+    optional bool EnableKqpScanQueryStreamLookup = 30 [default = true];
+    optional bool EnableKqpDataQueryStreamLookup = 31 [default = false];
+    optional TExecuterRetriesConfig ExecuterRetriesConfig = 32;
+    reserved 33; // optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
+    optional bool EnablePublishKqpProxyByRM = 34 [default = true];
+    optional bool EnableKqpScanQueryStreamIdxLookupJoin = 35 [default = false];
+    optional bool EnableKqpDataQueryStreamIdxLookupJoin = 49 [default = false];
+    optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
+    optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
+    optional bool EnableKqpImmediateEffects = 38 [default = true];
+    optional bool EnableSequentialReads = 39 [default = true];
+    optional bool EnablePreparedDdl = 42 [default = false];
+    optional bool EnableSequences = 43 [default = true];
+    optional bool EnableAsyncComputationPatternCompilation = 48 [default = true];
+    optional TCompileComputationPatternServiceConfig CompileComputationPatternServiceConfig = 47;
+
+    enum EBindingsMode {
+        BM_ENABLED = 0;
+        BM_DISABLED = 1;
+        BM_DROP_WITH_WARNING = 2;
+        BM_DROP = 3;
+    }
+
+    optional EBindingsMode BindingsMode = 40 [default = BM_ENABLED];
+    optional TIteratorReadsRetrySettings IteratorReadsRetrySettings = 41;
+    optional bool PredicateExtract20 = 44 [default = true];
+    optional TIteratorReadQuotaSettings IteratorReadQuotaSettings = 45;
+
+    enum EChannelTransportVersion {
+        CTV_UV_PICKLE_1_0 = 0;
+        CTV_OOB_PICKLE_1_0 = 1;
+    }
+
+    optional EChannelTransportVersion ChannelTransportVersion = 46 [default = CTV_OOB_PICKLE_1_0];
+
+    enum EIndexAutoChooseMode {
+        DISABLED = 0;
+        ONLY_FULL_KEY = 1; // Accepts iff point prefix includes all key columns
+        ONLY_POINTS = 2; // Accepts iff point prefix len > 0
+        MAX_USED_PREFIX = 3;
+    }
+    optional EIndexAutoChooseMode IndexAutoChooseMode = 50 [default = DISABLED];
+
+    optional bool EnableColumnsWithDefault = 51 [default = true];
+
+    optional bool EnableAstCache = 52 [default = false];
+    optional bool EnablePgConstsToParams = 53 [default = false];
+};

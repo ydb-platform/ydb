@@ -131,6 +131,7 @@ public:
                 Type_,
                 TUtf8Transcoder(Config_->EncodeUtf8),
                 Config_->MemoryLimit,
+                Config_->NestingLevelLimit,
                 Config_->AttributesMode);
         }
         YajlHandle_.reset(yajl_alloc(&YajlCallbacks, nullptr, Callbacks_.get()));

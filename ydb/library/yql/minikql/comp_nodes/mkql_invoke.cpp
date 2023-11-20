@@ -215,7 +215,7 @@ IComputationNode* WrapInvoke(TCallable& callable, const TComputationNodeFactoryC
     case 3U:
         return new TInvokeWrapper<3U>(ctx.Mutables, returnKind, funcName, funcDesc, std::move(argNodes));
     default:
-        Y_FAIL("Too wide invoke.");
+        Y_ABORT("Too wide invoke.");
     }
 }
 

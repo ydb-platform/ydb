@@ -25,8 +25,8 @@ namespace NKikimr::NUtil {
             TChunk(size_t size) noexcept
                 : Next(nullptr)
             {
-                Y_VERIFY_DEBUG((((uintptr_t)this) % PLATFORM_DATA_ALIGN) == 0);
-                Y_VERIFY_DEBUG(size >= ChunkHeaderSize());
+                Y_DEBUG_ABORT_UNLESS((((uintptr_t)this) % PLATFORM_DATA_ALIGN) == 0);
+                Y_DEBUG_ABORT_UNLESS(size >= ChunkHeaderSize());
                 Ptr = DataStart();
                 Left = size - ChunkHeaderSize();
             }
@@ -209,7 +209,7 @@ namespace NKikimr::NUtil {
                 Used_ += Current->Used();
                 Wasted_ += Current->Wasted();
                 Current = Current->Next;
-                Y_VERIFY_DEBUG(Current->Ptr == Current->DataStart());
+                Y_DEBUG_ABORT_UNLESS(Current->Ptr == Current->DataStart());
                 Wasted_ -= Current->ChunkSize();
                 Available_ -= Current->Left;
                 return true;

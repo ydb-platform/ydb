@@ -30,6 +30,7 @@ enum class EStatus : size_t {
     UNDETERMINED =        400170,
     UNSUPPORTED =         400180,
     SESSION_BUSY =        400190,
+    EXTERNAL_ERROR =      400200,
 
     // Client statuses
     // Cannot connect or unrecoverable network error. (map from gRPC UNAVAILABLE)

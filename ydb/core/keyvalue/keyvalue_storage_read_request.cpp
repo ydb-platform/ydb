@@ -496,7 +496,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvGetResult, Handle);
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
    }
 

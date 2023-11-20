@@ -148,30 +148,6 @@ public:
     }
 };
 
-class TCompactionPriority {
-private:
-    NStorageOptimizer::TOptimizationPriority Weight;
-    TMonotonic ConstructionInstant = TMonotonic::Now();
-public:
-    const NStorageOptimizer::TOptimizationPriority& GetWeight() const {
-        return Weight;
-    }
-
-    TCompactionPriority(std::shared_ptr<NStorageOptimizer::IOptimizerPlanner> planner)
-        : Weight(planner->GetUsefulMetric())
-    {
-
-    }
-    bool operator<(const TCompactionPriority& item) const {
-        return Weight < item.Weight;
-    }
-
-    TString DebugString() const {
-        return TStringBuilder() << "summary:(" << Weight.DebugString() << ");";
-    }
-
-};
-
 class TGranuleMeta: TNonCopyable {
 public:
     enum class EActivity {
@@ -188,6 +164,7 @@ private:
 
     std::set<EActivity> Activity;
     mutable bool AllowInsertionFlag = false;
+    const ui64 PathId;
     std::shared_ptr<TGranulesStorage> Owner;
     const NColumnShard::TGranuleDataCounters Counters;
     NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
@@ -199,6 +176,14 @@ private:
     void OnAdditiveSummaryChange() const;
     YDB_READONLY(TMonotonic, LastCompactionInstant, TMonotonic::Zero());
 public:
+    NJson::TJsonValue OptimizerSerializeToJson() const {
+        return OptimizerPlanner->SerializeToJsonVisual();
+    }
+
+    std::vector<NIndexedReader::TSortableBatchPosition> GetBucketPositions() const {
+        return OptimizerPlanner->GetBucketPositions();
+    }
+
     void OnStartCompaction() {
         LastCompactionInstant = TMonotonic::Now();
     }
@@ -218,27 +203,34 @@ public:
         }
     }
 
-    NOlap::TSerializationStats BuildSerializationStats(ISnapshotSchema::TPtr schema) const {
-        NOlap::TSerializationStats result;
+    std::shared_ptr<NOlap::TSerializationStats> BuildSerializationStats(ISnapshotSchema::TPtr schema) const {
+        auto result = std::make_shared<NOlap::TSerializationStats>();
         for (auto&& i : GetAdditiveSummary().GetCompacted().GetColumnStats()) {
             auto field = schema->GetFieldByColumnId(i.first);
             AFL_VERIFY(field)("column_id", i.first)("schema", schema->DebugString());
             NOlap::TColumnSerializationStat columnInfo(i.first, field->name());
             columnInfo.Merge(i.second);
-            result.AddStat(columnInfo);
+            result->AddStat(columnInfo);
         }
         return result;
     }
 
     TGranuleAdditiveSummary::ECompactionClass GetCompactionType(const TCompactionLimits& limits) const;
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;
-    TCompactionPriority GetCompactionPriority() const {
-        return TCompactionPriority(OptimizerPlanner);
+
+    NStorageOptimizer::TOptimizationPriority GetCompactionPriority() const {
+        return OptimizerPlanner->GetUsefulMetric();
+    }
+
+    void ActualizeOptimizer(const TInstant currentInstant) const {
+        if (currentInstant - OptimizerPlanner->GetActualizationInstant() > TDuration::Seconds(1)) {
+            OptimizerPlanner->Actualize(currentInstant);
+        }
     }
 
     bool NeedCompaction(const TCompactionLimits& limits) const {
         if (InCompaction() || Empty()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "granule_skipped_by_state")("granule_id", GetGranuleId())("granule_size", Size());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "granule_skipped_by_state")("path_id", GetPathId())("granule_size", Size());
             return false;
         }
         return GetCompactionType(limits) != TGranuleAdditiveSummary::ECompactionClass::NoCompaction;
@@ -247,7 +239,7 @@ public:
     bool InCompaction() const;
 
     bool IsErasable() const {
-        return Activity.empty();
+        return Activity.empty() && Portions.empty();
     }
 
     void OnCompactionStarted();
@@ -258,15 +250,13 @@ public:
     void UpsertPortion(const TPortionInfo& info);
 
     TString DebugString() const {
-        return TStringBuilder() << "(granule:" << GetGranuleId() << ";"
-            << "path_id:" << Record.PathId << ";"
+        return TStringBuilder() << "(granule:" << GetPathId() << ";"
+            << "path_id:" << GetPathId() << ";"
             << "size:" << GetAdditiveSummary().GetGranuleSize() << ";"
             << "portions_count:" << Portions.size() << ";"
             << ")"
             ;
     }
-
-    const TGranuleRecord Record;
 
     void AddColumnRecord(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnRecord& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta);
 
@@ -275,7 +265,7 @@ public:
     }
 
     ui64 GetPathId() const {
-        return Record.PathId;
+        return PathId;
     }
 
     const TPortionInfo& GetPortionVerified(const ui64 portion) const {
@@ -294,12 +284,8 @@ public:
 
     bool ErasePortion(const ui64 portion);
 
-    explicit TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex);
+    explicit TGranuleMeta(const ui64 pathId, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex);
 
-    ui64 GetGranuleId() const {
-        return Record.Granule;
-    }
-    ui64 PathId() const noexcept { return Record.PathId; }
     bool Empty() const noexcept { return Portions.empty(); }
 
     ui64 Size() const;

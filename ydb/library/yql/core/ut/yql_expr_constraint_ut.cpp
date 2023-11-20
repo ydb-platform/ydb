@@ -253,6 +253,27 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(element,tuple[desc])");
     }
 
+    Y_UNIT_TEST(SortByFullTupleOnTop) {
+        const auto s = R"((
+            (let mr_sink (DataSink 'yt (quote plato)))
+            (let list (AsList
+                '((String 'x) (String 'a) (String 'u))
+                '((String 'y) (String 'b) (String 'v))
+                '((String 'z) (String 'c) (String 'w))
+            ))
+            (let sorted (Sort list (Bool 'False) (lambda '(item) item)))
+            (let map (OrderedMap sorted (lambda '(item) (AsStruct '('one (Nth item '0)) '('two (Nth item '1)) '('three (Nth item '2))))))
+            (let world (Write! world mr_sink (Key '('table (String 'Output))) map '('('mode 'renew))))
+            (let world (Commit! world mr_sink))
+            (return world)
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(0[desc];1[desc];2[desc])");
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(one[desc];two[desc];three[desc])");
+    }
+
     Y_UNIT_TEST(SortByColumnAndExpr) {
         const auto s = R"((
             (let mr_sink (DataSink 'yt (quote plato)))

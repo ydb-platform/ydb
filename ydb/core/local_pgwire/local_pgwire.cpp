@@ -1,4 +1,6 @@
 #include "log_impl.h"
+#include "local_pgwire.h"
+#include "local_pgwire_util.h"
 #include <ydb/core/pgproxy/pg_proxy_events.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
@@ -10,7 +12,7 @@ namespace NLocalPgWire {
 using namespace NActors;
 using namespace NKikimr;
 
-extern IActor* CreateConnection(std::unordered_map<TString, TString> params);
+extern IActor* CreateConnection(std::unordered_map<TString, TString> params, NPG::TEvPGEvents::TEvConnectionOpened::TPtr&& event, const TConnectionState& connection);
 
 class TPgYdbProxy : public TActor<TPgYdbProxy> {
     using TBase = TActor<TPgYdbProxy>;
@@ -45,9 +47,15 @@ class TPgYdbProxy : public TActor<TPgYdbProxy> {
         };
     };
 
-    std::unordered_map<TActorId, TActorId> PgToYdbConnection;
+    struct TConnectionState {
+        TActorId YdbConnection;
+        uint32_t ConnectionNum;
+    };
+
+    std::unordered_map<TActorId, TConnectionState> ConnectionState;
     std::unordered_map<TActorId, TSecurityState> SecurityState;
     std::unordered_map<TString, TTokenState> TokenState;
+    uint32_t ConnectionNum = 0;
 
 public:
     TPgYdbProxy()
@@ -97,7 +105,7 @@ public:
 
     void Handle(NPG::TEvPGEvents::TEvAuth::TPtr& ev) {
         std::unordered_map<TString, TString> clientParams = ev->Get()->InitialMessage->GetClientParams();
-        BLOG_D("TEvAuth " << ev->Get()->InitialMessage->Dump());
+        BLOG_D("TEvAuth " << ev->Get()->InitialMessage->Dump() << " cookie " << ev->Cookie);
         Ydb::Auth::LoginRequest request;
         request.set_user(clientParams["user"]);
         if (ev->Get()->PasswordMessage) {
@@ -132,7 +140,7 @@ public:
     }
 
     void Handle(NPG::TEvPGEvents::TEvConnectionOpened::TPtr& ev) {
-        BLOG_D("TEvConnectionOpened " << ev->Sender);
+        BLOG_D("TEvConnectionOpened " << ev->Sender << " cookie " << ev->Cookie);
         auto params = ev->Get()->Message->GetClientParams();
         auto itSecurityState = SecurityState.find(ev->Sender);
         if (itSecurityState != SecurityState.end()) {
@@ -143,64 +151,83 @@ public:
                 params["ydb-serialized-token"] = itSecurityState->second.SerializedToken;
             }
         }
-        IActor* actor = CreateConnection(std::move(params));
+        auto& connectionState = ConnectionState[ev->Sender];
+        connectionState.ConnectionNum = ++ConnectionNum;
+        IActor* actor = CreateConnection(std::move(params), std::move(ev), {.ConnectionNum = connectionState.ConnectionNum});
         TActorId actorId = Register(actor);
-        PgToYdbConnection[ev->Sender] = actorId;
-        BLOG_D("Created ydb connection " << actorId);
+        connectionState.YdbConnection = actorId;
+        BLOG_D("Created ydb connection " << actorId << " num " << connectionState.ConnectionNum);
     }
 
     void Handle(NPG::TEvPGEvents::TEvConnectionClosed::TPtr& ev) {
-        BLOG_D("TEvConnectionClosed " << ev->Sender);
-        auto itConnection = PgToYdbConnection.find(ev->Sender);
-        if (itConnection != PgToYdbConnection.end()) {
-            Send(itConnection->second, new TEvents::TEvPoisonPill());
-            BLOG_D("Destroyed ydb connection " << itConnection->second);
+        BLOG_D("TEvConnectionClosed " << ev->Sender << " cookie " << ev->Cookie);
+        auto itConnection = ConnectionState.find(ev->Sender);
+        if (itConnection != ConnectionState.end()) {
+            Send(itConnection->second.YdbConnection, new TEvents::TEvPoisonPill());
+            BLOG_D("Destroyed ydb connection " << itConnection->second.YdbConnection << " num " << itConnection->second.ConnectionNum);
         }
         SecurityState.erase(ev->Sender);
+        ConnectionState.erase(itConnection);
         // TODO: cleanup TokenState too
     }
 
     void Handle(NPG::TEvPGEvents::TEvQuery::TPtr& ev) {
-        auto itConnection = PgToYdbConnection.find(ev->Sender);
-        if (itConnection != PgToYdbConnection.end()) {
-            Forward(ev, itConnection->second);
+        auto itConnection = ConnectionState.find(ev->Sender);
+        if (itConnection != ConnectionState.end()) {
+            Forward(ev, itConnection->second.YdbConnection);
         }
     }
 
     void Handle(NPG::TEvPGEvents::TEvParse::TPtr& ev) {
-        auto itConnection = PgToYdbConnection.find(ev->Sender);
-        if (itConnection != PgToYdbConnection.end()) {
-            Forward(ev, itConnection->second);
+        auto itConnection = ConnectionState.find(ev->Sender);
+        if (itConnection != ConnectionState.end()) {
+            Forward(ev, itConnection->second.YdbConnection);
         }
     }
 
     void Handle(NPG::TEvPGEvents::TEvBind::TPtr& ev) {
-        auto itConnection = PgToYdbConnection.find(ev->Sender);
-        if (itConnection != PgToYdbConnection.end()) {
-            Forward(ev, itConnection->second);
+        auto itConnection = ConnectionState.find(ev->Sender);
+        if (itConnection != ConnectionState.end()) {
+            Forward(ev, itConnection->second.YdbConnection);
         }
     }
 
     void Handle(NPG::TEvPGEvents::TEvDescribe::TPtr& ev) {
-        auto itConnection = PgToYdbConnection.find(ev->Sender);
-        if (itConnection != PgToYdbConnection.end()) {
-            Forward(ev, itConnection->second);
+        auto itConnection = ConnectionState.find(ev->Sender);
+        if (itConnection != ConnectionState.end()) {
+            Forward(ev, itConnection->second.YdbConnection);
         }
     }
 
     void Handle(NPG::TEvPGEvents::TEvExecute::TPtr& ev) {
-        auto itConnection = PgToYdbConnection.find(ev->Sender);
-        if (itConnection != PgToYdbConnection.end()) {
-            Forward(ev, itConnection->second);
-            BLOG_D("Forwarded to ydb connection " << itConnection->second);
+        auto itConnection = ConnectionState.find(ev->Sender);
+        if (itConnection != ConnectionState.end()) {
+            Forward(ev, itConnection->second.YdbConnection);
         }
     }
 
     void Handle(NPG::TEvPGEvents::TEvClose::TPtr& ev) {
-        auto itConnection = PgToYdbConnection.find(ev->Sender);
-        if (itConnection != PgToYdbConnection.end()) {
-            Forward(ev, itConnection->second);
-            BLOG_D("Forwarded to ydb connection " << itConnection->second);
+        auto itConnection = ConnectionState.find(ev->Sender);
+        if (itConnection != ConnectionState.end()) {
+            Forward(ev, itConnection->second.YdbConnection);
+        }
+    }
+
+    void Handle(NPG::TEvPGEvents::TEvCancelRequest::TPtr& ev) {
+        uint32_t nodeId = ev->Get()->Record.GetProcessId();
+        if (nodeId == SelfId().NodeId()) {
+            uint32_t connectionNum = ev->Get()->Record.GetSecretKey();
+            for (const auto& [pgConnectionId, connectionState] : ConnectionState) {
+                if (connectionState.ConnectionNum == connectionNum) {
+                    BLOG_D("Cancelling ConnectionNum " << connectionNum);
+                    Forward(ev, connectionState.YdbConnection);
+                    return;
+                }
+            }
+            BLOG_W("Cancelling ConnectionNum " << connectionNum << " - connection not found");
+        } else {
+            BLOG_D("Forwarding TEvCancelRequest to Node " << nodeId);
+            Forward(ev, CreateLocalPgWireProxyId(nodeId));
         }
     }
 
@@ -215,6 +242,7 @@ public:
             hFunc(NPG::TEvPGEvents::TEvDescribe, Handle);
             hFunc(NPG::TEvPGEvents::TEvExecute, Handle);
             hFunc(NPG::TEvPGEvents::TEvClose, Handle);
+            hFunc(NPG::TEvPGEvents::TEvCancelRequest, Handle);
             hFunc(TEvPrivate::TEvTokenReady, Handle);
             hFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle);
         }

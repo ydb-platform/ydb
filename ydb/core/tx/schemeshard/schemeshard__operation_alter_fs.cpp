@@ -215,7 +215,7 @@ public:
         TOperationContext& context) override;
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TAlterFileStore");
+        Y_ABORT("no AbortPropose for TAlterFileStore");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

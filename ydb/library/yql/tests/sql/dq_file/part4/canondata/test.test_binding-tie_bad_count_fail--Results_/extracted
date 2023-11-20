@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:5:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select $i, $j;
+	^
+        <tmp_path>/program.sql:<main>:3:10: Error: At function: Nth, At function: EnsureTupleSize
+        	$i, $j = AsTuple(1, 5u, "test");
+	         ^
+            <tmp_path>/program.sql:<main>:3:10: Error: Expected tuple type of size: 2, but got: 3
+            	$i, $j = AsTuple(1, 5u, "test");
+	         ^

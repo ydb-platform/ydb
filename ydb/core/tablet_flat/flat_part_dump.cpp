@@ -43,12 +43,13 @@ namespace {
     {
         Out << NFmt::Do(part) << " data " << part.DataSize() << "b" << Endl;
 
-        if (auto *frames = part.Small.Get()) Dump(*frames, "Small");
-        if (auto *frames = part.Large.Get()) Dump(*frames, "Large");
-        if (auto *blobs = part.Blobs.Get())  Dump(*blobs);
-        if (auto *bloom = part.ByKey.Get())  Dump(*bloom);
+        if (auto *frames = part.Small.Get()) Frames(*frames, "Small");
+        if (auto *frames = part.Large.Get()) Frames(*frames, "Large");
+        if (auto *blobs = part.Blobs.Get())  Blobs(*blobs);
+        if (auto *bloom = part.ByKey.Get())  Bloom(*bloom);
 
         Index(part, depth);
+        BTreeIndex(part);
 
         if (depth > 2) {
             auto index = TPartIndexIt(&part, Env, { });
@@ -69,7 +70,7 @@ namespace {
         }
     }
 
-    void TDump::Dump(const NPage::TFrames &page, const char *tag) noexcept
+    void TDump::Frames(const NPage::TFrames &page, const char *tag) noexcept
     {
         Out
             << " + " << tag << " Label{" << page.Raw.size() << "b}"
@@ -78,7 +79,7 @@ namespace {
             << Endl;
     }
 
-    void TDump::Dump(const NPage::TExtBlobs &page) noexcept
+    void TDump::Blobs(const NPage::TExtBlobs &page) noexcept
     {
         Out
             << " + Blobs Label{" << page.Raw.size() << "b} "
@@ -87,7 +88,7 @@ namespace {
             << Endl;
     }
 
-    void TDump::Dump(const NPage::TBloom &page) noexcept
+    void TDump::Bloom(const NPage::TBloom &page) noexcept
     {
         Out
             << " + Bloom Label{" << page.Raw.size() << "b} "
@@ -98,7 +99,7 @@ namespace {
 
     void TDump::Index(const TPart &part, ui32 depth) noexcept
     {
-        Key.reserve(part.Scheme->Groups[0].KeyTypes.size());
+        TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
         auto index = TPartIndexIt(&part, Env, { });
         auto label = index.TryGetLabel();
@@ -125,7 +126,7 @@ namespace {
         Out << ")" << Endl;
 
         for (ssize_t i = 0; ; i++) {
-            Key.clear();
+            key.clear();
 
             if (depth < 2 && i >= 10) {
                 Out << " | -- skipped the rest entries, depth level " << depth << Endl;
@@ -143,7 +144,7 @@ namespace {
 
             auto record = index.GetRecord();
             for (const auto &info: part.Scheme->Groups[0].ColsKeyIdx)
-                Key.push_back(record->Cell(info));
+                key.push_back(record->Cell(info));
 
             Out
                 << " | " << (Printf(Out, " %4u", record->GetPageId()), " ")
@@ -155,14 +156,30 @@ namespace {
                 Out << "~none~  ";
             }
 
-            DumpKey(*part.Scheme);
+            Key(key, *part.Scheme);
 
             Out << Endl;
         }
     }
 
+    void TDump::BTreeIndex(const TPart &part) noexcept
+    {
+        if (part.IndexPages.BTreeGroups) {
+            auto meta = part.IndexPages.BTreeGroups.front();
+            if (meta.LevelsCount) {
+                BTreeIndexNode(part, meta);
+            } else {
+                Out
+                    << " + BTreeIndex{Empty, "
+                    << meta.ToString() << Endl;
+            }
+        }
+    }
+
     void TDump::DataPage(const TPart &part, ui32 page) noexcept
     {
+        TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
+
         // TODO: need to join with other column groups
         auto data = NPage::TDataPage(Env->TryGetPage(&part, page));
 
@@ -181,13 +198,13 @@ namespace {
         }
 
         for (auto iter = data->Begin(); iter; ++iter) {
-            Key.clear();
+            key.clear();
             for (const auto &info: part.Scheme->Groups[0].ColsKeyData)
-                Key.push_back(iter->Cell(info));
+                key.push_back(iter->Cell(info));
 
             Out << " | ERowOp " << int(iter->GetRop()) << ": ";
 
-            DumpKey(*part.Scheme);
+            Key(key, *part.Scheme);
 
             bool first = true;
 
@@ -254,19 +271,74 @@ namespace {
         }
     }
 
-    void TDump::DumpKey(const TPartScheme &scheme) noexcept
+    void TDump::Key(TCellsRef key, const TPartScheme &scheme) noexcept
     {
         Out << "(";
 
-        for (auto off : xrange(Key.size())) {
+        for (auto off : xrange(key.size())) {
             TString str;
 
-            DbgPrintValue(str, Key[off], scheme.Groups[0].KeyTypes[off]);
+            DbgPrintValue(str, key[off], scheme.Groups[0].KeyTypes[off]);
 
             Out << (off ? ", " : "") << str;
         }
 
         Out << ")";
+    }
+
+    void TDump::BTreeIndexNode(const TPart &part, NPage::TBtreeIndexNode::TChild meta, ui32 level) noexcept
+    {
+        TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
+
+        TString intend;
+        for (size_t i = 0; i < level; i++) {
+            intend += " |";
+        }
+
+        auto dumpChild = [&] (NPage::TBtreeIndexNode::TChild child) {
+            if (part.GetPageType(child.PageId) == EPage::BTreeIndex) {
+                BTreeIndexNode(part, child, level + 1);
+            } else {
+                Out << intend << " | " << child.ToString() << Endl;
+            }
+        };
+
+        auto page = Env->TryGetPage(&part, meta.PageId);
+        if (!page) {
+            Out << intend << " | -- the rest of the index pages aren't loaded" << Endl;
+            return;
+        }
+
+        auto node = NPage::TBtreeIndexNode(*page);
+
+        auto label = node.Label();
+
+        Out
+            << intend
+            << " + BTreeIndex{"
+            << meta.ToString() << ", "
+            << (ui16)label.Type << " rev " << label.Format << ", " 
+            << label.Size << "b}"
+            << Endl;
+
+        dumpChild(node.GetChild(0));
+
+        for (NPage::TRecIdx i : xrange(node.GetKeysCount())) {
+            Out << intend << " | > ";
+
+            key.clear();
+            auto cells = node.GetKeyCells(i, part.Scheme->Groups[0].ColsKeyIdx);
+            for (TPos pos : xrange(cells.Count())) {
+                Y_UNUSED(pos);
+                key.push_back(cells.Next());
+            }
+
+            Key(key, *part.Scheme);
+            Out << Endl;
+            dumpChild(node.GetChild(i + 1));
+        }
+
+        Out << Endl;
     }
 
 }

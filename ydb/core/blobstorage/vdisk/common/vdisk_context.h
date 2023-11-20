@@ -141,7 +141,7 @@ namespace NKikimr {
                 }
                 default:
                     // fail process, unrecoverable error
-                    Y_FAIL("%s", VDISKP(VDiskLogPrefix, "CheckPDiskResponse: FATAL error from PDisk: %s",
+                    Y_ABORT("%s", VDISKP(VDiskLogPrefix, "CheckPDiskResponse: FATAL error from PDisk: %s",
                                 FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()).data());
                     return false;
             }

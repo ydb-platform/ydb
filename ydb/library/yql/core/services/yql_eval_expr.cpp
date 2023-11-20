@@ -47,7 +47,7 @@ bool CheckPendingArgs(const TExprNode& root, TNodeSet& visited, TNodeMap<const T
         return true;
     }
 
-    if (root.IsCallable("TypeOf")) {
+    if (root.IsCallable({"TypeOf", "SqlColumnOrType", "SqlPlainColumnOrType"})) {
         underTypeOf = true;
     }
 

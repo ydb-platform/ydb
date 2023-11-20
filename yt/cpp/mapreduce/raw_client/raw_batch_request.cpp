@@ -69,21 +69,21 @@ public:
 
 public:
     TResponseParserBase()
-        : Result(NewPromise<TReturnType>())
+        : Result_(NewPromise<TReturnType>())
     { }
 
     void SetException(std::exception_ptr e) override
     {
-        Result.SetException(std::move(e));
+        Result_.SetException(std::move(e));
     }
 
     TFuture<TReturnType> GetFuture()
     {
-        return Result.GetFuture();
+        return Result_.GetFuture();
     }
 
 protected:
-    TPromise<TReturnType> Result;
+    TPromise<TReturnType> Result_;
 };
 
 ////////////////////////////////////////////////////////////////////
@@ -96,7 +96,7 @@ public:
     void SetResponse(TMaybe<TNode> node) override
     {
         EnsureSomething(node);
-        Result.SetValue(std::move(*node));
+        Result_.SetValue(std::move(*node));
     }
 };
 
@@ -109,7 +109,7 @@ public:
     void SetResponse(TMaybe<TNode> node) override
     {
         EnsureNothing(node);
-        Result.SetValue();
+        Result_.SetValue();
     }
 };
 
@@ -122,7 +122,7 @@ public:
     void SetResponse(TMaybe<TNode> node) override
     {
         EnsureType(node, TNode::List);
-        Result.SetValue(std::move(node->AsList()));
+        Result_.SetValue(std::move(node->AsList()));
     }
 };
 
@@ -135,7 +135,7 @@ public:
     void SetResponse(TMaybe<TNode> node) override
     {
         EnsureType(node, TNode::Bool);
-        Result.SetValue(std::move(node->AsBool()));
+        Result_.SetValue(std::move(node->AsBool()));
     }
 };
 
@@ -148,7 +148,7 @@ public:
     void SetResponse(TMaybe<TNode> node) override
     {
         EnsureType(node, TNode::String);
-        Result.SetValue(GetGuid(node->AsString()));
+        Result_.SetValue(GetGuid(node->AsString()));
     }
 };
 
@@ -173,7 +173,7 @@ public:
         TRichYPath result;
         Deserialize(result, *node);
         result.Path_ = AddPathPrefix(result.Path_, PathPrefix_);
-        Result.SetValue(result);
+        Result_.SetValue(result);
     }
 
 private:
@@ -190,7 +190,7 @@ public:
     void SetResponse(TMaybe<TNode> node) override
     {
         EnsureType(node, TNode::Map);
-        Result.SetValue(ParseOperationAttributes(*node));
+        Result_.SetValue(ParseOperationAttributes(*node));
     }
 };
 
@@ -205,7 +205,7 @@ public:
         EnsureType(node, TNode::Map);
         TVector<TTableColumnarStatistics> statistics;
         Deserialize(statistics, *node);
-        Result.SetValue(std::move(statistics));
+        Result_.SetValue(std::move(statistics));
     }
 };
 
@@ -220,7 +220,7 @@ public:
         EnsureType(node, TNode::Map);
         TMultiTablePartitions partitions;
         Deserialize(partitions, *node);
-        Result.SetValue(std::move(partitions));
+        Result_.SetValue(std::move(partitions));
     }
 };
 
@@ -234,9 +234,9 @@ public:
     {
         EnsureType(node, TNode::String);
         if (node->AsString().empty()) {
-            Result.SetValue(Nothing());
+            Result_.SetValue(Nothing());
         } else {
-            Result.SetValue(node->AsString());
+            Result_.SetValue(node->AsString());
         }
     }
 };
@@ -250,7 +250,7 @@ public:
     void SetResponse(TMaybe<TNode> node) override
     {
         EnsureType(node, TNode::String);
-        Result.SetValue(node->AsString());
+        Result_.SetValue(node->AsString());
     }
 };
 
@@ -263,7 +263,7 @@ public:
     void SetResponse(TMaybe<TNode> node) override
     {
         EnsureType(node, TNode::Map);
-        Result.SetValue(ParseCheckPermissionResponse(*node));
+        Result_.SetValue(ParseCheckPermissionResponse(*node));
     }
 };
 

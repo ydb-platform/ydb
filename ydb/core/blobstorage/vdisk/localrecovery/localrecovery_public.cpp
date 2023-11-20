@@ -1,5 +1,6 @@
 #include "localrecovery_public.h"
 #include "localrecovery_logreplay.h"
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_lsnmngr.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/recovery/hulldb_recovery.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hulldb_bulksstloaded.h>
@@ -125,7 +126,7 @@ namespace NKikimr {
         void SignalSuccessAndDie(const TActorContext &ctx) {
             // recover Lsn and ConfirmedLsn:
             // Db->Lsn now contains last seen lsn
-            Y_VERIFY_DEBUG(LocRecCtx->HullDbRecovery->GetHullDs());
+            Y_DEBUG_ABORT_UNLESS(LocRecCtx->HullDbRecovery->GetHullDs());
 
             LocRecCtx->RecovInfo->SuccessfulRecovery = true;
             LocRecCtx->RecovInfo->CheckConsistency();
@@ -486,7 +487,7 @@ namespace NKikimr {
                         LocRecCtx->VCtx,
                         ui32(LocRecCtx->PDiskCtx->Dsk->ChunkSize),
                         ui32(LocRecCtx->PDiskCtx->Dsk->PrefetchSizeBytes),
-                        Config->FreshCompaction,
+                        Config->FreshCompaction && !Config->BaseInfo.ReadOnly,
                         Config->GCOnlySynced,
                         Config->AllowKeepFlags,
                         Config->BarrierValidation,
@@ -612,7 +613,7 @@ namespace NKikimr {
                     HullBarriersDBInitialized = true;
                     break;
                 default:
-                    Y_FAIL("Unexpected case");
+                    Y_ABORT("Unexpected case");
             }
 
             if (DatabaseStateLoaded())
@@ -635,7 +636,7 @@ namespace NKikimr {
         }
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-            Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::LocalRecovInfoId);
+            Y_DEBUG_ABORT_UNLESS(ev->Get()->SubRequestId == TDbMon::LocalRecovInfoId);
             TStringStream str;
             LocRecCtx->RecovInfo->OutputHtml(str);
             ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::LocalRecovInfoId));

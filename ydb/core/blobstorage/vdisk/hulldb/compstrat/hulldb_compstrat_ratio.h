@@ -26,10 +26,12 @@ namespace NKikimr {
 
             TStrategyStorageRatio(TIntrusivePtr<THullCtx> hullCtx,
                                   const TLevelIndexSnapshot &levelSnap,
-                                  TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> &&barriersEssence)
+                                  TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> &&barriersEssence,
+                                  bool allowGarbageCollection)
                 : HullCtx(std::move(hullCtx))
                 , LevelSnap(levelSnap)
                 , BarriersEssence(std::move(barriersEssence))
+                , AllowGarbageCollection(allowGarbageCollection)
             {}
 
 
@@ -53,6 +55,7 @@ namespace NKikimr {
             TIntrusivePtr<THullCtx> HullCtx;
             const TLevelIndexSnapshot &LevelSnap;
             TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> BarriersEssence;
+            const bool AllowGarbageCollection;
 
             struct TStat {
                 ui32 SstsChecked = 0;
@@ -163,7 +166,8 @@ namespace NKikimr {
                     NGc::TKeepStatus keep = BarriersEssence->Keep(dbIt.GetCurKey(),
                                                                   dbMerger.GetMemRec(),
                                                                   dbMerger.GetMemRecsMerged(),
-                                                                  allowKeepFlags);
+                                                                  allowKeepFlags,
+                                                                  AllowGarbageCollection);
                     if (keep.KeepIndex) {
                         // calculate index overhead
                         ratio->IndexItemsKeep++;

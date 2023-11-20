@@ -525,7 +525,7 @@ namespace NActors {
                 break;
 
             default:
-                Y_FAIL("Unexpected type of event in held event queue");
+                Y_ABORT("Unexpected type of event in held event queue");
         }
     }
 
@@ -736,7 +736,7 @@ namespace NActors {
             switch (auto& ev = h; ev->GetTypeRewrite()) {
                 hFunc(NMon::TEvHttpInfoRes, Session->GenerateHttpInfo);
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
         } else {
             TActivationContext::Send(h.Release());

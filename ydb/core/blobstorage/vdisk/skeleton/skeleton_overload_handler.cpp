@@ -57,6 +57,12 @@ namespace NKikimr {
             , AnubisOsirisPutHandler(std::move(aoput))
         {}
 
+        ~TEmergencyQueue() {
+            while (Queue.Head()) {
+                Queue.Pop();
+            }
+        }
+
         void Push(TEvBlobStorage::TEvVMovedPatch::TPtr ev) {
             ++Mon.EmergencyMovedPatchQueueItems();
             Mon.EmergencyMovedPatchQueueBytes() += ev->Get()->Record.ByteSize();
@@ -147,7 +153,7 @@ namespace NKikimr {
                     break;
                 }
                 default:
-                    Y_FAIL("unexpected event type in emergency queue(%" PRIu64 ")", (ui64)ev->GetTypeRewrite());
+                    Y_ABORT("unexpected event type in emergency queue(%" PRIu64 ")", (ui64)ev->GetTypeRewrite());
             }
         }
     };
@@ -225,7 +231,7 @@ namespace NKikimr {
     }
 
     ui32 TOverloadHandler::GetIntegralRankPercent() const {
-        Y_VERIFY_DEBUG(DynamicPDiskWeightsManager);
+        Y_DEBUG_ABORT_UNLESS(DynamicPDiskWeightsManager);
         ui32 integralRankPercent = ((DynamicPDiskWeightsManager->GetFreshRank()
                     + DynamicPDiskWeightsManager->GetLevelRank()) * 100u).ToUi64();
         return integralRankPercent;

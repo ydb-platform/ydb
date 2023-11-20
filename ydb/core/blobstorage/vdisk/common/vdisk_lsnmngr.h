@@ -111,12 +111,12 @@ namespace NKikimr {
 
         // basic lsn allocation
         TLsnSeg AllocLsn(ui64 lsnAdvance = 1) {
-            Y_VERIFY_DEBUG(CurrentLsnPtr && lsnAdvance > 0);
+            Y_DEBUG_ABORT_UNLESS(CurrentLsnPtr && lsnAdvance > 0);
             TAtomicBase inc(lsnAdvance);
             TAtomicBase val = AtomicAdd(*CurrentLsnPtr, inc);
             ui64 right = static_cast<ui64>(val);
             ui64 left = right - lsnAdvance + 1;
-            Y_VERIFY_DEBUG(left != 0); // we never allocate zero lsn!
+            Y_DEBUG_ABORT_UNLESS(left != 0); // we never allocate zero lsn!
             return TLsnSeg(left, right);
         }
 
@@ -205,7 +205,7 @@ namespace NKikimr {
 
         ////////////////////////////// LSN GETTERS /////////////////////////////////////////
         ui64 GetLsn() const {
-            Y_VERIFY_DEBUG(CurrentLsnPtr);
+            Y_DEBUG_ABORT_UNLESS(CurrentLsnPtr);
             return static_cast<ui64>(AtomicGet(*CurrentLsnPtr));
         }
 

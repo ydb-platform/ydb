@@ -80,6 +80,7 @@ SRCS(
     query/rpc_execute_script.cpp
     query/rpc_fetch_script_results.cpp
     query/rpc_attach_session.cpp
+    query/rpc_kqp_tx.cpp
     query/service_query.h
 )
 
@@ -113,7 +114,7 @@ PEERDIR(
     ydb/core/tx/datashard
     ydb/core/tx/sharding
     ydb/core/tx/long_tx_service/public
-    ydb/core/tx/ev_write
+    ydb/core/tx/data_events
     ydb/core/ydb_convert
     ydb/core/security
     ydb/library/aclib

@@ -910,6 +910,85 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
     }
 
+    Y_UNIT_TEST_LLVM(TestInnerManyKeyStrings) {
+
+        for (ui32 pass = 0; pass < 1; ++pass) {
+            TSetup<LLVM> setup;
+            TProgramBuilder& pb = *setup.PgmBuilder;
+
+            const auto key1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A1");
+            const auto key2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A2");
+            const auto key3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A3");
+            const auto key4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B1");
+            const auto key5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B2");
+            const auto key6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B3");
+
+
+            const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
+            const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
+            const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
+            const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
+            const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
+            const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+
+            const auto tupleType1 = pb.NewTupleType({
+                pb.NewDataType(NUdf::TDataType<char*>::Id),
+                pb.NewDataType(NUdf::TDataType<char*>::Id),
+                pb.NewDataType(NUdf::TDataType<char*>::Id)
+            });
+
+            const auto tupleType2 = pb.NewTupleType({
+                pb.NewDataType(NUdf::TDataType<char*>::Id),
+                pb.NewDataType(NUdf::TDataType<char*>::Id),
+                pb.NewDataType(NUdf::TDataType<char*>::Id)
+            });
+
+
+            const auto list1 = pb.NewList(tupleType1, {
+                pb.NewTuple({key1, key4, payload1}),
+                pb.NewTuple({key2, key5, payload2}),
+                pb.NewTuple({key3, key6, payload3})
+            });
+
+            const auto list2 = pb.NewList(tupleType2, {
+                pb.NewTuple({key4, key1, payload4}),
+                pb.NewTuple({key5, key2, payload5}),
+                pb.NewTuple({key6, key6, payload6})
+            });
+
+
+            const auto resultType = pb.NewFlowType(pb.NewMultiType({
+                pb.NewDataType(NUdf::TDataType<char*>::Id),
+                pb.NewDataType(NUdf::TDataType<char*>::Id)
+            }));
+
+            const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
+                pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
+                pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
+                EJoinKind::Inner, {0U, 1U}, {1U, 0U}, {1U, 0U}, {2U, 1U}, resultType),
+                [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
+            );
+
+            const auto graph = setup.BuildGraph(pgmReturn);
+
+            const auto iterator = graph->GetValue().GetListIterator();
+
+            NUdf::TUnboxedValue tuple;
+
+            UNIT_ASSERT(iterator.Next(tuple));
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B2");
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
+            UNIT_ASSERT(iterator.Next(tuple));
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "B1");
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "X");
+            UNIT_ASSERT(!iterator.Next(tuple));
+
+        }
+
+
+    }
+
+
     Y_UNIT_TEST_LLVM(TestInnerStringKey1) {
 
         for (ui32 pass = 0; pass < 1; ++pass) {

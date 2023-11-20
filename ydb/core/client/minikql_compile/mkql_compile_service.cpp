@@ -93,7 +93,7 @@ public:
             HFunc(NYql::TMiniKQLCompileActorEvents::TEvCompileResult, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                Y_FAIL("");
+                Y_ABORT("");
         }
     }
 

@@ -68,7 +68,7 @@ namespace NKikimr {
                                    ui64 fullDataSize,
                                    TRope&& data) {
         TVDiskInfo &ref = (*Fields->ProxiesPtr)[vdisk];
-        Y_VERIFY_DEBUG(Fields->ProxiesStarted &&
+        Y_DEBUG_ABORT_UNLESS(Fields->ProxiesStarted &&
                        vdisk == Fields->Info->GetVDiskId(ref.OrderNumber) &&
                        vdisk != Fields->SelfVDisk &&
                        vdisk == ref.Get().TargetVDiskID);

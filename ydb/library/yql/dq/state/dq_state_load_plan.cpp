@@ -150,7 +150,7 @@ NDqProto::NDqStateLoadPlan::TSourcePlan& FindSourcePlan(NDqProto::NDqStateLoadPl
             return plan;
         }
     }
-    Y_FAIL("Source plan for input index %lu was not found", inputIndex);
+    Y_ABORT("Source plan for input index %lu was not found", inputIndex);
 }
 
 } // namespace

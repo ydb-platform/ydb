@@ -2,6 +2,8 @@
 #include "coordinator_impl.h"
 
 #include <library/cpp/actors/core/interconnect.h>
+#include <library/cpp/time_provider/time_provider.h>
+
 
 namespace NKikimr::NFlatTxCoordinator {
 
@@ -110,7 +112,7 @@ void TCoordinatorStateActor::Handle(TEvTxCoordinator::TEvCoordinatorStateRequest
         NKikimrTxCoordinator::TEvCoordinatorStateResponse::TContinuationToken token;
         if (msg->Record.HasContinuationToken()) {
             bool ok = token.ParseFromString(msg->Record.GetContinuationToken());
-            Y_VERIFY_DEBUG(ok);
+            Y_DEBUG_ABORT_UNLESS(ok);
         }
         size_t offset = token.GetOffset();
         if (offset < SerializedState.size()) {
@@ -123,7 +125,7 @@ void TCoordinatorStateActor::Handle(TEvTxCoordinator::TEvCoordinatorStateRequest
                 res->Record.SetSerializedState(SerializedState.substr(offset, MaxSerializedStateChunk));
                 token.SetOffset(offset + MaxSerializedStateChunk);
                 bool ok = token.SerializeToString(res->Record.MutableContinuationToken());
-                Y_VERIFY_DEBUG(ok);
+                Y_DEBUG_ABORT_UNLESS(ok);
             }
         }
     }

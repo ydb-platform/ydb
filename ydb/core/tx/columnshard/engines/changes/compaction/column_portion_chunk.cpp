@@ -1,6 +1,7 @@
 #include "column_portion_chunk.h"
 #include <ydb/core/formats/arrow/common/validation.h>
 #include <ydb/core/tx/columnshard/splitter/simple.h>
+#include <ydb/core/tx/columnshard/engines/changes/counters/general.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
@@ -18,29 +19,40 @@ std::vector<NKikimr::NOlap::IPortionColumnChunk::TPtr> TChunkPreparation::DoInte
     return newChunks;
 }
 
-std::shared_ptr<arrow::Array> TColumnPortion::AppendBlob(const TString& data, const TColumnRecord& columnChunk) {
-    if (CurrentPortionRecords + columnChunk.GetMeta().GetNumRowsVerified() <= Context.GetPortionRowsCountLimit() &&
-        columnChunk.GetMeta().GetRawBytesVerified() < Context.GetChunkRawBytesLimit() &&
-        data.size() < Context.GetChunkPackedBytesLimit() &&
-        columnChunk.GetMeta().GetRawBytesVerified() > Context.GetStorePackedChunkSizeLimit() && Context.GetSaver().IsHardPacker() &&
-        Context.GetUseWholeChunksOptimization())
-    {
-        FlushBuffer();
-        Chunks.emplace_back(std::make_shared<TChunkPreparation>(data, columnChunk, Context.GetSchemaInfo()));
-        PackedSize += Chunks.back()->GetPackedSize();
-        CurrentPortionRecords += columnChunk.GetMeta().GetNumRowsVerified();
-        return nullptr;
-    } else {
+std::shared_ptr<arrow::Array> TColumnPortion::AppendBlob(const TString& data, const TColumnRecord& columnChunk, ui32& remained) {
+//    if (CurrentPortionRecords + columnChunk.GetMeta().GetNumRowsVerified() <= Context.GetPortionRowsCountLimit() &&
+//        columnChunk.GetMeta().GetRawBytesVerified() < Context.GetChunkRawBytesLimit() &&
+//        data.size() < Context.GetChunkPackedBytesLimit() &&
+//        columnChunk.GetMeta().GetRawBytesVerified() > Context.GetStorePackedChunkSizeLimit() && Context.GetSaver().IsHardPacker() &&
+//        Context.GetUseWholeChunksOptimization())
+//    {
+//        NChanges::TGeneralCompactionCounters::OnFullBlobAppend(columnChunk.BlobRange.GetBlobSize());
+//        FlushBuffer();
+//        Chunks.emplace_back(std::make_shared<TChunkPreparation>(data, columnChunk, Context.GetSchemaInfo()));
+//        PackedSize += Chunks.back()->GetPackedSize();
+//        CurrentPortionRecords += columnChunk.GetMeta().GetNumRowsVerified();
+//        return nullptr;
+//    } else {
+        NChanges::TGeneralCompactionCounters::OnSplittedBlobAppend(columnChunk.BlobRange.GetBlobSize());
         auto batch = NArrow::TStatusValidator::GetValid(Context.GetLoader()->Apply(data));
-        return AppendSlice(batch);
-    }
+        AFL_VERIFY(batch->num_columns() == 1);
+        auto batchArray = batch->column(0);
+        remained = AppendSlice(batchArray, 0, batch->num_rows());
+        if (remained) {
+            return batchArray;
+        } else {
+            return nullptr;
+        }
+//    }
 }
 
-std::shared_ptr<arrow::Array> TColumnPortion::AppendSlice(const std::shared_ptr<arrow::Array>& a) {
+ui32 TColumnPortion::AppendSlice(const std::shared_ptr<arrow::Array>& a, const ui32 startIndex, const ui32 length) {
     Y_ABORT_UNLESS(a);
-    ui32 i = 0;
+    Y_ABORT_UNLESS(length);
     Y_ABORT_UNLESS(CurrentPortionRecords < Context.GetPortionRowsCountLimit());
-    for (; i < a->length(); ++i) {
+    Y_ABORT_UNLESS(startIndex + length <= a->length());
+    ui32 i = startIndex;
+    for (; i < startIndex + length; ++i) {
         ui64 recordSize = 0;
         NArrow::Append(*Builder, *a, i, &recordSize);
         CurrentChunkRawSize += recordSize;
@@ -54,11 +66,7 @@ std::shared_ptr<arrow::Array> TColumnPortion::AppendSlice(const std::shared_ptr<
             FlushBuffer();
         }
     }
-    if (i == a->length()) {
-        return nullptr;
-    } else {
-        return a->Slice(i, a->length() - i);
-    }
+    return startIndex + length - i;
 }
 
 void TColumnPortion::FlushBuffer() {

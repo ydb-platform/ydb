@@ -43,7 +43,7 @@ namespace NKikimr {
                 throw TExPoison();
 
             default:
-                Y_FAIL("unexpected event Type# 0x%08" PRIx32, type);
+                Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);
         }
     }
 
@@ -52,7 +52,7 @@ namespace NKikimr {
     }
 
     void TScrubCoroImpl::ForwardToBlobRecoveryActor(TAutoPtr<IEventHandle> ev) {
-        Send(IEventHandle::Forward(ev, BlobRecoveryActorId));
+        Send(IEventHandle::Forward(std::move(ev), BlobRecoveryActorId));
     }
 
     void TScrubCoroImpl::Run() {

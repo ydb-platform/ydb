@@ -210,6 +210,8 @@ namespace NKikimr {
         bool HasBlockRecordFor(ui64 tabletId) const {
             return BlocksCache.HasRecord(tabletId);
         }
+
+        void PermitGarbageCollection(const TActorContext& ctx);
     };
 
     // FIXME:

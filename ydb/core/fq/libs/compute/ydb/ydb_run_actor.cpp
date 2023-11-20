@@ -137,13 +137,10 @@ public:
     }
 
     void Handle(const TEvYdbCompute::TEvFinalizerResponse::TPtr ev) {
+        // Pinger is no longer available at this place.
+        // The query can be restarted only after the expiration of lease in case of error
         auto& response = *ev->Get();
-        if (response.Status != NYdb::EStatus::SUCCESS) {
-            LOG_I("FinalizerResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
-            ResignAndPassAway(response.Issues);
-            return;
-        }
-        LOG_I("FinalizerResponse (success) " << response.Status << " Issues: " << response.Issues.ToOneLineString());
+        LOG_I("FinalizerResponse ( " << (response.Status == NYdb::EStatus::SUCCESS ? "success" : "failed") << ") " << response.Status << " Issues: " << response.Issues.ToOneLineString());
         FinishAndPassAway();
     }
 

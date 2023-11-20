@@ -131,7 +131,7 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
                 return false;
             }
 
-            Y_VERIFY_DEBUG(join->GetJoin());
+            Y_DEBUG_ABORT_UNLESS(join->GetJoin());
             join->GetJoin()->SetupJoin(joinOp, joinKeyExpr, linkSettings);
             break;
         }
@@ -161,7 +161,7 @@ TNodePtr TSqlSelect::JoinExpr(ISource* join, const TRule_join_constraint& node) 
                 return nullptr;
             }
 
-            Y_VERIFY_DEBUG(join->GetJoin());
+            Y_DEBUG_ABORT_UNLESS(join->GetJoin());
             return join->GetJoin()->BuildJoinKeys(Ctx, names);
         }
         case TRule_join_constraint::ALT_NOT_SET:
@@ -394,7 +394,7 @@ bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column&
                         implicitLabel = true;
                         break;
                     case TRule_result_column_TAlt2_TBlock2::ALT_NOT_SET:
-                        Y_FAIL("You should change implementation according to grammar changes");
+                        Y_ABORT("You should change implementation according to grammar changes");
                 }
                 term->SetLabel(label, Ctx.Pos());
                 term->MarkImplicitLabel(implicitLabel);
@@ -547,7 +547,7 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
                 }
                 break;
             case TRule_named_single_source_TBlock3_TBlock1::ALT_NOT_SET:
-                Y_FAIL("You should change implementation according to grammar changes");
+                Y_ABORT("You should change implementation according to grammar changes");
         }
         singleSource->SetLabel(label);
     }
@@ -601,7 +601,7 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
             }
             break;
         case TRule_named_single_source::TBlock4::ALT_NOT_SET:
-            Y_FAIL("SampleClause: does not corresond to grammar changes");
+            Y_ABORT("SampleClause: does not corresond to grammar changes");
         }
         if (!singleSource->SetSamplingOptions(Ctx, pos, mode, samplingRateNode, samplingSeedNode)) {
             Ctx.IncrementMonCounter("sql_errors", "IncorrectSampleClause");
@@ -638,7 +638,7 @@ bool TSqlSelect::ColumnName(TVector<TNodePtr>& keys, const TRule_without_column_
             columnName = Id(node.GetAlt_without_column_name2().GetRule_an_id_without1(), *this);
             break;
         case TRule_without_column_name::ALT_NOT_SET:
-            Y_FAIL("You should change implementation according to grammar changes");
+            Y_ABORT("You should change implementation according to grammar changes");
     }
 
     if (columnName.empty()) {
@@ -1298,7 +1298,7 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind& no
             break;
         }
         case TRule_select_kind_TBlock2::ALT_NOT_SET:
-            Y_FAIL("You should change implementation according to grammar changes");
+            Y_ABORT("You should change implementation according to grammar changes");
     }
 
     return res;
@@ -1316,18 +1316,25 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
 
 template<typename TRule>
 TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult&& first) {
-    TPosition unionPos = pos; // Position of first select
-    TVector<TSourcePtr> sources;
-    sources.emplace_back(std::move(first.Source));
+    if (node.GetBlock2().empty()) {
+        return std::move(first.Source);
+    }
 
-    TVector<TSortSpecificationPtr> orderBy;
-    TNodePtr skipTake;
-    TWriteSettings settings;
-    settings.Discard = first.Settings.Discard;
-    bool assumeOrderBy = false;
     auto blocks = node.GetBlock2();
+
+    TPosition unionPos = pos; // Position of first select
+    TVector<TSortSpecificationPtr> orderBy;
+    bool assumeOrderBy = false;
+    TNodePtr skipTake;
+    TWriteSettings outermostSettings;
+    outermostSettings.Discard = first.Settings.Discard;
+
+    TVector<TSourcePtr> sources{ std::move(first.Source)};
+    bool currentQuantifier = false;
+
     for (int i = 0; i < blocks.size(); ++i) {
         auto& b = blocks[i];
+        const bool second = (i == 0);
         const bool last = (i + 1 == blocks.size());
         TSelectKindPlacement placement;
         placement.IsLastInSelectOp = last;
@@ -1341,38 +1348,35 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
             orderBy = next.SelectOpOrderBy;
             assumeOrderBy = next.SelectOpAssumeOrderBy;
             skipTake = next.SelectOpSkipTake;
-            settings.Label = next.Settings.Label;
+            outermostSettings.Label = next.Settings.Label;
         }
 
         switch (b.GetRule_select_op1().Alt_case()) {
-            case TRule_select_op::kAltSelectOp1: {
-                const bool isUnionAll = b.GetRule_select_op1().GetAlt_select_op1().HasBlock2();
-                if (!isUnionAll) {
-                    Token(b.GetRule_select_op1().GetAlt_select_op1().GetToken1());
-                    Ctx.Error() << "UNION without quantifier ALL is not supported yet. Did you mean UNION ALL?";
-                    return nullptr;
-                } else {
-                    sources.emplace_back(std::move(next.Source));
-                }
+            case TRule_select_op::kAltSelectOp1:
                 break;
-            }
             case TRule_select_op::kAltSelectOp2:
             case TRule_select_op::kAltSelectOp3:
                 Ctx.Error() << "INTERSECT and EXCEPT are not implemented yet";
                 return nullptr;
             case TRule_select_op::ALT_NOT_SET:
-                Y_FAIL("You should change implementation according to grammar changes");
+                Y_ABORT("You should change implementation according to grammar changes");
         }
+
+        const bool quantifier = b.GetRule_select_op1().GetAlt_select_op1().HasBlock2();
+
+        if (!second && quantifier != currentQuantifier) {
+            auto source = BuildUnion(pos, std::move(sources), currentQuantifier, {});
+            sources.clear();
+            sources.emplace_back(std::move(source));
+        }
+
+        sources.emplace_back(std::move(next.Source));
+        currentQuantifier = quantifier;
     }
 
-    if (sources.size() == 1) {
-        return std::move(sources[0]);
-    }
+    auto result = BuildUnion(pos, std::move(sources), currentQuantifier, outermostSettings);
 
-    TSourcePtr result;
     if (orderBy) {
-        result = BuildUnionAll(unionPos, std::move(sources), {});
-
         TVector<TNodePtr> groupByExpr;
         TVector<TNodePtr> groupBy;
         bool compactGroupBy = false;
@@ -1389,14 +1393,13 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
 
         result = BuildSelectCore(Ctx, unionPos, std::move(result), groupByExpr, groupBy, compactGroupBy, groupBySuffix,
             assumeOrderBy, orderBy, having, std::move(winSpecs), legacyHoppingWindowSpec, std::move(terms),
-            distinct, std::move(without), stream, settings, {}, {});
-    } else {
-        result = BuildUnionAll(unionPos, std::move(sources), settings);
-    }
+            distinct, std::move(without), stream, outermostSettings, {}, {});
 
-    if (skipTake || orderBy) {
+        result = BuildSelect(unionPos, std::move(result), skipTake);
+    } else if (skipTake) {
         result = BuildSelect(unionPos, std::move(result), skipTake);
     }
+
     return result;
 }
 

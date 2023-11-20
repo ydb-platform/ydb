@@ -48,7 +48,7 @@ namespace NKikimr {
                     Y_ABORT_UNLESS(pdiskFlags & NKikimrBlobStorage::StatusNotEnoughDiskSpaceForOperation);
                     return SetPrivate(WriteOnlyLog);
                 default:
-                    Y_FAIL("Unexpected state# %s", NKikimrProto::EReplyStatus_Name(status).data());
+                    Y_ABORT("Unexpected state# %s", NKikimrProto::EReplyStatus_Name(status).data());
             }
         }
 

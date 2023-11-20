@@ -1,0 +1,17 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:31: Warning: At function: RemovePrefixMembers, At function: Unordered
+    	insert into plato.Output with truncate
+	                              ^
+        <tmp_path>/program.sql:<main>:3:1: Warning: At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+        	select a + b + c as a, coalesce(d, "") as b, f as f, cast(coalesce(e, true) as varchar) as e from plato.Input;
+	^
+            <tmp_path>/program.sql:<main>:3:14: Warning: At function: +
+            	select a + b + c as a, coalesce(d, "") as b, f as f, cast(coalesce(e, true) as varchar) as e from plato.Input;
+	             ^
+                <tmp_path>/program.sql:<main>:3:10: Warning: At function: +
+                	select a + b + c as a, coalesce(d, "") as b, f as f, cast(coalesce(e, true) as varchar) as e from plato.Input;
+	         ^
+                    <tmp_path>/program.sql:<main>:3:10: Warning: Integral type implicit bitcast: Optional<Int64> and Optional<Uint64>
+                    	select a + b + c as a, coalesce(d, "") as b, f as f, cast(coalesce(e, true) as varchar) as e from plato.Input;
+	         ^

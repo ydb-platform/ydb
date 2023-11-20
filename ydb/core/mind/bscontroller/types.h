@@ -178,7 +178,7 @@ namespace NKikimr {
                     {}
 
                     std::pair<const typename TBaseMap::value_type*, TConstIterator> operator *() const {
-                        Y_VERIFY_DEBUG(OverlayIt != Map.Overlay.end());
+                        Y_DEBUG_ABORT_UNLESS(OverlayIt != Map.Overlay.end());
                         return std::make_pair(BaseIt != Map.Base.end() && BaseIt->first == OverlayIt->first ?
                             &*BaseIt : nullptr, OverlayIt);
                     }
@@ -375,7 +375,7 @@ namespace NKikimr {
                     const bool hasBase = baseIt != Base.end() && !(key < baseIt->first);
 
                     if (!overlay) {
-                        Y_VERIFY_DEBUG(hasBase);
+                        Y_DEBUG_ABORT_UNLESS(hasBase);
                         baseIt = Base.erase(baseIt);
                     } else if (hasBase) {
                         overlay->OnCommit();

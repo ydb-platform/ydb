@@ -1,0 +1,32 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:5:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: SqlProject
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:10:7: Warning: At function: AssumeColumnOrderPartial
+        	      SELECT keyitem.kk as kkstr FROM Input as d FLATTEN BY key as keyitem
+	      ^
+            <tmp_path>/program.sql:<main>:6:3: Warning: At function: Aggregate
+            	  countIf(kkstritem % 10 == 0) as count_dec,
+	  ^
+                <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Warning: At function: AggregationTraits
+                	
+	                 ^
+                    <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Warning: At function: If
+                    	
+	                                                                                                              ^
+                        <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Warning: At function: Coalesce
+                        	
+	                                                                                                                  ^
+                            <tmp_path>/program.sql:<main>:6:3: Warning: At function: PersistableRepr
+                            	  countIf(kkstritem % 10 == 0) as count_dec,
+	  ^
+                                <tmp_path>/program.sql:<main>:6:26: Warning: At function: ==
+                                	  countIf(kkstritem % 10 == 0) as count_dec,
+	                         ^
+                                    <tmp_path>/program.sql:<main>:6:21: Warning: At function: %
+                                    	  countIf(kkstritem % 10 == 0) as count_dec,
+	                    ^
+                                        <tmp_path>/program.sql:<main>:6:21: Warning: Integral type implicit bitcast: Uint32 and Int32
+                                        	  countIf(kkstritem % 10 == 0) as count_dec,
+	                    ^

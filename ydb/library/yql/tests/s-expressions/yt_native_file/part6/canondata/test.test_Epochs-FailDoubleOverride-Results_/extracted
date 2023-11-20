@@ -1,0 +1,8 @@
+<tmp_path>/program.yql:<main>: Error: Type annotation
+
+    <tmp_path>/program.yql:<main>:13:13: Error: At function: YtWriteTable!
+    	(let world (Write! world sink (Key '('table (String 'Output))) input '('('mode 'renew))))
+	            ^
+        <tmp_path>/program.yql:<main>:13:13: Error: Replacing "Output" table content after another table modifications in the same transaction
+        	(let world (Write! world sink (Key '('table (String 'Output))) input '('('mode 'renew))))
+	            ^

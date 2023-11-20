@@ -345,7 +345,7 @@ namespace NKikimr::NStorage {
                 (SessionId, ev->InterconnectSession),
                 (ExpectedCookie, info.Cookie),
                 (ExpectedSessionId, info.SessionId));
-            Y_VERIFY_DEBUG(false);
+            Y_DEBUG_ABORT_UNLESS(false);
             return;
         }
 
@@ -368,7 +368,7 @@ namespace NKikimr::NStorage {
                     (SessionId, ev->InterconnectSession),
                     (Record, record),
                     (NodeId, nodeId));
-                Y_VERIFY_DEBUG(false);
+                Y_DEBUG_ABORT_UNLESS(false);
             }
         }
 

@@ -6,6 +6,7 @@ SRCS(
     yql_mkql_input_stream.cpp
     yql_mkql_input.cpp
     yql_mkql_output.cpp
+    yql_mkql_table_content.cpp
     yql_mkql_table.cpp
     yql_mkql_ungrouping_list.cpp
 )

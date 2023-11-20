@@ -1,5 +1,6 @@
 #include "defs.h"
 
+#include <ydb/core/util/address_classifier.h>
 #include <ydb/core/audit/audit_log.h>
 
 #include "base/base.h"
@@ -15,7 +16,7 @@ void AuditLogConn(const IRequestProxyCtx* ctx, const TString& database, const TS
     AUDIT_LOG(
         AUDIT_PART("component", GrpcConnComponentName)
 
-        AUDIT_PART("remote_address", ctx->GetPeerName())
+        AUDIT_PART("remote_address", NKikimr::NAddressClassifier::ExtractAddress(ctx->GetPeerName()))
         AUDIT_PART("subject", userSID)
         AUDIT_PART("database", database)
         AUDIT_PART("operation", ctx->GetRequestName())

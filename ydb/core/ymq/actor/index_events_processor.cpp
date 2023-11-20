@@ -71,7 +71,7 @@ void TSearchEventsProcessor::HandleWakeup(TEvWakeup::TPtr&, const TActorContext&
         case EState::CleanupExecute:
             return RunEventsCleanup(ctx);
         default:
-            Y_FAIL();
+            Y_ABORT();
     }
 }
 
@@ -93,14 +93,8 @@ void TSearchEventsProcessor::HandleQueryResponse(NKqp::TEvKqp::TEvQueryResponse:
         case EState::Stopping:
             return StopSession(ctx);
         default:
-            Y_FAIL();
+            Y_ABORT();
     }
-}
-
-void TSearchEventsProcessor::HandleProcessResponse(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
-    const auto& record = ev->Get()->Record;
-    LOG_ERROR_S(ctx, NKikimrServices::SQS, "YC Search events processor: failed to list ymq events: " << record);
-    HandleFailure(ctx);
 }
 
 void TSearchEventsProcessor::HandleFailure(const TActorContext& ctx) {
@@ -114,7 +108,7 @@ void TSearchEventsProcessor::HandleFailure(const TActorContext& ctx) {
         case EState::Stopping:
             return;
         default:
-            Y_FAIL();
+            Y_ABORT();
     }
 }
 

@@ -118,7 +118,7 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 
 {% note tip %}
 
-При настройке TTL с использованием YQL, `Interval` создается из строкового литерала в формате [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601).
+При настройке TTL с использованием YQL, `Interval` создается из строкового литерала в формате [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) с [некоторыми ограничениями](../../yql/reference/builtins/basic#data-type-literals).
 
 {% endnote %}
 
@@ -159,7 +159,7 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
   ```go
   err := session.AlterTable(ctx, "mytable",
     options.WithSetTimeToLiveSettings(
-      options.NewTTLSettings().ColumnSecond("modified_at").ExpireAfter(time.Hour),
+      options.NewTTLSettings().ColumnSeconds("modified_at").ExpireAfter(time.Hour),
     ),
   )
   ```

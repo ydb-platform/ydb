@@ -2,3 +2,7 @@ src:*contrib/tools/python/src*
 src:*contrib/tools/python3/src*
 src:*contrib/libs/luajit*
 type:std::__*::locale::id=init
+
+# DTCC-1913: issues use-of-uninitialized-value on msan on Clang16
+src:*contrib/python/matplotlib/py2/src/*
+src:*contrib/python/matplotlib/py3/src/*

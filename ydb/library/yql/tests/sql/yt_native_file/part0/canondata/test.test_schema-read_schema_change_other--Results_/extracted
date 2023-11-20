@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:1:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject
+    	select * from plato.Input with schema Struct<_other:Yson>;
+	^
+        <tmp_path>/program.sql:<main>:1:15: Error: At function: Merge, At function: YtSection, At function: YtPath, At function: YtTable
+        	select * from plato.Input with schema Struct<_other:Yson>;
+	              ^
+            <tmp_path>/program.sql:<main>:1:21: Error: It is forbidden to specify the column '_other'.
+            	select * from plato.Input with schema Struct<_other:Yson>;
+	                    ^

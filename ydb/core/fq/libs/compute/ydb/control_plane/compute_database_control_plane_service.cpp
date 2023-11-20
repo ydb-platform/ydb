@@ -31,14 +31,51 @@ namespace NFq {
 using namespace NActors;
 using namespace NFq;
 
+namespace {
+
+struct TDatabaseClients {
+    struct TClientConfig {
+        TActorId ActorId;
+        NConfig::TComputeDatabaseConfig Config;
+        TActorId DatabasesCacheActorId;
+    };
+
+    std::optional<TClientConfig> GetClient(const TString& scope, const TString& endpoint, const TString& database) const {
+        auto currentClient = GetClient(scope);
+        if (currentClient.Config.GetExecutionConnection().GetEndpoint() == endpoint && database.StartsWith(currentClient.Config.GetTenant())) {
+            return currentClient;
+        }
+
+        for (const auto& client: CommonDatabaseClients) {
+            if (client.Config.GetExecutionConnection().GetEndpoint() == endpoint && database.StartsWith(client.Config.GetTenant())) {
+                return client;
+            }
+        }
+
+        return {};
+    }
+
+    TClientConfig GetClient(const TString& scope) const {
+        auto it = ScopeToDatabaseClient.find(scope);
+        if (it != ScopeToDatabaseClient.end()) {
+            return it->second;
+        }
+        Y_ABORT_UNLESS(CommonDatabaseClients);
+        return CommonDatabaseClients[MultiHash(scope) % CommonDatabaseClients.size()];
+    }
+
+    TVector<TClientConfig> CommonDatabaseClients;
+    TMap<TString, TClientConfig> ScopeToDatabaseClient;
+};
+
 class TCreateDatabaseRequestActor : public NActors::TActorBootstrapped<TCreateDatabaseRequestActor> {
 public:
-    TCreateDatabaseRequestActor(const TActorId& databaseClientActorId, const TActorId& synchronizationServiceActorId, const NFq::NConfig::TComputeConfig& config, const NFq::NConfig::TYdbStorageConfig& executionConnection, TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& request)
-        : DatabaseClientActorId(databaseClientActorId)
+    TCreateDatabaseRequestActor(const std::shared_ptr<TDatabaseClients>& clients, const TActorId& synchronizationServiceActorId, const NFq::NConfig::TComputeConfig& config, TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& request)
+        : Scope(request->Get()->Scope)
+        , Clients(clients)
         , SynchronizationServiceActorId(synchronizationServiceActorId)
         , Config(config)
         , Request(request)
-        , ExecutionConnection(executionConnection)
     {}
 
     static constexpr char ActorName[] = "FQ_CREATE_DATABASE_REQUEST_ACTOR";
@@ -48,12 +85,14 @@ public:
         switch (controlPlane.type_case()) {
             case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
             case NConfig::TYdbComputeControlPlane::kSingle: {
+                LOG_T("Scope: " << Scope << " Single control plane mode has been chosen");
                 *Result.mutable_connection() = Config.GetYdb().GetControlPlane().GetSingle().GetConnection();
                 Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Config.GetYdb().GetControlPlane().GetSingle().GetConnection()});
             }
             break;
             case NConfig::TYdbComputeControlPlane::kCms:
             case NConfig::TYdbComputeControlPlane::kYdbcp:
+            LOG_T("Scope: " << Scope << " CMS or YDBCP mode has been chosen");
             Send(NFq::ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvDescribeDatabaseRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope});
             break;
         }
@@ -64,8 +103,12 @@ public:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvControlPlaneStorage::TEvDescribeDatabaseResponse, Handle);
         hFunc(TEvYdbCompute::TEvCreateDatabaseResponse, Handle);
+        hFunc(TEvYdbCompute::TEvAddDatabaseResponse, Handle);
         hFunc(TEvControlPlaneStorage::TEvCreateDatabaseResponse, Handle);
         hFunc(TEvYdbCompute::TEvSynchronizeResponse, Handle);
+        hFunc(TEvYdbCompute::TEvCheckDatabaseResponse, Handle);
+        hFunc(TEvYdbCompute::TEvInvalidateSynchronizationResponse, Handle);
+        hFunc(TEvControlPlaneStorage::TEvModifyDatabaseResponse, Handle);
     )
 
     void Handle(TEvControlPlaneStorage::TEvDescribeDatabaseResponse::TPtr& ev) {
@@ -73,33 +116,116 @@ public:
         const auto& result = ev->Get()->Record;
 
         if (issues && issues.back().IssueCode == TIssuesIds::ACCESS_DENIED) {
-            Send(DatabaseClientActorId, new TEvYdbCompute::TEvCreateDatabaseRequest{Request->Get()->CloudId, Request->Get()->Scope, Request->Get()->BasePath, Request->Get()->Path, ExecutionConnection});
+            LOG_T("Scope: " << Scope << " Couldn't find the information about database in control plane storage for this scope");
+            Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvInvalidateSynchronizationRequest(Scope));
             return;
         }
 
         if (issues) {
+            LOG_E("Scope: " << Scope << " Describe database (control plane storage) has been failed. " << issues.ToOneLineString());
             FailedAndPassAway(issues);
             return;
         }
 
         Result = result;
-        Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, result.connection()});
+        auto lastAccessAtEvent = std::make_unique<TEvControlPlaneStorage::TEvModifyDatabaseRequest>(Request->Get()->CloudId, Scope);
+        lastAccessAtEvent->LastAccessAt = TInstant::Now();
+        Send(ControlPlaneStorageServiceActorId(), lastAccessAtEvent.release(), 0, UpdateLastAccessAtCookie);
+        auto client = Clients->GetClient(Scope, Result.connection().endpoint(), Result.connection().database());
+        if (!client) {
+            auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after DescribeDatabaseRequest. Please contact internal support"}};
+            LOG_E("Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
+            FailedAndPassAway(issues);
+            return;
+        }
+        Send(client->DatabasesCacheActorId, std::make_unique<TEvYdbCompute::TEvCheckDatabaseRequest>(Result.connection().database()));
+    }
+
+    void Handle(TEvYdbCompute::TEvCheckDatabaseResponse::TPtr& ev) {
+        const auto& response = *ev.Get()->Get();
+        if (response.Issues) {
+            LOG_E("Scope: " << Scope << " The database existence check has been failed. " << response.Issues.ToOneLineString());
+            FailedAndPassAway(response.Issues);
+            return;
+        }
+
+        if (response.IsExists) {
+            Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection()});
+        } else {
+            auto invalidateSynchronizationEvent = std::make_unique<TEvControlPlaneStorage::TEvModifyDatabaseRequest>(Request->Get()->CloudId, Scope);
+            invalidateSynchronizationEvent->Synchronized = false;
+            Send(ControlPlaneStorageServiceActorId(), invalidateSynchronizationEvent.release(), 0, OnlyDatabaseCreateCookie);
+        }
+    }
+
+    void Handle(TEvYdbCompute::TEvInvalidateSynchronizationResponse::TPtr& ev) {
+        auto client = ev->Cookie == OnlyDatabaseCreateCookie 
+            ? Clients->GetClient(Scope, Result.connection().endpoint(), Result.connection().database())
+            : Clients->GetClient(Scope);
+        if (!client) {
+            auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after InvalidateSynchronizationRequest. Please contact internal support"}};
+            LOG_E("Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
+            FailedAndPassAway(issues);
+            return;
+        }
+        FillRequest(Request, client->Config);
+        Send(client->ActorId, new TEvYdbCompute::TEvCreateDatabaseRequest{Request->Get()->CloudId, Scope, Request->Get()->BasePath, Request->Get()->Path, client->Config.GetExecutionConnection()}, 0, ev->Cookie);
+    }
+
+    void Handle(TEvYdbCompute::TEvAddDatabaseResponse::TPtr& ev) {
+        if (ev->Cookie == OnlyDatabaseCreateCookie) {
+            Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, Result.connection()});
+            return;
+        }
+        Send(ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvCreateDatabaseRequest{Request->Get()->CloudId, Scope, Result});
+    }
+
+    void Handle(TEvControlPlaneStorage::TEvModifyDatabaseResponse::TPtr& ev) {
+        const auto issues = ev->Get()->Issues;
+        if (issues) {
+            LOG_E("Scope: " << Scope << " The modification of the information about database has been failed. " << issues.ToOneLineString());
+            FailedAndPassAway(issues);
+            return;
+        }
+
+        if (ev->Cookie == UpdateLastAccessAtCookie) {
+            return;
+        }
+
+        if (ev->Cookie == InvalidateSynchronizationCooke) {
+            Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvInvalidateSynchronizationRequest(Scope));
+            return;
+        }
+
+        if (ev->Cookie == OnlyDatabaseCreateCookie) {
+            Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvInvalidateSynchronizationRequest(Scope), 0, OnlyDatabaseCreateCookie);
+            return;
+        }
     }
 
     void Handle(TEvYdbCompute::TEvCreateDatabaseResponse::TPtr& ev) {
         const auto issues = ev->Get()->Issues;
         if (issues) {
+            LOG_E("Scope: " << Scope << " CreateDatabaseRequest (compute) has been failed. " << issues.ToOneLineString());
             FailedAndPassAway(issues);
             return;
         }
 
         Result = ev->Get()->Result;
-        Send(ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvCreateDatabaseRequest{Request->Get()->CloudId, Request->Get()->Scope, Result});
+        auto client = Clients->GetClient(Scope, Result.connection().endpoint(), Result.connection().database());
+        if (!client) {
+            auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after CreateDatabaseRequest. Please contact internal support"}};
+            LOG_E("Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
+            FailedAndPassAway(issues);
+            return;
+        }
+        Send(client->DatabasesCacheActorId, new TEvYdbCompute::TEvAddDatabaseRequest{Result.connection().database()}, 0, ev->Cookie);
     }
 
     void Handle(TEvControlPlaneStorage::TEvCreateDatabaseResponse::TPtr& ev) {
         const auto issues = ev->Get()->Issues;
         if (issues) {
+            LOG_E("Scope: " << Scope << " CreateDatabaseRequest (control plane storage) has been failed. " << issues.ToOneLineString());
             FailedAndPassAway(issues);
             return;
         }
@@ -110,6 +236,7 @@ public:
     void Handle(TEvYdbCompute::TEvSynchronizeResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
+            LOG_E("Scope: " << Scope << " SynchronizeRequest has been failed. " << response.Issues.ToOneLineString());
             FailedAndPassAway(response.Issues);
             return;
         }
@@ -123,20 +250,32 @@ public:
         PassAway();
     }
 
+    void FillRequest(TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& ev, const NConfig::TComputeDatabaseConfig& config) {
+        NYdb::NFq::TScope scope(ev.Get()->Get()->Scope);
+        ev.Get()->Get()->BasePath = config.GetControlPlaneConnection().GetDatabase();
+        const TString databaseName = Config.GetYdb().GetControlPlane().GetDatabasePrefix() + scope.ParseFolder();
+        ev.Get()->Get()->Path = config.GetTenant() ? config.GetTenant() + "/" + databaseName: databaseName;
+    }
+
 private:
-    TActorId DatabaseClientActorId;
+    TString Scope;
+    std::shared_ptr<TDatabaseClients> Clients;
     TActorId SynchronizationServiceActorId;
     NFq::NConfig::TComputeConfig Config;
     TEvYdbCompute::TEvCreateDatabaseRequest::TPtr Request;
     FederatedQuery::Internal::ComputeDatabaseInternal Result;
-    NFq::NConfig::TYdbStorageConfig ExecutionConnection;
+
+    enum : ui64 {
+        InvalidateSynchronizationCooke = 1,
+        UpdateLastAccessAtCookie,
+        OnlyDatabaseCreateCookie
+    };
 };
 
+}
+
 class TComputeDatabaseControlPlaneServiceActor : public NActors::TActorBootstrapped<TComputeDatabaseControlPlaneServiceActor> {
-    struct TClientConfig {
-        TActorId ActorId;
-        NConfig::TComputeDatabaseConfig Config;
-    };
+
 
 public:
     TComputeDatabaseControlPlaneServiceActor(const NFq::NConfig::TComputeConfig& config,
@@ -146,6 +285,7 @@ public:
                                              const TYqSharedResources::TPtr& yqSharedResources,
                                              const ::NMonitoring::TDynamicCounterPtr& counters)
         : Config(config)
+        , Clients(std::make_shared<TDatabaseClients>())
         , CommonConfig(commonConfig)
         , Signer(signer)
         , YqSharedResources(yqSharedResources)
@@ -168,10 +308,10 @@ public:
             case NConfig::TYdbComputeControlPlane::kSingle:
             break;
             case NConfig::TYdbComputeControlPlane::kCms:
-                CreateCmsClientActors(controlPlane.GetCms());
+                CreateCmsClientActors(controlPlane.GetCms(), controlPlane.GetDatabasesCacheReloadPeriod());
             break;
             case NConfig::TYdbComputeControlPlane::kYdbcp:
-                CreateControlPlaneClientActors(controlPlane.GetYdbcp());
+                CreateControlPlaneClientActors(controlPlane.GetYdbcp(), controlPlane.GetDatabasesCacheReloadPeriod());
             break;
         }
         Become(&TComputeDatabaseControlPlaneServiceActor::StateFunc);
@@ -188,29 +328,37 @@ public:
         return settings;
     }
 
-    void CreateCmsClientActors(const NConfig::TYdbComputeControlPlane::TCms& cmsConfig) {
+    void CreateCmsClientActors(const NConfig::TYdbComputeControlPlane::TCms& cmsConfig, const TString& databasesCacheReloadPeriod) {
         const auto& mapping = cmsConfig.GetDatabaseMapping();
         for (const auto& config: mapping.GetCommon()) {
-            CommonDatabaseClients.push_back({Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release()), config});
+            const auto clientActor = Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
+            Clients->CommonDatabaseClients.push_back({clientActor, config, cacheActor});
         }
 
-        Y_ABORT_UNLESS(CommonDatabaseClients);
+        Y_ABORT_UNLESS(Clients->CommonDatabaseClients);
 
         for (const auto& [scope, config]: mapping.GetScopeToComputeDatabase()) {
-            ScopeToDatabaseClient[scope] = {Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release()), config};
+            const auto clientActor = Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
+            Clients->ScopeToDatabaseClient[scope] = {clientActor, config, cacheActor};
         }
     }
 
-    void CreateControlPlaneClientActors(const NConfig::TYdbComputeControlPlane::TYdbcp& controlPlaneConfig) {
+    void CreateControlPlaneClientActors(const NConfig::TYdbComputeControlPlane::TYdbcp& controlPlaneConfig, const TString& databasesCacheReloadPeriod) {
         const auto& mapping = controlPlaneConfig.GetDatabaseMapping();
         for (const auto& config: mapping.GetCommon()) {
-            CommonDatabaseClients.push_back({Register(CreateYdbcpGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release()), config});
+            const auto clientActor = Register(CreateYdbcpGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
+            Clients->CommonDatabaseClients.push_back({clientActor, config, cacheActor});
         }
 
-        Y_ABORT_UNLESS(CommonDatabaseClients);
+        Y_ABORT_UNLESS(Clients->CommonDatabaseClients);
 
         for (const auto& [scope, config]: mapping.GetScopeToComputeDatabase()) {
-            ScopeToDatabaseClient[scope] = {Register(CreateYdbcpGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release()), config};
+            const auto clientActor = Register(CreateYdbcpGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
+            const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
+            Clients->ScopeToDatabaseClient[scope] = {clientActor, config, cacheActor};
         }
     }
 
@@ -220,34 +368,16 @@ public:
 
     void Handle(TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& ev) {
         if (Config.GetYdb().GetControlPlane().HasSingle()) {
-            Register(new TCreateDatabaseRequestActor(TActorId{}, SynchronizationServiceActorId, Config, Config.GetYdb().GetControlPlane().GetSingle().GetConnection(), ev));
+            Register(new TCreateDatabaseRequestActor(Clients, SynchronizationServiceActorId, Config, ev));
             return;
         }
-
-        const auto& scope = ev->Get()->Scope;
-        auto it = ScopeToDatabaseClient.find(scope);
-        if (it != ScopeToDatabaseClient.end()) {
-            FillRequest(ev, it->second.Config);
-            Register(new TCreateDatabaseRequestActor(it->second.ActorId, SynchronizationServiceActorId, Config, it->second.Config.GetExecutionConnection(), ev));
-            return;
-        }
-        const auto& clientConfig = CommonDatabaseClients[MultiHash(scope) % CommonDatabaseClients.size()];
-        FillRequest(ev, clientConfig.Config);
-        Register(new TCreateDatabaseRequestActor(clientConfig.ActorId, SynchronizationServiceActorId, Config, clientConfig.Config.GetExecutionConnection(), ev));
-    }
-
-    void FillRequest(TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& ev, const NConfig::TComputeDatabaseConfig& config) {
-        NYdb::NFq::TScope scope(ev.Get()->Get()->Scope);
-        ev.Get()->Get()->BasePath = config.GetControlPlaneConnection().GetDatabase();
-        const TString databaseName = Config.GetYdb().GetControlPlane().GetDatabasePrefix() + scope.ParseFolder();
-        ev.Get()->Get()->Path = config.GetTenant() ? config.GetTenant() + "/" + databaseName: databaseName;
+        Register(new TCreateDatabaseRequestActor(Clients, SynchronizationServiceActorId, Config, ev));
     }
 
 private:
     TActorId SynchronizationServiceActorId;
     NFq::NConfig::TComputeConfig Config;
-    TVector<TClientConfig> CommonDatabaseClients;
-    TMap<TString, TClientConfig> ScopeToDatabaseClient;
+    std::shared_ptr<TDatabaseClients> Clients;
     NConfig::TCommonConfig CommonConfig;
     TSigner::TPtr Signer;
     TYqSharedResources::TPtr YqSharedResources;

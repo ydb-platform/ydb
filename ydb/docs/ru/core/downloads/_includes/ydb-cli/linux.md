@@ -1,6 +1,7 @@
 Версия | Дата выпуска | Скачать | Список изменений
 :--- | :--- | :--- | :---
-v.2.6.0 | 07.08.23 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.6.0/linux/amd64/ydb) | [См. список](../../../changelog-cli.md#2-6-0)
+v.2.7.0 | 23.10.23 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.7.0/linux/amd64/ydb) | [См. список](../../../changelog-cli.md#2-7-0)
+v.2.6.0 | 07.09.23 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.6.0/linux/amd64/ydb) | [См. список](../../../changelog-cli.md#2-6-0)
 v.2.5.0 | 20.06.23 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.5.0/linux/amd64/ydb) | [См. список](../../../changelog-cli.md#2-5-0)
 v.2.4.0 | 24.05.23 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.4.0/linux/amd64/ydb) | [См. список](../../../changelog-cli.md#2-4-0)
 v.2.3.0 | 01.05.23 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.3.0/linux/amd64/ydb) | [См. список](../../../changelog-cli.md#2-3-0)

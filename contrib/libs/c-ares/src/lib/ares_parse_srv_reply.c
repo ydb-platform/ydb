@@ -1,18 +1,28 @@
-
-/* Copyright 1998 by the Massachusetts Institute of Technology.
- * Copyright (C) 2009 by Jakub Hrozek <jhrozek@redhat.com>
+/* MIT License
  *
- * Permission to use, copy, modify, and distribute this
- * software and its documentation for any purpose and without
- * fee is hereby granted, provided that the above copyright
- * notice appear in all copies and that both that copyright
- * notice and this permission notice appear in supporting
- * documentation, and that the name of M.I.T. not be used in
- * advertising or publicity pertaining to distribution of the
- * software without specific, written prior permission.
- * M.I.T. makes no representations about the suitability of
- * this software for any purpose.  It is provided "as is"
- * without express or implied warranty.
+ * Copyright (c) 1998 Massachusetts Institute of Technology
+ * Copyright (c) 2009 Jakub Hrozek
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ *
+ * SPDX-License-Identifier: MIT
  */
 
 #include "ares_setup.h"
@@ -40,7 +50,7 @@ ares_parse_srv_reply (const unsigned char *abuf, int alen,
 {
   unsigned int qdcount, ancount, i;
   const unsigned char *aptr, *vptr;
-  int status, rr_type, rr_class, rr_len, rr_ttl;
+  int status, rr_type, rr_class, rr_len;
   long len;
   char *hostname = NULL, *rr_name = NULL;
   struct ares_srv_reply *srv_head = NULL;
@@ -93,7 +103,6 @@ ares_parse_srv_reply (const unsigned char *abuf, int alen,
       rr_type = DNS_RR_TYPE (aptr);
       rr_class = DNS_RR_CLASS (aptr);
       rr_len = DNS_RR_LEN (aptr);
-      rr_ttl = DNS_RR_TTL(aptr);
       aptr += RRFIXEDSZ;
       if (aptr + rr_len > abuf + alen)
         {
@@ -135,7 +144,6 @@ ares_parse_srv_reply (const unsigned char *abuf, int alen,
           vptr += sizeof(unsigned short);
           srv_curr->port = DNS__16BIT(vptr);
           vptr += sizeof(unsigned short);
-          srv_curr->ttl = rr_ttl;
 
           status = ares_expand_name (vptr, abuf, alen, &srv_curr->host, &len);
           if (status != ARES_SUCCESS)

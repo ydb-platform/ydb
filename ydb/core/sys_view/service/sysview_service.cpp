@@ -7,6 +7,7 @@
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -14,6 +15,8 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
+#include <library/cpp/time_provider/time_provider.h>
+
 
 using namespace NActors;
 

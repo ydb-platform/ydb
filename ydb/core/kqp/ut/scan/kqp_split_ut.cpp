@@ -317,7 +317,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
     };
 
     void CollectKeysTo(TVector<ui64>* collectedKeys, TTestActorRuntime* runtime, TActorId sender) {
-        auto captureEvents =  [=](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
+        auto captureEvents = [=](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NKqp::TEvKqpExecuter::TEvStreamData::EventType) {
                 auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
                 for (auto& row : record.resultset().rows()) {
@@ -686,7 +686,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         TVector<THolder<IEventHandle>> evts;
         std::atomic<bool> captureNotify = true;
         s.Runtime->SetObserverFunc(
-            [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> TTestActorRuntimeBase::EEventAction {
+            [&](TAutoPtr<IEventHandle>& ev) -> TTestActorRuntimeBase::EEventAction {
                 if (!captureNotify.load()) {
                     return TTestActorRuntime::EEventAction::PROCESS;
                 }

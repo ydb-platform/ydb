@@ -80,7 +80,7 @@ namespace NKikimr::NBlobDepot {
                     break;
             }
             if (!render) {
-                Y_FAIL();
+                Y_ABORT();
             }
 
             HTML(Stream) {

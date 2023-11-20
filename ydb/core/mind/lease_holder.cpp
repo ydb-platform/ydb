@@ -5,6 +5,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <ydb/core/mon/mon.h>
 #include <library/cpp/actors/core/mon.h>
+#include <library/cpp/actors/util/should_continue.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
 
@@ -71,7 +72,7 @@ private:
             IgnoreFunc(TEvNodeBroker::TEvExtendLeaseResponse);
 
         default:
-            Y_FAIL("TLeaseHolder::StateIdle unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("TLeaseHolder::StateIdle unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
         }
     }
@@ -86,7 +87,7 @@ private:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
 
         default:
-            Y_FAIL("TLeaseHolder::StatePing unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("TLeaseHolder::StatePing unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
         }
     }

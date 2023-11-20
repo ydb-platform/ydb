@@ -6,7 +6,7 @@ namespace NYdb::NFederatedTopic {
 
 constexpr TDuration REDISCOVERY_DELAY = TDuration::Seconds(30);
 
-TFederatedDbObserver::TFederatedDbObserver(std::shared_ptr<TGRpcConnectionsImpl> connections, const TFederatedTopicClientSettings& settings)
+TFederatedDbObserverImpl::TFederatedDbObserverImpl(std::shared_ptr<TGRpcConnectionsImpl> connections, const TFederatedTopicClientSettings& settings)
     : TClientImplCommon(std::move(connections), settings)
     , FederatedDbState(std::make_shared<TFederatedDbState>())
     , PromiseToInitState(NThreading::NewPromise())
@@ -17,21 +17,21 @@ TFederatedDbObserver::TFederatedDbObserver(std::shared_ptr<TGRpcConnectionsImpl>
     RpcSettings.UseAuth = true;
 }
 
-TFederatedDbObserver::~TFederatedDbObserver() {
+TFederatedDbObserverImpl::~TFederatedDbObserverImpl() {
     Stop();
 }
 
-std::shared_ptr<TFederatedDbState> TFederatedDbObserver::GetState() {
+std::shared_ptr<TFederatedDbState> TFederatedDbObserverImpl::GetState() {
     with_lock(Lock) {
         return FederatedDbState;
     }
 }
 
-NThreading::TFuture<void> TFederatedDbObserver::WaitForFirstState() {
+NThreading::TFuture<void> TFederatedDbObserverImpl::WaitForFirstState() {
     return PromiseToInitState.GetFuture();
 }
 
-void TFederatedDbObserver::Start() {
+void TFederatedDbObserverImpl::Start() {
     with_lock(Lock) {
         if (Stopping) {
             return;
@@ -40,7 +40,7 @@ void TFederatedDbObserver::Start() {
     }
 }
 
-void TFederatedDbObserver::Stop() {
+void TFederatedDbObserverImpl::Stop() {
     NGrpc::IQueueClientContextPtr ctx;
     with_lock(Lock) {
         Stopping = true;
@@ -52,17 +52,17 @@ void TFederatedDbObserver::Stop() {
 }
 
 // If observer is stale it will never update state again because of client retry policy
-bool TFederatedDbObserver::IsStale() const {
+bool TFederatedDbObserverImpl::IsStale() const {
     with_lock(Lock) {
         return PromiseToInitState.HasValue() && !FederatedDbState->Status.IsSuccess();
     }
 }
 
-Ydb::FederationDiscovery::ListFederationDatabasesRequest TFederatedDbObserver::ComposeRequest() const {
+Ydb::FederationDiscovery::ListFederationDatabasesRequest TFederatedDbObserverImpl::ComposeRequest() const {
     return {};
 }
 
-void TFederatedDbObserver::RunFederationDiscoveryImpl() {
+void TFederatedDbObserverImpl::RunFederationDiscoveryImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     FederationDiscoveryDelayContext = Connections_->CreateContext();
@@ -72,14 +72,15 @@ void TFederatedDbObserver::RunFederationDiscoveryImpl() {
         return;
     }
 
-    auto extractor = [self = shared_from_this()]
+    auto extractor = [selfCtx = SelfContext]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
-
-        Ydb::FederationDiscovery::ListFederationDatabasesResult result;
-        if (any) {
-            any->UnpackTo(&result);
+        if (auto self = selfCtx->LockShared()) {
+            Ydb::FederationDiscovery::ListFederationDatabasesResult result;
+            if (any) {
+                any->UnpackTo(&result);
+            }
+            self->OnFederationDiscovery(std::move(status), std::move(result));
         }
-        self->OnFederationDiscovery(std::move(status), std::move(result));
     };
 
     Connections_->RunDeferred<Ydb::FederationDiscovery::V1::FederationDiscoveryService,
@@ -94,15 +95,17 @@ void TFederatedDbObserver::RunFederationDiscoveryImpl() {
         FederationDiscoveryDelayContext);
 }
 
-void TFederatedDbObserver::ScheduleFederationDiscoveryImpl(TDuration delay) {
+void TFederatedDbObserverImpl::ScheduleFederationDiscoveryImpl(TDuration delay) {
     Y_ABORT_UNLESS(Lock.IsLocked());
-    auto cb = [self = shared_from_this()](bool ok) {
+    auto cb = [selfCtx = SelfContext](bool ok) {
         if (ok) {
-            with_lock(self->Lock) {
-                if (self->Stopping) {
-                    return;
+            if (auto self = selfCtx->LockShared()) {
+                with_lock(self->Lock) {
+                    if (self->Stopping) {
+                        return;
+                    }
+                    self->RunFederationDiscoveryImpl();
                 }
-                self->RunFederationDiscoveryImpl();
             }
         }
     };
@@ -119,7 +122,7 @@ void TFederatedDbObserver::ScheduleFederationDiscoveryImpl(TDuration delay) {
 
 }
 
-void TFederatedDbObserver::OnFederationDiscovery(TStatus&& status, Ydb::FederationDiscovery::ListFederationDatabasesResult&& result) {
+void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::FederationDiscovery::ListFederationDatabasesResult&& result) {
     with_lock(Lock) {
         if (Stopping) {
             // TODO log something

@@ -199,4 +199,17 @@ ui64 TBlobStorageGroupType::MaxPartSize(const TLogoBlobID &id) const {
     return TErasureType::PartSize((TErasureType::ECrcMode)id.CrcMode(), id.BlobSize());
 }
 
+bool TBlobStorageGroupType::PartFits(ui32 partId, ui32 idxInSubgroup) const {
+    switch (GetErasure()) {
+        case TBlobStorageGroupType::ErasureMirror3dc:
+            return idxInSubgroup % 3 == partId - 1;
+
+        case TBlobStorageGroupType::ErasureMirror3of4:
+            return idxInSubgroup >= 4 || partId == 3 || idxInSubgroup % 2 == partId - 1;
+
+        default:
+            return idxInSubgroup >= TotalPartCount() || idxInSubgroup == partId - 1;
+    }
+}
+
 }

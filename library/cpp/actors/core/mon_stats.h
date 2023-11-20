@@ -70,6 +70,8 @@ namespace NActors {
         i64 MinConsumedCpuUs = 0;
         i64 MaxBookedCpuUs = 0;
         i64 MinBookedCpuUs = 0;
+        double SpinningTimeUs = 0;
+        double SpinThresholdUs = 0;
         i16 WrongWakenedThreadCount = 0;
         i16 CurrentThreadCount = 0;
         i16 PotentialMaxThreadCount = 0;

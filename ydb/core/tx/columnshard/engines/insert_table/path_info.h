@@ -15,7 +15,7 @@ public:
     };
 
 private:
-    const EIndexationPriority Category;
+    YDB_READONLY(EIndexationPriority, Category, EIndexationPriority::NoPriority);
     const ui32 Weight;
 public:
     TPathInfoIndexPriority(const EIndexationPriority category, const ui32 weight)
@@ -38,8 +38,8 @@ class TPathInfo: public TMoveOnly {
 private:
     const ui64 PathId = 0;
     TSet<TInsertedData> Committed;
-    i64 CommittedSize = 0;
-    i64 InsertedSize = 0;
+    YDB_READONLY(i64, CommittedSize, 0);
+    YDB_READONLY(i64, InsertedSize, 0);
     bool CommittedOverload = false;
     bool InsertedOverload = false;
     TInsertionSummary* Summary = nullptr;

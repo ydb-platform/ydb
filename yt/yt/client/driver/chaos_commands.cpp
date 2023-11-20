@@ -13,11 +13,21 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TUpdateChaosTableReplicaProgressCommand::TUpdateChaosTableReplicaProgressCommand()
+void TUpdateChaosTableReplicaProgressCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("replica_id", ReplicaId);
-    RegisterParameter("progress", Options.Progress);
-    RegisterParameter("force", Options.Force);
+    registrar.Parameter("replica_id", &TThis::ReplicaId);
+
+    registrar.ParameterWithUniversalAccessor<TReplicationProgress>(
+        "progress",
+        [] (TThis* command) -> auto& {
+            return command->Options.Progress;
+        });
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "force",
+        [] (TThis* command) -> auto& {
+            return command->Options.Force;
+        });
 }
 
 void TUpdateChaosTableReplicaProgressCommand::DoExecute(ICommandContextPtr context)
@@ -32,15 +42,28 @@ void TUpdateChaosTableReplicaProgressCommand::DoExecute(ICommandContextPtr conte
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TAlterReplicationCardCommand::TAlterReplicationCardCommand()
+void TAlterReplicationCardCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("replication_card_id", ReplicationCardId);
-    RegisterParameter("replicated_table_options", Options.ReplicatedTableOptions)
-        .Optional();
-    RegisterParameter("enable_replicated_table_tracker", Options.EnableReplicatedTableTracker)
-        .Optional();
-    RegisterParameter("replication_card_collocation_id", Options.ReplicationCardCollocationId)
-        .Optional();
+    registrar.Parameter("replication_card_id", &TThis::ReplicationCardId);
+
+    registrar.ParameterWithUniversalAccessor<NTabletClient::TReplicatedTableOptionsPtr>(
+        "replicated_table_options",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReplicatedTableOptions;
+        })
+        .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "enable_replicated_table_tracker",
+        [] (TThis* command) -> auto& {
+            return command->Options.EnableReplicatedTableTracker;
+        })
+        .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<std::optional<TReplicationCardCollocationId>>(
+        "replication_card_collocation_id",
+         [] (TThis* command) -> auto& {
+            return command->Options.ReplicationCardCollocationId;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TAlterReplicationCardCommand::DoExecute(ICommandContextPtr context)

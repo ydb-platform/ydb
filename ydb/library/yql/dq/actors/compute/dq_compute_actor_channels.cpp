@@ -111,14 +111,6 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelData::TPtr& ev)
 
     TInputChannelState& inputChannel = InCh(channelId);
 
-    if (Y_UNLIKELY(inputChannel.Stats)) {
-        auto now = Now();
-        if (inputChannel.Stats->FirstMessageTs == TInstant::Zero()) {
-            inputChannel.Stats->FirstMessageTs = now;
-        }
-        inputChannel.Stats->LastMessageTs = now;
-    }
-
     LOG_T("Received input for channelId: " << channelId
         << ", seqNo: " << record.GetSeqNo()
         << ", size: " << channelData.Proto.GetData().GetRaw().size()
@@ -158,19 +150,6 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelData::TPtr& ev)
     if (inputChannel.RetryState) {
         LOG_D("Waiting for input channelId: " << channelId
             << " messages: " << InFlightMessagesStr(inputChannel.InFlight));
-    }
-
-    if (inputChannel.PollRequest && inputChannel.PollRequest->SeqNo <= record.GetSeqNo()) {
-        if (Y_UNLIKELY(inputChannel.Stats)) {
-            auto waitTime = TInstant::Now() - *inputChannel.StartPollTime;
-            if (inputChannel.Stats->FirstMessageTs == TInstant::Zero()) {
-                inputChannel.Stats->IdleTime += waitTime;
-            } else {
-                inputChannel.Stats->WaitTime += waitTime;
-            }
-            inputChannel.StartPollTime.reset();
-        }
-        inputChannel.PollRequest.reset();
     }
 
     if (channelData.Proto.GetFinished()) {
@@ -227,7 +206,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& 
     }
 
     LOG_T("Resume compute actor");
-    Cbs->ResumeExecution();
+    Cbs->ResumeExecution(EResumeSource::ChannelsHandleWork);
 }
 
 void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelData::TPtr& ev) {
@@ -256,15 +235,6 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelData::TPtr
 
         if (seqNo < msg->FromSeqNo || seqNo > msg->ToSeqNo) {
             LOG_E("Output channelId: " << msg->ChannelId << " has unexpected inflight message seqNo: " << seqNo);
-        }
-
-        if (Y_UNLIKELY(outputChannel.Stats)) {
-            outputChannel.Stats->ResentMessages++;
-            auto now = Now();
-            if (outputChannel.Stats->FirstMessageTs == TInstant::Zero()) {
-                outputChannel.Stats->FirstMessageTs = now;
-            }
-            outputChannel.Stats->LastMessageTs = now;
         }
 
         auto retryEv = MakeHolder<TEvDqCompute::TEvChannelData>();
@@ -417,7 +387,7 @@ void TDqComputeActorChannels::HandleUndeliveredEvChannelData(ui64 channelId, NAc
     if (outputChannel.Finished && outputChannel.EarlyFinish && !SupportCheckpoints) {
         LOG_I("Ignore undelivered TEvChannelData event due to early finish, channelId: " << channelId);
         outputChannel.InFlight.clear();
-        Cbs->ResumeExecution();
+        Cbs->ResumeExecution(EResumeSource::ChannelsHandleUndeliveredData);
         return;
     }
 
@@ -448,7 +418,7 @@ void TDqComputeActorChannels::HandleUndeliveredEvChannelDataAck(ui64 channelId, 
         LOG_I("Handle undelivered event: TEvChannelDataAck, channelId: " << channelId << ", reason: " << reason
             << ". Ignore, channel is finished.");
         inputChannel.InFlight.clear();
-        Cbs->ResumeExecution();
+        Cbs->ResumeExecution(EResumeSource::ChannelsHandleUndeliveredAck);
         return;
     }
 
@@ -585,14 +555,6 @@ void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData, con
         << ", checkpoint: " << channelData.Proto.HasCheckpoint()
         << ", seqNo: " << seqNo
         << ", finished: " << finished);
-
-    if (Y_UNLIKELY(outputChannel.Stats)) {
-        auto now = Now();
-        if (outputChannel.Stats->FirstMessageTs == TInstant::Zero()) {
-            outputChannel.Stats->FirstMessageTs = now;
-        }
-        outputChannel.Stats->LastMessageTs = now;
-    }
 
     auto dataEv = MakeHolder<TEvDqCompute::TEvChannelData>();
     dataEv->Record.SetSeqNo(seqNo);

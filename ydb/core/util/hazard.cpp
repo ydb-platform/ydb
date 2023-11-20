@@ -72,7 +72,7 @@ THazardPointer* THazardDomain::Acquire() {
 }
 
 void THazardDomain::Release(THazardPointer* ptr) noexcept {
-    Y_VERIFY_DEBUG(ptr->ProtectedPointer.load(std::memory_order_relaxed) == nullptr,
+    Y_DEBUG_ABORT_UNLESS(ptr->ProtectedPointer.load(std::memory_order_relaxed) == nullptr,
         "Make sure pointer is cleared before it is released");
 
     auto& cache = LocalCache.Get();

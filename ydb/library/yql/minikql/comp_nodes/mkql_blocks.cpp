@@ -585,9 +585,10 @@ public:
 
         block = more;
 
-        const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetPointer() }, "values_ptr", block);
-        const auto values = new LoadInst(ptrValuesType, valuesPtr, "values", block);
-        SafeUnRefUnboxed(values, ctx, block);
+        const auto clearFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::ClearValues));
+        const auto clearType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
+        const auto clearPtr = CastInst::Create(Instruction::IntToPtr, clearFunc, PointerType::getUnqual(clearType), "clear", block);
+        CallInst::Create(clearType, clearPtr, {stateArg}, "", block);
 
         const auto getres = GetNodeValues(Flow_, ctx, block);
 
@@ -668,21 +669,21 @@ private:
         std::vector<std::unique_ptr<IBlockReader>> Readers_;
         std::vector<std::unique_ptr<IBlockItemConverter>> Converters_;
 
-        TState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, size_t wideFieldsIndex, const TVector<TType*>& types)
+        TState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types)
             : TComputationValue(memInfo)
             , Values_(types.size() + 1)
         {
             Pointer_ = Values_.data();
-            auto**const fields = ctx.WideFields.data() + wideFieldsIndex;
-            for (size_t i = 0; i < types.size() + 1; ++i) {
-                fields[i] = &Values_[i];
-            }
 
             const auto& pgBuilder = ctx.Builder->GetPgBuilder();
             for (size_t i = 0; i < types.size(); ++i) {
                 Readers_.push_back(MakeBlockReader(TTypeInfoHelper(), types[i]));
                 Converters_.push_back(MakeBlockItemConverter(TTypeInfoHelper(), types[i], pgBuilder));
             }
+        }
+
+        void ClearValues() {
+            Values_.assign(Values_.size(), NUdf::TUnboxedValuePod());
         }
 
         NUdf::TUnboxedValuePod Get(const THolderFactory& holderFactory, size_t idx) const {
@@ -746,12 +747,20 @@ private:
     }
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-        state = ctx.HolderFactory.Create<TState>(ctx, WideFieldsIndex_, Types_);
+        state = ctx.HolderFactory.Create<TState>(ctx, Types_);
     }
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue())
+        if (!state.HasValue()) {
             MakeState(ctx, state);
+
+            const auto s = static_cast<TState*>(state.AsBoxed().Get());
+            auto**const fields = ctx.WideFields.data() + WideFieldsIndex_;
+            for (size_t i = 0; i <= Types_.size(); ++i) {
+                fields[i] = &s->Values_[i];
+            }
+            return *s;
+        }
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
 
@@ -949,8 +958,8 @@ public:
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         auto& s = GetState(state, ctx);
         if (!s.Count) {
-            s.Values.assign(s.Values.size(), NUdf::TUnboxedValuePod());
             const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
+            s.ClearValues();
             if (const auto result = Flow_->FetchValues(ctx, fields); result != EFetchResult::One)
                 return result;
             s.FillArrays();
@@ -1024,9 +1033,10 @@ public:
 
         block = read;
 
-        const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetPointer() }, "values_ptr", block);
-        const auto values = new LoadInst(ptrValuesType, valuesPtr, "values", block);
-        SafeUnRefUnboxed(values, ctx, block);
+        const auto clearFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TBlockState::ClearValues));
+        const auto clearType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
+        const auto clearPtr = CastInst::Create(Instruction::IntToPtr, clearFunc, PointerType::getUnqual(clearType), "clear", block);
+        CallInst::Create(clearType, clearPtr, {stateArg}, "", block);
 
         const auto getres = GetNodeValues(Flow_, ctx, block);
 
@@ -1039,6 +1049,8 @@ public:
 
         block = work;
 
+        const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetPointer() }, "values_ptr", block);
+        const auto values = new LoadInst(ptrValuesType, valuesPtr, "values", block);
         Value* array = UndefValue::get(arrayType);
         for (auto idx = 0U; idx < getres.second.size(); ++idx) {
             const auto value = getres.second[idx](ctx, block);

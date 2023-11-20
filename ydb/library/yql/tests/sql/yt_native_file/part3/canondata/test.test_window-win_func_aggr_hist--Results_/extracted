@@ -1,0 +1,26 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Warning: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject
+    	select subkey, HISTOGRAM(cast(key as uint32) % 10, 2.) over w1 as hh, count(key) over w1 as c, min(key) over w1 as mink, max(key) over w1 as maxk
+	^
+        <tmp_path>/program.sql:<main>:3:12: Warning: At function: CalcOverWindow
+        	from plato.Input
+	           ^
+            <tmp_path>/program.sql:<main>:2:16: Warning: At function: WinOnRows
+            	select subkey, HISTOGRAM(cast(key as uint32) % 10, 2.) over w1 as hh, count(key) over w1 as c, min(key) over w1 as mink, max(key) over w1 as maxk
+	               ^
+                <tmp_path>/program.sql:/lib/yql/window.yql:xxx:yyy: Warning: At function: WindowTraits
+                	
+	                   ^
+                    <tmp_path>/program.sql:/lib/yql/window.yql:xxx:yyy: Warning: At function: MatchType
+                    	
+	                                         ^
+                        <tmp_path>/program.sql:/lib/yql/window.yql:xxx:yyy: Warning: At function: TypeOf
+                        	
+	                   ^
+                            <tmp_path>/program.sql:<main>:2:46: Warning: At function: %
+                            	select subkey, HISTOGRAM(cast(key as uint32) % 10, 2.) over w1 as hh, count(key) over w1 as c, min(key) over w1 as mink, max(key) over w1 as maxk
+	                                             ^
+                                <tmp_path>/program.sql:<main>:2:46: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                                	select subkey, HISTOGRAM(cast(key as uint32) % 10, 2.) over w1 as hh, count(key) over w1 as c, min(key) over w1 as mink, max(key) over w1 as maxk
+	                                             ^

@@ -6,7 +6,6 @@ SIZE(MEDIUM)
 TIMEOUT(180)
 
 SRCS(
-    kqp_spilling_file_ut.cpp
     kqp_scan_data_ut.cpp
 )
 

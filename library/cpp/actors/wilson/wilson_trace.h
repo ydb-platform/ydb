@@ -116,7 +116,7 @@ namespace NWilson {
             p += sizeof(SpanId);
             memcpy(&Raw, p, sizeof(Raw));
             p += sizeof(Raw);
-            Y_VERIFY_DEBUG(p - in == sizeof(TSerializedTraceId));
+            Y_DEBUG_ABORT_UNLESS(p - in == sizeof(TSerializedTraceId));
         }
 
         TTraceId(const NActorsProto::TTraceId& pb)
@@ -138,7 +138,7 @@ namespace NWilson {
             p += sizeof(SpanId);
             memcpy(p, &Raw, sizeof(Raw));
             p += sizeof(Raw);
-            Y_VERIFY_DEBUG(p - *out == sizeof(TSerializedTraceId));
+            Y_DEBUG_ABORT_UNLESS(p - *out == sizeof(TSerializedTraceId));
         }
 
         void Serialize(NActorsProto::TTraceId *pb) const {
@@ -223,7 +223,7 @@ namespace NWilson {
         static constexpr size_t GetSpanIdSize() { return sizeof(ui64); }
 
         void Validate() const {
-            Y_VERIFY_DEBUG(*this || !SpanId);
+            Y_DEBUG_ABORT_UNLESS(*this || !SpanId);
         }
 
         // for compatibility with NBS

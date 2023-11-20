@@ -1,6 +1,6 @@
 #include "defs.h"
 #include "datashard_locks.h"
-#include "datashard_ut_common.h"
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 
 #include <ydb/core/tablet_flat/flat_dbase_apply.h>
 #include <ydb/core/tablet_flat/flat_exec_commit.h>
@@ -654,8 +654,7 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
         // should use RS. Hold one RS to 'pause' one transaction
         // and then restart its shard. This will cause locks
         // cache to be used.
-        auto captureRS = [shards](TTestActorRuntimeBase&,
-                                  TAutoPtr<IEventHandle> &event) -> auto {
+        auto captureRS = [shards](TAutoPtr<IEventHandle> &event) -> auto {
             if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
                 auto &rec = event->Get<TEvTxProcessing::TEvReadSet>()->Record;
                 if (rec.GetTabletDest() == shards[0])

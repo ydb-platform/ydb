@@ -12,7 +12,7 @@ TRlHelpers::TRlHelpers(const std::optional<TString>& topicPath, const TRlContext
     , Subscribe(subscribe)
     , WaitDuration(waitDuration)
 {
-    Y_VERIFY_DEBUG(!subscribe || (topicPath && subscribe));
+    Y_DEBUG_ABORT_UNLESS(!subscribe || (topicPath && subscribe));
 }
 
 void TRlHelpers::Bootstrap(const TActorId selfId, const NActors::TActorContext& ctx) {

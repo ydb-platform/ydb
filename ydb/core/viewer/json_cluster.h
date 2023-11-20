@@ -8,6 +8,9 @@
 #include <ydb/core/viewer/json/json.h>
 #include "json_pipe_req.h"
 #include "viewer.h"
+#include "viewer_probes.h"
+
+LWTRACE_USING(VIEWER_PROVIDER);
 
 namespace NKikimr {
 namespace NViewer {
@@ -34,6 +37,18 @@ class TJsonCluster : public TViewerPipeClient<TJsonCluster> {
     ui32 TenantsNumber = 0;
     bool Tablets = false;
 
+    struct TEventLog {
+        bool IsTimeout = false;
+        TInstant StartTime;
+        TInstant StartHandleListTenantsResponseTime;
+        TInstant StartHandleNodesInfoTime;
+        TInstant StartMergeBSGroupsTime;
+        TInstant StartMergeVDisksTime;
+        TInstant StartMergePDisksTime;
+        TInstant StartMergeTabletsTime;
+        TInstant StartResponseBuildingTime;
+    };
+    TEventLog EventLog;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
@@ -52,6 +67,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ) {
+        EventLog.StartTime = TActivationContext::Now();
         SendRequest(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         RequestConsoleListTenants();
         Become(&TThis::StateRequested, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
@@ -59,8 +75,11 @@ public:
 
     void PassAway() override {
         if (NodesInfo != nullptr) {
+            TIntrusivePtr<TDynamicNameserviceConfig> dynamicNameserviceConfig = AppData()->DynamicNameserviceConfig;
             for (const auto& ni : NodesInfo->Nodes) {
-                Send(TActivationContext::InterconnectProxy(ni.NodeId), new TEvents::TEvUnsubscribe);
+                if (ni.NodeId <= dynamicNameserviceConfig->MaxStaticNodeId) {
+                    Send(TActivationContext::InterconnectProxy(ni.NodeId), new TEvents::TEvUnsubscribe);
+                }
             }
         }
         TBase::PassAway();
@@ -128,6 +147,7 @@ public:
     }
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
+        EventLog.StartHandleNodesInfoTime = TActivationContext::Now();
         if (Tablets) {
             THolder<TEvTxUserProxy::TEvNavigate> request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
             if (!Event->Get()->UserToken.empty()) {
@@ -241,6 +261,7 @@ public:
     }
 
     void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
+        EventLog.StartHandleListTenantsResponseTime = TActivationContext::Now();
         Ydb::Cms::ListDatabasesResult listTenantsResult;
         ev->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
         TenantsNumber = listTenantsResult.paths().size();
@@ -286,15 +307,21 @@ public:
     TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&> PDisksIndex;
 
     void ReplyAndPassAway() {
-        TStringStream json;
+        EventLog.StartMergeBSGroupsTime = TActivationContext::Now();
         MergeWhiteboardResponses(MergedBSGroupInfo, BSGroupInfo);
+        EventLog.StartMergeVDisksTime = TActivationContext::Now();
         MergeWhiteboardResponses(MergedVDiskInfo, VDiskInfo);
+        EventLog.StartMergePDisksTime = TActivationContext::Now();
         MergeWhiteboardResponses(MergedPDiskInfo, PDiskInfo);
 
+        EventLog.StartMergeTabletsTime = TActivationContext::Now();
         THashSet<TTabletId> tablets;
-
         if (Tablets) {
             MergeWhiteboardResponses(MergedTabletInfo, TabletInfo);
+        }
+
+        EventLog.StartResponseBuildingTime = TActivationContext::Now();
+        if (Tablets) {
             TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
             if (!domains->Domains.empty()) {
                 TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
@@ -424,12 +451,30 @@ public:
         if (itMax != names.end()) {
             pbCluster.SetName(itMax->first);
         }
+
+        TStringStream json;
         TProtoToJson::ProtoToJson(json, pbCluster, JsonSettings);
         Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), std::move(json.Str())), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+
+        const TInstant now = TActivationContext::Now();
+        LWPROBE(ViewerClusterHandler, TBase::SelfId().NodeId(), Tablets, EventLog.IsTimeout,
+            EventLog.StartTime.MilliSeconds(),
+            (now - EventLog.StartTime).MilliSeconds(),
+            (EventLog.StartHandleListTenantsResponseTime - EventLog.StartTime).MilliSeconds(),
+            (EventLog.StartHandleNodesInfoTime - EventLog.StartTime).MilliSeconds(),
+            (EventLog.StartMergeBSGroupsTime - EventLog.StartTime).MilliSeconds(),
+            (EventLog.StartMergeVDisksTime - EventLog.StartMergeBSGroupsTime).MilliSeconds(),
+            (EventLog.StartMergePDisksTime - EventLog.StartMergeVDisksTime).MilliSeconds(),
+            (EventLog.StartMergeTabletsTime - EventLog.StartMergePDisksTime).MilliSeconds(),
+            (EventLog.StartResponseBuildingTime - EventLog.StartMergeTabletsTime).MilliSeconds(),
+            (now - EventLog.StartResponseBuildingTime).MilliSeconds()
+        );
+
         PassAway();
     }
 
     void HandleTimeout() {
+        EventLog.IsTimeout = true;
         ReplyAndPassAway();
     }
 };

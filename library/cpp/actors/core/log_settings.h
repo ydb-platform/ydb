@@ -143,13 +143,13 @@ namespace NActors {
             }
 
             inline TComponentSettings GetComponentSettings(EComponent component) const {
-                Y_VERIFY_DEBUG((component & Mask) == component);
+                Y_DEBUG_ABORT_UNLESS((component & Mask) == component);
                 // by using Mask we don't get outside of array boundaries
                 return TComponentSettings(AtomicGet(ComponentInfo[component & Mask]));
             }
 
             const char* ComponentName(EComponent component) const {
-                Y_VERIFY_DEBUG((component & Mask) == component);
+                Y_DEBUG_ABORT_UNLESS((component & Mask) == component);
                 return ComponentNames[component & Mask].data();
             }
 

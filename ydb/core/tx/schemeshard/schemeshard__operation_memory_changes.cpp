@@ -185,7 +185,7 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         if (!elem) {
             ss->TxInFlight.erase(id);
         } else {
-            Y_FAIL("No such cases are exist");
+            Y_ABORT("No such cases are exist");
         }
         TxStates.pop();
     }

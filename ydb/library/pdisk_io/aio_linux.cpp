@@ -221,13 +221,13 @@ public:
     }
 
     void PreparePRead(IAsyncIoOperation *op, void *destination, size_t size, size_t offset) override {
-        Y_VERIFY_DEBUG(File);
+        Y_DEBUG_ABORT_UNLESS(File);
         iocb* cb =  static_cast<iocb*>(static_cast<TAsyncIoOperation*>(op));
         io_prep_pread(cb, static_cast<FHANDLE>(*File), destination, size, offset);
     }
 
     void PreparePWrite(IAsyncIoOperation *op, const void *source, size_t size, size_t offset) override {
-        Y_VERIFY_DEBUG(File);
+        Y_DEBUG_ABORT_UNLESS(File);
         iocb* cb =  static_cast<iocb*>(static_cast<TAsyncIoOperation*>(op));
         io_prep_pwrite(cb, static_cast<FHANDLE>(*File), const_cast<void*>(source), size, offset);
     }
@@ -538,7 +538,7 @@ public:
     }
 
     void PreparePRead(IAsyncIoOperation *op, void *destination, size_t size, size_t offset) override {
-        Y_VERIFY_DEBUG(File);
+        Y_DEBUG_ABORT_UNLESS(File);
 
         auto tOp = dynamic_cast<TAsyncIoOperationLiburing*>(op);
         Y_ABORT_UNLESS(tOp != nullptr);
@@ -550,7 +550,7 @@ public:
     }
 
     void PreparePWrite(IAsyncIoOperation *op, const void *source, size_t size, size_t offset) override {
-        Y_VERIFY_DEBUG(File);
+        Y_DEBUG_ABORT_UNLESS(File);
 
         auto tOp = dynamic_cast<TAsyncIoOperationLiburing*>(op);
         Y_ABORT_UNLESS(tOp != nullptr);

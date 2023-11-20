@@ -91,7 +91,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TRmDir");
+        Y_ABORT("no AbortPropose for TRmDir");
     }
 
     bool ProgressState(TOperationContext& context) override {

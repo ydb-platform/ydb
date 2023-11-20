@@ -2,6 +2,7 @@
 
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
+#include <library/cpp/random_provider/random_provider.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/protos/subdomains.pb.h>
@@ -303,7 +304,7 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvWaitPlanStep::TPtr &
     TMediator &mediator = *it->second.Mediator;
     const ui32 bucketId = it->second.BucketId;
     auto &bucket = mediator.Buckets[bucketId];
-    Y_VERIFY_DEBUG(bucket.Entry, "TEvWaitPlanStep TabletId# %" PRIu64 " has no timecast entry, possible race", tabletId);
+    Y_DEBUG_ABORT_UNLESS(bucket.Entry, "TEvWaitPlanStep TabletId# %" PRIu64 " has no timecast entry, possible race", tabletId);
     if (!bucket.Entry) {
         return;
     }
@@ -351,7 +352,7 @@ void TMediatorTimecastProxy::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, 
         << " HANDLE EvDeliveryProblem " << msg->TabletId);
     auto it = MediatorCoordinators.find(msg->TabletId);
     if (it != MediatorCoordinators.end()) {
-        Y_VERIFY_DEBUG(!it->second.RetryPending);
+        Y_DEBUG_ABORT_UNLESS(!it->second.RetryPending);
         Schedule(TDuration::MilliSeconds(5), new TEvPrivate::TEvRetryCoordinator(msg->TabletId));
         it->second.RetryPending = true;
         it->second.Subscribed = false;

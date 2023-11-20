@@ -16,6 +16,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/base/nameservice.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/mind/tenant_slot_broker.h>
@@ -449,7 +450,6 @@ public:
 
     THashMap<TNodeId, THolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse>> NodeSystemState;
     THashMap<TNodeId, const NKikimrWhiteboard::TSystemStateInfo*> MergedNodeSystemState;
-    THashSet<TNodeId> UsedClockSkewNodes;
 
     std::unordered_map<TString, const NKikimrBlobStorage::TBaseConfig::TPDisk*> BSConfigPDisks;
     std::unordered_map<TString, const NKikimrBlobStorage::TBaseConfig::TVSlot*> BSConfigVSlots;
@@ -1298,7 +1298,7 @@ public:
         std::sort(computeNodeIds->begin(), computeNodeIds->end());
         computeNodeIds->erase(std::unique(computeNodeIds->begin(), computeNodeIds->end()), computeNodeIds->end());
         if (computeNodeIds->empty()) {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no compute nodes");
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no compute nodes", ETags::ComputeState);
         } else {
             Ydb::Monitoring::StatusFlag::Status systemStatus = FillSystemTablets({&context, "SYSTEM_TABLET"});
             if (systemStatus != Ydb::Monitoring::StatusFlag::GREEN && systemStatus != Ydb::Monitoring::StatusFlag::GREY) {
@@ -1361,7 +1361,7 @@ public:
 
         auto itPDisk = BSConfigPDisks.find(pDiskId);
         if (itPDisk == BSConfigPDisks.end()) { // this report, in theory, can't happen because there was pdisk mention in bsc vslot info. this pdisk info have to exists in bsc too
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide expected pdisk information");
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide expected pdisk information", ETags::PDiskState);
             storagePDiskStatus.set_overall(context.GetOverallStatus());
             return;
         }
@@ -1369,7 +1369,7 @@ public:
         ui32 nodeId = itPDisk->second->nodeid();
         auto itNode = BSConfigNodes.find(nodeId);
         if (itNode == BSConfigNodes.end()) { // this report, in theory, can't happen because there was node mention in bsc pdisk info. this node info have to exists in bsc too
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide expected node information");
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide expected node information", ETags::PDiskState);
             storagePDiskStatus.set_overall(context.GetOverallStatus());
             return;
         }
@@ -1433,7 +1433,7 @@ public:
                 case NKikimrBlobStorage::TPDiskState::Reserved14:
                 case NKikimrBlobStorage::TPDiskState::Reserved15:
                 case NKikimrBlobStorage::TPDiskState::Reserved16:
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Unknown PDisk state");
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Unknown PDisk state", ETags::PDiskState);
                     break;
             }
 
@@ -1520,14 +1520,9 @@ public:
         storageVDiskStatus.set_id(vSlotId);
 
         if (itVSlot == BSConfigVSlots.end()) { // this report, in theory, can't happen because there was slot mention in bsc group info. this slot info have to exists in bsc too
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide information");
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide information", ETags::VDiskState);
             storageVDiskStatus.set_overall(context.GetOverallStatus());
             return;
-        }
-
-        if (itVSlot->second->vslotid().has_pdiskid()) {
-            TString pDiskId = GetPDiskId(*itVSlot->second);
-            FillPDiskStatus(pDiskId, *storageVDiskStatus.mutable_pdisk(), {&context, "PDISK"});
         }
 
         auto& vslot = *itVSlot->second;
@@ -1535,9 +1530,14 @@ public:
         const auto *descriptor = NKikimrBlobStorage::EVDiskStatus_descriptor();
         auto status = descriptor->FindValueByName(vslot.status());
         if (!status) { // this case is not expected because becouse bsc assignes status according EVDiskStatus enum
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide known status");
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide known status", ETags::VDiskState);
             storageVDiskStatus.set_overall(context.GetOverallStatus());
             return;
+        }
+
+        if (itVSlot->second->vslotid().has_pdiskid()) {
+            TString pDiskId = GetPDiskId(*itVSlot->second);
+            FillPDiskStatus(pDiskId, *storageVDiskStatus.mutable_pdisk(), {&context, "PDISK"});
         }
 
         switch (status->number()) {
@@ -1849,7 +1849,7 @@ public:
 
         auto itGroup = BSConfigGroups.find(groupId);
         if (itGroup == BSConfigGroups.end()) {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide information");
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet BSC didn't provide information", ETags::GroupState);
             storageGroupStatus.set_overall(context.GetOverallStatus());
             return;
         }
@@ -1860,7 +1860,7 @@ public:
             TString vDiskId = GetVSlotId(vSlotIdProto);
             Ydb::Monitoring::StorageVDiskStatus& vDiskStatus = *storageGroupStatus.add_vdisks();
             FillVDiskStatus(vDiskId, vDiskStatus, {&context, "VDISK"});
-            onlyGoodDisks &= vDiskStatus.overall() != Ydb::Monitoring::StatusFlag::RED 
+            onlyGoodDisks &= vDiskStatus.overall() != Ydb::Monitoring::StatusFlag::RED
                 && vDiskStatus.overall() != Ydb::Monitoring::StatusFlag::GREY;
         }
 
@@ -2052,56 +2052,38 @@ public:
         }
     }
 
-    bool IsRequiredClockSkewIssue(const NKikimrWhiteboard::TSystemStateInfo& nodeSystemState) {
-        if (!nodeSystemState.has_clockskewpeerid()) {
-            return true;
-        }
-        const ui32 peerId = nodeSystemState.clockskewpeerid();
-        auto itPeerState = MergedNodeSystemState.find(peerId);
-        if (itPeerState == MergedNodeSystemState.end() || UsedClockSkewNodes.contains(peerId)) {
-            return false;
-        }
-        const NKikimrWhiteboard::TSystemStateInfo& peerState(*itPeerState->second);
-        if (!peerState.has_clockskewpeerid()) {
-            return true;
-        }
-        const ui32 nextPeerId = peerState.clockskewpeerid();
-        if (nextPeerId != nodeSystemState.nodeid() && !UsedClockSkewNodes.contains(nextPeerId)) {
-            return false;
-        }
-        return true;
-    }
+    const TDuration MAX_CLOCKSKEW_RED_ISSUE_TIME = TDuration::MicroSeconds(25000);
+    const TDuration MAX_CLOCKSKEW_YELLOW_ISSUE_TIME = TDuration::MicroSeconds(5000);
 
-    void FillClockSkewResult(TNodeId nodeId, TSelfCheckContext context) {
-        FillNodeInfo(nodeId, context.Location.mutable_node());
-        auto itNodeSystemState = MergedNodeSystemState.find(nodeId);
-        if (itNodeSystemState != MergedNodeSystemState.end()) {
-            const NKikimrWhiteboard::TSystemStateInfo& nodeSystemState(*itNodeSystemState->second);
-            if (IsRequiredClockSkewIssue(nodeSystemState)) {
-                UsedClockSkewNodes.emplace(nodeId);
-                if (nodeSystemState.has_clockskewpeerid()) {
-                    const ui32 peerId = nodeSystemState.clockskewpeerid();
-                    UsedClockSkewNodes.emplace(peerId);
-                    FillNodeInfo(peerId, context.Location.mutable_peer());
-                }
-                if (nodeSystemState.clockskewmicrosec() > 25000) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Time difference is more than 25 ms", ETags::NodeState);
-                } else if (nodeSystemState.clockskewmicrosec() > 5000) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Time difference is more than 5 ms", ETags::NodeState);
-                } else {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
-                }
+    void FillNodesSyncStatus(TOverallStateContext& context) {
+        long maxClockSkewUs = 0;
+        TNodeId maxClockSkewPeerId = 0;
+        TNodeId maxClockSkewNodeId = 0;
+        for (auto& [nodeId, nodeSystemState] : MergedNodeSystemState) {
+            if (abs(nodeSystemState->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
+                maxClockSkewUs = abs(nodeSystemState->GetMaxClockSkewWithPeerUs());
+                maxClockSkewPeerId = nodeSystemState->GetMaxClockSkewPeerId();
+                maxClockSkewNodeId = nodeId;
             }
         }
-    }
+        if (!maxClockSkewNodeId) {
+            return;
+        }
 
-    void FillNodesSyncResult(TOverallStateContext& context) {
         TSelfCheckResult syncContext;
         syncContext.Type = "NODES_SYNC";
-        for (TNodeId nodeId : NodeIds) {
-            FillClockSkewResult(nodeId, {&syncContext, "TIME"});
+        FillNodeInfo(maxClockSkewNodeId, syncContext.Location.mutable_node());
+        FillNodeInfo(maxClockSkewPeerId, syncContext.Location.mutable_peer());
+
+        TDuration maxClockSkewTime = TDuration::MicroSeconds(maxClockSkewUs);
+        if (maxClockSkewTime > MAX_CLOCKSKEW_RED_ISSUE_TIME) {
+            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "The nodes have a time discrepancy of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
+        } else if (maxClockSkewTime > MAX_CLOCKSKEW_YELLOW_ISSUE_TIME) {
+            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "The nodes have a time discrepancy of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
+        } else {
+            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
         }
-        syncContext.ReportWithMaxChildStatus("Time difference exceeded", ETags::SyncState, {ETags::NodeState});
+
         context.UpdateMaxStatus(syncContext.GetOverallStatus());
         context.AddIssues(syncContext.IssueRecords);
     }
@@ -2114,7 +2096,7 @@ public:
                 FillDatabaseResult(context, path, state);
             }
         }
-        FillNodesSyncResult(context);
+        FillNodesSyncStatus(context);
         if (DatabaseState.empty()) {
             Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());
             TSelfCheckResult tabletContext;
@@ -2169,9 +2151,9 @@ public:
 
     void TruncateIssuesIfBeyondLimit(Ydb::Monitoring::SelfCheckResult& result, ui64 byteLimit) {
         auto truncateStatusPriority = {
-            Ydb::Monitoring::StatusFlag::BLUE, 
-            Ydb::Monitoring::StatusFlag::YELLOW, 
-            Ydb::Monitoring::StatusFlag::ORANGE, 
+            Ydb::Monitoring::StatusFlag::BLUE,
+            Ydb::Monitoring::StatusFlag::YELLOW,
+            Ydb::Monitoring::StatusFlag::ORANGE,
             Ydb::Monitoring::StatusFlag::RED
         };
         for (Ydb::Monitoring::StatusFlag::Status truncateStatus: truncateStatusPriority) {
@@ -2219,7 +2201,7 @@ public:
             id << Ydb::Monitoring::StatusFlag_Status_Name(issue->status());
             id << '-' << TSelfCheckResult::crc16(issue->message());
             issue->set_id(id.Str());
-        } 
+        }
 
         for (TActorId pipe : PipeClients) {
             NTabletPipe::CloseClient(SelfId(), pipe);

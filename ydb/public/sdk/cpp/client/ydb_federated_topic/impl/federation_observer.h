@@ -7,6 +7,7 @@
 
 #include <ydb/public/api/protos/ydb_federation_discovery.pb.h>
 
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/federated_topic.h>
 
@@ -42,14 +43,15 @@ public:
 };
 
 
-class TFederatedDbObserver : public TClientImplCommon<TFederatedDbObserver> {
+class TFederatedDbObserverImpl : public TClientImplCommon<TFederatedDbObserverImpl>,
+                                 public NPersQueue::TEnableSelfContext<TFederatedDbObserverImpl> {
 public:
     static constexpr TDuration REDISCOVER_DELAY = TDuration::Seconds(60);
 
 public:
-    TFederatedDbObserver(std::shared_ptr<TGRpcConnectionsImpl> connections, const TFederatedTopicClientSettings& settings);
+    TFederatedDbObserverImpl(std::shared_ptr<TGRpcConnectionsImpl> connections, const TFederatedTopicClientSettings& settings);
 
-    ~TFederatedDbObserver();
+    ~TFederatedDbObserverImpl();
 
     std::shared_ptr<TFederatedDbState> GetState();
 
@@ -77,6 +79,34 @@ private:
     NGrpc::IQueueClientContextPtr FederationDiscoveryDelayContext;
 
     bool Stopping = false;
+};
+
+class TFederatedDbObserver : public NPersQueue::TContextOwner<TFederatedDbObserverImpl> {
+public:
+    inline TFederatedDbObserver(std::shared_ptr<TGRpcConnectionsImpl> connections,
+                                const TFederatedTopicClientSettings& settings)
+        : TContextOwner(connections, settings) {
+    }
+
+    inline std::shared_ptr<TFederatedDbState> GetState() {
+        return TryGetImpl()->GetState();
+    }
+
+    inline NThreading::TFuture<void> WaitForFirstState() {
+        return TryGetImpl()->WaitForFirstState();
+    }
+
+    inline void Start() {
+        return TryGetImpl()->Start();
+    }
+
+    inline void Stop() {
+        return TryGetImpl()->Stop();
+    }
+
+    inline bool IsStale() const {
+        return TryGetImpl()->IsStale();
+    }
 };
 
 } // namespace NYdb::NFederatedTopic

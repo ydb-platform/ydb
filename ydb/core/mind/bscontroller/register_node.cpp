@@ -459,7 +459,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateNodeDrive
 
 void TBlobStorageController::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev) {
     auto&& [it, inserted] = PipeServerToNode.emplace(ev->Get()->ServerId, std::nullopt);
-    Y_VERIFY_DEBUG(inserted);
+    Y_DEBUG_ABORT_UNLESS(inserted);
 }
 
 void TBlobStorageController::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev) {
@@ -469,7 +469,7 @@ void TBlobStorageController::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& 
         }
         PipeServerToNode.erase(it);
     } else {
-        Y_VERIFY_DEBUG(false);
+        Y_DEBUG_ABORT_UNLESS(false);
     }
 }
 
@@ -479,7 +479,7 @@ bool TBlobStorageController::OnRegisterNode(const TActorId& serverId, TNodeId no
             it->second = nodeId;
             OnWardenConnected(nodeId);
         } else {
-            Y_VERIFY_DEBUG(*it->second == nodeId);
+            Y_DEBUG_ABORT_UNLESS(*it->second == nodeId);
         }
         return true;
     } else {

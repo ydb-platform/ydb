@@ -19,6 +19,7 @@
 #include <__algorithm/transform.h>
 #include <__assert>
 #include <__concepts/arithmetic.h>
+#include <__concepts/same_as.h>
 #include <__config>
 #include <__format/format_error.h>
 #include <__format/format_fwd.h>
@@ -26,6 +27,7 @@
 #include <__format/formatter.h>
 #include <__format/formatter_integral.h>
 #include <__format/parser_std_format_spec.h>
+#include <__memory/allocator.h>
 #include <__utility/move.h>
 #include <__utility/unreachable.h>
 #include <charconv>
@@ -445,7 +447,7 @@ _LIBCPP_HIDE_FROM_ABI _OutIt __format_locale_specific_form(_OutIt __out_it, cons
     if (__digits <= __grouping[0])
       __grouping.clear();
     else
-      __grouping = __determine_grouping(__digits, __grouping);
+      __grouping = __formatter::__determine_grouping(__digits, __grouping);
   }
 
   size_t __size = __result.__last - __buffer.begin() + // Formatted string

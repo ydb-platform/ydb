@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:4:13: Error: At function: YtWriteTable!
+    	INSERT INTO Input
+	            ^
+        <tmp_path>/program.sql:<main>:4:13: Error: Failed to convert type: List<Struct<'key':String,'value':String>> to List<Struct<'key':String,'subkey':String,'value':String>>
+        	INSERT INTO Input
+	            ^
+            <tmp_path>/program.sql:<main>:4:13: Error: Can't find  'subkey: String' in Struct<'key':String,'value':String>
+            	INSERT INTO Input
+	            ^
+        <tmp_path>/program.sql:<main>:4:13: Error: Table "Input" row type differs from the written row type: Struct<-subkey:String>
+        	INSERT INTO Input
+	            ^

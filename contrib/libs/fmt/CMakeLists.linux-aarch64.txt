@@ -10,7 +10,6 @@
 add_library(contrib-libs-fmt)
 target_compile_options(contrib-libs-fmt PUBLIC
   -DFMT_EXPORT
-  -DFMT_CONSTEVAL=
 )
 target_compile_options(contrib-libs-fmt PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>

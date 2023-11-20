@@ -64,18 +64,21 @@ TFollowerId TLeaderTabletInfo::GetFollowerPromotableOnNode(TNodeId nodeId) const
 
 void TLeaderTabletInfo::AssignDomains(const TSubDomainKey& objectDomain, const TVector<TSubDomainKey>& allowedDomains) {
     if (!allowedDomains.empty()) {
-        EffectiveAllowedDomains = allowedDomains;
+        NodeFilter.AllowedDomains = allowedDomains;
         if (!objectDomain) {
             ObjectDomain = allowedDomains.front();
         } else {
             ObjectDomain = objectDomain;
         }
     } else if (objectDomain) {
-        EffectiveAllowedDomains = { objectDomain };
+        NodeFilter.AllowedDomains = { objectDomain };
         ObjectDomain = objectDomain;
     } else  {
-        EffectiveAllowedDomains = { Hive.GetRootDomainKey() };
+        NodeFilter.AllowedDomains = { Hive.GetRootDomainKey() };
         ObjectDomain = { Hive.GetRootDomainKey() };
+    }
+    for (auto& followerGroup : FollowerGroups) {
+        followerGroup.NodeFilter.AllowedDomains = NodeFilter.AllowedDomains;
     }
 }
 
@@ -137,6 +140,7 @@ TFollowerGroup& TLeaderTabletInfo::AddFollowerGroup(TFollowerGroupId followerGro
     } else {
         followerGroup.Id = followerGroupId;
     }
+    followerGroup.NodeFilter.AllowedDomains = NodeFilter.AllowedDomains;
     return followerGroup;
 }
 

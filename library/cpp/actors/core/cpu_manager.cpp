@@ -132,7 +132,7 @@ namespace NActors {
                 return result;
             }
         }
-        Y_FAIL("missing PoolId: %d", int(poolId));
+        Y_ABORT("missing PoolId: %d", int(poolId));
     }
 
     TVector<IExecutorPool*> TCpuManager::GetBasicExecutorPools() const {

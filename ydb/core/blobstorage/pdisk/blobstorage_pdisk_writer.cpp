@@ -19,7 +19,7 @@ void TBufferedWriter::WriteBufferWithFlush(TReqId reqId, NWilson::TTraceId *trac
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(source, sizeToWrite);
         CurrentBuffer->FlushAction = flushAction;
         CurrentBuffer->CostNs = DriveModel->TimeForSizeNs(sizeToWrite, chunkIdx, TDriveModel::OP_TYPE_WRITE);
-        Y_VERIFY_DEBUG(sizeToWrite <= CurrentBuffer->Size());
+        Y_DEBUG_ABORT_UNLESS(sizeToWrite <= CurrentBuffer->Size());
         BlockDevice.PwriteAsync(source, sizeToWrite, DirtyFrom, CurrentBuffer.Release(), reqId, traceId);
         CurrentBuffer = TBuffer::TPtr(Pool->Pop());
         CurrentSector = CurrentBuffer->Data();

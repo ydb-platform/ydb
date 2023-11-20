@@ -58,9 +58,9 @@ private:
         const auto& descr = AltDescription(node);
         TVector<TString> parts;
         const auto pos = descr.find(": ");
-        Y_VERIFY_DEBUG(pos != TString::npos);
+        Y_DEBUG_ABORT_UNLESS(pos != TString::npos);
         Split(TString(descr.begin() + pos + 2, descr.end()), "_", parts);
-        Y_VERIFY_DEBUG(parts.size() > 1);
+        Y_DEBUG_ABORT_UNLESS(parts.size() > 1);
         parts.pop_back();
         for (auto& part: parts) {
             part.to_upper(0, 1);

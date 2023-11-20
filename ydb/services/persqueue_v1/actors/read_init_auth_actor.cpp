@@ -13,7 +13,7 @@ TReadInitAndAuthActor::TReadInitAndAuthActor(
         const TActorContext& ctx, const TActorId& parentId, const TString& clientId, const ui64 cookie,
         const TString& session, const NActors::TActorId& metaCache, const NActors::TActorId& newSchemeCache,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TIntrusiveConstPtr<NACLib::TUserToken> token,
-        const NPersQueue::TTopicsToConverter& topics, const TString& localCluster, bool readWithoutConsumer
+        const NPersQueue::TTopicsToConverter& topics, const TString& localCluster, bool skipReadRuleCheck
 )
     : ParentId(parentId)
     , Cookie(cookie)
@@ -22,7 +22,7 @@ TReadInitAndAuthActor::TReadInitAndAuthActor(
     , NewSchemeCache(newSchemeCache)
     , ClientId(clientId)
     , ClientPath(NPersQueue::ConvertOldConsumerName(ClientId, ctx))
-    , ReadWithoutConsumer(readWithoutConsumer)
+    , SkipReadRuleCheck(skipReadRuleCheck)
     , Token(token)
     , Counters(counters)
     , LocalCluster(localCluster)
@@ -196,7 +196,7 @@ bool TReadInitAndAuthActor::CheckTopicACL(
     )) {
         return false;
     }
-    if (!ReadWithoutConsumer && (Token || AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen())) {
+    if (!SkipReadRuleCheck && (Token || AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen())) {
         bool found = false;
         for (auto& cons : pqDescr.GetPQTabletConfig().GetReadRules() ) {
             if (cons == ClientId) {

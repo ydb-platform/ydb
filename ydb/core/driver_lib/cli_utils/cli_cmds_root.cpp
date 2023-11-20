@@ -65,7 +65,7 @@ public:
             }
             break;
         case TCommandConfig::EServerType::MessageBus:
-            Y_FAIL("MessageBus is no longer supported");
+            Y_ABORT("MessageBus is no longer supported");
             break;
         }
     }

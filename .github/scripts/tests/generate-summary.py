@@ -2,13 +2,14 @@
 import argparse
 import dataclasses
 import os
+import re
 import json
 import sys
 from github import Github, Auth as GithubAuth
 from github.PullRequest import PullRequest
 from enum import Enum
 from operator import attrgetter
-from typing import List, Optional
+from typing import List, Optional, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from junit_utils import get_property_value, iter_xml_files
 
@@ -29,7 +30,7 @@ class TestResult:
     classname: str
     name: str
     status: TestStatus
-    log_url: Optional[str]
+    log_urls: Dict[str, str]
     elapsed: float
 
     @property
@@ -73,7 +74,14 @@ class TestResult:
         else:
             status = TestStatus.PASS
 
-        log_url = get_property_value(testcase, "url:Log")
+        log_urls = {
+            'Log': get_property_value(testcase, "url:Log"),
+            'log': get_property_value(testcase, "url:log"),
+            'stdout': get_property_value(testcase, "url:stdout"),
+            'stderr': get_property_value(testcase, "url:stderr"),
+        }
+        log_urls = {k: v for k, v in log_urls.items() if v}
+
         elapsed = testcase.get("time")
 
         try:
@@ -82,7 +90,7 @@ class TestResult:
             elapsed = 0
             print(f"Unable to cast elapsed time for {classname}::{name}  value={elapsed!r}")
 
-        return cls(classname, name, status, log_url, elapsed)
+        return cls(classname, name, status, log_urls, elapsed)
 
 
 class TestSummaryLine:
@@ -215,7 +223,7 @@ def render_testlist_html(rows, fn):
 
     for t in rows:
         status_test.setdefault(t.status, []).append(t)
-        if t.log_url:
+        if any(t.log_urls.values()):
             has_any_log.add(t.status)
 
     for status in status_test.keys():
@@ -268,35 +276,52 @@ def gen_summary(summary_url_prefix, summary_out_folder, paths):
     return summary
 
 
-def update_pr_comment(pr: PullRequest, summary: TestSummary, test_history_url: str):
-    header = f"<!-- status {pr.number} -->"
+def get_comment_text(pr: PullRequest, summary: TestSummary, build_preset: str, test_history_url: str):
 
     if summary.is_failed:
-        result = ":red_circle: Some tests failed"
+        result = f":red_circle: **{build_preset}**: some tests FAILED"
     else:
-        result = ":green_circle: All tests passed"
+        result = f":green_circle: **{build_preset}**: all tests PASSED"
 
-    body = [header, f"{result} for commit {pr.head.sha}."]
+    body = [f"{result} for commit {pr.head.sha}."]
 
     if test_history_url:
         body.append("")
         body.append(f"[Test history]({test_history_url})")
 
     body.extend(summary.render())
-    body = "\n".join(body)
 
-    comment = None
+    return body
+
+
+def update_pr_comment(run_number: int, pr: PullRequest, summary: TestSummary, build_preset: str, test_history_url: str):
+    header = f"<!-- status pr={pr.number}, run={{}} -->"
+    header_re = re.compile(header.format(r"(\d+)"))
+
+    comment = body = None
 
     for c in pr.get_issue_comments():
-        if c.body.startswith(header):
+        if matches := header_re.match(c.body):
             comment = c
-            break
+            if int(matches[1]) == run_number:
+                body = [c.body, "", "---", ""]
+
+    if body is None:
+        body = [
+            header.format(run_number),
+            "> [!NOTE]",
+            "> This is an automated comment that will be appended during run.",
+            "",
+        ]
+
+    body.extend(get_comment_text(pr, summary, build_preset, test_history_url))
+
+    body = "\n".join(body)
 
     if comment is None:
         pr.create_issue_comment(body)
-        return
-
-    comment.edit(body)
+    else:
+        comment.edit(body)
 
 
 def main():
@@ -304,6 +329,7 @@ def main():
     parser.add_argument("--summary-out-path", required=True)
     parser.add_argument("--summary-url-prefix", required=True)
     parser.add_argument('--test-history-url', required=False)
+    parser.add_argument('--build-preset', default="default-linux-x86-64-relwithdebinfo", required=False)
     parser.add_argument("args", nargs="+", metavar="TITLE html_out path")
     args = parser.parse_args()
 
@@ -323,8 +349,9 @@ def main():
         with open(os.environ["GITHUB_EVENT_PATH"]) as fp:
             event = json.load(fp)
 
+        run_number = int(os.environ.get("GITHUB_RUN_NUMBER"))
         pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
-        update_pr_comment(pr, summary, args.test_history_url)
+        update_pr_comment(run_number, pr, summary, args.build_preset, args.test_history_url)
 
 
 if __name__ == "__main__":

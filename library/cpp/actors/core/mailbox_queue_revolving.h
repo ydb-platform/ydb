@@ -85,7 +85,7 @@ namespace NActors {
             }
 
             ~TReader() {
-                Y_VERIFY_DEBUG(Head() == 0);
+                Y_DEBUG_ABORT_UNLESS(Head() == 0);
                 for (ui32 i = 0; i < TWriteConcurrency; ++i)
                     delete ReadFrom[i];
             }
@@ -179,7 +179,7 @@ namespace NActors {
                     if (RelaxedLoad(&WriteTo[i]) != nullptr) {
                         if (TChunk* writeTo = AtomicSwap(&WriteTo[i], nullptr)) {
                             const ui64 nextTag = AtomicIncrement(Tag);
-                            Y_VERIFY_DEBUG(nextTag < Max<ui64>());
+                            Y_DEBUG_ABORT_UNLESS(nextTag < Max<ui64>());
                             const ui32 writePosition = WritePosition[i];
                             if (writePosition != TChunk::EntriesCount) {
                                 writeTo->Entries[writePosition].Tag = nextTag;

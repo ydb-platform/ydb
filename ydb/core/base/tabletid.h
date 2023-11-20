@@ -51,44 +51,44 @@ namespace NKikimr {
 
     // blob storage controller (exactly one per domain in default state storage group)
     inline ui64 MakeBSControllerID(ui64 stateStorageGroup) {
-        Y_VERIFY_DEBUG(stateStorageGroup < (1ull << 8ull));
+        Y_DEBUG_ABORT_UNLESS(stateStorageGroup < (1ull << 8ull));
         return MakeTabletID(stateStorageGroup, 0, 0x1001);
     }
 
     // one default hive per domain (in default state storage group!)
     inline ui64 MakeDefaultHiveID(ui64 stateStorageGroup) {
-        Y_VERIFY_DEBUG(stateStorageGroup < (1ull << 8ull));
+        Y_DEBUG_ABORT_UNLESS(stateStorageGroup < (1ull << 8ull));
         return MakeTabletID(stateStorageGroup, 0, 1);
     }
 
     // cluster management system tablet (exactly one per domain in default state storage group)
     inline ui64 MakeCmsID(ui64 stateStorageGroup) {
-        Y_VERIFY_DEBUG(stateStorageGroup < (1ull << 8ull));
+        Y_DEBUG_ABORT_UNLESS(stateStorageGroup < (1ull << 8ull));
         return MakeTabletID(stateStorageGroup, 0, 0x2000);
     }
 
     // node broker tablet (exactly one per domain in default state storage group)
     inline ui64 MakeNodeBrokerID(ui64 stateStorageGroup) {
-        Y_VERIFY_DEBUG(stateStorageGroup < (1ull << 8ull));
+        Y_DEBUG_ABORT_UNLESS(stateStorageGroup < (1ull << 8ull));
         return MakeTabletID(stateStorageGroup, 0, 0x2001);
     }
 
     // tenant slot broker tablet (exactly one per domain in default state storage group)
     inline ui64 MakeTenantSlotBrokerID(ui64 stateStorageGroup) {
-        Y_VERIFY_DEBUG(stateStorageGroup < (1ull << 8ull));
+        Y_DEBUG_ABORT_UNLESS(stateStorageGroup < (1ull << 8ull));
         return MakeTabletID(stateStorageGroup, 0, 0x2002);
     }
 
     // console tablet (exactly one per domain in default state storage group)
     inline ui64 MakeConsoleID(ui64 stateStorageGroup) {
-        Y_VERIFY_DEBUG(stateStorageGroup < (1ull << 8ull));
+        Y_DEBUG_ABORT_UNLESS(stateStorageGroup < (1ull << 8ull));
         return MakeTabletID(stateStorageGroup, 0, 0x2003);
     }
 
     // TODO: think about encoding scheme for sibling group hive
 
     inline TActorId MakeStateStorageProxyID(ui64 stateStorageGroup) {
-        Y_VERIFY_DEBUG(stateStorageGroup < (1ull << 8ull));
+        Y_DEBUG_ABORT_UNLESS(stateStorageGroup < (1ull << 8ull));
         char x[12] = { 's', 't', 's', 'p', 'r', 'o', 'x', 'y' };
         x[8] = (char)stateStorageGroup;
         return TActorId(0, TStringBuf(x, 12));

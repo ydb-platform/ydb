@@ -56,7 +56,7 @@ NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
         case NUdf::EDataSlot::Double:
             return NUdf::TUnboxedValuePod(static_cast<double>(value) / 12345);
         default:
-            Y_FAIL("Not implemented creation value for such type");
+            Y_ABORT("Not implemented creation value for such type");
     }
 }
 

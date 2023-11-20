@@ -184,7 +184,7 @@ namespace NActors {
                         if (it->first <= MonotonicTime) {
                             if (NSchedulerQueue::TQueueType* q = it->second.Get()) {
                                 while (NSchedulerQueue::TEntry* x = q->Reader.Pop()) {
-                                    Y_VERIFY_DEBUG(x->InstantMicroseconds <= ActiveTick);
+                                    Y_DEBUG_ABORT_UNLESS(x->InstantMicroseconds <= ActiveTick);
                                     if (eventSchedulingErrorUs == 0 && MonotonicTime > x->InstantMicroseconds) {
                                         eventSchedulingErrorUs = MonotonicTime - x->InstantMicroseconds;
                                     }
@@ -209,7 +209,7 @@ namespace NActors {
                     }
 
                     if (ActiveTick <= MonotonicTime) {
-                        Y_VERIFY_DEBUG(!ActiveSec || ActiveSec->empty());
+                        Y_DEBUG_ABORT_UNLESS(!ActiveSec || ActiveSec->empty());
                         ActiveSec.Destroy();
                         ActiveTick += IntrasecondThreshold;
                         TScheduleMap::iterator it = ScheduleMap.find(ActiveTick);

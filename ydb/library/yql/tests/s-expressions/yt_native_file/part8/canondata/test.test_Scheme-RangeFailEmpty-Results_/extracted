@@ -1,0 +1,14 @@
+<tmp_path>/program.yql:<main>: Error: Type annotation
+
+    <tmp_path>/program.yql:<main>:22:17: Error: At function: RemovePrefixMembers
+    	    (let world (Write! world result_sink (Key) output '('('type) '('autoref))))
+	                ^
+        <tmp_path>/program.yql:<main>:12:18: Error: At function: FlatMap
+        	      (let core (FlatMap core (lambda '(row) (block '(
+	                 ^
+            <tmp_path>/program.yql:<main>:6:11: Error: At function: Merge, At function: YtReadTable!
+            	  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (MrTableRangeStrict '"" filter))) (Void) '('('infer_scheme))))
+	          ^
+                <tmp_path>/program.yql:<main>:6:52: Error: Cannot infer schema for table "Input1", table is empty
+                	  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (MrTableRangeStrict '"" filter))) (Void) '('('infer_scheme))))
+	                                                   ^

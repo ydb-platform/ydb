@@ -108,7 +108,7 @@ public:
         } else if (PipeRetry) {
             return OnPipeRetry(txc, ctx);
         } else {
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
     }
 
@@ -287,7 +287,7 @@ private:
 
         case NKikimrTxDataShard::TEvCdcStreamScanResponse::BAD_REQUEST:
         case NKikimrTxDataShard::TEvCdcStreamScanResponse::SCHEME_ERROR:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
 
         default:
             LOG_E("Unexpected response status"

@@ -35,6 +35,7 @@ enum ENodeType : int
     NT_USER                 /* "user" */,
     NT_SCHEDULER_POOL       /* "scheduler_pool" */,
     NT_LINK                 /* "link" */,
+    NT_GROUP                /* "group" */,
 };
 
 ///
@@ -449,7 +450,7 @@ struct TIOOptions
     /// This is advanced option.
     ///
     /// If `CreateTransaction` is set to `false`  reader/writer doesn't create internal transaction
-    /// and doesn't lock table. This option is overriden (effectively `false`) for writers by
+    /// and doesn't lock table. This option is overridden (effectively `false`) for writers by
     /// @ref NYT::TTableWriterOptions::SingleHttpRequest
     ///
     /// WARNING: if `CreateTransaction` is `false`, read/write might become non-atomic.
@@ -509,7 +510,7 @@ struct TWriterOptions
     /// Data is accumulated in memory buffer so in case error occurs data could be resended.
     ///
     /// If `RetryBlockSize` is not set buffer size is set to `DesiredChunkSize`.
-    /// If niether `RetryBlockSize` nor `DesiredChunkSize` is set size of buffer is 64MB.
+    /// If neither `RetryBlockSize` nor `DesiredChunkSize` is set size of buffer is 64MB.
     ///
     /// @note Written chunks cannot be larger than size of this memory buffer.
     ///
@@ -799,7 +800,7 @@ struct TLockOptions
     ///
     /// If `Waitable' is set to true Lock method will create
     /// waitable lock, that will be taken once other transactions
-    /// that hold lock to that node are commited / aborted.
+    /// that hold lock to that node are committed / aborted.
     ///
     /// @note Lock method DOES NOT wait until lock is actually acquired.
     /// Waiting should be done using corresponding methods of ILock.
@@ -1054,7 +1055,7 @@ struct TCreateClientOptions
     /// @brief Use HTTPs (use HTTP client from yt/yt/core always).
     ///
     /// @see UseCoreHttpClient
-    FLUENT_FIELD_DEFAULT(bool, UseTLS, false);
+    FLUENT_FIELD_OPTION(bool, UseTLS);
 
     /// @brief Use HTTP client from yt/yt/core.
     FLUENT_FIELD_DEFAULT(bool, UseCoreHttpClient, false);
@@ -1071,6 +1072,9 @@ struct TCreateClientOptions
     /// access token, api version and more.
     /// @see NYT::TConfig
     FLUENT_FIELD_DEFAULT(TConfigPtr, Config, nullptr);
+
+    /// @brief Proxy Address to be used for connection
+    FLUENT_FIELD_OPTION(TString, ProxyAddress);
 };
 
 ///

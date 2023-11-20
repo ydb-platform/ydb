@@ -32,7 +32,7 @@ TString TSpecialKeys::SerializeToStringDataOnlyNoCompression() const {
     return NArrow::SerializeBatchNoCompression(Data);
 }
 
-TFirstLastSpecialKeys::TFirstLastSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::vector<TString>& columnNames /*= {}*/) {
+TFirstLastSpecialKeys::TFirstLastSpecialKeys(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<TString>& columnNames /*= {}*/) {
     Y_ABORT_UNLESS(batch);
     Y_ABORT_UNLESS(batch->num_rows());
     std::shared_ptr<arrow::RecordBatch> keyBatch = batch;
@@ -86,7 +86,7 @@ TMinMaxSpecialKeys::TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch
 
 TFirstLastSpecialKeys::TFirstLastSpecialKeys(const TString& data)
     : TBase(data) {
-    Y_VERIFY_DEBUG(Data->ValidateFull().ok());
+    Y_DEBUG_ABORT_UNLESS(Data->ValidateFull().ok());
     Y_ABORT_UNLESS(Data->num_rows() == 1 || Data->num_rows() == 2);
 }
 
@@ -99,7 +99,7 @@ std::shared_ptr<NKikimr::NArrow::TFirstLastSpecialKeys> TFirstLastSpecialKeys::B
 TMinMaxSpecialKeys::TMinMaxSpecialKeys(const TString& data)
     : TBase(data)
 {
-    Y_VERIFY_DEBUG(Data->ValidateFull().ok());
+    Y_DEBUG_ABORT_UNLESS(Data->ValidateFull().ok());
     Y_ABORT_UNLESS(Data->num_rows() == 1 || Data->num_rows() == 2);
 }
 

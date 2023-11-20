@@ -179,7 +179,7 @@ std::shared_ptr<arrow::RecordBatch> InplaceConvertColumns(const std::shared_ptr<
     auto convertedBatch = arrow::RecordBatch::Make(resultSchemaFixed, batch->num_rows(), std::move(columns));
 
     Y_ABORT_UNLESS(convertedBatch->Validate().ok());
-    Y_VERIFY_DEBUG(convertedBatch->ValidateFull().ok());
+    Y_DEBUG_ABORT_UNLESS(convertedBatch->ValidateFull().ok());
     return convertedBatch;
 }
 
@@ -275,7 +275,6 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
             }
 
             if (NeedDataConversion(colType)) {
-                memPool.Clear();
                 for (i32 i = 0; i < unroll; ++i) {
                     if (!ConvertData(cells[i][col], colType, memPool, errorMessage)) {
                         return false;
@@ -289,6 +288,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
         for (i32 i = 0; i < unroll; ++i) {
             RowWriter_.AddRow(cells[i]);
         }
+        memPool.Clear();
     }
     cells.resize(1);
 #else

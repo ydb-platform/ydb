@@ -50,6 +50,13 @@ protected:
     virtual void DoDebugString(TStringOutput& out) const override;
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept override;
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
+    virtual ui64 DoCalcMemoryForUsage() const override {
+        ui64 result = 0;
+        for (auto& p : PortionsToEvict) {
+            result += 2 * p.GetPortionInfo().GetBlobBytes();
+        }
+        return result;
+    }
 public:
     virtual bool NeedConstruction() const override {
         return PortionsToEvict.size();

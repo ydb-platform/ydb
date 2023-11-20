@@ -6,6 +6,7 @@
 #include "event.h"
 #include "events.h"
 #include "executor_pool_base.h"
+#include "probes.h"
 
 #include <library/cpp/actors/prof/tag.h>
 #include <library/cpp/actors/util/affinity.h>
@@ -43,6 +44,8 @@ namespace NActors {
         , Ctx(workerId, cpuId)
         , ThreadName(threadName)
         , IsUnitedWorker(true)
+        , TimePerMailbox(timePerMailbox)
+        , EventsPerMailbox(eventsPerMailbox)
     {
         Ctx.Switch(
             ExecutorPool,
@@ -76,7 +79,7 @@ namespace NActors {
     { }
 
     void TExecutorThread::UnregisterActor(TMailboxHeader* mailbox, TActorId actorId) {
-        Y_VERIFY_DEBUG(IsUnitedWorker || actorId.PoolID() == ExecutorPool->PoolId && ExecutorPool->ResolveMailbox(actorId.Hint()) == mailbox);
+        Y_DEBUG_ABORT_UNLESS(IsUnitedWorker || actorId.PoolID() == ExecutorPool->PoolId && ExecutorPool->ResolveMailbox(actorId.Hint()) == mailbox);
         IActor* actor = mailbox->DetachActor(actorId.LocalId());
         Ctx.DecrementActorsAliveByActivity(actor->GetActivityType());
         DyingActors.push_back(THolder(actor));
@@ -154,7 +157,7 @@ namespace NActors {
 
     template <typename TMailbox>
     bool TExecutorThread::Execute(TMailbox* mailbox, ui32 hint, bool isTailExecution) {
-        Y_VERIFY_DEBUG(DyingActors.empty());
+        Y_DEBUG_ABORT_UNLESS(DyingActors.empty());
 
         bool reclaimAsFree = false;
 
@@ -347,12 +350,17 @@ namespace NActors {
         return ThreadId;
     }
 
+    TWorkerId TExecutorThread::GetWorkerId() const {
+        return Ctx.WorkerId;
+    }
+
     void TExecutorThread::ProcessExecutorPool(IExecutorPool *pool, bool isSharedThread) {
         ExecutorPool = pool;
         TThreadContext threadCtx;
         TlsThreadContext = &threadCtx;
         TlsThreadContext->Pool = static_cast<IExecutorPool*>(ExecutorPool);
         TlsThreadContext->WorkerId = Ctx.WorkerId;
+        pool->Initialize(Ctx);
 
         ExecutorPool->SetRealTimeMode();
         TAffinityGuard affinity(ExecutorPool->Affinity());
@@ -539,7 +547,7 @@ namespace NActors {
                 case TExecutionState::FreeLeavingMarked:
                     return false;
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
         }
     }
@@ -572,7 +580,7 @@ namespace NActors {
                 case TExecutionState::FreeLeavingMarked:
                     return false;
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
         }
     }
@@ -587,7 +595,7 @@ namespace NActors {
                 case TExecutionState::Leaving:
                 case TExecutionState::Executing:
                 case TExecutionState::LeavingMarked:
-                    Y_FAIL();
+                    Y_ABORT();
                 case TExecutionState::Free:
                     if (AtomicUi32Cas(&ExecutionState, TExecutionState::Executing, TExecutionState::Free))
                         return true;
@@ -601,7 +609,7 @@ namespace NActors {
                 case TExecutionState::FreeLeavingMarked:
                     return false;
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
         }
     }
@@ -613,7 +621,7 @@ namespace NActors {
         else if (state == TExecutionState::FreeExecuting)
             AtomicStore(&ExecutionState, (ui32)TExecutionState::FreeLeaving);
         else
-            Y_FAIL();
+            Y_ABORT();
         AtomicBarrier();
     }
 
@@ -624,7 +632,7 @@ namespace NActors {
             switch (state) {
                 case TExecutionState::Inactive:
                 case TExecutionState::Scheduled:
-                    Y_FAIL();
+                    Y_ABORT();
                 case TExecutionState::Leaving:
                     if (!wouldReschedule) {
                         if (AtomicUi32Cas(&ExecutionState, TExecutionState::Inactive, TExecutionState::Leaving))
@@ -635,14 +643,14 @@ namespace NActors {
                     }
                     break;
                 case TExecutionState::Executing:
-                    Y_FAIL();
+                    Y_ABORT();
                 case TExecutionState::LeavingMarked:
                     if (AtomicUi32Cas(&ExecutionState, TExecutionState::Scheduled, TExecutionState::LeavingMarked))
                         return true;
                     break;
                 case TExecutionState::Free:
                 case TExecutionState::FreeScheduled:
-                    Y_FAIL();
+                    Y_ABORT();
                 case TExecutionState::FreeLeaving:
                     if (!wouldReschedule) {
                         if (AtomicUi32Cas(&ExecutionState, TExecutionState::Free, TExecutionState::FreeLeaving))
@@ -653,13 +661,13 @@ namespace NActors {
                     }
                     break;
                 case TExecutionState::FreeExecuting:
-                    Y_FAIL();
+                    Y_ABORT();
                 case TExecutionState::FreeLeavingMarked:
                     if (AtomicUi32Cas(&ExecutionState, TExecutionState::FreeScheduled, TExecutionState::FreeLeavingMarked))
                         return true;
                     break;
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
         }
     }
@@ -671,7 +679,7 @@ namespace NActors {
             switch (state) {
                 case TExecutionState::Inactive:
                 case TExecutionState::Scheduled:
-                    Y_FAIL();
+                    Y_ABORT();
                 case TExecutionState::Leaving:
                     if (!wouldReschedule) {
                         if (AtomicUi32Cas(&ExecutionState, TExecutionState::Free, TExecutionState::Leaving))
@@ -682,7 +690,7 @@ namespace NActors {
                     }
                     break;
                 case TExecutionState::Executing:
-                    Y_FAIL();
+                    Y_ABORT();
                 case TExecutionState::LeavingMarked:
                     if (AtomicUi32Cas(&ExecutionState, TExecutionState::FreeScheduled, TExecutionState::LeavingMarked))
                         return true;
@@ -692,9 +700,9 @@ namespace NActors {
                 case TExecutionState::FreeLeaving:
                 case TExecutionState::FreeExecuting:
                 case TExecutionState::FreeLeavingMarked:
-                    Y_FAIL();
+                    Y_ABORT();
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
         }
     }

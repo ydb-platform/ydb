@@ -179,7 +179,7 @@ namespace NKikimr {
                     break;
 
                 case EItemState::Processing:
-                    Y_FAIL("unexpected case");
+                    Y_ABORT("unexpected case");
             }
 
             // ensure that we generated locator for each item

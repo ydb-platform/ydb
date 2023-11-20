@@ -13,6 +13,7 @@ target_link_libraries(engines-reader-plain_reader PUBLIC
   yutil
   core-formats-arrow
   tx-columnshard-blobs_action
+  tx-conveyor-usage
 )
 target_sources(engines-reader-plain_reader PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/scanner.cpp
@@ -25,4 +26,5 @@ target_sources(engines-reader-plain_reader PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/column_assembler.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/committed_assembler.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/columns_set.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/context.cpp
 )

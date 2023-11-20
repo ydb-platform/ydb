@@ -64,7 +64,7 @@ public:
     virtual void ResolveTables(const TVector<TTable>& tables, NActors::TActorId responseTo) override {
         Y_UNUSED(tables);
         Y_UNUSED(responseTo);
-        Y_FAIL("Not implemented for local resolve.");
+        Y_ABORT("Not implemented for local resolve.");
     }
 private:
     const NTable::TScheme& Scheme;
@@ -350,7 +350,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
             ++PageFaultCount;
             return false;
         } catch (...) {
-            Y_FAIL("there must be no leaked exceptions");
+            Y_ABORT("there must be no leaked exceptions");
         }
     }
 

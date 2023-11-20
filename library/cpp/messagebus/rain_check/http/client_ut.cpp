@@ -74,7 +74,7 @@ namespace {
             const int THR_POOL_SIZE = 2;
             runner->ForkLoop(THR_POOL_SIZE);
         } catch (...) {
-            Y_FAIL("Can't run server: %s", CurrentExceptionMessage().data());
+            Y_ABORT("Can't run server: %s", CurrentExceptionMessage().data());
         }
 
         return runner;

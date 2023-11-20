@@ -8,7 +8,8 @@ namespace NYql::NDq {
 void RegisterYdbReadActorFactory(NYql::NDq::TDqAsyncIoFactory& factory, ::NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
     factory.RegisterSource<NYql::NYdb::TSource>("YdbSource",
         [driver, credentialsFactory](NYql::NYdb::TSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args) {
-            return CreateYdbReadActor(std::move(settings), args.InputIndex, args.SecureParams, args.TaskParams, args.ComputeActorId, driver, credentialsFactory);
+            return CreateYdbReadActor(std::move(settings), args.InputIndex, args.StatsLevel, args.SecureParams,
+                args.TaskParams, args.ComputeActorId, driver, credentialsFactory);
         });
 }
 

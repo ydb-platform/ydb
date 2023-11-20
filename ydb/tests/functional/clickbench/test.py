@@ -53,6 +53,9 @@ def execute_scan_query(driver, yql_text, table_path):
     while retries > 0 and not success:
         retries -= 1
 
+        if yql_text.startswith('--'):
+            return []
+
         it = driver.table_client.scan_query(yql_text)
         result = []
         while True:
@@ -67,6 +70,8 @@ def execute_scan_query(driver, yql_text, table_path):
             except Exception:
                 if retries == 0:
                     raise
+
+                break
 
 
 def explain_scan_query(driver, yql_text, table_path):
@@ -98,7 +103,8 @@ def save_canonical_data(data, fname):
 
 
 @pytest.mark.parametrize("store", ["row", "column"])
-def test_run_benchmark(store):
+@pytest.mark.parametrize("executor", ["scan", "generic"])
+def test_run_benchmark(store, executor):
     path = "clickbench/benchmark/{}/hits".format(store)
     ret = run_cli(["workload", "clickbench", "init", "--store", store, "--path", path])
     assert_that(ret.exit_code, is_(0))
@@ -114,7 +120,7 @@ def test_run_benchmark(store):
 
     # just validating that benchmark can be executed successfully on this data.
     out_fpath = os.path.join(yatest.common.output_path(), 'click_bench.{}.results'.format(store))
-    ret = run_cli(["workload", "clickbench", "run", "--output", out_fpath, "--table", path])
+    ret = run_cli(["workload", "clickbench", "run", "--output", out_fpath, "--table", path, "--executor", executor])
     assert_that(ret.exit_code, is_(0))
 
 

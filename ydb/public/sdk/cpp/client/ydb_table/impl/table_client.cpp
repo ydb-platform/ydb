@@ -700,6 +700,7 @@ TAsyncExplainDataQueryResult TTableClient::TImpl::ExplainDataQuery(const TSessio
     auto request = MakeOperationRequest<Ydb::Table::ExplainDataQueryRequest>(settings);
     request.set_session_id(session.GetId());
     request.set_yql_text(query);
+    request.set_collect_full_diagnostics(settings.WithCollectFullDiagnostics_);
 
     auto promise = NewPromise<TExplainQueryResult>();
 
@@ -707,14 +708,16 @@ TAsyncExplainDataQueryResult TTableClient::TImpl::ExplainDataQuery(const TSessio
         (google::protobuf::Any* any, TPlainStatus status) mutable {
             TString ast;
             TString plan;
+            TString diagnostics;
             if (any) {
                 Ydb::Table::ExplainQueryResult result;
                 any->UnpackTo(&result);
                 ast = result.query_ast();
                 plan = result.query_plan();
+                diagnostics = result.query_full_diagnostics();
             }
             TExplainQueryResult val(TStatus(std::move(status)),
-                std::move(plan), std::move(ast));
+                std::move(plan), std::move(ast), std::move(diagnostics));
             promise.SetValue(std::move(val));
         };
 
@@ -999,6 +1002,7 @@ TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TScanQueryProcessorPtr>> TT
     }
 
     request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
+    request.set_collect_full_diagnostics(settings.CollectFullDiagnostics_);
 
     auto promise = NewPromise<std::pair<TPlainStatus, TScanQueryProcessorPtr>>();
 

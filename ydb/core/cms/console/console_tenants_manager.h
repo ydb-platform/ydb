@@ -527,6 +527,7 @@ public:
         bool IsExternalSubdomain;
         bool IsExternalHive;
         bool IsExternalSysViewProcessor;
+        bool IsExternalStatisticsAggregator;
         bool AreResourcesShared;
         THashSet<TTenant::TPtr> HostedTenants;
 
@@ -963,7 +964,7 @@ public:
             HFuncTraced(TEvTenantSlotBroker::TEvTenantState, Handle);
 
         default:
-            Y_FAIL("TTenantsManager::StateWork unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("TTenantsManager::StateWork unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
         }
     }

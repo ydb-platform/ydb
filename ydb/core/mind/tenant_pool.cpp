@@ -3,6 +3,7 @@
 #include "tenant_slot_broker.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/tabletid.h>
@@ -10,6 +11,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/mon/mon.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -303,7 +305,7 @@ public:
                 ctx.Send(LocalID, event.Release());
             }
         } else {
-            Y_FAIL("unexpected tenant status");
+            Y_ABORT("unexpected tenant status");
         }
     }
 
@@ -732,7 +734,7 @@ public:
             IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
 
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
@@ -871,7 +873,7 @@ public:
             HFunc(NMon::TEvHttpInfo, Handle);
             HFunc(TEvLocal::TEvLocalDrainNode, Handle);
         default:
-            Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }

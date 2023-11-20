@@ -1,0 +1,50 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:2:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:8:20: Warning: At function: SqlIn
+            	    CAST(subkey AS Int32) IN (1, 2) AS optional_key_i32,
+	                   ^
+                <tmp_path>/program.sql:<main>:8:20: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    CAST(subkey AS Int32) IN (1, 2) AS optional_key_i32,
+	                   ^
+        <tmp_path>/program.sql:<main>:2:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:9:20: Warning: At function: SqlIn
+            	    CAST(subkey AS Int64) IN (1, 2) AS optional_key_i64,
+	                   ^
+                <tmp_path>/program.sql:<main>:9:20: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    CAST(subkey AS Int64) IN (1, 2) AS optional_key_i64,
+	                   ^
+        <tmp_path>/program.sql:<main>:2:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:10:20: Warning: At function: SqlIn
+            	    CAST(subkey AS Uint32) IN (1, 2) AS optional_key_ui32,
+	                   ^
+                <tmp_path>/program.sql:<main>:10:20: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    CAST(subkey AS Uint32) IN (1, 2) AS optional_key_ui32,
+	                   ^
+        <tmp_path>/program.sql:<main>:2:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:11:20: Warning: At function: SqlIn
+            	    CAST(subkey AS Uint64) IN (1, 2) AS optional_key_ui64,
+	                   ^
+                <tmp_path>/program.sql:<main>:11:20: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    CAST(subkey AS Uint64) IN (1, 2) AS optional_key_ui64,
+	                   ^
+        <tmp_path>/program.sql:<main>:2:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:12:20: Warning: At function: SqlIn
+            	    CAST(subkey AS Uint8) IN (1, 2) AS optional_key_to_larger_type
+	                   ^
+                <tmp_path>/program.sql:<main>:12:20: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	    CAST(subkey AS Uint8) IN (1, 2) AS optional_key_to_larger_type
+	                   ^

@@ -82,6 +82,8 @@ namespace std {
 #include <__bits>
 #include <__charconv/chars_format.h>
 #include <__charconv/from_chars_result.h>
+#include <__charconv/tables.h>
+#include <__charconv/to_chars_base_10.h>
 #include <__charconv/to_chars_result.h>
 #include <__config>
 #include <__debug>
@@ -94,6 +96,10 @@ namespace std {
 #include <limits>
 #include <type_traits>
 
+#ifndef _LIBCPP_REMOVE_TRANSITIVE_INCLUDES
+#  include <iosfwd>
+#endif
+
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
 #endif
@@ -105,46 +111,12 @@ _LIBCPP_BEGIN_NAMESPACE_STD
 
 #ifndef _LIBCPP_CXX03_LANG
 
-namespace __itoa {
-_LIBCPP_AVAILABILITY_TO_CHARS _LIBCPP_FUNC_VIS char* __u64toa(uint64_t __value, char* __buffer) noexcept;
-_LIBCPP_AVAILABILITY_TO_CHARS _LIBCPP_FUNC_VIS char* __u32toa(uint32_t __value, char* __buffer) noexcept;
-} // namespace __itoa
-
 to_chars_result to_chars(char*, char*, bool, int = 10) = delete;
 from_chars_result from_chars(const char*, const char*, bool, int = 10) = delete;
 
 namespace __itoa
 {
 
-static constexpr uint64_t __pow10_64[] = {
-    UINT64_C(0),
-    UINT64_C(10),
-    UINT64_C(100),
-    UINT64_C(1000),
-    UINT64_C(10000),
-    UINT64_C(100000),
-    UINT64_C(1000000),
-    UINT64_C(10000000),
-    UINT64_C(100000000),
-    UINT64_C(1000000000),
-    UINT64_C(10000000000),
-    UINT64_C(100000000000),
-    UINT64_C(1000000000000),
-    UINT64_C(10000000000000),
-    UINT64_C(100000000000000),
-    UINT64_C(1000000000000000),
-    UINT64_C(10000000000000000),
-    UINT64_C(100000000000000000),
-    UINT64_C(1000000000000000000),
-    UINT64_C(10000000000000000000),
-};
-
-static constexpr uint32_t __pow10_32[] = {
-    UINT32_C(0),          UINT32_C(10),       UINT32_C(100),
-    UINT32_C(1000),       UINT32_C(10000),    UINT32_C(100000),
-    UINT32_C(1000000),    UINT32_C(10000000), UINT32_C(100000000),
-    UINT32_C(1000000000),
-};
 
 template <typename _Tp, typename = void>
 struct _LIBCPP_HIDDEN __traits_base
@@ -154,16 +126,15 @@ struct _LIBCPP_HIDDEN __traits_base
     static _LIBCPP_HIDE_FROM_ABI int __width(_Tp __v)
     {
         auto __t = (64 - std::__libcpp_clz(static_cast<type>(__v | 1))) * 1233 >> 12;
-        return __t - (__v < __pow10_64[__t]) + 1;
+        return __t - (__v < __table<>::__pow10_64[__t]) + 1;
     }
 
-    _LIBCPP_AVAILABILITY_TO_CHARS
-    static _LIBCPP_HIDE_FROM_ABI char* __convert(_Tp __v, char* __p)
+    static _LIBCPP_HIDE_FROM_ABI char* __convert(char* __p, _Tp __v)
     {
-        return __u64toa(__v, __p);
+        return __itoa::__base_10_u64(__p, __v);
     }
 
-    static _LIBCPP_HIDE_FROM_ABI decltype(__pow10_64)& __pow() { return __pow10_64; }
+    static _LIBCPP_HIDE_FROM_ABI decltype(__table<>::__pow10_64)& __pow() { return __table<>::__pow10_64; }
 };
 
 template <typename _Tp>
@@ -175,16 +146,15 @@ struct _LIBCPP_HIDDEN
     static _LIBCPP_HIDE_FROM_ABI int __width(_Tp __v)
     {
         auto __t = (32 - std::__libcpp_clz(static_cast<type>(__v | 1))) * 1233 >> 12;
-        return __t - (__v < __pow10_32[__t]) + 1;
+        return __t - (__v < __table<>::__pow10_32[__t]) + 1;
     }
 
-    _LIBCPP_AVAILABILITY_TO_CHARS
-    static _LIBCPP_HIDE_FROM_ABI char* __convert(_Tp __v, char* __p)
+    static _LIBCPP_HIDE_FROM_ABI char* __convert(char* __p, _Tp __v)
     {
-        return __u32toa(__v, __p);
+        return __itoa::__base_10_u32(__p, __v);
     }
 
-    static _LIBCPP_HIDE_FROM_ABI decltype(__pow10_32)& __pow() { return __pow10_32; }
+    static _LIBCPP_HIDE_FROM_ABI decltype(__table<>::__pow10_32)& __pow() { return __table<>::__pow10_32; }
 };
 
 template <typename _Tp>
@@ -275,7 +245,6 @@ __complement(_Tp __x)
 }
 
 template <typename _Tp>
-_LIBCPP_AVAILABILITY_TO_CHARS
 inline _LIBCPP_HIDE_FROM_ABI to_chars_result
 __to_chars_itoa(char* __first, char* __last, _Tp __value, true_type)
 {
@@ -290,7 +259,6 @@ __to_chars_itoa(char* __first, char* __last, _Tp __value, true_type)
 }
 
 template <typename _Tp>
-_LIBCPP_AVAILABILITY_TO_CHARS
 inline _LIBCPP_HIDE_FROM_ABI to_chars_result
 __to_chars_itoa(char* __first, char* __last, _Tp __value, false_type)
 {
@@ -298,13 +266,12 @@ __to_chars_itoa(char* __first, char* __last, _Tp __value, false_type)
     auto __diff = __last - __first;
 
     if (__tx::digits <= __diff || __tx::__width(__value) <= __diff)
-        return {__tx::__convert(__value, __first), errc(0)};
+        return {__tx::__convert(__first, __value), errc(0)};
     else
         return {__last, errc::value_too_large};
 }
 
 template <typename _Tp>
-_LIBCPP_AVAILABILITY_TO_CHARS
 inline _LIBCPP_HIDE_FROM_ABI to_chars_result
 __to_chars_integral(char* __first, char* __last, _Tp __value, int __base,
                     true_type)
@@ -319,8 +286,150 @@ __to_chars_integral(char* __first, char* __last, _Tp __value, int __base,
     return __to_chars_integral(__first, __last, __x, __base, false_type());
 }
 
+namespace __itoa {
+
+template <unsigned _Base>
+struct _LIBCPP_HIDDEN __integral;
+
+template <>
+struct _LIBCPP_HIDDEN __integral<2> {
+  template <typename _Tp>
+  _LIBCPP_HIDE_FROM_ABI static constexpr int __width(_Tp __value) noexcept {
+    // If value == 0 still need one digit. If the value != this has no
+    // effect since the code scans for the most significant bit set. (Note
+    // that __libcpp_clz doesn't work for 0.)
+    return numeric_limits<_Tp>::digits - std::__libcpp_clz(__value | 1);
+  }
+
+  template <typename _Tp>
+  _LIBCPP_HIDE_FROM_ABI static to_chars_result __to_chars(char* __first, char* __last, _Tp __value) {
+    ptrdiff_t __cap = __last - __first;
+    int __n = __width(__value);
+    if (__n > __cap)
+      return {__last, errc::value_too_large};
+
+    __last = __first + __n;
+    char* __p = __last;
+    const unsigned __divisor = 16;
+    while (__value > __divisor) {
+      unsigned __c = __value % __divisor;
+      __value /= __divisor;
+      __p -= 4;
+      std::memcpy(__p, &__table<>::__base_2_lut[4 * __c], 4);
+    }
+    do {
+      unsigned __c = __value % 2;
+      __value /= 2;
+      *--__p = "01"[__c];
+    } while (__value != 0);
+    return {__last, errc(0)};
+  }
+};
+
+template <>
+struct _LIBCPP_HIDDEN __integral<8> {
+  template <typename _Tp>
+  _LIBCPP_HIDE_FROM_ABI static constexpr int __width(_Tp __value) noexcept {
+    // If value == 0 still need one digit. If the value != this has no
+    // effect since the code scans for the most significat bit set. (Note
+    // that __libcpp_clz doesn't work for 0.)
+    return ((numeric_limits<_Tp>::digits - std::__libcpp_clz(__value | 1)) + 2) / 3;
+  }
+
+  template <typename _Tp>
+  _LIBCPP_HIDE_FROM_ABI static to_chars_result __to_chars(char* __first, char* __last, _Tp __value) {
+    ptrdiff_t __cap = __last - __first;
+    int __n = __width(__value);
+    if (__n > __cap)
+      return {__last, errc::value_too_large};
+
+    __last = __first + __n;
+    char* __p = __last;
+    unsigned __divisor = 64;
+    while (__value > __divisor) {
+      unsigned __c = __value % __divisor;
+      __value /= __divisor;
+      __p -= 2;
+      std::memcpy(__p, &__table<>::__base_8_lut[2 * __c], 2);
+    }
+    do {
+      unsigned __c = __value % 8;
+      __value /= 8;
+      *--__p = "01234567"[__c];
+    } while (__value != 0);
+    return {__last, errc(0)};
+  }
+
+};
+
+template <>
+struct _LIBCPP_HIDDEN __integral<16> {
+  template <typename _Tp>
+  _LIBCPP_HIDE_FROM_ABI static constexpr int __width(_Tp __value) noexcept {
+    // If value == 0 still need one digit. If the value != this has no
+    // effect since the code scans for the most significat bit set. (Note
+    // that __libcpp_clz doesn't work for 0.)
+    return (numeric_limits<_Tp>::digits - std::__libcpp_clz(__value | 1) + 3) / 4;
+  }
+
+  template <typename _Tp>
+  _LIBCPP_HIDE_FROM_ABI static to_chars_result __to_chars(char* __first, char* __last, _Tp __value) {
+    ptrdiff_t __cap = __last - __first;
+    int __n = __width(__value);
+    if (__n > __cap)
+      return {__last, errc::value_too_large};
+
+    __last = __first + __n;
+    char* __p = __last;
+    unsigned __divisor = 256;
+    while (__value > __divisor) {
+      unsigned __c = __value % __divisor;
+      __value /= __divisor;
+      __p -= 2;
+      std::memcpy(__p, &__table<>::__base_16_lut[2 * __c], 2);
+    }
+    if (__first != __last)
+      do {
+        unsigned __c = __value % 16;
+        __value /= 16;
+        *--__p = "0123456789abcdef"[__c];
+      } while (__value != 0);
+    return {__last, errc(0)};
+  }
+};
+
+} // namespace __itoa
+
+template <unsigned _Base, typename _Tp,
+          typename enable_if<(sizeof(_Tp) >= sizeof(unsigned)), int>::type = 0>
+_LIBCPP_HIDE_FROM_ABI int
+__to_chars_integral_width(_Tp __value) {
+  return __itoa::__integral<_Base>::__width(__value);
+}
+
+template <unsigned _Base, typename _Tp,
+          typename enable_if<(sizeof(_Tp) < sizeof(unsigned)), int>::type = 0>
+_LIBCPP_HIDE_FROM_ABI int
+__to_chars_integral_width(_Tp __value) {
+  return std::__to_chars_integral_width<_Base>(static_cast<unsigned>(__value));
+}
+
+template <unsigned _Base, typename _Tp,
+          typename enable_if<(sizeof(_Tp) >= sizeof(unsigned)), int>::type = 0>
+_LIBCPP_HIDE_FROM_ABI to_chars_result
+__to_chars_integral(char* __first, char* __last, _Tp __value) {
+  return __itoa::__integral<_Base>::__to_chars(__first, __last, __value);
+}
+
+template <unsigned _Base, typename _Tp,
+          typename enable_if<(sizeof(_Tp) < sizeof(unsigned)), int>::type = 0>
+_LIBCPP_HIDE_FROM_ABI to_chars_result
+__to_chars_integral(char* __first, char* __last, _Tp __value) {
+  return std::__to_chars_integral<_Base>(__first, __last, static_cast<unsigned>(__value));
+}
+
 template <typename _Tp>
-_LIBCPP_AVAILABILITY_TO_CHARS _LIBCPP_HIDE_FROM_ABI int
+_LIBCPP_HIDE_FROM_ABI int
 __to_chars_integral_width(_Tp __value, unsigned __base) {
   _LIBCPP_ASSERT(__value >= 0, "The function requires a non-negative value.");
 
@@ -347,13 +456,21 @@ __to_chars_integral_width(_Tp __value, unsigned __base) {
 }
 
 template <typename _Tp>
-_LIBCPP_AVAILABILITY_TO_CHARS
 inline _LIBCPP_HIDE_FROM_ABI to_chars_result
 __to_chars_integral(char* __first, char* __last, _Tp __value, int __base,
                     false_type)
 {
-  if (__base == 10)
+  if (__base == 10) [[likely]]
     return __to_chars_itoa(__first, __last, __value, false_type());
+
+  switch (__base) {
+  case 2:
+    return __to_chars_integral<2>(__first, __last, __value);
+  case 8:
+    return __to_chars_integral<8>(__first, __last, __value);
+  case 16:
+    return __to_chars_integral<16>(__first, __last, __value);
+  }
 
   ptrdiff_t __cap = __last - __first;
   int __n = __to_chars_integral_width(__value, __base);
@@ -371,21 +488,24 @@ __to_chars_integral(char* __first, char* __last, _Tp __value, int __base,
 }
 
 template <typename _Tp, typename enable_if<is_integral<_Tp>::value, int>::type = 0>
-_LIBCPP_AVAILABILITY_TO_CHARS
 inline _LIBCPP_HIDE_FROM_ABI to_chars_result
 to_chars(char* __first, char* __last, _Tp __value)
 {
-    return __to_chars_itoa(__first, __last, __value, is_signed<_Tp>());
+  using _Type = __make_32_64_or_128_bit_t<_Tp>;
+  static_assert(!is_same<_Type, void>::value, "unsupported integral type used in to_chars");
+  static_assert(sizeof(_Tp) <= sizeof(int64_t), "128-bit integral support isn't available yet in to_chars");
+  return std::__to_chars_itoa(__first, __last, static_cast<_Type>(__value), is_signed<_Tp>());
 }
 
 template <typename _Tp, typename enable_if<is_integral<_Tp>::value, int>::type = 0>
-_LIBCPP_AVAILABILITY_TO_CHARS
 inline _LIBCPP_HIDE_FROM_ABI to_chars_result
 to_chars(char* __first, char* __last, _Tp __value, int __base)
 {
-    _LIBCPP_ASSERT(2 <= __base && __base <= 36, "base not in [2, 36]");
-    return __to_chars_integral(__first, __last, __value, __base,
-                               is_signed<_Tp>());
+  _LIBCPP_ASSERT(2 <= __base && __base <= 36, "base not in [2, 36]");
+
+  using _Type = __make_32_64_or_128_bit_t<_Tp>;
+  static_assert(sizeof(_Tp) <= sizeof(int64_t), "128-bit integral support isn't available yet in to_chars");
+  return std::__to_chars_integral(__first, __last, static_cast<_Type>(__value), __base, is_signed<_Tp>());
 }
 
 template <typename _It, typename _Tp, typename _Fn, typename... _Ts>

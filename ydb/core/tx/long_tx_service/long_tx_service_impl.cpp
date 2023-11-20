@@ -2,7 +2,9 @@
 #include "lwtrace_probes.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/domain.h>
 #include <library/cpp/actors/core/log.h>
+#include <library/cpp/actors/core/actor.h>
 #include <util/string/builder.h>
 
 #define TXLOG_LOG(priority, stream) \
@@ -196,7 +198,7 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvCommitFinished::TPtr& ev) {
     auto it = Transactions.find(msg->TxId.UniqueId);
     Y_ABORT_UNLESS(it != Transactions.end());
     auto& tx = it->second;
-    Y_VERIFY_DEBUG(tx.TxId == msg->TxId);
+    Y_DEBUG_ABORT_UNLESS(tx.TxId == msg->TxId);
 
     for (auto& c : tx.Committers) {
         SendReplyIssues(ERequestType::Commit, c.Sender, c.Cookie, msg->Status, msg->Issues);
@@ -335,6 +337,10 @@ const TString& TLongTxServiceActor::GetDatabaseNameOrLegacyDefault(const TString
 }
 
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr& ev) {
+    if (Settings.Counters) {
+        Settings.Counters->AcquireReadSnapshotInRequests->Inc();
+    }
+
     auto* msg = ev->Get();
     const TString& databaseName = GetDatabaseNameOrLegacyDefault(msg->Record.GetDatabaseName());
     TXLOG_DEBUG("Received TEvAcquireReadSnapshot from " << ev->Sender << " for database " << databaseName);
@@ -357,6 +363,11 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
         req.Cookie = ev->Cookie;
         req.Orbit = std::move(msg->Orbit);
     }
+
+    if (Settings.Counters) {
+        Settings.Counters->AcquireReadSnapshotInInFlight->Inc();
+    }
+
     ScheduleAcquireSnapshot(databaseName, state);
 }
 
@@ -423,6 +434,11 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
         for (auto& beginReq : req->BeginTxRequests) {
             Send(beginReq.Sender, new TEvLongTxService::TEvBeginTxResult(msg->Status, msg->Issues), 0, beginReq.Cookie);
         }
+    }
+
+    if (Settings.Counters) {
+        Settings.Counters->AcquireReadSnapshotInInFlight->Sub(req->UserRequests.size());
+        Settings.Counters->AcquireReadSnapshotOutInFlight->Dec();
     }
 
     state->ActiveRequests.erase(ev->Cookie);
@@ -806,7 +822,7 @@ void TLongTxServiceActor::SendProxyRequest(ui32 nodeId, ERequestType type, THold
         return;
     }
 
-    Y_VERIFY_DEBUG(node.State == EProxyState::Connected);
+    Y_DEBUG_ABORT_UNLESS(node.State == EProxyState::Connected);
     pendingEv->Rewrite(TEvInterconnect::EvForward, node.Session);
     TActivationContext::Send(pendingEv.Release());
     req.State = ERequestState::Sent;

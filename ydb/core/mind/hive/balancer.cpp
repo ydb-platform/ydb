@@ -1,5 +1,6 @@
 #include <random>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/random_provider/random_provider.h>
 #include "hive_impl.h"
 #include "hive_log.h"
 #include "node_info.h"
@@ -264,7 +265,7 @@ protected:
                             BLOG_D("Balancer moving tablet " << tablet->ToString() << " " << tablet->GetResourceValues()
                                    << " from node " << tablet->Node->Id << " " << tablet->Node->ResourceValues
                                    << " to node " << result.BestNode->Id << " " << result.BestNode->ResourceValues);
-                            Hive->RecordTabletMove({now, tablet->GetFullTabletId(), tablet->Node->Id, result.BestNode->Id});
+                            Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, result.BestNode->Id));
                             Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), result.BestNode->Id));
                             UpdateProgress();
                             if (!CanKickNextTablet()) {

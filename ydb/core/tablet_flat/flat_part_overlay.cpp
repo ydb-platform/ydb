@@ -143,22 +143,22 @@ void TOverlay::Validate() const noexcept
 
     while (screen) {
         if (!slices) {
-            Y_FAIL("Found screen hole [%lu,%lu) that has no matching slices", screen->Begin, screen->End);
+            Y_ABORT("Found screen hole [%lu,%lu) that has no matching slices", screen->Begin, screen->End);
         }
 
         if (screen->End == Max<TRowId>()) {
             if (slices.HasNext()) {
                 auto mid = *slices;
                 ++slices;
-                Y_FAIL("Found screen hole [%lu,+inf) that does not match slices [%lu,%lu) and [%lu,%lu)",
+                Y_ABORT("Found screen hole [%lu,+inf) that does not match slices [%lu,%lu) and [%lu,%lu)",
                     screen->Begin, mid.Begin, mid.End, slices->Begin, slices->End);
             }
             if (screen->Begin != slices->Begin) {
-                Y_FAIL("Found screen hole [%lu,+inf) that does not match slice [%lu,%lu)",
+                Y_ABORT("Found screen hole [%lu,+inf) that does not match slice [%lu,%lu)",
                     screen->Begin, slices->Begin, slices->End);
             }
         } else if (!(*screen == *slices)) {
-            Y_FAIL("Found screen hole [%lu,%lu) that does not match slice [%lu,%lu)",
+            Y_ABORT("Found screen hole [%lu,%lu) that does not match slice [%lu,%lu)",
                 screen->Begin, screen->End, slices->Begin, slices->End);
         }
 
@@ -167,7 +167,7 @@ void TOverlay::Validate() const noexcept
     }
 
     if (slices) {
-        Y_FAIL("Found slice [%lu,%lu) that has no matching screen holes", slices->Begin, slices->End);
+        Y_ABORT("Found slice [%lu,%lu) that has no matching screen holes", slices->Begin, slices->End);
     }
 }
 

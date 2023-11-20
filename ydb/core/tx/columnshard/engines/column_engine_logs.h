@@ -123,34 +123,14 @@ public:
         return VersionedIndex;
     }
 
-    TString SerializeMark(const NArrow::TReplaceKey& key) const override {
-        if (UseCompositeMarks()) {
-            return TMark::SerializeComposite(key, MarkSchema());
-        } else {
-            return TMark::SerializeScalar(key, MarkSchema());
-        }
-    }
-
-    NArrow::TReplaceKey DeserializeMark(const TString& key, std::optional<ui32> markNumKeys) const override {
-        if (markNumKeys) {
-            Y_ABORT_UNLESS(*markNumKeys == (ui32)MarkSchema()->num_fields());
-            return TMark::DeserializeComposite(key, MarkSchema());
-        } else {
-            NArrow::TReplaceKey markKey = TMark::DeserializeScalar(key, MarkSchema());
-            if (UseCompositeMarks()) {
-                return TMark::ExtendBorder(markKey, MarkSchema());
-            }
-            return markKey;
-        }
-    }
-
     const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const override;
     const TColumnEngineStats& GetTotalStats() override;
     ui64 MemoryUsage() const override;
     TSnapshot LastUpdate() const override { return LastSnapshot; }
 
+    virtual void DoRegisterTable(const ui64 pathId) override;
 public:
-    bool Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop = {}) override;
+    bool Load(IDbWrapper& db) override;
 
     std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(const TCompactionLimits& limits, const THashSet<TPortionAddress>& busyPortions) noexcept override;
@@ -166,36 +146,46 @@ public:
 
 
     std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
-                                        const THashSet<ui32>& columnIds,
                                         const TPKRangesFilter& pkRangesFilter) const override;
 
-    bool IsPortionExists(const ui64 granuleId, const ui64 portionId) const {
-        auto it = Granules.find(granuleId);
-        if (it == Granules.end()) {
+    bool IsPortionExists(const ui64 pathId, const ui64 portionId) const {
+        auto it = Tables.find(pathId);
+        if (it == Tables.end()) {
             return false;
         }
         return !!it->second->GetPortionPtr(portionId);
     }
 
-    bool IsGranuleExists(const ui64 granuleId) const {
-        return !!GetGranuleOptional(granuleId);
+    virtual bool HasDataInPathId(const ui64 pathId) const override {
+        auto g = GetGranuleOptional(pathId);
+        if (!g) {
+            return false;
+        }
+        if (g->GetPortions().size()) {
+            return false;
+        }
+        return true;
     }
 
-    const TGranuleMeta& GetGranuleVerified(const ui64 granuleId) const {
-        auto it = Granules.find(granuleId);
-        AFL_VERIFY(it != Granules.end())("granule_id", granuleId)("count", Granules.size());
+    bool IsGranuleExists(const ui64 pathId) const {
+        return !!GetGranuleOptional(pathId);
+    }
+
+    const TGranuleMeta& GetGranuleVerified(const ui64 pathId) const {
+        auto it = Tables.find(pathId);
+        AFL_VERIFY(it != Tables.end())("path_id", pathId)("count", Tables.size());
         return *it->second;
     }
 
-    std::shared_ptr<TGranuleMeta> GetGranulePtrVerified(const ui64 granuleId) const {
-        auto result = GetGranuleOptional(granuleId);
-        Y_ABORT_UNLESS(result);
+    std::shared_ptr<TGranuleMeta> GetGranulePtrVerified(const ui64 pathId) const {
+        auto result = GetGranuleOptional(pathId);
+        AFL_VERIFY(result)("path_id", pathId);
         return result;
     }
 
-    std::shared_ptr<TGranuleMeta> GetGranuleOptional(const ui64 granuleId) const {
-        auto it = Granules.find(granuleId);
-        if (it == Granules.end()) {
+    std::shared_ptr<TGranuleMeta> GetGranuleOptional(const ui64 pathId) const {
+        auto it = Tables.find(pathId);
+        if (it == Tables.end()) {
             return nullptr;
         }
         return it->second;
@@ -206,51 +196,24 @@ public:
     }
 
 private:
-    using TMarksMap = std::map<TMark, ui64, TMark::TCompare>;
-
     TVersionedIndex VersionedIndex;
     ui64 TabletId;
-    std::shared_ptr<TGranulesTable> GranulesTable;
     std::shared_ptr<TColumnsTable> ColumnsTable;
     std::shared_ptr<TCountersTable> CountersTable;
-    THashMap<ui64, std::shared_ptr<TGranuleMeta>> Granules; // granule -> meta
-    THashMap<ui64, TMarksMap> PathGranules; // path_id -> {mark, granule}
+    THashMap<ui64, std::shared_ptr<TGranuleMeta>> Tables; // pathId into Granule that equal to Table
     TMap<ui64, std::shared_ptr<TColumnEngineStats>> PathStats; // per path_id stats sorted by path_id
-    /// Set of empty granules.
-    /// Just for providing count of empty granules.
-    THashSet<ui64> EmptyGranules;
     std::map<TSnapshot, std::vector<TPortionInfo>> CleanupPortions;
     TColumnEngineStats Counters;
     ui64 LastPortion;
     ui64 LastGranule;
     TSnapshot LastSnapshot = TSnapshot::Zero();
-    mutable std::optional<TMark> CachedDefaultMark;
     bool Loaded = false;
 private:
-    const std::shared_ptr<arrow::Schema>& MarkSchema() const noexcept {
-        return VersionedIndex.GetIndexKey();
-    }
-
-    const TMark& DefaultMark() const {
-        if (!CachedDefaultMark) {
-            CachedDefaultMark = TMark(TMark::MinBorder(MarkSchema()));
-        }
-        return *CachedDefaultMark;
-    }
-
-    bool UseCompositeMarks() const noexcept {
-        return VersionedIndex.GetLastSchema()->GetIndexInfo().IsCompositeIndexKey();
-    }
-
-    bool LoadGranules(IDbWrapper& db);
-    bool LoadColumns(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs);
+    bool LoadColumns(IDbWrapper& db);
     bool LoadCounters(IDbWrapper& db);
 
-    void EraseGranule(ui64 pathId, ui64 granule, const TMark& mark);
+    void EraseTable(const ui64 pathId);
 
-    /// Insert granule or check if same granule was already inserted.
-    void SetGranule(const TGranuleRecord& rec);
-    std::optional<ui64> NewGranule(const TGranuleRecord& rec);
     void UpsertPortion(const TPortionInfo& portionInfo, const TPortionInfo* exInfo = nullptr);
     bool ErasePortion(const TPortionInfo& portionInfo, bool updateStats = true);
     void UpdatePortionStats(const TPortionInfo& portionInfo, EStatsUpdateType updateType = EStatsUpdateType::DEFAULT,
@@ -258,9 +221,6 @@ private:
     void UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo,
                             EStatsUpdateType updateType,
                             const TPortionInfo* exPortionInfo = nullptr) const;
-
-    /// Return lists of adjacent empty granules for the path.
-    std::vector<std::vector<std::pair<TMark, ui64>>> EmptyGranuleTracks(const ui64 pathId) const;
 };
 
 } // namespace NKikimr::NOlap

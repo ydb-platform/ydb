@@ -1,5 +1,4 @@
 import os
-import pytest
 import shutil
 import yatest.common
 import yql_utils
@@ -39,7 +38,7 @@ class YQLRun(object):
             self.sql2yql_binary = None
 
         try:
-            self.udf_resolver_binary = yql_utils.yql_binary_path('yql/tools/udf_resolver/udf_resolver')
+            self.udf_resolver_binary = yql_utils.yql_binary_path(os.getenv('YQL_UDFRESOLVER_PATH') or 'ydb/library/yql/tools/udf_resolver/udf_resolver')
         except Exception:
             self.udf_resolver_binary = None
 
@@ -63,7 +62,7 @@ class YQLRun(object):
             text_format.Merge(gateway_config, self.gateway_config)
 
         if cfg_dir is None:
-            cfg_dir = 'yql/cfg/tests'
+            cfg_dir = 'ydb/library/yql/cfg/tests'
         with open(yql_utils.yql_source_path(cfg_dir + '/' + yql_utils.get_gateway_cfg_filename())) as f:
             text_format.Merge(f.read(), self.gateway_config)
 
@@ -86,7 +85,7 @@ class YQLRun(object):
 
     def yql_exec(self, program=None, program_file=None, files=None, urls=None,
                  run_sql=False, verbose=False, check_error=True, tables=None, pretty_plan=True,
-                 wait=True, parameters={}, extra_env={}):
+                 wait=True, parameters={}, extra_env={}, require_udf_resolver=False):
         del pretty_plan
 
         res_dir = self.res_dir
@@ -236,7 +235,8 @@ class YQLRun(object):
             else:
                 cmd += '--run '
 
-        if yql_utils.get_param('UDF_RESOLVER'):
+        if yql_utils.get_param('UDF_RESOLVER') or require_udf_resolver:
+            assert self.udf_resolver_binary, "Missing udf_resolver binary"
             cmd += '--udf-resolver=' + self.udf_resolver_binary + ' --scan-udfs '
             if not yatest.common.context.sanitize:
                 cmd += ' --udf-resolver-filter-syscalls '
@@ -244,15 +244,10 @@ class YQLRun(object):
         if run_sql and not self.use_sql2yql:
             cmd += '--sql '
 
-        if yql_utils.get_param('MULTIRUN'):
-            if '/* multirun can not */' in yql_program:
-                pytest.skip('multirun can not execute this')
-            cmd += '-M %s ' % yql_utils.get_param('MULTIRUN')
-
         if parameters:
             parameters_file = res_file_path('params.yson')
             with open(parameters_file, 'w') as f:
-                f.write(yson.dumps(parameters))
+                f.write(six.ensure_str(yson.dumps(parameters)))
             cmd += '--params-file=%s ' % parameters_file
 
         if verbose:

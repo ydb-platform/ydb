@@ -379,7 +379,7 @@ private:
                 int embeddedChildIndex = childIndex;
                 if (depth == 0 && childDescription.Type->ProtoType != EProtobufType::EmbeddedMessage) {
                     auto maybeEmbeddedChildIndex = type->FieldNumberToEmbeddedChildIndex(fieldNumber);
-                    Y_ABORT_UNLESS(maybeEmbeddedChildIndex);
+                    YT_VERIFY(maybeEmbeddedChildIndex);
                     embeddedChildIndex = *maybeEmbeddedChildIndex;
                 }
 
@@ -634,7 +634,7 @@ private:
                         GetPathString())
                         << TErrorAttribute("table_index", TableIndex_);
                 case EProtobufType::EmbeddedMessage:
-                    Y_FAIL();
+                    Y_ABORT();
             }
             YT_ABORT();
         }();

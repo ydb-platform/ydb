@@ -330,7 +330,7 @@ namespace NKikimr::NTestShard {
                     return;
 
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
 
             if (!r.ItemsSize()) {
@@ -412,7 +412,7 @@ namespace NKikimr::NTestShard {
                             break;
 
                         default:
-                            Y_FAIL("unexpected key state in State dict");
+                            Y_ABORT("unexpected key state in State dict");
                     }
                     State.erase(it);
                 } else {
@@ -487,7 +487,7 @@ namespace NKikimr::NTestShard {
                     return;
 
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
 
             Y_ABORT_UNLESS(!TransitionInFlight.empty());

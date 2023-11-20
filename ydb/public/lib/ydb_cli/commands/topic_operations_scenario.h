@@ -49,8 +49,8 @@ public:
     TDuration WindowSec;
     TDuration WarmupSec;
     bool Quiet = false;
-    bool PrintTimestamp;
-    double Percentile;
+    bool PrintTimestamp = false;
+    double Percentile = 99.0;
     TString TopicName;
     ui32 TopicPartitionCount = 1;
     ui32 ProducerThreadCount = 0;

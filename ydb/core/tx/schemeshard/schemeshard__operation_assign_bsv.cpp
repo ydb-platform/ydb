@@ -85,15 +85,15 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TAssignBlockStoreVolume");
+        Y_ABORT("no AbortPropose for TAssignBlockStoreVolume");
     }
 
     bool ProgressState(TOperationContext&) override {
-        Y_FAIL("no progress state for assign bsc");
+        Y_ABORT("no progress state for assign bsc");
     }
 
     void AbortUnsafe(TTxId, TOperationContext&) override {
-        Y_FAIL("no AbortUnsafe for assign bsc");
+        Y_ABORT("no AbortUnsafe for assign bsc");
     }
 };
 

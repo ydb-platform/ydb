@@ -100,8 +100,7 @@ namespace {
         return TUnboxedValuePod(static_cast<ui64>(result));
     }
 
-    SIMPLE_UDF_OPTIONS(TToUint64, ui64(TAutoMap<TUtf8>, TOptional<ui16>),
-                       builder.OptionalArgs(1)) {
+    SIMPLE_UDF_WITH_OPTIONAL_ARGS(TToUint64, ui64(TAutoMap<TUtf8>, TOptional<ui16>), 1) {
         Y_UNUSED(valueBuilder);
         const TString inputStr(args[0].AsStringRef());
         const char* input = inputStr.Data();
@@ -119,8 +118,7 @@ namespace {
         return TUnboxedValuePod(ret);
     }
 
-    SIMPLE_UDF_OPTIONS(TTryToUint64, TOptional<ui64>(TAutoMap<TUtf8>, TOptional<ui16>),
-                       builder.OptionalArgs(1)) {
+    SIMPLE_UDF_WITH_OPTIONAL_ARGS(TTryToUint64, TOptional<ui64>(TAutoMap<TUtf8>, TOptional<ui16>), 1) {
         Y_UNUSED(valueBuilder);
         const TString inputStr(args[0].AsStringRef());
         const char* input = inputStr.Data();
@@ -140,15 +138,14 @@ namespace {
         return TUnboxedValuePod(ret);
     }
 
-    SIMPLE_UDF_OPTIONS(TSubstring, TUtf8(TAutoMap<TUtf8>, TOptional<ui64>, TOptional<ui64>),
-                       builder.OptionalArgs(1)) {
+    SIMPLE_UDF_WITH_OPTIONAL_ARGS(TSubstring, TUtf8(TAutoMap<TUtf8>, TOptional<ui64>, TOptional<ui64>), 1) {
         const TStringBuf input(args[0].AsStringRef());
         size_t from = args[1].GetOrDefault<ui64>(0);
         size_t len = !args[2] ? TStringBuf::npos : size_t(args[2].Get<ui64>());
         return valueBuilder->NewString(SubstrUTF8(input, from, len));
     }
 
-    SIMPLE_UDF_OPTIONS(TFind, TOptional<ui64>(TAutoMap<TUtf8>, TUtf8, TOptional<ui64>), builder.OptionalArgs(1)) {
+    SIMPLE_UDF_WITH_OPTIONAL_ARGS(TFind, TOptional<ui64>(TAutoMap<TUtf8>, TUtf8, TOptional<ui64>), 1) {
         Y_UNUSED(valueBuilder);
         const std::string_view string(args[0].AsStringRef());
         const std::string_view needle(args[1].AsStringRef());
@@ -170,7 +167,7 @@ namespace {
         return TUnboxedValuePod();
     }
 
-    SIMPLE_UDF_OPTIONS(TRFind, TOptional<ui64>(TAutoMap<TUtf8>, TUtf8, TOptional<ui64>), builder.OptionalArgs(1)) {
+    SIMPLE_UDF_WITH_OPTIONAL_ARGS(TRFind, TOptional<ui64>(TAutoMap<TUtf8>, TUtf8, TOptional<ui64>), 1) {
         Y_UNUSED(valueBuilder);
         const std::string_view string(args[0].AsStringRef());
         const std::string_view needle(args[1].AsStringRef());
@@ -250,14 +247,14 @@ namespace {
     using TSkipEmptyArg = TNamedArg<bool, skipEmptyName>;
     using TLimitArg = TNamedArg<ui64, limitName>;
 
-    SIMPLE_UDF_OPTIONS(TSplitToList, TListType<TUtf8>(
+    SIMPLE_UDF_WITH_OPTIONAL_ARGS(TSplitToList, TListType<TUtf8>(
                             TOptional<TUtf8>,
                             TUtf8,
                             TDelimeterStringArg,
                             TSkipEmptyArg,
                             TLimitArg
                        ),
-                       builder.OptionalArgs(3)) {
+                       3) {
         TTmpVector result;
         if (args[0]) {
             const bool delimiterString = args[2].GetOrDefault<bool>(true);

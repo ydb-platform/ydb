@@ -7,8 +7,6 @@
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
-#include <ydb/core/protos/config.pb.h>
-#include <ydb/core/protos/kqp.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 
 namespace NKikimr {
@@ -26,6 +24,7 @@ struct TEvKqpExecuter {
         TVector<TKqpExecuterTxResult> TxResults;
 
         NLWTrace::TOrbit Orbit;
+        IKqpGateway::TKqpSnapshot Snapshot;
         ui64 ResultRowsCount = 0;
         ui64 ResultRowsBytes = 0;
 
@@ -94,9 +93,10 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
     TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext);
 
-IActor* CreateKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target, const TString& database,
-    TIntrusiveConstPtr<NACLib::TUserToken> userToken, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc,
-    bool temporary, TString SessionId);
+IActor* CreateKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target,
+    const TMaybe<TString>& requestType, const TString& database,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+    bool temporary, TString SessionId, TIntrusivePtr<TUserRequestContext> ctx);
 
 std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral(
     IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner, const TIntrusivePtr<TUserRequestContext>& userRequestContext);

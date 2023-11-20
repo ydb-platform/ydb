@@ -46,8 +46,10 @@ int GetLockPriority(ELockType lockType)
             return 1;
         case ELockType::SharedStrong:
             return 2;
-        case ELockType::Exclusive:
+        case ELockType::SharedWrite:
             return 3;
+        case ELockType::Exclusive:
+            return 4;
         default:
             YT_ABORT();
     }
@@ -57,8 +59,32 @@ int GetLockPriority(ELockType lockType)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool IsReadLock(ELockType lock)
+{
+    return lock == ELockType::SharedWeak || lock == ELockType::SharedStrong;
+}
+
+bool IsWriteLock(ELockType lock)
+{
+    return lock == ELockType::Exclusive || lock == ELockType::SharedWrite;
+}
+
 ELockType GetStrongestLock(ELockType lhs, ELockType rhs)
 {
+    if (lhs == ELockType::None) {
+        return rhs;
+    }
+
+    if (rhs == ELockType::None) {
+        return lhs;
+    }
+
+    if (IsReadLock(lhs) && IsWriteLock(rhs) ||
+        IsReadLock(rhs) && IsWriteLock(lhs))
+    {
+        return ELockType::Exclusive;
+    }
+
     return GetLockPriority(lhs) > GetLockPriority(rhs) ? lhs : rhs;
 }
 
@@ -1420,11 +1446,12 @@ void ValidateSystemColumnSchema(
     bool allowUnversionedUpdateColumns)
 {
     static const auto allowedSortedTablesSystemColumns = THashMap<TString, ESimpleLogicalValueType>{
+        {EmptyValueColumnName, ESimpleLogicalValueType::Int64},
     };
 
     static const auto allowedOrderedTablesSystemColumns = THashMap<TString, ESimpleLogicalValueType>{
         {TimestampColumnName, ESimpleLogicalValueType::Uint64},
-        {CumulativeDataWeightColumnName, ESimpleLogicalValueType::Int64}
+        {CumulativeDataWeightColumnName, ESimpleLogicalValueType::Int64},
     };
 
     auto validateType = [&] (ESimpleLogicalValueType expected) {

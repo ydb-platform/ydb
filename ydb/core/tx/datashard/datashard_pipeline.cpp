@@ -6,6 +6,7 @@
 
 #include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/cputime.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
 
 namespace NKikimr {
@@ -628,8 +629,7 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
     if (Self->GetVolatileTxManager().FindByTxId(txId)) {
         // This readset is for a known volatile transaction, we need to
         // hand it off to volatile tx manager.
-        Self->GetVolatileTxManager().ProcessReadSet(rs, txc);
-        return true;
+        return Self->GetVolatileTxManager().ProcessReadSet(rs, std::move(ack), txc);
     }
 
     if (step <= OutdatedReadSetStep()) {
@@ -1318,7 +1318,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         info.SetMvccSnapshot(TRowVersion(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId()));
     }
     TActiveTransaction::TPtr tx = MakeIntrusive<TActiveTransaction>(info);
-    tx->SetTarget(ev->Get()->GetSource());
+    tx->SetTarget(ev->Sender);
     tx->SetTxBody(rec.GetTxBody());
     tx->SetCookie(ev->Cookie);
     tx->Orbit = std::move(ev->Get()->Orbit);
@@ -1838,7 +1838,7 @@ bool TPipeline::AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, co
         WaitingDataTxOps.emplace(TRowVersion::Min(), std::move(ev)); // postpone tx processing till mvcc state switch is finished
     } else {
         bool prioritizedReads = Self->GetEnablePrioritizedMvccSnapshotReads();
-        Y_VERIFY_DEBUG(ev->Get()->Record.HasMvccSnapshot());
+        Y_DEBUG_ABORT_UNLESS(ev->Get()->Record.HasMvccSnapshot());
         TRowVersion snapshot(ev->Get()->Record.GetMvccSnapshot().GetStep(), ev->Get()->Record.GetMvccSnapshot().GetTxId());
         WaitingDataTxOps.emplace(snapshot, std::move(ev));
         const ui64 waitStep = prioritizedReads ? snapshot.Step : snapshot.Step + 1;
@@ -2116,8 +2116,8 @@ bool TPipeline::MarkPlannedLogicallyCompleteUpTo(const TRowVersion& version, TTr
         if (version <= prVersion) {
             return false;
         }
-        Y_VERIFY_DEBUG(!pr.second->IsImmediate());
-        Y_VERIFY_DEBUG(!pr.second->HasFlag(TTxFlags::BlockingImmediateOps));
+        Y_DEBUG_ABORT_UNLESS(!pr.second->IsImmediate());
+        Y_DEBUG_ABORT_UNLESS(!pr.second->HasFlag(TTxFlags::BlockingImmediateOps));
         pr.second->SetFlag(TTxFlags::BlockingImmediateOps);
         pr.second->PromoteImmediateConflicts();
         // TODO: we don't want to persist these flags in the future
@@ -2151,9 +2151,9 @@ bool TPipeline::MarkPlannedLogicallyIncompleteUpTo(const TRowVersion& version, T
         if (version < prVersion) {
             return false;
         }
-        Y_VERIFY_DEBUG(!pr.second->IsImmediate());
-        Y_VERIFY_DEBUG(!pr.second->HasFlag(TTxFlags::BlockingImmediateOps));
-        Y_VERIFY_DEBUG(!pr.second->HasFlag(TTxFlags::BlockingImmediateWrites));
+        Y_DEBUG_ABORT_UNLESS(!pr.second->IsImmediate());
+        Y_DEBUG_ABORT_UNLESS(!pr.second->HasFlag(TTxFlags::BlockingImmediateOps));
+        Y_DEBUG_ABORT_UNLESS(!pr.second->HasFlag(TTxFlags::BlockingImmediateWrites));
         pr.second->SetFlag(TTxFlags::BlockingImmediateWrites);
         pr.second->PromoteImmediateWriteConflicts();
         // TODO: we don't want to persist these flags in the future

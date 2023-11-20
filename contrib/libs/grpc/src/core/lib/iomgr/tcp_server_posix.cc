@@ -346,7 +346,7 @@ static void on_read(void* arg, grpc_error_handle err) {
         grpc_fd_notify_on_read(sp->emfd, &sp->read_closure);
         return;
       } else if (errno == EMFILE || errno == ENFILE) {
-        Y_FAIL("grpc failed accept4: %s", strerror(errno));
+        Y_ABORT("grpc failed accept4: %s", strerror(errno));
       } else {
         gpr_mu_lock(&sp->server->mu);
         if (!sp->server->shutdown_listeners) {

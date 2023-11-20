@@ -61,7 +61,7 @@ public:
                 HFunc(TEvBlobStorage::TEvVReadyNotify, HandleBw);
                 HFunc(TEvBlobStorage::TEvVWindowChange, HandleBw);
                 HFunc(TEvBlobStorage::TEvVSyncGuid, HandleForward);
-                default: Y_FAIL("unexpected event Type# 0x%08" PRIx32, ev->GetTypeRewrite());
+                default: Y_ABORT("unexpected event Type# 0x%08" PRIx32, ev->GetTypeRewrite());
             }
         }
     }
@@ -161,8 +161,8 @@ public:
         DiskSize = SectorMap->DeviceSize;
         PDiskGuid = 1;
         PDiskKey = 1;
-        MainKey = {1};
-        FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, MainKey.back(), "queue_test",
+        MainKey = NPDisk::TMainKey{ .Keys = { 1 } };
+        FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, MainKey.Keys.back(), "queue_test",
                 false, false, SectorMap, false);
 
         PDiskId = MakeBlobStoragePDiskID(1, 1);

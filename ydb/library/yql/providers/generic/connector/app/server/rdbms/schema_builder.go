@@ -17,8 +17,9 @@ type schemaItem struct {
 }
 
 type schemaBuilder struct {
-	typeMapper utils.TypeMapper
-	items      []*schemaItem
+	typeMapper          utils.TypeMapper
+	typeMappingSettings *api_service_protos.TTypeMappingSettings
+	items               []*schemaItem
 }
 
 func (sb *schemaBuilder) addColumn(columnName, columnType string) error {
@@ -28,7 +29,7 @@ func (sb *schemaBuilder) addColumn(columnName, columnType string) error {
 	}
 
 	var err error
-	item.ydbColumn, err = sb.typeMapper.SQLTypeToYDBColumn(columnName, columnType)
+	item.ydbColumn, err = sb.typeMapper.SQLTypeToYDBColumn(columnName, columnType, sb.typeMappingSettings)
 
 	if err != nil && !errors.Is(err, utils.ErrDataTypeNotSupported) {
 		return fmt.Errorf("sql type to ydb column (%s, %s): %w", columnName, columnType, err)

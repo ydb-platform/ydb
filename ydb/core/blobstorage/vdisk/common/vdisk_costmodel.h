@@ -111,7 +111,7 @@ namespace NKikimr {
             const ui64 seekCost = (size / WriteBlockSize + 1) * SeekTimeUs * 1000ull; // huge blocks may require several seeks
             const ui64 writeCost = size * ui64(1000000000) / WriteSpeedBps;
             const ui64 cost = seekCost + writeCost;
-            Y_VERIFY_DEBUG(cost);
+            Y_DEBUG_ABORT_UNLESS(cost);
             return cost;
         }
 

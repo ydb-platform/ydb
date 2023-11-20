@@ -23,7 +23,7 @@ namespace NKikimr {
             case EWriterDataType::Fresh:       return data ? vctx->CompDataFresh : vctx->CompIndexFresh;
             case EWriterDataType::Comp:        return data ? vctx->CompData : vctx->CompIndex;
             case EWriterDataType::Replication: return vctx->Replication;
-            default:                           Y_FAIL("incorrect EWriterDataType provided");
+            default:                           Y_ABORT("incorrect EWriterDataType provided");
         }
     }
 
@@ -32,7 +32,7 @@ namespace NKikimr {
             case EWriterDataType::Fresh:        return NPriWrite::HullFresh;
             case EWriterDataType::Comp:         return NPriWrite::HullComp;
             case EWriterDataType::Replication:  return NPriWrite::HullComp; // FIXME: add HullRepl priority class
-            default:                            Y_FAIL("incorrect EWriterDataType provided");
+            default:                            Y_ABORT("incorrect EWriterDataType provided");
         }
     }
 
@@ -195,7 +195,7 @@ namespace NKikimr {
             }
             TDiskPart result = ChunkWriter->GetDiskPartForBookmark();
             static const char padding[3] = {0, 0, 0};
-            Y_VERIFY_DEBUG(alignedLen - len <= 3);
+            Y_DEBUG_ABORT_UNLESS(alignedLen - len <= 3);
             ChunkWriter->Push(padding, alignedLen - len);
 
             return result;
@@ -345,7 +345,7 @@ namespace NKikimr {
         }
 
         TDiskPart Push(const TRope& buffer) {
-            Y_VERIFY_DEBUG(!Finished);
+            Y_DEBUG_ABORT_UNLESS(!Finished);
 
             TMaybe<TDiskPart> result = TBase::AppendAligned(buffer);
             if (!result) {
@@ -474,7 +474,7 @@ namespace NKikimr {
                 }
             }
             if (items) {
-                Y_VERIFY_DEBUG(!intermSize);
+                Y_DEBUG_ABORT_UNLESS(!intermSize);
                 chunks += items / NumRecsPerChunk;
                 intermSize += (items % NumRecsPerChunk) * sizeof(TRec);
             }
@@ -491,7 +491,7 @@ namespace NKikimr {
                 }
             }
             if (outs) {
-                Y_VERIFY_DEBUG(!intermSize);
+                Y_DEBUG_ABORT_UNLESS(!intermSize);
                 chunks += outs / NumDiskPartsPerChunk;
                 intermSize += (outs % NumDiskPartsPerChunk) * sizeof(TDiskPart);
             }
@@ -529,7 +529,7 @@ namespace NKikimr {
                     auto beg = dataMerger->GetHugeBlobMerger().SavedData().begin();
                     auto end = dataMerger->GetHugeBlobMerger().SavedData().end();
 
-                    Y_VERIFY_DEBUG(beg + 1 < end);
+                    Y_DEBUG_ABORT_UNLESS(beg + 1 < end);
                     TMemRec newMemRec(memRec);
                     ui32 idx = ui32(Outbound.size());
                     ui32 num = ui32(end - beg);
@@ -547,7 +547,7 @@ namespace NKikimr {
                     ItemsWithHugeData++;
                     break;
                 }
-                default: Y_FAIL("Impossible case");
+                default: Y_ABORT("Impossible case");
             }
 
             ++Items;
@@ -855,24 +855,24 @@ namespace NKikimr {
             TMemRec memRecToAdd(memRec);
             switch (memRec.GetType()) {
                 case TBlobType::HugeBlob:
-                    Y_VERIFY_DEBUG(inplacedDataSize == 0);
-                    Y_VERIFY_DEBUG(numAddedOuts == 1);
+                    Y_DEBUG_ABORT_UNLESS(inplacedDataSize == 0);
+                    Y_DEBUG_ABORT_UNLESS(numAddedOuts == 1);
                     break;
 
                 case TBlobType::ManyHugeBlobs:
-                    Y_VERIFY_DEBUG(inplacedDataSize == 0);
-                    Y_VERIFY_DEBUG(numAddedOuts > 1);
+                    Y_DEBUG_ABORT_UNLESS(inplacedDataSize == 0);
+                    Y_DEBUG_ABORT_UNLESS(numAddedOuts > 1);
                     break;
 
                 case TBlobType::DiskBlob:
-                    Y_VERIFY_DEBUG(numAddedOuts == 0);
+                    Y_DEBUG_ABORT_UNLESS(numAddedOuts == 0);
                     if (inplacedDataSize) {
                         *location = DataWriter.Preallocate(inplacedDataSize);
                         memRecToAdd.SetDiskBlob(*location);
                     }
                     break;
 
-                default: Y_FAIL("Impossible case");
+                default: Y_ABORT("Impossible case");
             }
 
             IndexBuilder.Push(key, memRecToAdd, dataMerger);
@@ -891,7 +891,7 @@ namespace NKikimr {
             const auto& diskBlobMerger = dataMerger->GetDiskBlobMerger();
             if (memRec.GetType() == TBlobType::DiskBlob && !diskBlobMerger.Empty()) {
                 data = diskBlobMerger.CreateDiskBlob(Arena);
-                Y_VERIFY_DEBUG(!inplacedDataSize);
+                Y_DEBUG_ABORT_UNLESS(!inplacedDataSize);
                 inplacedDataSize = data.GetSize();
             }
 
@@ -902,9 +902,9 @@ namespace NKikimr {
 
             // write inplace data if we have some
             if (data) {
-                Y_VERIFY_DEBUG(data.GetSize() == inplacedDataSize);
+                Y_DEBUG_ABORT_UNLESS(data.GetSize() == inplacedDataSize);
                 TDiskPart writtenLocation = DataWriter.Push(data);
-                Y_VERIFY_DEBUG(writtenLocation == preallocatedLocation);
+                Y_DEBUG_ABORT_UNLESS(writtenLocation == preallocatedLocation);
             }
 
             return true;

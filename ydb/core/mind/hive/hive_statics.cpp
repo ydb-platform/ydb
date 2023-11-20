@@ -384,8 +384,12 @@ void MakeTabletTypeSet(std::vector<TTabletTypes::EType>& list) {
 
 bool IsValidTabletType(TTabletTypes::EType type) {
     return (type > TTabletTypes::Unknown
-            && type < TTabletTypes::Reserved40
+            && type < TTabletTypes::Reserved41
             );
+}
+
+bool IsValidObjectId(const TFullObjectId& objectId) {
+    return objectId.second != 0;
 }
 
 NJson::TJsonValue THive::GetBalancerProgressJson() {

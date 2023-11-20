@@ -23,6 +23,7 @@ target_link_libraries(ydb-core-kqp-ut-olap PUBLIC
   kqp-ut-common
   yql-sql-pg_dummy
   columnshard-hooks-testing
+  tx-datashard-ut_common
 )
 target_sources(ydb-core-kqp-ut-olap PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/olap/kqp_olap_ut.cpp

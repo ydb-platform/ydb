@@ -35,7 +35,7 @@ public:
         }
 
         const T &Get() const {
-            Y_VERIFY_DEBUG(Valid());
+            Y_DEBUG_ABORT_UNLESS(Valid());
             return Vec[Pos];
         }
 
@@ -75,7 +75,7 @@ public:
     }
 
     void Pop() {
-        Y_VERIFY_DEBUG(!Empty());
+        Y_DEBUG_ABORT_UNLESS(!Empty());
         --Elems;
         if (++First == Vec.capacity())
             First = 0;
@@ -90,22 +90,22 @@ public:
     }
 
     T &Top() {
-        Y_VERIFY_DEBUG(!Empty());
+        Y_DEBUG_ABORT_UNLESS(!Empty());
         return Vec[First];
     }
 
     const T &Top() const {
-        Y_VERIFY_DEBUG(!Empty());
+        Y_DEBUG_ABORT_UNLESS(!Empty());
         return Vec[First];
     }
 
     T &Back() {
-        Y_VERIFY_DEBUG(!Empty());
+        Y_DEBUG_ABORT_UNLESS(!Empty());
         return Vec[Last ? Last - 1 : Vec.size() - 1];
     }
 
     const T &Back() const {
-        Y_VERIFY_DEBUG(!Empty());
+        Y_DEBUG_ABORT_UNLESS(!Empty());
         return Vec[Last ? Last - 1 : Vec.size() - 1];
     }
 
@@ -116,7 +116,7 @@ private:
     size_t Elems = 0;
 
     void ResizeVector() {
-        Y_VERIFY_DEBUG(Elems == Vec.capacity() && Elems == Vec.size() && First == Last);
+        Y_DEBUG_ABORT_UNLESS(Elems == Vec.capacity() && Elems == Vec.size() && First == Last);
         // resize vector
         TVec newVec;
         newVec.reserve(Vec.capacity() * 2);
@@ -129,7 +129,7 @@ private:
         Vec.swap(newVec);
         First = 0;
         Last = Vec.size();
-        Y_VERIFY_DEBUG(Elems == Vec.size());
+        Y_DEBUG_ABORT_UNLESS(Elems == Vec.size());
     }
 };
 

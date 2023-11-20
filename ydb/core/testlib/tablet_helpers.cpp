@@ -43,6 +43,7 @@
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/sys_view/processor/processor.h>
+#include <ydb/core/statistics/aggregator/aggregator.h>
 
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -60,7 +61,7 @@ static NActors::TTestActorRuntime& AsKikimrRuntime(NActors::TTestActorRuntimeBas
         return dynamic_cast<NActors::TTestBasicRuntime&>(r);
     } catch (const std::bad_cast& e) {
         Cerr << e.what() << Endl;
-        Y_FAIL("Failed to cast to TTestActorRuntime: %s", e.what());
+        Y_ABORT("Failed to cast to TTestActorRuntime: %s", e.what());
     }
 }
 
@@ -496,7 +497,7 @@ namespace NKikimr {
                 CurrentItems.push_back(currentItem->DelayedExecution.Get());
                 return TTestActorRuntime::EEventAction::RESCHEDULE;
             } else {
-                Y_FAIL();
+                Y_ABORT();
             }
         }
 
@@ -772,7 +773,7 @@ namespace NKikimr {
             TTabletScheduledFilter scheduledFilter(tabletTracer);
             try {
                 testFunc(INITIAL_TEST_DISPATCH_NAME, [&](TTestActorRuntimeBase& runtime) {
-                    runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                    runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
                         tabletTracer.OnEvent(AsKikimrRuntime(runtime), event);
                         return TTestActorRuntime::EEventAction::PROCESS;
                     });
@@ -829,7 +830,7 @@ namespace NKikimr {
                     TTabletScheduledFilter scheduledFilter(rebootingObserver);
                     testFunc(dispatchName,
                         [&](TTestActorRuntime& runtime) {
-                            runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                            runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
                                 return rebootingObserver.OnEvent(AsKikimrRuntime(runtime), event);
                             });
 
@@ -872,7 +873,7 @@ namespace NKikimr {
             TTabletScheduledFilter scheduledFilter(tabletTracer);
 
             testFunc(INITIAL_TEST_DISPATCH_NAME, [&](TTestActorRuntime& runtime) {
-                runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
                     tabletTracer.OnEvent(AsKikimrRuntime(runtime), event);
                     return TTestActorRuntime::EEventAction::PROCESS;
                 });
@@ -920,7 +921,7 @@ namespace NKikimr {
 
                 testFunc(dispatchName,
                     [&](TTestActorRuntime& runtime) {
-                    runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                    runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
                         return pipeResetingObserver.OnEvent(AsKikimrRuntime(runtime), event);
                     });
 
@@ -969,7 +970,7 @@ namespace NKikimr {
                     Cout << dispatchName << "\n";
                 testFunc(dispatchName,
                     [&](TTestActorRuntime& runtime) {
-                    runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                    runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
                         return delayingObserver.OnEvent(AsKikimrRuntime(runtime), event);
                     });
 
@@ -1007,7 +1008,7 @@ namespace NKikimr {
             , TabletTracer(TracingActive, tabletIds)
             , ScheduledFilter(TabletTracer)
         {
-            PrevObserverFunc = Runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+            PrevObserverFunc = Runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
                 TabletTracer.OnEvent(AsKikimrRuntime(runtime), event);
                 return TTestActorRuntime::EEventAction::PROCESS;
             });
@@ -1218,6 +1219,8 @@ namespace NKikimr {
                     bootstrapperActorId = Boot(ctx, type, &NReplication::CreateController, DataGroupErasure);
                 } else if (type == TTabletTypes::PersQueue) {
                     bootstrapperActorId = Boot(ctx, type, &CreatePersQueue, DataGroupErasure);
+                } else if (type == TTabletTypes::StatisticsAggregator) {
+                    bootstrapperActorId = Boot(ctx, type, &NStat::CreateStatisticsAggregator, DataGroupErasure);
                 } else {
                     status = NKikimrProto::ERROR;
                 }

@@ -408,123 +408,123 @@ TUnboxedValuePod GetLengthImpl(TUnboxedValuePod dict, const IValueBuilder* value
 
 }
 
-SIMPLE_UDF_OPTIONS(TConvertToBool, TOptional<bool>(TAutoMap<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TConvertToBool, TOptional<bool>(TAutoMap<TNodeResource>, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
-        return (options.AutoConvert ? &ConvertToBool<true, true> : &ConvertToBool<true, false>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToBool<true, true> : &ConvertToBool<true, false>)(args[0], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &ConvertToBool<false, true> : &ConvertToBool<false, false>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToBool<false, true> : &ConvertToBool<false, false>)(args[0], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TConvertToInt64, TOptional<i64>(TAutoMap<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TConvertToInt64, TOptional<i64>(TAutoMap<TNodeResource>, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
-        return (options.AutoConvert ? &ConvertToIntegral<true, true, i64> : &ConvertToIntegral<true, false, i64>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToIntegral<true, true, i64> : &ConvertToIntegral<true, false, i64>)(args[0], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &ConvertToIntegral<false, true, i64> : &ConvertToIntegral<false, false, i64>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToIntegral<false, true, i64> : &ConvertToIntegral<false, false, i64>)(args[0], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TConvertToUint64, TOptional<ui64>(TAutoMap<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TConvertToUint64, TOptional<ui64>(TAutoMap<TNodeResource>, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
-        return (options.AutoConvert ? &ConvertToIntegral<true, true, ui64> : &ConvertToIntegral<true, false, ui64>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToIntegral<true, true, ui64> : &ConvertToIntegral<true, false, ui64>)(args[0], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &ConvertToIntegral<false, true, ui64> : &ConvertToIntegral<false, false, ui64>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToIntegral<false, true, ui64> : &ConvertToIntegral<false, false, ui64>)(args[0], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TConvertToDouble, TOptional<double>(TAutoMap<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TConvertToDouble, TOptional<double>(TAutoMap<TNodeResource>, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
-        return (options.AutoConvert ? &ConvertToFloat<true, true, double> : &ConvertToFloat<true, false, double>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToFloat<true, true, double> : &ConvertToFloat<true, false, double>)(args[0], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &ConvertToFloat<false, true, double> : &ConvertToFloat<false, false, double>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToFloat<false, true, double> : &ConvertToFloat<false, false, double>)(args[0], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TConvertToString, TOptional<char*>(TAutoMap<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TConvertToString, TOptional<char*>(TAutoMap<TNodeResource>, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
-        return (options.AutoConvert ? &ConvertToString<true, true, false> : &ConvertToString<true, false, false>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToString<true, true, false> : &ConvertToString<true, false, false>)(args[0], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &ConvertToString<false, true, false> : &ConvertToString<false, false, false>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToString<false, true, false> : &ConvertToString<false, false, false>)(args[0], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TConvertToList, TListType<TNodeResource>(TOptional<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TConvertToList, TListType<TNodeResource>(TOptional<TNodeResource>, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
-        return (options.AutoConvert ? &ConvertToListImpl<true, true> : &ConvertToListImpl<true, false>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToListImpl<true, true> : &ConvertToListImpl<true, false>)(args[0], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &ConvertToListImpl<false, true> : &ConvertToListImpl<false, false>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToListImpl<false, true> : &ConvertToListImpl<false, false>)(args[0], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TConvertToInt64List, TListType<i64>(TOptional<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TConvertToInt64List, TListType<i64>(TOptional<TNodeResource>, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
-        return (options.AutoConvert ? &ConvertToListImpl<true, true, &ConvertToIntegral<true, true, i64>> : &ConvertToListImpl<true, false, &ConvertToIntegral<true, false, i64>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToListImpl<true, true, &ConvertToIntegral<true, true, i64>> : &ConvertToListImpl<true, false, &ConvertToIntegral<true, false, i64>>)(args[0], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &ConvertToListImpl<false, true, &ConvertToIntegral<false, true, i64>> : &ConvertToListImpl<false, false, &ConvertToIntegral<false, false, i64>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToListImpl<false, true, &ConvertToIntegral<false, true, i64>> : &ConvertToListImpl<false, false, &ConvertToIntegral<false, false, i64>>)(args[0], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TConvertToUint64List, TListType<ui64>(TOptional<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TConvertToUint64List, TListType<ui64>(TOptional<TNodeResource>, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
-        return (options.AutoConvert ? &ConvertToListImpl<true, true, &ConvertToIntegral<true, true, ui64>> : &ConvertToListImpl<true, false, &ConvertToIntegral<true, false, ui64>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToListImpl<true, true, &ConvertToIntegral<true, true, ui64>> : &ConvertToListImpl<true, false, &ConvertToIntegral<true, false, ui64>>)(args[0], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &ConvertToListImpl<false, true, &ConvertToIntegral<false, true, ui64>> : &ConvertToListImpl<false, false, &ConvertToIntegral<false, false, ui64>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToListImpl<false, true, &ConvertToIntegral<false, true, ui64>> : &ConvertToListImpl<false, false, &ConvertToIntegral<false, false, ui64>>)(args[0], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TConvertToBoolList, TListType<bool>(TOptional<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TConvertToBoolList, TListType<bool>(TOptional<TNodeResource>, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
-        return (options.AutoConvert ? &ConvertToListImpl<true, true, &ConvertToBool<true, true>> : &ConvertToListImpl<true, false, &ConvertToBool<true, false>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToListImpl<true, true, &ConvertToBool<true, true>> : &ConvertToListImpl<true, false, &ConvertToBool<true, false>>)(args[0], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &ConvertToListImpl<false, true, &ConvertToBool<false, true>> : &ConvertToListImpl<false, false, &ConvertToBool<false, false>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToListImpl<false, true, &ConvertToBool<false, true>> : &ConvertToListImpl<false, false, &ConvertToBool<false, false>>)(args[0], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TConvertToDoubleList, TListType<double>(TOptional<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TConvertToDoubleList, TListType<double>(TOptional<TNodeResource>, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
-        return (options.AutoConvert ? &ConvertToListImpl<true, true, &ConvertToFloat<true, true, double>> : &ConvertToListImpl<true, false, &ConvertToFloat<true, false, double>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToListImpl<true, true, &ConvertToFloat<true, true, double>> : &ConvertToListImpl<true, false, &ConvertToFloat<true, false, double>>)(args[0], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &ConvertToListImpl<false, true, &ConvertToFloat<false, true, double>> : &ConvertToListImpl<false, false, &ConvertToFloat<false, false, double>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToListImpl<false, true, &ConvertToFloat<false, true, double>> : &ConvertToListImpl<false, false, &ConvertToFloat<false, false, double>>)(args[0], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TConvertToStringList, TListType<char*>(TOptional<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TConvertToStringList, TListType<char*>(TOptional<TNodeResource>, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
-        return (options.AutoConvert ? &ConvertToListImpl<true, true, &ConvertToString<true, true, false>> : &ConvertToListImpl<true, false, &ConvertToString<true, false, false>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToListImpl<true, true, &ConvertToString<true, true, false>> : &ConvertToListImpl<true, false, &ConvertToString<true, false, false>>)(args[0], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &ConvertToListImpl<false, true, &ConvertToString<false, true, false>> : &ConvertToListImpl<false, false, &ConvertToString<false, false, false>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToListImpl<false, true, &ConvertToString<false, true, false>> : &ConvertToListImpl<false, false, &ConvertToString<false, false, false>>)(args[0], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TConvertToDict, TDictType(TOptional<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TConvertToDict, TDictType(TOptional<TNodeResource>, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
-        return (options.AutoConvert ? &ConvertToDictImpl<true, true> : &ConvertToDictImpl<true, false>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToDictImpl<true, true> : &ConvertToDictImpl<true, false>)(args[0], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &ConvertToDictImpl<false, true> : &ConvertToDictImpl<false, false>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToDictImpl<false, true> : &ConvertToDictImpl<false, false>)(args[0], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TConvertToInt64Dict, TInt64DictType(TOptional<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TConvertToInt64Dict, TInt64DictType(TOptional<TNodeResource>, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
-        return (options.AutoConvert ? &ConvertToDictImpl<true, true, &ConvertToIntegral<true, true, i64>> : &ConvertToDictImpl<true, false, &ConvertToIntegral<true, false, i64>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToDictImpl<true, true, &ConvertToIntegral<true, true, i64>> : &ConvertToDictImpl<true, false, &ConvertToIntegral<true, false, i64>>)(args[0], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &ConvertToDictImpl<false, true, &ConvertToIntegral<false, true, i64>> : &ConvertToDictImpl<false, false, &ConvertToIntegral<false, false, i64>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToDictImpl<false, true, &ConvertToIntegral<false, true, i64>> : &ConvertToDictImpl<false, false, &ConvertToIntegral<false, false, i64>>)(args[0], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TConvertToUint64Dict, TUint64DictType(TOptional<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TConvertToUint64Dict, TUint64DictType(TOptional<TNodeResource>, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
-        return (options.AutoConvert ? &ConvertToDictImpl<true, true, &ConvertToIntegral<true, true, ui64>> : &ConvertToDictImpl<true, false, &ConvertToIntegral<true, false, ui64>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToDictImpl<true, true, &ConvertToIntegral<true, true, ui64>> : &ConvertToDictImpl<true, false, &ConvertToIntegral<true, false, ui64>>)(args[0], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &ConvertToDictImpl<false, true, &ConvertToIntegral<false, true, ui64>> : &ConvertToDictImpl<false, false, &ConvertToIntegral<false, false, ui64>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToDictImpl<false, true, &ConvertToIntegral<false, true, ui64>> : &ConvertToDictImpl<false, false, &ConvertToIntegral<false, false, ui64>>)(args[0], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TConvertToBoolDict, TBoolDictType(TOptional<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TConvertToBoolDict, TBoolDictType(TOptional<TNodeResource>, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
-        return (options.AutoConvert ? &ConvertToDictImpl<true, true, &ConvertToBool<true, true>> : &ConvertToDictImpl<true, false, &ConvertToBool<true, false>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToDictImpl<true, true, &ConvertToBool<true, true>> : &ConvertToDictImpl<true, false, &ConvertToBool<true, false>>)(args[0], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &ConvertToDictImpl<false, true, &ConvertToBool<false, true>> : &ConvertToDictImpl<false, false, &ConvertToBool<false, false>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToDictImpl<false, true, &ConvertToBool<false, true>> : &ConvertToDictImpl<false, false, &ConvertToBool<false, false>>)(args[0], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TConvertToDoubleDict, TDoubleDictType(TOptional<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TConvertToDoubleDict, TDoubleDictType(TOptional<TNodeResource>, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
-        return (options.AutoConvert ? &ConvertToDictImpl<true, true, &ConvertToFloat<true, true, double>> : &ConvertToDictImpl<true, false, &ConvertToFloat<true, false, double>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToDictImpl<true, true, &ConvertToFloat<true, true, double>> : &ConvertToDictImpl<true, false, &ConvertToFloat<true, false, double>>)(args[0], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &ConvertToDictImpl<false, true, &ConvertToFloat<false, true, double>> : &ConvertToDictImpl<false, false, &ConvertToFloat<false, false, double>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToDictImpl<false, true, &ConvertToFloat<false, true, double>> : &ConvertToDictImpl<false, false, &ConvertToFloat<false, false, double>>)(args[0], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TConvertToStringDict, TStringDictType(TOptional<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TConvertToStringDict, TStringDictType(TOptional<TNodeResource>, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
-        return (options.AutoConvert ? &ConvertToDictImpl<true, true, &ConvertToString<true, true, false>> : &ConvertToDictImpl<true, false, &ConvertToString<true, false, false>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToDictImpl<true, true, &ConvertToString<true, true, false>> : &ConvertToDictImpl<true, false, &ConvertToString<true, false, false>>)(args[0], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &ConvertToDictImpl<false, true, &ConvertToString<false, true, false>> : &ConvertToDictImpl<false, false, &ConvertToString<false, false, false>>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ConvertToDictImpl<false, true, &ConvertToString<false, true, false>> : &ConvertToDictImpl<false, false, &ConvertToString<false, false, false>>)(args[0], valueBuilder, GetPos());
 }
 
 SIMPLE_STRICT_UDF(TAttributes, TDictType(TAutoMap<TNodeResource>)) {
@@ -536,124 +536,124 @@ SIMPLE_STRICT_UDF(TAttributes, TDictType(TAutoMap<TNodeResource>)) {
     return valueBuilder->NewEmptyList();
 }
 
-SIMPLE_UDF_OPTIONS(TContains, TOptional<bool>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TContains, TOptional<bool>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
-        return (options.AutoConvert ? &ContainsImpl<true, true> : &ContainsImpl<true, false>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ContainsImpl<true, true> : &ContainsImpl<true, false>)(args[0], args[1], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &ContainsImpl<false, true> : &ContainsImpl<false, false>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &ContainsImpl<false, true> : &ContainsImpl<false, false>)(args[0], args[1], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TGetLength, TOptional<ui64>(TAutoMap<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TGetLength, TOptional<ui64>(TAutoMap<TNodeResource>, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
-        return (options.AutoConvert ? &GetLengthImpl<true, true> : &GetLengthImpl<true, false>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &GetLengthImpl<true, true> : &GetLengthImpl<true, false>)(args[0], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &GetLengthImpl<false, true> : &GetLengthImpl<false, false>)(args[0], valueBuilder, Pos_);
+        return (options.AutoConvert ? &GetLengthImpl<false, true> : &GetLengthImpl<false, false>)(args[0], valueBuilder, GetPos());
 }
 
-SIMPLE_STRICT_UDF_OPTIONS(TLookup, TOptional<TNodeResource>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
-    return LookupImpl(args[0], args[1], valueBuilder, Pos_);
+SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TLookup, TOptional<TNodeResource>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), 1) {
+    return LookupImpl(args[0], args[1], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TLookupBool, TOptional<bool>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TLookupBool, TOptional<bool>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
-        return (options.AutoConvert ? &LookupImpl<&ConvertToBool<true, true>> : &LookupImpl<&ConvertToBool<true, false>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &LookupImpl<&ConvertToBool<true, true>> : &LookupImpl<&ConvertToBool<true, false>>)(args[0], args[1], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &LookupImpl<&ConvertToBool<false, true>> : &LookupImpl<&ConvertToBool<false, false>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &LookupImpl<&ConvertToBool<false, true>> : &LookupImpl<&ConvertToBool<false, false>>)(args[0], args[1], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TLookupInt64, TOptional<i64>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TLookupInt64, TOptional<i64>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
-        return (options.AutoConvert ? &LookupImpl<&ConvertToIntegral<true, true, i64>> : &LookupImpl<&ConvertToIntegral<true, false, i64>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &LookupImpl<&ConvertToIntegral<true, true, i64>> : &LookupImpl<&ConvertToIntegral<true, false, i64>>)(args[0], args[1], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &LookupImpl<&ConvertToIntegral<false, true, i64>> : &LookupImpl<&ConvertToIntegral<false, false, i64>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &LookupImpl<&ConvertToIntegral<false, true, i64>> : &LookupImpl<&ConvertToIntegral<false, false, i64>>)(args[0], args[1], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TLookupUint64, TOptional<ui64>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TLookupUint64, TOptional<ui64>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
-        return (options.AutoConvert ? &LookupImpl<&ConvertToIntegral<true, true, ui64>> : &LookupImpl<&ConvertToIntegral<true, false, ui64>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &LookupImpl<&ConvertToIntegral<true, true, ui64>> : &LookupImpl<&ConvertToIntegral<true, false, ui64>>)(args[0], args[1], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &LookupImpl<&ConvertToIntegral<false, true, ui64>> : &LookupImpl<&ConvertToIntegral<false, false, ui64>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &LookupImpl<&ConvertToIntegral<false, true, ui64>> : &LookupImpl<&ConvertToIntegral<false, false, ui64>>)(args[0], args[1], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TLookupDouble, TOptional<double>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TLookupDouble, TOptional<double>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
-        return (options.AutoConvert ? &LookupImpl<&ConvertToFloat<true, true, double>> : &LookupImpl<&ConvertToFloat<true, false, double>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &LookupImpl<&ConvertToFloat<true, true, double>> : &LookupImpl<&ConvertToFloat<true, false, double>>)(args[0], args[1], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &LookupImpl<&ConvertToFloat<false, true, double>> : &LookupImpl<&ConvertToFloat<false, false, double>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &LookupImpl<&ConvertToFloat<false, true, double>> : &LookupImpl<&ConvertToFloat<false, false, double>>)(args[0], args[1], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TLookupString, TOptional<char*>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TLookupString, TOptional<char*>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
-        return (options.AutoConvert ? &LookupImpl<&ConvertToString<true, true, false>> : &LookupImpl<&ConvertToString<true, false, false>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &LookupImpl<&ConvertToString<true, true, false>> : &LookupImpl<&ConvertToString<true, false, false>>)(args[0], args[1], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &LookupImpl<&ConvertToString<false, true, false>> : &LookupImpl<&ConvertToString<false, false, false>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &LookupImpl<&ConvertToString<false, true, false>> : &LookupImpl<&ConvertToString<false, false, false>>)(args[0], args[1], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TLookupList, TOptional<TListType<TNodeResource>>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TLookupList, TOptional<TListType<TNodeResource>>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
-        return (options.AutoConvert ? &LookupImpl<&ConvertToListImpl<true, true>> : &LookupImpl<&ConvertToListImpl<true, false>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &LookupImpl<&ConvertToListImpl<true, true>> : &LookupImpl<&ConvertToListImpl<true, false>>)(args[0], args[1], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &LookupImpl<&ConvertToListImpl<false, true>> : &LookupImpl<&ConvertToListImpl<false, false>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &LookupImpl<&ConvertToListImpl<false, true>> : &LookupImpl<&ConvertToListImpl<false, false>>)(args[0], args[1], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TLookupDict, TOptional<TDictType>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TLookupDict, TOptional<TDictType>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
-        return (options.AutoConvert ? &LookupImpl<&ConvertToDictImpl<true, true>> : &LookupImpl<&ConvertToDictImpl<true, false>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &LookupImpl<&ConvertToDictImpl<true, true>> : &LookupImpl<&ConvertToDictImpl<true, false>>)(args[0], args[1], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &LookupImpl<&ConvertToDictImpl<false, true>> : &LookupImpl<&ConvertToDictImpl<false, false>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &LookupImpl<&ConvertToDictImpl<false, true>> : &LookupImpl<&ConvertToDictImpl<false, false>>)(args[0], args[1], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TYPath, TOptional<TNodeResource>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
-    return YPathImpl(args[0], args[1], valueBuilder, Pos_);
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TYPath, TOptional<TNodeResource>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), 1) {
+    return YPathImpl(args[0], args[1], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TYPathBool, TOptional<bool>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TYPathBool, TOptional<bool>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
-        return (options.AutoConvert ? &YPathImpl<&ConvertToBool<true, true>> : &YPathImpl<&ConvertToBool<true, false>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &YPathImpl<&ConvertToBool<true, true>> : &YPathImpl<&ConvertToBool<true, false>>)(args[0], args[1], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &YPathImpl<&ConvertToBool<false, true>> : &YPathImpl<&ConvertToBool<false, false>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &YPathImpl<&ConvertToBool<false, true>> : &YPathImpl<&ConvertToBool<false, false>>)(args[0], args[1], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TYPathInt64, TOptional<i64>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TYPathInt64, TOptional<i64>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
-        return (options.AutoConvert ? &YPathImpl<&ConvertToIntegral<true, true, i64>> : &YPathImpl<&ConvertToIntegral<true, false, i64>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &YPathImpl<&ConvertToIntegral<true, true, i64>> : &YPathImpl<&ConvertToIntegral<true, false, i64>>)(args[0], args[1], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &YPathImpl<&ConvertToIntegral<false, true, i64>> : &YPathImpl<&ConvertToIntegral<false, false, i64>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &YPathImpl<&ConvertToIntegral<false, true, i64>> : &YPathImpl<&ConvertToIntegral<false, false, i64>>)(args[0], args[1], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TYPathUint64, TOptional<ui64>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TYPathUint64, TOptional<ui64>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
-        return (options.AutoConvert ? &YPathImpl<&ConvertToIntegral<true, true, ui64>> : &YPathImpl<&ConvertToIntegral<true, false, ui64>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &YPathImpl<&ConvertToIntegral<true, true, ui64>> : &YPathImpl<&ConvertToIntegral<true, false, ui64>>)(args[0], args[1], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &YPathImpl<&ConvertToIntegral<false, true, ui64>> : &YPathImpl<&ConvertToIntegral<false, false, ui64>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &YPathImpl<&ConvertToIntegral<false, true, ui64>> : &YPathImpl<&ConvertToIntegral<false, false, ui64>>)(args[0], args[1], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TYPathDouble, TOptional<double>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TYPathDouble, TOptional<double>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
-        return (options.AutoConvert ? &YPathImpl<&ConvertToFloat<true, true, double>> : &YPathImpl<&ConvertToFloat<true, false, double>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &YPathImpl<&ConvertToFloat<true, true, double>> : &YPathImpl<&ConvertToFloat<true, false, double>>)(args[0], args[1], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &YPathImpl<&ConvertToFloat<false, true, double>> : &YPathImpl<&ConvertToFloat<false, false, double>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &YPathImpl<&ConvertToFloat<false, true, double>> : &YPathImpl<&ConvertToFloat<false, false, double>>)(args[0], args[1], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TYPathString, TOptional<char*>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TYPathString, TOptional<char*>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
-        return (options.AutoConvert ? &YPathImpl<&ConvertToString<true, true, false>> : &YPathImpl<&ConvertToString<true, false, false>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &YPathImpl<&ConvertToString<true, true, false>> : &YPathImpl<&ConvertToString<true, false, false>>)(args[0], args[1], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &YPathImpl<&ConvertToString<false, true, false>> : &YPathImpl<&ConvertToString<false, false, false>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &YPathImpl<&ConvertToString<false, true, false>> : &YPathImpl<&ConvertToString<false, false, false>>)(args[0], args[1], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TYPathList, TOptional<TListType<TNodeResource>>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TYPathList, TOptional<TListType<TNodeResource>>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
-        return (options.AutoConvert ? &YPathImpl<&ConvertToListImpl<true, true>> : &YPathImpl<&ConvertToListImpl<true, false>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &YPathImpl<&ConvertToListImpl<true, true>> : &YPathImpl<&ConvertToListImpl<true, false>>)(args[0], args[1], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &YPathImpl<&ConvertToListImpl<false, true>> : &YPathImpl<&ConvertToListImpl<false, false>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &YPathImpl<&ConvertToListImpl<false, true>> : &YPathImpl<&ConvertToListImpl<false, false>>)(args[0], args[1], valueBuilder, GetPos());
 }
 
-SIMPLE_UDF_OPTIONS(TYPathDict, TOptional<TDictType>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TYPathDict, TOptional<TDictType>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), 1) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
-        return (options.AutoConvert ? &YPathImpl<&ConvertToDictImpl<true, true>> : &YPathImpl<&ConvertToDictImpl<true, false>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &YPathImpl<&ConvertToDictImpl<true, true>> : &YPathImpl<&ConvertToDictImpl<true, false>>)(args[0], args[1], valueBuilder, GetPos());
     else
-        return (options.AutoConvert ? &YPathImpl<&ConvertToDictImpl<false, true>> : &YPathImpl<&ConvertToDictImpl<false, false>>)(args[0], args[1], valueBuilder, Pos_);
+        return (options.AutoConvert ? &YPathImpl<&ConvertToDictImpl<false, true>> : &YPathImpl<&ConvertToDictImpl<false, false>>)(args[0], args[1], valueBuilder, GetPos());
 }
 
 SIMPLE_STRICT_UDF(TSerialize, TYson(TAutoMap<TNodeResource>)) {
@@ -671,11 +671,11 @@ SIMPLE_STRICT_UDF(TSerializePretty, TYson(TAutoMap<TNodeResource>)) {
 constexpr char SkipMapEntity[] = "SkipMapEntity";
 constexpr char EncodeUtf8[] = "EncodeUtf8";
 
-SIMPLE_UDF_OPTIONS(TSerializeJson, TOptional<TJson>(TAutoMap<TNodeResource>, TOptional<TOptionsResource>, TNamedArg<bool, SkipMapEntity>, TNamedArg<bool, EncodeUtf8>), builder.OptionalArgs(3U)) try {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TSerializeJson, TOptional<TJson>(TAutoMap<TNodeResource>, TOptional<TOptionsResource>, TNamedArg<bool, SkipMapEntity>, TNamedArg<bool, EncodeUtf8>), 3) try {
     return valueBuilder->NewString(SerializeJsonDom(args[0], args[2].GetOrDefault(false), args[3].GetOrDefault(false)));
 } catch (const std::exception& e) {
     if (ParseOptions(args[1]).Strict) {
-        UdfTerminate((::TStringBuilder() << valueBuilder->WithCalleePosition(Pos_) << " " << e.what()).data());
+        UdfTerminate((::TStringBuilder() << valueBuilder->WithCalleePosition(GetPos()) << " " << e.what()).data());
     }
     return {};
 }

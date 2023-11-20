@@ -344,7 +344,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TAlterKesus");
+        Y_ABORT("no AbortPropose for TAlterKesus");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

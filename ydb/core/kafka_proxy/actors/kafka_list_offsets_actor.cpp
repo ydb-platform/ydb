@@ -83,7 +83,7 @@ void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
     --PendingResponses;
     auto it = TopicsRequestsInfo.find(ev->Sender);
 
-    Y_VERIFY_DEBUG(it != TopicsRequestsInfo.end()); 
+    Y_DEBUG_ABORT_UNLESS(it != TopicsRequestsInfo.end()); 
     if (it == TopicsRequestsInfo.end()) {
         KAFKA_LOG_CRIT("ListOffsets actor: received unexpected TEvTopicOffsetsResponse. Ignoring.");
         return RespondIfRequired(ctx);
@@ -118,7 +118,7 @@ void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
                 responsePartition.Offset = responseFromPQPartition.EndOffset;
                 responsePartition.ErrorCode = NONE_ERROR;
             } else {
-                responsePartition.ErrorCode = INVALID_REQUEST; //TODO savnik: handle it
+                responsePartition.ErrorCode = INVALID_REQUEST; // FIXME(savnik): handle it
                 ErrorCode = INVALID_REQUEST;
             }
         } else {

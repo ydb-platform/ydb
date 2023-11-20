@@ -53,8 +53,7 @@ std::unique_ptr<TDqTaskRunnerContext> CreateTaskRunnerContext(NMiniKQL::TKqpComp
 TDqTaskRunnerSettings CreateTaskRunnerSettings(Ydb::Table::QueryStatsCollection::Mode statsMode) {
     TDqTaskRunnerSettings settings;
     // Always collect basic stats for system views / request unit computation.
-    settings.CollectBasicStats = true;
-    settings.CollectProfileStats = CollectProfileStats(statsMode);
+    settings.StatsMode = GetDqStatsMode(statsMode);
     settings.OptLLVM = "OFF";
     settings.TerminateOnError = false;
     return settings;
@@ -67,7 +66,7 @@ TDqTaskRunnerMemoryLimits CreateTaskRunnerMemoryLimits() {
     return memoryLimits;
 }
 
-TDqTaskRunnerExecutionContext CreateTaskRunnerExecutionContext() {
+TDqTaskRunnerExecutionContextDefault CreateTaskRunnerExecutionContext() {
     return {};
 }
 
@@ -273,7 +272,7 @@ public:
                 auto taskCpuTime = stats->BuildCpuTime + stats->ComputeCpuTime;
                 executerCpuTime -= taskCpuTime;
                 NYql::NDq::FillTaskRunnerStats(taskRunner->GetTaskId(), TaskId2StageId[taskRunner->GetTaskId()],
-                    *stats, fakeComputeActorStats.AddTasks(), CollectProfileStats(Request.StatsMode));
+                    *stats, fakeComputeActorStats.AddTasks(), StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode)));
                 fakeComputeActorStats.SetCpuTimeUs(fakeComputeActorStats.GetCpuTimeUs() + taskCpuTime.MicroSeconds());
             }
 

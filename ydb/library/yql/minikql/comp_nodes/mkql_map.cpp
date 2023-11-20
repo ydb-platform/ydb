@@ -304,12 +304,12 @@ public:
         if (auto elements = list.GetElements()) {
             auto size = list.GetListLength();
             NUdf::TUnboxedValue* items = nullptr;
-            const auto result = ctx.HolderFactory.CreateDirectArrayHolder(size, items);
+            NUdf::TUnboxedValue result = ctx.HolderFactory.CreateDirectArrayHolder(size, items);
             while (size--) {
                 Item->SetValue(ctx, NUdf::TUnboxedValue(*elements++));
                 *items++ = NewItem->GetValue(ctx);
             }
-            return result;
+            return result.Release();
         }
 
         return ctx.HolderFactory.Create<TListValue>(ctx, std::move(list), Item, NewItem);

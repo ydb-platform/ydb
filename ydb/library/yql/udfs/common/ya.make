@@ -1,8 +1,10 @@
 RECURSE(
     clickhouse/client
+    compress_base
     datetime
     datetime2
     digest
+    file
     histogram
     hyperloglog
     ip_base
@@ -10,9 +12,11 @@ RECURSE(
     json2
     math
     pire
+    protobuf
     re2
     set
     stat
+    streaming
     string
     top
     topfreq

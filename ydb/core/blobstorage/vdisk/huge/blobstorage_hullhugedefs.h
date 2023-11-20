@@ -315,7 +315,7 @@ namespace NKikimr {
             void Merge(const TDiskPart *begin, const TDiskPart *end, const NMatrix::TVectorType &parts, ui64 circaLsn)
             {
                 Y_ABORT_UNLESS(end - begin == parts.CountBits());
-                Y_VERIFY_DEBUG(Parts.GetSize() == parts.GetSize());
+                Y_DEBUG_ABORT_UNLESS(Parts.GetSize() == parts.GetSize());
                 const ui8 maxSize = parts.GetSize();
                 TDiskPtrs newDiskPtrs;
                 TCircaLsns newCircaLsns;
@@ -330,7 +330,7 @@ namespace NKikimr {
                 for (ui8 i = 0; i < maxSize; i++) {
                     if (Parts.Get(i) && parts.Get(i)) {
                         // both
-                        Y_VERIFY_DEBUG(locIt != locEnd && it != end);
+                        Y_DEBUG_ABORT_UNLESS(locIt != locEnd && it != end);
                         if (CircaLsns[locIt - locBegin] < circaLsn) {
                             // incoming value wins
                             newDiskPtrs.push_back(*it);
@@ -345,12 +345,12 @@ namespace NKikimr {
                         ++locIt;
                         ++it;
                     } else if (Parts.Get(i)) {
-                        Y_VERIFY_DEBUG(locIt != locEnd);
+                        Y_DEBUG_ABORT_UNLESS(locIt != locEnd);
                         newDiskPtrs.push_back(*locIt);
                         newCircaLsns.push_back(CircaLsns[locIt - locBegin]);
                         ++locIt;
                     } else if (parts.Get(i)) {
-                        Y_VERIFY_DEBUG(it != end);
+                        Y_DEBUG_ABORT_UNLESS(it != end);
                         newDiskPtrs.push_back(*it);
                         newCircaLsns.push_back(circaLsn);
                         ++it;

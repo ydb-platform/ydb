@@ -26,7 +26,7 @@ namespace NKikimr {
 
         void Bootstrap(const TActorContext &ctx) {
             Become(&TThis::StateFunc);
-            Y_VERIFY_DEBUG(!Result->GlueReads.empty());
+            Y_DEBUG_ABORT_UNLESS(!Result->GlueReads.empty());
 
             TReplQuoter::TPtr quoter;
             if (IsRepl) {

@@ -345,6 +345,30 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
     }
 
+    Y_UNIT_TEST(DropTableStmtMultiple) {
+        auto res = PgSqlToYql("DROP TABLE FakeTable1, FakeTable2");
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+                (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"FakeTable1"))) (Void) '('('mode 'drop))))
+                (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"FakeTable2"))) (Void) '('('mode 'drop))))
+                (let world (CommitAll! world))
+                (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(DropTableUnknownClusterStmt) {
+        auto res = PgSqlToYql("drop table if exists public.t");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_EQUAL(res.Issues.Size(), 1);
+
+        auto issue = *(res.Issues.begin());
+        UNIT_ASSERT_C(issue.GetMessage().find("Unknown cluster: public") != TString::npos, res.Issues.ToString());
+    }
+
     Y_UNIT_TEST(UpdateStmt) {
         auto res = PgSqlToYql("UPDATE plato.Input SET kind = 'test' where kind = 'testtest'");
         Cerr << res.Root->ToString();
@@ -361,7 +385,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
                             (PgResultItem '"kind" (Void) (lambda '() (PgConst '"test" (PgType 'unknown))))))
                         '('from '('((Right! read0) '"input" '())))
                         '('join_ops '('()))
-                        '('where (PgWhere (Void) (lambda '() (PgOp '"=" (PgColumnRef '"kind") (PgConst '"testtest" (PgType 'unknown))))))))))
+                        '('where (PgWhere (Void) (lambda '() (PgOp '"=" (PgColumnRef '"kind") (PgConst '"testtest" (PgType 'unknown)))))) '('unknowns_allowed)))))
                         '('set_ops '('push)))
                     )
                 )

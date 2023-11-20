@@ -2,6 +2,7 @@
 #include "cms_state.h"
 #include "node_checkers.h"
 
+#include <ydb/core/base/nameservice.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/actors/core/actor.h>
@@ -495,7 +496,7 @@ void TClusterInfo::UpdatePDiskState(const TPDiskID &id, const NKikimrWhiteboard:
 void TClusterInfo::AddVDisk(const NKikimrBlobStorage::TBaseConfig::TVSlot &info)
 {
     ui32 nodeId = info.GetVSlotId().GetNodeId();
-    Y_VERIFY_DEBUG(HasNode(nodeId));
+    Y_DEBUG_ABORT_UNLESS(HasNode(nodeId));
     if (!HasNode(nodeId)) {
         BLOG_ERROR("Got VDisk info from BSC base config for unknown node " << nodeId);
         return;
@@ -515,7 +516,7 @@ void TClusterInfo::AddVDisk(const NKikimrBlobStorage::TBaseConfig::TVSlot &info)
     vdisk->NodeId = nodeId;
     vdisk->SlotId = info.GetVSlotId().GetVSlotId();
 
-    Y_VERIFY_DEBUG(HasPDisk(vdisk->PDiskId));
+    Y_DEBUG_ABORT_UNLESS(HasPDisk(vdisk->PDiskId));
     if (!HasPDisk(vdisk->PDiskId)) {
         BLOG_ERROR("Got VDisk info from BSC base config for unknown PDisk " << vdisk->PDiskId.ToString());
         PDisks.emplace(vdisk->PDiskId, new TPDiskInfo(vdisk->PDiskId));
@@ -559,14 +560,14 @@ void TClusterInfo::AddBSGroup(const NKikimrBlobStorage::TBaseConfig::TGroup &inf
         bsgroup.Erasure = {TErasureType::ErasureSpeciesByName(info.GetErasureSpecies())};
     for (const auto &vdisk : info.GetVSlotId()) {
         TPDiskID pdiskId = {vdisk.GetNodeId(), vdisk.GetPDiskId()};
-        Y_VERIFY_DEBUG(HasPDisk(pdiskId));
+        Y_DEBUG_ABORT_UNLESS(HasPDisk(pdiskId));
         if (!HasPDisk(pdiskId)) {
             BLOG_ERROR("Group " << bsgroup.GroupId << " refers unknown pdisk " << pdiskId.ToString());
             return;
         }
 
         auto &pdisk = PDiskRef(pdiskId);
-        Y_VERIFY_DEBUG(pdisk.VSlots.contains(vdisk.GetVSlotId()));
+        Y_DEBUG_ABORT_UNLESS(pdisk.VSlots.contains(vdisk.GetVSlotId()));
         if (!pdisk.VSlots.contains(vdisk.GetVSlotId())) {
             BLOG_ERROR("Group " << bsgroup.GroupId << " refers unknown slot " <<
                         vdisk.GetVSlotId() << " in disk " << pdiskId.ToString());
@@ -646,6 +647,7 @@ void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action)
     switch (action.GetType()) {
     case TAction::RESTART_SERVICES:
     case TAction::SHUTDOWN_HOST:
+    case TAction::REBOOT_HOST:
         if (auto nodes = NodePtrs(action.GetHost(), MakeServices(action))) {
             for (const auto node : nodes) {
                 for (auto &nodeGroup: node->NodeGroups)
@@ -696,6 +698,7 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
     switch (action.GetType()) {
     case TAction::RESTART_SERVICES:
     case TAction::SHUTDOWN_HOST:
+    case TAction::REBOOT_HOST:
         if (auto nodes = NodePtrs(action.GetHost(), MakeServices(action))) {
             for (const auto node : nodes) {
                 res.insert(node);
@@ -750,6 +753,7 @@ ui64 TClusterInfo::AddLocks(const TPermissionInfo &permission, const TActorConte
         if (item->State == DOWN
             && (permission.Action.GetType() == TAction::RESTART_SERVICES
                 || permission.Action.GetType() == TAction::SHUTDOWN_HOST
+                || permission.Action.GetType() == TAction::REBOOT_HOST
                 || permission.Action.GetType() == TAction::REPLACE_DEVICES)) {
             item->State = RESTART;
             lock = true;;
@@ -1001,6 +1005,7 @@ void TOperationLogManager::ApplyAction(const NKikimrCms::TAction &action,
     switch (action.GetType()) {
     case NKikimrCms::TAction::RESTART_SERVICES:
     case NKikimrCms::TAction::SHUTDOWN_HOST:
+    case NKikimrCms::TAction::REBOOT_HOST:
         if (auto nodes = clusterState->NodePtrs(action.GetHost(), MakeServices(action))) {
             for (const auto node : nodes) {
                 for (auto &nodeGroup: node->NodeGroups)

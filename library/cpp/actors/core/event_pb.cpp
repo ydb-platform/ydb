@@ -148,7 +148,7 @@ namespace NActors {
         // fill in base params
         BufferPtr = static_cast<char*>(data);
         SizeRemain = size;
-        Y_VERIFY_DEBUG(size);
+        Y_DEBUG_ABORT_UNLESS(size);
 
         // transfer control to the coroutine
         Y_ABORT_UNLESS(Event);

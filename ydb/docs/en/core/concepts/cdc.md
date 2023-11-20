@@ -125,7 +125,7 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 >        "created": "2022-12-12T00:00:00.000000Z",
 >        "customer": "Name123"
 >    },
->    "ts": [1670792400, 562949953607163]
+>    "ts": [1670792400890, 562949953607163]
 > }
 > ```
 

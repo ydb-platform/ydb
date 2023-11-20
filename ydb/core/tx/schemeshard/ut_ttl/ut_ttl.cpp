@@ -676,7 +676,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         auto delayConditionalErase = [&]() -> THolder<IEventHandle> {
             THolder<IEventHandle> delayed;
 
-            auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
                 switch (ev->GetTypeRewrite()) {
                 case TEvCondEraseReq::EventType:
                     delayed.Reset(ev.Release());

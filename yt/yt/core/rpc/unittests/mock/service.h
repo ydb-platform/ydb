@@ -198,14 +198,14 @@ public:
     MOCK_METHOD(
         void,
         SubscribeCanceled,
-        (const TCallback<void()>& callback),
+        (const TCallback<void(const TError&)>& callback),
         (override)
     );
 
     MOCK_METHOD(
         void,
         UnsubscribeCanceled,
-        (const TCallback<void()>& callback),
+        (const TCallback<void(const TError&)>& callback),
         (override)
     );
 

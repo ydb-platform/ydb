@@ -1,4 +1,5 @@
 #include "read_metadata.h"
+#include "read_context.h"
 #include "plain_reader/plain_read_data.h"
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
@@ -13,13 +14,12 @@ TDataStorageAccessor::TDataStorageAccessor(const std::unique_ptr<NOlap::TInsertT
     , Index(index)
 {}
 
-std::shared_ptr<NOlap::TSelectInfo> TDataStorageAccessor::Select(const NOlap::TReadDescription& readDescription, const THashSet<ui32>& columnIds) const {
+std::shared_ptr<NOlap::TSelectInfo> TDataStorageAccessor::Select(const NOlap::TReadDescription& readDescription, const THashSet<ui32>& /*columnIds*/) const {
     if (readDescription.ReadNothing) {
         return std::make_shared<NOlap::TSelectInfo>();
     }
     return Index->Select(readDescription.PathId,
                             readDescription.GetSnapshot(),
-                            columnIds,
                             readDescription.PKRangesFilter);
 }
 
@@ -27,23 +27,28 @@ std::vector<NOlap::TCommittedBlob> TDataStorageAccessor::GetCommitedBlobs(const 
     return std::move(InsertTable->Read(readDescription.PathId, readDescription.GetSnapshot(), pkSchema));
 }
 
-std::unique_ptr<NColumnShard::TScanIteratorBase> TReadMetadata::StartScan(const NOlap::TReadContext& readContext) const {
-    return std::make_unique<NColumnShard::TColumnShardScanIterator>(this->shared_from_this(), readContext);
+std::unique_ptr<NColumnShard::TScanIteratorBase> TReadMetadata::StartScan(const std::shared_ptr<NOlap::TReadContext>& readContext) const {
+    return std::make_unique<NColumnShard::TColumnShardScanIterator>(readContext, this->shared_from_this());
 }
 
 bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor, std::string& error) {
     auto& indexInfo = ResultIndexSchema->GetIndexInfo();
-
-    std::vector<ui32> resultColumnsIds;
-    if (readDescription.ColumnIds.size()) {
-        resultColumnsIds = readDescription.ColumnIds;
-    } else if (readDescription.ColumnNames.size()) {
-        resultColumnsIds = indexInfo.GetColumnIds(readDescription.ColumnNames);
-    } else {
-        error = "Empty column list requested";
-        return false;
+    {
+        std::vector<ui32> resultColumnsIds;
+        if (readDescription.ColumnIds.size()) {
+            resultColumnsIds = readDescription.ColumnIds;
+        } else if (readDescription.ColumnNames.size()) {
+            resultColumnsIds = indexInfo.GetColumnIds(readDescription.ColumnNames);
+        } else {
+            error = "Empty column list requested";
+            return false;
+        }
+        ResultColumnsIds.swap(resultColumnsIds);
     }
-    ResultColumnsIds.swap(resultColumnsIds);
+
+    for (auto&& i : GetProgram().GetSourceColumns()) {
+        RequestColumns.emplace_back(i.first);
+    }
 
     if (!GetResultSchema()) {
         error = "Could not get ResultSchema.";
@@ -58,12 +63,11 @@ bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataSto
     /// So '1:foo' would be omitted in blob records for the column in new snapshots. And '2:foo' - in old ones.
     /// It's not possible for blobs with several columns. There should be a special logic for them.
     {
-        Y_ABORT_UNLESS(!ResultColumnsIds.empty(), "Empty column list");
+        AFL_VERIFY(ResultColumnsIds.size())("event", "Empty column list");
         THashSet<TString> requiredColumns = indexInfo.GetRequiredColumns();
 
         // Snapshot columns
-        requiredColumns.insert(NOlap::TIndexInfo::SPEC_COL_PLAN_STEP);
-        requiredColumns.insert(NOlap::TIndexInfo::SPEC_COL_TX_ID);
+        requiredColumns.insert(NOlap::TIndexInfo::GetSpecialColumnNames().begin(), NOlap::TIndexInfo::GetSpecialColumnNames().end());
 
         for (auto&& i : readDescription.PKRangesFilter.GetColumnNames()) {
             requiredColumns.emplace(i);
@@ -139,15 +143,11 @@ std::set<ui32> TReadMetadata::GetPKColumnIds() const {
     return result;
 }
 
-std::vector<std::pair<TString, NScheme::TTypeInfo>> TReadStatsMetadata::GetResultYqlSchema() const {
-    return NOlap::GetColumns(NColumnShard::PrimaryIndexStatsSchema, ResultColumnIds);
-}
-
 std::vector<std::pair<TString, NScheme::TTypeInfo>> TReadStatsMetadata::GetKeyYqlSchema() const {
     return NOlap::GetColumns(NColumnShard::PrimaryIndexStatsSchema, NColumnShard::PrimaryIndexStatsSchema.KeyColumns);
 }
 
-std::unique_ptr<NColumnShard::TScanIteratorBase> TReadStatsMetadata::StartScan(const NOlap::TReadContext& /*readContext*/) const {
+std::unique_ptr<NColumnShard::TScanIteratorBase> TReadStatsMetadata::StartScan(const std::shared_ptr<NOlap::TReadContext>& /*readContext*/) const {
     return std::make_unique<NColumnShard::TStatsIterator>(this->shared_from_this());
 }
 
@@ -171,8 +171,8 @@ void TReadStats::PrintToLog() {
         ;
 }
 
-std::shared_ptr<NKikimr::NOlap::IDataReader> TReadMetadata::BuildReader(const NOlap::TReadContext& context, const TConstPtr& self) const {
-    return std::make_shared<NPlainReader::TPlainReadData>(self, context);
+std::shared_ptr<NKikimr::NOlap::IDataReader> TReadMetadata::BuildReader(const std::shared_ptr<NOlap::TReadContext>& context) const {
+    return std::make_shared<NPlainReader::TPlainReadData>(context);
 //    auto result = std::make_shared<TIndexedReadData>(self, context);
 //    result->InitRead();
 //    return result;

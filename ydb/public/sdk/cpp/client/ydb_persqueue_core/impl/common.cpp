@@ -38,6 +38,7 @@ ERetryErrorClass GetRetryErrorClass(EStatus status) {
     case EStatus::UNSUPPORTED:
     case EStatus::ALREADY_EXISTS:
     case EStatus::NOT_FOUND:
+    case EStatus::EXTERNAL_ERROR:
     case EStatus::CLIENT_UNAUTHENTICATED:
     case EStatus::CLIENT_CALL_UNIMPLEMENTED:
         return ERetryErrorClass::NoRetry;

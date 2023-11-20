@@ -15,12 +15,12 @@ namespace NTable {
 
         TResult Locate(const TPart*, ui64, ELargeObj) noexcept override
         {
-            Y_FAIL("Dummy env cannot deal with storage");
+            Y_ABORT("Dummy env cannot deal with storage");
         }
 
         const TSharedData* TryGetPage(const TPart*, TPageId, TGroupId) override
         {
-             Y_FAIL("Dummy env cannot deal with storage");
+             Y_ABORT("Dummy env cannot deal with storage");
         }
     };
 

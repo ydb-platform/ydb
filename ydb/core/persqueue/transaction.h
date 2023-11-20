@@ -24,7 +24,8 @@ struct TDistributedTransaction {
                               ui64 extractTabletId);
     void OnProposeTransaction(const NKikimrPQ::TDataTransaction& txBody,
                               ui64 extractTabletId);
-    void OnProposeTransaction(const NKikimrPQ::TConfigTransaction& txBody);
+    void OnProposeTransaction(const NKikimrPQ::TConfigTransaction& txBody,
+                              ui64 extractTabletId);
     void OnPlanStep(ui64 step);
     void OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPredicateResult& event);
     void OnProposePartitionConfigResult(const TEvPQ::TEvProposePartitionConfigResult& event);
@@ -85,7 +86,7 @@ struct TDistributedTransaction {
     void InitConfigTransaction(const NKikimrPQ::TTransaction& tx);
 
     void InitPartitions(const google::protobuf::RepeatedPtrField<NKikimrPQ::TPartitionOperation>& tx);
-    void InitPartitions(const NKikimrPQ::TPQTabletConfig& config);
+    void InitPartitions();
 
     template<class E>
     void OnPartitionResult(const E& event, EDecision decision);

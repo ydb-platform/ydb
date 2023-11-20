@@ -78,6 +78,7 @@ PEERDIR(
     ydb/core/kafka_proxy
     ydb/core/kqp
     ydb/core/kqp/federated_query
+    ydb/core/kqp/finalize_script_service
     ydb/core/kqp/rm_service
     ydb/core/load_test
     ydb/core/local_pgwire
@@ -98,6 +99,7 @@ PEERDIR(
     ydb/core/scheme_types
     ydb/core/security
     ydb/core/statistics
+    ydb/core/statistics/aggregator
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
     ydb/core/tablet
@@ -152,6 +154,7 @@ PEERDIR(
     ydb/services/ext_index/metadata
     ydb/services/monitoring
     ydb/services/persqueue_cluster_discovery
+    ydb/services/deprecated/persqueue_v0
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/ydb

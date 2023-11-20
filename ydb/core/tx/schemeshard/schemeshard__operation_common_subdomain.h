@@ -218,6 +218,16 @@ public:
                 context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
                 break;
             }
+            case ETabletType::StatisticsAggregator: {
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Send configure request to statistics aggregator: " << tabletID <<
+                    " opId: " << OperationId <<
+                    " schemeshard: " << ssId);
+                auto event = new NStat::TEvStatistics::TEvConfigureAggregator(path.PathString());
+                shard.Operation = TTxState::ConfigureParts;
+                context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
+                break;
+            }
             case ETabletType::SchemeShard: {
                 auto event = new TEvSchemeShard::TEvInitTenantSchemeShard(ui64(ssId),
                                                                               pathId.LocalPathId, path.PathString(),

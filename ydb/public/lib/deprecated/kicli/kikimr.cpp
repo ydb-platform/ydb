@@ -292,7 +292,7 @@ public:
         case NMsgBusProxy::MTYPE_CLIENT_LOGIN_REQUEST:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusLoginRequest, NMsgBusProxy::TBusResponse>(&NGRpcProxy::TGRpcClient::LoginRequest, promise, request);
         default:
-            Y_FAIL("%s", (TStringBuilder() << "unexpected message type# " << type).data());
+            Y_ABORT("%s", (TStringBuilder() << "unexpected message type# " << type).data());
         }
     }
 

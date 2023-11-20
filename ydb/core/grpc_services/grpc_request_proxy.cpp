@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/nameservice.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
@@ -59,7 +60,7 @@ class TGRpcRequestProxyImpl
     using TBase = TActorBootstrapped<TGRpcRequestProxyImpl>;
 public:
     explicit TGRpcRequestProxyImpl(const NKikimrConfig::TAppConfig& appConfig)
-        : AppConfig(MakeIntrusive<TAppConfig>(appConfig))
+        : ChannelBufferSize(appConfig.GetTableServiceConfig().GetResourceManager().GetChannelBufferSize())
     { }
 
     void Bootstrap(const TActorContext& ctx);
@@ -264,9 +265,8 @@ private:
     void DoStartUpdate(const TString& database);
     bool DeferAndStartUpdate(const TString& database, TAutoPtr<IEventHandle>& ev, IRequestProxyCtx*);
 
-    TIntrusiveConstPtr<TAppConfig> GetAppConfig() const override {
-        std::shared_lock lock(Mutex);
-        return AppConfig;
+    ui64 GetChannelBufferSize() const override {
+        return ChannelBufferSize.load();
     }
 
     TActorId RegisterActor(IActor* actor) const override {
@@ -296,12 +296,11 @@ private:
     std::unordered_map<TString, TActorId> Subscribers;
     THashSet<TSubDomainKey> SubDomainKeys;
     bool AllowYdbRequestsWithoutDatabase = true;
-    TIntrusiveConstPtr<TAppConfig> AppConfig;
+    std::atomic<ui64> ChannelBufferSize;
     TActorId SchemeCache;
     bool DynamicNode = false;
     TString RootDatabase;
     IGRpcProxyCounters::TPtr Counters;
-    mutable std::shared_mutex Mutex;
 };
 
 void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
@@ -371,11 +370,8 @@ void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetC
 void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
     auto &event = ev->Get()->Record;
 
-    {
-        std::unique_lock lock(Mutex);
-        AppConfig = MakeIntrusive<TAppConfig>(event.GetConfig());
-    }
-
+    ChannelBufferSize.store(
+        event.GetConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize());
     LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Updated app config");
 
     auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
@@ -570,7 +566,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
         HFunc(TEvProxyRuntimeEvent, PreHandle);
 
         default:
-            Y_FAIL("Unknown request: %u\n", ev->GetTypeRewrite());
+            Y_ABORT("Unknown request: %u\n", ev->GetTypeRewrite());
         break;
     }
 }

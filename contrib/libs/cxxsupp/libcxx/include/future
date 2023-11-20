@@ -378,13 +378,17 @@ template <class R, class Alloc> struct uses_allocator<packaged_task<R>, Alloc>;
 #include <thread>
 #include <version>
 
+#ifndef _LIBCPP_REMOVE_TRANSITIVE_INCLUDES
+#  include <chrono>
+#endif
+
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
 #endif
 
 #ifdef _LIBCPP_HAS_NO_THREADS
-#error <future> is not supported on this single threaded system
-#else // !_LIBCPP_HAS_NO_THREADS
+# error "<future> is not supported since libc++ has been configured without support for threads."
+#endif
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
@@ -2431,7 +2435,5 @@ future<void>::share() _NOEXCEPT
 }
 
 _LIBCPP_END_NAMESPACE_STD
-
-#endif // !_LIBCPP_HAS_NO_THREADS
 
 #endif // _LIBCPP_FUTURE

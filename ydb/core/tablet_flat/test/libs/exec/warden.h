@@ -84,7 +84,7 @@ namespace NFake {
 
             } else if (eh->CastAsLocal<TEvents::TEvPoison>()) {
                 if (std::exchange(Shutting, true)) {
-                    Y_FAIL("Got double BS storage shut order");
+                    Y_ABORT("Got double BS storage shut order");
                 } else if (auto logl = Logger->Log(ELnLev::Info))
                     logl << "Shut order, stopping " << Alive << " BS groups";
 
@@ -106,9 +106,9 @@ namespace NFake {
                 const auto group = eh->Cookie;
 
                 if (group >= State.size() || State[group] < EState::Fired) {
-                    Y_FAIL("Got an TEvGone event form unknown BS group");
+                    Y_ABORT("Got an TEvGone event form unknown BS group");
                 } else if (!Shutting || State[group] != EState::Shut) {
-                    Y_FAIL("Got unexpected TEvGone from BS group mock");
+                    Y_ABORT("Got unexpected TEvGone from BS group mock");
                 }
 
                 --Alive, State[group] = EState::Gone;
@@ -118,7 +118,7 @@ namespace NFake {
             } else if (eh->CastAsLocal<NFake::TEvTerm>()) {
 
             } else {
-                Y_FAIL("Got unexpected message");
+                Y_ABORT("Got unexpected message");
             }
         }
 

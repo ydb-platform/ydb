@@ -737,7 +737,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 NKikimrProto::OK);
         round = evInitRes->PDiskParams->OwnerRound + 1;
 
-        testCtx.MainKey[0] += 123;
+        testCtx.MainKey.Keys[0] += 123;
         testCtx.UpdateConfigRecreatePDisk(testCtx.GetPDiskConfig());
 
         evInitRes = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
@@ -775,27 +775,27 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         readChunk();
 
-        testCtx.MainKey.push_back(0xFull);
+        testCtx.MainKey.Keys.push_back(0xFull);
         testCtx.RestartPDiskSync();
         mock.InitFull();
         readChunk();
 
-        testCtx.MainKey = { 0xFull };
+        testCtx.MainKey.Keys = { 0xFull };
         testCtx.RestartPDiskSync();
         mock.InitFull();
         readChunk();
 
-        testCtx.MainKey = { 0xFull, 0xA };
+        testCtx.MainKey.Keys = { 0xFull, 0xA };
         testCtx.RestartPDiskSync();
         mock.InitFull();
         readChunk();
 
-        testCtx.MainKey = { 0xFull, 0xA, 0xB, 0xC };
+        testCtx.MainKey.Keys = { 0xFull, 0xA, 0xB, 0xC };
         testCtx.RestartPDiskSync();
         mock.InitFull();
         readChunk();
 
-        testCtx.MainKey = { 0xC };
+        testCtx.MainKey.Keys = { 0xC };
         testCtx.RestartPDiskSync();
         mock.InitFull();
         readChunk();
@@ -826,13 +826,31 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                         chunk, 0, data.size(), 0, nullptr),
                 NKikimrProto::OK);
 
-        testCtx.MainKey = { 0xABCDEF };
+        testCtx.MainKey.Keys = { 0xABCDEF };
         testCtx.TestResponse<NPDisk::TEvYardControlResult>(
                 new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr),
                 NKikimrProto::OK);
 
         testCtx.TestResponse<NPDisk::TEvYardControlResult>(
                 new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, (void*)(&testCtx.MainKey)),
+                NKikimrProto::CORRUPTED);
+    }
+
+    Y_UNIT_TEST(RecreateWithInvalidPDiskKey) {
+        TActorTestContext testCtx({ false });
+        int round = 2;
+        const TVDiskID vDiskID(0, 1, 0, 0, 0);
+
+        auto evInitRes = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
+                new NPDisk::TEvYardInit(round, vDiskID, testCtx.TestCtx.PDiskGuid),
+                NKikimrProto::OK);
+        round = evInitRes->PDiskParams->OwnerRound + 1;
+
+        testCtx.MainKey.Keys = {};
+        testCtx.UpdateConfigRecreatePDisk(testCtx.GetPDiskConfig());
+
+        evInitRes = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
+                new NPDisk::TEvYardInit(round, vDiskID, testCtx.TestCtx.PDiskGuid),
                 NKikimrProto::CORRUPTED);
     }
 
@@ -981,6 +999,37 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             true,
             true
         );
+    }
+
+    Y_UNIT_TEST(PDiskIncreaseLogChunksLimitAfterRestart) {
+        TActorTestContext testCtx({
+            .IsBad=false,
+            .DiskSize = 1_GB,
+            .ChunkSize = 1_MB,
+        });
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+
+        TRcBuf buf(TString(64_MB, 'a'));
+        auto writeLog = [&]() {
+            testCtx.Send(new NPDisk::TEvLog(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0,
+                        buf, vdisk.GetLsnSeg(), nullptr));
+            const auto logRes = testCtx.Recv<NPDisk::TEvLogResult>();
+            return logRes->Status;
+        };
+
+        while (writeLog() == NKikimrProto::OK) {}
+        UNIT_ASSERT_VALUES_EQUAL(writeLog(), NKikimrProto::OUT_OF_SPACE);
+
+        testCtx.Send(new TEvBlobStorage::TEvRestartPDisk(testCtx.GetPDisk()->PDiskId, testCtx.MainKey, nullptr));
+        testCtx.Recv<TEvBlobStorage::TEvRestartPDiskResult>();
+
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(writeLog(), NKikimrProto::OK);
     }
 
 }

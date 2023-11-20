@@ -19,7 +19,7 @@ void TSendDataProtocol::ProtocolFunc(
         break;
 
     default:
-        Y_FAIL("Unknown message type dispatched");
+        Y_ABORT("Unknown message type dispatched");
     }
 }
 
@@ -93,7 +93,7 @@ void TSendDataProtocol::TryAgain(const TActorContext& ctx) noexcept {
     case ENOTSOCK:
     case EOPNOTSUPP:
         {
-            Y_FAIL("Very bad socket error");
+            Y_ABORT("Very bad socket error");
         }
     }
 }

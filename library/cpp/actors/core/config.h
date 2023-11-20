@@ -28,6 +28,12 @@ namespace NActors {
         ui64 PeriodUs = 15000000; // Time between balancer steps
     };
 
+    enum class EASProfile {
+        Default,
+        LowCpuConsumption,
+        LowLatency,
+    };
+
     struct TBasicExecutorPoolConfig {
         static constexpr TDuration DEFAULT_TIME_PER_MAILBOX = TDuration::MilliSeconds(10);
         static constexpr ui32 DEFAULT_EVENTS_PER_MAILBOX = 100;
@@ -46,6 +52,7 @@ namespace NActors {
         i16 Priority = 0;
         i16 SharedExecutorsCount = 0;
         i16 SoftProcessingDurationTs = 0;
+        EASProfile ActorSystemProfile = EASProfile::Default;
     };
 
     struct TIOExecutorPoolConfig {
@@ -122,7 +129,7 @@ namespace NActors {
                     return p.PoolName;
                 }
             }
-            Y_FAIL("undefined pool id: %" PRIu32, (ui32)poolId);
+            Y_ABORT("undefined pool id: %" PRIu32, (ui32)poolId);
         }
 
         std::optional<ui32> GetThreadsOptional(ui32 poolId) const {

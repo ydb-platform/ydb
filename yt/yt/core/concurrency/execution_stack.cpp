@@ -17,6 +17,8 @@
 
 #include <library/cpp/yt/memory/ref.h>
 
+#include <library/cpp/yt/misc/tls.h>
+
 #include <util/system/sanitizers.h>
 
 namespace NYT::NConcurrency {
@@ -129,7 +131,7 @@ TExecutionStack::~TExecutionStack()
     ::DeleteFiber(Handle_);
 }
 
-static thread_local void* FiberTrampolineOpaque;
+static YT_THREAD_LOCAL(void*) FiberTrampolineOpaque;
 
 void TExecutionStack::SetOpaque(void* opaque)
 {

@@ -147,15 +147,15 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TAlterLogin");
+        Y_ABORT("no AbortPropose for TAlterLogin");
     }
 
     bool ProgressState(TOperationContext&) override {
-        Y_FAIL("no progress state for TAlterLogin");
+        Y_ABORT("no progress state for TAlterLogin");
     }
 
     void AbortUnsafe(TTxId, TOperationContext&) override {
-        Y_FAIL("no AbortUnsafe for TAlterLogin");
+        Y_ABORT("no AbortUnsafe for TAlterLogin");
     }
 };
 

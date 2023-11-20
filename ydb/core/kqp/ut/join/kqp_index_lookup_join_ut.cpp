@@ -52,13 +52,16 @@ void PrepareTables(TSession session) {
             (2, 102, "Value1"),
             (3, 103, "Value2"),
             (4, 104, "Value2"),
-            (5, 105, "Value3");
+            (5, 105, "Value3"),
+            (6, NULL, "Value6"),
+            (7, NULL, "Value7");
 
         REPLACE INTO `/Root/Right` (Key, Value) VALUES
             (100, "Value20"),
             (101, "Value21"),
             (102, "Value22"),
-            (103, "Value23");
+            (103, "Value23"),
+            (NULL, "Value24");
 
         REPLACE INTO `/Root/LaunchByProcessIdAndPinned` (idx_processId, idx_pinned, idx_launchNumber) VALUES
             ("eProcess", false, 4),
@@ -109,7 +112,7 @@ void Test(const TString& query, const TString& answer, size_t rightTableReads, b
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Left");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 7);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).name(), "/Root/Right");
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().rows(), rightTableReads);
     } else {
@@ -117,7 +120,7 @@ void Test(const TString& query, const TString& answer, size_t rightTableReads, b
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Left");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 7);
 
         UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
 
@@ -198,7 +201,9 @@ Y_UNIT_TEST(Left) {
         R"([
             [[3];[103];["Value2"];[103];["Value23"]];
             [[4];[104];["Value2"];#;#];
-            [[5];[105];["Value3"];#;#]
+            [[5];[105];["Value3"];#;#];
+            [[6];#;["Value6"];#;#];
+            [[7];#;["Value7"];#;#]
         ])", 1);
 }
 
@@ -214,7 +219,9 @@ Y_UNIT_TEST(LeftOnly) {
         )",
         R"([
             [[4];[104];["Value2"]];
-            [[5];[105];["Value3"]]
+            [[5];[105];["Value3"]];
+            [[6];#;["Value6"]];
+            [[7];#;["Value7"]]
         ])", 1);
 }
 
@@ -341,7 +348,9 @@ Y_UNIT_TEST_TWIN(SimpleLeftJoin, StreamLookup) {
             [[2];[102];["Value1"];[102];["Value22"]];
             [[3];[103];["Value2"];[103];["Value23"]];
             [[4];[104];["Value2"];#;#];
-            [[5];[105];["Value3"];#;#]
+            [[5];[105];["Value3"];#;#];
+            [[6];#;["Value6"];#;#];
+            [[7];#;["Value7"];#;#]
         ])", 3, StreamLookup);
 }
 
@@ -359,7 +368,9 @@ Y_UNIT_TEST_TWIN(LeftJoinCustomColumnOrder, StreamLookup) {
             [["Value22"];[2];[102];["Value1"];[102]];
             [["Value23"];[3];[103];["Value2"];[103]];
             [#;[4];#;["Value2"];[104]];
-            [#;[5];#;["Value3"];[105]]
+            [#;[5];#;["Value3"];[105]];
+            [#;[6];#;["Value6"];#];
+            [#;[7];#;["Value7"];#]
         ])", 3, StreamLookup);
 }
 
@@ -373,6 +384,8 @@ Y_UNIT_TEST_TWIN(LeftJoinOnlyRightColumn, StreamLookup) {
             ORDER BY r.Value;
         )",
         R"([
+            [#];
+            [#];
             [#];
             [#];
             [["Value21"]];
@@ -391,6 +404,8 @@ Y_UNIT_TEST_TWIN(LeftJoinOnlyLeftColumn, StreamLookup) {
             ORDER BY l.Fk;
         )",
         R"([
+            [#];
+            [#];
             [[101]];
             [[102]];
             [[103]];

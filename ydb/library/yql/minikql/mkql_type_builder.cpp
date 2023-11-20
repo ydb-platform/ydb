@@ -1940,7 +1940,7 @@ NUdf::ETypeKind TTypeInfoHelper::GetTypeKind(const NUdf::TType* type) const {
     case NMiniKQL::TType::EKind::Pg: return NUdf::ETypeKind::Pg;
     case NMiniKQL::TType::EKind::Block: return NUdf::ETypeKind::Block;
     default:
-        Y_VERIFY_DEBUG(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
+        Y_DEBUG_ABORT_UNLESS(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
         return NUdf::ETypeKind::Unknown;
     }
 }
@@ -1951,7 +1951,7 @@ void TTypeInfoHelper::VisitType(const NUdf::TType* type, NUdf::ITypeVisitor* vis
         return;
     }
 
-    Y_VERIFY_DEBUG(visitor->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(1, 0)));
+    Y_DEBUG_ABORT_UNLESS(visitor->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(1, 0)));
     auto mkqlType = static_cast<const NMiniKQL::TType*>(type);
 
 #define MKQL_HANDLE_UDF_TYPE(TypeKind) \
@@ -1976,7 +1976,7 @@ case NMiniKQL::TType::EKind::TypeKind: { \
         MKQL_HANDLE_UDF_TYPE(Pg)
         MKQL_HANDLE_UDF_TYPE(Block)
     default:
-        Y_VERIFY_DEBUG(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
+        Y_DEBUG_ABORT_UNLESS(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
     }
 
 #undef MKQL_HANDLE_UDF_TYPE
@@ -2213,8 +2213,9 @@ NUdf::IHash::TPtr MakeHashImpl(const NMiniKQL::TType* type) {
             if (!slot) {
                 throw TTypeNotSupported() << "Invalid data slot";
             }
-            if (!(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanHash)) {
-                throw TTypeNotSupported() << "Data type is not hashable";
+            const auto& info = NUdf::GetDataTypeInfo(*slot);
+            if (!(info.Features & NUdf::CanHash)) {
+                throw TTypeNotSupported() << "Type " << info.Name << " is not hashable";
             }
             switch (*slot) {
                 UDF_TYPE_ID_MAP(MAKE_HASH)
@@ -2246,7 +2247,8 @@ NUdf::IHash::TPtr MakeHashImpl(const NMiniKQL::TType* type) {
             return MakeHashImpl(taggedType->GetBaseType());
         }
         default:
-            throw TTypeNotSupported() << "Data, Pg, Optional, Tuple, Struct, List, Variant or Dict is expected for hashing";
+            throw TTypeNotSupported() << "Data, Pg, Optional, Tuple, Struct, List, Variant or Dict is expected for hashing, "
+            << "but got: " << PrintNode(type);
     }
 }
 
@@ -2262,8 +2264,9 @@ NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type) {
             if (!slot) {
                 throw TTypeNotSupported() << "Invalid data slot";
             }
-            if (!(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare)) {
-                throw TTypeNotSupported() << "Data type is not comparable";
+            const auto& info = NUdf::GetDataTypeInfo(*slot);
+            if (!(info.Features & NUdf::CanCompare)) {
+                throw TTypeNotSupported() << "Type " << info.Name << " is not comparable";
             }
             switch (*slot) {
                 UDF_TYPE_ID_MAP(MAKE_COMPARE)
@@ -2296,7 +2299,7 @@ NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type) {
             return MakeCompareImpl(taggedType->GetBaseType());
         }
         default:
-            throw TTypeNotSupported() << "Data, Pg, Optional, Variant, Tuple, Struct, List or Dict are expected for comparing,"
+            throw TTypeNotSupported() << "Data, Pg, Optional, Variant, Tuple, Struct, List or Dict are expected for comparing, "
             << "but got: " << PrintNode(type);
     }
 }
@@ -2313,8 +2316,9 @@ NUdf::IEquate::TPtr MakeEquateImpl(const NMiniKQL::TType* type) {
             if (!slot) {
                 throw TTypeNotSupported() << "Invalid data slot";
             }
-            if (!(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanEquate)) {
-                throw TTypeNotSupported() << "Data type is not equatable";
+            const auto& info = NUdf::GetDataTypeInfo(*slot);
+            if (!(info.Features & NUdf::CanEquate)) {
+                throw TTypeNotSupported() << "Type " << info.Name << " is not equatable";
             }
             switch (*slot) {
                 UDF_TYPE_ID_MAP(MAKE_EQUATE)
@@ -2346,7 +2350,8 @@ NUdf::IEquate::TPtr MakeEquateImpl(const NMiniKQL::TType* type) {
             return MakeEquateImpl(taggedType->GetBaseType());
         }
         default:
-            throw TTypeNotSupported() << "Data, Pg, Optional, Tuple, Struct, List, Variant or Dict is expected for equating";
+            throw TTypeNotSupported() << "Data, Pg, Optional, Tuple, Struct, List, Variant or Dict is expected for equating, "
+            << "but got: " << PrintNode(type);
     }
 }
 

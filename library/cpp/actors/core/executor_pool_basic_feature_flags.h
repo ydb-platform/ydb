@@ -14,6 +14,8 @@ namespace NActors::NFeatures {
 
     struct TCommonFeatureFlags {
         static constexpr EActorSystemOptimizationType OptimizationType = EActorSystemOptimizationType::Common;
+
+        static constexpr bool ProbeSpinCycles = false;
     };
 
     struct TLocalQueuesFeatureFlags {
@@ -22,6 +24,17 @@ namespace NActors::NFeatures {
         static constexpr ui16 MIN_LOCAL_QUEUE_SIZE = 0;
         static constexpr ui16 MAX_LOCAL_QUEUE_SIZE = 16;
         static constexpr std::optional<ui16> FIXED_LOCAL_QUEUE_SIZE = std::nullopt;
+
+        static constexpr bool UseIfAllOtherThreadsAreSleeping = false;
+        static constexpr bool UseOnMicroburst = false;
+    };
+
+    struct TSpinFeatureFlags {
+        static constexpr bool DoNotSpinLower = false;
+        static constexpr bool UsePseudoMovingWindow = true;
+
+        static constexpr bool HotColdThreads = false;
+        static constexpr bool CalcPerThread = false;
     };
 
     using TFeatureFlags = TCommonFeatureFlags;

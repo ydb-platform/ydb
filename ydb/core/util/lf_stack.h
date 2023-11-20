@@ -41,7 +41,7 @@ namespace NKikimr {
             // The item we push is guaranteed to have flag not set
             // N.B. release here synchronizes with fast path acquire during refcount decrement
             auto count = item->RefCount.fetch_add(FlagAddingToStack, std::memory_order_release);
-            Y_VERIFY_DEBUG((count & FlagAddingToStack) == 0, "Flag invariant failure during push");
+            Y_DEBUG_ABORT_UNLESS((count & FlagAddingToStack) == 0, "Flag invariant failure during push");
 
             if (count == 0) {
                 DoPush(item);
@@ -63,7 +63,7 @@ namespace NKikimr {
                 // No other thread may change RefCount until this store succeeds
                 // N.B. release here synchronizes the store to Next above with refcount increment
                 auto count = item->RefCount.exchange(RefCountInc, std::memory_order_release);
-                Y_VERIFY_DEBUG(count == FlagAddingToStack, "Flag invariant failure during push");
+                Y_DEBUG_ABORT_UNLESS(count == FlagAddingToStack, "Flag invariant failure during push");
 
                 // N.B. release here synchronizes item state with acquire on successful Pop
                 if (Head.compare_exchange_strong(head, item, std::memory_order_release)) {
@@ -74,8 +74,8 @@ namespace NKikimr {
                 // Attempt to restart push, taking back RefCount we added above
                 // N.B. release here synchronizes with fast path acquire during refcount decrement
                 count = item->RefCount.fetch_add(FlagAddingToStack - RefCountInc, std::memory_order_release);
-                Y_VERIFY_DEBUG(count >= RefCountInc, "RefCount underflow");
-                Y_VERIFY_DEBUG((count & FlagAddingToStack) == 0, "Flag invariant failure during push");
+                Y_DEBUG_ABORT_UNLESS(count >= RefCountInc, "RefCount underflow");
+                Y_DEBUG_ABORT_UNLESS((count & FlagAddingToStack) == 0, "Flag invariant failure during push");
 
                 if (count != RefCountInc) {
                     // Some other thread is currently holding a reference
@@ -111,8 +111,8 @@ namespace NKikimr {
                     // remove 2 previously added references, one from us
                     // and one from the stack itself.
                     count = item->RefCount.fetch_add(-RefCountInc2, std::memory_order_relaxed);
-                    Y_VERIFY_DEBUG(count >= RefCountInc2, "RefCount underflow");
-                    Y_VERIFY_DEBUG((count & FlagAddingToStack) == 0, "Flag invariant failure during pop");
+                    Y_DEBUG_ABORT_UNLESS(count >= RefCountInc2, "RefCount underflow");
+                    Y_DEBUG_ABORT_UNLESS((count & FlagAddingToStack) == 0, "Flag invariant failure during pop");
                     // We are the owner, should be safe to change the Next pointer however we want
                     TItem* marker = item->Next.exchange((TItem*)-1, std::memory_order_relaxed);
                     Y_ABORT_UNLESS(marker != (TItem*)-1, "Popped item that is already marked exclusive");
@@ -132,7 +132,7 @@ namespace NKikimr {
                     // may not change neither RefCount nor Next until
                     // RefCount becomes above zero again.
                     count = item->RefCount.exchange(0, std::memory_order_relaxed);
-                    Y_VERIFY_DEBUG(count == FlagAddingToStack, "Flag invariant failure during pop");
+                    Y_DEBUG_ABORT_UNLESS(count == FlagAddingToStack, "Flag invariant failure during pop");
                     // We are the owner, should be safe to change the Next pointer however we want
                     TItem* marker = item->Next.exchange((TItem*)-1, std::memory_order_relaxed);
                     Y_ABORT_UNLESS(marker != (TItem*)-1, "Popped item that is already marked exclusive");

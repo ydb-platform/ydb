@@ -27,7 +27,7 @@ public:
     ui32 FirstPkColumn = 0;
 
     bool DeserializeFromProto(const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo);
-    
+
     std::optional<NKikimrTxColumnShard::TIndexPortionMeta> SerializeToProto(const ui32 columnId, const ui32 chunk) const;
 
     void FillBatchInfo(const NArrow::TFirstLastSpecialKeys& primaryKeys, const NArrow::TMinMaxSpecialKeys& snapshotKeys, const TIndexInfo& indexInfo);
@@ -42,15 +42,23 @@ public:
         out << info.DebugString();
         return out;
     }
+
+    bool HasSnapshotMinMax() const {
+        return !!RecordSnapshotMax && !!RecordSnapshotMin;
+    }
+
+    bool HasPrimaryKeyBorders() const {
+        return !!IndexKeyStart && !!IndexKeyEnd;
+    }
 };
 
 class TPortionAddress {
 private:
-    YDB_READONLY(ui64, GranuleId, 0);
+    YDB_READONLY(ui64, PathId, 0);
     YDB_READONLY(ui64, PortionId, 0);
 public:
-    TPortionAddress(const ui64 granuleId, const ui64 portionId)
-        : GranuleId(granuleId)
+    TPortionAddress(const ui64 pathId, const ui64 portionId)
+        : PathId(pathId)
         , PortionId(portionId)
     {
 
@@ -59,11 +67,11 @@ public:
     TString DebugString() const;
 
     bool operator<(const TPortionAddress& item) const {
-        return std::tie(GranuleId, PortionId) < std::tie(item.GranuleId, item.PortionId);
+        return std::tie(PathId, PortionId) < std::tie(item.PathId, item.PortionId);
     }
 
     bool operator==(const TPortionAddress& item) const {
-        return std::tie(GranuleId, PortionId) == std::tie(item.GranuleId, item.PortionId);
+        return std::tie(PathId, PortionId) == std::tie(item.PathId, item.PortionId);
     }
 };
 
@@ -72,7 +80,7 @@ public:
 template<>
 struct THash<NKikimr::NOlap::TPortionAddress> {
     inline ui64 operator()(const NKikimr::NOlap::TPortionAddress& x) const noexcept {
-        return CombineHashes(x.GetPortionId(), x.GetGranuleId());
+        return CombineHashes(x.GetPortionId(), x.GetPathId());
     }
 };
 

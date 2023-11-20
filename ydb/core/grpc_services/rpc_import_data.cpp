@@ -249,7 +249,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
             shardId = ProcessData(request.ydb_dump(), request.data(), ev->Record);
             break;
         default:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
 
         if (!shardId) {

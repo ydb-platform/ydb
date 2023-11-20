@@ -3,6 +3,7 @@
 #include <util/generic/hash_set.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/remove_declare.h>
 
 namespace NKikimr::NColumnShard {
 class TColumnShard;
@@ -14,6 +15,7 @@ namespace NKikimr::NOlap {
 class IBlobsDeclareRemovingAction: public ICommonBlobsAction {
 private:
     using TBase = ICommonBlobsAction;
+    std::shared_ptr<NBlobOperations::TRemoveDeclareCounters> Counters;
     YDB_READONLY_DEF(THashSet<TUnifiedBlobId>, DeclaredBlobs);
 protected:
     virtual void DoDeclareRemove(const TUnifiedBlobId& blobId) = 0;
@@ -24,6 +26,10 @@ public:
         : TBase(storageId)
     {
 
+    }
+
+    void SetCounters(const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters) {
+        Counters = counters;
     }
 
     void DeclareRemove(const TUnifiedBlobId& blobId);

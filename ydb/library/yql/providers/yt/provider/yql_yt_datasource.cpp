@@ -4,6 +4,7 @@
 #include "yql_yt_key.h"
 #include "yql_yt_op_settings.h"
 #include "yql_yt_dq_integration.h"
+#include "yql_yt_dq_optimize.h"
 
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
@@ -87,6 +88,7 @@ public:
             bool collectNodes = mode == EReleaseTempDataMode::Immediate;
             return MakeHolder<TYtDataSourceTrackableNodeProcessor>(collectNodes);
         })
+        , DqOptimizer_([this]() { return CreateYtDqOptimizers(State_); })
     {
     }
 
@@ -483,6 +485,10 @@ public:
         return State_->DqIntegration_.Get();
     }
 
+    IDqOptimization* GetDqOptimization() override {
+        return DqOptimizer_.Get();
+    }
+
 private:
     TExprNode::TPtr InjectUdfRemapperOrView(TYtRead readNode, TExprContext& ctx, bool fromReadSchema) {
         const bool weakConcat = NYql::HasSetting(readNode.Arg(4).Ref(), EYtSettingType::WeakConcat);
@@ -730,7 +736,9 @@ private:
                 YQL_ENSURE(root, "View is not initialized: " << view);
                 TOptimizeExprSettings settings(nullptr);
                 settings.VisitChanges = true;
-                auto status = OptimizeExpr(root, root, [newReadNode, rightOverRead, &readNode](const TExprNode::TPtr& node, TExprContext& ctx) {
+                TExprNode::TListType innerWorlds;
+                const bool enableViewIsolation = State_->Configuration->ViewIsolation.Get().GetOrElse(false);
+                auto status = OptimizeExpr(root, root, [newReadNode, rightOverRead, &readNode, enableViewIsolation, &innerWorlds](const TExprNode::TPtr& node, TExprContext& ctx) {
                     if (auto world = TMaybeNode<TCoLeft>(node).Input().Maybe<TCoRead>().World()) {
                         return world.Cast().Ptr();
                     }
@@ -752,18 +760,13 @@ private:
                             YQL_ENSURE(false, "Unknown table name (should be self or self_raw): " << tableName);
                         }
 
-                        if (read.World().Ptr()->Type() == TExprNode::World) {
-                            return selfRead;
+                        if (enableViewIsolation) {
+                            if (read.World().Raw()->Type() != TExprNode::World) {
+                                innerWorlds.push_back(read.World().Ptr());
+                            }
                         }
 
-                        return ctx.Builder(node->Pos())
-                            .Callable("Right!")
-                                .Callable(0, "Cons!")
-                                    .Add(0, read.World().Ptr())
-                                    .Add(1, selfRead)
-                                .Seal()
-                            .Seal()
-                            .Build();
+                        return selfRead;
                     }
 
                     // Inject original Read! dependencies
@@ -777,6 +780,13 @@ private:
                 if (status.Level == IGraphTransformer::TStatus::Error) {
                     return {};
                 }
+
+                if (!innerWorlds.empty()) {
+                    innerWorlds.push_back(origReadNode.World().Ptr());
+                    auto combined = ctx.NewCallable(origReadNode.World().Pos(), "Sync!", std::move(innerWorlds));
+                    root = ctx.ReplaceNode(std::move(root), *origReadNode.World().Raw(), combined);
+                }
+
                 newReadNode = root;
                 ctx.Step
                     .Repeat(TExprStep::ExpandApplyForLambdas)
@@ -841,6 +851,7 @@ private:
     TLazyInitHolder<IGraphTransformer> ConstraintTransformer_;
     TLazyInitHolder<TExecTransformerBase> ExecTransformer_;
     TLazyInitHolder<TYtDataSourceTrackableNodeProcessor> TrackableNodeProcessor_;
+    TLazyInitHolder<IDqOptimization> DqOptimizer_;
 };
 
 TIntrusivePtr<IDataProvider> CreateYtDataSource(TYtState::TPtr state) {

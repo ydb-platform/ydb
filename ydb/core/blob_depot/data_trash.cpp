@@ -92,7 +92,7 @@ namespace NKikimr::NBlobDepot {
             if (const TGenStep genStep(*it); genStep <= record.IssuedGenStep) {
                 doNotKeep.push_back(*it);
             } else if (nextGenStep < genStep) {
-                Y_FAIL();
+                Y_ABORT();
             }
         }
 

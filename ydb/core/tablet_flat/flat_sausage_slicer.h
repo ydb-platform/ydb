@@ -57,11 +57,11 @@ namespace NPageCollection {
                 ui32 off = 0;
                 for (auto blobId : largeGlobId.Blobs()) {
                     const ui32 chunk = Min(Block, size - off);
-                    Y_VERIFY_DEBUG(chunk == blobId.BlobSize());
+                    Y_DEBUG_ABORT_UNLESS(chunk == blobId.BlobSize());
                     refs.push_back({ blobId, body.substr(off, chunk) });
                     off += chunk;
                 }
-                Y_VERIFY_DEBUG(off == largeGlobId.Bytes);
+                Y_DEBUG_ABORT_UNLESS(off == largeGlobId.Bytes);
             }
 
             return largeGlobId;

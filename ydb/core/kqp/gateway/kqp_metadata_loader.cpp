@@ -2,6 +2,7 @@
 #include "actors/kqp_ic_gateway_actors.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/stat_service.h>
 
@@ -361,7 +362,7 @@ void SetError(TTableMetadataResult& externalDataSourceMetadata, const TString& e
     externalDataSourceMetadata.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
 }
 
-void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSourceMetadata, const TDescribeSecretsResponse& objectDescription) {
+void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSourceMetadata, const TEvDescribeSecretsResponse::TDescription& objectDescription) {
     if (objectDescription.Status != Ydb::StatusIds::SUCCESS) {
         externalDataSourceMetadata.AddIssues(objectDescription.Issues);
         externalDataSourceMetadata.SetStatus(NYql::YqlStatusFromYdbStatus(objectDescription.Status));
@@ -419,62 +420,63 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
     }
 }
 
-NThreading::TFuture<TDescribeSecretsResponse> LoadExternalDataSourceSecretValues(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TDuration maximalSecretsSnapshotWaitTime, TActorSystem* actorSystem) {
+NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> LoadExternalDataSourceSecretValues(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TDuration maximalSecretsSnapshotWaitTime, TActorSystem* actorSystem) {
     const auto& authDescription = entry.ExternalDataSourceInfo->Description.GetAuth();
     switch (authDescription.identity_case()) {
         case NKikimrSchemeOp::TAuth::kServiceAccount: {
             const TString& saSecretId = authDescription.GetServiceAccount().GetSecretName();
-            auto promise = NewPromise<TDescribeSecretsResponse>();
-            actorSystem->Register(new TDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {saSecretId}, promise, maximalSecretsSnapshotWaitTime));
+            auto promise = NewPromise<TEvDescribeSecretsResponse::TDescription>();
+            actorSystem->Register(CreateDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {saSecretId}, promise, maximalSecretsSnapshotWaitTime));
             return promise.GetFuture();
         }
 
         case NKikimrSchemeOp::TAuth::kNone:
-            return MakeFuture(TDescribeSecretsResponse({}));
+            return MakeFuture(TEvDescribeSecretsResponse::TDescription({}));
 
         case NKikimrSchemeOp::TAuth::kBasic: {
             const TString& passwordSecretId = authDescription.GetBasic().GetPasswordSecretName();
-            auto promise = NewPromise<TDescribeSecretsResponse>();
-            actorSystem->Register(new TDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {passwordSecretId}, promise, maximalSecretsSnapshotWaitTime));
+            auto promise = NewPromise<TEvDescribeSecretsResponse::TDescription>();
+            actorSystem->Register(CreateDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {passwordSecretId}, promise, maximalSecretsSnapshotWaitTime));
             return promise.GetFuture();
         }
 
         case NKikimrSchemeOp::TAuth::kMdbBasic: {
             const TString& saSecretId = authDescription.GetMdbBasic().GetServiceAccountSecretName();
             const TString& passwordSecreId = authDescription.GetMdbBasic().GetPasswordSecretName();
-            auto promise = NewPromise<TDescribeSecretsResponse>();
-            actorSystem->Register(new TDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {saSecretId, passwordSecreId}, promise, maximalSecretsSnapshotWaitTime));
+            auto promise = NewPromise<TEvDescribeSecretsResponse::TDescription>();
+            actorSystem->Register(CreateDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {saSecretId, passwordSecreId}, promise, maximalSecretsSnapshotWaitTime));
             return promise.GetFuture();
         }
 
         case NKikimrSchemeOp::TAuth::kAws: {
             const TString& awsAccessKeyIdSecretId = authDescription.GetAws().GetAwsAccessKeyIdSecretName();
             const TString& awsAccessKeyKeySecretId = authDescription.GetAws().GetAwsSecretAccessKeySecretName();
-            auto promise = NewPromise<TDescribeSecretsResponse>();
-            actorSystem->Register(new TDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {awsAccessKeyIdSecretId, awsAccessKeyKeySecretId}, promise, maximalSecretsSnapshotWaitTime));
+            auto promise = NewPromise<TEvDescribeSecretsResponse::TDescription>();
+            actorSystem->Register(CreateDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {awsAccessKeyIdSecretId, awsAccessKeyKeySecretId}, promise, maximalSecretsSnapshotWaitTime));
             return promise.GetFuture();
         }
 
         case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
-            return MakeFuture(TDescribeSecretsResponse(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("identity case is not specified") }));
+            return MakeFuture(TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("identity case is not specified") }));
     }
 }
 
 } // anonymous namespace
 
 
-TVector<TString> TKqpTableMetadataLoader::GetCollectedSchemeData() {
-    TVector<TString> result(std::move(CollectedSchemeData));
-    CollectedSchemeData = TVector<TString>();
+TVector<NKikimrKqp::TKqpTableMetadataProto> TKqpTableMetadataLoader::GetCollectedSchemeData() {
+    TVector<NKikimrKqp::TKqpTableMetadataProto> result(std::move(CollectedSchemeData));
+    CollectedSchemeData = TVector<NKikimrKqp::TKqpTableMetadataProto>();
     return result;
 }
 
 
 void TKqpTableMetadataLoader::OnLoadedTableMetadata(TTableMetadataResult& loadTableMetadataResult) {
     if (!NeedCollectSchemeData) return;
-    TString data = loadTableMetadataResult.Metadata->SerializeToString();
+    NKikimrKqp::TKqpTableMetadataProto proto;
+    loadTableMetadataResult.Metadata->ToMessage(&proto);
     with_lock(Lock) {
-        CollectedSchemeData.emplace_back(data);
+        CollectedSchemeData.emplace_back(std::move(proto));
     }
 }
 
@@ -732,7 +734,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             return;
                         }
                         LoadExternalDataSourceSecretValues(entry, userToken, MaximalSecretsSnapshotWaitTime, ActorSystem)
-                            .Subscribe([promise, externalDataSourceMetadata](const TFuture<TDescribeSecretsResponse>& result) mutable
+                            .Subscribe([promise, externalDataSourceMetadata](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());
                             promise.SetValue(externalDataSourceMetadata);
@@ -785,7 +787,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     // Create an apply for the future that will fetch table statistics and save it in the metadata
     // This method will only run if cost based optimization is enabled
 
-    if (!Config || !Config->HasOptEnableCostBasedOptimization()){
+    if (!Config || !Config->FeatureFlags.GetEnableStatistics()){
         return future;
     }
 
@@ -825,9 +827,11 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                     return;
                 }
                 auto resp = response.StatResponses[0];
-                auto s = std::get<NKikimr::NStat::TStatSimple>(resp.Statistics);
-                result.Metadata->RecordsCount = s.RowCount;
-                result.Metadata->DataSize = s.BytesSize;
+                if (std::holds_alternative<NKikimr::NStat::TStatSimple>(resp.Statistics)) {
+                    auto s = std::get<NKikimr::NStat::TStatSimple>(resp.Statistics);
+                    result.Metadata->RecordsCount = s.RowCount;
+                    result.Metadata->DataSize = s.BytesSize;
+                }
                 promise.SetValue(result);
         });
 

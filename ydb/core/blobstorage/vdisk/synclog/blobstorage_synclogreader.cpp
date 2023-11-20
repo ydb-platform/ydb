@@ -209,7 +209,7 @@ namespace NKikimr {
                     str << "SYNCLOG LOGIC ERROR: " << wno.Explanation
                         << " " << InternalsToString(Ev->Get(), SnapPtr.Get(), DbBirthLsn);
                     LOG_ERROR(ctx, BS_SYNCLOG,  str.Str());
-                    // Y_FAIL("%s", str.Str().data()); // TODO(alexvru): fix logic
+                    // Y_ABORT("%s", str.Str().data()); // TODO(alexvru): fix logic
                 }
                 Finish(ctx, NKikimrProto::ERROR, 0, true);
             }
@@ -249,7 +249,7 @@ namespace NKikimr {
                         ReadFromDisk(ctx);
                         break;
                     default:
-                        Y_FAIL("Unexpected value# %d", int(wno.WhatsNext));
+                        Y_ABORT("Unexpected value# %d", int(wno.WhatsNext));
                 }
             }
 

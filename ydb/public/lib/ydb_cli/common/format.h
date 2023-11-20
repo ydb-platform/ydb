@@ -2,6 +2,7 @@
 
 #include "command.h"
 #include "formats.h"
+#include "pretty_table.h"
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
@@ -94,9 +95,17 @@ public:
 private:
     void PrintPretty(const NJson::TJsonValue& plan);
     void PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<TString>& offsets);
+    void PrintPrettyTable(const NJson::TJsonValue& plan);
+    void PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table);
     void PrintJson(const TString& plan);
     TString JsonToString(const NJson::TJsonValue& jsonValue);
 
+    void SimplifyQueryPlan(NJson::TJsonValue& plan);
+    TVector<NJson::TJsonValue> RemoveRedundantNodes(NJson::TJsonValue& plan, const THashSet<TString>& redundantNodes);
+    THashMap<TString, NJson::TJsonValue> ExtractPrecomputes(NJson::TJsonValue& planJson);
+    void ResolvePrecomputeLinks(NJson::TJsonValue& planJson, const THashMap<TString, NJson::TJsonValue>& precomputes);
+
+private:
     EOutputFormat Format;
     bool AnalyzeMode;
     IOutputStream& Output;

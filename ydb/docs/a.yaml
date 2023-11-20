@@ -1,7 +1,4 @@
-title: Deploy YDB OSS docs
-# slug вашего сервиса в ABC. Его можно узнать из url страницы
-# вашего сервиса в ABC, например для адреса
-# https://abc.yandex-team.ru/services/market/, market - это slug
+title: YDB OSS docs
 service: kikimr
 
 arcanum:
@@ -23,10 +20,6 @@ arcanum:
         ship: 1
 
 ci:
-  permissions:
-    start-flow:
-      - service: edition_90_ydb_cs
-      - service: kikimr
   secret: sec-01g3rbfrx24zvmxgqq6yb0ye1b # id секрета, созданного на шаге 1
   runtime:
     # Sandbox-группа (https://sandbox.yandex-team.ru/admin/groups),
@@ -48,24 +41,6 @@ ci:
       flow: deploy-pr-docs
       triggers:
         - on: pr
-  releases:
-    release-docs:
-      title: Release YDB internal, tech and corp docs
-      flow: release-docs
-      auto: true
-      filters:
-      - sub-paths: ['**']
-      - abs-paths: [kikimr/docs/**, kikimr/docs-corp/**]
-
-      stages:
-      - id: build
-        title: Build
-        displace: true
-      - id: testing
-        title: Testing
-        displace: true
-      - id: stable
-        title: Stable
 
   flows:
     deploy-pr-docs:
@@ -74,34 +49,7 @@ ci:
           title: Deploy docs
           task: common/docs/deploy
           input:
-            targets: kikimr/docs/ru/docs_oss;kikimr/docs/ru/docs_tech;kikimr/docs/ru/docs_yfm;kikimr/docs-corp # путь до вашего проекта от корня Аркадии
+            targets: ydb/docs
             arcanum_review_id: ${context.launch_pull_request_info.pull_request.id}
             notify: true # отставлять комментарий к ПР с ссылкой на выложенную документацию
 
-    release-docs:
-      jobs:
-        deploy:
-          title: Deploy docs
-          task: common/docs/deploy
-          stage: build
-          input:
-            targets: kikimr/docs/ru/docs_tech;kikimr/docs/ru/docs_yfm # путь до вашего проекта от корня Аркадии
-
-        release-to-testing:
-          title: Release docs to testing
-          task: common/docs/release
-          needs: deploy
-          stage: testing
-          input:
-            projects: ${tasks.deploy.output_params.projects}
-            environments: testing
-
-        release-to-stable:
-          title: Release docs to stable
-          task: common/docs/release
-          needs: release-to-testing
-          manual: false
-          stage: stable
-          input:
-            projects: ${tasks.deploy.output_params.projects}
-            environments: production

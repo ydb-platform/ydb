@@ -120,7 +120,7 @@ namespace {
                 case EMode::FIND_AND_CONSUME:
                     return findAndconsume;
             }
-            Y_FAIL("Unexpected mode");
+            Y_ABORT("Unexpected mode");
         }
 
         TRe2Udf(
@@ -222,7 +222,7 @@ namespace {
                         return valueBuilder->NewList(matches.data(), matches.size());
                     }
                 }
-                Y_FAIL("Unexpected mode");
+                Y_ABORT("Unexpected mode");
             } else {
                 switch (Mode) {
                     case MATCH:
@@ -237,7 +237,7 @@ namespace {
                     case FIND_AND_CONSUME:
                         return valueBuilder->NewEmptyList();
                 }
-                Y_FAIL("Unexpected mode");
+                Y_ABORT("Unexpected mode");
             }
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
@@ -335,14 +335,14 @@ namespace {
         }
     };
 
-    SIMPLE_UDF_OPTIONS(TPatternFromLike, char*(char*, TOptional<char*>), builder.OptionalArgs(1)) {
+    SIMPLE_UDF_WITH_OPTIONAL_ARGS(TPatternFromLike, char*(char*, TOptional<char*>), 1) {
         const std::string_view input(args[0].AsStringRef());
         const bool hasEscape = bool(args[1]);
         char escape = 0;
         if (hasEscape) {
             const std::string_view escapeRef(args[1].AsStringRef());
             if (escapeRef.size() != 1U) {
-                UdfTerminate((TStringBuilder() << Pos_ << " Escape should be single character").data());
+                UdfTerminate((TStringBuilder() << GetPos() << " Escape should be single character").data());
             }
             escape = escapeRef.front();
         }

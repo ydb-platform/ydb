@@ -21,6 +21,7 @@ target_link_libraries(providers-dq-opt PUBLIC
   yql-utils-log
   yql-dq-opt
   yql-dq-type_ann
+  yql-dq-integration
   library-yql-core
   yql-core-peephole_opt
   yql-core-type_ann

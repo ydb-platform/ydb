@@ -76,7 +76,7 @@ void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
 }
 
 TColumnEngineChanges::~TColumnEngineChanges() {
-    Y_VERIFY_DEBUG(!NActors::TlsActivationContext || Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted);
+    Y_DEBUG_ABORT_UNLESS(!NActors::TlsActivationContext || Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted);
 }
 
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {

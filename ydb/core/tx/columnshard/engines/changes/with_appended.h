@@ -46,8 +46,6 @@ public:
 
     THashMap<TPortionAddress, TPortionInfo> PortionsToRemove;
     std::vector<TPortionInfoWithBlobs> AppendedPortions;
-    THashMap<ui64, std::pair<ui64, TMark>> NewGranules;
-    ui64 FirstGranuleId = 0;
     virtual ui32 GetWritePortionsCount() const override {
         return AppendedPortions.size();
     }

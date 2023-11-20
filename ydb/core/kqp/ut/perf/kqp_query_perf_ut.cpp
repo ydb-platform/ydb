@@ -275,6 +275,56 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         UNIT_ASSERT_VALUES_EQUAL(totalTasks, EnableSourceRead ? 2 : 3);
     }
 
+    Y_UNIT_TEST_TWIN(IndexLookupJoin, EnableStreamLookup) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(EnableStreamLookup);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig);
+        TKikimrRunner kikimr{settings};
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT l.Key, r.Key1, r.Key2
+            FROM `/Root/Join1` AS l
+            INNER JOIN `/Root/Join2` AS r
+               ON l.Fk21 = r.Key1
+            ORDER BY l.Key, r.Key1, r.Key2;
+        )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[1];[101u];["One"]];
+            [[1];[101u];["Three"]];
+            [[1];[101u];["Two"]];
+            [[2];[102u];["One"]];
+            [[3];[103u];["One"]];
+            [[4];[104u];["One"]];
+            [[5];[105u];["One"]];
+            [[5];[105u];["Two"]];
+            [[6];[106u];["One"]];
+            [[8];[108u];["One"]];
+            [[9];[101u];["One"]];
+            [[9];[101u];["Three"]];
+            [[9];[101u];["Two"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+        AssertTableStats(result, "/Root/Join1", {
+            .ExpectedReads = 9,
+        });
+
+        AssertTableStats(result, "/Root/Join2", {
+            .ExpectedReads = EnableStreamLookup ? 13 : 10,
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), EnableStreamLookup ? 1 : 3);
+    }
+
     Y_UNIT_TEST(Upsert) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();

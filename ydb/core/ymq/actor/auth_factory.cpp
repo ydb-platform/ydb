@@ -1,5 +1,7 @@
 #include "auth_factory.h"
 
+#include <util/stream/file.h>
+
 namespace NKikimr::NSQS {
 
 void TAuthFactory::RegisterAuthActor(TActorSystem& system, TAuthActorData&& data)

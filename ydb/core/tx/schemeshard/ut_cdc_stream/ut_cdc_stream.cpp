@@ -72,7 +72,10 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
     Y_UNIT_TEST(VirtualTimestamps) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableChangefeedDynamoDBStreamsFormat(true)
+            .EnableChangefeedDebeziumJsonFormat(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -83,29 +86,42 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
-            TableName: "Table"
-            StreamDescription {
-              Name: "Stream"
-              Mode: ECdcStreamModeKeysOnly
-              Format: ECdcStreamFormatProto
-              VirtualTimestamps: true
-            }
-        )");
-        env.TestWaitNotification(runtime, txId);
+        for (const char* format : TVector<const char*>{"Proto", "Json"}) {
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream%s"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormat%s
+                  VirtualTimestamps: true
+                }
+            )", format, format));
+            env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
-            NLs::PathExist,
-            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly),
-            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
-            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
-            NLs::StreamVirtualTimestamps(true),
-        });
+            TestDescribeResult(DescribePrivatePath(runtime, Sprintf("/MyRoot/Table/Stream%s", format)), {
+                NLs::StreamVirtualTimestamps(true),
+            });
+        }
+
+        for (const char* format : TVector<const char*>{"DynamoDBStreamsJson", "DebeziumJson"}) {
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream%s"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormat%s
+                  VirtualTimestamps: true
+                }
+            )", format, format), {NKikimrScheme::StatusInvalidParameter});
+        }
     }
 
     Y_UNIT_TEST(ResolvedTimestamps) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableChangefeedDynamoDBStreamsFormat(true)
+            .EnableChangefeedDebeziumJsonFormat(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -116,20 +132,34 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
-            TableName: "Table"
-            StreamDescription {
-              Name: "Stream"
-              Mode: ECdcStreamModeKeysOnly
-              Format: ECdcStreamFormatProto
-              ResolvedTimestampsIntervalMs: 1000
-            }
-        )");
-        env.TestWaitNotification(runtime, txId);
+        for (const char* format : TVector<const char*>{"Proto", "Json"}) {
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream%s"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormat%s
+                  ResolvedTimestampsIntervalMs: 1000
+                }
+            )", format, format));
+            env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
-            NLs::StreamResolvedTimestamps(TDuration::MilliSeconds(1000)),
-        });
+            TestDescribeResult(DescribePrivatePath(runtime, Sprintf("/MyRoot/Table/Stream%s", format)), {
+                NLs::StreamResolvedTimestamps(TDuration::MilliSeconds(1000)),
+            });
+        }
+
+        for (const char* format : TVector<const char*>{"DynamoDBStreamsJson", "DebeziumJson"}) {
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream%s"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormat%s
+                  ResolvedTimestampsIntervalMs: 1000
+                }
+            )", format, format), {NKikimrScheme::StatusInvalidParameter});
+        }
     }
 
     Y_UNIT_TEST(RetentionPeriod) {
@@ -354,7 +384,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
     Y_UNIT_TEST(DocApi) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableChangefeedDynamoDBStreamsFormat(true));
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableChangefeedDynamoDBStreamsFormat(true)
+            .EnableChangefeedDebeziumJsonFormat(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -393,16 +425,18 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             }
         )", {NKikimrScheme::StatusInvalidParameter});
 
-        // invalid aws region
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
-            TableName: "DocumentTable"
-            StreamDescription {
-              Name: "Stream"
-              Mode: ECdcStreamModeKeysOnly
-              Format: ECdcStreamFormatProto
-              AwsRegion: "foo"
-            }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        // invalid format
+        for (const char* format : TVector<const char*>{"Proto", "Json", "DebeziumJson"}) {
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "DocumentTable"
+                StreamDescription {
+                  Name: "Stream"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormat%s
+                  AwsRegion: "foo"
+                }
+            )", format), {NKikimrScheme::StatusInvalidParameter});
+        }
 
         // ok
         TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
@@ -1083,7 +1117,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_NOTICE);
         TVector<TString> meteringRecords;
-        runtime.SetObserverFunc([&meteringRecords](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&meteringRecords](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() != NMetering::TEvMetering::EvWriteMeteringJson) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
@@ -1485,7 +1519,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
 
         bool catchMeteringRecord = false;
         TString meteringRecord;
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvCdcStreamScanResponse:
                 if (const auto* msg = ev->Get<TEvDataShard::TEvCdcStreamScanResponse>()) {

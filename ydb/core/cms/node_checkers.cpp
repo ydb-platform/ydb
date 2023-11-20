@@ -18,7 +18,7 @@ TNodesLimitsCounterBase::ENodeState INodesChecker::NodeState(NKikimrCms::EState 
         case NKikimrCms::RESTART:
             return NODE_STATE_RESTART;
         default:
-            Y_FAIL("Unknown EState");
+            Y_ABORT("Unknown EState");
     }
 }
 
@@ -79,6 +79,10 @@ void TNodesCounterBase::UnlockNode(ui32 nodeId) {
     }
 }
 
+const THashMap<ui32, INodesChecker::ENodeState>& TNodesCounterBase::GetNodeToState() const {
+    return NodeToState;
+}
+
 bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TString& reason) const {
     Y_ABORT_UNLESS(NodeToState.contains(nodeId));
     auto nodeState = NodeToState.at(nodeId);
@@ -86,7 +90,7 @@ bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
     bool isForceRestart = mode == NKikimrCms::MODE_FORCE_RESTART;
 
     NCH_LOG_D("Checking Node: "
-            << nodeId << ", with state: " << nodeState 
+            << nodeId << ", with state: " << nodeState
             << ", with limit: " << DisabledNodesLimit
             << ", with ratio limit: " << DisabledNodesRatioLimit
             << ", locked nodes: " << LockedNodesCount
@@ -145,19 +149,22 @@ bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
 
     NCH_LOG_D("Checking limits for sys tablet: " << NKikimrConfig::TBootstrap_ETabletType_Name(TabletType)
             << ", on node: " << nodeId
-            << ", with state: " << nodeState 
+            << ", with state: " << nodeState
             << ", locked nodes: " << LockedNodesCount
             << ", down nodes: " << DownNodesCount);
 
     switch (nodeState) {
+        case NODE_STATE_UP:
+            break;
         case NODE_STATE_UNSPECIFIED:
         case NODE_STATE_LOCKED:
         case NODE_STATE_RESTART:
             reason = TStringBuilder() << "Cannot lock node '" << nodeId << "'"
                 << ": node state: '" << nodeState << "'";
             return false;
-        default:
-            break;
+        case NODE_STATE_DOWN:
+            // Allow to maintain down/unavailable node
+            return true;
     }
 
     const auto tabletNodes = NodeToState.size();
@@ -184,7 +191,7 @@ bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
             }
             break;
         default:
-            Y_FAIL("Unknown availability mode");
+            Y_ABORT("Unknown availability mode");
     }
 
     reason = TStringBuilder() << "Cannot lock node '" << nodeId << "'"

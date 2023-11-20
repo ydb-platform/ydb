@@ -82,6 +82,7 @@ PEERDIR(
     library/cpp/lwtrace
     library/cpp/monlib/dynamic_counters
     library/cpp/monlib/metrics
+    library/cpp/monlib/service/pages/resources
     library/cpp/monlib/service/pages/tablesorter
     library/cpp/openssl/init
     library/cpp/packedtypes

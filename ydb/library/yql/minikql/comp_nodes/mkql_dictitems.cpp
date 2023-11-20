@@ -291,7 +291,7 @@ IComputationNode* WrapDictItems(TCallable& callable, const TComputationNodeFacto
     case EDictItems::Payloads:
         return new TDictHalfsWrapper<false>(ctx.Mutables, node);
     default:
-        Y_FAIL("Unknown mode: %" PRIu32, mode);
+        Y_ABORT("Unknown mode: %" PRIu32, mode);
     }
 }
 

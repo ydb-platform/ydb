@@ -21,6 +21,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <ydb/library/yql/dq/tasks/dq_task_program.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
@@ -240,7 +241,7 @@ namespace NYql::NDqs {
             YQL_ENSURE(!stageInfo.Tasks.empty());
 
             auto stageSettings = NDq::TDqStageSettings::Parse(stage);
-            if (stageSettings.SinglePartition) {
+            if (stageSettings.PartitionMode == NDq::TDqStageSettings::EPartitionMode::Single) {
                 YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");
             }
         }
@@ -456,6 +457,13 @@ namespace NYql::NDqs {
             taskDesc.MutableMeta()->PackFrom(taskMeta);
             taskDesc.SetStageId(stageId);
 
+            if (Settings->DisableLLVMForBlockStages.Get().GetOrElse(true)) {
+                auto& stage = TasksGraph.GetStageInfo(task.StageId).Meta.Stage;
+                auto settings = TDqStageSettings::Parse(stage);
+                if (settings.BlockStatus.Defined() && settings.BlockStatus == TDqStageSettings::EBlockStatus::Full) {
+                    taskDesc.SetUseLlvm(false);
+                }
+            }
             plan.emplace_back(std::move(taskDesc));
         }
 
@@ -537,7 +545,7 @@ namespace NYql::NDqs {
         YQL_ENSURE(datasource);
         const auto stageSettings = TDqStageSettings::Parse(stage);
         auto tasksPerStage = Settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
-        const size_t maxPartitions = stageSettings.SinglePartition ? 1ULL : tasksPerStage;
+        const size_t maxPartitions = TDqStageSettings::EPartitionMode::Single == stageSettings.PartitionMode ? 1ULL : tasksPerStage;
         TVector<TString> parts;
         if (auto dqIntegration = (*datasource)->GetDqIntegration()) {
             TString clusterName;

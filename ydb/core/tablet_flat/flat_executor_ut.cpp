@@ -2256,7 +2256,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorVersionedRows) {
                 TString expected(1024, (char)key);
                 Y_ABORT_UNLESS(selected == expected);
 
-                Y_VERIFY_DEBUG(rit != KeysRanges.end());
+                Y_DEBUG_ABORT_UNLESS(rit != KeysRanges.end());
                 if (++expectedKey == rit->second) {
                     expectedKey = ++rit != KeysRanges.end() ? rit->first : -1;
                 }
@@ -3330,7 +3330,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
         bool Detached = false;
 
         void Install(TTestActorRuntimeBase& runtime) {
-            PrevObserverFunc = runtime.SetObserverFunc([this](auto& runtime, auto& ev) {
+            PrevObserverFunc = runtime.SetObserverFunc([this, &runtime](auto& ev) {
                 return OnEvent(runtime, ev);
             });
         }
@@ -3351,7 +3351,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
                 HFuncCtx(TEvTablet::TEvCommit, Handle, ctx);
                 HFuncCtx(TEvTabletBase::TEvWriteLogResult, Handle, ctx);
                 default:
-                    return PrevObserverFunc(ctx, ev);
+                    return PrevObserverFunc(ev);
             }
 
             return ev ? EEventAction::PROCESS : EEventAction::DROP;

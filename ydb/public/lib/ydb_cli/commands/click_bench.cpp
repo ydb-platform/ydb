@@ -210,18 +210,19 @@ TVector<TClickBenchCommandRun::TQueryFullInfo> TClickBenchCommandRun::GetQueries
     return result;
 }
 
+template <typename TClient>
 bool TClickBenchCommandRun::RunBench(TConfig& config)
 {
     TOFStream outFStream{OutFilePath};
 
     auto driver = CreateDriver(config);
-    auto client = NYdb::NTable::TTableClient(driver);
+    auto client = TClient(driver);
 
     TStringStream report;
     report << "Results for " << IterationsCount << " iterations" << Endl;
-    report << "+---------+----------+---------+---------+----------+---------+---------+---------+---------+" << Endl;
-    report << "| Query # | ColdTime |   Min   |   Max   |   Mean   |   Std   |  RttMin |  RttMax |  RttAvg |" << Endl;
-    report << "+---------+----------+---------+---------+----------+---------+---------+---------+---------+" << Endl;
+    report << "+---------+----------+---------+---------+----------+----------+---------+---------+---------+---------+" << Endl;
+    report << "| Query # | ColdTime |   Min   |   Max   |   Mean   |  Median  |   Std   |  RttMin |  RttMax |  RttAvg |" << Endl;
+    report << "+---------+----------+---------+---------+----------+----------+---------+---------+---------+---------+" << Endl;
 
     NJson::TJsonValue jsonReport(NJson::JSON_ARRAY);
     const bool collectJsonSensors = !JsonReportFileName.empty();
@@ -301,26 +302,26 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
         Y_ABORT_UNLESS(success);
         auto& testInfo = inserted->second;
 
-        report << Sprintf("|   %02u    | %8.3f | %7.3f | %7.3f | %8.3f | %7.3f | %7.3f | %7.3f | %7.3f |", queryN,
+        report << Sprintf("|   %02u    | %8.3f | %7.3f | %7.3f | %8.3f | %8.3f | %7.3f | %7.3f | %7.3f | %7.3f |", queryN,
             testInfo.ColdTime.MilliSeconds() * 0.001, testInfo.Min.MilliSeconds() * 0.001, testInfo.Max.MilliSeconds() * 0.001,
-            testInfo.Mean * 0.001, testInfo.Std * 0.001, testInfo.RttMin.MilliSeconds() * 0.001, testInfo.RttMax.MilliSeconds() * 0.001,
+            testInfo.Mean * 0.001, testInfo.Median * 0.001, testInfo.Std * 0.001, testInfo.RttMin.MilliSeconds() * 0.001, testInfo.RttMax.MilliSeconds() * 0.001,
             testInfo.RttMean * 0.001) << Endl;
         if (collectJsonSensors) {
             jsonReport.AppendValue(GetSensorValue("ColdTime", testInfo.ColdTime, queryN));
             jsonReport.AppendValue(GetSensorValue("Min", testInfo.Min, queryN));
             jsonReport.AppendValue(GetSensorValue("Max", testInfo.Max, queryN));
             jsonReport.AppendValue(GetSensorValue("Mean", testInfo.Mean, queryN));
+            jsonReport.AppendValue(GetSensorValue("Median", testInfo.Median, queryN));
             jsonReport.AppendValue(GetSensorValue("Std", testInfo.Std, queryN));
             jsonReport.AppendValue(GetSensorValue("DiffsCount", diffsCount, queryN));
             jsonReport.AppendValue(GetSensorValue("FailsCount", failsCount, queryN));
             jsonReport.AppendValue(GetSensorValue("SuccessCount", successIteration, queryN));
-
         }
     }
 
     driver.Stop(true);
 
-    report << "+---------+----------+---------+---------+----------+---------+---------+---------+---------+" << Endl;
+    report << "+---------+----------+---------+---------+----------+----------+---------+---------+---------+---------+" << Endl;
 
     Cout << Endl << report.Str() << Endl;
     Cout << "Results saved to " << OutFilePath << Endl;
@@ -573,12 +574,25 @@ void TClickBenchCommandRun::Config(TConfig& config) {
         });
 
     config.Opts->MutuallyExclusiveOpt(includeOpt, excludeOpt);
+
+    config.Opts->AddLongOption("executor", "Query executor type."
+            " Options: scan, generic\n"
+            "scan - use scan queries;\n"
+            "generic - use generic queries.")
+        .DefaultValue("scan").StoreResult(&QueryExecutorType);
 };
 
 
 int TClickBenchCommandRun::Run(TConfig& config) {
-    const bool okay = RunBench(config);
-    return !okay;
+    if (QueryExecutorType == "scan") {
+        const bool okay = RunBench<NYdb::NTable::TTableClient>(config);
+        return !okay;
+    } else if (QueryExecutorType == "generic") {
+        const bool okay = RunBench<NYdb::NQuery::TQueryClient>(config);
+        return !okay;
+    } else {
+        ythrow yexception() << "Incorrect executor type. Available options: \"scan\", \"generic\"." << Endl;
+    }
 };
 
 TMap<ui32, TString> TClickBenchCommandRun::LoadExternalResults() const {

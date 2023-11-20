@@ -221,7 +221,9 @@ void ResolveYPath(
 TFuture<TSharedRefArray>
 ExecuteVerb(
     const IYPathServicePtr& service,
-    const TSharedRefArray& requestMessage);
+    const TSharedRefArray& requestMessage,
+    NLogging::TLogger logger = {},
+    NLogging::ELogLevel logLevel = NLogging::ELogLevel::Debug);
 
 //! Asynchronously executes a request against a given service.
 void ExecuteVerb(
@@ -233,7 +235,9 @@ template <class TTypedRequest>
 TFuture<TIntrusivePtr<typename TTypedRequest::TTypedResponse>>
 ExecuteVerb(
     const IYPathServicePtr& service,
-    const TIntrusivePtr<TTypedRequest>& request);
+    const TIntrusivePtr<TTypedRequest>& request,
+    NLogging::TLogger logger = {},
+    NLogging::ELogLevel logLevel = NLogging::ELogLevel::Debug);
 
 //! Synchronously executes a typed YPath request against a given service.
 //! Throws if an error has occurred.
@@ -241,7 +245,9 @@ template <class TTypedRequest>
 TIntrusivePtr<typename TTypedRequest::TTypedResponse>
 SyncExecuteVerb(
     const IYPathServicePtr& service,
-    const TIntrusivePtr<TTypedRequest>& request);
+    const TIntrusivePtr<TTypedRequest>& request,
+    NLogging::TLogger logger = {},
+    NLogging::ELogLevel logLevel = NLogging::ELogLevel::Debug);
 
 //! Executes |GetKey| verb assuming #service handles requests synchronously. Throws if an error has occurred.
 TString SyncYPathGetKey(

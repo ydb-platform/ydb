@@ -13,23 +13,20 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
-#include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/grpc_services/table_settings.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/table_profiles.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
-#include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/persqueue_v1/rpc_calls.h>
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -129,16 +126,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         TActorId kqpProxy = MakeKqpProxyID(ctx.SelfID.NodeId());
         ctx.Send(kqpProxy, this->Request.Release());
-
         this->Become(&TKqpRequestHandler::AwaitState);
-    }
-
-    void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& kqpResponse = ev->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, ctx.SelfID
-            << "Received process error for kqp query: " << kqpResponse.GetError());
-
-        TBase::HandleError(kqpResponse.GetError(), ctx);
     }
 
     using TBase::Handle;
@@ -146,7 +134,6 @@ public:
 
     STFUNC(AwaitState) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
             HFunc(TResponse, HandleResponse);
 
         default:
@@ -222,14 +209,6 @@ public:
         Executions.push_back(std::move(*ev->Get()->Record.MutableProfile()));
     }
 
-    void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& kqpResponse = ev->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
-            << "Received process error for scan query: " << kqpResponse.GetError());
-
-        TBase::HandleError(kqpResponse.GetError(), ctx);
-    }
-
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         const TString msg = ev->Get()->GetIssues().ToOneLineString();
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
@@ -254,7 +233,6 @@ public:
 
     STFUNC(AwaitState) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, Handle);
@@ -295,14 +273,6 @@ public:
         ctx.Send(kqpProxy, this->Request.Release());
 
         this->Become(&TKqpStreamRequestHandler::AwaitState);
-    }
-
-    void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& kqpResponse = ev->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, ctx.SelfID
-            << "Received process error for kqp data query: " << kqpResponse.GetError());
-
-        TBase::HandleError(kqpResponse.GetError(), ctx);
     }
 
     using TBase::Promise;
@@ -358,7 +328,6 @@ public:
 
     STFUNC(AwaitState) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
             HFunc(TResponse, HandleResponse);
             HFunc(NKqp::TEvKqp::TEvDataQueryStreamPartAck, Handle);
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
@@ -417,14 +386,6 @@ public:
         Executions.push_back(std::move(*ev->Get()->Record.MutableProfile()));
     }
 
-    void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& kqpResponse = ev->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
-            << "Received process error for scan query: " << kqpResponse.GetError());
-
-        TBase::HandleError(kqpResponse.GetError(), ctx);
-    }
-
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         const TString msg = ev->Get()->GetIssues().ToOneLineString();
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
@@ -450,7 +411,6 @@ public:
 
     STFUNC(AwaitState) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, Handle);
@@ -467,6 +427,55 @@ private:
     TVector<NYql::NDqProto::TDqExecutionStats> Executions;
 };
 
+class TKqpSchemeExecuterRequestHandler: public TActorBootstrapped<TKqpSchemeExecuterRequestHandler> {
+public:
+    using TResult = IKqpGateway::TGenericResult;
+
+    TKqpSchemeExecuterRequestHandler(TKqpPhyTxHolder::TConstPtr phyTx, const TMaybe<TString>& requestType, const TString& database,
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken, TPromise<TResult> promise)
+        : PhyTx(std::move(phyTx))
+        , Database(database)
+        , UserToken(std::move(userToken))
+        , Promise(promise)
+        , RequestType(requestType)
+    {}
+
+    void Bootstrap() {
+        auto ctx = MakeIntrusive<TUserRequestContext>();
+        IActor* actor = CreateKqpSchemeExecuter(PhyTx, SelfId(), RequestType, Database, UserToken, false /* temporary */, TString() /* sessionId */, ctx);
+        Register(actor);
+        Become(&TThis::WaitState);
+    }
+
+    STATEFN(WaitState) {
+        switch(ev->GetTypeRewrite()) {
+            hFunc(TEvKqpExecuter::TEvTxResponse, Handle);
+        }
+    }
+
+    void Handle(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
+        auto* response = ev->Get()->Record.MutableResponse();
+
+        TResult result;
+        if (response->GetStatus() == Ydb::StatusIds::SUCCESS) {
+            result.SetSuccess();
+        } else {
+            for (auto& issue : response->GetIssues()) {
+                result.AddIssue(NYql::IssueFromMessage(issue));
+            }
+        }
+
+        Promise.SetValue(result);
+        this->PassAway();
+    }
+
+private:
+    TKqpPhyTxHolder::TConstPtr PhyTx;
+    const TString Database;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TPromise<TResult> Promise;
+    const TMaybe<TString> RequestType;
+};
 
 class TKqpExecLiteralRequestHandler: public TActorBootstrapped<TKqpExecLiteralRequestHandler> {
 public:
@@ -621,7 +630,7 @@ public:
         UserToken = token;
     }
 
-    TVector<TString> GetCollectedSchemeData() override {
+    TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() override {
         return MetadataLoader->GetCollectedSchemeData();
     }
 
@@ -798,23 +807,11 @@ public:
         }
     }
 
-    TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
-        const TMaybe<TString>& requestType, ui64 flags) override
+    TFuture<TGenericResult> AlterTable(const TString&, Ydb::Table::AlterTableRequest&&, const TMaybe<TString>&, ui64) override
     {
         try {
-            YQL_ENSURE(!flags); //Supported only for prepared mode
-            if (!CheckCluster(cluster)) {
-                return InvalidCluster<TGenericResult>(cluster);
-            }
-
-            // FIXME: should be defined in grpc_services/rpc_calls.h, but cause cyclic dependency
-            using namespace NGRpcService;
-            using TEvAlterTableRequest = TGrpcRequestOperationCall<Ydb::Table::AlterTableRequest,
-                Ydb::Table::AlterTableResponse>;
-
-            return SendLocalRpcRequestNoResult<TEvAlterTableRequest>(std::move(req), Database, GetTokenCompat(), requestType);
-        }
-        catch (yexception& e) {
+            YQL_ENSURE(false, "gateway doesn't implement alter");
+        } catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
         }
     }
@@ -1444,7 +1441,9 @@ public:
                     } else if (f.HasValue()) {
                         TGenericResult result;
                         result.SetStatus(f.GetValue().GetStatus());
-                        result.AddIssue(NYql::TIssue(f.GetValue().GetErrorMessage()));
+                        auto issue = NYql::TIssue{f.GetValue().GetErrorMessage()};
+                        issue.SetCode(f.GetValue().GetStatus(), NYql::TSeverityIds::S_ERROR);
+                        result.AddIssue(issue);
                         return NThreading::MakeFuture<TGenericResult>(result);
                     } else {
                         TGenericResult result;
@@ -2072,6 +2071,13 @@ private:
         IActor* requestHandler = new TSchemeOpRequestHandler(request, promise, failedOnAlreadyExists);
         RegisterActor(requestHandler);
 
+        return promise.GetFuture();
+    }
+
+    TFuture<TGenericResult> SendSchemeExecuterRequest(const TString&, const TMaybe<TString>& requestType, const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder>& phyTx) override {
+        auto promise = NewPromise<TGenericResult>();
+        IActor* requestHandler = new TKqpSchemeExecuterRequestHandler(phyTx, requestType, Database, UserToken, promise);
+        RegisterActor(requestHandler);
         return promise.GetFuture();
     }
 

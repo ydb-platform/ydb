@@ -4,13 +4,15 @@
 
 #include <util/generic/hash.h>
 
+#include "dq_compute_actor_async_io.h"
+
 namespace NYql::NDq {
 
 struct TDqComputeActorMetrics {
 public:
     TDqComputeActorMetrics(const NMonitoring::TDynamicCounterPtr& counters);
 
-    void ReportEvent(ui32 type);
+    void ReportEvent(ui32 type, TAutoPtr<NActors::IEventHandle>& ev);
     void ReportAsyncInputData(ui32 id, ui64 rows, ui64 bytes, TMaybe<TInstant> watermark);
     void ReportInputChannelWatermark(ui32 id, ui64 dataSize, TMaybe<TInstant> watermark);
     void ReportInjectedToTaskRunnerWatermark(TInstant watermark);
@@ -33,7 +35,8 @@ private:
     NMonitoring::THistogramPtr InputRows;
     NMonitoring::THistogramPtr InputBytes;
 
-    NMonitoring::TDynamicCounters::TCounterPtr ResumeExecution;
+    NMonitoring::TDynamicCounters::TCounterPtr ResumeExecutionTot;
+    NMonitoring::TDynamicCounters::TCounterPtr ResumeExecution[static_cast<ui32>(EResumeSource::Last)];
     NMonitoring::TDynamicCounters::TCounterPtr ChannelsInfo;
     NMonitoring::TDynamicCounters::TCounterPtr AbortExecution;
     NMonitoring::TDynamicCounters::TCounterPtr Wakeup;

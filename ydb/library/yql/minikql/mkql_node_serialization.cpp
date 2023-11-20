@@ -412,7 +412,7 @@ namespace {
 
                 Owner.Write((char)TType::EKind::Struct);
                 auto type = node.GetType();
-                Y_VERIFY_DEBUG(node.GetValuesCount() == type->GetMembersCount());
+                Y_DEBUG_ABORT_UNLESS(node.GetValuesCount() == type->GetMembersCount());
                 for (ui32 i = node.GetValuesCount(); i-- > 0; ) {
                     auto value = node.GetValue(i);
                     Owner.AddChildNode(*value.GetNode());
@@ -498,7 +498,7 @@ namespace {
                     auto result = node.GetResult();
                     Owner.AddChildNode(*result.GetNode());
                 } else {
-                    Y_VERIFY_DEBUG(node.GetInputsCount() == type->GetArgumentsCount());
+                    Y_DEBUG_ABORT_UNLESS(node.GetInputsCount() == type->GetArgumentsCount());
                     for (ui32 i = node.GetInputsCount(); i-- > 0;) {
                         auto input = node.GetInput(i);
                         Owner.AddChildNode(*input.GetNode());
@@ -537,7 +537,7 @@ namespace {
 
                 Owner.Write((char)TType::EKind::Tuple);
                 auto type = node.GetType();
-                Y_VERIFY_DEBUG(node.GetValuesCount() == type->GetElementsCount());
+                Y_DEBUG_ABORT_UNLESS(node.GetValuesCount() == type->GetElementsCount());
                 for (ui32 i = node.GetValuesCount(); i-- > 0;) {
                     auto value = node.GetValue(i);
                     Owner.AddChildNode(*value.GetNode());
@@ -781,7 +781,7 @@ namespace {
 
             void Visit(TStructLiteral& node) override {
                 auto type = node.GetType();
-                Y_VERIFY_DEBUG(node.GetValuesCount() == type->GetMembersCount());
+                Y_DEBUG_ABORT_UNLESS(node.GetValuesCount() == type->GetMembersCount());
                 TStackVec<char> immediateFlags(GetBitmapBytes(node.GetValuesCount()));
                 for (ui32 i = 0, e = node.GetValuesCount(); i < e; ++i) {
                     auto value = node.GetValue(i);
@@ -833,7 +833,7 @@ namespace {
                     Owner.Write(node.GetResult().IsImmediate() ? 1 : 0);
                 } else {
                     auto type = node.GetType();
-                    Y_VERIFY_DEBUG(node.GetInputsCount() == type->GetArgumentsCount());
+                    Y_DEBUG_ABORT_UNLESS(node.GetInputsCount() == type->GetArgumentsCount());
                     TStackVec<char> immediateFlags(GetBitmapBytes(node.GetInputsCount()));
                     for (ui32 i = 0, e = node.GetInputsCount(); i < e; ++i) {
                         auto input = node.GetInput(i);
@@ -857,7 +857,7 @@ namespace {
 
             void Visit(TTupleLiteral& node) override {
                 auto type = node.GetType();
-                Y_VERIFY_DEBUG(node.GetValuesCount() == type->GetElementsCount());
+                Y_DEBUG_ABORT_UNLESS(node.GetValuesCount() == type->GetElementsCount());
                 TStackVec<char> immediateFlags(GetBitmapBytes(node.GetValuesCount()));
                 for (ui32 i = 0, e = node.GetValuesCount(); i < e; ++i) {
                     auto value = node.GetValue(i);
@@ -897,16 +897,16 @@ namespace {
                     auto prevSize = Stack.size();
                     nodeAndFlag.first->Accept(preVisitor);
                     if (preVisitor.IsProcessed()) { // ref or small node, some nodes have been added
-                        Y_VERIFY_DEBUG(prevSize == Stack.size());
+                        Y_DEBUG_ABORT_UNLESS(prevSize == Stack.size());
                         Stack.pop_back();
                         continue;
                     }
 
-                    Y_VERIFY_DEBUG(prevSize <= Stack.size());
+                    Y_DEBUG_ABORT_UNLESS(prevSize <= Stack.size());
                 } else {
                     auto prevSize = Stack.size();
                     nodeAndFlag.first->Accept(postVisitor);
-                    Y_VERIFY_DEBUG(prevSize == Stack.size());
+                    Y_DEBUG_ABORT_UNLESS(prevSize == Stack.size());
                     Stack.pop_back();
                 }
             }
@@ -942,7 +942,7 @@ namespace {
                 it->second = nameIndex++;
             }
 
-            Y_VERIFY_DEBUG(nameIndex == Names.size());
+            Y_DEBUG_ABORT_UNLESS(nameIndex == Names.size());
         }
 
         void End() {
@@ -954,14 +954,14 @@ namespace {
         }
 
         void RegisterReference(TNode& node) {
-            Y_VERIFY_DEBUG(node.GetCookie() == 0);
+            Y_DEBUG_ABORT_UNLESS(node.GetCookie() == 0);
             node.SetCookie(++ReferenceCount);
         }
 
         void WriteReference(TNode& node) {
             Write(SystemMask | (char)ESystemCommand::Ref);
-            Y_VERIFY_DEBUG(node.GetCookie() != 0);
-            Y_VERIFY_DEBUG(node.GetCookie() <= ReferenceCount);
+            Y_DEBUG_ABORT_UNLESS(node.GetCookie() != 0);
+            Y_DEBUG_ABORT_UNLESS(node.GetCookie() <= ReferenceCount);
             WriteVar32(node.GetCookie() - 1);
         }
 
@@ -1036,7 +1036,7 @@ namespace {
                 }
 
                 if (last.NextPass == AllPassesDone) {
-                    Y_VERIFY_DEBUG(last.ChildCount <= NodeStack.size());
+                    Y_DEBUG_ABORT_UNLESS(last.ChildCount <= NodeStack.size());
                     Reverse(NodeStack.end() - last.ChildCount, NodeStack.end());
                     auto newNode = ReadNode();
                     if (Current > lastPos) {
@@ -1060,7 +1060,7 @@ namespace {
                 if (childCount != 0) {
                     CtxStack.insert(CtxStack.end(), childCount, TNodeContext());
                 } else {
-                    Y_VERIFY_DEBUG(res == 0);
+                    Y_DEBUG_ABORT_UNLESS(res == 0);
                 }
             }
 

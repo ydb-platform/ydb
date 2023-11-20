@@ -20,14 +20,9 @@ import collections
 
 import ymake
 
-
-MDS_URI_PREFIX = 'https://storage.yandex-team.ru/get-devtools/'
-MDS_SCHEME = 'mds'
 CANON_DATA_DIR_NAME = 'canondata'
 CANON_OUTPUT_STORAGE = 'canondata_storage'
 CANON_RESULT_FILE_NAME = 'result.json'
-CANON_MDS_RESOURCE_REGEX = re.compile(re.escape(MDS_URI_PREFIX) + r'(.*?)($|#)')
-CANON_SBR_RESOURCE_REGEX = re.compile(r'(sbr:/?/?(\d+))')
 
 BLOCK_SEPARATOR = '============================================================='
 SPLIT_FACTOR_MAX_VALUE = 1000
@@ -231,7 +226,7 @@ def validate_test(unit, kw):
         requirements_list = []
         for req_name, req_value in six.iteritems(requirements):
             requirements_list.append(req_name + ":" + req_value)
-        valid_kw['REQUIREMENTS'] = serialize_list(requirements_list)
+        valid_kw['REQUIREMENTS'] = serialize_list(sorted(requirements_list))
 
     # Mark test with ya:external tag if it requests any secret from external storages
     # It's not stable and nonreproducible by definition
@@ -311,7 +306,7 @@ def validate_test(unit, kw):
                 )
 
     if tags:
-        valid_kw['TAG'] = serialize_list(tags)
+        valid_kw['TAG'] = serialize_list(sorted(tags))
 
     unit_path = _common.get_norm_unit_path(unit)
     if (
@@ -351,7 +346,7 @@ def serialize_list(lst):
 
 
 def deserialize_list(val):
-    return filter(None, val.replace('"', "").split(";"))
+    return list(filter(None, val.replace('"', "").split(";")))
 
 
 def get_correct_expression_for_group_var(varname):
@@ -488,13 +483,13 @@ def onadd_ytest(unit, *args):
     elif flat_args[1] == "no.test":
         return
     test_size = ''.join(spec_args.get('SIZE', [])) or unit.get('TEST_SIZE_NAME') or ''
-    test_tags = serialize_list(_get_test_tags(unit, spec_args))
+    test_tags = serialize_list(sorted(_get_test_tags(unit, spec_args)))
     test_timeout = ''.join(spec_args.get('TIMEOUT', [])) or unit.get('TEST_TIMEOUT') or ''
     test_requirements = spec_args.get('REQUIREMENTS', []) + get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
 
     if flat_args[1] != "clang_tidy" and unit.get("TIDY_ENABLED") == "yes":
         # graph changed for clang_tidy tests
-        if flat_args[1] in ("unittest.py", "gunittest", "g_benchmark"):
+        if flat_args[1] in ("unittest.py", "gunittest", "g_benchmark", "boost.test"):
             flat_args[1] = "clang_tidy"
             test_size = 'SMALL'
             test_tags = ''
@@ -539,7 +534,7 @@ def onadd_ytest(unit, *args):
         'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
         'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
         #  'TEST-PRESERVE-ENV': 'da',
-        'TEST-DATA': serialize_list(test_data),
+        'TEST-DATA': serialize_list(sorted(test_data)),
         'TEST-TIMEOUT': test_timeout,
         'FORK-MODE': fork_mode,
         'SPLIT-FACTOR': ''.join(spec_args.get('SPLIT_FACTOR', [])) or unit.get('TEST_SPLIT_FACTOR') or '',
@@ -566,8 +561,10 @@ def onadd_ytest(unit, *args):
             return
         else:
             test_record["TEST-NAME"] += "_bench"
-
-    if flat_args[1] == 'fuzz.test' and unit.get('FUZZING') == 'yes':
+    elif flat_args[1] in ("g_benchmark", "y_benchmark"):
+        benchmark_opts = get_unit_list_variable(unit, 'BENCHMARK_OPTS_VALUE')
+        test_record['BENCHMARK-OPTS'] = serialize_list(benchmark_opts)
+    elif flat_args[1] == 'fuzz.test' and unit.get('FUZZING') == 'yes':
         test_record['FUZZING'] = '1'
         # use all cores if fuzzing requested
         test_record['REQUIREMENTS'] = serialize_list(
@@ -620,6 +617,9 @@ def onadd_check(unit, *args):
     check_type = flat_args[0]
 
     if check_type in ("check.data", "check.resource") and unit.get('VALIDATE_DATA') == "no":
+        return
+
+    if check_type == "check.external" and (len(flat_args) == 1 or not flat_args[1]):
         return
 
     test_dir = _common.get_norm_unit_path(unit)
@@ -775,7 +775,7 @@ def onadd_pytest_script(unit, *args):
         return
     unit.set(["PYTEST_BIN", "no"])
     custom_deps = get_values_list(unit, 'TEST_DEPENDS_VALUE')
-    timeout = filter(None, [unit.get(["TEST_TIMEOUT"])])
+    timeout = list(filter(None, [unit.get(["TEST_TIMEOUT"])]))
     if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
         unit.ondata_files(_common.get_norm_unit_path(unit))
 
@@ -969,7 +969,7 @@ def onjava_test(unit, *args):
         'FORK-MODE': unit.get('TEST_FORK_MODE') or '',
         'SPLIT-FACTOR': unit.get('TEST_SPLIT_FACTOR') or '',
         'CUSTOM-DEPENDENCIES': ' '.join(get_values_list(unit, 'TEST_DEPENDS_VALUE')),
-        'TAG': serialize_list(_get_test_tags(unit)),
+        'TAG': serialize_list(sorted(_get_test_tags(unit))),
         'SIZE': unit.get('TEST_SIZE_NAME') or '',
         'REQUIREMENTS': serialize_list(get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')),
         'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
@@ -1114,7 +1114,7 @@ def _dump_test(
         'FORK-TEST-FILES': fork_test_files,
         'TEST-FILES': serialize_list(test_files),
         'SIZE': test_size,
-        'TAG': serialize_list(tags),
+        'TAG': serialize_list(sorted(tags)),
         'REQUIREMENTS': serialize_list(requirements),
         'USE_ARCADIA_PYTHON': use_arcadia_python or '',
         'OLD_PYTEST': 'yes' if old_pytest else 'no',
@@ -1186,7 +1186,7 @@ def get_canonical_test_resources(unit):
 
 def _load_canonical_file(filename, unit_path):
     try:
-        with open(filename) as results_file:
+        with open(filename, 'rb') as results_file:
             return json.load(results_file)
     except Exception as e:
         print("malformed canonical data in {}: {} ({})".format(unit_path, e, filename), file=sys.stderr)
@@ -1194,12 +1194,17 @@ def _load_canonical_file(filename, unit_path):
 
 
 def _get_resource_from_uri(uri):
-    m = CANON_MDS_RESOURCE_REGEX.match(uri)
+    m = consts.CANON_MDS_RESOURCE_REGEX.match(uri)
     if m:
-        res_id = m.group(1)
-        return "{}:{}".format(MDS_SCHEME, res_id)
+        key = m.group(1)
+        return "{}:{}".format(consts.MDS_SCHEME, key)
 
-    m = CANON_SBR_RESOURCE_REGEX.match(uri)
+    m = consts.CANON_BACKEND_RESOURCE_REGEX.match(uri)
+    if m:
+        key = m.group(1)
+        return "{}:{}".format(consts.MDS_SCHEME, key)
+
+    m = consts.CANON_SBR_RESOURCE_REGEX.match(uri)
     if m:
         # There might be conflict between resources, because all resources in sandbox have 'resource.tar.gz' name
         # That's why we use notation with '=' to specify specific path for resource

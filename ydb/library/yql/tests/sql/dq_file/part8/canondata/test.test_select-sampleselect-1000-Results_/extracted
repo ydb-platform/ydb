@@ -1,0 +1,6 @@
+<tmp_path>/program.sql:<main>: Warning: Execution
+
+    <tmp_path>/program.sql:<main>:3:1: Warning: Execution of node: Pull
+    	select key, subkey, value || "foo" as new_value from plato.Input;
+	^
+        <tmp_path>/program.sql:<main>: Warning: Rows limit reached: 1000

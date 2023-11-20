@@ -10,6 +10,7 @@
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 
@@ -918,7 +919,7 @@ private:
                         }
                         op.Properties["Cluster"] = cluster;
                         AddOperator(stagePlanNode, "Source", op);
-                    } else if (auto settings = source.Settings().Maybe<TS3ParseSettingsBase>(); settings.IsValid()) {
+                    } else if (auto settings = source.Settings().Maybe<TS3ParseSettings>(); settings.IsValid()) {
                         TOperator op;
                         op.Properties["Name"] = S3ProviderName;
                         op.Properties["Format"] = settings.Cast().Format().StringValue();
@@ -1857,14 +1858,79 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
     queryProto.SetQueryPlan(SerializeTxPlans(txPlans, writer.Str()));
 }
 
+void FillAggrStat(NJson::TJsonValue& node, const NYql::NDqProto::TDqStatsAggr& aggr, const TString& name) {
+    auto min = aggr.GetMin();
+    auto max = aggr.GetMax();
+    auto sum = aggr.GetSum();
+    if (min || max || sum) { // do not fill empty metrics
+        auto& aggrStat = node.InsertValue(name, NJson::JSON_MAP);
+        aggrStat["Min"] = min;
+        aggrStat["Max"] = max;
+        aggrStat["Sum"] = sum;
+        aggrStat["Count"] = aggr.GetCnt();
+    }
+}
+
+void FillAsyncAggrStat(NJson::TJsonValue& node, const NYql::NDqProto::TDqAsyncStatsAggr& asyncAggr) {
+    if (asyncAggr.HasBytes()) {
+        FillAggrStat(node, asyncAggr.GetBytes(), "Bytes");
+    }
+    if (asyncAggr.HasRows()) {
+        FillAggrStat(node, asyncAggr.GetRows(), "Rows");
+    }
+    if (asyncAggr.HasChunks()) {
+        FillAggrStat(node, asyncAggr.GetChunks(), "Chunks");
+    }
+    if (asyncAggr.HasSplits()) {
+        FillAggrStat(node, asyncAggr.GetSplits(), "Splits");
+    }
+
+    if (asyncAggr.HasFirstMessageMs()) {
+        FillAggrStat(node, asyncAggr.GetFirstMessageMs(), "FirstMessageMs");
+    }
+    if (asyncAggr.HasPauseMessageMs()) {
+        FillAggrStat(node, asyncAggr.GetPauseMessageMs(), "PauseMessageMs");
+    }
+    if (asyncAggr.HasResumeMessageMs()) {
+        FillAggrStat(node, asyncAggr.GetResumeMessageMs(), "ResumeMessageMs");
+    }
+    if (asyncAggr.HasLastMessageMs()) {
+        FillAggrStat(node, asyncAggr.GetLastMessageMs(), "LastMessageMs");
+    }
+
+    if (asyncAggr.HasWaitTimeUs()) {
+        FillAggrStat(node, asyncAggr.GetWaitTimeUs(), "WaitTimeUs");
+    }
+    if (asyncAggr.HasWaitPeriods()) {
+        FillAggrStat(node, asyncAggr.GetWaitPeriods(), "WaitPeriods");
+    }
+    if (asyncAggr.HasActiveTimeUs()) {
+        FillAggrStat(node, asyncAggr.GetActiveTimeUs(), "ActiveTimeUs");
+    }
+    if (asyncAggr.HasFirstMessageMs() && asyncAggr.HasLastMessageMs()) {
+        auto& aggrStat = node.InsertValue("ActiveMessageMs", NJson::JSON_MAP);
+        aggrStat["Min"] = asyncAggr.GetFirstMessageMs().GetMin();
+        aggrStat["Max"] = asyncAggr.GetLastMessageMs().GetMax();
+        aggrStat["Count"] = asyncAggr.GetFirstMessageMs().GetCnt();
+    }
+    if (asyncAggr.HasPauseMessageMs() && asyncAggr.HasResumeMessageMs()) {
+        auto& aggrStat = node.InsertValue("WaitMessageMs", NJson::JSON_MAP);
+        aggrStat["Min"] = asyncAggr.GetPauseMessageMs().GetMin();
+        aggrStat["Max"] = asyncAggr.GetResumeMessageMs().GetMax();
+        aggrStat["Count"] = asyncAggr.GetPauseMessageMs().GetCnt();
+    }
+}
+
 TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TDqExecutionStats& stats) {
     if (txPlanJson.empty()) {
         return {};
     }
 
     THashMap<TProtoStringType, const NYql::NDqProto::TDqStageStats*> stages;
+    THashMap<ui32, TString> stageIdToGuid;
     for (const auto& stage : stats.GetStages()) {
         stages[stage.GetStageGuid()] = &stage;
+        stageIdToGuid[stage.GetStageId()] = stage.GetStageGuid();
     }
 
     NJson::TJsonValue root;
@@ -1872,20 +1938,22 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
 
     auto fillInputStats = [](NJson::TJsonValue& node, const NYql::NDqProto::TDqInputChannelStats& inputStats) {
         node["ChannelId"] = inputStats.GetChannelId();
+        node["SrcStageId"] = inputStats.GetSrcStageId();
 
-        SetNonZero(node, "Bytes", inputStats.GetBytes());
-        SetNonZero(node, "Rows", inputStats.GetRowsIn());
+        SetNonZero(node, "Bytes", inputStats.GetPush().GetBytes());
+        SetNonZero(node, "Rows", inputStats.GetPush().GetRows());
 
-        SetNonZero(node, "WaitTimeUs", inputStats.GetWaitTimeUs());
+        SetNonZero(node, "WaitTimeUs", inputStats.GetPush().GetWaitTimeUs());
     };
 
     auto fillOutputStats = [](NJson::TJsonValue& node, const NYql::NDqProto::TDqOutputChannelStats& outputStats) {
         node["ChannelId"] = outputStats.GetChannelId();
+        node["DstStageId"] = outputStats.GetDstStageId();
 
-        SetNonZero(node, "Bytes", outputStats.GetBytes());
-        SetNonZero(node, "Rows", outputStats.GetRowsOut());
+        SetNonZero(node, "Bytes", outputStats.GetPop().GetBytes());
+        SetNonZero(node, "Rows", outputStats.GetPop().GetRows());
 
-        SetNonZero(node, "WritesBlockedNoSpace", outputStats.GetBlockedByCapacity());
+        SetNonZero(node, "WaitTimeUs", outputStats.GetPop().GetWaitTimeUs());
         SetNonZero(node, "SpilledBytes", outputStats.GetSpilledBytes());
     };
 
@@ -1901,15 +1969,15 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
 
         // equals to max if there was no first row
         if(taskStats.GetFirstRowTimeMs() != std::numeric_limits<ui64>::max()) {
-            SetNonZero(node, "FirstRowTimeMs", taskStats.GetFirstRowTimeMs());
+            SetNonZero(node, "FirstRowTimeMs", taskStats.GetFirstRowTimeMs()); // need to be reviewed
         }
-        SetNonZero(node, "StartTimeMs", taskStats.GetStartTimeMs());
-        SetNonZero(node, "FinishTimeMs", taskStats.GetFinishTimeMs());
+        SetNonZero(node, "StartTimeMs", taskStats.GetStartTimeMs());   // need to be reviewed
+        SetNonZero(node, "FinishTimeMs", taskStats.GetFinishTimeMs()); // need to be reviewed
 
         SetNonZero(node, "ComputeTimeUs", taskStats.GetComputeCpuTimeUs());
-        SetNonZero(node, "WaitTimeUs", taskStats.GetWaitTimeUs());
-        SetNonZero(node, "PendingInputTimeUs", taskStats.GetPendingInputTimeUs());
-        SetNonZero(node, "PendingOutputTimeUs", taskStats.GetPendingOutputTimeUs());
+
+        SetNonZero(node, "WaitInputTimeUs", taskStats.GetWaitInputTimeUs());
+        SetNonZero(node, "WaitOutputTimeUs", taskStats.GetWaitOutputTimeUs());
 
         NKqpProto::TKqpTaskExtraStats taskExtraStats;
         if (taskStats.GetExtra().UnpackTo(&taskExtraStats)) {
@@ -1939,6 +2007,16 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
         }
     };
 
+    THashMap<TString, ui32> guidToPlaneId;
+
+    auto collectPlanNodeId = [&](NJson::TJsonValue& node) {
+        if (auto stageGuid = node.GetMapSafe().FindPtr("StageGuid")) {
+            if (auto planNodeId = node.GetMapSafe().FindPtr("PlanNodeId")) {
+                guidToPlaneId[stageGuid->GetStringSafe()] = planNodeId->GetIntegerSafe();
+            }
+        }
+    };
+
     auto addStatsToPlanNode = [&](NJson::TJsonValue& node) {
         if (auto stageGuid = node.GetMapSafe().FindPtr("StageGuid")) {
             if (auto stat = stages.FindPtr(stageGuid->GetStringSafe())) {
@@ -1957,30 +2035,85 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 stats["TotalOutputRows"] = (*stat)->GetOutputRows().GetSum();
                 stats["TotalOutputBytes"] = (*stat)->GetOutputBytes().GetSum();
 
-                if (!(*stat)->GetIngressBytes().empty()) {
-                    auto& ingressStats = stats.InsertValue("IngressBytes", NJson::JSON_ARRAY);
-                    for (auto ingressBytes : (*stat)->GetIngressBytes()) {
+                if ((*stat)->HasCpuTimeUs()) {
+                    FillAggrStat(stats, (*stat)->GetCpuTimeUs(), "CpuTimeUs");
+                }
+
+                if ((*stat)->HasSourceCpuTimeUs()) {
+                    FillAggrStat(stats, (*stat)->GetSourceCpuTimeUs(), "SourceCpuTimeUs");
+                }
+
+                if ((*stat)->HasMaxMemoryUsage()) {
+                    FillAggrStat(stats, (*stat)->GetMaxMemoryUsage(), "MaxMemoryUsage");
+                }
+
+                if (!(*stat)->GetIngress().empty()) {
+                    auto& ingressStats = stats.InsertValue("Ingress", NJson::JSON_ARRAY);
+                    for (auto ingress : (*stat)->GetIngress()) {
                         auto& ingressInfo = ingressStats.AppendValue(NJson::JSON_MAP);
-                        ingressInfo["Name"] = ingressBytes.first;
-                        ingressInfo["Min"] = ingressBytes.second.GetMin();
-                        ingressInfo["Max"] = ingressBytes.second.GetMax();
-                        ingressInfo["Sum"] = ingressBytes.second.GetSum();
-                        ingressInfo["Count"] = ingressBytes.second.GetCnt();
+                        ingressInfo["Name"] = ingress.first;
+                        if (ingress.second.HasIngress()) {
+                            FillAsyncAggrStat(ingressInfo.InsertValue("Ingress", NJson::JSON_MAP), ingress.second.GetIngress());
+                        }
+                        if (ingress.second.HasPush()) {
+                            FillAsyncAggrStat(ingressInfo.InsertValue("Push", NJson::JSON_MAP), ingress.second.GetPush());
+                        }
+                        if (ingress.second.HasPop()) {
+                            FillAsyncAggrStat(ingressInfo.InsertValue("Pop", NJson::JSON_MAP), ingress.second.GetPop());
+                        }
                     }
                 }
-
-                if (!(*stat)->GetEgressBytes().empty()) {
-                    auto& egressStats = stats.InsertValue("EgressBytes", NJson::JSON_ARRAY);
-                    for (auto egressBytes : (*stat)->GetEgressBytes()) {
+                if (!(*stat)->GetInput().empty()) {
+                    auto& inputStats = stats.InsertValue("Input", NJson::JSON_ARRAY);
+                    for (auto input : (*stat)->GetInput()) {
+                        auto& inputInfo = inputStats.AppendValue(NJson::JSON_MAP);
+                        auto stageGuid = stageIdToGuid.at(input.first);
+                        auto planNodeId = guidToPlaneId.at(stageGuid);
+                        inputInfo["Name"] = ToString(planNodeId);
+                        if (input.second.HasPush()) {
+                            FillAsyncAggrStat(inputInfo.InsertValue("Push", NJson::JSON_MAP), input.second.GetPush());
+                        }
+                        if (input.second.HasPop()) {
+                            FillAsyncAggrStat(inputInfo.InsertValue("Pop", NJson::JSON_MAP), input.second.GetPop());
+                        }
+                    }
+                }
+                if (!(*stat)->GetOutput().empty()) {
+                    auto& outputStats = stats.InsertValue("Output", NJson::JSON_ARRAY);
+                    for (auto output : (*stat)->GetOutput()) {
+                        auto& outputInfo = outputStats.AppendValue(NJson::JSON_MAP);
+                        if (output.first == 0) {
+                            outputInfo["Name"] = "RESULT";
+                        } else {
+                            auto stageGuid = stageIdToGuid.at(output.first);
+                            auto planNodeId = guidToPlaneId.at(stageGuid);
+                            outputInfo["Name"] = ToString(planNodeId);
+                        }
+                        if (output.second.HasPush()) {
+                            FillAsyncAggrStat(outputInfo.InsertValue("Push", NJson::JSON_MAP), output.second.GetPush());
+                        }
+                        if (output.second.HasPop()) {
+                            FillAsyncAggrStat(outputInfo.InsertValue("Pop", NJson::JSON_MAP), output.second.GetPop());
+                        }
+                    }
+                }
+                if (!(*stat)->GetEgress().empty()) {
+                    auto& egressStats = stats.InsertValue("Egress", NJson::JSON_ARRAY);
+                    for (auto egress : (*stat)->GetEgress()) {
                         auto& egressInfo = egressStats.AppendValue(NJson::JSON_MAP);
-                        egressInfo["Name"] = egressBytes.first;
-                        egressInfo["Min"] = egressBytes.second.GetMin();
-                        egressInfo["Max"] = egressBytes.second.GetMax();
-                        egressInfo["Sum"] = egressBytes.second.GetSum();
-                        egressInfo["Count"] = egressBytes.second.GetCnt();
+                        egressInfo["Name"] = egress.first;
+                        if (egress.second.HasPush()) {
+                            FillAsyncAggrStat(egressInfo.InsertValue("Push", NJson::JSON_MAP), egress.second.GetPush());
+                        }
+                        if (egress.second.HasPop()) {
+                            FillAsyncAggrStat(egressInfo.InsertValue("Pop", NJson::JSON_MAP), egress.second.GetPop());
+                        }
+                        if (egress.second.HasEgress()) {
+                            FillAsyncAggrStat(egressInfo.InsertValue("Egress", NJson::JSON_MAP), egress.second.GetEgress());
+                        }
                     }
                 }
-
+ 
                 NKqpProto::TKqpStageExtraStats kqpStageStats;
                 if ((*stat)->GetExtra().UnpackTo(&kqpStageStats)) {
                     auto& nodesStats = stats.InsertValue("NodesScanShards", NJson::JSON_ARRAY);
@@ -1999,6 +2132,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
         }
     };
 
+    ModifyPlan(root, collectPlanNodeId);
     ModifyPlan(root, addStatsToPlanNode);
 
     NJsonWriter::TBuf txWriter;

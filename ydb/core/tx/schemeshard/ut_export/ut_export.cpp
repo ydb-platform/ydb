@@ -135,7 +135,7 @@ namespace {
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
 
         THolder<IEventHandle> delayed;
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (delayFunc(ev)) {
                 delayed.Reset(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
@@ -166,21 +166,6 @@ namespace {
         env.TestWaitNotification(runtime, exportId);
 
         TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
-    }
-
-    void WriteRow(TTestActorRuntime& runtime, ui64 tabletId, const TString& key, const TString& value) {
-        NKikimrMiniKQL::TResult result;
-        TString error;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
-            (
-                (let key '( '('key (Utf8 '%s) ) ) )
-                (let row '( '('value (Utf8 '%s) ) ) )
-                (return (AsList (UpdateRow '__user__Table key row) ))
-            )
-        )", key.c_str(), value.c_str()), result, error);
-
-        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
-        UNIT_ASSERT_VALUES_EQUAL(error, "");
     }
 
 } // anonymous
@@ -532,7 +517,7 @@ partitioning_settings {
 
         bool dropNotification = false;
         THolder<IEventHandle> delayed;
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvSchemeShard::EvModifySchemeTransaction:
                 break;
@@ -616,7 +601,7 @@ partitioning_settings {
 
         bool dropNotification = false;
         THolder<IEventHandle> delayed;
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvSchemeShard::EvModifySchemeTransaction:
                 break;
@@ -708,8 +693,8 @@ partitioning_settings {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        WriteRow(runtime, TTestTxConfig::FakeHiveTablets, "a", "valueA");
-        WriteRow(runtime, TTestTxConfig::FakeHiveTablets, "b", "valueB");
+        WriteRow(runtime, "a", "valueA");
+        WriteRow(runtime, "b", "valueB");
 
         runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
@@ -719,7 +704,7 @@ partitioning_settings {
         TMaybe<ui64> tabletId;
         bool delayed = false;
 
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::EvProposeTransaction: {
                     auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
@@ -817,7 +802,7 @@ partitioning_settings {
         ui64 txId = 100;
 
         THashSet<ui64> statsCollected;
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvPeriodicTableStats) {
                 statsCollected.insert(ev->Get<TEvDataShard::TEvPeriodicTableStats>()->Record.GetDatashardId());
             }
@@ -849,7 +834,7 @@ partitioning_settings {
         env.TestWaitNotification(runtime, txId);
 
         for (int i = 1; i < 500; ++i) {
-            WriteRow(runtime, TTestTxConfig::FakeHiveTablets, Sprintf("a%i", i), "value");
+            WriteRow(runtime, Sprintf("a%i", i), "value");
         }
 
         // trigger memtable's compaction
@@ -946,7 +931,7 @@ partitioning_settings {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        WriteRow(runtime, TTestTxConfig::FakeHiveTablets, "a", "valueA");
+        WriteRow(runtime, "a", "valueA");
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -955,7 +940,7 @@ partitioning_settings {
         UNIT_ASSERT(s3Mock.Start());
 
         THolder<IEventHandle> injectResult;
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NSharedCache::EvResult) {
                 const auto* msg = ev->Get<NSharedCache::TEvResult>();
                 UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
@@ -1016,7 +1001,7 @@ partitioning_settings {
         UNIT_ASSERT(s3Mock.Start());
 
         THolder<IEventHandle> copyTables;
-        auto origObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto origObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
                 const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
                 if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
@@ -1048,7 +1033,7 @@ partitioning_settings {
         }
 
         THolder<IEventHandle> proposeTxResult;
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvProposeTransactionResult) {
                 proposeTxResult.Reset(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
@@ -1098,7 +1083,7 @@ partitioning_settings {
         UNIT_ASSERT(s3Mock.Start());
 
         TVector<THolder<IEventHandle>> copyTables;
-        auto origObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto origObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
                 const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
                 if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
@@ -1179,7 +1164,7 @@ partitioning_settings {
         TestGetExport(runtime, txId, "/MyRoot");
 
         TVector<THolder<IEventHandle>> delayed;
-        auto origObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto origObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
                 const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
                 const auto opType = record.GetTransaction(0).GetOperationType();
@@ -1298,8 +1283,8 @@ partitioning_settings {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        WriteRow(runtime, TTestTxConfig::FakeHiveTablets, "a", "valueA");
-        WriteRow(runtime, TTestTxConfig::FakeHiveTablets, "b", "valueB");
+        WriteRow(runtime, "a", "valueA");
+        WriteRow(runtime, "b", "valueB");
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
 
         TPortManager portManager;
@@ -1309,7 +1294,7 @@ partitioning_settings {
         UNIT_ASSERT(s3Mock.Start());
 
         THolder<IEventHandle> injectResult;
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::EvProposeTransaction: {
                     auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
@@ -1371,5 +1356,42 @@ partitioning_settings {
 
         env.TestWaitNotification(runtime, exportId);
         TestGetExport(runtime, exportId, "/MyRoot");
+    }
+
+    Y_UNIT_TEST(CorruptedDyNumber) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().DisableStatsBatching(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "DyNumber" }
+                KeyColumnNames: ["key"]
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Write bad DyNumber
+        UploadRows(runtime, "/MyRoot/Table", 0, {1}, {2}, {1});
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/Table"
+                    destination_prefix: ""
+                }
+                }
+            )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
 }

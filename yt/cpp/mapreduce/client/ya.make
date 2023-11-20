@@ -20,6 +20,7 @@ SRCS(
     prepare_operation.cpp
     py_helpers.cpp
     retry_heavy_write_request.cpp
+    retry_transaction.cpp
     retryful_writer.cpp
     retryless_writer.cpp
     skiff.cpp

@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:1:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select AsTuple(1, 1) in (
+	^
+        <tmp_path>/program.sql:<main>:1:19: Error: At function: SqlIn
+        	select AsTuple(1, 1) in (
+	                  ^
+            <tmp_path>/program.sql:<main>:1:19: Error: Can't compare Tuple<Int32,Int32> with Int32
+            	select AsTuple(1, 1) in (
+	                  ^

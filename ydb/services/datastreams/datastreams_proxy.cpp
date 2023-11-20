@@ -128,7 +128,7 @@ namespace NKikimr::NDataStreams::V1 {
             PartitionWriteSpeedInBytesPerSec(GetProtoRequest()->write_quota_kb_per_sec()));
 
         if (AppData(ctx)->PQConfig.GetBillingMeteringConfig().GetEnabled()) {
-            topicRequest.set_metering_mode(Ydb::Topic::METERING_MODE_RESERVED_CAPACITY);
+            topicRequest.set_metering_mode(Ydb::Topic::METERING_MODE_REQUEST_UNITS);
 
             if (GetProtoRequest()->has_stream_mode_details()) {
                 switch(GetProtoRequest()->stream_mode_details().stream_mode()) {
@@ -1042,7 +1042,7 @@ namespace NKikimr::NDataStreams::V1 {
                                    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
                                    const NKikimrSchemeOp::TDirEntry& selfInfo);
-        void ReplyNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) override;
+        void OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) override;
 
     private:
         TString ConsumerName;
@@ -1098,7 +1098,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
     }
 
-    void TRegisterStreamConsumerActor::ReplyNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
+    void TRegisterStreamConsumerActor::OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
         Ydb::DataStreams::V1::RegisterStreamConsumerResult result;
         auto consumer = result.Mutableconsumer();
@@ -1827,8 +1827,9 @@ namespace NKikimr::NDataStreams::V1 {
                 Uint128ToDecimalString(range.End));
             awsShard->mutable_sequence_number_range()->set_starting_sequence_number(
                 std::to_string(StartEndOffsetsPerPartition[shard.GetPartitionId()].first));
-            awsShard->mutable_sequence_number_range()->set_ending_sequence_number(
-                std::to_string(StartEndOffsetsPerPartition[shard.GetPartitionId()].second));
+            //TODO: fill it only for closed partitions
+            //awsShard->mutable_sequence_number_range()->set_ending_sequence_number(
+            //    std::to_string(StartEndOffsetsPerPartition[shard.GetPartitionId()].second));
             awsShard->set_shard_id(GetShardName(shard.GetPartitionId()));
         }
         if (LeftToRead > 0) {

@@ -1,0 +1,11 @@
+        MountPoints: [
+            {
+                MountPoint: "../../../../mount/statbox"
+                RootAlias: "/statbox"
+            },
+            {
+                MountPoint: "../../../../mount/lib"
+                RootAlias: "/lib"
+                Library: true
+            }
+        ]

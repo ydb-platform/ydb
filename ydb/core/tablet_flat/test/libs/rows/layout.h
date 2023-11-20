@@ -44,9 +44,9 @@ namespace NTest{
                 auto it = std::find_if(Cols.begin(), Cols.end(), pred);
 
                 if (it == Cols.end()) {
-                    Y_FAIL("Not all key tags found in columns registery");
+                    Y_ABORT("Not all key tags found in columns registery");
                 } else if (it->KeyOrder != Max<NTable::TPos>()) {
-                    Y_FAIL("Non-unique key column tags supplied for layout");
+                    Y_ABORT("Non-unique key column tags supplied for layout");
                 } else {
                     it->KeyOrder = keyOrder++;
                 }

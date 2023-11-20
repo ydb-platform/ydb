@@ -518,12 +518,12 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
         case EWorkerType::CdcStream:
             return Register(new TCdcWorker(SelfId(), pathId, DataShard.TabletId, DstDataShards));
         case EWorkerType::AsyncIndex:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
     }
 
     TActorId RegisterWorker(const TPathId& pathId, TWorker& worker) const {
-        Y_VERIFY_DEBUG(!worker.ActorId);
+        Y_DEBUG_ABORT_UNLESS(!worker.ActorId);
         worker.ActorId = RegisterWorker(pathId, worker.Type);
         return worker.ActorId;
     }

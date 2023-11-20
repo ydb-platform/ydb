@@ -7,8 +7,8 @@
 #include <ydb/library/yql/providers/dq/service/service_node.h>
 
 #include <ydb/library/yql/providers/dq/stats_collector/pool_stats_collector.h>
-
 #include <ydb/library/yql/providers/dq/worker_manager/local_worker_manager.h>
+#include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 
 #include <ydb/library/yql/utils/range_walker.h>
 #include <ydb/library/yql/utils/bind_in_range.h>
@@ -17,6 +17,7 @@
 
 #include <util/system/env.h>
 #include <util/generic/size_literals.h>
+#include <util/folder/dirut.h>
 
 namespace NYql {
 
@@ -29,7 +30,8 @@ public:
         TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories, NBus::TBindResult interconnectPort, NBus::TBindResult grpcPort,
         NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
         IMetricsRegistryPtr metricsRegistry,
-        const std::function<IActor*(void)>& metricsPusherFactory)
+        const std::function<IActor*(void)>& metricsPusherFactory,
+        bool withSpilling)
         : MetricsRegistry(metricsRegistry
             ? metricsRegistry
             : CreateMetricsRegistry(GetSensorsGroupFor(NSensorComponent::kDq))
@@ -37,9 +39,8 @@ public:
     {
         ui32 nodeId = 1;
 
-        TString hostName;
-        TString localAddress;
-        std::tie(hostName, localAddress) = NDqs::GetLocalAddress();
+        TString hostName = "localhost";
+        TString localAddress = "::1";
 
         NDqs::TServiceNodeConfig config = {
             nodeId,
@@ -58,24 +59,38 @@ public:
             threads,
             MetricsRegistry);
 
-        auto patternCache = std::make_shared<NKikimr::NMiniKQL::TComputationPatternLRUCache>(200_MB);
+        auto lwmGroup = MetricsRegistry->GetSensors()->GetSubgroup("component", "lwm");
+        auto patternCache = std::make_shared<NKikimr::NMiniKQL::TComputationPatternLRUCache>(NKikimr::NMiniKQL::TComputationPatternLRUCache::Config(200_MB, 200_MB));
         NDqs::TLocalWorkerManagerOptions lwmOptions;
         lwmOptions.Factory = NTaskRunnerProxy::CreateFactory(functionRegistry, compFactory, taskTransformFactory, patternCache, true);
         lwmOptions.AsyncIoFactory = std::move(asyncIoFactory);
         lwmOptions.FunctionRegistry = functionRegistry;
         lwmOptions.TaskRunnerInvokerFactory = new NDqs::TTaskRunnerInvokerFactory();
         lwmOptions.TaskRunnerActorFactory = NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory(
-            [factory=lwmOptions.Factory](const NDq::TDqTaskSettings& task, const NDq::TLogFunc& )
+            [factory=lwmOptions.Factory](const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& )
                 {
-                    return factory->Get(task);
+                    return factory->Get(task, statsMode);
                 });
-        lwmOptions.Counters = NDqs::TWorkerManagerCounters(MetricsRegistry->GetSensors()->GetSubgroup("component", "lwm"));
+        lwmOptions.Counters = NDqs::TWorkerManagerCounters(lwmGroup);
         lwmOptions.DropTaskCountersOnFinish = false;
+        lwmOptions.UseSpilling = withSpilling;
         auto resman = NDqs::CreateLocalWorkerManager(lwmOptions);
 
         ServiceNode->AddLocalService(
             MakeWorkerManagerActorID(nodeId),
             TActorSetupCmd(resman, TMailboxType::Simple, 0));
+
+        if (withSpilling) {
+            char tempDir[MAX_PATH];
+            if (MakeTempDir(tempDir, nullptr) != 0)
+                ythrow yexception() << "LocalServiceHolder: Can't create temporary directory " << tempDir;
+
+            auto spillingActor = NDq::CreateDqLocalFileSpillingService(NDq::TFileSpillingServiceConfig{.Root = tempDir, .CleanupOnShutdown = true}, MakeIntrusive<NDq::TSpillingCounters>(lwmGroup));
+
+            ServiceNode->AddLocalService(
+                NDq::MakeDqLocalFileSpillingServiceID(nodeId),
+                TActorSetupCmd(spillingActor, TMailboxType::Simple, 0));
+        }
 
         auto statsCollector = CreateStatsCollector(1, *ServiceNode->GetSetup(), MetricsRegistry->GetSensors());
 
@@ -234,7 +249,7 @@ THolder<TLocalServiceHolder> CreateLocalServiceHolder(const NKikimr::NMiniKQL::I
     NBus::TBindResult interconnectPort, NBus::TBindResult grpcPort,
     NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
     IMetricsRegistryPtr metricsRegistry,
-    const std::function<IActor*(void)>& metricsPusherFactory)
+    const std::function<IActor*(void)>& metricsPusherFactory, bool withSpilling)
 {
     return MakeHolder<TLocalServiceHolder>(functionRegistry,
         compFactory,
@@ -245,13 +260,14 @@ THolder<TLocalServiceHolder> CreateLocalServiceHolder(const NKikimr::NMiniKQL::I
         std::move(asyncIoFactory),
         threads,
         metricsRegistry,
-        metricsPusherFactory);
+        metricsPusherFactory,
+        withSpilling);
 }
 
 TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
     TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories,
-    NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
+    bool withSpilling, NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, int threads,
     IMetricsRegistryPtr metricsRegistry,
     const std::function<IActor*(void)>& metricsPusherFactory)
 {
@@ -271,8 +287,9 @@ TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctio
             std::move(asyncIoFactory),
             threads,
             metricsRegistry,
-            metricsPusherFactory),
-        CreateDqGateway(std::get<0>(NDqs::GetLocalAddress()), grpcPort.Addr.GetPort()));
+            metricsPusherFactory,
+            withSpilling),
+        CreateDqGateway("[::1]", grpcPort.Addr.GetPort()));
 }
 
 } // namespace NYql

@@ -387,7 +387,7 @@ void TDnsCache::GHBNCallback(void* arg, int status, int, struct hostent* info) {
                 p->second.AddrsV6.push_back(*(struct in6_addr*)(info->h_addr_list[i]));
             }
         } else {
-            Y_FAIL("unknown address type in ares callback");
+            Y_ABORT("unknown address type in ares callback");
         }
         resolved = TTimeKeeper::GetTime();
         notfound = 0;

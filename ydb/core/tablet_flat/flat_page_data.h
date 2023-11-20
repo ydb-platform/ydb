@@ -115,12 +115,12 @@ namespace NPage {
             // right after column entries. Up to caller to decide what kind of data is there
 
             TRowVersion GetMaxVersion(const TPartScheme::TGroupInfo& group) const noexcept {
-                Y_VERIFY_DEBUG(IsErased());
+                Y_DEBUG_ABORT_UNLESS(IsErased());
                 return GetTail<TVersion>(group)->Get();
             }
 
             TRowVersion GetMinVersion(const TPartScheme::TGroupInfo& group) const noexcept {
-                Y_VERIFY_DEBUG(IsVersioned());
+                Y_DEBUG_ABORT_UNLESS(IsVersioned());
                 auto* v = GetTail<TVersion>(group);
                 if (IsErased()) {
                     ++v;
@@ -129,7 +129,7 @@ namespace NPage {
             }
 
             ui64 GetDeltaTxId(const TPartScheme::TGroupInfo& group) const noexcept {
-                Y_VERIFY_DEBUG(IsDelta());
+                Y_DEBUG_ABORT_UNLESS(IsDelta());
                 return GetTail<TDelta>(group)->GetTxId();
             }
 

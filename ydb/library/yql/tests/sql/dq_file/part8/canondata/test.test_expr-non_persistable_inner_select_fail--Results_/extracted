@@ -1,0 +1,13 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:5:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT 1 FROM (
+	^
+        <tmp_path>/program.sql:<main>:6:5: Error: At function: PersistableRepr
+        	    SELECT
+	    ^
+            <tmp_path>/program.sql:<main>: Error: Treat warning as error mode enabled. To disable it use "pragma warning("default", <code>);"
+            
+                <tmp_path>/program.sql:<main>:6:5: Error: Persistable required. Atom, key, world, datasink, datasource, callable, resource, stream and lambda are not persistable
+                	    SELECT
+	    ^

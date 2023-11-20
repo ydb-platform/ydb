@@ -345,7 +345,7 @@ public:
             const auto now = context.Ctx.Now();
             for (auto& shard : table->GetPartitions()) {
                 auto& lag = shard.LastCondEraseLag;
-                Y_VERIFY_DEBUG(!lag.Defined());
+                Y_DEBUG_ABORT_UNLESS(!lag.Defined());
 
                 lag = now - shard.LastCondErase;
                 context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
@@ -359,7 +359,7 @@ public:
                     context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
                     lag.Clear();
                 } else {
-                    Y_VERIFY_DEBUG(false);
+                    Y_DEBUG_ABORT_UNLESS(false);
                 }
             }
         }
@@ -588,7 +588,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TAlterTable");
+        Y_ABORT("no AbortPropose for TAlterTable");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

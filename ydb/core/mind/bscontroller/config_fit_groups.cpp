@@ -54,7 +54,7 @@ namespace NKikimr {
                 for (ui64 reserve = 0; reserve < min || (reserve - min) * 1000000 / Max<ui64>(1, total) < part; ++reserve, ++total) {
                     TGroupMapper::TGroupDefinition group;
                     try {
-                        AllocateGroup(0, group, {}, {}, 0, false);
+                        AllocateOrSanitizeGroup(0, group, {}, {}, 0, false, &TGroupGeometryInfo::AllocateGroup);
                     } catch (const TExFitGroupError&) {
                         throw TExError() << "group reserve constraint hit";
                     }
@@ -95,7 +95,7 @@ namespace NKikimr {
                     requiredSpace = ExpectedSlotSize.front();
                     ExpectedSlotSize.pop_front();
                 }
-                AllocateGroup(groupId, group, {}, {}, requiredSpace, false);
+                AllocateOrSanitizeGroup(groupId, group, {}, {}, requiredSpace, false, &TGroupGeometryInfo::AllocateGroup);
 
                 // scan all comprising PDisks for PDiskCategory
                 TMaybe<TPDiskCategory> desiredPDiskCategory;
@@ -154,6 +154,7 @@ namespace NKikimr {
                 }
 
                 TGroupMapper::TGroupDefinition group;
+                TGroupMapper::TGroupConstraintsDefinition softConstraints, hardConstraints;
                 bool layoutIsValid = true;
 
                 auto getGroup = [&]() -> TGroupMapper::TGroupDefinition& {
@@ -162,9 +163,14 @@ namespace NKikimr {
                         std::unordered_map<TPDiskId, NLayoutChecker::TPDiskLayoutPosition> pdiskLocations;
 
                         Geometry.ResizeGroup(group);
+                        Geometry.ResizeGroup(softConstraints);
+                        Geometry.ResizeGroup(hardConstraints);
                         for (const TVSlotInfo *vslot : groupInfo->VDisksInGroup) {
                             const TPDiskId& pdiskId = vslot->VSlotId.ComprisingPDiskId();
                             group[vslot->RingIdx][vslot->FailDomainIdx][vslot->VDiskIdx] = pdiskId;
+                            if (State.Self.TryToRelocateBrokenDisksLocallyFirst) {
+                                softConstraints[vslot->RingIdx][vslot->FailDomainIdx][vslot->VDiskIdx].NodeId = pdiskId.NodeId;
+                            }
                             const auto loc = State.HostRecords->GetLocation(pdiskId.NodeId);
 
                             pdiskLocations[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(domainMapper, loc, pdiskId, Geometry);
@@ -229,7 +235,7 @@ namespace NKikimr {
                                 break;
 
                             default:
-                                Y_FAIL("unexpected drive status");
+                                Y_ABORT("unexpected drive status");
                         }
                     }
 
@@ -238,6 +244,9 @@ namespace NKikimr {
                         // get the current PDisk in the desired slot and replace it with the target one; if the target
                         // PDisk id is zero, then new PDisk will be picked up automatically
                         g[vslot->RingIdx][vslot->FailDomainIdx][vslot->VDiskIdx] = targetPDiskId;
+                        if (State.Self.UseSelfHealLocalPolicy && it != State.ExplicitReconfigureMap.end()) {
+                            hardConstraints[vslot->RingIdx][vslot->FailDomainIdx][vslot->VDiskIdx].NodeId = vslot->VSlotId.ComprisingPDiskId().NodeId;
+                        }
                         replacedSlots.emplace(vslot->GetShortVDiskId(), vslot->VSlotId);
                     } else {
                         preservedSlots.emplace(vslot->GetVDiskId(), vslot->VSlotId);
@@ -297,7 +306,8 @@ namespace NKikimr {
 
                             STLOG(PRI_INFO, BS_CONTROLLER, BSCFG01, "Attempt to sanitize group layout", (GroupId, groupId));
                             // Use group layout sanitizing algorithm on direct requests or when initial group layout is invalid
-                            auto result = SanitizeGroup(groupId, group, std::move(forbid), requiredSpace, AllowUnusableDisks);
+                            auto result = AllocateOrSanitizeGroup(groupId, group, {}, std::move(forbid), requiredSpace,
+                                AllowUnusableDisks, &TGroupGeometryInfo::SanitizeGroup);
 
                             if (replacedSlots.empty()) {
                                 // update information about replaced disks
@@ -316,7 +326,14 @@ namespace NKikimr {
                             for (const auto& [vdiskId, vslotId] : replacedSlots) {
                                 replacedDisks.emplace(vdiskId, vslotId.ComprisingPDiskId());
                             }
-                            AllocateGroup(groupId, group, replacedDisks, std::move(forbid), requiredSpace, AllowUnusableDisks);
+                            try {
+                                TGroupMapper::MergeTargetDiskConstraints(hardConstraints, softConstraints);
+                                AllocateOrSanitizeGroup(groupId, group, softConstraints, replacedDisks, std::move(forbid), requiredSpace,
+                                    AllowUnusableDisks, &TGroupGeometryInfo::AllocateGroup);
+                            } catch (const TExFitGroupError& ex) {
+                                AllocateOrSanitizeGroup(groupId, group, hardConstraints, replacedDisks, std::move(forbid), requiredSpace,
+                                    AllowUnusableDisks, &TGroupGeometryInfo::AllocateGroup);
+                            }
                         }
                         if (!IgnoreVSlotQuotaCheck) {
                             adjustSpaceAvailable = true;
@@ -369,7 +386,7 @@ namespace NKikimr {
                             const TVDiskIdShort pos(slot->RingIdx, slot->FailDomainIdx, slot->VDiskIdx);
                             if (const auto it = replacedSlots.find(pos); it != replacedSlots.end()) {
                                 auto *item = Status.AddReassignedItem();
-                                VDiskIDFromVDiskID(TVDiskID(groupInfo->ID, groupInfo->Generation - 1, pos), item->MutableVDiskId());
+                                VDiskIDFromVDiskID(TVDiskID(groupInfo->ID, groupInfo->Generation, pos), item->MutableVDiskId());
                                 Serialize(item->MutableFrom(), it->second);
                                 Serialize(item->MutableTo(), slot->VSlotId);
                                 if (auto *pdisk = State.PDisks.Find(it->second.ComprisingPDiskId())) {
@@ -412,10 +429,13 @@ namespace NKikimr {
                 State.CheckConsistency();
             }
 
-        private:
-            void AllocateGroup(TGroupId groupId, TGroupMapper::TGroupDefinition& group,
+        private:            
+            template<typename T>
+            std::invoke_result_t<T, TGroupGeometryInfo&, TGroupMapper&, TGroupId, TGroupMapper::TGroupDefinition&, TGroupMapper::TGroupConstraintsDefinition&,
+                    const THashMap<TVDiskIdShort, TPDiskId>&, TGroupMapper::TForbiddenPDisks, i64> AllocateOrSanitizeGroup(
+                    TGroupId groupId, TGroupMapper::TGroupDefinition& group, TGroupMapper::TGroupConstraintsDefinition& constraints,
                     const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TGroupMapper::TForbiddenPDisks forbid,
-                    i64 requiredSpace, bool addExistingDisks) {
+                    i64 requiredSpace, bool addExistingDisks, T&& func) {
                 if (!Mapper) {
                     Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping);
                     PopulateGroupMapper();
@@ -434,37 +454,26 @@ namespace NKikimr {
                         }
                     }
                 }
-                Geometry.AllocateGroup(*Mapper, groupId, group, replacedDisks, std::move(forbid), requiredSpace);
-                for (const TPDiskId pdiskId : removeQ) {
-                    Mapper->UnregisterPDisk(pdiskId);
-                }
+                struct TUnregister {
+                    TGroupMapper& Mapper;
+                    TStackVec<TPDiskId, 32>& RemoveQ;
+                    ~TUnregister() {
+                        for (const TPDiskId pdiskId : RemoveQ) {
+                            Mapper.UnregisterPDisk(pdiskId);
+                        }
+                    }
+                } unregister{*Mapper, removeQ};
+                return std::invoke(func, Geometry, *Mapper, groupId, group, constraints, replacedDisks, std::move(forbid), requiredSpace);
             }
 
-            std::pair<TVDiskIdShort, TPDiskId> SanitizeGroup(TGroupId groupId, TGroupMapper::TGroupDefinition& group, 
-                    TGroupMapper::TForbiddenPDisks forbid, i64 requiredSpace, bool addExistingDisks) {
-                if (!Mapper) {
-                    Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping);
-                    PopulateGroupMapper();
-                }
-                TStackVec<TPDiskId, 32> removeQ;
-                if (addExistingDisks) {
-                    for (const auto& realm : group) {
-                        for (const auto& domain : realm) {
-                            for (const TPDiskId id : domain) {
-                                if (id != TPDiskId()) {
-                                    if (auto *info = State.PDisks.Find(id); info && RegisterPDisk(id, *info, false, "X")) {
-                                        removeQ.push_back(id);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                auto res = Geometry.SanitizeGroup(*Mapper, groupId, group, std::move(forbid), requiredSpace);
-                for (const TPDiskId pdiskId : removeQ) {
-                    Mapper->UnregisterPDisk(pdiskId);
-                }
-                return res;
+            template<typename T>
+            std::invoke_result_t<T, TGroupGeometryInfo&, TGroupMapper&, TGroupId, TGroupMapper::TGroupDefinition&, TGroupMapper::TGroupConstraintsDefinition&,
+                    const THashMap<TVDiskIdShort, TPDiskId>&, TGroupMapper::TForbiddenPDisks, i64> AllocateOrSanitizeGroup(
+                    TGroupId groupId, TGroupMapper::TGroupDefinition& group,
+                    const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TGroupMapper::TForbiddenPDisks forbid,
+                    i64 requiredSpace, bool addExistingDisks, T&& func) {
+                TGroupMapper::TGroupConstraintsDefinition emptyConstraints;
+                return AllocateOrSanitizeGroup(groupId, group, emptyConstraints, replacedDisks, forbid, requiredSpace, addExistingDisks, func);
             }
 
             void PopulateGroupMapper() {

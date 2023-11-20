@@ -66,11 +66,16 @@ bool NeedsValuesRename(const NNodes::TKiWriteTable &node, TYdbOperation op) {
         && !GetSetItemOptionValue(TExprBase(fill));
 }
 
-bool RewriteValuesColumnNames(const TKiWriteTable& node, const TKikimrTableDescription* table, TExprContext& ctx, TTypeAnnotationContext& types) {
+bool RewriteValuesColumnNames(
+    const TKiWriteTable& node, 
+    const TKikimrTableDescription* table, 
+    TExprContext& ctx, 
+    TTypeAnnotationContext& types
+) {
     bool ok = true;
     TransformPgSetItemOption(node, "values", [&ok, &node, &table, &ctx, &types](const TExprBase &setItemOption) {
         auto values = GetSetItemOptionValue(setItemOption);
-        if (values->ChildrenSize() != table->Metadata->Columns.size()) {
+        if (values->ChildrenSize() > table->Metadata->Columns.size()) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << Sprintf(
                 "VALUES have %zu columns, INSERT INTO expects: %zu", 
                 values->ChildrenSize(), 
@@ -83,9 +88,9 @@ bool RewriteValuesColumnNames(const TKiWriteTable& node, const TKikimrTableDescr
         THashMap<TString, TString> valueColumnName;
         columns.reserve(values->ChildrenSize()); 
         for (ui32 index = 0; index < values->ChildrenSize(); ++index) {
-            valueColumnName[values->Child(index)->Content()] = table->Metadata->ColumnOrder[index];
+            valueColumnName[values->Child(index)->Content()] = table->Metadata->ColumnOrder.at(index);
             columns.push_back(Build<TCoAtom>(ctx, node.Pos())
-                .Value(table->Metadata->ColumnOrder[index])
+                .Value(table->Metadata->ColumnOrder.at(index))
             .Done().Ptr());
             columns.back()->SetTypeAnn(values->Child(index)->GetTypeAnn());
         }
@@ -111,7 +116,7 @@ bool RewriteValuesColumnNames(const TKiWriteTable& node, const TKikimrTableDescr
         } else {
             input->SetTypeAnn(rowStructType);
         }
-        types.SetColumnOrder(*input, table->Metadata->ColumnOrder, ctx, /*overwrite=*/true);  
+        types.SetColumnOrder(*input, TVector<TString>(table->Metadata->ColumnOrder.begin(), table->Metadata->ColumnOrder.begin() + values->ChildrenSize()), ctx, /*overwrite=*/true);  
     });
     if (ok) {
         auto fill = GetSetItemOption(node, "fill_target_columns");

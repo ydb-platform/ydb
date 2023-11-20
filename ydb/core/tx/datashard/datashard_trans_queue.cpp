@@ -517,7 +517,7 @@ void TTransQueue::PlanTx(TOperation::TPtr op,
                          ui64 step,
                          NIceDb::TNiceDb &db)
 {
-    Y_VERIFY_DEBUG(TxsInFly.contains(op->GetTxId()) && TxsInFly.at(op->GetTxId()) == op);
+    Y_DEBUG_ABORT_UNLESS(TxsInFly.contains(op->GetTxId()) && TxsInFly.at(op->GetTxId()) == op);
 
     if (Y_LIKELY(!op->GetStep())) {
         op->SetStep(step);

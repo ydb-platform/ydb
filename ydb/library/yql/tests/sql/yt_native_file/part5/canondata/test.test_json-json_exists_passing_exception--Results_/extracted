@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:9:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:10:4: Error: At function: JsonExists
+        	    JSON_EXISTS(
+	   ^
+            <tmp_path>/program.sql:<main>:12:8: Error: At function: JsonVariables
+            	        PASSING
+	       ^
+                <tmp_path>/program.sql:<main>:13:13: Error: Expected data or optional of data, but got: Tuple<Int32,Int32>
+                	            AsTuple(1, 2) as var
+	            ^

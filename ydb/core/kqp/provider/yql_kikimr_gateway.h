@@ -16,10 +16,13 @@
 #include <ydb/services/metadata/manager/abstract.h>
 
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
+#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/threading/future/future.h>
 
 #include <util/string/join.h>
@@ -27,6 +30,10 @@
 namespace NKikimr {
     namespace NMiniKQL {
         class IFunctionRegistry;
+    }
+
+    namespace NKqp {
+        class TKqpPhyTxHolder;
     }
 }
 
@@ -186,6 +193,7 @@ struct TTableSettings {
     TResetableSetting<TTtlSettings, void> TtlSettings;
     TResetableSetting<TString, void> Tiering;
     TMaybe<TString> PartitionByHashFunction;
+    TMaybe<TString> StoreExternalBlobs;
 
     // These parameters are only used for external sources
     TMaybe<TString> DataSourcePath;
@@ -376,6 +384,11 @@ struct TExternalSource {
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
 };
 
+enum EMetaSerializationType : ui64 {
+    EncodedProto = 1,
+    Json = 2
+};
+
 struct TKikimrTableMetadata : public TThrRefBase {
     bool DoesExist = false;
     TString Cluster;
@@ -427,7 +440,10 @@ struct TKikimrTableMetadata : public TThrRefBase {
         , SysView(message->GetSysView())
         , SchemaVersion(message->GetSchemaVersion())
         , Kind(static_cast<EKikimrTableKind>(message->GetKind()))
+        , RecordsCount(message->GetRecordsCount())
+        , DataSize(message->GetDataSize())
         , KeyColumnNames(message->GetKeyColunmNames().begin(), message->GetKeyColunmNames().end())
+
     {
         for(auto& attr: message->GetAttributes()) {
             Attributes.emplace(attr.GetKey(), attr.GetValue());
@@ -491,6 +507,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
         PathId.ToMessage(message->MutablePathId());
         message->SetSchemaVersion(SchemaVersion);
         message->SetKind(static_cast<ui32>(Kind));
+        message->SetRecordsCount(RecordsCount);
+        message->SetDataSize(DataSize);
         for(auto& [key, value] : Attributes) {
             message->AddAttributes()->SetKey(key);
             message->AddAttributes()->SetValue(value);
@@ -742,7 +760,7 @@ public:
             const TString& cluster, const TString& table, const TLoadTableMetadataSettings& settings, const TString& database,
             const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) = 0;
 
-        virtual TVector<TString> GetCollectedSchemeData() = 0;
+        virtual TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() = 0;
 
         virtual ~IKqpTableMetadataLoader() = default;
     };
@@ -761,6 +779,10 @@ public:
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> SendSchemeExecuterRequest(const TString& cluster,
+        const TMaybe<TString>& requestType,
+        const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder> &phyTx) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
         const TMaybe<TString>& requestType, ui64 flags) = 0;
@@ -813,7 +835,7 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropExternalTable(const TString& cluster, const TDropExternalTableSettings& settings) = 0;
 
-    virtual TVector<TString> GetCollectedSchemeData() = 0;
+    virtual TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() = 0;
 
     virtual NThreading::TFuture<TExecuteLiteralResult> ExecuteLiteral(const TString& program, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) = 0;
 

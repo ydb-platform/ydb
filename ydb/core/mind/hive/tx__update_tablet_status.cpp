@@ -158,7 +158,7 @@ public:
                 }
                 switch (tablet->GetLeader().State) {
                 case ETabletState::GroupAssignment:
-                    //Y_FAIL("Unexpected tablet boot failure during group assignment");
+                    //Y_ABORT("Unexpected tablet boot failure during group assignment");
                     // Just ignore it. This is fail from previous generation.
                     return true;
                 case ETabletState::StoppingInGroupAssignment:

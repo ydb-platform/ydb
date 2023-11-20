@@ -112,7 +112,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
                 break;
 
             default:
-                Y_FAIL("unexpected queryStatus# %s", NKikimrProto::EReplyStatus_Name(status).data());
+                Y_ABORT("unexpected queryStatus# %s", NKikimrProto::EReplyStatus_Name(status).data());
         }
 
         if (isOk) {

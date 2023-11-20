@@ -54,7 +54,7 @@ namespace NTable {
             if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
                 return EReady::Page;
             }
-            Y_VERIFY_DEBUG(Page.BaseRow() <= rowId, "Index and row have an unexpected relation");
+            Y_DEBUG_ABORT_UNLESS(Page.BaseRow() <= rowId, "Index and row have an unexpected relation");
 
             Data = Page->Begin() + (rowId - Page.BaseRow());
             Y_ABORT_UNLESS(Data, "Unexpected failure to find record for RowId=%lu", rowId);
@@ -70,7 +70,7 @@ namespace NTable {
         }
 
         const NPage::TDataPage::TRecord* GetRecord() const noexcept {
-            Y_VERIFY_DEBUG(IsValid(), "Use of unpositioned iterator");
+            Y_DEBUG_ABORT_UNLESS(IsValid(), "Use of unpositioned iterator");
             return Data.GetRecord();
         }
 
@@ -85,7 +85,7 @@ namespace NTable {
                 }
                 PageId = pageId;
             }
-            Y_VERIFY_DEBUG(Page.BaseRow() == baseRow, "Index and data are out of sync");
+            Y_DEBUG_ABORT_UNLESS(Page.BaseRow() == baseRow, "Index and data are out of sync");
             return true;
         }
 
@@ -127,7 +127,7 @@ namespace NTable {
         {
             BeginRowId = beginRowId;
             EndRowId = Min(endRowId, Index.GetEndRowId());
-            Y_VERIFY_DEBUG(BeginRowId < EndRowId,
+            Y_DEBUG_ABORT_UNLESS(BeginRowId < EndRowId,
                 "Trying to iterate over empty bounds=[%lu,%lu)", BeginRowId, EndRowId);
             RowId = Max<TRowId>();
         }
@@ -136,7 +136,7 @@ namespace NTable {
                 const TCells key, ESeek seek,
                 const TPartScheme::TGroupInfo& scheme, const TKeyCellDefaults* keyDefaults) noexcept
         {
-            Y_VERIFY_DEBUG(seek == ESeek::Exact || seek == ESeek::Lower || seek == ESeek::Upper,
+            Y_DEBUG_ABORT_UNLESS(seek == ESeek::Exact || seek == ESeek::Lower || seek == ESeek::Upper,
                     "Only ESeek{Exact, Upper, Lower} are currently supported here");
 
             if (auto ready = Index.Seek(key, seek, scheme, keyDefaults); ready != EReady::Data) {
@@ -184,7 +184,7 @@ namespace NTable {
                     // Adjust to the first available row
                     Data += BeginRowId - RowId;
                     RowId = BeginRowId;
-                    Y_VERIFY_DEBUG(Data, "Unexpected failure to find BeginRowId=%lu", BeginRowId);
+                    Y_DEBUG_ABORT_UNLESS(Data, "Unexpected failure to find BeginRowId=%lu", BeginRowId);
                 }
 
                 return EReady::Data;
@@ -198,7 +198,7 @@ namespace NTable {
                 }
 
                 RowId = Index.GetRowId();
-                Y_VERIFY_DEBUG(RowId > BeginRowId,
+                Y_DEBUG_ABORT_UNLESS(RowId > BeginRowId,
                     "Unexpected next page RowId=%lu (BeginRowId=%lu)",
                     RowId, BeginRowId);
 
@@ -214,7 +214,7 @@ namespace NTable {
                 const TCells key, ESeek seek,
                 const TPartScheme::TGroupInfo& scheme, const TKeyCellDefaults* keyDefaults) noexcept
         {
-            Y_VERIFY_DEBUG(seek == ESeek::Exact || seek == ESeek::Lower || seek == ESeek::Upper,
+            Y_DEBUG_ABORT_UNLESS(seek == ESeek::Exact || seek == ESeek::Lower || seek == ESeek::Upper,
                     "Only ESeek{Exact, Upper, Lower} are currently supported here");
 
             if (auto ready = Index.SeekReverse(key, seek, scheme, keyDefaults); ready != EReady::Data) {
@@ -252,7 +252,7 @@ namespace NTable {
                 if (RowId >= EndRowId) {
                     // Adjust to the first available row
                     auto diff = RowId - (EndRowId - 1);
-                    Y_VERIFY_DEBUG(Data.Off() >= diff, "Unexpected failure to find LastRowId=%lu", EndRowId - 1);
+                    Y_DEBUG_ABORT_UNLESS(Data.Off() >= diff, "Unexpected failure to find LastRowId=%lu", EndRowId - 1);
                     Data -= diff;
                     RowId = EndRowId - 1;
                 }
@@ -268,7 +268,7 @@ namespace NTable {
                     return Terminate(ready);
                 }
 
-                Y_VERIFY_DEBUG(RowId < EndRowId,
+                Y_DEBUG_ABORT_UNLESS(RowId < EndRowId,
                     "Unexpected prev page RowId=%lu (EndRowId=%lu)",
                     RowId, EndRowId);
                 if (RowId >= BeginRowId) {
@@ -327,7 +327,7 @@ namespace NTable {
                 return EReady::Gone;
             }
 
-            Y_VERIFY_DEBUG(RowId >= BeginRowId && RowId < EndRowId,
+            Y_DEBUG_ABORT_UNLESS(RowId >= BeginRowId && RowId < EndRowId,
                 "Unexpected RowId=%lu outside of iteration bounds [%lu,%lu)",
                 RowId, BeginRowId, EndRowId);
 
@@ -345,7 +345,7 @@ namespace NTable {
                 }
             }
 
-            Y_VERIFY_DEBUG(Index.IsValid() && Index.GetRowId() <= RowId,
+            Y_DEBUG_ABORT_UNLESS(Index.IsValid() && Index.GetRowId() <= RowId,
                 "Next called without a valid index record");
 
             if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
@@ -366,7 +366,7 @@ namespace NTable {
                 return EReady::Gone;
             }
 
-            Y_VERIFY_DEBUG(RowId >= BeginRowId && RowId < EndRowId,
+            Y_DEBUG_ABORT_UNLESS(RowId >= BeginRowId && RowId < EndRowId,
                 "Unexpected RowId=%lu outside of iteration bounds [%lu,%lu)",
                 RowId, BeginRowId, EndRowId);
 
@@ -386,7 +386,7 @@ namespace NTable {
                 }
             }
 
-            Y_VERIFY_DEBUG(Index.IsValid() && Index.GetRowId() <= RowId,
+            Y_DEBUG_ABORT_UNLESS(Index.IsValid() && Index.GetRowId() <= RowId,
                 "Prev called without a valid index record");
 
             if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
@@ -397,7 +397,7 @@ namespace NTable {
                 return EReady::Data;
             }
 
-            Y_FAIL("Unexpected failure to seek in a non-final data page");
+            Y_ABORT("Unexpected failure to seek in a non-final data page");
         }
 
         using TPartGroupRowIt::IsValid;
@@ -429,7 +429,7 @@ namespace NTable {
         EReady SeekIndex(TRowId rowId) noexcept
         {
             auto ready = Index.Seek(rowId);
-            Y_VERIFY_DEBUG(ready != EReady::Gone,
+            Y_DEBUG_ABORT_UNLESS(ready != EReady::Gone,
                 "Unexpected failure to find index record for RowId=%lu, bounds=[%lu,%lu)",
                 rowId, BeginRowId, EndRowId);
             return ready;
@@ -457,7 +457,7 @@ namespace NTable {
         EReady Seek(
             TRowId rowId, const TRowVersion& rowVersion) noexcept
         {
-            Y_VERIFY_DEBUG(rowId != Max<TRowId>());
+            Y_DEBUG_ABORT_UNLESS(rowId != Max<TRowId>());
 
             static_assert(sizeof(rowId) == sizeof(ui64), "sizes don't match");
             static_assert(sizeof(rowVersion.Step) == sizeof(ui64), "sizes don't match");
@@ -473,8 +473,8 @@ namespace NTable {
 
             // Directly use the history group scheme
             const auto& scheme = Part->Scheme->HistoryGroup;
-            Y_VERIFY_DEBUG(scheme.ColsKeyIdx.size() == 3);
-            Y_VERIFY_DEBUG(scheme.ColsKeyData.size() == 3);
+            Y_DEBUG_ABORT_UNLESS(scheme.ColsKeyIdx.size() == 3);
+            Y_DEBUG_ABORT_UNLESS(scheme.ColsKeyData.size() == 3);
 
             // Directly use the histroy key keyDefaults with correct sort order
             const TKeyCellDefaults* keyDefaults = Part->Scheme->HistoryKeys.Get();
@@ -533,7 +533,7 @@ namespace NTable {
                             if (!checkIndex()) {
                                 // First row for the next RowId
                                 MaxVersion = TRowVersion::Max();
-                                Y_VERIFY_DEBUG(rowId < RowId);
+                                Y_DEBUG_ABORT_UNLESS(rowId < RowId);
                                 return EReady::Gone;
                             }
 
@@ -544,7 +544,7 @@ namespace NTable {
                         if (!checkData()) {
                             // First row for the new RowId
                             MaxVersion = TRowVersion::Max();
-                            Y_VERIFY_DEBUG(rowId < RowId);
+                            Y_DEBUG_ABORT_UNLESS(rowId < RowId);
                             return EReady::Gone;
                         }
 
@@ -573,8 +573,8 @@ namespace NTable {
 
             // Special case when we are following a previous Index estimate
             if (rowId == RowId && RowVersion <= rowVersion && rowVersion <= MaxVersion) {
-                Y_VERIFY_DEBUG(Index.IsValid());
-                Y_VERIFY_DEBUG(!Data);
+                Y_DEBUG_ABORT_UNLESS(Index.IsValid());
+                Y_DEBUG_ABORT_UNLESS(!Data);
 
                 if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
                     return EReady::Page;
@@ -612,7 +612,7 @@ namespace NTable {
                 if (!checkData()) {
                     // First row for the next RowId
                     MaxVersion = TRowVersion::Max();
-                    Y_VERIFY_DEBUG(rowId < RowId);
+                    Y_DEBUG_ABORT_UNLESS(rowId < RowId);
                     return EReady::Gone;
                 }
 
@@ -630,7 +630,7 @@ namespace NTable {
             if (!checkIndex()) {
                 // First row for the nextRowId
                 MaxVersion = TRowVersion::Max();
-                Y_VERIFY_DEBUG(rowId < RowId);
+                Y_DEBUG_ABORT_UNLESS(rowId < RowId);
                 return EReady::Gone;
             }
 
@@ -662,17 +662,17 @@ namespace NTable {
         using TPartGroupRowIt::GetRecord;
 
         TRowId GetHistoryRowId() const noexcept {
-            Y_VERIFY_DEBUG(IsValid());
+            Y_DEBUG_ABORT_UNLESS(IsValid());
             return TPartGroupRowIt::GetRowId();
         }
 
         TRowId GetRowId() const noexcept {
-            Y_VERIFY_DEBUG(IsValid());
+            Y_DEBUG_ABORT_UNLESS(IsValid());
             return RowId;
         }
 
         const TRowVersion& GetRowVersion() const noexcept {
-            Y_VERIFY_DEBUG(IsValid());
+            Y_DEBUG_ABORT_UNLESS(IsValid());
             return RowVersion;
         }
 
@@ -797,8 +797,8 @@ namespace NTable {
             if (!SkipMainVersion) {
                 return Main.IsValid();
             } else {
-                Y_VERIFY_DEBUG(HistoryState, "SkipMainVersion set, but no HistoryState");
-                Y_VERIFY_DEBUG(Main.IsValid());
+                Y_DEBUG_ABORT_UNLESS(HistoryState, "SkipMainVersion set, but no HistoryState");
+                Y_DEBUG_ABORT_UNLESS(Main.IsValid());
                 return HistoryState->History.IsValid() && HistoryState->History.GetRowId() == Main.GetRowId();
             }
         }
@@ -829,7 +829,7 @@ namespace NTable {
 
         TRowVersion GetRowVersion() const noexcept
         {
-            Y_VERIFY_DEBUG(IsValid(), "Attempt to get invalid row version");
+            Y_DEBUG_ABORT_UNLESS(IsValid(), "Attempt to get invalid row version");
 
             if (!SkipMainVersion) {
                 const auto& info = Part->Scheme->Groups[0];
@@ -854,7 +854,7 @@ namespace NTable {
                 }
 
                 // History group stores version as part of its key
-                Y_VERIFY_DEBUG(!data->IsVersioned());
+                Y_DEBUG_ABORT_UNLESS(!data->IsVersioned());
 
                 return HistoryState->History.GetRowVersion();
             }
@@ -864,7 +864,7 @@ namespace NTable {
                                 NTable::ITransactionMapSimplePtr committedTransactions,
                                 NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
         {
-            Y_VERIFY_DEBUG(Main.IsValid(), "Attempt to use an invalid iterator");
+            Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Attempt to use an invalid iterator");
 
             // We cannot use min/max hints when part has uncommitted deltas
             if (!Part->TxIdStats) {
@@ -969,7 +969,7 @@ namespace NTable {
                 HistoryState->History.GetRowVersion() <= rowVersion)
             {
                 // We should have called Seek at least once for current row
-                Y_VERIFY_DEBUG(HistoryState->History.GetRowId() == Main.GetRowId());
+                Y_DEBUG_ABORT_UNLESS(HistoryState->History.GetRowId() == Main.GetRowId());
 
                 // History is already positioned on version that is old enough
                 ready = EReady::Data;
@@ -995,7 +995,7 @@ namespace NTable {
                         SkipEraseVersion = true;
                     }
 
-                    Y_VERIFY_DEBUG(HistoryState->History.GetRowVersion() <= rowVersion);
+                    Y_DEBUG_ABORT_UNLESS(HistoryState->History.GetRowVersion() <= rowVersion);
                     return EReady::Data;
                 }
 
@@ -1018,7 +1018,7 @@ namespace NTable {
                 NTable::ITransactionMapSimplePtr committedTransactions,
                 NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
         {
-            Y_VERIFY_DEBUG(Main.IsValid(), "Attempt to use an invalid iterator");
+            Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Attempt to use an invalid iterator");
             Y_ABORT_UNLESS(!SkipMainVersion, "Cannot use SkipToCommitted after positioning to history");
 
             const auto& info = Part->Scheme->Groups[0];
@@ -1056,7 +1056,7 @@ namespace NTable {
                 return false;
             }
 
-            Y_VERIFY_DEBUG(Main.IsValid(), "Cannot use unpositioned iterators");
+            Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Cannot use unpositioned iterators");
 
             const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
             return data->IsDelta();
@@ -1064,11 +1064,11 @@ namespace NTable {
 
         ui64 GetDeltaTxId() const noexcept
         {
-            Y_VERIFY_DEBUG(!SkipMainVersion, "Current record is not a delta record");
-            Y_VERIFY_DEBUG(Main.IsValid(), "Cannot use unpositioned iterators");
+            Y_DEBUG_ABORT_UNLESS(!SkipMainVersion, "Current record is not a delta record");
+            Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Cannot use unpositioned iterators");
 
             const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
-            Y_VERIFY_DEBUG(data->IsDelta(), "Current record is not a delta record");
+            Y_DEBUG_ABORT_UNLESS(data->IsDelta(), "Current record is not a delta record");
 
             const auto& info = Part->Scheme->Groups[0];
             return data->GetDeltaTxId(info);
@@ -1076,12 +1076,12 @@ namespace NTable {
 
         void ApplyDelta(TRowState& row) const noexcept
         {
-            Y_VERIFY_DEBUG(!SkipMainVersion, "Current record is not a delta record");
-            Y_VERIFY_DEBUG(Main.IsValid(), "Cannot use unpositioned iterators");
+            Y_DEBUG_ABORT_UNLESS(!SkipMainVersion, "Current record is not a delta record");
+            Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Cannot use unpositioned iterators");
 
             const ui32 index = SkipMainDeltas;
             const auto* data = Main.GetRecord()->GetAltRecord(index);
-            Y_VERIFY_DEBUG(data->IsDelta(), "Current record is not a delta record");
+            Y_DEBUG_ABORT_UNLESS(data->IsDelta(), "Current record is not a delta record");
 
             if (row.Touch(data->GetRop())) {
                 for (auto& pin : Pinout) {
@@ -1094,11 +1094,11 @@ namespace NTable {
 
         EReady SkipDelta() noexcept
         {
-            Y_VERIFY_DEBUG(!SkipMainVersion, "Current record is not a delta record");
-            Y_VERIFY_DEBUG(Main.IsValid(), "Cannot use unpositioned iterators");
+            Y_DEBUG_ABORT_UNLESS(!SkipMainVersion, "Current record is not a delta record");
+            Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Cannot use unpositioned iterators");
 
             const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
-            Y_VERIFY_DEBUG(data->IsDelta(), "Current record is not a delta record");
+            Y_DEBUG_ABORT_UNLESS(data->IsDelta(), "Current record is not a delta record");
 
             data = Main.GetRecord()->GetAltRecord(++SkipMainDeltas);
             if (!data) {
@@ -1113,7 +1113,7 @@ namespace NTable {
                    NTable::ITransactionMapSimplePtr committedTransactions,
                    NTable::ITransactionObserverSimplePtr transactionObserver) const noexcept
         {
-            Y_VERIFY_DEBUG(IsValid(), "Attempt to apply an invalid row");
+            Y_DEBUG_ABORT_UNLESS(IsValid(), "Attempt to apply an invalid row");
 
             const auto* data = SkipMainVersion
                 ? HistoryState->History.GetRecord()
@@ -1183,7 +1183,7 @@ namespace NTable {
 
         Y_FORCE_INLINE void InitKey() const noexcept
         {
-            Y_VERIFY_DEBUG(Main.IsValid(), "Attempt to get an invalid key");
+            Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Attempt to get an invalid key");
             if (KeyInitialized)
                 return;
 
@@ -1221,7 +1221,7 @@ namespace NTable {
                         row.Set(pin.To, TCellOp(ECellOp::Null, ELargeObj::Outer), { } /* no useful data */);
                         return;
                     case EReady::Gone:
-                        Y_FAIL("Unexpected failure to find RowId=%" PRIu64 " in group %" PRIu32 "%s",
+                        Y_ABORT("Unexpected failure to find RowId=%" PRIu64 " in group %" PRIu32 "%s",
                                 altRowId, col.Group, SkipMainVersion ? "/history" : "");
                 }
             }
@@ -1245,7 +1245,7 @@ namespace NTable {
                 const auto ref = data->Cell(info).AsValue<ui64>();
 
                 if (ref >> (sizeof(ui32) * 8))
-                    Y_FAIL("Upper bits of ELargeObj ref now isn't used");
+                    Y_ABORT("Upper bits of ELargeObj ref now isn't used");
                 if (auto blob = Env->Locate(Part, ref, op)) {
                     const auto got = NPage::TLabelWrapper().Read(**blob);
 
@@ -1269,7 +1269,7 @@ namespace NTable {
                     row.Set(pin.To, op, TCell::Make((**Part->Blobs)[ref]));
                 }
             } else {
-                Y_FAIL("Got an unknown blob placement reference type");
+                Y_ABORT("Got an unknown blob placement reference type");
             }
         }
 
@@ -1326,7 +1326,7 @@ namespace NTable {
             , Env(env)
             , Current(Run.end())
         {
-            Y_VERIFY_DEBUG(!Run.empty(), "Cannot iterate over an empty run");
+            Y_DEBUG_ABORT_UNLESS(!Run.empty(), "Cannot iterate over an empty run");
         }
 
         EReady Seek(const TCells key, ESeek seek) noexcept
@@ -1382,7 +1382,7 @@ namespace NTable {
                     break;
 
                 default:
-                    Y_FAIL("Unsupported iterator seek mode");
+                    Y_ABORT("Unsupported iterator seek mode");
             }
 
             if (pos == Run.end()) {
@@ -1471,7 +1471,7 @@ namespace NTable {
                     break;
 
                 default:
-                    Y_FAIL("Unsupported iterator seek mode");
+                    Y_ABORT("Unsupported iterator seek mode");
             }
 
             if (pos == Run.end()) {
@@ -1517,7 +1517,7 @@ namespace NTable {
                 return EReady::Gone;
             }
 
-            Y_VERIFY_DEBUG(CurrentIt, "Unexpected missing iterator for the current slice");
+            Y_DEBUG_ABORT_UNLESS(CurrentIt, "Unexpected missing iterator for the current slice");
 
             auto ready = CurrentIt->Next();
             if (ready != EReady::Gone) {
@@ -1547,7 +1547,7 @@ namespace NTable {
                 return EReady::Gone;
             }
 
-            Y_VERIFY_DEBUG(CurrentIt, "Unexpected missing iterator for the current slice");
+            Y_DEBUG_ABORT_UNLESS(CurrentIt, "Unexpected missing iterator for the current slice");
 
             auto ready = CurrentIt->Prev();
             if (ready != EReady::Gone) {
@@ -1575,7 +1575,7 @@ namespace NTable {
         bool IsValid() const noexcept
         {
             if (Current != Run.end()) {
-                Y_VERIFY_DEBUG(CurrentIt, "Unexpected missing iterator for the current slice");
+                Y_DEBUG_ABORT_UNLESS(CurrentIt, "Unexpected missing iterator for the current slice");
                 return CurrentIt->IsValid();
             }
             return false;
@@ -1598,13 +1598,13 @@ namespace NTable {
 
         TDbTupleRef GetKey() const noexcept
         {
-            Y_VERIFY_DEBUG(CurrentIt);
+            Y_DEBUG_ABORT_UNLESS(CurrentIt);
             return CurrentIt->GetKey();
         }
 
         const TSharedData& GetKeyPage() const noexcept
         {
-            Y_VERIFY_DEBUG(CurrentIt);
+            Y_DEBUG_ABORT_UNLESS(CurrentIt);
             return CurrentIt->GetKeyPage();
         }
 
@@ -1612,13 +1612,13 @@ namespace NTable {
                    NTable::ITransactionMapSimplePtr committedTransactions,
                    NTable::ITransactionObserverSimplePtr transactionObserver) const noexcept
         {
-            Y_VERIFY_DEBUG(CurrentIt);
+            Y_DEBUG_ABORT_UNLESS(CurrentIt);
             CurrentIt->Apply(row, committedTransactions, transactionObserver);
         }
 
         TRowVersion GetRowVersion() const noexcept
         {
-            Y_VERIFY_DEBUG(CurrentIt);
+            Y_DEBUG_ABORT_UNLESS(CurrentIt);
             return CurrentIt->GetRowVersion();
         }
 
@@ -1626,32 +1626,32 @@ namespace NTable {
                                 NTable::ITransactionMapSimplePtr committedTransactions,
                                 NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
         {
-            Y_VERIFY_DEBUG(CurrentIt);
+            Y_DEBUG_ABORT_UNLESS(CurrentIt);
             auto ready = CurrentIt->SkipToRowVersion(rowVersion, stats, committedTransactions, transactionObserver);
             return ready;
         }
 
         bool IsDelta() const noexcept
         {
-            Y_VERIFY_DEBUG(CurrentIt);
+            Y_DEBUG_ABORT_UNLESS(CurrentIt);
             return CurrentIt->IsDelta();
         }
 
         ui64 GetDeltaTxId() const noexcept
         {
-            Y_VERIFY_DEBUG(CurrentIt);
+            Y_DEBUG_ABORT_UNLESS(CurrentIt);
             return CurrentIt->GetDeltaTxId();
         }
 
         void ApplyDelta(TRowState& row) const noexcept
         {
-            Y_VERIFY_DEBUG(CurrentIt);
+            Y_DEBUG_ABORT_UNLESS(CurrentIt);
             return CurrentIt->ApplyDelta(row);
         }
 
         EReady SkipDelta() noexcept
         {
-            Y_VERIFY_DEBUG(CurrentIt);
+            Y_DEBUG_ABORT_UNLESS(CurrentIt);
             return CurrentIt->SkipDelta();
         }
 
@@ -1671,7 +1671,7 @@ namespace NTable {
 
         Y_FORCE_INLINE void DropCurrent() noexcept
         {
-            Y_VERIFY_DEBUG(CurrentIt, "Dropping non-existant current iterator");
+            Y_DEBUG_ABORT_UNLESS(CurrentIt, "Dropping non-existant current iterator");
             const auto* part = CurrentIt->Part;
             Cache[part] = std::move(CurrentIt);
         }

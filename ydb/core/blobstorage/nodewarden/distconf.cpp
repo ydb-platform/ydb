@@ -222,7 +222,7 @@ void Out<NKikimr::NStorage::TDistributedConfigKeeper::ERootState>(IOutputStream&
         case E::PROPOSE_NEW_STORAGE_CONFIG: s << "PROPOSE_NEW_STORAGE_CONFIG"; return;
         case E::ERROR_TIMEOUT:              s << "ERROR_TIMEOUT";              return;
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 template<>

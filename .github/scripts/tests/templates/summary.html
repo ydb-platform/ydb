@@ -59,8 +59,11 @@
         </td>
         {% if status in has_any_log %}
         <td>
-            {% if t.log_url %}
-                <a href="{{ t.log_url }}">LOG</a>
+            {% if t.log_urls %}
+                {% for log_name, log_url in t.log_urls.items() %}
+                <a href="{{ log_url }}">{{ log_name.upper() }}</a>{% if not loop.last %} | {% endif %}
+
+                {% endfor %}
             {% else %}
                 &nbsp;
             {% endif %}

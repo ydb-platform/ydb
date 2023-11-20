@@ -60,6 +60,7 @@ private:
     virtual TStatus HandleDataQueryBlocks(NNodes::TKiDataQueryBlocks node, TExprContext& ctx) = 0;
     virtual TStatus HandleDataQueryBlock(NNodes::TKiDataQueryBlock node, TExprContext& ctx) = 0;
     virtual TStatus HandleEffects(NNodes::TKiEffects node, TExprContext& ctx) = 0;
+    virtual TStatus HandlePgDropObject(NNodes::TPgDropObject node, TExprContext& ctx) = 0;
 
     virtual TStatus HandleModifyPermissions(NNodes::TKiModifyPermissions node, TExprContext& ctx) = 0;
 };
@@ -73,7 +74,8 @@ public:
         Role,
         Object,
         Topic,
-        Permission
+        Permission,
+        PGObject
     };
 
     struct TViewDescription {
@@ -86,37 +88,37 @@ public:
         : Ctx(ctx) {}
 
     Type GetKeyType() const {
-        Y_VERIFY_DEBUG(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
         return *KeyType;
     }
 
     TString GetTablePath() const {
-        Y_VERIFY_DEBUG(KeyType.Defined());
-        Y_VERIFY_DEBUG(KeyType == Type::Table || KeyType == Type::TableScheme);
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Table || KeyType == Type::TableScheme);
         return Target;
     }
 
     TString GetTopicPath() const {
-        Y_VERIFY_DEBUG(KeyType.Defined());
-        Y_VERIFY_DEBUG(KeyType == Type::Topic);
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Topic);
         return Target;
     }
 
     TString GetFolderPath() const {
-        Y_VERIFY_DEBUG(KeyType.Defined());
-        Y_VERIFY_DEBUG(KeyType == Type::TableList);
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::TableList);
         return Target;
     }
 
     TString GetRoleName() const {
-        Y_VERIFY_DEBUG(KeyType.Defined());
-        Y_VERIFY_DEBUG(KeyType == Type::Role);
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Role);
         return Target;
     }
 
     TString GetObjectId() const {
-        Y_VERIFY_DEBUG(KeyType.Defined());
-        Y_VERIFY_DEBUG(KeyType == Type::Object);
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Object);
         return Target;
     }
 
@@ -125,16 +127,29 @@ public:
     }
 
     const TString& GetObjectType() const {
-        Y_VERIFY_DEBUG(KeyType.Defined());
-        Y_VERIFY_DEBUG(ObjectType.Defined());
-        Y_VERIFY_DEBUG(KeyType == Type::Object);
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(ObjectType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Object);
         return *ObjectType;
     }
 
     const TString& GetPermissionAction() const {
-        Y_VERIFY_DEBUG(KeyType.Defined());
-        Y_VERIFY_DEBUG(KeyType == Type::Permission);
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Permission);
         return Target;
+    }
+
+    const TString& GetPGObjectId() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::PGObject);
+        return Target;
+    }
+
+    const TString& GetPGObjectType() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(ObjectType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::PGObject);
+        return *ObjectType;
     }
 
     bool Extract(const TExprNode& key);

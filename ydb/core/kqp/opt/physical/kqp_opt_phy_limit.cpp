@@ -112,10 +112,6 @@ TExprBase KqpApplyLimitToOlapReadTable(TExprBase node, TExprContext& ctx, const 
         return node;
     }
 
-    if (!kqpCtx.IsScanQuery()) {
-        return node;
-    }
-
     const bool isReadTableRanges = true;
     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, GetReadTablePath(input, isReadTableRanges));
 

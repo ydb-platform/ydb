@@ -461,7 +461,7 @@ class TBackupRestoreOperationBase: public TSubOperation {
     }
 
     TTxState::ETxState NextState(TTxState::ETxState) const override {
-        Y_FAIL("unreachable");
+        Y_ABORT("unreachable");
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state, TOperationContext& context) const {
@@ -645,7 +645,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TBackupRestoreOperationBase");
+        Y_ABORT("no AbortPropose for TBackupRestoreOperationBase");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

@@ -99,7 +99,7 @@ namespace NWriter {
                 if (auto cache = Blocks[num]->Finish()) {
                     result.PageCollections.emplace_back(std::move(cache));
                 } else if (num < Blocks.size() - 1) {
-                    Y_FAIL("Finish produced an empty main page collection");
+                    Y_ABORT("Finish produced an empty main page collection");
                 }
 
                 Y_ABORT_UNLESS(!*Blocks[num], "Block writer has unexpected data");

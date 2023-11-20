@@ -23,7 +23,6 @@ public:
     void Handle(TEvAccessService::TEvAuthenticateRequest::TPtr& ev) {
         auto result = std::make_unique<TEvAccessService::TEvAuthenticateResponse>();
         result->Response.mutable_subject()->mutable_user_account()->set_federation_id("mock");
-        result->Status.Ok();
         Send(ev->Sender, result.release());
     }
 

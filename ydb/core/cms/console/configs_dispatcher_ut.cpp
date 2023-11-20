@@ -408,7 +408,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
 
         ui64 notifications = 0;
         TActorId subscriber;
-        auto observer = [&notifications,&subscriber,recipient=runtime.Sender](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> TTenantTestRuntime::EEventAction {
+        auto observer = [&notifications,&subscriber,recipient=runtime.Sender](TAutoPtr<IEventHandle>& ev) -> TTenantTestRuntime::EEventAction {
             if (ev->Recipient == recipient && ev->Sender == subscriber) {
                 switch (ev->GetTypeRewrite()) {
                 case TEvPrivate::EvGotNotification:
@@ -454,7 +454,6 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
         ui64 notifications = 0;
         TActorId subscriber;
         auto observer = [&notifications, &subscriber, recipient = runtime.Sender](
-            TTestActorRuntimeBase&,
             TAutoPtr<IEventHandle> &ev) -> TTenantTestRuntime::EEventAction {
             if (ev->Recipient == recipient && ev->Sender == subscriber) {
                 switch (ev->GetTypeRewrite()) {
@@ -569,7 +568,6 @@ selector_config: []
         ui64 notifications = 0;
         TActorId subscriber;
         auto observer = [&notifications, &subscriber, recipient = runtime.Sender](
-            TTestActorRuntimeBase&,
             TAutoPtr<IEventHandle> &ev) -> TTenantTestRuntime::EEventAction {
             if (ev->Recipient == recipient && ev->Sender == subscriber) {
                 switch (ev->GetTypeRewrite()) {

@@ -41,7 +41,7 @@ TBuildAndWaitDependenciesUnit::~TBuildAndWaitDependenciesUnit()
  */
 bool TBuildAndWaitDependenciesUnit::HasDirectBlockers(const TOperation::TPtr& op) const
 {
-    Y_VERIFY_DEBUG(op->IsWaitingDependencies());
+    Y_DEBUG_ABORT_UNLESS(op->IsWaitingDependencies());
 
     return !op->GetDependencies().empty()
         || !op->GetSpecialDependencies().empty()

@@ -1444,9 +1444,11 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            (SELECT Key FROM `/Root/KeyValue` ORDER BY Key LIMIT 1)
-            UNION ALL
-            (SELECT Key FROM `/Root/EightShard` ORDER BY Key LIMIT 1);
+            SELECT Key FROM (
+              (SELECT Key FROM `/Root/KeyValue` ORDER BY Key LIMIT 1)
+              UNION ALL
+              (SELECT Key FROM `/Root/EightShard` ORDER BY Key LIMIT 1)
+            ) ORDER BY Key;
         )").GetValueSync();
         auto res = StreamResultToYson(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -2367,7 +2369,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         std::vector<TAutoPtr<IEventHandle>> captured;
         bool firstAttemptToGetData = false;
 
-        auto captureEvents =  [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType) {
                 IActor* actor = runtime->FindActor(ev->GetRecipientRewrite());
                 if (actor && actor->GetActivityType() == NKikimrServices::TActivity::KQP_STREAM_LOOKUP_ACTOR) {

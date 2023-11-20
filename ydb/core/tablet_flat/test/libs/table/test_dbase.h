@@ -398,15 +398,15 @@ namespace NTest {
                 TString alter = TString::TUninitialized(header.Alter);
 
                 if (in.Load((void*)alter.data(), alter.size()) != alter.size())
-                    Y_FAIL("Cannot read alter chunk data in change page");
+                    Y_ABORT("Cannot read alter chunk data in change page");
 
                 TString redo = TString::TUninitialized(header.Redo);
 
                 if (in.Load((void*)redo.data(), redo.size()) != redo.size())
-                    Y_FAIL("Cannot read redo log data in change page");
+                    Y_ABORT("Cannot read redo log data in change page");
 
                 if (in.Skip(abytes) != abytes)
-                    Y_FAIL("Cannot read affects array in change page");
+                    Y_ABORT("Cannot read affects array in change page");
 
                 changes.push_back(new TChange{ header.Serial, header.Serial });
                 changes.back()->Scheme = std::move(alter);
@@ -425,7 +425,7 @@ namespace NTest {
         TDbExec& DoBegin(bool real) noexcept
         {
             if (OnTx == EOnTx::Real && real) {
-                Y_FAIL("Cannot run multiple tx at the same time");
+                Y_ABORT("Cannot run multiple tx at the same time");
             } else if (OnTx == EOnTx::Auto && real) {
                 DoCommit(false, false);
             }
@@ -445,7 +445,7 @@ namespace NTest {
             const auto was = std::exchange(OnTx, EOnTx::None);
 
             if (was != (real ? EOnTx::Real : EOnTx::Auto))
-                Y_FAIL("There is no active dbase tx");
+                Y_ABORT("There is no active dbase tx");
 
             auto prod = Base->Commit({ Gen, Step }, apply, Annex.Get());
             auto up = std::move(prod.Change);

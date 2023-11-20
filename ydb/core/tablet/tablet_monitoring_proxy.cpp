@@ -7,6 +7,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/tx/tx.h>
@@ -125,9 +126,33 @@ public:
         Detach(ctx);
     }
 
+    TString GetCORS() {
+        TStringBuilder res;
+        TString origin;
+        for (const auto& header : Request.headers()) {
+            if (header.name() == "Origin") {
+                origin = header.value();
+            }
+        }
+        if (origin.empty()) {
+            origin = "*";
+        }
+        res << "Access-Control-Allow-Origin: " << origin << "\r\n";
+        res << "Access-Control-Allow-Credentials: true\r\n";
+        res << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n";
+        res << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n";
+        return res;
+    }
+
     void Handle(NMon::TEvRemoteJsonInfoRes::TPtr &ev, const TActorContext &ctx) {
-        static const char HTTPOKJSON[] = "HTTP/1.1 200 Ok\r\nContent-Type: application/json\r\n\r\n";
-        ctx.Send(Sender, new NMon::TEvHttpInfoRes(HTTPOKJSON + ev->Get()->Json, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        TStringStream str;
+        str << "HTTP/1.1 200 Ok\r\n"
+            << "Content-Type: application/json\r\n"
+            << GetCORS()
+            << "\r\n"
+            << ev->Get()->Json;
+
+        ctx.Send(Sender, new NMon::TEvHttpInfoRes(str.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Detach(ctx);
     }
 

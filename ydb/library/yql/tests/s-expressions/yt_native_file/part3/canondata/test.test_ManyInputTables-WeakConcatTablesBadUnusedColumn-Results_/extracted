@@ -1,0 +1,5 @@
+<tmp_path>/program.yql:<main>: Warning: Optimization
+
+    <tmp_path>/program.yql:<main>:4:9: Warning: Consider using explicit CAST or BITCAST to convert from Uint32 to Int32
+    	(let x (Read! world mr_source (MrTableConcat (Key '('table (String 'Input1))) (Key '('table (String 'Input2)))) '('name 'name2) '()))
+	        ^

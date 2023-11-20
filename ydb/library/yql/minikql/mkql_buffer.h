@@ -56,12 +56,12 @@ private:
     static void Free(TBufferPage* page);
 
     static inline const TBufferPage* GetPage(const char* data) {
-        Y_VERIFY_DEBUG(data);
+        Y_DEBUG_ABORT_UNLESS(data);
         return reinterpret_cast<const TBufferPage*>(data - sizeof(TBufferPage));
     }
 
     static inline TBufferPage* GetPage(char* data) {
-        Y_VERIFY_DEBUG(data);
+        Y_DEBUG_ABORT_UNLESS(data);
         return reinterpret_cast<TBufferPage*>(data - sizeof(TBufferPage));
     }
 };
@@ -119,7 +119,7 @@ class TPagedBuffer : private TNonCopyable {
     inline size_t Size() const {
         //                      + (Tail_ ? TailSize_ : 0);
         size_t sizeWithReserve = ClosedPagesSize_ + ((-size_t(Tail_ != nullptr)) & TailSize_);
-        Y_VERIFY_DEBUG(sizeWithReserve >= HeadReserve_);
+        Y_DEBUG_ABORT_UNLESS(sizeWithReserve >= HeadReserve_);
         return sizeWithReserve - HeadReserve_;
     }
 
@@ -148,9 +148,9 @@ class TPagedBuffer : private TNonCopyable {
     }
 
     inline void ReserveHeader(size_t len) {
-        Y_VERIFY_DEBUG(len > 0);
-        Y_VERIFY_DEBUG(Head_ == Tail_);
-        Y_VERIFY_DEBUG(HeadReserve_ == 0);
+        Y_DEBUG_ABORT_UNLESS(len > 0);
+        Y_DEBUG_ABORT_UNLESS(Head_ == Tail_);
+        Y_DEBUG_ABORT_UNLESS(HeadReserve_ == 0);
         Advance(len);
         HeadReserve_ = len;
     }
@@ -159,14 +159,14 @@ class TPagedBuffer : private TNonCopyable {
         if (len > HeadReserve_) {
             return nullptr;
         }
-        Y_VERIFY_DEBUG(Head_);
+        Y_DEBUG_ABORT_UNLESS(Head_);
         HeadReserve_ -= len;
         return Head_ + HeadReserve_;
     }
 
     // buffer-style operations with last page
     inline char* Pos() const {
-        Y_VERIFY_DEBUG(Tail_);
+        Y_DEBUG_ABORT_UNLESS(Tail_);
         return Tail_ + TailSize_;
     }
 
@@ -178,7 +178,7 @@ class TPagedBuffer : private TNonCopyable {
     }
 
     inline void EraseBack(size_t len) {
-        Y_VERIFY_DEBUG(Tail_ && TailSize_ >= len);
+        Y_DEBUG_ABORT_UNLESS(Tail_ && TailSize_ >= len);
         TailSize_ -= len;
     }
 
@@ -203,7 +203,7 @@ class TPagedBuffer : private TNonCopyable {
             if (TailSize_ == TBufferPage::PageCapacity) {
                 AppendPage();
             }
-            Y_VERIFY_DEBUG(TailSize_ < TBufferPage::PageCapacity);
+            Y_DEBUG_ABORT_UNLESS(TailSize_ < TBufferPage::PageCapacity);
 
             size_t avail = TBufferPage::PageCapacity - TailSize_;
             size_t chunk = std::min(avail, size);

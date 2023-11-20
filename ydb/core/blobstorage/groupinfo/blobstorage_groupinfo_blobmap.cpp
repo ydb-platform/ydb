@@ -54,7 +54,7 @@ namespace NKikimr {
                         if (++domainIdx == numFailDomains) {
                             domainIdx = 0;
                         }
-                        Y_VERIFY_DEBUG(domain.VDisks.size() == 1);
+                        Y_DEBUG_ABORT_UNLESS(domain.VDisks.size() == 1);
                         const TBlobStorageGroupInfo::TVDiskInfo& vdisk = domain.VDisks[0];
                         orderNums.push_back(vdisk.OrderNumber);
                     }

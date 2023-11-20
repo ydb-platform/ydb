@@ -326,7 +326,7 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx,
                 const TDiskPutRequest &put = requests.PutsToSend[idx];
                 ui64 cookie = TBlobCookie(diskOrderNumber, put.BlobIdx, put.Id.PartId(),
                         VPutRequests);
-                Y_VERIFY_DEBUG(Info->Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3of4 ||
+                Y_DEBUG_ABORT_UNLESS(Info->Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3of4 ||
                     put.Id.PartId() != 3 || put.Buffer.IsEmpty());
                 auto vPut = std::make_unique<TEvBlobStorage::TEvVPut>(put.Id, put.Buffer, vDiskId, true, &cookie,
                     Deadline, Blackboard.PutHandleClass);
@@ -462,7 +462,7 @@ void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &
             Blackboard.AddPutOkResponse(blob, orderNumber);
             break;
         default:
-        Y_FAIL("Unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
+        Y_ABORT("Unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
     }
     Step(logCtx, outVGets, outVPuts, outGetResult);
 }
@@ -507,7 +507,7 @@ void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVMultiPutRes
                 Blackboard.AddPutOkResponse(blob, orderNumber);
                 break;
             default:
-            Y_FAIL("Unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
+            Y_ABORT("Unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
         }
     }
     Step(logCtx, outVGets, outVMultiPuts, outGetResult);

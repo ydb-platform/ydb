@@ -112,7 +112,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         switch (record.GetStatus()) {
         case NKikimrScheme::StatusAccepted:
             DstPathId = TPathId(SchemeShardId, record.GetPathId());
-            Y_VERIFY_DEBUG(TxId == record.GetTxId());
+            Y_DEBUG_ABORT_UNLESS(TxId == record.GetTxId());
             return SubscribeTx(record.GetTxId());
         case NKikimrScheme::StatusMultipleModifications:
             if (record.HasPathCreateTxId()) {

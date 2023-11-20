@@ -190,7 +190,7 @@ public:
     bool IsEmpty() const;
 
     void Profile(const TProfiler& profiler);
-    void ValidateOptions(TSensorOptions options);
+    void ValidateOptions(const TSensorOptions& options);
 
     void AddCounter(TCounterStatePtr counter);
     void AddGauge(TGaugeStatePtr gauge);
@@ -207,14 +207,14 @@ public:
 
     void ReadSensors(
         const TString& name,
-        const TReadOptions& options,
+        TReadOptions readOptions,
         TTagWriter* tagWriter,
         ::NMonitoring::IMetricConsumer* consumer) const;
 
     int ReadSensorValues(
         const TTagIdList& tagIds,
         int index,
-        const TReadOptions& options,
+        TReadOptions readOptions,
         const TTagRegistry& tagRegistry,
         NYTree::TFluentAny fluent) const;
 

@@ -12,20 +12,68 @@ namespace NKikimr::NOlap {
 
 struct TIndexInfo;
 
-struct TPortionInfo {
+class TPortionInfo {
 private:
     TPortionInfo() = default;
-    ui64 Granule = 0;
-    ui64 Portion = 0;   // Id of independent (overlayed by PK) portion of data in granule
+    ui64 PathId = 0;
+    ui64 Portion = 0;   // Id of independent (overlayed by PK) portion of data in pathId
     TSnapshot MinSnapshot = TSnapshot::Zero();  // {PlanStep, TxId} is min snapshot for {Granule, Portion}
     TSnapshot RemoveSnapshot = TSnapshot::Zero(); // {XPlanStep, XTxId} is snapshot where the blob has been removed (i.e. compacted into another one)
 
     bool HasPkMinMax() const;
     TPortionMeta Meta;
     std::shared_ptr<NOlap::IBlobsStorageOperator> BlobsOperator;
+    ui64 DeprecatedGranuleId = 0;
 public:
+    ui64 GetPathId() const {
+        return PathId;
+    }
+
+    bool OlderThen(const TPortionInfo& info) const {
+        return RecordSnapshotMin() < info.RecordSnapshotMin();
+    }
+
+    bool CrossPKWith(const TPortionInfo& info) const {
+        return CrossPKWith(info.IndexKeyStart(), info.IndexKeyEnd());
+    }
+
+    bool CrossPKWith(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const {
+        if (from < IndexKeyStart()) {
+            if (to < IndexKeyEnd()) {
+                return IndexKeyStart() <= to;
+            } else {
+                return true;
+            }
+        } else {
+            if (to < IndexKeyEnd()) {
+                return true;
+            } else {
+                return from <= IndexKeyEnd();
+            }
+        }
+    }
+
+    ui64 GetPortionId() const {
+        return Portion;
+    }
+
     bool HasStorageOperator() const {
         return !!BlobsOperator;
+    }
+
+    NJson::TJsonValue SerializeToJsonVisual() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("id", Portion);
+        result.InsertValue("s_max", RecordSnapshotMax().GetPlanStep() / 1000);
+        /*
+        result.InsertValue("s_min", RecordSnapshotMin().GetPlanStep());
+        result.InsertValue("tx_min", RecordSnapshotMin().GetTxId());
+        result.InsertValue("s_max", RecordSnapshotMax().GetPlanStep());
+        result.InsertValue("tx_max", RecordSnapshotMax().GetTxId());
+        result.InsertValue("pk_min", IndexKeyStart().DebugString());
+        result.InsertValue("pk_max", IndexKeyEnd().DebugString());
+        */
+        return result;
     }
 
     void InitOperator(const std::shared_ptr<NOlap::IBlobsStorageOperator>& bOperator, const bool rewrite) {
@@ -80,8 +128,8 @@ public:
 
     bool Empty() const { return Records.empty(); }
     bool Produced() const { return Meta.GetProduced() != TPortionMeta::EProduced::UNSPECIFIED; }
-    bool Valid() const { return MinSnapshot.Valid() && Granule && Portion && !Empty() && Produced() && HasPkMinMax() && Meta.IndexKeyStart && Meta.IndexKeyEnd; }
-    bool ValidSnapshotInfo() const { return MinSnapshot.Valid() && Granule && Portion; }
+    bool Valid() const { return MinSnapshot.Valid() && PathId && Portion && !Empty() && Produced() && HasPkMinMax() && Meta.IndexKeyStart && Meta.IndexKeyEnd; }
+    bool ValidSnapshotInfo() const { return MinSnapshot.Valid() && PathId && Portion; }
     bool IsInserted() const { return Meta.GetProduced() == TPortionMeta::EProduced::INSERTED; }
     bool IsEvicted() const { return Meta.GetProduced() == TPortionMeta::EProduced::EVICTED; }
     bool CanHaveDups() const { return !Produced(); /* || IsInserted(); */ }
@@ -97,15 +145,15 @@ public:
         return TPortionInfo();
     }
 
-    TPortionInfo(const ui64 granuleId, const ui64 portionId, const TSnapshot& minSnapshot, const std::shared_ptr<NOlap::IBlobsStorageOperator>& blobsOperator)
-        : Granule(granuleId)
+    TPortionInfo(const ui64 pathId, const ui64 portionId, const TSnapshot& minSnapshot, const std::shared_ptr<NOlap::IBlobsStorageOperator>& blobsOperator)
+        : PathId(pathId)
         , Portion(portionId)
         , MinSnapshot(minSnapshot)
         , BlobsOperator(blobsOperator)
     {
     }
 
-    TString DebugString() const;
+    TString DebugString(const bool withDetails = false) const;
 
     bool HasRemoveSnapshot() const {
         return RemoveSnapshot.Valid();
@@ -132,20 +180,24 @@ public:
         return Portion;
     }
 
-    ui64 GetGranule() const {
-        return Granule;
+    ui64 GetDeprecatedGranuleId() const {
+        return DeprecatedGranuleId;
     }
 
     TPortionAddress GetAddress() const {
-        return TPortionAddress(Granule, Portion);
+        return TPortionAddress(PathId, Portion);
     }
 
-    void SetGranule(const ui64 granule) {
-        Granule = granule;
+    void SetPathId(const ui64 pathId) {
+        PathId = pathId;
     }
 
     void SetPortion(const ui64 portion) {
         Portion = portion;
+    }
+
+    void SetDeprecatedGranuleId(const ui64 granuleId) {
+        DeprecatedGranuleId = granuleId;
     }
 
     const TSnapshot& GetMinSnapshot() const {
@@ -248,7 +300,15 @@ public:
         return *Meta.RecordSnapshotMax;
     }
 
-    ui32 NumRows() const {
+    THashSet<TUnifiedBlobId> GetBlobIds() const {
+        THashSet<TUnifiedBlobId> result;
+        for (auto&& i : Records) {
+            result.emplace(i.BlobRange.BlobId);
+        }
+        return result;
+    }
+
+    ui32 GetRecordsCount() const {
         ui32 result = 0;
         std::optional<ui32> columnIdFirst;
         for (auto&& i : Records) {
@@ -258,6 +318,10 @@ public:
             }
         }
         return result;
+    }
+
+    ui32 NumRows() const {
+        return GetRecordsCount();
     }
 
     ui32 NumRows(const ui32 columnId) const {
@@ -271,13 +335,17 @@ public:
     }
 
     ui64 GetRawBytes(const std::vector<ui32>& columnIds) const;
-
-    ui64 RawBytesSum() const {
+    ui64 GetRawBytes(const std::set<ui32>& columnIds) const;
+    ui64 GetRawBytes() const {
         ui64 result = 0;
         for (auto&& i : Records) {
             result += i.GetMeta().GetRawBytesVerified();
         }
         return result;
+    }
+
+    ui64 RawBytesSum() const {
+        return GetRawBytes();
     }
 
 private:
@@ -430,6 +498,7 @@ public:
         }
 
         std::shared_ptr<arrow::RecordBatch> Assemble(const TAssembleOptions& options = {}) const;
+        std::shared_ptr<arrow::Table> AssembleTable(const TAssembleOptions& options = {}) const;
     };
 
     template <class TExternalBlobInfo>
@@ -446,16 +515,24 @@ public:
         TMap<size_t, TMap<ui32, TBlobRange>> columnChunks; // position in schema -> ordered chunks
         TMap<size_t, size_t> positionsMap;
 
-        for (auto& rec : Records) {
-            auto resulPos = resultSchema.GetFieldIndex(rec.ColumnId);
-            if (resulPos < 0) {
-                continue;
+        {
+            int resulPos = -1;
+            int dataSchemaPos = -1;
+            std::optional<ui32> predColumnId;
+            for (auto& rec : Records) {
+                if (!predColumnId || rec.ColumnId != *predColumnId) {
+                    resulPos = resultSchema.GetFieldIndex(rec.ColumnId);
+                    dataSchemaPos = dataSchema.GetFieldIndex(rec.ColumnId);
+                }
+                predColumnId = rec.ColumnId;
+                if (resulPos < 0) {
+                    continue;
+                }
+                Y_ASSERT(dataSchemaPos >= 0);
+                positionsMap[resulPos] = dataSchemaPos;
+                AFL_VERIFY(columnChunks[resulPos].emplace(rec.Chunk, rec.BlobRange).second)("record", rec.DebugString());
+                //            AFL_VERIFY(rowsCount == NumRows(rec.ColumnId))("error", "Inconsistent rows")("portion", DebugString())("record", rec.DebugString())("column_records", NumRows(rec.ColumnId));
             }
-            auto pos = dataSchema.GetFieldIndex(rec.ColumnId);
-            Y_ASSERT(pos >= 0);
-            positionsMap[resulPos] = pos;
-            AFL_VERIFY(columnChunks[resulPos].emplace(rec.Chunk, rec.BlobRange).second)("record", rec.DebugString());
-//            AFL_VERIFY(rowsCount == NumRows(rec.ColumnId))("error", "Inconsistent rows")("portion", DebugString())("record", rec.DebugString())("column_records", NumRows(rec.ColumnId));
         }
 
         // Make chunked arrays for columns

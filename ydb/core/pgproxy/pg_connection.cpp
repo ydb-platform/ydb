@@ -18,6 +18,7 @@ public:
     TSocketAddressType Address;
     THPTimer InactivityTimer;
     static constexpr TDuration InactivityTimeout = TDuration::Minutes(10);
+    static constexpr uint32_t BACKEND_DATA_MASK = 0x55aa55aa;
     TEvPollerReady* InactivityEvent = nullptr;
     bool IsAuthRequired = true;
     bool IsSslSupported = true;
@@ -33,7 +34,7 @@ public:
         {"DateStyle", "ISO"},
         {"IntervalStyle", "postgres"},
         {"integer_datetimes", "on"},
-        {"server_version", "14.5 (ydb stable-23-3)"},
+        {"server_version", "14.5 (ydb stable-23-4)"},
     };
     TSocketBuffer BufferOutput;
     TActorId DatabaseProxy;
@@ -64,7 +65,7 @@ public:
     void PassAway() override {
         //ctx.Send(Endpoint->Owner, new TEvHttpProxy::TEvHttpConnectionClosed(ctx.SelfID, std::move(RecycledRequests)));
         if (ConnectionEstablished) {
-            Send(DatabaseProxy, new TEvPGEvents::TEvConnectionClosed());
+            Send(DatabaseProxy, new TEvPGEvents::TEvConnectionClosed(), 0, IncomingSequenceNumber);
             ConnectionEstablished = false;
         }
         Send(ListenerActorId, new TEvents::TEvUnsubscribe());
@@ -153,6 +154,7 @@ protected:
         };
         static const std::unordered_map<char, TStringBuf> outgoingMessageName = {
             GetMessageCode<TPGAuth>(),
+            GetMessageCode<TPGBackendKeyData>(),
             GetMessageCode<TPGErrorResponse>(),
             GetMessageCode<TPGDataRow>(),
             GetMessageCode<TPGParameterStatus>(),
@@ -209,6 +211,8 @@ protected:
             switch (message.Message) {
                 case TPGParameterStatus::CODE:
                     return ((const TPGParameterStatus&)message).Dump();
+                case TPGBackendKeyData::CODE:
+                    return ((const TPGBackendKeyData&)message).Dump();
                 case TPGReadyForQuery::CODE:
                     return ((const TPGReadyForQuery&)message).Dump();
                 case TPGCommandComplete::CODE:
@@ -319,30 +323,9 @@ protected:
         FlushAndPoll();
     }
 
-    void FinishHandshake() {
-        const auto& clientParams(InitialMessage->GetClientParams());
-        auto itOptions = clientParams.find("options");
-        if (itOptions != clientParams.end()) {
-            TStringBuf options(itOptions->second);
-            TStringBuf token;
-            while (options.NextTok(' ', token) && token == "-c") {
-                TStringBuf option;
-                if (options.NextTok(' ', option)) {
-                    TStringBuf name;
-                    TStringBuf value;
-                    if (option.NextTok('=', name)) {
-                        value = option;
-                        ServerParams[TString(name)] = TString(value);
-                    }
-                }
-            }
-        }
-        for (const auto& [name, value] : ServerParams) {
-            SendParameterStatus(name, value);
-        }
-        SendReadyForQuery();
-        ConnectionEstablished = true;
-        Send(DatabaseProxy, new TEvPGEvents::TEvConnectionOpened(std::move(InitialMessage), Address));
+    bool IsValidBackendData(const TPGInitial::TPGBackendData& backendData) {
+        Y_UNUSED(backendData);
+        return true;
     }
 
     void HandleMessage(const TPGInitial* message) {
@@ -371,6 +354,10 @@ protected:
         }
         if (protocol == 0x2e16d204) { // 80877102 cancellation message
             BLOG_D("cancellation message");
+            TPGInitial::TPGBackendData backendData = message->GetBackendData();
+            if (IsValidBackendData(backendData)) {
+                Send(DatabaseProxy, new TEvPGEvents::TEvCancelRequest(backendData.Pid ^ BACKEND_DATA_MASK, backendData.Key ^ BACKEND_DATA_MASK));
+            }
             CloseConnection = true;
             return;
         }
@@ -384,7 +371,7 @@ protected:
             Send(DatabaseProxy, new TEvPGEvents::TEvAuth(InitialMessage, Address), 0, IncomingSequenceNumber++);
         } else {
             SendAuthOk();
-            FinishHandshake();
+            BecomeConnected();
         }
     }
 
@@ -495,6 +482,12 @@ protected:
         return false;
     }
 
+    void BecomeConnected() {
+        SyncSequenceNumber = IncomingSequenceNumber;
+        Send(DatabaseProxy, new TEvPGEvents::TEvConnectionOpened(InitialMessage, Address), 0, IncomingSequenceNumber++);
+        ConnectionEstablished = true;
+    }
+
     struct TEventsComparator {
         bool operator ()(const TAutoPtr<IEventHandle>& ev1, const TAutoPtr<IEventHandle>& ev2) const {
             return ev1->Cookie < ev2->Cookie;
@@ -533,11 +526,51 @@ protected:
                 }
             } else {
                 SendAuthOk();
-                FinishHandshake();
+                BecomeConnected();
             }
             ++OutgoingSequenceNumber;
             ReplayPostponedEvents();
             FlushAndPoll();
+        } else {
+            PostponeEvent(ev);
+        }
+    }
+
+    void HandleConnected(TEvPGEvents::TEvFinishHandshake::TPtr& ev) {
+        if (IsEventExpected(ev)) {
+            if (ev->Get()->ErrorFields.empty()) {
+                const auto& clientParams(InitialMessage->GetClientParams());
+                auto itOptions = clientParams.find("options");
+                if (itOptions != clientParams.end()) {
+                    TStringBuf options(itOptions->second);
+                    TStringBuf token;
+                    while (options.NextTok(' ', token) && token == "-c") {
+                        TStringBuf option;
+                        if (options.NextTok(' ', option)) {
+                            TStringBuf name;
+                            TStringBuf value;
+                            if (option.NextTok('=', name)) {
+                                value = option;
+                                ServerParams[TString(name)] = TString(value);
+                            }
+                        }
+                    }
+                }
+
+                TPGStreamOutput<TPGBackendKeyData> backendKeyData;
+                backendKeyData << (ev->Get()->BackendData.Pid ^ BACKEND_DATA_MASK) << (ev->Get()->BackendData.Key ^ BACKEND_DATA_MASK);
+                SendStream(backendKeyData);
+
+                for (const auto& [name, value] : ServerParams) {
+                    SendParameterStatus(name, value);
+                }
+                BecomeReadyForQuery();
+            } else {
+                SendErrorResponse(ev->Get()->ErrorFields);
+                BLOG_ERROR("unable to create connection");
+                CloseConnection = true;
+                FlushAndPoll();
+            }
         } else {
             PostponeEvent(ev);
         }
@@ -707,7 +740,7 @@ protected:
     }
 
     const TPGMessage* GetInputMessage() const {
-        Y_VERIFY_DEBUG(HasInputMessage());
+        Y_DEBUG_ABORT_UNLESS(HasInputMessage());
         return reinterpret_cast<const TPGMessage*>(BufferInput.data());
     }
 
@@ -864,6 +897,7 @@ protected:
             hFunc(TEvPollerReady, HandleConnected);
             hFunc(TEvPollerRegisterResult, HandleConnected);
             hFunc(TEvPGEvents::TEvAuthResponse, HandleConnected);
+            hFunc(TEvPGEvents::TEvFinishHandshake, HandleConnected);
             hFunc(TEvPGEvents::TEvQueryResponse, HandleConnected);
             hFunc(TEvPGEvents::TEvParseResponse, HandleConnected);
             hFunc(TEvPGEvents::TEvBindResponse, HandleConnected);

@@ -520,7 +520,7 @@ void ChaChaVec::Encipher(const ui8* plaintext, ui8* ciphertext, size_t len)
     } else if (input_unalignment == 8) {
         EncipherImpl<false>(plaintext, ciphertext, len);
     } else {
-        Y_FAIL("ChaChaVec can work only with input aligned on 8, 16 or more bytes");
+        Y_ABORT("ChaChaVec can work only with input aligned on 8, 16 or more bytes");
     }
 }
 

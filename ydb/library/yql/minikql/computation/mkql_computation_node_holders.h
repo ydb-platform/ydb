@@ -121,8 +121,8 @@ public:
         MKQL_ENSURE(!IsWide(), "ForEachRowWide() should be used instead");
         return DoForEachRow<const NUdf::TUnboxedValue, const TUnboxedValueBatch>(this,
             [&cb](const NUdf::TUnboxedValue* values, ui32 width) {
-                Y_VERIFY_DEBUG(width == 1);
-                Y_VERIFY_DEBUG(values);
+                Y_DEBUG_ABORT_UNLESS(width == 1);
+                Y_DEBUG_ABORT_UNLESS(values);
                 return cb(*values);
             });
     }
@@ -132,8 +132,8 @@ public:
         MKQL_ENSURE(!IsWide(), "ForEachRowWide() should be used instead");
         return DoForEachRow<NUdf::TUnboxedValue, TUnboxedValueBatch>(this,
             [&cb](NUdf::TUnboxedValue* values, ui32 width) {
-                Y_VERIFY_DEBUG(width == 1);
-                Y_VERIFY_DEBUG(values);
+                Y_DEBUG_ABORT_UNLESS(width == 1);
+                Y_DEBUG_ABORT_UNLESS(values);
                 return cb(*values);
             });
     }
@@ -195,7 +195,7 @@ public:
     }
 
     void PushRow(NUdf::TUnboxedValue* values, ui32 width) {
-        Y_VERIFY_DEBUG(width == Width_);
+        Y_DEBUG_ABORT_UNLESS(width == Width_);
         ReserveNextRow();
         for (ui32 i = 0; i < Width_; ++i) {
             Values_.back().emplace_back(std::move(values[i]));
@@ -227,8 +227,8 @@ private:
 
         auto currTop = parent->Values_.begin();
 
-        Y_VERIFY_DEBUG(parent->PageSize_ > parent->RowOffset_);
-        Y_VERIFY_DEBUG(parent->Width_ == 0 || (parent->PageSize_ - parent->RowOffset_) % parent->Width_ == 0);
+        Y_DEBUG_ABORT_UNLESS(parent->PageSize_ > parent->RowOffset_);
+        Y_DEBUG_ABORT_UNLESS(parent->Width_ == 0 || (parent->PageSize_ - parent->RowOffset_) % parent->Width_ == 0);
 
         size_t valuesOnPage = parent->PageSize_ - parent->RowOffset_;
 
@@ -507,7 +507,7 @@ inline ui64 AddSmallValue(TPagedArena& pool, const TStringBuf& value) {
     if (value.size() <= 8) {
         ui64 ret = 0;
         memcpy((ui8*)&ret, value.data(), value.size());
-        Y_VERIFY_DEBUG(IsSmallValueEmbedded(ret));
+        Y_DEBUG_ABORT_UNLESS(IsSmallValueEmbedded(ret));
         return ret;
     }
     else {

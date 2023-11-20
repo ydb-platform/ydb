@@ -138,10 +138,10 @@ struct TPartFragment {
 
 
     char *GetDataAt(ui64 get_offset) const {
-        Y_VERIFY_DEBUG(Size);
-        Y_VERIFY_DEBUG(get_offset >= Offset, "%s", (TStringBuilder() << "get_offset# " << get_offset
+        Y_DEBUG_ABORT_UNLESS(Size);
+        Y_DEBUG_ABORT_UNLESS(get_offset >= Offset, "%s", (TStringBuilder() << "get_offset# " << get_offset
                     << " Offset# " << Offset << " Size# " << Size << " capacity# " << OwnedString.capacity()).c_str());
-        Y_VERIFY_DEBUG(get_offset < Offset + Size, "%s", (TStringBuilder() << "get_offset# " << get_offset
+        Y_DEBUG_ABORT_UNLESS(get_offset < Offset + Size, "%s", (TStringBuilder() << "get_offset# " << get_offset
                     << " Offset# " << Offset << " Size# " << Size << " capacity# " << OwnedString.capacity()).c_str());
         return Bytes + get_offset - Offset;
     }

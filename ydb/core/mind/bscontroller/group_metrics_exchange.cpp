@@ -27,7 +27,7 @@ namespace NKikimr::NBsController {
 
                     TString s;
                     const bool success = group->GroupMetrics->SerializeToString(&s);
-                    Y_VERIFY_DEBUG(success);
+                    Y_DEBUG_ABORT_UNLESS(success);
                     db.Table<Schema::Group>().Key(group->ID).Update<Schema::Group::Metrics>(s);
                 }
             }

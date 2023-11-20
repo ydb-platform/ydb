@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 
+#include <ydb/library/yql/core/yql_graph_transformer.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 namespace NKikimr {
@@ -28,12 +29,17 @@ struct TKqlTransformContext : TThrRefBase {
     TVector<TSimpleSharedPtr<NKikimrMiniKQL::TResult>> MkqlResults;
     TVector<NKikimrMiniKQL::TResult> PhysicalQueryResults;
 
+    NYql::TExprNode::TPtr ExplainTransformerInput; // Explain transformer must work after other transformers, but use input before peephole
+    TMaybe<NYql::NNodes::TKiDataQueryBlocks> DataQueryBlocks;
+
     void Reset() {
         ReplyTarget = {};
         MkqlResults.clear();
         QueryStats = {};
         PhysicalQuery = nullptr;
         PhysicalQueryResults.clear();
+        ExplainTransformerInput = nullptr;
+        DataQueryBlocks = Nothing();
     }
 };
 
@@ -60,6 +66,9 @@ private:
     NYql::NLog::EComponent Component;
     NYql::NLog::ELevel Level;
 };
+
+// Saves current input into TKqlTransformContext::ExplainTransformerInput
+TAutoPtr<NYql::IGraphTransformer> CreateSaveExplainTransformerInput(TKqlTransformContext& transformCtx);
 
 } // namespace NKqp
 } // namespace NKikimr

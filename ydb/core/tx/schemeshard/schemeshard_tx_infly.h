@@ -403,7 +403,7 @@ struct TTxState {
         case TxMoveTableIndex:
             return true;
         case TxInvalid:
-            Y_VERIFY_DEBUG("UNREACHABLE");
+            Y_DEBUG_ABORT_UNLESS("UNREACHABLE");
             Y_UNREACHABLE();
         }
     }
@@ -497,7 +497,7 @@ struct TTxState {
         case TxMoveTableIndex:
             return false;
         case TxInvalid:
-            Y_VERIFY_DEBUG("UNREACHABLE");
+            Y_DEBUG_ABORT_UNLESS("UNREACHABLE");
             Y_UNREACHABLE();
         }
     }
@@ -591,7 +591,7 @@ struct TTxState {
         case TxAlterExternalDataSource:
             return false;
         case TxInvalid:
-            Y_VERIFY_DEBUG("UNREACHABLE");
+            Y_DEBUG_ABORT_UNLESS("UNREACHABLE");
             Y_UNREACHABLE();
         }
     }

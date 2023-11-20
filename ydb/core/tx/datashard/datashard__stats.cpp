@@ -3,6 +3,7 @@
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 #include <ydb/core/tablet_flat/flat_dbase_sz_env.h>
 #include "ydb/core/tablet_flat/shared_sausagecache.h"
+#include <ydb/core/protos/datashard_config.pb.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -20,12 +21,12 @@ class TStatsEnv : public IPages {
 public:
     TResult Locate(const TMemTable*, ui64, ui32) noexcept override
     {
-        Y_FAIL("IPages::Locate(TMemTable*, ...) shouldn't be used here");
+        Y_ABORT("IPages::Locate(TMemTable*, ...) shouldn't be used here");
     }
 
     TResult Locate(const TPart*, ui64, ELargeObj) noexcept override
     {
-        Y_FAIL("IPages::Locate(TPart*, ...) shouldn't be used here");
+        Y_ABORT("IPages::Locate(TPart*, ...) shouldn't be used here");
     }
 
     const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override
@@ -116,6 +117,7 @@ public:
 private:
     void Die(const TActorContext& ctx) override {
         ctx.Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvNotifyActorDied);
+        ctx.Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister);
         TActorBootstrapped::Die(ctx);
     }
 
@@ -172,7 +174,7 @@ private:
         Subset->ColdParts.clear(); // stats won't include cold parts, if any
 
         if (BuildStats(*Subset, ev->Stats, RowCountResolution, DataSizeResolution, &Env)) {
-            Y_VERIFY_DEBUG(IndexSize == ev->Stats.IndexSize.Size);
+            Y_DEBUG_ABORT_UNLESS(IndexSize == ev->Stats.IndexSize.Size);
 
             ctx.Send(ReplyTo, ev.Release());
 

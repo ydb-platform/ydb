@@ -28,6 +28,8 @@ PEERDIR(
     yt/yt/library/profiling/perf
 )
 
+SIZE(MEDIUM)
+
 END()
 
 RECURSE(

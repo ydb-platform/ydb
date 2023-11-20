@@ -6,6 +6,7 @@
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_build.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/core/services/yql_out_transformers.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
@@ -88,7 +89,7 @@ private:
 
     TStatus DoBuildTxResults(TExprNode::TPtr inputExpr, TExprNode::TPtr& outputExpr, TExprContext& ctx) {
         auto stages = CollectStages(inputExpr, ctx);
-        Y_VERIFY_DEBUG(!stages.empty());
+        Y_DEBUG_ABORT_UNLESS(!stages.empty());
 
         auto results = TKqlQueryResultList(inputExpr);
         auto txResults = BuildTxResults(results, stages, ctx);
@@ -121,7 +122,7 @@ private:
 
     TStatus DoBuildTxEffects(TExprNode::TPtr inputExpr, TExprNode::TPtr& outputExpr, TExprContext& ctx) {
         auto stages = CollectStages(inputExpr, ctx);
-        Y_VERIFY_DEBUG(!stages.empty());
+        Y_DEBUG_ABORT_UNLESS(!stages.empty());
 
         TKqpPhyTxSettings txSettings;
         txSettings.Type = EPhysicalTxType::Data;
@@ -219,7 +220,7 @@ private:
                 // If results stage is marked as single_partition, no collect stage needed.
                 // Once we have partitioning constraint we should check it instead of stage setting.
                 auto settings = TDqStageSettings::Parse(resultStage);
-                if (settings.SinglePartition) {
+                if (settings.PartitionMode == TDqStageSettings::EPartitionMode::Single) {
                     needsCollectStage = false;
                 }
 
@@ -708,7 +709,7 @@ private:
                 computedInputsSet.insert(precompute.Raw());
             }
         }
-        Y_VERIFY_DEBUG(phaseResults.size() == computedInputs.size());
+        Y_DEBUG_ABORT_UNLESS(phaseResults.size() == computedInputs.size());
 
         auto phaseResultsNode = Build<TKqlQueryResultList>(ctx, query.Pos())
             .Add(phaseResults)

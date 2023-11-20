@@ -69,7 +69,7 @@ namespace {
         }
 
         void Add(const THistoRec&) override {
-            Y_FAIL("Not implemented");
+            Y_ABORT("Not implemented");
         }
 
     protected:
@@ -107,7 +107,7 @@ namespace {
         }
 
         void Add(const THistoRec&) override {
-            Y_FAIL("Not implemented");
+            Y_ABORT("Not implemented");
         }
     };
 

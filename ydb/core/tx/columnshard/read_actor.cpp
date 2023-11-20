@@ -4,6 +4,10 @@
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
+#include "blobs_reader/actor.h"
+#include "engines/reader/read_context.h"
+#include "resource_subscriber/actor.h"
+#include "blobs_reader/read_coordinator.h"
 
 namespace NKikimr::NColumnShard {
 namespace {
@@ -60,7 +64,7 @@ public:
         } else {
             ACFL_DEBUG("event", "TEvTaskProcessedResult");
             auto t = static_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult());
-            Y_VERIFY_DEBUG(dynamic_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult()));
+            Y_DEBUG_ABORT_UNLESS(dynamic_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult()));
             if (!IndexedData->IsFinished()) {
                 Y_ABORT_UNLESS(t->Apply(*IndexedData));
             }
@@ -145,9 +149,16 @@ public:
         }
     }
 
+    virtual void PassAway() override {
+        Send(ResourceSubscribeActorId, new TEvents::TEvPoisonPill);
+        IActor::PassAway();
+    }
+
     void Bootstrap(const TActorContext& ctx) {
-        IndexedData = ReadMetadata->BuildReader(NOlap::TReadContext(Storages, Counters, true), ReadMetadata);
-        LOG_S_DEBUG("Starting read (" << IndexedData->DebugString() << ") at tablet " << TabletId);
+        ResourceSubscribeActorId = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletId, SelfId()));
+        ReadCoordinatorActorId = ctx.Register(new NOlap::NBlobOperations::NRead::TReadCoordinatorActor(TabletId, SelfId()));
+        IndexedData = ReadMetadata->BuildReader(std::make_shared<NOlap::TReadContext>(Storages, Counters, true, ReadMetadata, SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId, NOlap::TComputeShardingPolicy()));
+        LOG_S_DEBUG("Starting read (" << IndexedData->DebugString(false) << ") at tablet " << TabletId);
 
         bool earlyExit = false;
         if (Deadline != TInstant::Max()) {
@@ -164,8 +175,7 @@ public:
             SendTimeouts(ctx);
             ctx.Send(SelfId(), new TEvents::TEvPoisonPill());
         } else {
-            while (auto task = IndexedData->ExtractNextReadTask(false)) {
-                Send(ReadBlobsActor, std::make_unique<NOlap::NBlobOperations::NRead::TEvStartReadTask>(task));
+            while (IndexedData->ReadNextInterval()) {
             }
             BuildResult(ctx);
         }
@@ -193,6 +203,8 @@ private:
     TActorId DstActor;
     TActorId BlobCacheActorId;
     std::unique_ptr<TEvColumnShard::TEvReadResult> Result;
+    TActorId ResourceSubscribeActorId;
+    TActorId ReadCoordinatorActorId;
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
     std::shared_ptr<NOlap::IDataReader> IndexedData;
     TInstant Deadline;

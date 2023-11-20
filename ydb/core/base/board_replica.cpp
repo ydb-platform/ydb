@@ -99,7 +99,7 @@ class TBoardReplicaActor : public TActor<TBoardReplicaActor> {
                 entry.Session = ev->InterconnectSession;
             }
             entry.Payload = record.GetPayload();
-            Y_VERIFY_DEBUG(entry.Owner == ActorIdFromProto(record.GetOwner()));
+            Y_DEBUG_ABORT_UNLESS(entry.Owner == ActorIdFromProto(record.GetOwner()));
 
             if (pathSubscribeDataIt != PathToSubscribers.end()) {
                 SendUpdateToSubscribers(entry, false);
@@ -334,7 +334,7 @@ class TBoardReplicaActor : public TActor<TBoardReplicaActor> {
                 break;
             }
             default:
-                Y_FAIL("Unexpected case");
+                Y_ABORT("Unexpected case");
         }
     }
 

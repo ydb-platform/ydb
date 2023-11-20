@@ -1,7 +1,8 @@
 #pragma once
 
-#include "ydb/public/sdk/cpp/client/ydb_table/table.h"
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
 #include <list>
@@ -31,6 +32,7 @@ struct TQueryInfo {
 
     std::optional<std::function<void(NYdb::NTable::TReadRowsResult)>> ReadRowsResultCallback;
     std::optional<std::function<void(NYdb::NTable::TDataQueryResult)>> DataQueryResultCallback;
+    std::optional<std::function<void(NYdb::NQuery::TExecuteQueryResult)>> GenericQueryResultCallback;
 };
 
 using TQueryInfoList = std::list<TQueryInfo>;

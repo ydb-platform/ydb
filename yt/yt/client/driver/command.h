@@ -9,7 +9,7 @@
 
 #include <yt/yt/core/misc/error.h>
 
-#include <yt/yt/core/ytree/yson_serializable.h>
+#include <yt/yt/core/ytree/yson_struct.h>
 
 namespace NYT::NDriver {
 
@@ -69,20 +69,22 @@ void ProduceSingleOutputValue(
 ////////////////////////////////////////////////////////////////////////////////
 
 class TCommandBase
-    : public virtual NYTree::TYsonSerializableLite
+    : public virtual NYTree::TYsonStructLite
     , public ICommand
 {
 protected:
     NLogging::TLogger Logger = DriverLogger;
 
-    virtual void DoExecute(ICommandContextPtr context) = 0;
+    virtual void DoExecute(ICommandContextPtr ) { };
     virtual bool HasResponseParameters() const;
-
-    TCommandBase();
 
     void ProduceResponseParameters(
         ICommandContextPtr context,
         const std::function<void(NYson::IYsonConsumer*)>& producer);
+
+    REGISTER_YSON_STRUCT_LITE(TCommandBase)
+
+    static void Register(TRegistrar registrar);
 
 public:
     void Execute(ICommandContextPtr context) override;
@@ -107,8 +109,11 @@ class TTransactionalCommandBase<
 >
     : public virtual TTypedCommandBase<TOptions>
 {
+    REGISTER_YSON_STRUCT_LITE(TTransactionalCommandBase);
+
+    static void Register(TRegistrar registrar);
+
 protected:
-    TTransactionalCommandBase();
     NApi::ITransactionPtr AttachTransaction(
         ICommandContextPtr context,
         bool required);
@@ -127,8 +132,9 @@ class TMutatingCommandBase<
 >
     : public virtual TTypedCommandBase<TOptions>
 {
-protected:
-    TMutatingCommandBase();
+    REGISTER_YSON_STRUCT_LITE(TMutatingCommandBase);
+
+    static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -144,8 +150,9 @@ class TReadOnlyMasterCommandBase<
 >
     : public virtual TTypedCommandBase<TOptions>
 {
-protected:
-    TReadOnlyMasterCommandBase();
+    REGISTER_YSON_STRUCT_LITE(TReadOnlyMasterCommandBase);
+
+    static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -161,8 +168,9 @@ class TReadOnlyTabletCommandBase<
 >
     : public virtual TTypedCommandBase<TOptions>
 {
-protected:
-    TReadOnlyTabletCommandBase();
+    REGISTER_YSON_STRUCT_LITE(TReadOnlyTabletCommandBase);
+
+    static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -178,8 +186,9 @@ class TSuppressableAccessTrackingCommandBase<
 >
     : public virtual TTypedCommandBase<TOptions>
 {
-protected:
-    TSuppressableAccessTrackingCommandBase();
+    REGISTER_YSON_STRUCT_LITE(TSuppressableAccessTrackingCommandBase);
+
+    static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -195,8 +204,9 @@ class TPrerequisiteCommandBase<
 >
     : public virtual TTypedCommandBase<TOptions>
 {
-protected:
-    TPrerequisiteCommandBase();
+    REGISTER_YSON_STRUCT_LITE(TPrerequisiteCommandBase);
+
+    static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -212,8 +222,9 @@ class TTimeoutCommandBase<
 >
     : public virtual TTypedCommandBase<TOptions>
 {
-protected:
-    TTimeoutCommandBase();
+    REGISTER_YSON_STRUCT_LITE(TTimeoutCommandBase);
+
+    static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -234,9 +245,12 @@ class TTabletReadCommandBase<
 >
     : public virtual TTypedCommandBase<TOptions>
 {
-protected:
-    TTabletReadCommandBase();
+public:
     NApi::IClientBasePtr GetClientBase(ICommandContextPtr context);
+
+    REGISTER_YSON_STRUCT_LITE(TTabletReadCommandBase);
+
+    static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -273,8 +287,11 @@ class TTabletWriteCommandBase<
 >
     : public virtual TTypedCommandBase<TOptions>
 {
+    REGISTER_YSON_STRUCT_LITE(TTabletWriteCommandBase);
+
+    static void Register(TRegistrar registrar);
+
 protected:
-    TTabletWriteCommandBase();
     NApi::ITransactionPtr GetTransaction(ICommandContextPtr context);
     bool ShouldCommitTransaction();
 };
@@ -290,8 +307,9 @@ class TSelectRowsCommandBase<
 >
     : public virtual TTypedCommandBase<TOptions>
 {
-protected:
-    TSelectRowsCommandBase();
+    REGISTER_YSON_STRUCT_LITE(TSelectRowsCommandBase);
+
+    static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -72,6 +72,7 @@ public:
     TExprNode::TPtr WrapRead(const TDqSettings& dqSettings, const TExprNode::TPtr& read, TExprContext& ctx) override {
         if (const auto& maybePqReadTopic = TMaybeNode<TPqReadTopic>(read)) {
             const auto& pqReadTopic = maybePqReadTopic.Cast();
+            YQL_ENSURE(pqReadTopic.Ref().GetTypeAnn(), "No type annotation for node " << pqReadTopic.Ref().Content());
 
             const auto rowType = pqReadTopic.Ref().GetTypeAnn()
                 ->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()

@@ -26,12 +26,12 @@ public:
         , InitItems(std::move(initItems))
         , Outputs(std::move(outputs))
         , UpdateItems(std::move(updateItems))
-        , InputsOnInit(GetPasstroughtMap(Inputs, InitItems))
-        , InputsOnUpdate(GetPasstroughtMap(Inputs, UpdateItems))
-        , InitOnInputs(GetPasstroughtMap(InitItems, Inputs))
-        , UpdateOnInputs(GetPasstroughtMap(UpdateItems, Inputs))
-        , OutputsOnUpdate(GetPasstroughtMap(Outputs, UpdateItems))
-        , UpdateOnOutputs(GetPasstroughtMap(UpdateItems, Outputs))
+        , InputsOnInit(GetPasstroughtMapOneToOne(Inputs, InitItems))
+        , InputsOnUpdate(GetPasstroughtMapOneToOne(Inputs, UpdateItems))
+        , InitOnInputs(GetPasstroughtMapOneToOne(InitItems, Inputs))
+        , UpdateOnInputs(GetPasstroughtMapOneToOne(UpdateItems, Inputs))
+        , OutputsOnUpdate(GetPasstroughtMapOneToOne(Outputs, UpdateItems))
+        , UpdateOnOutputs(GetPasstroughtMapOneToOne(UpdateItems, Outputs))
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Inputs.size()))
         , TempStateIndex(std::exchange(mutables.CurValueIndex, mutables.CurValueIndex + Outputs.size()))
     {}
@@ -61,7 +61,7 @@ public:
 
         block = good;
         for (auto i = 0U; i < Inputs.size(); ++i)
-            if (Inputs[i]->GetDependencesCount() > 0U)
+            if (Inputs[i]->GetDependencesCount() > 0U || !InputsOnInit[i] || !InputsOnUpdate[i])
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(Inputs[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -147,10 +147,7 @@ private:
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         for (auto i = 0U; i < Inputs.size(); ++i) {
-            if (Inputs[i]->GetDependencesCount() > 0U) {
-                fields[i] = &Inputs[i]->RefValue(ctx);
-                continue;
-            } else if (const auto& map = InputsOnInit[i]) {
+            if (const auto& map = InputsOnInit[i]; map && !Inputs[i]->GetDependencesCount()) {
                 if (const auto& to = UpdateOnOutputs[*map]) {
                     fields[i] = &Outputs[*to]->RefValue(ctx);
                     continue;
@@ -158,6 +155,9 @@ private:
                     fields[i] = out;
                     continue;
                 }
+            } else {
+                fields[i] = &Inputs[i]->RefValue(ctx);
+                continue;
             }
 
             fields[i] = nullptr;
@@ -199,14 +199,14 @@ private:
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         for (auto i = 0U; i < Inputs.size(); ++i) {
-            if (Inputs[i]->GetDependencesCount() > 0U) {
-                fields[i] = &Inputs[i]->RefValue(ctx);
-                continue;
-            } else if (const auto& map = InputsOnUpdate[i]) {
+            if (const auto& map = InputsOnUpdate[i]; map && !Inputs[i]->GetDependencesCount()) {
                 if (const auto out = output[*map]) {
                     fields[i] = out;
                     continue;
                 }
+            } else {
+                fields[i] = &Inputs[i]->RefValue(ctx);
+                continue;
             }
 
             fields[i] = nullptr;

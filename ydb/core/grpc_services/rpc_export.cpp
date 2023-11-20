@@ -109,6 +109,10 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 TIssuesIds::EIssueCode code;
 
                 switch (entry.Status) {
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+                    status = StatusIds::UNAUTHORIZED;
+                    code = TIssuesIds::ACCESS_DENIED;
+                    break;
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
                     status = StatusIds::SCHEME_ERROR;

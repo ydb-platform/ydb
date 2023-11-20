@@ -441,7 +441,7 @@ namespace {
             {
                 EnsureType(jsonValue, NJson::JSON_UINTEGER);
                 unsigned long long intValue = jsonValue.GetUInteger();
-                if (intValue > std::numeric_limits<ui8>::max() || intValue < std::numeric_limits<ui8>::min()) {
+                if (intValue > std::numeric_limits<ui8>::max()) {
                     ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in UInt8 type");
                 }
                 ValueBuilder.Uint8(intValue);
@@ -461,7 +461,7 @@ namespace {
             {
                 EnsureType(jsonValue, NJson::JSON_UINTEGER);
                 unsigned long long intValue = jsonValue.GetUInteger();
-                if (intValue > std::numeric_limits<ui16>::max() || intValue < std::numeric_limits<ui16>::min()) {
+                if (intValue > std::numeric_limits<ui16>::max()) {
                     ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in UInt16 type");
                 }
                 ValueBuilder.Uint16(intValue);
@@ -481,7 +481,7 @@ namespace {
             {
                 EnsureType(jsonValue, NJson::JSON_UINTEGER);
                 unsigned long long intValue = jsonValue.GetUInteger();
-                if (intValue > std::numeric_limits<ui32>::max() || intValue < std::numeric_limits<ui32>::min()) {
+                if (intValue > std::numeric_limits<ui32>::max()) {
                     ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in UInt32 type");
                 }
                 ValueBuilder.Uint32(intValue);
@@ -501,7 +501,7 @@ namespace {
             {
                 EnsureType(jsonValue, NJson::JSON_UINTEGER);
                 unsigned long long intValue = jsonValue.GetUInteger();
-                if (intValue > std::numeric_limits<ui64>::max() || intValue < std::numeric_limits<ui64>::min()) {
+                if (intValue > std::numeric_limits<ui64>::max()) {
                     ThrowFatalError(TStringBuilder() << "Value \"" << intValue << "\" doesn't fit in UInt64 type");
                 }
                 ValueBuilder.Uint64(intValue);

@@ -80,17 +80,17 @@ namespace {
 
         NPageCollection::TBorder Bounds(ui32) const noexcept override
         {
-            Y_FAIL("Unexpected Bounds(...) call");
+            Y_ABORT("Unexpected Bounds(...) call");
         }
 
         NPageCollection::TGlobId Glob(ui32) const noexcept override
         {
-            Y_FAIL("Unexpected Glob(...) call");
+            Y_ABORT("Unexpected Glob(...) call");
         }
 
         bool Verify(ui32, TArrayRef<const char>) const noexcept override
         {
-            Y_FAIL("Unexpected Verify(...) call");
+            Y_ABORT("Unexpected Verify(...) call");
         }
 
         size_t BackingSize() const noexcept override

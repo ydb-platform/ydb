@@ -18,6 +18,7 @@
 #include <ydb/library/yql/core/yql_data_provider.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -149,7 +150,7 @@ private:
                                                 .Build()
                                             .Build()
                                         .Build()
-                                    .Settings(TDqStageSettings{.SinglePartition = true}.BuildNode(ctx, fill.Pos()))
+                                    .Settings(TDqStageSettings{.PartitionMode = TDqStageSettings::EPartitionMode::Single}.BuildNode(ctx, fill.Pos()))
                                     .Build()
                                 .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
                                 .Build()
@@ -254,7 +255,7 @@ private:
                                         .Build()
                                     .Build()
                                 .Build()
-                            .Settings(TDqStageSettings{.SinglePartition = true}.BuildNode(ctx, sort.Pos()))
+                            .Settings(TDqStageSettings{.PartitionMode = TDqStageSettings::EPartitionMode::Single}.BuildNode(ctx, sort.Pos()))
                             .Build()
                         .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
                         .Build()
@@ -384,7 +385,7 @@ private:
                                         .Build()
                                     .Build()
                                 .Build()
-                            .Settings(TDqStageSettings{.SinglePartition = ordered}.BuildNode(ctx, map.Pos()))
+                            .Settings(TDqStageSettings{.PartitionMode = ordered ? TDqStageSettings::EPartitionMode::Single : TDqStageSettings::EPartitionMode::Default}.BuildNode(ctx, map.Pos()))
                             .Done();
 
                         if (!ordered) {
@@ -595,7 +596,7 @@ private:
                                         .Build()
                                     .Build()
                                 .Build()
-                            .Settings(TDqStageSettings{.SinglePartition = true}.BuildNode(ctx, reduce.Pos()))
+                            .Settings(TDqStageSettings{.PartitionMode = TDqStageSettings::EPartitionMode::Single}.BuildNode(ctx, reduce.Pos()))
                             .Build()
                         .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
                         .Build()

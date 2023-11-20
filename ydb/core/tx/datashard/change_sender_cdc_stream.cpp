@@ -1,5 +1,6 @@
 #include "change_exchange.h"
 #include "change_exchange_impl.h"
+#include "change_record_cdc_serializer.h"
 #include "change_sender_common_ops.h"
 #include "change_sender_monitoring.h"
 #include "datashard_user_table.h"
@@ -7,7 +8,6 @@
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
-#include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -35,6 +35,14 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     /// Init
+
+    void Init() {
+        auto opts = TPartitionWriterOpts()
+            .WithCheckState(true)
+            .WithAutoRegister(true);
+        Writer = RegisterWithSameMailbox(CreatePartitionWriter(SelfId(), {}, ShardId, PartitionId, {}, SourceId, opts));
+        Become(&TThis::StateInit);
+    }
 
     STATEFN(StateInit) {
         switch (ev->GetTypeRewrite()) {
@@ -78,22 +86,9 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         }
     }
 
-    static NJson::TJsonWriterConfig DefaultJsonConfig() {
-        NJson::TJsonWriterConfig jsonConfig;
-        jsonConfig.ValidateUtf8 = false;
-        jsonConfig.WriteNanAsString = true;
-        return jsonConfig;
-    }
-
     void Handle(TEvChangeExchange::TEvRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
         NKikimrClient::TPersQueueRequest request;
-
-        const auto awsJsonOpts = TChangeRecord::TAwsJsonOptions{
-            .AwsRegion = Stream.AwsRegion.GetOrElse(AppData()->AwsCompatibilityConfig.GetAwsRegion()),
-            .StreamMode = Stream.Mode,
-            .ShardId = DataShard.TabletId,
-        };
 
         for (const auto& record : ev->Get()->Records) {
             if (record.GetSeqNo() <= MaxSeqNo) {
@@ -101,80 +96,9 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
             }
 
             auto& cmd = *request.MutablePartitionRequest()->AddCmdWrite();
-            cmd.SetSeqNo(record.GetSeqNo());
             cmd.SetSourceId(NSourceIdEncoding::EncodeSimple(SourceId));
-            cmd.SetCreateTimeMS(record.GetApproximateCreationDateTime().MilliSeconds());
             cmd.SetIgnoreQuotaDeadline(true);
-
-            NKikimrPQClient::TDataChunk data;
-            data.SetCodec(0 /* CODEC_RAW */);
-
-            switch (Stream.Format) {
-                case NKikimrSchemeOp::ECdcStreamFormatProto: {
-                    NKikimrChangeExchange::TChangeRecord protoRecord;
-                    record.SerializeToProto(protoRecord);
-                    data.SetData(protoRecord.SerializeAsString());
-                    cmd.SetData(data.SerializeAsString());
-                    break;
-                }
-
-                case NKikimrSchemeOp::ECdcStreamFormatJson:
-                case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson: {
-                    NJson::TJsonValue json;
-                    if (Stream.Format == NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson) {
-                        record.SerializeToDynamoDBStreamsJson(json, awsJsonOpts);
-                    } else {
-                        record.SerializeToYdbJson(json, Stream.VirtualTimestamps);
-                    }
-
-                    TStringStream str;
-                    WriteJson(&str, &json, DefaultJsonConfig());
-                    data.SetData(str.Str());
-
-                    if (record.GetKind() == TChangeRecord::EKind::CdcDataChange) {
-                        cmd.SetData(data.SerializeAsString());
-                        cmd.SetPartitionKey(record.GetPartitionKey());
-                    } else if (record.GetKind() == TChangeRecord::EKind::CdcHeartbeat) {
-                        auto& heartbeat = *cmd.MutableHeartbeat();
-                        heartbeat.SetStep(record.GetStep());
-                        heartbeat.SetTxId(record.GetTxId());
-                        heartbeat.SetData(data.SerializeAsString());
-                    } else {
-                        Y_FAIL_S("Unexpected cdc record"
-                            << ": kind# " << record.GetKind());
-                    }
-                    break;
-                }
-
-                case NKikimrSchemeOp::ECdcStreamFormatDebeziumJson: {
-                    NJson::TJsonValue keyJson;
-                    NJson::TJsonValue valueJson;
-                    record.SerializeToDebeziumJson(keyJson, valueJson, Stream.VirtualTimestamps, Stream.Mode);
-
-                    TStringStream keyStr;
-                    WriteJson(&keyStr, &keyJson, DefaultJsonConfig());
-
-                    TStringStream valueStr;
-                    WriteJson(&valueStr, &valueJson, DefaultJsonConfig());
-
-                    // Add key in the same way as Kafka integration does
-                    auto messageMeta = data.AddMessageMeta();
-                    messageMeta->set_key("__key"); // Kafka integration stores kafka key in "__key" metadata
-                    messageMeta->set_value(keyStr.Str());
-
-                    // Add value
-                    data.SetData(valueStr.Str());
-                    cmd.SetData(data.SerializeAsString());
-                    cmd.SetPartitionKey(record.GetPartitionKey());
-                    break;
-                }
-
-                default: {
-                    LOG_E("Unknown format"
-                        << ": format# " << static_cast<int>(Stream.Format));
-                    return Leave();
-                }
-            }
+            Serializer->Serialize(cmd, record);
 
             Pending.push_back(record.GetSeqNo());
         }
@@ -274,7 +198,13 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
 
     void Disconnected() {
         LOG_D("Disconnected");
-        Leave();
+
+        if (CurrentStateFunc() != static_cast<TReceiveFunc>(&TThis::StateInit)) {
+            return Leave();
+        }
+
+        CloseWriter();
+        Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup());
     }
 
     void Lost() {
@@ -287,11 +217,14 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         PassAway();
     }
 
-    void PassAway() override {
-        if (Writer) {
-            Send(Writer, new TEvents::TEvPoisonPill());
+    void CloseWriter() {
+        if (const auto& writer = std::exchange(Writer, {})) {
+            Send(writer, new TEvents::TEvPoisonPill());
         }
+    }
 
+    void PassAway() override {
+        CloseWriter();
         TActorBootstrapped::PassAway();
     }
 
@@ -310,23 +243,26 @@ public:
         , DataShard(dataShard)
         , PartitionId(partitionId)
         , ShardId(shardId)
-        , Stream(stream)
         , SourceId(ToString(DataShard.TabletId))
+        , Serializer(CreateChangeRecordSerializer({
+            .StreamFormat = stream.Format,
+            .StreamMode = stream.Mode,
+            .AwsRegion = stream.AwsRegion.GetOrElse(AppData()->AwsCompatibilityConfig.GetAwsRegion()),
+            .VirtualTimestamps = stream.VirtualTimestamps,
+            .ShardId = DataShard.TabletId,
+        }))
     {
     }
 
     void Bootstrap() {
-        auto opts = TPartitionWriterOpts()
-            .WithCheckState(true)
-            .WithAutoRegister(true);
-        Writer = RegisterWithSameMailbox(CreatePartitionWriter(SelfId(), {}, ShardId, PartitionId, {}, SourceId, opts));
-        Become(&TThis::StateInit);
+        Init();
     }
 
     STATEFN(StateBase) {
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvPartitionWriter::TEvDisconnected, Disconnected);
             hFunc(NMon::TEvRemoteHttpInfo, Handle);
+            sFunc(TEvents::TEvWakeup, Init);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -336,8 +272,8 @@ private:
     const TDataShardId DataShard;
     const ui32 PartitionId;
     const ui64 ShardId;
-    const TUserTable::TCdcStream Stream;
     const TString SourceId;
+    THolder<IChangeRecordSerializer> Serializer;
     mutable TMaybe<TString> LogPrefix;
 
     TActorId Writer;
@@ -692,7 +628,11 @@ class TCdcChangeSenderMain
             Y_ABORT_UNLESS(!prev->KeyRange.ToBound.Defined());
         }
 
-        CreateSenders(MakePartitionIds(KeyDesc->Partitions));
+        const auto topicVersion = entry.Self->Info.GetVersion().GetGeneralVersion();
+        const bool versionChanged = !TopicVersion || TopicVersion != topicVersion;
+        TopicVersion = topicVersion;
+
+        CreateSenders(MakePartitionIds(KeyDesc->Partitions), versionChanged);
         Become(&TThis::StateMain);
     }
 
@@ -812,6 +752,7 @@ public:
     explicit TCdcChangeSenderMain(const TDataShardId& dataShard, const TPathId& streamPathId)
         : TActorBootstrapped()
         , TBaseChangeSender(this, this, dataShard, streamPathId)
+        , TopicVersion(0)
     {
     }
 
@@ -846,6 +787,7 @@ private:
 
     TUserTable::TCdcStream Stream;
     TPathId TopicPathId;
+    ui64 TopicVersion;
     THolder<TKeyDesc> KeyDesc;
     THashMap<ui32, ui64> PartitionToShard;
 

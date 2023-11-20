@@ -288,20 +288,28 @@ private:
         void SetTosLevel(TTosLevel /*tosLevel*/) override
         { }
 
-        void Terminate(const TError& /*error*/) override
-        { }
+        void Terminate(const TError& error) override
+        {
+            TerminatedList_.Fire(error);
+        }
 
-        void SubscribeTerminated(const TCallback<void(const TError&)>& /*callback*/) override
-        { }
+        void SubscribeTerminated(const TCallback<void(const TError&)>& callback) override
+        {
+            TerminatedList_.Subscribe(callback);
+        }
 
-        void UnsubscribeTerminated(const TCallback<void(const TError&)>& /*callback*/) override
-        { }
+        void UnsubscribeTerminated(const TCallback<void(const TError&)>& callback) override
+        {
+            TerminatedList_.Unsubscribe(callback);
+        }
 
     private:
         const TWeakPtr<TCallHandler> Handler_;
         const TNetworkAddress PeerAddress_;
         const TString PeerAddressString_;
         const IAttributeDictionaryPtr EndpointAttributes_;
+
+        TSingleShotCallbackList<void(const TError&)> TerminatedList_;
     };
 
     class TCallHandler
@@ -330,6 +338,9 @@ private:
 
         ~TCallHandler()
         {
+            if (ReplyBus_) {
+                ReplyBus_->Terminate(TError(NYT::EErrorCode::Canceled, "GRPC call completed"));
+            }
             Owner_->OnCallHandlerDestroyed();
         }
 
@@ -422,6 +433,8 @@ private:
         TString ErrorMessage_;
         TGrpcSlice ErrorMessageSlice_;
         int RawCanceled_ = 0;
+
+        IBusPtr ReplyBus_;
 
         YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, TraceContextSpinLock_);
         NTracing::TTraceContextHandler TraceContextHandler_;
@@ -931,14 +944,16 @@ private:
                 StartBatch(ops, EServerCallCookie::Close);
             }
 
-            auto replyBus = New<TReplyBus>(this);
+            YT_VERIFY(!ReplyBus_);
+            ReplyBus_ = New<TReplyBus>(this);
+
             if (Service_) {
                 auto requestMessage = CreateRequestMessage(
                     *header,
                     messageWithAttachments.Message,
                     messageWithAttachments.Attachments);
 
-                Service_->HandleRequest(std::move(header), std::move(requestMessage), std::move(replyBus));
+                Service_->HandleRequest(std::move(header), std::move(requestMessage), ReplyBus_);
             } else {
                 auto error = TError(
                     NRpc::EErrorCode::NoSuchService,
@@ -947,7 +962,7 @@ private:
                 YT_LOG_WARNING(error);
 
                 auto responseMessage = CreateErrorResponseMessage(RequestId_, error);
-                YT_UNUSED_FUTURE(replyBus->Send(std::move(responseMessage), NBus::TSendOptions(EDeliveryTrackingLevel::None)));
+                YT_UNUSED_FUTURE(ReplyBus_->Send(std::move(responseMessage), NBus::TSendOptions(EDeliveryTrackingLevel::None)));
             }
         }
 

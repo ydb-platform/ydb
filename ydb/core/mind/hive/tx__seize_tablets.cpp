@@ -73,7 +73,7 @@ public:
                 tabletInfo.SetTabletType(tablet.Type);
                 tabletInfo.SetState(static_cast<ui32>(tablet.State));
                 tabletInfo.SetVolatileState(tablet.GetVolatileState());
-                tabletInfo.SetObjectId(tablet.ObjectId);
+                tabletInfo.SetObjectId(tablet.ObjectId.second);
                 tabletInfo.SetGeneration(tablet.KnownGeneration);
                 ActorIdToProto(tablet.LockedToActor, tabletInfo.MutableLockedToActor());
                 tabletInfo.SetLockedReconnectTimeout(tablet.LockedReconnectTimeout.MilliSeconds());

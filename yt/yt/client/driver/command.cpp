@@ -63,9 +63,9 @@ void ProduceSingleOutput(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCommandBase::TCommandBase()
+void TCommandBase::Register(TRegistrar registrar)
 {
-    SetUnrecognizedStrategy(NYTree::EUnrecognizedStrategy::Keep);
+    registrar.UnrecognizedStrategy(NYTree::EUnrecognizedStrategy::Keep);
 }
 
 void TCommandBase::Execute(ICommandContextPtr context)

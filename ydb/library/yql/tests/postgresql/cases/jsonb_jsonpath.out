@@ -1,0 +1,30 @@
+select jsonb '{"a": 12}' @? '$';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": 12}' @? '1';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": 12}' @? '$.a.b';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '{"a": 12}' @? '$.b';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '{"a": 12}' @? '$.a + 2';
+ ?column? 
+----------
+ t
+(1 row)
+

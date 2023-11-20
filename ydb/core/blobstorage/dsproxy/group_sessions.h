@@ -68,7 +68,7 @@ namespace NKikimr {
                         case NKikimrBlobStorage::EVDiskQueueId::GetFastRead:  return GetFastRead;
                         case NKikimrBlobStorage::EVDiskQueueId::GetDiscover:  return GetDiscover;
                         case NKikimrBlobStorage::EVDiskQueueId::GetLowRead:   return GetLowRead;
-                        default:                                              Y_FAIL("unexpected EVDiskQueueId");
+                        default:                                              Y_ABORT("unexpected EVDiskQueueId");
                     }
                 }
 

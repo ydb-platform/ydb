@@ -4,15 +4,15 @@
 
 namespace NKikimr::NColumnShard {
 
-TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata, const NOlap::TReadContext& context)
+TColumnShardScanIterator::TColumnShardScanIterator(const std::shared_ptr<NOlap::TReadContext>& context, const NOlap::TReadMetadata::TConstPtr& readMetadata)
     : Context(context)
-    , ReadyResults(context.GetCounters())
     , ReadMetadata(readMetadata)
+    , ReadyResults(context->GetCounters())
 {
-    IndexedData = ReadMetadata->BuildReader(context, ReadMetadata);
-    Y_ABORT_UNLESS(ReadMetadata->IsSorted());
+    IndexedData = readMetadata->BuildReader(Context);
+    Y_ABORT_UNLESS(Context->GetReadMetadata()->IsSorted());
 
-    if (ReadMetadata->Empty()) {
+    if (readMetadata->Empty()) {
         IndexedData->Abort();
     }
 }
@@ -22,28 +22,28 @@ std::optional<NOlap::TPartialReadResult> TColumnShardScanIterator::GetBatch() {
     return ReadyResults.pop_front();
 }
 
-std::shared_ptr<NOlap::NBlobOperations::NRead::ITask> TColumnShardScanIterator::GetNextTaskToRead() {
-    return IndexedData->ExtractNextReadTask(ReadyResults.size());
+void TColumnShardScanIterator::PrepareResults() {
+    FillReadyResults();
+}
+
+bool TColumnShardScanIterator::ReadNextInterval() {
+    return IndexedData->ReadNextInterval();
 }
 
 void TColumnShardScanIterator::FillReadyResults() {
     auto ready = IndexedData->ExtractReadyResults(MaxRowsInBatch);
-    i64 limitLeft = ReadMetadata->Limit == 0 ? INT64_MAX : ReadMetadata->Limit - ItemsRead;
+    i64 limitLeft = Context->GetReadMetadata()->Limit == 0 ? INT64_MAX : Context->GetReadMetadata()->Limit - ItemsRead;
     for (size_t i = 0; i < ready.size() && limitLeft; ++i) {
-        if (ready[i].GetResultBatch().num_rows() == 0 && !ready[i].GetLastReadKey()) {
-            Y_ABORT_UNLESS(i + 1 == ready.size(), "Only last batch can be empty!");
-            break;
-        }
-
         auto& batch = ReadyResults.emplace_back(std::move(ready[i]));
         if (batch.GetResultBatch().num_rows() > limitLeft) {
-            batch.Slice(0, limitLeft);
+            batch.Cut(limitLeft);
         }
         limitLeft -= batch.GetResultBatch().num_rows();
         ItemsRead += batch.GetResultBatch().num_rows();
     }
 
     if (limitLeft == 0) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "abort_scan")("limit", Context->GetReadMetadata()->Limit)("ready", ItemsRead);
         IndexedData->Abort();
     }
 }

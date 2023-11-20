@@ -158,8 +158,7 @@ namespace NTests {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSessionImpl
 
-class TWriteSessionImpl : public IWriteSession,
-                          public std::enable_shared_from_this<TWriteSessionImpl> {
+class TWriteSessionImpl : public TEnableSelfContext<TWriteSessionImpl> {
 private:
     friend class TWriteSession;
     friend class TSimpleBlockingWriteSession;
@@ -173,13 +172,13 @@ private:
     using IProcessor = IWriteSessionConnectionProcessorFactory::IProcessor;
 
     struct TMessage {
-        ui64 SeqNo;
+        ui64 Id;
         TInstant CreatedAt;
         TStringBuf DataRef;
         TMaybe<ECodec> Codec;
         ui32 OriginalSize; // only for coded messages
-        TMessage(ui64 seqNo, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec = {}, ui32 originalSize = 0)
-            : SeqNo(seqNo)
+        TMessage(ui64 id, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec = {}, ui32 originalSize = 0)
+            : Id(id)
             , CreatedAt(createdAt)
             , DataRef(data)
             , Codec(codec)
@@ -194,11 +193,11 @@ private:
         TInstant StartedAt = TInstant::Zero();
         bool Acquired = false;
         bool FlushRequested = false;
-        void Add(ui64 seqNo, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec, ui32 originalSize) {
+        void Add(ui64 id, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec, ui32 originalSize) {
             if (StartedAt == TInstant::Zero())
                 StartedAt = TInstant::Now();
             CurrentSize += codec ? originalSize : data.size();
-            Messages.emplace_back(seqNo, createdAt, data, codec, originalSize);
+            Messages.emplace_back(id, createdAt, data, codec, originalSize);
             Acquired = false;
         }
 
@@ -264,11 +263,11 @@ private:
     };
 
     struct TOriginalMessage {
-        ui64 SeqNo;
+        ui64 Id;
         TInstant CreatedAt;
         size_t Size;
-        TOriginalMessage(const ui64 sequenceNumber, const TInstant createdAt, const size_t size)
-                : SeqNo(sequenceNumber)
+        TOriginalMessage(const ui64 id, const TInstant createdAt, const size_t size)
+                : Id(id)
                 , CreatedAt(createdAt)
                 , Size(size)
         {}
@@ -302,28 +301,26 @@ public:
             std::shared_ptr<TGRpcConnectionsImpl> connections,
             TDbDriverStatePtr dbDriverState);
 
-    TMaybe<TWriteSessionEvent::TEvent> GetEvent(bool block = false) override;
+    TMaybe<TWriteSessionEvent::TEvent> GetEvent(bool block = false);
     TVector<TWriteSessionEvent::TEvent> GetEvents(bool block = false,
-                                                  TMaybe<size_t> maxEventsCount = Nothing()) override;
-    NThreading::TFuture<ui64> GetInitSeqNo() override;
+                                                  TMaybe<size_t> maxEventsCount = Nothing());
+    NThreading::TFuture<ui64> GetInitSeqNo();
 
     void Write(TContinuationToken&& continuationToken, TStringBuf data,
-               TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override;
+               TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing());
 
     void WriteEncoded(TContinuationToken&& continuationToken, TStringBuf data, ECodec codec, ui32 originalSize,
-               TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override;
+               TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing());
 
 
-    NThreading::TFuture<void> WaitEvent() override;
+    NThreading::TFuture<void> WaitEvent();
 
     // Empty maybe - block till all work is done. Otherwise block at most at closeTimeout duration.
-    bool Close(TDuration closeTimeout = TDuration::Max()) override;
+    bool Close(TDuration closeTimeout = TDuration::Max());
 
-    TWriterCounters::TPtr GetCounters() override {Y_FAIL("Unimplemented"); } //ToDo - unimplemented;
+    TWriterCounters::TPtr GetCounters() {Y_ABORT("Unimplemented"); } //ToDo - unimplemented;
 
     ~TWriteSessionImpl(); // will not call close - destroy everything without acks
-
-    void SetCallbackContext(std::shared_ptr<TCallbackContext<TWriteSessionImpl>> ctx);
 
 private:
 
@@ -360,10 +357,12 @@ private:
 
     //TString GetDebugIdentity() const;
     Ydb::PersQueue::V1::StreamingWriteClientMessage GetInitClientMessage();
-    bool CleanupOnAcknowledged(ui64 sequenceNumber);
+    bool CleanupOnAcknowledged(ui64 id);
     bool IsReadyToSendNextImpl();
     void DumpState();
-    ui64 GetNextSeqNoImpl(const TMaybe<ui64>& seqNo);
+    ui64 GetNextIdImpl(const TMaybe<ui64>& seqNo);
+    ui64 GetSeqNoImpl(ui64 id);
+    ui64 GetIdImpl(ui64 seqNo);
     void SendImpl();
     void AbortImpl();
     void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
@@ -385,14 +384,12 @@ private:
     TString TargetCluster;
     TString InitialCluster;
     TString CurrentCluster;
-    bool OnSeqNoShift = false;
     TString PreferredClusterByCDS;
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> ConnectionFactory;
     TDbDriverStatePtr DbDriverState;
     TStringType PrevToken;
     bool UpdateTokenInProgress = false;
     TInstant LastTokenUpdate = TInstant::Zero();
-    std::shared_ptr<TCallbackContext<TWriteSessionImpl>> CbContext;
     std::shared_ptr<TWriteSessionEventsQueue> EventsQueue;
     NGrpc::IQueueClientContextPtr ClientContext; // Common client context.
     NGrpc::IQueueClientContextPtr ConnectContext;
@@ -426,9 +423,9 @@ private:
     TAtomic Aborting = 0;
     bool SessionEstablished = false;
     ui32 PartitionId = 0;
-    ui64 LastSeqNo = 0;
-    ui64 MinUnsentSeqNo = 0;
-    ui64 SeqNoShift = 0;
+    ui64 NextId = 0;
+    ui64 MinUnsentId = 1;
+    std::map<TString, ui64> InitSeqNo;
     TMaybe<bool> AutoSeqNoMode;
     bool ValidateSeqNoMode = false;
 

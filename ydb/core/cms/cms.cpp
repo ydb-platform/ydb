@@ -11,6 +11,7 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/erasure/erasure.h>
 #include <ydb/core/protos/cms.pb.h>
@@ -21,6 +22,8 @@
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
+#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
@@ -73,6 +76,158 @@ void TCms::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext 
     Die(ctx);
 }
 
+namespace {
+    struct TNodeVDisksStatus {
+        ui32 Up;
+        ui32 Down;
+        ui32 Restart;
+    };
+
+    void CalculateNodeVDisksStatus(const TClusterInfoPtr clusterInfo, const TNodeInfoPtr node,
+                                   THashMap<ui32, TNodeVDisksStatus>& nodeVDisksStatus) {
+        ui32 up = 0;
+        ui32 down = 0;
+        ui32 restart = 0;
+        for (const auto& vdiskID : node->VDisks) {
+            const auto& vdisk = clusterInfo->VDisk(vdiskID);
+            switch (vdisk.State) {
+                case NKikimrCms::EState::UNKNOWN:
+                    break;
+                case NKikimrCms::EState::DOWN:
+                    ++down;
+                    break;
+                case NKikimrCms::EState::RESTART:
+                    ++restart;
+                    break;
+                case NKikimrCms::EState::UP:
+                    ++up;
+                    break;
+            }
+        }
+        nodeVDisksStatus[node->NodeId].Up = up;
+        nodeVDisksStatus[node->NodeId].Down = down;
+        nodeVDisksStatus[node->NodeId].Restart = restart;
+    }
+} // namespace
+
+void TCms::GenerateNodeState(IOutputStream& out)
+{
+    THashMap<ui32, TNodeVDisksStatus> nodeVDisksStatusMap;
+
+    ui32 totalVDisksUp = 0;
+    ui32 totalVDisksRestart = 0;
+    ui32 totalVDisksDown = 0;
+
+    for (const auto& node: ClusterInfo->AllNodes()) {
+        CalculateNodeVDisksStatus(ClusterInfo, node.second, nodeVDisksStatusMap);
+        totalVDisksUp += nodeVDisksStatusMap[node.first].Up;
+        totalVDisksDown += nodeVDisksStatusMap[node.first].Down;
+        totalVDisksRestart += nodeVDisksStatusMap[node.first].Restart;
+    }
+
+    const auto& nodeState = ClusterInfo->ClusterNodes->GetNodeToState();
+    HTML(out) {
+        TAG(TH3) {
+            out << "Nodes with state";
+        }
+        TAG(TH4) {
+            out << "ClusterInfo last update timestamp: " << ClusterInfo->GetTimestamp();
+        }
+        TAG(TH4) {
+            out << "Total VDisks State. UP: " << totalVDisksUp << ", Restart = " << totalVDisksRestart << ", Down = " << totalVDisksDown;
+        }
+        TABLE_SORTABLE() {
+            TABLEHEAD() {
+                TABLER() {
+                    TABLED() {
+                        out << "NodeID";
+                    }
+                    TABLED() {
+                        out << "Host";
+                    }
+                    TABLED() {
+                        out << "State";
+                    }
+                    TABLED() {
+                        out << "InMemoryState";
+                    }
+                    TABLED() {
+                        out << "Tenant";
+                    }
+                    TABLED() {
+                        out << "VDisksUp";
+                    }
+                    TABLED() {
+                        out << "VDisksDown";
+                    }
+                    TABLED() {
+                        out << "VDisksRestart";
+                    }
+                }
+            }
+            TABLEBODY() {
+                for (const auto& node : ClusterInfo->AllNodes()) {
+                    auto currentInMemoryState = INodesChecker::NODE_STATE_UNSPECIFIED;
+                    if (nodeState.contains(node.first)) {
+                        currentInMemoryState = nodeState.at(node.first);
+                    }
+                    TABLER() {
+                        TABLED() {
+                            out << node.first;
+                        }
+                        TABLED() {
+                            out << node.second->Host;
+                        }
+                        TABLED() {
+                            out << node.second->State;
+                        }
+                        TABLED() {
+                            out << currentInMemoryState;
+                        }
+                        TABLED() {
+                            out << node.second->Tenant;
+                        }
+                        if (node.second->VDisks) {
+                            TABLED() {
+                                out << nodeVDisksStatusMap[node.first].Up;
+                            }
+                            TABLED() {
+                                out << nodeVDisksStatusMap[node.first].Down;
+                            }
+                            TABLED() {
+                                out << nodeVDisksStatusMap[node.first].Restart;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+TString TCms::GenerateStat()
+{
+    TStringStream str;
+    HTML(str) {
+        TAG(TH2) { str << "Cluster management system tablet";}
+        GenerateNodeState(str);
+    }
+    return str.Str();
+}
+
+bool TCms::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx)
+{
+    if (!ev) {
+        return true;
+    }
+
+    ScheduleUpdateClusterInfo(ctx, true);
+
+    TString str = GenerateStat();
+    ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(std::move(str)));
+    return true;
+}
+
 void TCms::Enqueue(TAutoPtr<IEventHandle> &ev)
 {
     InitQueue.push(ev);
@@ -96,8 +251,6 @@ void TCms::AdjustInfo(TClusterInfoPtr &info, const TActorContext &ctx) const
 {
     for (const auto &entry : State->Permissions)
         info->AddLocks(entry.second, &ctx);
-    for (const auto &entry : State->ScheduledRequests)
-        info->ScheduleActions(entry.second, &ctx);
     for (const auto &entry : State->Notifications)
         info->AddExternalLocks(entry.second, &ctx);
 }
@@ -283,6 +436,7 @@ void TCms::AddPermissionExtensions(const TAction& action, TPermission& perm) con
     switch (action.GetType()) {
         case TAction::RESTART_SERVICES:
         case TAction::SHUTDOWN_HOST:
+        case TAction::REBOOT_HOST:
             AddHostExtensions(action.GetHost(), perm);
             break;
         default:
@@ -340,6 +494,7 @@ bool TCms::CheckAction(const TAction &action,
         case TAction::RESTART_SERVICES:
             return CheckActionRestartServices(action, opts, error, ctx);
         case TAction::SHUTDOWN_HOST:
+        case TAction::REBOOT_HOST:
             return CheckActionShutdownHost(action, opts, error, ctx);
         case TAction::REPLACE_DEVICES:
             return CheckActionReplaceDevices(action, opts.PermissionDuration, error);
@@ -428,8 +583,12 @@ bool TCms::CheckActionShutdownHost(const TAction &action,
                                    TErrorInfo &error,
                                    const TActorContext &ctx) const
 {
+    const bool forciblyAllow = action.GetType() == TAction::REBOOT_HOST;
     for (const auto node : ClusterInfo->HostNodes(action.GetHost())) {
         if (!CheckActionShutdownNode(action, opts, *node, error, ctx)) {
+            if (forciblyAllow && node->State == DOWN) {
+                continue;
+            }
             return false;
         }
     }
@@ -1345,7 +1504,7 @@ void TCms::ProcessRequest(TAutoPtr<IEventHandle> &ev)
         HFuncTraced(TEvCms::TEvGetClusterInfoRequest, Handle);
 
     default:
-        Y_FAIL("Unexpected request type");
+        Y_ABORT("Unexpected request type");
     }
 }
 
@@ -1569,13 +1728,7 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         }
     }
 
-    ClusterInfo->LogManager.PushRollbackPoint();
-    for (const auto &scheduled_request : State->ScheduledRequests) {
-            for (auto &action : scheduled_request.second.Request.GetActions())
-                ClusterInfo->LogManager.ApplyAction(action, ClusterInfo);
-    }
     bool ok = CheckPermissionRequest(rec, resp->Record, scheduled.Request, ctx);
-    ClusterInfo->LogManager.RollbackOperations();
 
     // Schedule request if required.
     if (rec.GetDryRun()) {
@@ -1589,7 +1742,6 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
             scheduled.Owner = user;
             scheduled.Order = State->NextRequestId - 1;
             scheduled.RequestId = reqId;
-            ClusterInfo->ScheduleActions(scheduled, &ctx);
 
             copy = new TRequestInfo(scheduled);
             State->ScheduledRequests.emplace(reqId, std::move(scheduled));
@@ -1640,20 +1792,8 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
 
     auto requestStartTime = TInstant::Now();
 
-    ClusterInfo->LogManager.PushRollbackPoint();
-    for (const auto &scheduled_request : State->ScheduledRequests) {
-        if (scheduled_request.second.Order < request.Order) {
-            for (auto &action : scheduled_request.second.Request.GetActions())
-                ClusterInfo->LogManager.ApplyAction(action, ClusterInfo);
-        }
-    }
-    // Deactivate locks of this and later requests to
-    // avoid false conflicts.
-    ClusterInfo->DeactivateScheduledLocks(request.Order);
     request.Request.SetAvailabilityMode(rec.GetAvailabilityMode());
     bool ok = CheckPermissionRequest(request.Request, resp->Record, scheduled.Request, ctx);
-    ClusterInfo->ReactivateScheduledLocks();
-    ClusterInfo->LogManager.RollbackOperations();
 
     // Schedule request if required.
     if (rec.GetDryRun()) {
@@ -1662,15 +1802,12 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
         TAutoPtr<TRequestInfo> copy;
         auto order = request.Order;
 
-        ClusterInfo->UnscheduleActions(request.RequestId);
         State->ScheduledRequests.erase(it);
         if (scheduled.Request.ActionsSize()) {
             scheduled.Owner = user;
             scheduled.Order = order;
             scheduled.RequestId = rec.GetRequestId();
             resp->Record.SetRequestId(scheduled.RequestId);
-
-            ClusterInfo->ScheduleActions(scheduled, &ctx);
 
             copy = new TRequestInfo(scheduled);
             State->ScheduledRequests.emplace(scheduled.RequestId, std::move(scheduled));

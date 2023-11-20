@@ -94,9 +94,7 @@ TNode SerializeParamsForConcatenate(
 TNode SerializeParamsForPingTx(
     const TTransactionId& transactionId);
 
-TNode SerializeParamsForGetOperation(
-    const TOperationId& operationId,
-    const TGetOperationOptions& options);
+TNode SerializeParamsForGetOperation(const std::variant<TString, TOperationId>& aliasOrOperationId, const TGetOperationOptions& options);
 
 TNode SerializeParamsForAbortOperation(
     const TOperationId& operationId);

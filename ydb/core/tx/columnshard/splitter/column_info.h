@@ -29,7 +29,7 @@ public:
     void Merge(TSplittedColumn&& c) {
         Size += c.Size;
         Y_ABORT_UNLESS(Field->name() == c.Field->name());
-        Y_VERIFY_DEBUG(Field->Equals(c.Field));
+        Y_DEBUG_ABORT_UNLESS(Field->Equals(c.Field));
         Y_ABORT_UNLESS(ColumnId == c.ColumnId);
         Y_ABORT_UNLESS(ColumnId);
         RecordsCount += c.RecordsCount;

@@ -460,6 +460,7 @@ TFuture<NCypressClient::TNodeId> TClientBase::CopyNode(
     req->set_preserve_owner(options.PreserveOwner);
     req->set_preserve_acl(options.PreserveAcl);
     req->set_pessimistic_quota_check(options.PessimisticQuotaCheck);
+    req->set_enable_cross_cell_copying(options.EnableCrossCellCopying);
 
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
@@ -492,6 +493,7 @@ TFuture<NCypressClient::TNodeId> TClientBase::MoveNode(
     req->set_preserve_expiration_timeout(options.PreserveExpirationTimeout);
     req->set_preserve_owner(options.PreserveOwner);
     req->set_pessimistic_quota_check(options.PessimisticQuotaCheck);
+    req->set_enable_cross_cell_copying(options.EnableCrossCellCopying);
 
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
@@ -762,6 +764,9 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
     req->SetTimeout(options.Timeout.value_or(GetRpcProxyConnection()->GetConfig()->DefaultLookupRowsTimeout));
 
     req->set_path(path);
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        req->TracingTags().push_back({"yt.table_path", path});
+    }
     req->Attachments() = SerializeRowset(nameTable, keys, req->mutable_rowset_descriptor());
 
     if (!options.ColumnFilter.IsUniversal()) {
@@ -806,6 +811,9 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
     req->SetTimeout(options.Timeout.value_or(GetRpcProxyConnection()->GetConfig()->DefaultLookupRowsTimeout));
 
     req->set_path(path);
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        req->TracingTags().push_back({"yt.table_path", path});
+    }
     req->Attachments() = SerializeRowset(nameTable, keys, req->mutable_rowset_descriptor());
 
     if (!options.ColumnFilter.IsUniversal()) {
@@ -873,6 +881,15 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookup(
         req->Attachments().insert(req->Attachments().end(), rowset.begin(), rowset.end());
     }
 
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        std::vector<TString> paths;
+        paths.reserve(subrequests.size());
+        for (const auto& subrequest : subrequests) {
+            paths.push_back(subrequest.Path);
+        }
+        req->TracingTags().push_back({"yt.table_paths", NYson::ConvertToYsonString(paths).ToString()});
+    }
+
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
     req->set_timestamp(options.Timestamp);
     req->set_retention_timestamp(options.RetentionTimestamp);
@@ -909,11 +926,16 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookup(
 }
 
 template<class TRequest>
-void FillRequestBySelectRowsOptionsBase(const TSelectRowsOptionsBase& options, TRequest request)
+void FillRequestBySelectRowsOptionsBase(
+    const TSelectRowsOptionsBase& options,
+    const std::optional<NYPath::TYPath>& defaultUdfRegistryPath,
+    TRequest request)
 {
     request->set_timestamp(options.Timestamp);
     if (options.UdfRegistryPath) {
         request->set_udf_registry_path(*options.UdfRegistryPath);
+    } else if (defaultUdfRegistryPath) {
+        request->set_udf_registry_path(*defaultUdfRegistryPath);
     }
 }
 
@@ -927,11 +949,13 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->SetResponseHeavy(true);
     req->set_query(query);
 
-    FillRequestBySelectRowsOptionsBase(options, req);
+    const auto& config = GetRpcProxyConnection()->GetConfig();
+
+    FillRequestBySelectRowsOptionsBase(options, config->UdfRegistryPath, req);
     // TODO(ifsmirnov): retention timestamp in explain_query.
     req->set_retention_timestamp(options.RetentionTimestamp);
     // TODO(lukyan): Move to FillRequestBySelectRowsOptionsBase
-    req->SetTimeout(options.Timeout.value_or(GetRpcProxyConnection()->GetConfig()->DefaultSelectRowsTimeout));
+    req->SetTimeout(options.Timeout.value_or(config->DefaultSelectRowsTimeout));
 
     if (options.InputRowLimit) {
         req->set_input_row_limit(*options.InputRowLimit);
@@ -979,7 +1003,7 @@ TFuture<TYsonString> TClientBase::ExplainQuery(
 
     auto req = proxy.ExplainQuery();
     req->set_query(query);
-    FillRequestBySelectRowsOptionsBase(options, req);
+    FillRequestBySelectRowsOptionsBase(options, GetRpcProxyConnection()->GetConfig()->UdfRegistryPath, req);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspExplainQueryPtr& rsp) {
         return TYsonString(rsp->value());

@@ -107,7 +107,8 @@ TMutableUnversionedRow TRowBuffer::CaptureAndPermuteRow(
     const TTableSchema& tableSchema,
     int schemafulColumnCount,
     const TNameTableToSchemaIdMapping& idMapping,
-    std::vector<bool>* columnPresenceBuffer)
+    std::vector<bool>* columnPresenceBuffer,
+    std::optional<TUnversionedValue> addend)
 {
     int valueCount = schemafulColumnCount;
 
@@ -126,6 +127,9 @@ TMutableUnversionedRow TRowBuffer::CaptureAndPermuteRow(
             ++valueCount;
         }
     }
+    if (addend) {
+        ++valueCount;
+    }
 
     auto capturedRow = TMutableUnversionedRow::Allocate(&Pool_, valueCount);
     for (int pos = 0; pos < schemafulColumnCount; ++pos) {
@@ -143,6 +147,9 @@ TMutableUnversionedRow TRowBuffer::CaptureAndPermuteRow(
         int pos = mappedId < schemafulColumnCount ? mappedId : valueCount++;
         capturedRow[pos] = value;
         capturedRow[pos].Id = mappedId;
+    }
+    if (addend) {
+        capturedRow[valueCount++] = *addend;
     }
 
     return capturedRow;

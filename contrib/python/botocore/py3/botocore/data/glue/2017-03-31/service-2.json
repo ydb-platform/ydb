@@ -5389,6 +5389,14 @@
         "SnowflakeTarget":{
           "shape":"SnowflakeTarget",
           "documentation":"<p>Specifies a target that writes to a Snowflake data source.</p>"
+        },
+        "ConnectorDataSource":{
+          "shape":"ConnectorDataSource",
+          "documentation":"<p>Specifies a source generated with standard connection options.</p>"
+        },
+        "ConnectorDataTarget":{
+          "shape":"ConnectorDataTarget",
+          "documentation":"<p>Specifies a target generated with standard connection options.</p>"
         }
       },
       "documentation":"<p> <code>CodeGenConfigurationNode</code> enumerates all valid Node types. One and only one of its member variables can be populated.</p>"
@@ -5991,6 +5999,65 @@
         }
       },
       "documentation":"<p>Specifies the connections used by a job.</p>"
+    },
+    "ConnectorDataSource":{
+      "type":"structure",
+      "required":[
+        "Name",
+        "ConnectionType",
+        "Data"
+      ],
+      "members":{
+        "Name":{
+          "shape":"NodeName",
+          "documentation":"<p>The name of this source node.</p>"
+        },
+        "ConnectionType":{
+          "shape":"EnclosedInStringProperty",
+          "documentation":"<p>The <code>connectionType</code>, as provided to the underlying Glue library. This node type supports the following connection types: </p> <ul> <li> <p> <code>bigquery</code> </p> </li> </ul>"
+        },
+        "Data":{
+          "shape":"ConnectorOptions",
+          "documentation":"<p>A map specifying connection options for the node. You can find standard connection options for the corresponding connection type in the <a href=\"https://docs.aws.amazon.com/glue/latest/dg/aws-glue-programming-etl-connect.html\"> Connection parameters</a> section of the Glue documentation.</p>"
+        },
+        "OutputSchemas":{
+          "shape":"GlueSchemas",
+          "documentation":"<p>Specifies the data schema for this source.</p>"
+        }
+      },
+      "documentation":"<p>Specifies a source generated with standard connection options.</p>"
+    },
+    "ConnectorDataTarget":{
+      "type":"structure",
+      "required":[
+        "Name",
+        "ConnectionType",
+        "Data"
+      ],
+      "members":{
+        "Name":{
+          "shape":"NodeName",
+          "documentation":"<p>The name of this target node.</p>"
+        },
+        "ConnectionType":{
+          "shape":"EnclosedInStringProperty",
+          "documentation":"<p>The <code>connectionType</code>, as provided to the underlying Glue library. This node type supports the following connection types: </p> <ul> <li> <p> <code>bigquery</code> </p> </li> </ul>"
+        },
+        "Data":{
+          "shape":"ConnectorOptions",
+          "documentation":"<p>A map specifying connection options for the node. You can find standard connection options for the corresponding connection type in the <a href=\"https://docs.aws.amazon.com/glue/latest/dg/aws-glue-programming-etl-connect.html\"> Connection parameters</a> section of the Glue documentation.</p>"
+        },
+        "Inputs":{
+          "shape":"OneInput",
+          "documentation":"<p>The nodes that are inputs to the data target.</p>"
+        }
+      },
+      "documentation":"<p>Specifies a target generated with standard connection options.</p>"
+    },
+    "ConnectorOptions":{
+      "type":"map",
+      "key":{"shape":"GenericString"},
+      "value":{"shape":"GenericString"}
     },
     "ContextWords":{
       "type":"list",
@@ -18111,6 +18178,8 @@
       "type":"string",
       "enum":[
         "GITHUB",
+        "GITLAB",
+        "BITBUCKET",
         "AWS_CODE_COMMIT"
       ]
     },
@@ -20262,11 +20331,11 @@
         },
         "Provider":{
           "shape":"SourceControlProvider",
-          "documentation":"<p>The provider for the remote repository.</p>"
+          "documentation":"<p> The provider for the remote repository. Possible values: GITHUB, AWS_CODE_COMMIT, GITLAB, BITBUCKET. </p>"
         },
         "RepositoryName":{
           "shape":"NameString",
-          "documentation":"<p>The name of the remote repository that contains the job artifacts.</p>"
+          "documentation":"<p>The name of the remote repository that contains the job artifacts. For BitBucket providers, <code>RepositoryName</code> should include <code>WorkspaceName</code>. Use the format <code>&lt;WorkspaceName&gt;/&lt;RepositoryName&gt;</code>. </p>"
         },
         "RepositoryOwner":{
           "shape":"NameString",
@@ -20517,11 +20586,11 @@
         },
         "Provider":{
           "shape":"SourceControlProvider",
-          "documentation":"<p>The provider for the remote repository.</p>"
+          "documentation":"<p> The provider for the remote repository. Possible values: GITHUB, AWS_CODE_COMMIT, GITLAB, BITBUCKET. </p>"
         },
         "RepositoryName":{
           "shape":"NameString",
-          "documentation":"<p>The name of the remote repository that contains the job artifacts.</p>"
+          "documentation":"<p>The name of the remote repository that contains the job artifacts. For BitBucket providers, <code>RepositoryName</code> should include <code>WorkspaceName</code>. Use the format <code>&lt;WorkspaceName&gt;/&lt;RepositoryName&gt;</code>. </p>"
         },
         "RepositoryOwner":{
           "shape":"NameString",

@@ -27,6 +27,7 @@ message StatusIds {
         UNDETERMINED =        400170;
         UNSUPPORTED =         400180;
         SESSION_BUSY =        400190;
+        EXTERNAL_ERROR =      400200;
     }
     // reserved range [401000, 402999] for internal client status
 }

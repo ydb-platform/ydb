@@ -29,14 +29,14 @@ template <typename T>
 inline bool HasData(const TProtoValue& value, NScheme::TTypeId schemeType) {
     Y_UNUSED(value);
     Y_UNUSED(schemeType);
-    Y_FAIL("Not scpecified type.");
+    Y_ABORT("Not scpecified type.");
 }
 
 template <typename T>
 inline T GetData(const TProtoValue& value, NScheme::TTypeId schemeType) {
     Y_UNUSED(value);
     Y_UNUSED(schemeType);
-    Y_FAIL("Not scpecified type.");
+    Y_ABORT("Not scpecified type.");
 }
 
 #include "data_funcs.inl"

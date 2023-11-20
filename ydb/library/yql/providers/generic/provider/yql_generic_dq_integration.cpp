@@ -1,6 +1,7 @@
 #include "yql_generic_dq_integration.h"
 
 #include "yql_generic_mkql_compiler.h"
+#include "yql_generic_predicate_pushdown.h"
 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -41,6 +42,7 @@ namespace NYql {
             TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
                 if (const auto maybeGenReadTable = TMaybeNode<TGenReadTable>(read)) {
                     const auto genReadTable = maybeGenReadTable.Cast();
+                    YQL_ENSURE(genReadTable.Ref().GetTypeAnn(), "No type annotation for node " << genReadTable.Ref().Content());
                     const auto token = TString("cluster:default_") += genReadTable.DataSource().Cluster().StringValue();
                     const auto rowType = genReadTable.Ref()
                                              .GetTypeAnn()
@@ -69,6 +71,7 @@ namespace NYql {
                                 .Name().Build(token)
                                 .Build()
                             .Columns(std::move(columns))
+                            .FilterPredicate(genReadTable.FilterPredicate())
                             .Build()
                         .RowType(ExpandType(genReadTable.Pos(), *rowType, ctx))
                         .DataSource(genReadTable.DataSource().Cast<TCoDataSource>())
@@ -138,13 +141,30 @@ namespace NYql {
                         column->mutable_type()->CopyFrom(type);
                     }
 
+                    if (auto predicate = settings.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
+                        TStringBuilder err;
+                        if (!SerializeFilterPredicate(predicate, select->mutable_where()->mutable_filter_typed(), err)) {
+                            ythrow yexception() << "Failed to serialize filter predicate for source: " << err;
+                        }
+                    }
+
                     // store data source instance
                     srcDesc.mutable_data_source_instance()->CopyFrom(tableMeta.value()->DataSourceInstance);
 
                     // preserve source description for read actor
                     protoSettings.PackFrom(srcDesc);
 
-                    sourceType = "GenericSource";
+                    switch (srcDesc.data_source_instance().kind()) {
+                        case NYql::NConnector::NApi::CLICKHOUSE:
+                            sourceType = "ClickHouseGeneric";
+                            break;
+                        case NYql::NConnector::NApi::POSTGRESQL:
+                            sourceType = "PostgreSqlGeneric";
+                            break;
+                        default:
+                            ythrow yexception() << "Data source kind is unknown or not specified";
+                            break;
+                    }
                 }
             }
 

@@ -142,6 +142,9 @@ private:
         });
         ControlId = NActors::ActorIdFromProto(ev->Get()->Record.GetControlId());
         ResultId = NActors::ActorIdFromProto(ev->Get()->Record.GetResultId());
+        if (ev->Get()->Record.GetRequest().GetStatsMode() != NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_UNSPECIFIED) {
+            StatsMode = ev->Get()->Record.GetRequest().GetStatsMode();
+        }
         // These actors will be killed at exit.
         AddChild(ControlId);
         AddChild(ResultId);
@@ -191,11 +194,13 @@ private:
             TraceId, Settings,
             Counters,
             enableComputeActor ? tasks : TVector<NYql::NDqProto::TDqTask>(),
-            computeActorType));
+            computeActorType,
+            StatsMode));
         auto allocateRequest = MakeHolder<TEvAllocateWorkersRequest>(workerCount, Username);
         allocateRequest->Record.SetTraceId(TraceId);
         allocateRequest->Record.SetCreateComputeActor(enableComputeActor);
         allocateRequest->Record.SetComputeActorType(computeActorType);
+        allocateRequest->Record.SetStatsMode(StatsMode);
         if (enableComputeActor) {
             ActorIdToProto(ControlId, allocateRequest->Record.MutableResultActorId());
         }
@@ -224,7 +229,9 @@ private:
             MergeFilter(filter, pragmaFilter);
         }
 
-        StartCounter("AllocateWorkers");
+        if (CollectBasic()) {
+            StartCounter("AllocateWorkersUs");
+        }
 
         TActivationContext::Send(new IEventHandle(
             GwmActorId,
@@ -256,11 +263,13 @@ private:
         if (Finished) {
             YQL_CLOG(WARN, ProviderDq) << "Re-Finish IGNORED with status=" << static_cast<int>(statusCode);
         } else {
-            FlushCounter("ExecutionTime");
             TQueryResponse result;
+            if (CollectBasic()) {
+                FlushCounter("ExecutionTimeUs");
+                FlushCounters(result);
+            }
             IssuesToMessage(Issues, result.MutableIssues());
             result.SetStatusCode(statusCode);
-            FlushCounters(result);
             Send(ControlId, MakeHolder<TEvQueryResponse>(std::move(result)));
             Finished = true;
         }
@@ -273,7 +282,9 @@ private:
                             << ", status=" << static_cast<int>(ev->Get()->Record.GetStatusCode())
                             << ", issues size=" << ev->Get()->Record.IssuesSize()
                             << ", sender=" << ev->Sender;
-            AddCounters(ev->Get()->Record);
+            if (CollectBasic()) {
+                AddCounters(ev->Get()->Record);
+            }
             if (ev->Get()->Record.IssuesSize()) {
                 TIssues issues;
                 IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
@@ -323,8 +334,10 @@ private:
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
         YQL_CLOG(DEBUG, ProviderDq) << "TDqExecuter::TEvAllocateWorkersResponse";
 
-        AddCounters(ev->Get()->Record);
-        FlushCounter("AllocateWorkers");
+        if (CollectBasic()) {
+            AddCounters(ev->Get()->Record);
+            FlushCounter("AllocateWorkersUs");
+        }
 
         auto& response = ev->Get()->Record;
         switch (response.GetTResponseCase()) {
@@ -371,14 +384,16 @@ private:
 
                 uniqueWorkers.insert(std::make_pair(workerInfo.GetGuid(), workerInfo));
             }
-            AddCounter("UniqueWorkers", uniqueWorkers.size());
+            if (CollectBasic()) {
+                AddCounter("UniqueWorkers", uniqueWorkers.size());
+            }
         }
 
         YQL_CLOG(INFO, ProviderDq) << workers.size() << " workers allocated";
 
         YQL_ENSURE(workers.size() == tasks.size());
 
-        auto res = MakeHolder<TEvReadyState>(ExecutionPlanner->GetSourceID(), ExecutionPlanner->GetResultType());
+        auto res = MakeHolder<TEvReadyState>(ExecutionPlanner->GetSourceID(), ExecutionPlanner->GetResultType(), StatsMode);
 
         if (Settings->EnableComputeActor.Get().GetOrElse(false) == false) {
             for (size_t i = 0; i < tasks.size(); i++) {
@@ -403,7 +418,9 @@ private:
         WorkersAllocated = true;
 
         ExecutionStart = TInstant::Now();
-        StartCounter("ExecutionTime");
+        if (CollectBasic()) {
+            StartCounter("ExecutionTimeUs");
+        }
 
         AllocationHistogram->Collect((ExecutionStart-StartTime).Seconds());
 
@@ -459,6 +476,10 @@ private:
         }
     }
 
+    bool CollectBasic() {
+        return StatsMode >= NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_BASIC;
+    }
+
     NActors::TActorId GwmActorId;
     NActors::TActorId PrinterId;
     TDqConfiguration::TPtr Settings;
@@ -492,6 +513,7 @@ private:
     TIssues Issues;
     bool CreateTaskSuspended;
     bool Finished = false;
+    NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_FULL;
 };
 
 NActors::IActor* MakeDqExecuter(

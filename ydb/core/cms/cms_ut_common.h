@@ -386,7 +386,6 @@ private:
 
     TActorId Sender;
     TActorId ClientId;
-    TActorId CmsTabletActor;
 };
 
 }

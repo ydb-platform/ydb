@@ -1,6 +1,8 @@
 #include "kqp_prepared_query.h"
 
+#include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/library/yql/core/yql_data_provider.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
@@ -74,6 +76,7 @@ TKqpPhyTxHolder::TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPrepar
         const auto& txResult = Proto->GetResults(i);
         auto& result = TxResultsMeta[i];
 
+        YQL_ENSURE(Alloc);
         result.MkqlItemType = ImportTypeFromProto(txResult.GetItemType(), Alloc->TypeEnv);
         //Hack to prevent data race. Side effect of IsPresortSupported - fill cached value.
         //So no more concurent write subsequently
@@ -95,6 +98,10 @@ TKqpPhyTxHolder::TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPrepar
     }
 }
 
+TIntrusiveConstPtr<TTableConstInfoMap> TKqpPhyTxHolder::GetTableConstInfoById() const {
+    return TableConstInfoById;
+}
+
 bool TKqpPhyTxHolder::IsLiteralTx() const {
     return LiteralTx;
 }
@@ -107,9 +114,14 @@ const NKikimr::NKqp::TStagePredictor& TKqpPhyTxHolder::GetCalculationPredictor(c
 TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry)
     : Proto(proto)
-    , Alloc(std::move(std::make_shared<TPreparedQueryAllocHolder>(functionRegistry)))
+    , Alloc(nullptr)
     , TableConstInfoById(MakeIntrusive<TTableConstInfoMap>())
 {
+
+    if (functionRegistry) {
+        Alloc = std::make_shared<TPreparedQueryAllocHolder>(functionRegistry);
+    }
+
     THashSet<TString> tablesSet;
     const auto& phyQuery = Proto->GetPhysicalQuery();
     Transactions.reserve(phyQuery.TransactionsSize());
@@ -151,6 +163,16 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
     }
 
     QueryTables = TVector<TString>(tablesSet.begin(), tablesSet.end());
+}
+
+TIntrusivePtr<TTableConstInfo>& TPreparedQueryHolder::GetInfo(const TTableId& tableId) {
+    auto info = TableConstInfoById->Map.FindPtr(tableId);
+    MKQL_ENSURE_S(info);
+    return *info;
+}
+
+const THashMap<TTableId, TIntrusivePtr<TTableConstInfo>>& TPreparedQueryHolder::GetTableConstInfo() const {
+    return TableConstInfoById->Map;
 }
 
 void TPreparedQueryHolder::FillTable(const NKqpProto::TKqpPhyTable& phyTable) {

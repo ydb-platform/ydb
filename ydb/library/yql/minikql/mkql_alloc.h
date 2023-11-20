@@ -139,6 +139,29 @@ private:
     TAllocState::TListEntry* Prev = nullptr;
 };
 
+// TListEntry and IBoxedValue use the same place
+static_assert(sizeof(NUdf::IBoxedValue) == sizeof(TAllocState::TListEntry));
+
+class TBoxedValueWithFree : public NUdf::TBoxedValueBase {
+public:
+    void operator delete(void *mem) noexcept;
+};
+
+struct TMkqlPAllocHeader {
+    union {
+        TAllocState::TListEntry Entry;
+        TBoxedValueWithFree Boxed;
+    } U;
+
+    size_t Size;
+    void* Self; // should be placed right before pointer to allocated area, see GetMemoryChunkContext
+};
+
+static_assert(sizeof(TMkqlPAllocHeader) == 
+    sizeof(size_t) +
+    sizeof(TAllocState::TListEntry) +
+    sizeof(void*), "Padding is not allowed");
+
 class TScopedAlloc {
 public:
     explicit TScopedAlloc(const TSourceLocation& location,
@@ -233,7 +256,7 @@ private:
 
 void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool);
 inline void* MKQLAllocFastDeprecated(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
-    Y_VERIFY_DEBUG(state);
+    Y_DEBUG_ABORT_UNLESS(state);
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
@@ -257,7 +280,7 @@ inline void* MKQLAllocFastDeprecated(size_t sz, TAllocState* state, const EMemor
 }
 
 inline void* MKQLAllocFastWithSize(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
-    Y_VERIFY_DEBUG(state);
+    Y_DEBUG_ABORT_UNLESS(state);
 
     bool useMemalloc = state->SupportsSizedAllocators && sz > MaxPageUserData;
 
@@ -289,14 +312,14 @@ inline void* MKQLAllocFastWithSize(size_t sz, TAllocState* state, const EMemoryS
 
 void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state, const EMemorySubPool mPool) noexcept;
 
-inline void MKQLFreeDeprecated(const void* mem, const EMemorySubPool mPool = EMemorySubPool::Default) noexcept {
+inline void MKQLFreeDeprecated(const void* mem, const EMemorySubPool mPool) noexcept {
     if (!mem) {
         return;
     }
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     TAllocState *state = TlsAllocState;
-    Y_VERIFY_DEBUG(state);
+    Y_DEBUG_ABORT_UNLESS(state);
 
     auto entry = (TAllocState::TListEntry*)(mem) - 1;
     entry->Unlink();
@@ -305,7 +328,7 @@ inline void MKQLFreeDeprecated(const void* mem, const EMemorySubPool mPool = EMe
 #endif
 
     TAllocPageHeader* header = (TAllocPageHeader*)TAllocState::GetPageStart(mem);
-    Y_VERIFY_DEBUG(header->MyAlloc == TlsAllocState, "%s", (TStringBuilder() << "wrong allocator was used; "
+    Y_DEBUG_ABORT_UNLESS(header->MyAlloc == TlsAllocState, "%s", (TStringBuilder() << "wrong allocator was used; "
         "allocated with: " << header->MyAlloc->GetInfo() << " freed with: " << TlsAllocState->GetInfo()).data());
     if (Y_LIKELY(--header->UseCount != 0)) {
         return;
@@ -319,7 +342,7 @@ inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state,
         return;
     }
 
-    Y_VERIFY_DEBUG(state);
+    Y_DEBUG_ABORT_UNLESS(state);
 
     bool useFree = state->SupportsSizedAllocators && sz > MaxPageUserData;
 
@@ -336,7 +359,7 @@ inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state,
     }
 
     TAllocPageHeader* header = (TAllocPageHeader*)TAllocState::GetPageStart(mem);
-    Y_VERIFY_DEBUG(header->MyAlloc == state, "%s", (TStringBuilder() << "wrong allocator was used; "
+    Y_DEBUG_ABORT_UNLESS(header->MyAlloc == state, "%s", (TStringBuilder() << "wrong allocator was used; "
         "allocated with: " << header->MyAlloc->GetInfo() << " freed with: " << TlsAllocState->GetInfo()).data());
     if (Y_LIKELY(--header->UseCount != 0)) {
         header->Deallocated += sz;
@@ -346,7 +369,7 @@ inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state,
     MKQLFreeSlow(header, state, mPool);
 }
 
-inline void* MKQLAllocDeprecated(size_t sz, const EMemorySubPool mPool = EMemorySubPool::Default) {
+inline void* MKQLAllocDeprecated(size_t sz, const EMemorySubPool mPool) {
     return MKQLAllocFastDeprecated(sz, TlsAllocState, mPool);
 }
 
@@ -564,9 +587,9 @@ public:
         {}
 
         T& operator*() {
-            Y_VERIFY_DEBUG(PageIndex < OBJECTS_PER_PAGE);
-            Y_VERIFY_DEBUG(PageNo < Owner->Pages.size());
-            Y_VERIFY_DEBUG(PageNo + 1 < Owner->Pages.size() || PageIndex < Owner->IndexInLastPage);
+            Y_DEBUG_ABORT_UNLESS(PageIndex < OBJECTS_PER_PAGE);
+            Y_DEBUG_ABORT_UNLESS(PageNo < Owner->Pages.size());
+            Y_DEBUG_ABORT_UNLESS(PageNo + 1 < Owner->Pages.size() || PageIndex < Owner->IndexInLastPage);
             return *Owner->ObjectAt(Owner->Pages[PageNo], PageIndex);
         }
 
@@ -614,9 +637,9 @@ public:
         {}
 
         const T& operator*() {
-            Y_VERIFY_DEBUG(PageIndex < OBJECTS_PER_PAGE);
-            Y_VERIFY_DEBUG(PageNo < Owner->Pages.size());
-            Y_VERIFY_DEBUG(PageNo + 1 < Owner->Pages.size() || PageIndex < Owner->IndexInLastPage);
+            Y_DEBUG_ABORT_UNLESS(PageIndex < OBJECTS_PER_PAGE);
+            Y_DEBUG_ABORT_UNLESS(PageNo < Owner->Pages.size());
+            Y_DEBUG_ABORT_UNLESS(PageNo + 1 < Owner->Pages.size() || PageIndex < Owner->IndexInLastPage);
             return *Owner->ObjectAt(Owner->Pages[PageNo], PageIndex);
         }
 
@@ -658,6 +681,10 @@ private:
     size_t IndexInLastPage;
 };
 
+inline void TBoxedValueWithFree::operator delete(void *mem) noexcept {
+    auto size = ((TMkqlPAllocHeader*)mem)->Size + sizeof(TMkqlPAllocHeader);
+    return MKQLFreeWithSize(mem, size, EMemorySubPool::Default);
+}
 
 } // NMiniKQL
 

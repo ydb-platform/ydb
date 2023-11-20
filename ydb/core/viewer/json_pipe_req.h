@@ -96,13 +96,14 @@ protected:
         SendRequestToPipe(pipeClient, request.Release(), hiveId);
     }
 
-    void RequestHiveNodeStats(NNodeWhiteboard::TTabletId hiveId, ui64 pathId) {
+    void RequestHiveNodeStats(NNodeWhiteboard::TTabletId hiveId, TPathId pathId) {
         TActorId pipeClient = ConnectTabletPipe(hiveId);
         THolder<TEvHive::TEvRequestHiveNodeStats> request = MakeHolder<TEvHive::TEvRequestHiveNodeStats>();
         request->Record.SetReturnMetrics(Metrics);
-        if (pathId) {
+        if (pathId != TPathId()) {
             request->Record.SetReturnExtendedTabletInfo(true);
-            request->Record.SetFilterTabletsByPathId(pathId);
+            request->Record.SetFilterTabletsBySchemeShardId(pathId.OwnerId);
+            request->Record.SetFilterTabletsByPathId(pathId.LocalPathId);
         }
         SendRequestToPipe(pipeClient, request.Release(), hiveId);
     }

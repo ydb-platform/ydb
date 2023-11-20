@@ -26,7 +26,7 @@ struct TQueryStatistics
 
     std::vector<TQueryStatistics> InnerStatistics;
 
-    void AddInnerStatistics(const TQueryStatistics& statistics);
+    void AddInnerStatistics(TQueryStatistics statistics);
 };
 
 void ToProto(NProto::TQueryStatistics* serialized, const TQueryStatistics& original);

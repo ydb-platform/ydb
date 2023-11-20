@@ -1141,6 +1141,33 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["UnionAll"]);
     }
 
+    Y_UNIT_TEST(UnionTest) {
+        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input UNION select subkey FROM plato.Input;");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Union"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Union"]);
+    }
+
+    Y_UNIT_TEST(UnionAggregationTest) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+            SELECT 1 
+            UNION ALL
+                SELECT 1 UNION ALL SELECT 1 UNION ALL SELECT 1
+            UNION
+                SELECT 1 UNION SELECT 1 UNION SELECT 1 UNION SELECT 1
+            UNION ALL
+                SELECT 1 UNION ALL SELECT 1 UNION ALL SELECT 1;
+        )");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Union"), 0}, {TString("UnionAll"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["UnionAll"]);
+        UNIT_ASSERT_VALUES_EQUAL(3, elementStat["Union"]);
+    }
+
     Y_UNIT_TEST(DeclareDecimalParameter) {
         NYql::TAstParseResult res = SqlToYql("declare $value as Decimal(22,9); select $value as cnt;");
         UNIT_ASSERT(res.Root);
@@ -1870,6 +1897,27 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(StoreExternalBlobsParseCorrect) {
+        NYql::TAstParseResult res = SqlToYql(
+            R"( USE plato;
+                CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
+                WITH ( STORE_EXTERNAL_BLOBS = ENABLED );)"
+        );
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("storeExternalBlobs"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("ENABLED"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
     Y_UNIT_TEST(DefaultValueColumn2) {
         auto res = SqlToYql(R"( use plato;
             $lambda = () -> {
@@ -2431,6 +2479,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(AutoSampleWorksWithSubquery) {
         UNIT_ASSERT(SqlToYql("select * from (select * from plato.Input) sample 0.2").IsOk());
+    }
+
+    Y_UNIT_TEST(CreateTableTrailingComma) {
+        UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE tableName (Key Uint32, PRIMARY KEY (Key),);").IsOk());
+        UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE tableName (Key Uint32,);").IsOk());
     }
 }
 
@@ -3230,12 +3283,6 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         NYql::TAstParseResult res = SqlToYql("upsert into plato.Output (key, value, subkey) values (2, '3');", 10, TString(NYql::KikimrProviderName));
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:39: Error: VALUES have 2 columns, UPSERT INTO expects: 3\n");
-    }
-
-    Y_UNIT_TEST(UnionNotSupported) {
-        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input UNION select subkey FROM plato.Input;");
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:29: Error: UNION without quantifier ALL is not supported yet. Did you mean UNION ALL?\n");
     }
 
     Y_UNIT_TEST(GroupingSetByExprWithoutAlias) {

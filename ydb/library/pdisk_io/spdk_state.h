@@ -19,23 +19,23 @@ public:
     TSpdkStateOSS() {}
 
     void LaunchThread(int (*)(void *), void *) override {
-         Y_FAIL("Spdk is not supported now");
+         Y_ABORT("Spdk is not supported now");
     }
 
     ui8 *Malloc(ui64, ui32) override {
-         Y_FAIL("Spdk is not supported now");
+         Y_ABORT("Spdk is not supported now");
     }
 
     void Free(ui8 *) override {
-         Y_FAIL("Spdk is not supported now");
+         Y_ABORT("Spdk is not supported now");
     }
 
     //ui64 GetDeviceSize() override {
-    //     Y_FAIL("Spdk is not supported now");
+    //     Y_ABORT("Spdk is not supported now");
     //}
 
     void WaitAllThreads() override {
-         Y_FAIL("Spdk is not supported now");
+         Y_ABORT("Spdk is not supported now");
     }
 };
 

@@ -22,20 +22,9 @@
 #include <util/string/builder.h>
 
 
-TString PrintIssue(const ::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage> &issues) {
-    TStringBuilder msg;
-    msg << '{';
-    for (auto &issue : issues) {
-        msg << " issue# " << issue.message();
-    }
-    msg << " }";
-    return msg;
-}
-
-
 #define UNIT_ASSERT_CHECK_STATUS(got, exp) \
     UNIT_ASSERT_C(got.status() == exp, "exp# " << Ydb::StatusIds::StatusCode_Name(exp) \
-            << " got# " << Ydb::StatusIds::StatusCode_Name(got.status()) << " issues# "  << PrintIssue(got.issues())) \
+            << " got# " << Ydb::StatusIds::StatusCode_Name(got.status()) << " issues# "  << got.issues()) \
 // UNIT_ASSERT_CHECK_STATUS
 
 

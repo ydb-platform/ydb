@@ -85,7 +85,7 @@ TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram
         break;
     }
 
-    return TSerializedCellVec(TSerializedCellVec::Serialize(splitKey));
+    return TSerializedCellVec(splitKey);
 }
 
 TSerializedCellVec DoFindSplitKey(const TVector<std::pair<TSerializedCellVec, ui64>>& keysHist,
@@ -121,13 +121,17 @@ TSerializedCellVec DoFindSplitKey(const TVector<std::pair<TSerializedCellVec, ui
     splitKey.resize(prefixSize);
     splitKey.resize(keyColumnTypes.size());
 
-    return TSerializedCellVec(TSerializedCellVec::Serialize(splitKey));
+
+    return TSerializedCellVec(splitKey);
 }
 
 TSerializedCellVec ChooseSplitKeyByKeySample(const NKikimrTableStats::THistogram& keySample, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes) {
     TVector<std::pair<TSerializedCellVec, ui64>> keysHist;
-    for (const auto& s : keySample.GetBuckets()) {
-        keysHist.emplace_back(std::make_pair(TSerializedCellVec(s.GetKey()), s.GetValue()));
+    const auto & buckets = keySample.GetBuckets();
+    keysHist.reserve(buckets.size());
+
+    for (const auto& bucket : buckets) {
+        keysHist.emplace_back(std::make_pair(TSerializedCellVec(bucket.GetKey()), bucket.GetValue()));
     }
 
     auto fnCmp = [&keyColumnTypes] (const auto& key1, const auto& key2) {
@@ -198,7 +202,7 @@ const char* ToString(ESplitReason splitReason) {
     case ESplitReason::SPLIT_BY_LOAD:
         return "Split by load";
     default:
-        Y_VERIFY_DEBUG(!"Unexpected enum value");
+        Y_DEBUG_ABORT_UNLESS(!"Unexpected enum value");
         return "Unexpected enum value";
     }
 }

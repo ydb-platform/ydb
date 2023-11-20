@@ -11,6 +11,7 @@
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
 #include <vector>
+#include <algorithm>
 
 namespace NYdb::NConsoleClient::BenchmarkUtils {
 
@@ -66,6 +67,17 @@ TTestInfo::TTestInfo(std::vector<TDuration>&& clientTimings, std::vector<TDurati
     }
 
     RttMean = totalDiff / static_cast<double>(ServerTimings.size());
+
+    auto serverTimingsCopy = ServerTimings;
+    auto centerElement = serverTimingsCopy.begin() + ServerTimings.size() / 2;
+    std::nth_element(serverTimingsCopy.begin(), centerElement, serverTimingsCopy.end());
+
+    if (ServerTimings.size() % 2 == 0) {
+        auto maxLessThanCenterElement = std::max_element(serverTimingsCopy.begin(), centerElement);
+        Median = (centerElement->MilliSeconds() + maxLessThanCenterElement->MilliSeconds()) / 2.0;
+    } else {
+        Median = centerElement->MilliSeconds();
+    }
 }
 
 TString FullTablePath(const TString& database, const TString& table) {
@@ -112,7 +124,8 @@ public:
         return ServerTiming;
     }
 
-    bool Scan(NTable::TScanQueryPartIterator& it) {
+    template <typename TIterator>
+    bool Scan(TIterator& it) {
         for (;;) {
             auto streamPart = it.ReadNext().GetValueSync();
             if (!streamPart.IsSuccess()) {
@@ -123,8 +136,15 @@ public:
                 break;
             }
 
-            if (streamPart.HasQueryStats()) {
-                ServerTiming = streamPart.GetQueryStats().GetTotalDuration();
+            if constexpr (std::is_same_v<TIterator, NTable::TScanQueryPartIterator>) {
+                if (streamPart.HasQueryStats()) {
+                    ServerTiming = streamPart.GetQueryStats().GetTotalDuration();
+                }
+            } else {
+                const auto& stats = streamPart.GetStats();
+                if (stats) {
+                    ServerTiming = stats->GetTotalDuration();
+                }
             }
 
             if (streamPart.HasResultSet()) {
@@ -234,8 +254,29 @@ public:
 
 TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client) {
     TStreamExecScanQuerySettings settings;
-    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+    settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
     auto it = client.StreamExecuteScanQuery(query, settings).GetValueSync();
+    ThrowOnError(it);
+
+    std::shared_ptr<TYSONResultScanner> scannerYson = std::make_shared<TYSONResultScanner>();
+    std::shared_ptr<TCSVResultScanner> scannerCSV = std::make_shared<TCSVResultScanner>();
+    TQueryResultScannerComposite composite;
+    composite.AddScanner(scannerYson);
+    composite.AddScanner(scannerCSV);
+    if (!composite.Scan(it)) {
+        return TQueryBenchmarkResult::Error(composite.GetErrorInfo());
+    } else {
+        return TQueryBenchmarkResult::Result(scannerYson->GetResult(), *scannerCSV, composite.GetServerTiming());
+    }
+}
+
+TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client) {
+    NQuery::TExecuteQuerySettings settings;
+    settings.StatsMode(NQuery::EStatsMode::Basic);
+    auto it = client.StreamExecuteQuery(
+        query,
+        NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+        settings).GetValueSync();
     ThrowOnError(it);
 
     std::shared_ptr<TYSONResultScanner> scannerYson = std::make_shared<TYSONResultScanner>();

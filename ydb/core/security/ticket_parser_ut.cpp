@@ -72,9 +72,9 @@ void InitLdapSettingsWithInvalidFilter(NKikimrProto::TLdapAuthentication* ldapSe
     ldapSettings->SetSearchFilter("&(uid=$username)()");
 }
 
-void InitLdapSettingsWithUnavaliableHost(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+void InitLdapSettingsWithUnavailableHost(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
     InitLdapSettings(ldapSettings, ldapPort, certificateFile);
-    ldapSettings->SetHost("unavaliablehost");
+    ldapSettings->SetHost("unavailablehost");
 }
 
 void InitLdapSettingsWithCustomGroupAttribute(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
@@ -710,8 +710,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ldapServer.Stop();
     }
 
-    Y_UNIT_TEST(LdapServerIsUnavaliable) {
-        TLdapKikimrServer server(InitLdapSettingsWithUnavaliableHost);
+    Y_UNIT_TEST(LdapServerIsUnavailable) {
+        TLdapKikimrServer server(InitLdapSettingsWithUnavailableHost);
 
         LdapMock::TLdapMockResponses responses;
         LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), responses);
@@ -731,9 +731,41 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";
 
-        TLdapKikimrServer server(InitLdapSettings);
+
         auto responses = TCorrectLdapResponse::GetResponses(login);
-        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), responses);
+        LdapMock::TLdapMockResponses updatedResponses = responses;
+
+        std::vector<TString> newLdapGroups {
+            "ou=groups,dc=search,dc=yandex,dc=net",
+            "cn=people,ou=groups,dc=search,dc=yandex,dc=net",
+            "cn=designers,ou=groups,dc=search,dc=yandex,dc=net"
+        };
+        std::vector<LdapMock::TSearchEntry> newFetchGroupsSearchResponseEntries {
+            {
+                .Dn = "uid=" + login + ",dc=search,dc=yandex,dc=net",
+                .AttributeList = {
+                                    {"memberOf", newLdapGroups}
+                                }
+            }
+        };
+
+        const TString ldapDomain = "@ldap";
+        THashSet<TString> newExpectedGroups;
+        std::transform(newLdapGroups.begin(), newLdapGroups.end(), std::inserter(newExpectedGroups, newExpectedGroups.end()), [&ldapDomain](TString& group) {
+            return group.append(ldapDomain);
+        });
+        newExpectedGroups.insert("all-users@well-known");
+
+        LdapMock::TSearchResponseInfo newFetchGroupsSearchResponseInfo {
+            .ResponseEntries = newFetchGroupsSearchResponseEntries,
+            .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
+        };
+
+        auto& searchResponse = updatedResponses.SearchResponses.front();
+        searchResponse.second = newFetchGroupsSearchResponseInfo;
+
+        TLdapKikimrServer server(InitLdapSettings);
+        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), {responses, updatedResponses});
 
         auto loginResponse = GetLoginResponse(server, login, password);
         TTestActorRuntime* runtime = server.GetRuntime();
@@ -744,7 +776,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
         UNIT_ASSERT(ticketParserResult->Token != nullptr);
-        const TString ldapDomain = "@ldap";
         UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
         const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
         THashSet<TString> groups(fetchedGroups.begin(), fetchedGroups.end());
@@ -760,34 +791,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
         }
 
-        std::vector<TString> newLdapGroups {
-            "ou=groups,dc=search,dc=yandex,dc=net",
-            "cn=people,ou=groups,dc=search,dc=yandex,dc=net",
-            "cn=desiners,ou=groups,dc=search,dc=yandex,dc=net"
-        };
-        std::vector<LdapMock::TSearchEntry> newFetchGroupsSearchResponseEntries {
-            {
-                .Dn = "uid=" + login + ",dc=search,dc=yandex,dc=net",
-                .AttributeList = {
-                                    {"memberOf", newLdapGroups}
-                                }
-            }
-        };
-
-        THashSet<TString> newExpectedGroups;
-        std::transform(newLdapGroups.begin(), newLdapGroups.end(), std::inserter(newExpectedGroups, newExpectedGroups.end()), [&ldapDomain](TString& group) {
-            return group.append(ldapDomain);
-        });
-        newExpectedGroups.insert("all-users@well-known");
-
-        LdapMock::TSearchResponseInfo newFetchGroupsSearchResponseInfo {
-            .ResponseEntries = newFetchGroupsSearchResponseEntries,
-            .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
-        };
-
-        auto& searchresponse = responses.SearchResponses.front();
-        searchresponse.second = newFetchGroupsSearchResponseInfo;
-        ldapServer.SetSearchReasponse(searchresponse);
+        ldapServer.UpdateResponses();
         Sleep(TDuration::Seconds(10));
 
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
@@ -812,8 +816,15 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TLdapKikimrServer server(InitLdapSettings);
         auto responses = TCorrectLdapResponse::GetResponses(login);
-        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), responses);
+        LdapMock::TLdapMockResponses updatedResponses = responses;
+        LdapMock::TSearchResponseInfo newFetchGroupsSearchResponseInfo {
+            .ResponseEntries = {}, // User has been removed. Return empty entries list
+            .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
+        };
 
+        auto& searchResponse = updatedResponses.SearchResponses.front();
+        searchResponse.second = newFetchGroupsSearchResponseInfo;
+        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), {responses, updatedResponses});
 
         auto loginResponse = GetLoginResponse(server, login, password);
         TTestActorRuntime* runtime = server.GetRuntime();
@@ -840,14 +851,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
         }
 
-        LdapMock::TSearchResponseInfo newFetchGroupsSearchResponseInfo {
-            .ResponseEntries = {}, // User has been removed. Return empty entries list
-            .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
-        };
-
-        auto& searchresponse = responses.SearchResponses.front();
-        searchresponse.second = newFetchGroupsSearchResponseInfo;
-        ldapServer.SetSearchReasponse(searchresponse);
+        ldapServer.UpdateResponses();
         Sleep(TDuration::Seconds(10));
 
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
@@ -1081,7 +1085,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         accessServiceMock.ShouldGenerateRetryableError = true;
-        TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "keyId"};
+        TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "AKIAIOSFODNN7EXAMPLE"};
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", {})), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1137,7 +1141,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         accessServiceMock.ShouldGenerateOneRetryableError = true;
-        TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "keyId"};
+        TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "AKIAIOSFODNN7EXAMPLE"};
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", {})), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1191,7 +1195,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         accessServiceMock.ShouldGenerateRetryableError = true;
-        TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "keyId"};
+        TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "AKIAIOSFODNN7EXAMPLE"};
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
         const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries {{
                                                                         TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}),
@@ -1253,7 +1257,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         accessServiceMock.ShouldGenerateOneRetryableError = true;
-        TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "keyId"};
+        TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "AKIAIOSFODNN7EXAMPLE"};
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
         const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries {{
                                                                         TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}),
@@ -1496,6 +1500,18 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->Error.empty());
         UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
+
+        // Authorization successful for gizmo resource
+        accessServiceMock.AllowedResourceIds.clear();
+        accessServiceMock.AllowedResourceIds.emplace("gizmo");
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
+                                           userToken,
+                                           {{"gizmo_id", "gizmo"}, },
+                                           {"monitoring.view"})), 0);
+        result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        UNIT_ASSERT(result->Error.empty());
+        UNIT_ASSERT(result->Token->IsExist("monitoring.view@as"));
+        UNIT_ASSERT(result->Token->IsExist("monitoring.view-gizmo@as"));
     }
 
     Y_UNIT_TEST(AuthorizationWithRequiredPermissions) {

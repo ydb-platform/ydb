@@ -1,0 +1,117 @@
+// Copyright (c) 2020-{{.ToYear}} Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package atomic
+
+import (
+	"encoding/json"
+	"strconv"
+	"sync/atomic"
+)
+
+// {{ .Name }} is an atomic wrapper around {{ .Wrapped }}.
+type {{ .Name }} struct {
+	_ nocmp // disallow non-atomic comparison
+
+	v {{ .Wrapped }}
+}
+
+// New{{ .Name }} creates a new {{ .Name }}.
+func New{{ .Name }}(val {{ .Wrapped }}) *{{ .Name }} {
+	return &{{ .Name }}{v: val}
+}
+
+// Load atomically loads the wrapped value.
+func (i *{{ .Name }}) Load() {{ .Wrapped }} {
+	return atomic.Load{{ .Name }}(&i.v)
+}
+
+// Add atomically adds to the wrapped {{ .Wrapped }} and returns the new value.
+func (i *{{ .Name }}) Add(delta {{ .Wrapped }}) {{ .Wrapped }} {
+	return atomic.Add{{ .Name }}(&i.v, delta)
+}
+
+// Sub atomically subtracts from the wrapped {{ .Wrapped }} and returns the new value.
+func (i *{{ .Name }}) Sub(delta {{ .Wrapped }}) {{ .Wrapped }} {
+	return atomic.Add{{ .Name }}(&i.v,
+		{{- if .Unsigned -}}
+			^(delta - 1)
+		{{- else -}}
+			-delta
+		{{- end -}}
+	)
+}
+
+// Inc atomically increments the wrapped {{ .Wrapped }} and returns the new value.
+func (i *{{ .Name }}) Inc() {{ .Wrapped }} {
+	return i.Add(1)
+}
+
+// Dec atomically decrements the wrapped {{ .Wrapped }} and returns the new value.
+func (i *{{ .Name }}) Dec() {{ .Wrapped }} {
+	return i.Sub(1)
+}
+
+// CAS is an atomic compare-and-swap.
+//
+// Deprecated: Use CompareAndSwap.
+func (i *{{ .Name }}) CAS(old, new {{ .Wrapped }}) (swapped bool) {
+	return i.CompareAndSwap(old, new)
+}
+
+// CompareAndSwap is an atomic compare-and-swap.
+func (i *{{ .Name }}) CompareAndSwap(old, new {{ .Wrapped }}) (swapped bool) {
+	return atomic.CompareAndSwap{{ .Name }}(&i.v, old, new)
+}
+
+// Store atomically stores the passed value.
+func (i *{{ .Name }}) Store(val {{ .Wrapped }}) {
+	atomic.Store{{ .Name }}(&i.v, val)
+}
+
+// Swap atomically swaps the wrapped {{ .Wrapped }} and returns the old value.
+func (i *{{ .Name }}) Swap(val {{ .Wrapped }}) (old {{ .Wrapped }}) {
+	return atomic.Swap{{ .Name }}(&i.v, val)
+}
+
+// MarshalJSON encodes the wrapped {{ .Wrapped }} into JSON.
+func (i *{{ .Name }}) MarshalJSON() ([]byte, error) {
+	return json.Marshal(i.Load())
+}
+
+// UnmarshalJSON decodes JSON into the wrapped {{ .Wrapped }}.
+func (i *{{ .Name }}) UnmarshalJSON(b []byte) error {
+	var v {{ .Wrapped }}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	i.Store(v)
+	return nil
+}
+
+// String encodes the wrapped value as a string.
+func (i *{{ .Name }}) String() string {
+	v := i.Load()
+	{{ if .Unsigned -}}
+		return strconv.FormatUint(uint64(v), 10)
+	{{- else -}}
+		return strconv.FormatInt(int64(v), 10)
+	{{- end }}
+}

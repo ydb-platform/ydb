@@ -154,6 +154,10 @@ void AssignVectorAt(std::vector<T>& vector, ssize_t index, T&& value, const T& d
 template <class T>
 const T& VectorAtOr(const std::vector<T>& vector, ssize_t index, const T& defaultValue = T());
 
+//! Checks if values stored in vector are unique.
+template <class T>
+bool CheckIfValuesUnique(std::vector<T> vector);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

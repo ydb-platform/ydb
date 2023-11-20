@@ -11,6 +11,7 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tabletid.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -33,6 +34,8 @@
 #include <util/generic/vector.h>
 #include <util/generic/xrange.h>
 #include <util/string/builder.h>
+
+#include <google/protobuf/util/json_util.h>
 
 namespace NKikimr {
 namespace NSchemeBoard {
@@ -193,8 +196,16 @@ namespace {
             return entry.Access;
         }
 
-        static void SetErrorAndClear(TNavigateContext* context, TNavigate::TEntry& entry) {
-            SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
+        static ui32 GetAccessForEnhancedError() {
+            return NACLib::EAccessRights::DescribeSchema;
+        }
+
+        static void SetErrorAndClear(TNavigateContext* context, TNavigate::TEntry& entry, const bool isDescribeDenied) {
+            if (isDescribeDenied) {
+                SetError(context, entry, TNavigate::EStatus::AccessDenied);
+            } else {
+                SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
+            }
 
             switch (entry.RequestType) {
             case TNavigate::TEntry::ERequestType::ByPath:
@@ -230,8 +241,12 @@ namespace {
             entry.FileStoreInfo.Drop();
         }
 
-        static void SetErrorAndClear(TResolveContext* context, TResolve::TEntry& entry) {
-            SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
+        static void SetErrorAndClear(TResolveContext* context, TResolve::TEntry& entry, const bool isDescribeDenied) {
+            if (isDescribeDenied) {
+                SetError(context, entry, TResolve::EStatus::AccessDenied, TKeyDesc::EStatus::NotExists);
+            } else {
+                SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
+            }
 
             entry.Kind = TResolve::KindUnknown;
             entry.DomainInfo.Drop();
@@ -269,7 +284,7 @@ namespace {
                             << ", domain# " << Context->ResolvedDomainInfo->DomainKey
                             << ", path's domain# " << entry.DomainInfo->DomainKey);
 
-                        SetErrorAndClear(Context.Get(), entry);
+                        SetErrorAndClear(Context.Get(), entry, false);
                     }
                 }
 
@@ -286,7 +301,10 @@ namespace {
                             << ", for# " << Context->Request->UserToken->GetUserSID()
                             << ", access# " << NACLib::AccessRightsToString(access));
 
-                        SetErrorAndClear(Context.Get(), entry);
+                        SetErrorAndClear(
+                            Context.Get(),
+                            entry,
+                            securityObject->CheckAccess(GetAccessForEnhancedError(), *Context->Request->UserToken));
                     }
                 }
             }
@@ -1205,7 +1223,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 } else if (auto* context = std::get_if<TResolveContextPtr>(&contextVariant)) {
                     ProcessInFlightNoCheck(*context, requests);
                 } else {
-                    Y_FAIL("unknown context type");
+                    Y_ABORT("unknown context type");
                 }
             }
         }
@@ -1309,7 +1327,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 } else if (auto* context = std::get_if<TResolveContextPtr>(&kv.first)) {
                     ProcessInFlight(context->Get(), kv.second, response);
                 } else {
-                    Y_FAIL("unknown context type");
+                    Y_ABORT("unknown context type");
                 }
 
                 return kv.second.empty();
@@ -1503,7 +1521,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 FillInfo(Kind, FileStoreInfo, std::move(*pathDesc.MutableFileStoreDescription()));
                 break;
             case NKikimrSchemeOp::EPathTypeInvalid:
-                Y_VERIFY_DEBUG(false, "Invalid path type");
+                Y_DEBUG_ABORT_UNLESS(false, "Invalid path type");
                 break;
             }
 
@@ -1571,7 +1589,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
-                        Y_VERIFY_DEBUG(false, "Invalid path type");
+                        Y_DEBUG_ABORT_UNLESS(false, "Invalid path type");
                         break;
                     }
                 }
@@ -1586,7 +1604,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 SetPathId(notify.PathId);
             }
 
-            Y_VERIFY_DEBUG(Subscriber.DomainOwnerId);
+            Y_DEBUG_ABORT_UNLESS(Subscriber.DomainOwnerId);
             if (notify.Strong) {
                 Status = NKikimrScheme::StatusPathDoesNotExist;
             }
@@ -2436,7 +2454,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     Complete(*context);
                 }
             } else {
-                Y_FAIL("unknown context type");
+                Y_ABORT("unknown context type");
             }
         }
     }

@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:6:1: Warning: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: SqlProject
+    	select
+	^
+        <tmp_path>/program.sql:<main>:9:6: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: FlatMap, At function: AsList, At function: AddMember
+        	from Input
+	     ^
+            <tmp_path>/program.sql:<main>:10:29: Warning: At function: %
+            	GROUP BY TableRecordIndex() % 3 as groupTribit
+	                            ^
+                <tmp_path>/program.sql:<main>:10:29: Warning: Integral type implicit bitcast: Uint64 and Int32
+                	GROUP BY TableRecordIndex() % 3 as groupTribit
+	                            ^

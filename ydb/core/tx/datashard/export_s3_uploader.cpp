@@ -14,7 +14,7 @@ protected:
     }
 
     void ResolveProxy() override {
-        Y_FAIL("unreachable");
+        Y_ABORT("unreachable");
     }
 
 public:

@@ -88,7 +88,7 @@ namespace NKikimr {
 
         void Bootstrap(const TActorContext &ctx) {
             Prepare();
-            Y_VERIFY_DEBUG(!Merger.HaveToMergeData());
+            Y_DEBUG_ABORT_UNLESS(!Merger.HaveToMergeData());
             MainCycleIndexOnly(ctx);
         }
 
@@ -123,7 +123,7 @@ namespace NKikimr {
         template<typename TMerger>
         void AddIndexOnly(const TLogoBlobID &logoBlobId, const TMerger &merger) {
             const auto &status = BarriersEssence->Keep(logoBlobId, merger.GetMemRec(), merger.GetMemRecsMerged(),
-                                                       QueryCtx->HullCtx->AllowKeepFlags);
+                                                       QueryCtx->HullCtx->AllowKeepFlags, true /*allowGarbageCollection*/);
             if (status.KeepData) {
                 const TIngress &ingress = merger.GetMemRec().GetIngress();
                 ui64 ingr = ingress.Raw();
@@ -159,7 +159,7 @@ namespace NKikimr {
             , TActorBootstrapped<TLevelIndexRangeQueryViaBatcherIndexOnly>()
             , Merger(QueryCtx->HullCtx->VCtx->Top->GType)
         {
-            Y_VERIFY_DEBUG(Record.GetIndexOnly());
+            Y_DEBUG_ABORT_UNLESS(Record.GetIndexOnly());
         }
     };
 

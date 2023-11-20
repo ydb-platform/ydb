@@ -33,10 +33,12 @@ target_link_libraries(core-kqp-proxy_service PUBLIC
   core-tx-tx_proxy
   core-tx-scheme_cache
   core-tx-schemeshard
+  ydb-core-mon
   ydb-library-query_actor
   providers-common-http_gateway
   providers-common-proto
   yql-public-issue
+  dq-actors-spilling
   api-protos
   public-lib-operation_id
   public-lib-scheme_types

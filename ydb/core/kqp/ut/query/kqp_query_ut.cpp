@@ -183,51 +183,127 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto setPermissions = [&](bool allow) {
-            NYdb::NScheme::TPermissions permissions("user0@builtin",
-                {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"}
-            );
+        const auto setPermissions = [&](const std::set<TString>& permissions) {
+            const TVector<TString> allPermissions = {
+                "describe_schema",
+                "select_row",
+                "update_row",
+                "erase_row",
+            };
 
-            auto permissionsSettings = allow
-                ? NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
-                : NYdb::NScheme::TModifyPermissionsSettings().AddRevokePermissions(permissions);
+            TVector<TString> grantPermissions;
+            TVector<TString> revokePermissions;
+
+            for (const auto& permission : allPermissions) {
+                if (permissions.contains(permission)) {
+                    grantPermissions.push_back("ydb.deprecated." + permission);
+                } else {
+                    revokePermissions.push_back("ydb.deprecated." + permission);
+                }
+            }
+
+            auto permissionsSettings = 
+                NYdb::NScheme::TModifyPermissionsSettings()
+                .AddGrantPermissions(NYdb::NScheme::TPermissions("user0@builtin", grantPermissions))
+                .AddRevokePermissions(NYdb::NScheme::TPermissions("user0@builtin", revokePermissions));
 
             auto schemeClient = kikimr.GetSchemeClient();
             auto result = schemeClient.ModifyPermissions("/Root/Test", permissionsSettings).ExtractValueSync();
             AssertSuccessResult(result);
         };
 
-        auto query = Q_(R"(
+        const auto check = [&](
+                const auto& query,
+                const std::optional<NYdb::TParams>& params,
+                const NYdb::EStatus expectedStatus,
+                const std::optional<TString> expectedIssue = std::nullopt) {
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetAuthToken("user0@builtin");
+            auto driver = TDriver(driverConfig);
+            auto db = NYdb::NTable::TTableClient(driver);
+
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            const auto result = params
+                ? session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), *params).ExtractValueSync()
+                : session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
+            if (expectedIssue) {
+                UNIT_ASSERT_C(result.GetIssues().ToString().Contains(*expectedIssue), result.GetIssues().ToString());
+            }
+        };
+
+        const auto select_query = Q_(R"(
             SELECT * FROM `/Root/Test`
         )");
 
-        setPermissions(true);
-        {
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(kikimr.GetEndpoint())
-                .SetAuthToken("user0@builtin");
-            auto driver = TDriver(driverConfig);
-            auto db = NYdb::NTable::TTableClient(driver);
+        const auto params = db.GetParamsBuilder()
+            .AddParam("$rows")
+                .BeginList()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("In_Group").OptionalUint32(42)
+                        .AddMember("In_Name").OptionalString("test_name")
+                        .AddMember("In_Amount").OptionalUint64(4242)
+                    .EndStruct()
+                .EndList()
+                .Build()
+            .Build();
 
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+        const auto insert_query = Q_(R"(
+            DECLARE $rows AS List<Struct<
+                In_Group : Uint32?,
+                In_Name : String?,
+                In_Amount : Uint64?
+            >>;
 
-        setPermissions(false);
-        {
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(kikimr.GetEndpoint())
-                .SetAuthToken("user0@builtin");
-            auto driver = TDriver(driverConfig);
-            auto db = NYdb::NTable::TTableClient(driver);
+            INSERT INTO `/Root/Test`
+            SELECT
+                In_Group AS Group,
+                In_Name AS Name,
+                In_Amount AS Amount
+            FROM AS_TABLE($rows)
+        )");
 
-            auto session = db.CreateSession().GetValueSync().GetSession();
+        const auto delete_query = Q_(R"(
+            DECLARE $rows AS List<Struct<
+                In_Group : Uint32?,
+                In_Name : String?,
+                In_Amount : Uint64?
+            >>;
 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            result.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
-        }
+            DELETE FROM `/Root/Test`
+            ON SELECT
+                In_Group AS Group,
+                In_Name AS Name,
+                In_Amount AS Amount
+            FROM AS_TABLE($rows)
+        )");
+
+        setPermissions({"describe_schema", "select_row", "update_row", "erase_row"});
+        check(select_query, std::nullopt, EStatus::SUCCESS);
+        check(insert_query, params, EStatus::SUCCESS);
+        check(delete_query, params, EStatus::SUCCESS);
+
+        setPermissions({"describe_schema", "select_row"});
+        check(select_query, std::nullopt, EStatus::SUCCESS);
+        check(insert_query, params, EStatus::ABORTED, "AccessDenied");
+        check(delete_query, params, EStatus::ABORTED, "AccessDenied");
+
+        setPermissions({"describe_schema"});
+        check(select_query, std::nullopt, EStatus::ABORTED, "AccessDenied");
+        check(insert_query, params, EStatus::ABORTED, "AccessDenied");
+        check(delete_query, params, EStatus::ABORTED, "AccessDenied");
+
+        setPermissions({});
+        check(select_query, std::nullopt, EStatus::SCHEME_ERROR);
+        check(insert_query, params, EStatus::SCHEME_ERROR);
+        check(delete_query, params, EStatus::SCHEME_ERROR);
+
+        setPermissions({"select_row", "update_row", "erase_row"});
+        check(select_query, std::nullopt, EStatus::SCHEME_ERROR);
+        check(insert_query, params, EStatus::SCHEME_ERROR);
+        check(delete_query, params, EStatus::SCHEME_ERROR);
     }
 
     Y_UNIT_TEST(QueryTimeout) {
@@ -1039,6 +1115,44 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         UNIT_ASSERT(result.GetResultSet(0).Truncated());
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 6);
+    }
+
+    Y_UNIT_TEST(GenericQueryNoRowsLimit) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        setting.SetName("_ResultRowsLimit");
+        setting.SetValue("5");
+
+        TKikimrRunner kikimr({setting});
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(Q_(R"(
+            SELECT * FROM `/Root/EightShard` WHERE Text = "Value2";
+        )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        UNIT_ASSERT(!result.GetResultSet(0).Truncated());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 8);
+    }
+
+    Y_UNIT_TEST(GenericQueryNoRowsLimitLotsOfRows) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetQueryClient();
+
+        CreateLargeTable(kikimr, 1000, 10, 10, 5000, 10);
+
+        auto result = db.ExecuteQuery(Q_(R"(
+            SELECT * FROM `/Root/LargeTable`;
+        )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(!result.GetResultSet(0).Truncated());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 10000);
+
+        result = db.ExecuteQuery(Q_(R"(
+            SELECT * FROM `/Root/LargeTable` LIMIT 5000;
+        )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(!result.GetResultSet(0).Truncated());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 5000);
     }
 
     Y_UNIT_TEST(NoEvaluate) {

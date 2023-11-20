@@ -263,7 +263,7 @@ TStructuredRowStreamDescription GetJobStreamDescription(
         case EIODirection::Output:
             return job.GetOutputRowStreamDescription();
         default:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
     }
 }
 
@@ -275,7 +275,7 @@ TString GetSuffix(EIODirection direction)
         case EIODirection::Output:
             return "_output";
     }
-    Y_FAIL("unreachable");
+    Y_ABORT("unreachable");
 }
 
 TString GetAddIOMethodName(EIODirection direction)
@@ -286,7 +286,7 @@ TString GetAddIOMethodName(EIODirection direction)
         case EIODirection::Output:
             return "AddOutput<>";
     }
-    Y_FAIL("unreachable");
+    Y_ABORT("unreachable");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -466,7 +466,7 @@ std::pair<TFormat, TMaybe<TSmallJobFile>> TFormatBuilder::CreateNodeFormat(
     ythrow TApiUsageError()
         << "Cannot derive exact " << type <<  " type for intermediate " << direction << " table for job "
         << TJobFactory::Get()->GetJobName(&job)
-        << "; use one of TMapReduceOperationSpec::Hint* methods to specifiy intermediate table structure";
+        << "; use one of TMapReduceOperationSpec::Hint* methods to specify intermediate table structure";
 }
 
 [[noreturn]] static void ThrowUnexpectedDifferentDescriptors(

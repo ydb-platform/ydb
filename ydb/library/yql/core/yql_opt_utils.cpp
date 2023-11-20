@@ -728,7 +728,7 @@ TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TP
 bool UpdateStructMembers(TExprContext& ctx, const TExprNode::TPtr& node, const TStringBuf& goal, TExprNode::TListType& members, MemberUpdaterFunc updaterFunc, const TTypeAnnotationNode* nodeType) {
     if (!nodeType) {
         nodeType = node->GetTypeAnn();
-        Y_VERIFY_DEBUG(nodeType || !"Unset node type for UpdateStructMembers");
+        Y_DEBUG_ABORT_UNLESS(nodeType || !"Unset node type for UpdateStructMembers");
     }
     bool filtered = false;
     if (node->IsCallable("AsStruct")) {
@@ -1917,6 +1917,81 @@ bool HasOnlyOneJoinType(const TExprNode& joinTree, TStringBuf joinType) {
     }
 
     return HasOnlyOneJoinType(*joinTree.Child(1), joinType) && HasOnlyOneJoinType(*joinTree.Child(2), joinType);
+}
+
+void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, const TParentsMap& parentsMap,
+    TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx,
+    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler)
+{
+
+    // Ignore stream input, because it cannot be used multiple times
+    if (node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::List) {
+        return;
+    }
+    auto itemType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+    if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
+        return;
+    }
+    auto structType = itemType->Cast<TStructExprType>();
+
+    auto it = parentsMap.find(node.Get());
+    if (it == parentsMap.cend() || it->second.size() <= 1) {
+        return;
+    }
+
+    TSet<TStringBuf> usedFields;
+    for (auto parent: it->second) {
+        if (auto maybeFlatMap = TMaybeNode<TCoFlatMapBase>(parent)) {
+            auto flatMap = maybeFlatMap.Cast();
+            TSet<TStringBuf> lambdaSubset;
+            if (!HaveFieldsSubset(flatMap.Lambda().Body().Ptr(), flatMap.Lambda().Args().Arg(0).Ref(), lambdaSubset, parentsMap)) {
+                return;
+            }
+            usedFields.insert(lambdaSubset.cbegin(), lambdaSubset.cend());
+        }
+        else if (auto maybeExtractMembers = TMaybeNode<TCoExtractMembers>(parent)) {
+            auto extractMembers = maybeExtractMembers.Cast();
+            for (auto member: extractMembers.Members()) {
+                usedFields.insert(member.Value());
+            }
+        }
+        else {
+            return;
+        }
+        if (usedFields.size() == structType->GetSize()) {
+            return;
+        }
+    }
+
+    TExprNode::TListType members;
+    for (auto column : usedFields) {
+        members.push_back(ctx.NewAtom(node->Pos(), column));
+    }
+
+    auto newInput = handler(node, ctx.NewList(node->Pos(), std::move(members)), parentsMap, ctx);
+    if (!newInput || newInput == node) {
+        return;
+    }
+
+    for (auto parent: it->second) {
+        if (TCoExtractMembers::Match(parent)) {
+            if (parent->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetSize() == usedFields.size()) {
+                toOptimize[parent] = newInput;
+            } else {
+                toOptimize[parent] = ctx.ChangeChild(*parent, 0, TExprNode::TPtr(newInput));
+            }
+        } else {
+            toOptimize[parent] = ctx.Builder(parent->Pos())
+                .Callable(parent->Content())
+                    .Add(0, newInput)
+                    .Lambda(1)
+                        .Param("item")
+                        .Apply(parent->ChildPtr(1)).With(0, "item").Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+    }
 }
 
 }

@@ -12,6 +12,7 @@ namespace NYql::NDq {
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateYdbReadActor(
     NYql::NYdb::TSource&& params,
     ui64 inputIndex,
+    TCollectStatsLevel statsLevel,
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
     const NActors::TActorId& computeActorId,

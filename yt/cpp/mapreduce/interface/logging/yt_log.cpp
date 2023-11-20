@@ -59,7 +59,7 @@ public:
 
     void UpdateCategory(TLoggingCategory* /*category*/) override
     {
-        Y_FAIL();
+        Y_ABORT();
     }
 
     bool GetAbortOnAlert() const override

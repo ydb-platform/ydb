@@ -42,10 +42,12 @@ target_sources(contrib-libs-nghttp2 PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_pq.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_priority_spec.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_queue.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_ratelim.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_rcbuf.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_session.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_stream.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_submit.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_time.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_version.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/sfparse.c
 )

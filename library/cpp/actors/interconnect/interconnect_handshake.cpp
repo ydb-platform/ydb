@@ -164,8 +164,9 @@ namespace NActors {
             }
 
             void WaitPoller(bool read, bool write, TString state) {
-                PollerToken->Request(read, write);
-                Actor->WaitForSpecificEvent<TEvPollerReady>(std::move(state));
+                if (!PollerToken->RequestNotificationAfterWouldBlock(read, write)) {
+                    Actor->WaitForSpecificEvent<TEvPollerReady>(std::move(state));
+                }
             }
 
             template <typename TDataPtr, typename TSendRecvFunc>
@@ -296,7 +297,7 @@ namespace NActors {
             } catch (const TExPoison&) {
                 // just stop execution, do nothing
             } catch (...) {
-                Y_FAIL("unhandled exception");
+                Y_ABORT("unhandled exception");
             }
             if (SubscribedForConnection) {
                 SendToProxy(MakeHolder<TEvSubscribeForConnection>(*HandshakeId, false));
@@ -346,7 +347,7 @@ namespace NActors {
                             auto ev = WaitForSpecificEvent<TEvReportConnection>("WaitInboundXdcStream");
                             SubscribedForConnection = false;
                             if (ev->Get()->HandshakeId != *HandshakeId) {
-                                Y_VERIFY_DEBUG(false);
+                                Y_DEBUG_ABORT_UNLESS(false);
                                 Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Mismatching HandshakeId in external data channel");
                             }
                             ExternalDataChannel.GetSocketRef() = std::move(ev->Get()->Socket);
@@ -439,7 +440,7 @@ namespace NActors {
                    throw TExPoison();
 
                 default:
-                    Y_FAIL("unexpected event 0x%08" PRIx32, type);
+                    Y_ABORT("unexpected event 0x%08" PRIx32, type);
             }
         }
 
@@ -892,7 +893,7 @@ namespace NActors {
             // extract peer node id from the peer
             PeerNodeId = request.Header.SelfVirtualId.NodeId();
             if (!PeerNodeId) {
-                Y_VERIFY_DEBUG(false, "PeerNodeId is zero request# %s", request.ToString().data());
+                Y_DEBUG_ABORT_UNLESS(false, "PeerNodeId is zero request# %s", request.ToString().data());
                 Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "SelfVirtualId.NodeId is empty in initial packet");
             }
             UpdatePrefix();
@@ -1097,7 +1098,7 @@ namespace NActors {
                     SendExBlock(MainChannel, ev->Record, "ExReply");
                     ProgramInfo.Clear(); // do not issue reply to the proxy
                 } else {
-                    Y_FAIL("unexpected event Type# 0x%08" PRIx32, reply->GetTypeRewrite());
+                    Y_ABORT("unexpected event Type# 0x%08" PRIx32, reply->GetTypeRewrite());
                 }
             }
         }

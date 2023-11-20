@@ -30,7 +30,7 @@
 #endif
 
 __thread int s2n_errno;
-__thread const char *s2n_debug_str;
+__thread struct s2n_debug_info _s2n_debug_info = { .debug_str = "", .source = "" };
 
 /**
  * Returns the address of the thread-local `s2n_errno` variable
@@ -96,10 +96,12 @@ static const char *no_such_error = "Internal s2n error";
     ERR_ENTRY(S2N_ERR_RECORD_LIMIT, "TLS record limit reached") \
     ERR_ENTRY(S2N_ERR_CERT_UNTRUSTED, "Certificate is untrusted") \
     ERR_ENTRY(S2N_ERR_CERT_REVOKED, "Certificate has been revoked by the CA") \
+    ERR_ENTRY(S2N_ERR_CERT_NOT_YET_VALID, "Certificate is not yet valid") \
     ERR_ENTRY(S2N_ERR_CERT_EXPIRED, "Certificate has expired") \
     ERR_ENTRY(S2N_ERR_CERT_TYPE_UNSUPPORTED, "Certificate Type is unsupported") \
     ERR_ENTRY(S2N_ERR_CERT_INVALID, "Certificate is invalid") \
     ERR_ENTRY(S2N_ERR_CERT_MAX_CHAIN_DEPTH_EXCEEDED, "The maximum certificate chain depth has been exceeded") \
+    ERR_ENTRY(S2N_ERR_CERT_REJECTED, "Certificate failed custom application validation") \
     ERR_ENTRY(S2N_ERR_CRL_LOOKUP_FAILED, "No CRL could be found for the corresponding certificate") \
     ERR_ENTRY(S2N_ERR_CRL_SIGNATURE, "The signature of the CRL is invalid") \
     ERR_ENTRY(S2N_ERR_CRL_ISSUER, "Unable to get the CRL issuer certificate") \
@@ -138,6 +140,7 @@ static const char *no_such_error = "Internal s2n error";
     ERR_ENTRY(S2N_ERR_HASH_INVALID_ALGORITHM, "invalid hash algorithm") \
     ERR_ENTRY(S2N_ERR_PRF_INVALID_ALGORITHM, "invalid prf hash algorithm") \
     ERR_ENTRY(S2N_ERR_PRF_INVALID_SEED, "invalid prf seeds provided") \
+    ERR_ENTRY(S2N_ERR_PRF_DERIVE, "error deriving a secret from the PRF") \
     ERR_ENTRY(S2N_ERR_P_HASH_INVALID_ALGORITHM, "invalid p_hash algorithm") \
     ERR_ENTRY(S2N_ERR_P_HASH_INIT_FAILED, "error initializing p_hash") \
     ERR_ENTRY(S2N_ERR_P_HASH_UPDATE_FAILED, "error updating p_hash") \
@@ -145,6 +148,7 @@ static const char *no_such_error = "Internal s2n error";
     ERR_ENTRY(S2N_ERR_P_HASH_WIPE_FAILED, "error wiping p_hash") \
     ERR_ENTRY(S2N_ERR_HMAC_INVALID_ALGORITHM, "invalid HMAC algorithm") \
     ERR_ENTRY(S2N_ERR_HKDF_OUTPUT_SIZE, "invalid HKDF output size") \
+    ERR_ENTRY(S2N_ERR_HKDF, "error generating HKDF output") \
     ERR_ENTRY(S2N_ERR_ALERT_PRESENT, "TLS alert is already pending") \
     ERR_ENTRY(S2N_ERR_HANDSHAKE_STATE, "Invalid handshake state encountered") \
     ERR_ENTRY(S2N_ERR_SHUTDOWN_PAUSED, "s2n_shutdown() called while paused") \
@@ -212,6 +216,7 @@ static const char *no_such_error = "Internal s2n error";
     ERR_ENTRY(S2N_ERR_SEND_SIZE, "Retried s2n_send() size is invalid") \
     ERR_ENTRY(S2N_ERR_CORK_SET_ON_UNMANAGED, "Attempt to set connection cork management on unmanaged IO") \
     ERR_ENTRY(S2N_ERR_UNRECOGNIZED_EXTENSION, "TLS extension not recognized") \
+    ERR_ENTRY(S2N_ERR_EXTENSION_NOT_RECEIVED, "The TLS extension was not received") \
     ERR_ENTRY(S2N_ERR_INVALID_SCT_LIST, "SCT list is invalid") \
     ERR_ENTRY(S2N_ERR_INVALID_OCSP_RESPONSE, "OCSP response is invalid") \
     ERR_ENTRY(S2N_ERR_UPDATING_EXTENSION, "Updating extension data failed") \
@@ -288,6 +293,15 @@ static const char *no_such_error = "Internal s2n error";
     ERR_ENTRY(S2N_ERR_INTERNAL_LIBCRYPTO_ERROR, "An internal error has occurred in the libcrypto API") \
     ERR_ENTRY(S2N_ERR_NO_RENEGOTIATION, "Only secure, server-initiated renegotiation is supported") \
     ERR_ENTRY(S2N_ERR_APP_DATA_BLOCKED, "Blocked on application data during handshake") \
+    ERR_ENTRY(S2N_ERR_KTLS_MANAGED_IO, "kTLS cannot be enabled while custom I/O is configured for the connection")  \
+    ERR_ENTRY(S2N_ERR_HANDSHAKE_NOT_COMPLETE, "Operation is only allowed after the handshake is complete") \
+    ERR_ENTRY(S2N_ERR_KTLS_UNSUPPORTED_PLATFORM, "kTLS is unsupported on this platform") \
+    ERR_ENTRY(S2N_ERR_KTLS_UNSUPPORTED_CONN, "kTLS is unsupported for this connection") \
+    ERR_ENTRY(S2N_ERR_KTLS_ENABLE, "An error occurred when attempting to enable kTLS on socket. Ensure the 'tls' kernel module is enabled.")  \
+    ERR_ENTRY(S2N_ERR_KTLS_BAD_CMSG, "Error handling cmsghdr.")  \
+    ERR_ENTRY(S2N_ERR_ATOMIC, "Atomic operations in this environment would require locking") \
+    ERR_ENTRY(S2N_ERR_TEST_ASSERTION, "Test assertion failed") \
+    ERR_ENTRY(S2N_ERR_KTLS_RENEG, "kTLS does not support secure renegotiation") \
     /* clang-format on */
 
 #define ERR_STR_CASE(ERR, str) \
@@ -366,7 +380,17 @@ const char *s2n_strerror_debug(int error, const char *lang)
         return s2n_strerror(error, lang);
     }
 
-    return s2n_debug_str;
+    return _s2n_debug_info.debug_str;
+}
+
+const char *s2n_strerror_source(int error)
+{
+    /* No error, just return the no error string */
+    if (error == S2N_ERR_OK) {
+        return s2n_strerror(error, "EN");
+    }
+
+    return _s2n_debug_info.source;
 }
 
 int s2n_error_get_type(int error)
@@ -386,6 +410,12 @@ int s2n_stack_traces_enabled_set(bool newval)
 {
     s_s2n_stack_traces_enabled = newval;
     return S2N_SUCCESS;
+}
+
+void s2n_debug_info_reset(void)
+{
+    _s2n_debug_info.debug_str = "";
+    _s2n_debug_info.source = "";
 }
 
 #ifdef S2N_STACKTRACE

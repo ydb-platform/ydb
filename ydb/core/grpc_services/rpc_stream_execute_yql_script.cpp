@@ -6,6 +6,7 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
@@ -314,7 +315,7 @@ private:
                 GRpcResponsesSize_ -= GRpcResponsesSizeQueue_.front();
                 GRpcResponsesSizeQueue_.pop();
             }
-            Y_VERIFY_DEBUG(GRpcResponsesSizeQueue_.empty() == (GRpcResponsesSize_ == 0));
+            Y_DEBUG_ABORT_UNLESS(GRpcResponsesSizeQueue_.empty() == (GRpcResponsesSize_ == 0));
 
             if (WaitOnSeqNo_ && RpcBufferSize_ > GRpcResponsesSize_) {
                 ui64 freeSpace = RpcBufferSize_ - GRpcResponsesSize_;
@@ -487,7 +488,7 @@ private:
 } // namespace
 
 void DoStreamExecuteYqlScript(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
-    ui64 rpcBufferSize = f.GetAppConfig()->GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
+    ui64 rpcBufferSize = f.GetChannelBufferSize();
     f.RegisterActor(new TStreamExecuteYqlScriptRPC(p.release(), rpcBufferSize));
 }
 

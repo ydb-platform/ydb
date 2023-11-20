@@ -44,7 +44,7 @@ namespace NKikimr::NBlobDepot {
             block.RefreshId = 0;
             IssueOnUpdateBlock(block);
         } else {
-            Y_FAIL("unexpected response type");
+            Y_ABORT("unexpected response type");
         }
     }
 

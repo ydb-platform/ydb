@@ -36,7 +36,6 @@ public:
 private:
     void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvPingSessionResponse, Handle);
             default: TBase::StateWork(ev);
         }
@@ -60,16 +59,6 @@ private:
 
         ev->Record.MutableRequest()->SetTimeoutMs(GetOperationTimeout().MilliSeconds());
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-    }
-
-    void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record;
-        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-            Ydb::Table::KeepAliveResult result;
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
-        } else {
-            return OnProcessError(record, ctx);
-        }
     }
 
     void Handle(NKqp::TEvKqp::TEvPingSessionResponse::TPtr& ev, const TActorContext& ctx) {

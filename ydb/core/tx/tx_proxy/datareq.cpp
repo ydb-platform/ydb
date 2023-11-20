@@ -13,6 +13,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/stream.pb.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
@@ -648,8 +649,8 @@ bool TKeySpace::IsFull() const
 
     auto &range = Ranges.front();
 
-    Y_VERIFY_DEBUG(range.FromInclusive);
-    Y_VERIFY_DEBUG(!range.ToInclusive);
+    Y_DEBUG_ABORT_UNLESS(range.FromInclusive);
+    Y_DEBUG_ABORT_UNLESS(!range.ToInclusive);
 
     if (IsGreater(range.From.GetCells(), SpaceRange.From.GetCells()))
         return false;
@@ -660,7 +661,7 @@ bool TKeySpace::IsFull() const
              && SpaceRange.ToInclusive)
         return false;
 
-    Y_VERIFY_DEBUG(!OrderedQueue || !IsGreater(SpaceRange.To.GetCells(), QueuePoint.GetCells()));
+    Y_DEBUG_ABORT_UNLESS(!OrderedQueue || !IsGreater(SpaceRange.To.GetCells(), QueuePoint.GetCells()));
 
     return true;
 }
@@ -1728,7 +1729,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
         TxProxyMon->ResolveKeySetMiniKQLSuccess->Inc();
         ProcessFlatMKQLResolve(request, ctx);
     } else {
-        Y_FAIL("No request");
+        Y_ABORT("No request");
     }
 }
 
@@ -2537,7 +2538,7 @@ void TDataReq::HandleResolve(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const T
 
 void TDataReq::Handle(TEvTxProcessing::TEvStreamQuotaRequest::TPtr &ev, const TActorContext &ctx)
 {
-    Y_VERIFY_DEBUG(ReadTableRequest);
+    Y_DEBUG_ABORT_UNLESS(ReadTableRequest);
 
     auto id = ReadTableRequest->QuotaRequestId++;
     TReadTableRequest::TQuotaRequest req{ev->Sender, ev->Get()->Record.GetShardId()};
@@ -2547,10 +2548,10 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamQuotaRequest::TPtr &ev, const TA
 
 void TDataReq::Handle(TEvTxProcessing::TEvStreamQuotaResponse::TPtr &ev, const TActorContext &ctx)
 {
-    Y_VERIFY_DEBUG(ReadTableRequest);
+    Y_DEBUG_ABORT_UNLESS(ReadTableRequest);
 
     auto it = ReadTableRequest->QuotaRequests.find(ev->Cookie);
-    Y_VERIFY_DEBUG(it != ReadTableRequest->QuotaRequests.end());
+    Y_DEBUG_ABORT_UNLESS(it != ReadTableRequest->QuotaRequests.end());
 
     if (ReadTableRequest->RowsLimited)
         ev->Get()->Record.SetRowLimit(ReadTableRequest->RowsRemain);
@@ -2727,14 +2728,14 @@ void TDataReq::MakeFlatMKQLResponse(const TActorContext &ctx, const NCpuTime::TC
         return Die(ctx);
     }
     default:
-        Y_FAIL("unknown engine status# %" PRIu32 " txid# %" PRIu64, (ui32)FlatMKQLRequest->EngineResponseStatus, (ui64)TxId);
+        Y_ABORT("unknown engine status# %" PRIu32 " txid# %" PRIu64, (ui32)FlatMKQLRequest->EngineResponseStatus, (ui64)TxId);
     }
 }
 
 void TDataReq::ProcessStreamResponseData(TEvDataShard::TEvProposeTransactionResult::TPtr &ev,
                                          const TActorContext &ctx)
 {
-    Y_VERIFY_DEBUG(ReadTableRequest);
+    Y_DEBUG_ABORT_UNLESS(ReadTableRequest);
 
     ctx.Send(ev->Sender, new TEvTxProcessing::TEvStreamDataAck);
 
@@ -2766,7 +2767,7 @@ void TDataReq::FinishShardStream(TEvDataShard::TEvProposeTransactionResult::TPtr
     auto &rec = ev->Get()->Record;
     auto shard = rec.GetOrigin();
 
-    Y_VERIFY_DEBUG(ReadTableRequest->StreamingShards.contains(shard));
+    Y_DEBUG_ABORT_UNLESS(ReadTableRequest->StreamingShards.contains(shard));
     ReadTableRequest->StreamingShards.erase(shard);
 
     if (ReadTableRequest->KeySpace.IsFull()
@@ -2986,7 +2987,7 @@ void TDataReq::SendStreamClearanceResponse(ui64 shard, bool cleared, const TActo
 void TDataReq::ProcessNextStreamClearance(bool cleared, const TActorContext &ctx)
 {
     Y_ABORT_UNLESS(ReadTableRequest);
-    Y_VERIFY_DEBUG(!ReadTableRequest->KeySpace.IsShardsQueueEmpty());
+    Y_DEBUG_ABORT_UNLESS(!ReadTableRequest->KeySpace.IsShardsQueueEmpty());
 
     auto shard = ReadTableRequest->KeySpace.ShardsQueueFront();
     ReadTableRequest->KeySpace.ShardsQueuePop();
@@ -3023,6 +3024,7 @@ bool TDataReq::ParseRangeKey(const NKikimrMiniKQL::TParams &proto,
                              EParseRangeKeyExp exp)
 {
     TVector<TCell> key;
+    TVector<TString> memoryOwner;
     if (proto.HasValue()) {
         if (!proto.HasType()) {
             UnresolvedKeys.push_back("No type was specified in the range key tuple");
@@ -3032,7 +3034,7 @@ bool TDataReq::ParseRangeKey(const NKikimrMiniKQL::TParams &proto,
         auto& value = proto.GetValue();
         auto& type = proto.GetType();
         TString errStr;
-        bool res = NMiniKQL::CellsFromTuple(&type, value, keyType, true, key, errStr);
+        bool res = NMiniKQL::CellsFromTuple(&type, value, keyType, true, key, errStr, memoryOwner);
         if (!res) {
             UnresolvedKeys.push_back("Failed to parse range key tuple: " + errStr);
             return false;
@@ -3058,7 +3060,7 @@ bool TDataReq::IsReadOnlyRequest() const {
         return true;
     }
 
-    Y_FAIL("No request");
+    Y_ABORT("No request");
 }
 
 IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, const TIntrusivePtr<NKikimr::NTxProxy::TTxProxyMon>& mon,

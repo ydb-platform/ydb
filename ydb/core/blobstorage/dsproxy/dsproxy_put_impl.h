@@ -484,7 +484,7 @@ protected:
                 ui32 counter = isVPut ? VPutRequests : VMultiPutRequests;
                 ui64 cookie = TBlobCookie(diskOrderNumber, put.BlobIdx, put.Id.PartId(), counter);
 
-                Y_VERIFY_DEBUG(Info->Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3of4 ||
+                Y_DEBUG_ABORT_UNLESS(Info->Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3of4 ||
                     put.Id.PartId() != 3 || put.Buffer.IsEmpty());
 
                 if constexpr (isVPut) {

@@ -74,11 +74,8 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T>
-size_t UnpackBitVector(TCompressedVectorView view, std::vector<T>* container);
-
-template <class T>
-size_t UnpackBitVector(const ui64* input, std::vector<T>* container);
+size_t GetCompressedVectorSize(const void* ptr);
+size_t GetCompressedVectorWidth(const void* ptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 

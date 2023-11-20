@@ -409,7 +409,7 @@ namespace NBus {
                 return 0;
             }
             if ((item.Start < start && start < item.End) || (item.Start < end && end < item.End)) {
-                Y_FAIL("Overlap in registered keys with non-identical range");
+                Y_ABORT("Overlap in registered keys with non-identical range");
             }
         }
 

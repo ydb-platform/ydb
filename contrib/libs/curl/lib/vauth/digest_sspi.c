@@ -5,8 +5,8 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 2014 - 2016, Steve Holme, <steve_holme@hotmail.com>.
- * Copyright (C) 2015 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Steve Holme, <steve_holme@hotmail.com>.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -307,7 +307,7 @@ CURLcode Curl_override_sspi_http_realm(const char *chlg,
 /*
  * Curl_auth_decode_digest_http_message()
  *
- * This is used to decode a HTTP DIGEST challenge message into the separate
+ * This is used to decode an HTTP DIGEST challenge message into the separate
  * attributes.
  *
  * Parameters:
@@ -371,7 +371,7 @@ CURLcode Curl_auth_decode_digest_http_message(const char *chlg,
 /*
  * Curl_auth_create_digest_http_message()
  *
- * This is used to generate a HTTP DIGEST response message ready for sending
+ * This is used to generate an HTTP DIGEST response message ready for sending
  * to the recipient.
  *
  * Parameters:

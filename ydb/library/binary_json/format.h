@@ -32,7 +32,7 @@ struct THeader {
         : Version(version)
         , StringOffset(stringOffset)
     {
-        Y_VERIFY_DEBUG(StringOffset <= MAX_OFFSET);
+        Y_DEBUG_ABORT_UNLESS(StringOffset <= MAX_OFFSET);
     }
 
     EVersion Version : 5;
@@ -64,7 +64,7 @@ struct TEntry {
         : Type(type)
         , Value(value)
     {
-        Y_VERIFY_DEBUG(value <= MAX_OFFSET);
+        Y_DEBUG_ABORT_UNLESS(value <= MAX_OFFSET);
     }
 
     EEntryType Type : 5;
@@ -96,7 +96,7 @@ struct TSEntry {
         : Type(type)
         , Value(value)
     {
-        Y_VERIFY_DEBUG(value <= MAX_OFFSET);
+        Y_DEBUG_ABORT_UNLESS(value <= MAX_OFFSET);
     }
 
     EStringType Type : 5;
@@ -126,7 +126,7 @@ struct TMeta {
         : Type(type)
         , Size(size)
     {
-        Y_VERIFY_DEBUG(size <= MAX_OFFSET);
+        Y_DEBUG_ABORT_UNLESS(size <= MAX_OFFSET);
     }
 
     EContainerType Type : 5;

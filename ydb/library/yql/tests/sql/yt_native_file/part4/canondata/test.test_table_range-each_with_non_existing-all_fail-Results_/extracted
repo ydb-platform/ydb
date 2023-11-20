@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Error: Pre type annotation
+
+    <tmp_path>/program.sql:<main>:4:15: Warning: Table plato.Input1 doesn't exist
+    	SELECT * FROM each(["Input1", "Input2", "Input3"]);
+	              ^
+    <tmp_path>/program.sql:<main>:4:15: Warning: Table plato.Input2 doesn't exist
+    	SELECT * FROM each(["Input1", "Input2", "Input3"]);
+	              ^
+    <tmp_path>/program.sql:<main>:4:15: Warning: Table plato.Input3 doesn't exist
+    	SELECT * FROM each(["Input1", "Input2", "Input3"]);
+	              ^
+    <tmp_path>/program.sql:<main>:4:15: Error: The list of tables is empty
+    	SELECT * FROM each(["Input1", "Input2", "Input3"]);
+	              ^

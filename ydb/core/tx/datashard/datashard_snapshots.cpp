@@ -2,6 +2,8 @@
 
 #include "datashard_impl.h"
 
+#include <ydb/core/protos/datashard_config.pb.h>
+
 #include <util/stream/output.h>
 
 namespace NKikimr {
@@ -464,7 +466,7 @@ bool TSnapshotManager::ChangeMvccState(ui64 step, ui64 txId, TTransactionContext
         }
 
         default:
-            Y_FAIL("Unexpected mvcc state# %d", (ui32)state);
+            Y_ABORT("Unexpected mvcc state# %d", (ui32)state);
     }
 
     txc.DB.OnPersistent([this, edge = CompleteEdge] {
@@ -517,7 +519,7 @@ bool TSnapshotManager::ReleaseReference(const TSnapshotKey& key, NTable::TDataba
     auto refIt = References.find(key);
 
     if (Y_UNLIKELY(refIt == References.end() || refIt->second <= 0)) {
-        Y_VERIFY_DEBUG(false, "ReleaseReference underflow, check acquire/release pairs");
+        Y_DEBUG_ABORT_UNLESS(false, "ReleaseReference underflow, check acquire/release pairs");
         return false;
     }
 
@@ -530,7 +532,7 @@ bool TSnapshotManager::ReleaseReference(const TSnapshotKey& key, NTable::TDataba
 
     auto it = Snapshots.find(key);
     if (it == Snapshots.end()) {
-        Y_VERIFY_DEBUG(false, "ReleaseReference on an already deleted snapshot");
+        Y_DEBUG_ABORT_UNLESS(false, "ReleaseReference on an already deleted snapshot");
         return false;
     }
 
@@ -754,9 +756,12 @@ bool TSnapshotManager::RemoveExpiredSnapshots(TInstant now, TTransactionContext&
     }
 
     // Make sure we don't leave followers without any repeatable read version
-    TRowVersion maxRepeatableRead = FollowerReadEdge;
-    if (maxRepeatableRead && !FollowerReadEdgeRepeatable) {
-        maxRepeatableRead = maxRepeatableRead.Prev();
+    TRowVersion maxRepeatableRead = TRowVersion::Max();
+    if (Self->HasFollowers()) {
+        maxRepeatableRead = FollowerReadEdge;
+        if (maxRepeatableRead && !FollowerReadEdgeRepeatable) {
+            maxRepeatableRead = maxRepeatableRead.Prev();
+        }
     }
 
     removed |= AdvanceWatermark(txc.DB, Min(proposed, leastPlanned, leastAcquired, maxWriteVersion, maxRepeatableRead));
@@ -882,7 +887,7 @@ void TSnapshotManager::RenameSnapshots(NTable::TDatabase& db, const TPathId& pre
         TSnapshotKey oldKey = it->first;
         TSnapshotKey newKey(newTableKey.OwnerId, newTableKey.PathId, oldKey.Step, oldKey.TxId);
 
-        Y_VERIFY_DEBUG(!References.contains(oldKey), "Unexpected reference to snapshot during rename");
+        Y_DEBUG_ABORT_UNLESS(!References.contains(oldKey), "Unexpected reference to snapshot during rename");
 
         PersistAddSnapshot(nicedb, newKey, it->second.Name, it->second.Flags, it->second.Timeout);
 

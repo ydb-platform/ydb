@@ -30,7 +30,7 @@ TTableRef::TTableRef(const TString& refName, const TString& service, const TDefe
 }
 
 TString TTableRef::ShortName() const {
-    Y_VERIFY_DEBUG(Keys);
+    Y_DEBUG_ABORT_UNLESS(Keys);
     if (Keys->GetTableKeys()->GetTableName()) {
         return *Keys->GetTableKeys()->GetTableName();
     }
@@ -47,7 +47,7 @@ ISource::~ISource()
 }
 
 TSourcePtr ISource::CloneSource() const {
-    Y_VERIFY_DEBUG(dynamic_cast<ISource*>(Clone().Get()), "Cloned node is no source");
+    Y_DEBUG_ABORT_UNLESS(dynamic_cast<ISource*>(Clone().Get()), "Cloned node is no source");
     TSourcePtr result = static_cast<ISource*>(Clone().Get());
     for (auto curFilter: Filters) {
         result->Filters.emplace_back(curFilter->Clone());
@@ -881,7 +881,7 @@ bool ISource::InitFilters(TContext& ctx) {
 }
 
 TAstNode* ISource::Translate(TContext& ctx) const {
-    Y_VERIFY_DEBUG(false);
+    Y_DEBUG_ABORT_UNLESS(false);
     Y_UNUSED(ctx);
     return nullptr;
 }

@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:9:1: Warning: At function: RemovePrefixMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select
+	^
+        <tmp_path>/program.sql:<main>:10:7: Warning: Alias `subkey` shadows column with the same name. It looks like comma is missed here. If not, it is recommended to use ... AS `subkey` to avoid confusion
+        	  key subkey,
+	      ^

@@ -481,7 +481,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
                             const TActorContext& ctx) noexcept
         {
             if (State != EState::WRITE_DATA_COMPLETE)
-                Y_FAIL("Stream is not ready to write data");
+                Y_ABORT("Stream is not ready to write data");
 
             TEvHTTPSendContent const* msg = ev->Get();
             HTTPWriteContent(this, ctx, msg->Data, msg->Len,msg->Last);

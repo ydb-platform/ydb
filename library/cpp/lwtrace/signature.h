@@ -139,7 +139,7 @@ namespace NLWTrace {
                 case PT_UNKNOWN:
                     return;
                 default:
-                    Y_FAIL("unknown param type");
+                    Y_ABORT("unknown param type");
             }
         }
 
@@ -180,7 +180,7 @@ namespace NLWTrace {
                 case PT_UNKNOWN:
                     return;
                 default:
-                    Y_FAIL("unknown param type");
+                    Y_ABORT("unknown param type");
             }
         }
 
@@ -205,7 +205,7 @@ namespace NLWTrace {
                 case PT_UNKNOWN:
                     return;
                 default:
-                    Y_FAIL("unknown param type");
+                    Y_ABORT("unknown param type");
             }
         }
 
@@ -224,7 +224,7 @@ namespace NLWTrace {
                 case PT_UNKNOWN:
                     return;
                 default:
-                    Y_FAIL("unknown param type");
+                    Y_ABORT("unknown param type");
             }
             Type = PT_UNKNOWN;
         }
@@ -240,7 +240,7 @@ namespace NLWTrace {
                     case PT_UNKNOWN:
                         return false; // All unknowns are equal
                     default:
-                        Y_FAIL("unknown param type");
+                        Y_ABORT("unknown param type");
                 }
             } else {
                 return false;
@@ -261,7 +261,7 @@ namespace NLWTrace {
                     case PT_UNKNOWN:
                         return false; // All unknowns are equal
                     default:
-                        Y_FAIL("unknown param type");
+                        Y_ABORT("unknown param type");
                 }
             } else {
                 return Type < rhs.Type;
@@ -279,7 +279,7 @@ namespace NLWTrace {
                     case PT_UNKNOWN:
                         return true; // All unknowns are equal
                     default:
-                        Y_FAIL("unknown param type");
+                        Y_ABORT("unknown param type");
                 }
             } else {
                 return Type < rhs.Type;

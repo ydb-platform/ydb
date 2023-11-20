@@ -98,7 +98,7 @@ namespace NActors {
                         if (NSchedulerQueue::TQueueType* q = it->second.Get()) {
                             while (NSchedulerQueue::TEntry* x = q->Reader.Pop()) {
                                 somethingDone = true;
-                                Y_VERIFY_DEBUG(x->InstantMicroseconds <= activeTick);
+                                Y_DEBUG_ABORT_UNLESS(x->InstantMicroseconds <= activeTick);
                                 IEventHandle* ev = x->Ev;
                                 ISchedulerCookie* cookie = x->Cookie;
                                 // TODO: lazy send with backoff queue to not hang over contended mailboxes
@@ -122,7 +122,7 @@ namespace NActors {
                 }
 
                 if (activeTick <= throttledMonotonic) {
-                    Y_VERIFY_DEBUG(!activeSec || activeSec->empty());
+                    Y_DEBUG_ABORT_UNLESS(!activeSec || activeSec->empty());
                     activeSec.Destroy();
                     activeTick += IntrasecondThreshold;
                     TScheduleMap::iterator it = ScheduleMap.find(activeTick);

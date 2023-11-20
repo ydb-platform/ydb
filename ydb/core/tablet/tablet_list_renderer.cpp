@@ -35,7 +35,7 @@ std::function<bool(const NKikimrWhiteboard::TTabletStateInfo&)> TTabletStateClas
     case DEAD_TABLETS:
         return &IsDeadTablet;
     default:
-        Y_FAIL("Bad tablet state class");
+        Y_ABORT("Bad tablet state class");
         return nullptr;
     }
 }
@@ -48,7 +48,7 @@ TString TTabletStateClassifier::GetTabletStateClassName(ui32 cls)
     case DEAD_TABLETS:
         return "Dead tablets";
     default:
-        Y_FAIL("Bad tablet state class");
+        Y_ABORT("Bad tablet state class");
         return "";
     }
 }

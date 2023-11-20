@@ -1,6 +1,7 @@
 #include "catalog.h"
 #include <util/generic/utility.h>
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/split.h>
@@ -1274,7 +1275,52 @@ TConversions ParseConversions(const TString& dat, const THashMap<TString, TVecto
 }
 
 struct TCatalog {
-    TCatalog() {
+    TCatalog() 
+        : ProhibitedProcs({
+            // revoked from public
+            "pg_start_backup",
+            "pg_stop_backup",
+            "pg_create_restore_point",
+            "pg_switch_wal",
+            "pg_wal_replay_pause",
+            "pg_wal_replay_resume",
+            "pg_rotate_logfile",
+            "pg_reload_conf",
+            "pg_current_logfile",
+            "pg_promote",
+            "pg_stat_reset",
+            "pg_stat_reset_shared",
+            "pg_stat_reset_slru",
+            "pg_stat_reset_single_table_counters",
+            "pg_stat_reset_single_function_counters",
+            "pg_stat_reset_replication_slot",
+            "lo_import",
+            "lo_export",
+            "pg_ls_logdir",
+            "pg_ls_waldir",
+            "pg_ls_archive_statusdir",
+            "pg_ls_tmpdir",
+            "pg_read_file",
+            "pg_read_binary_file",
+            "pg_replication_origin_advance",
+            "pg_replication_origin_create",
+            "pg_replication_origin_drop",
+            "pg_replication_origin_oid",
+            "pg_replication_origin_progress",
+            "pg_replication_origin_session_is_setup",
+            "pg_replication_origin_session_progress",
+            "pg_replication_origin_session_reset",
+            "pg_replication_origin_session_setup",
+            "pg_replication_origin_xact_reset",
+            "pg_replication_origin_xact_setup",
+            "pg_show_replication_origin_status",
+            "pg_stat_file",
+            "pg_ls_dir",
+            // transactions
+            "pg_last_committed_xact",
+            "pg_current_wal_lsn"
+        })
+    {
         TString typeData;
         Y_ENSURE(NResource::FindExact("pg_type.dat", &typeData));
         TString opData;
@@ -1467,6 +1513,7 @@ struct TCatalog {
     THashMap<std::pair<ui32, ui32>, ui32> CastsByDir;
     THashMap<TString, TVector<ui32>> OperatorsByName;
     THashMap<TString, TVector<ui32>> AggregationsByName;
+    THashSet<TString> ProhibitedProcs;
 };
 
 bool ValidateArgs(const TVector<ui32>& descArgTypeIds, const TVector<ui32>& argTypeIds) {
@@ -1504,7 +1551,12 @@ const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds) {
 
 const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds) {
     const auto& catalog = TCatalog::Instance();
-    auto procIdPtr = catalog.ProcByName.FindPtr(to_lower(name));
+    auto lower = to_lower(name);
+    if (catalog.ProhibitedProcs.contains(lower)) {
+        throw yexception() << "No access to proc: " << name;
+    }
+
+    auto procIdPtr = catalog.ProcByName.FindPtr(lower);
     if (!procIdPtr) {
         throw yexception() << "No such proc: " << name;
     }
@@ -2021,9 +2073,20 @@ bool CanCastImplicitly(ui32 fromTypeId, ui32 toTypeId, const TCatalog& catalog) 
 
 }  // NPrivate
 
+bool IsCoercible(ui32 fromTypeId, ui32 toTypeId, ECoercionCode coercionType) {
+    const auto& catalog = TCatalog::Instance();
+
+    return NPrivate::IsCoercible(fromTypeId, toTypeId, coercionType, catalog);
+}
+
 std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TString& name, const TVector<ui32>& argTypeIds) {
     const auto& catalog = TCatalog::Instance();
-    auto procIdPtr = catalog.ProcByName.FindPtr(to_lower(name));
+    auto lower = to_lower(name);
+    if (catalog.ProhibitedProcs.contains(lower)) {
+        throw yexception() << "No access to proc: " << name;
+    }
+
+    auto procIdPtr = catalog.ProcByName.FindPtr(lower);
     if (!procIdPtr) {
         throw yexception() << "No such proc: " << name;
     }
@@ -2149,17 +2212,17 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
     NPrivate::ThrowProcNotFound(name, argTypeIds);
 }
 
-const TTypeDesc& LookupCommonType(const TVector<ui32>& typeIds, bool& castsNeeded) {
-    if (0 == typeIds.size()) {
-        throw yexception() << "Cannot infer common type for empty list of types";
-    }
+TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::function<TPosition(size_t i)>& GetPosition, const TTypeDesc*& typeDesc, bool& castsNeeded) {
+    Y_ENSURE(0 != typeIds.size());
+
     const auto& catalog = TCatalog::Instance();
 
     const TTypeDesc* commonType = &LookupType(typeIds[0]);
     char commonCategory = commonType->Category;
     size_t unknownsCnt = (commonType->TypeId == UnknownOid) ? 1 : 0;
-    castsNeeded = false;
-    for (auto typeId = typeIds.cbegin() + 1; typeId != typeIds.cend(); ++typeId) {
+    castsNeeded = (unknownsCnt != 0);
+    size_t i = 1;
+    for (auto typeId = typeIds.cbegin() + 1; typeId != typeIds.cend(); ++typeId, ++i) {
         if (*typeId == UnknownOid || *typeId == InvalidOid) {
             ++unknownsCnt;
             castsNeeded = true;
@@ -2176,30 +2239,33 @@ const TTypeDesc& LookupCommonType(const TVector<ui32>& typeIds, bool& castsNeede
         }
         if (otherType.Category != commonCategory) {
             // https://www.postgresql.org/docs/14/typeconv-union-case.html, step 4
-            throw yexception() << "Cannot infer common type for types "
-                << commonType->TypeId << " and " << otherType.TypeId;
+            return TIssue(GetPosition(i), TStringBuilder() << "Cannot infer common type for types "
+                << commonType->TypeId << " and " << otherType.TypeId);
         }
         castsNeeded = true;
         if (NPrivate::CanCastImplicitly(otherType.TypeId, commonType->TypeId, catalog)) {
             continue;
         }
         if (commonType->IsPreferred || !NPrivate::CanCastImplicitly(commonType->TypeId, otherType.TypeId, catalog)) {
-            throw yexception() << "Cannot infer common type for types "
-                << commonType->TypeId << " and " << otherType.TypeId;
+            return TIssue(GetPosition(i), TStringBuilder() << "Cannot infer common type for types "
+                << commonType->TypeId << " and " << otherType.TypeId);
         }
         commonType = &otherType;
     }
+
     // https://www.postgresql.org/docs/14/typeconv-union-case.html, step 3
     if (unknownsCnt == typeIds.size()) {
         castsNeeded = true;
-        return LookupType("text");
+        typeDesc = &LookupType("text");
+    } else {
+        typeDesc = commonType;
     }
-    return *commonType;
+    return {};
 }
 
-const TTypeDesc& LookupCommonType(const TVector<ui32>& typeIds) {
+TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::function<TPosition(size_t i)>&GetPosition, const TTypeDesc*& typeDesc) {
     bool _;
-    return LookupCommonType(typeIds, _);
+    return LookupCommonType(typeIds, GetPosition, typeDesc, _);
 }
 
 

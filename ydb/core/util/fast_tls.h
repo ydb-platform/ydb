@@ -32,7 +32,7 @@ namespace NKikimr {
                 auto it = Slow.find(key);
                 if (Y_LIKELY(it != Slow.end())) {
                     void* ptr = it->second.load(std::memory_order_acquire);
-                    Y_VERIFY_DEBUG(ptr != nullptr, "Unexpected null current value in a slow slot");
+                    Y_DEBUG_ABORT_UNLESS(ptr != nullptr, "Unexpected null current value in a slow slot");
                     return ptr;
                 }
 

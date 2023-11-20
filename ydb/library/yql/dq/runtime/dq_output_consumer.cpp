@@ -488,7 +488,7 @@ private:
         ui64 hash = 0;
         for (size_t keyId = 0; keyId < KeyColumns_.size(); keyId++) {
             const ui32 columnIndex = KeyColumns_[keyId].Index;
-            Y_VERIFY_DEBUG(columnIndex < OutputWidth_);
+            Y_DEBUG_ABORT_UNLESS(columnIndex < OutputWidth_);
             ui64 keyHash;
             if (*KeyColumns_[keyId].IsScalar) {
                 if (!ScalarColumnHashes_[keyId].Defined()) {

@@ -37,7 +37,7 @@ namespace NActors {
         }
 
         void operator()(typename TEvent::TPtr& ev) {
-            Y_VERIFY_DEBUG(EventScheduled);
+            Y_DEBUG_ABORT_UNLESS(EventScheduled);
             EventScheduled = false;
             if (!Armed()) {
                 // just do nothing
@@ -58,7 +58,7 @@ namespace NActors {
 
     private:
         void Schedule(const TActorIdentity& actor) {
-            Y_VERIFY_DEBUG(Armed());
+            Y_DEBUG_ABORT_UNLESS(Armed());
             if (!EventScheduled) {
                 actor.Schedule(TriggerTimestamp, new TEvent);
                 EventScheduled = true;

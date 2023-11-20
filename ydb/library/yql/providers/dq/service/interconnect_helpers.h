@@ -34,7 +34,7 @@ struct TServiceNodeConfig {
     };
 };
 
-std::tuple<TString, TString> GetLocalAddress(const TString* hostname = nullptr);
+std::tuple<TString, TString> GetLocalAddress(const TString* hostname = nullptr, int family = AF_INET6);
 std::tuple<TString, TString> GetUserToken(const TMaybe<TString>& user, const TMaybe<TString>& tokenFile);
 
 std::tuple<THolder<NActors::TActorSystemSetup>, TIntrusivePtr<NActors::NLog::TSettings>> BuildActorSetup(

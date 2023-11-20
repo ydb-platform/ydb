@@ -265,6 +265,7 @@ private:
     struct TTokenInfo {
         bool OpeningBracket = false;
         bool ClosingBracket = false;
+        bool BracketForcedExpansion = false;
         ui32 ClosingBracketIndex = 0;
     };
 
@@ -343,6 +344,17 @@ private:
             if (value.Alt_case() == TRule_select_kind_parenthesis::kAltSelectKindParenthesis2) {
                 suppressExpr = true;
             }
+        } else if (descr == TRule_window_specification::GetDescriptor()) {
+            const auto& value = dynamic_cast<const TRule_window_specification&>(msg);
+            const auto& details = value.GetRule_window_specification_details2();
+            const bool needsNewline = details.HasBlock1() || details.HasBlock2() ||
+                                      details.HasBlock3() || details.HasBlock4();
+            if (needsNewline) {
+                auto& paren = value.GetToken1();
+                ForceExpandedColumn = paren.GetColumn();
+                ForceExpandedLine = paren.GetLine();
+            }
+            suppressExpr = true;
         }
 
         const bool expr = (descr == TRule_expr::GetDescriptor() || descr == TRule_in_expr::GetDescriptor());
@@ -402,11 +414,17 @@ private:
     void PopBracket(const TString& expected) {
         Y_ENSURE(!MarkTokenStack.empty());
         Y_ENSURE(MarkTokenStack.back() < ParsedTokens.size());
-        Y_ENSURE(ParsedTokens[MarkTokenStack.back()].Content == expected);
+        auto& openToken = ParsedTokens[MarkTokenStack.back()];
+        Y_ENSURE(openToken.Content == expected);
         auto& openInfo = MarkedTokens[MarkTokenStack.back()];
+        auto& closeInfo = MarkedTokens[TokenIndex];
+        const bool forcedExpansion = openToken.Line == ForceExpandedLine && openToken.LinePos <= ForceExpandedColumn;
+
         if (openInfo.OpeningBracket) {
             openInfo.ClosingBracketIndex = TokenIndex;
-            MarkedTokens[TokenIndex].ClosingBracket = true;
+            openInfo.BracketForcedExpansion = forcedExpansion;
+            closeInfo.BracketForcedExpansion = forcedExpansion;
+            closeInfo.ClosingBracket = true;
         }
 
         MarkTokenStack.pop_back();
@@ -651,14 +669,13 @@ private:
             NewLine();
             Visit(b.GetRule_create_table_entry2());
         }
+        if (msg.HasBlock7()) {
+            Visit(msg.GetBlock7());
+        }
 
         PopCurrentIndent();
         NewLine();
-        Visit(msg.GetToken7());
-        if (msg.HasBlock8()) {
-            NewLine();
-            Visit(msg.GetBlock8());
-        }
+        Visit(msg.GetToken8());
         if (msg.HasBlock9()) {
             NewLine();
             Visit(msg.GetBlock9());
@@ -670,6 +687,10 @@ private:
         if (msg.HasBlock11()) {
             NewLine();
             Visit(msg.GetBlock11());
+        }
+        if (msg.HasBlock12()) {
+            NewLine();
+            Visit(msg.GetBlock12());
         }
     }
 
@@ -1287,7 +1308,7 @@ private:
         if (markedInfo.ClosingBracket) {
             Y_ENSURE(!MarkTokenStack.empty());
             auto beginTokenIndex = MarkTokenStack.back();
-            if (ParsedTokens[beginTokenIndex].Line != ParsedTokens[TokenIndex].Line) {
+            if (markedInfo.BracketForcedExpansion || ParsedTokens[beginTokenIndex].Line != ParsedTokens[TokenIndex].Line) {
                 // multiline
                 PopCurrentIndent();
                 NewLine();
@@ -1303,7 +1324,7 @@ private:
 
         if (markedInfo.OpeningBracket) {
             MarkTokenStack.push_back(TokenIndex);
-            if (ParsedTokens[TokenIndex].Line != ParsedTokens[markedInfo.ClosingBracketIndex].Line) {
+            if (markedInfo.BracketForcedExpansion || ParsedTokens[TokenIndex].Line != ParsedTokens[markedInfo.ClosingBracketIndex].Line) {
                 // multiline
                 PushCurrentIndent();
                 NewLine();
@@ -1847,9 +1868,14 @@ private:
 
     void VisitWindowSpecification(const TRule_window_specification& msg) {
         Visit(msg.GetToken1());
-        NewLine();
-        PushCurrentIndent();
         const auto& details = msg.GetRule_window_specification_details2();
+        const bool needsNewline = details.HasBlock1() || details.HasBlock2() ||
+                                  details.HasBlock3() || details.HasBlock4();
+        if (needsNewline) {
+            NewLine();
+            PushCurrentIndent();
+        }
+        
         if (details.HasBlock1()) {
             NewLine();
             Visit(details.GetBlock1());
@@ -1870,8 +1896,11 @@ private:
             Visit(details.GetBlock4());
         }
 
-        NewLine();
-        PopCurrentIndent();
+        if (needsNewline) {
+            NewLine();
+            PopCurrentIndent();
+        }
+
         Visit(msg.GetToken3());
     }
 
@@ -2007,7 +2036,9 @@ private:
     bool AfterDigits = false;
     bool AfterQuestion = false;
     bool AfterLess = false;
-    bool AfterKeyExpr = false;
+    bool AfterKeyExpr = false; 
+    ui32 ForceExpandedLine = 0;
+    ui32 ForceExpandedColumn = 0;
 
     ui32 TokenIndex = 0;
     TMarkTokenStack MarkTokenStack;
@@ -2191,12 +2222,15 @@ public:
 
             TVector<NSQLTranslation::TParsedToken> comments;
             TParsedTokenList parsedTokens, stmtTokens;
+            bool hasTrailingComments = false;
             auto onNextRawToken = [&](NSQLTranslation::TParsedToken&& token) {
                 stmtTokens.push_back(token);
                 if (token.Name == "COMMENT") {
                     comments.emplace_back(std::move(token));
+                    hasTrailingComments = true;
                 } else if (token.Name != "WS" && token.Name != "EOF") {
                     parsedTokens.emplace_back(std::move(token));
+                    hasTrailingComments = false;
                 }
             };
 
@@ -2207,7 +2241,11 @@ public:
             NYql::TIssues parserIssues;
             auto message = NSQLTranslationV1::SqlAST(currentQuery, "Query", parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
             if (!message) {
-                finalFormattedQuery << currentQuery << "\n";
+                finalFormattedQuery << currentQuery;
+                if (!currentQuery.EndsWith("\n")) {
+                    finalFormattedQuery << "\n";
+                }
+                
                 continue;
             }
 
@@ -2229,7 +2267,12 @@ public:
             }
 
             finalFormattedQuery << currentFormattedQuery;
-            if (!currentFormattedQuery.EndsWith(";\n")) {
+            if (parsedTokens.back().Name != "SEMICOLON") {
+                if (hasTrailingComments 
+                     && !comments.back().Content.EndsWith("\n")
+                     && comments.back().Content.StartsWith("--")) {
+                    finalFormattedQuery << "\n";
+                }
                 finalFormattedQuery << ";\n";
             }
 

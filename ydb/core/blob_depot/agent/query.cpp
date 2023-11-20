@@ -9,7 +9,7 @@ namespace NKikimr::NBlobDepot {
             ENUMERATE_INCOMING_EVENTS(XX)
 #undef XX
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 
     void TBlobDepotAgent::HandleStorageProxy(TAutoPtr<IEventHandle> ev) {
@@ -242,7 +242,7 @@ namespace NKikimr::NBlobDepot {
             ENUMERATE_INCOMING_EVENTS(XX)
 #undef XX
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 
 } // NKikimr::NBlobDepot

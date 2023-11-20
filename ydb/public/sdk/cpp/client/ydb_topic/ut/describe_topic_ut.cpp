@@ -274,12 +274,17 @@ namespace NYdb::NTopic::NTests {
             DescribeConsumer(setup, client, true, false, false, false);
             DescribePartition(setup, client, true, false, false, false);
 
+            const size_t messagesCount = 1;
+
             // Write a message
             {
-                auto writeSettings = TWriteSessionSettings().Path(TEST_TOPIC).MessageGroupId(TEST_MESSAGE_GROUP_ID);
+                auto writeSettings = TWriteSessionSettings().Path(TEST_TOPIC).MessageGroupId(TEST_MESSAGE_GROUP_ID).Codec(ECodec::RAW);
                 auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
-                std::string message(10_KB, 'x');
-                UNIT_ASSERT(writeSession->Write(message));
+                std::string message(32_MB, 'x');
+
+                for(size_t i = 0; i < messagesCount; ++i) {
+                    UNIT_ASSERT(writeSession->Write(message));
+                }
                 writeSession->Close();
             }
 
@@ -313,9 +318,10 @@ namespace NYdb::NTopic::NTests {
                     TMaybe<TReadSessionEvent::TEvent> event = readSession->GetEvent(true);
                     UNIT_ASSERT(event);
                     auto commitOffsetAck = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(event.Get());
+
                     UNIT_ASSERT_C(commitOffsetAck, DebugString(*event));
 
-                    UNIT_ASSERT_VALUES_EQUAL(commitOffsetAck->GetCommittedOffset(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(commitOffsetAck->GetCommittedOffset(), messagesCount);
                 }
             }
 

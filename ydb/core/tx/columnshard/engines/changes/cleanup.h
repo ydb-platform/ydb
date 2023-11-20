@@ -24,6 +24,9 @@ protected:
         return false;
     }
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
+    virtual ui64 DoCalcMemoryForUsage() const override {
+        return 0;
+    }
 public:
     TCleanupColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
         : TBase(storagesManager, StaticTypeName()) {

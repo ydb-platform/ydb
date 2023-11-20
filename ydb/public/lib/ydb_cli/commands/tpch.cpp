@@ -49,12 +49,13 @@ TVector<TString> TTpchCommandRun::GetQueries() const {
     return queries;
 }
 
+template <typename TClient>
 bool TTpchCommandRun::RunBench(TConfig& config)
 {
     TOFStream outFStream{OutFilePath};
 
     auto driver = CreateDriver(config);
-    auto client = NYdb::NTable::TTableClient(driver);
+    auto client = TClient(driver);
 
     TStringStream report;
     report << "Results for " << IterationsCount << " iterations" << Endl;
@@ -379,12 +380,25 @@ void TTpchCommandRun::Config(TConfig& config) {
         });
 
     config.Opts->MutuallyExclusiveOpt(includeOpt, excludeOpt);
+
+    config.Opts->AddLongOption("executor", "Query executor type."
+            " Options: scan, generic\n"
+            "scan - use scan queries;\n"
+            "generic - use generic queries.")
+        .DefaultValue("scan").StoreResult(&QueryExecutorType);
 };
 
 
 int TTpchCommandRun::Run(TConfig& config) {
-    const bool okay = RunBench(config);
-    return !okay;
+    if (QueryExecutorType == "scan") {
+        const bool okay = RunBench<NYdb::NTable::TTableClient>(config);
+        return !okay;
+    } else if (QueryExecutorType == "generic") {
+        const bool okay = RunBench<NYdb::NQuery::TQueryClient>(config);
+        return !okay;
+    } else {
+        ythrow yexception() << "Incorrect executor type. Available options: \"scan\", \"generic\"." << Endl;
+    }
 };
 
 TCommandTpch::TCommandTpch()

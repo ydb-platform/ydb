@@ -11,11 +11,13 @@ SRCS(
     column_assembler.cpp
     committed_assembler.cpp
     columns_set.cpp
+    context.cpp
 )
 
 PEERDIR(
     ydb/core/formats/arrow
     ydb/core/tx/columnshard/blobs_action
+    ydb/core/tx/conveyor/usage
 )
 
 END()

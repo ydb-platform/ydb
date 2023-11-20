@@ -409,9 +409,9 @@ IGraphTransformer::TStatus BlockToPgWrapper(const TExprNode::TPtr& input, TExprN
     } else {
         resultType = ctx.Expr.MakeType<TBlockExprType>(resultType);
     }
-    
+
     input->SetTypeAnn(resultType);
-    return IGraphTransformer::TStatus::Ok;    
+    return IGraphTransformer::TStatus::Ok;
 }
 
 IGraphTransformer::TStatus BlockFromPgWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {

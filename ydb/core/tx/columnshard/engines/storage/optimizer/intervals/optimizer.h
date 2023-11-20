@@ -250,7 +250,7 @@ protected:
     virtual TString DoDebugString() const override;
 
 public:
-    TIntervalsOptimizerPlanner(const ui64 granuleId, const std::shared_ptr<IStoragesManager>& storagesManager);
+    TIntervalsOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager);
 };
 
 } // namespace NKikimr::NOlap

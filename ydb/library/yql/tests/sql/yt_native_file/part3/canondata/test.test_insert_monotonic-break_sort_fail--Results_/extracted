@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:3:25: Error: At function: YtPublish!
+    	INSERT INTO Output WITH MONOTONIC_KEYS
+	                        ^
+        <tmp_path>/program.sql:<main>:3:25: Error: Inserts with "monotonic_keys" setting must not change output table sorting
+        	INSERT INTO Output WITH MONOTONIC_KEYS
+	                        ^

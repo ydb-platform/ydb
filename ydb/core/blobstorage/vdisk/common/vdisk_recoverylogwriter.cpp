@@ -73,7 +73,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 , LsnSegmentStart(lsnSegmentStart)
                 , Lsn(lsn)
             {
-                Y_VERIFY_DEBUG(lsn >= lsnSegmentStart);
+                Y_DEBUG_ABORT_UNLESS(lsn >= lsnSegmentStart);
             }
 
             struct TGreater {

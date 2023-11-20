@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:3:19: Error: At function: YtWriteTable!
+    	insert into plato.Output
+	                  ^
+        <tmp_path>/program.sql:<main>:3:19: Error: Table "Output" has udf remappers, append is not allowed
+        	insert into plato.Output
+	                  ^

@@ -60,6 +60,8 @@ private:
     void HandleState(const TSqsEvents::TEvExecuted::TRecord& ev);
     void HandleGetConfigurationWhileIniting(TSqsEvents::TEvGetConfiguration::TPtr& ev);
     void HandleGetConfigurationWhileWorking(TSqsEvents::TEvGetConfiguration::TPtr& ev);
+    void HandleActionCounterChanged(TSqsEvents::TEvActionCounterChanged::TPtr& ev);
+    void HandleLocalCounterChanged(TSqsEvents::TEvLocalCounterChanged::TPtr& ev);
     void HandleExecuteWhileIniting(TSqsEvents::TEvExecute::TPtr& ev);
     void HandleExecuteWhileWorking(TSqsEvents::TEvExecute::TPtr& ev);
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev);

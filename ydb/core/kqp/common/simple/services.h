@@ -31,13 +31,13 @@ inline NActors::TActorId MakeKqpNodeServiceID(ui32 nodeId) {
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 
-inline NActors::TActorId MakeKqpLocalFileSpillingServiceID(ui32 nodeId) {
-    const char name[12] = "kqp_lfspill";
+inline NActors::TActorId MakeKqpCompileComputationPatternServiceID(ui32 nodeId) {
+    const char name[12] = "kqp_comp_cp";
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 
-inline NActors::TActorId MakeKqpCompileComputationPatternServiceID(ui32 nodeId) {
-    const char name[12] = "kqp_comp_cp";
+inline NActors::TActorId MakeKqpFinalizeScriptServiceId(ui32 nodeId) {
+    const char name[12] = "kqp_sfinal";
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 

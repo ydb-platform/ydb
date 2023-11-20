@@ -123,21 +123,25 @@ private:
     const ui32 ColumnId;
     std::optional<NArrow::TCompression> Compression;
     std::optional<NArrow::NDictionary::TEncodingSettings> DictionaryEncoding;
-public:
-    TColumnFeatures(const ui32 columnId)
-        : ColumnId(columnId)
-    {
+    std::shared_ptr<TColumnLoader> Loader;
 
-    }
-    static std::optional<TColumnFeatures> BuildFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo, const ui32 columnId);
-
-    NArrow::NTransformation::ITransformer::TPtr GetSaveTransformer() const;
     NArrow::NTransformation::ITransformer::TPtr GetLoadTransformer() const;
+
+    void InitLoader(const TIndexInfo& info);
+    TColumnFeatures(const ui32 columnId)
+        : ColumnId(columnId) {
+    }
+public:
+    NArrow::NTransformation::ITransformer::TPtr GetSaveTransformer() const;
+    static std::optional<TColumnFeatures> BuildFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo, const TIndexInfo& indexInfo);
+    static TColumnFeatures BuildFromIndexInfo(const ui32 columnId, const TIndexInfo& indexInfo);
 
     std::unique_ptr<arrow::util::Codec> GetCompressionCodec() const;
 
-    std::shared_ptr<TColumnLoader> GetLoader(const TIndexInfo& info) const;
-
+    const std::shared_ptr<TColumnLoader>& GetLoader() const {
+        AFL_VERIFY(Loader);
+        return Loader;
+    }
 };
 
 } // namespace NKikimr::NOlap

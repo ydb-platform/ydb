@@ -56,7 +56,7 @@ void TKafkaFetchActor::PrepareFetchRequestData(const size_t topicIndex, TVector<
         KAFKA_LOG_D(TStringBuilder() << "Fetch actor: New request. Topic: " << topicKafkaRequest.Topic.value() << " Partition: " << partKafkaRequest.Partition << " FetchOffset: " << partKafkaRequest.FetchOffset << " PartitionMaxBytes: " << partKafkaRequest.PartitionMaxBytes);
         
         auto& partPQRequest = partPQRequests[partIndex];
-        partPQRequest.Topic = NormalizePath(Context->DatabasePath, topicKafkaRequest.Topic.value()); //savnik: handle empty topic
+        partPQRequest.Topic = NormalizePath(Context->DatabasePath, topicKafkaRequest.Topic.value()); // FIXME(savnik): handle empty topic
         partPQRequest.Partition = partKafkaRequest.Partition;
         partPQRequest.Offset = partKafkaRequest.FetchOffset;
         partPQRequest.MaxBytes = partKafkaRequest.PartitionMaxBytes;
@@ -83,7 +83,7 @@ void TKafkaFetchActor::Handle(NKikimr::TEvPQ::TEvFetchResponse::TPtr& ev, const 
 
 size_t TKafkaFetchActor::CheckTopicIndex(const NKikimr::TEvPQ::TEvFetchResponse::TPtr& ev) {
     auto topicIt = TopicIndexes.find(ev->Sender);
-    Y_VERIFY_DEBUG(topicIt != TopicIndexes.end());
+    Y_DEBUG_ABORT_UNLESS(topicIt != TopicIndexes.end());
 
     if (topicIt == TopicIndexes.end()) {
         KAFKA_LOG_CRIT("Fetch actor: Received unexpected TEvFetchResponse. Ignoring. Expect malformed/incompled fetch reply.");
@@ -95,8 +95,6 @@ size_t TKafkaFetchActor::CheckTopicIndex(const NKikimr::TEvPQ::TEvFetchResponse:
 
 void TKafkaFetchActor::HandleErrorResponse(const NKikimr::TEvPQ::TEvFetchResponse::TPtr& ev, TFetchResponseData::TFetchableTopicResponse& topicResponse) {
     const auto code = ConvertErrorCode(ev->Get()->Status);
-    //Response->ErrorCode = code; savnik: TODO
-    //ErrorCode = code; savnik: TODO
 
     for (auto& partitionResponse : topicResponse.Partitions) {
         partitionResponse.ErrorCode = code;
@@ -120,7 +118,7 @@ void TKafkaFetchActor::HandleSuccessResponse(const NKikimr::TEvPQ::TEvFetchRespo
         }
 
         partKafkaResponse.HighWatermark = partPQResponse.GetReadResult().GetMaxOffset();
-        Response->ThrottleTimeMs = std::max(Response->ThrottleTimeMs, static_cast<i32>(partPQResponse.GetReadResult().GetWaitQuotaTimeMs())); //savnik: sum?
+        Response->ThrottleTimeMs = std::max(Response->ThrottleTimeMs, static_cast<i32>(partPQResponse.GetReadResult().GetWaitQuotaTimeMs()));
         if (partPQResponse.GetReadResult().GetResult().size() == 0) {
             continue;
         }
@@ -155,7 +153,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
 
         record.DataChunk = NKikimr::GetDeserializedData(result.GetData());
         if (record.DataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
-            continue;// savnik: check
+            continue;
         }
 
         for (auto& metadata : record.DataChunk.GetMessageMeta()) {

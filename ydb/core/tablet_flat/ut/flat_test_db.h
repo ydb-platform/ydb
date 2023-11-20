@@ -344,9 +344,9 @@ private:
         const auto num = one.ColumnCount;
 
         if (num != two.ColumnCount) {
-            Y_FAIL("Got different key columns count");
+            Y_ABORT("Got different key columns count");
         } else if (!std::equal(one.Types, one.Types + num, two.Types)) {
-            Y_FAIL("TDbTupleRef rows types vec are not the same");
+            Y_ABORT("TDbTupleRef rows types vec are not the same");
         } else {
             return CompareTypedCellVectors(one.Columns, two.Columns, one.Types, num);
         }

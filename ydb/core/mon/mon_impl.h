@@ -269,9 +269,9 @@ public:
             }
         }
 
-        out << "<link rel='stylesheet' href='https://yastatic.net/bootstrap/3.3.1/css/bootstrap.min.css'>\n";
-        out << "<script language='javascript' type='text/javascript' src='https://yastatic.net/jquery/2.1.3/jquery.min.js'></script>\n";
-        out << "<script language='javascript' type='text/javascript' src='https://yastatic.net/bootstrap/3.3.1/js/bootstrap.min.js'></script>\n";
+        out << "<link rel='stylesheet' href='/static/css/bootstrap.min.css'>\n";
+        out << "<script language='javascript' type='text/javascript' src='/static/js/jquery.min.js'></script>\n";
+        out << "<script language='javascript' type='text/javascript' src='/static/js/bootstrap.min.js'></script>\n";
 
         if (OutputTableSorterJsCss) {
             out << "<link rel='stylesheet' href='/jquery.tablesorter.css'>\n";

@@ -21,7 +21,7 @@ namespace NTests {
 // TWriteSession
 
 class TWriteSession : public IWriteSession,
-                      public std::enable_shared_from_this<TWriteSession> {
+                      public TContextOwner<TWriteSessionImpl> {
 private:
     friend class TSimpleBlockingWriteSession;
     friend class TPersQueueClient;
@@ -50,16 +50,12 @@ public:
     // Empty maybe - block till all work is done. Otherwise block at most at closeTimeout duration.
     bool Close(TDuration closeTimeout = TDuration::Max()) override;
 
-    TWriterCounters::TPtr GetCounters() override {Y_FAIL("Unimplemented"); } //ToDo - unimplemented;
+    TWriterCounters::TPtr GetCounters() override {Y_ABORT("Unimplemented"); } //ToDo - unimplemented;
 
     ~TWriteSession(); // will not call close - destroy everything without acks
 
 private:
     void Start(const TDuration& delay);
-
-private:
-    std::shared_ptr<NPersQueue::TCallbackContext<TWriteSessionImpl>> CbContext;
-    std::shared_ptr<TWriteSessionImpl> Impl;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

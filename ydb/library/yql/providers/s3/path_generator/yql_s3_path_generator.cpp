@@ -143,7 +143,7 @@ std::string fmtInteger(int32_t width, i64 value)
 }
 
 bool IsOverflow(i64 a, i64 b) {
-    if (a ^ b < 0) {
+    if ((a ^ b) < 0) {
         return false;
     }
     if (a > 0) {

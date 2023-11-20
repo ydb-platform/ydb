@@ -2349,7 +2349,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             ))__";
 
         TDeque<THolder<IEventHandle>> blockedConfirmations;
-        auto blockConfirmations = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto blockConfirmations = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::TEvPut::EventType: {
                     const auto* msg = ev->Get<TEvBlobStorage::TEvPut>();
@@ -2584,7 +2584,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         ui64 detachCounter = 0;
         ui64 gcWaitCounter = 0;
         ui64 gcAppliedCounter = 0;
-        auto nemesis = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto nemesis = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTablet::TEvFollowerDetach::EventType: {
                     // Drop TEvFollowerDetach and simulate interconnect disconnection
@@ -2705,7 +2705,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         bool logResultsCapture = true;
         TVector<THolder<IEventHandle>> logResultsEvents;
-        auto observer = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto observer = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTabletBase::TEvWriteLogResult::EventType: {
                     if (logResultsCapture) {
@@ -2805,7 +2805,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TDeque<THolder<IEventHandle>> blockedConfirmations;
         bool blockConfirmations = true;
         std::pair<ui32, ui32> maxGc{ 0, 0 };
-        auto observerFunc = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::TEvPut::EventType: {
                     const auto* msg = ev->Get<TEvBlobStorage::TEvPut>();

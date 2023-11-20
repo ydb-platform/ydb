@@ -31,10 +31,10 @@ void TChangesWithAppend::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIn
                 self.IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_PORTIONS_WRITTEN);
                 break;
             case NOlap::TPortionMeta::EProduced::EVICTED:
-                Y_FAIL("Unexpected evicted case");
+                Y_ABORT("Unexpected evicted case");
                 break;
             case NOlap::TPortionMeta::EProduced::INACTIVE:
-                Y_FAIL("Unexpected inactive case");
+                Y_ABORT("Unexpected inactive case");
                 break;
         }
     }
@@ -55,48 +55,29 @@ void TChangesWithAppend::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIn
 }
 
 bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
-    // Save new granules
-    std::map<ui64, ui64> remapGranules;
-    for (auto& [granule, p] : NewGranules) {
-        ui64 pathId = p.first;
-        TMark mark = p.second;
-        TGranuleRecord rec(pathId, granule, context.Snapshot, mark.GetBorder());
-        auto oldGranuleId = self.NewGranule(rec);
-        if (!oldGranuleId) {
-            self.GranulesTable->Write(context.DB, rec);
-        } else {
-            remapGranules.emplace(rec.Granule, *oldGranuleId);
-        }
-    }
     // Save new portions (their column records)
+    {
+        auto g = self.GranulesStorage->StartPackModification();
 
-    for (auto& portionInfoWithBlobs : AppendedPortions) {
-        auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
-        Y_ABORT_UNLESS(!portionInfo.Empty());
-        auto it = remapGranules.find(portionInfo.GetGranule());
-        if (it != remapGranules.end()) {
-            portionInfo.SetGranule(it->second);
+        for (auto& [_, portionInfo] : PortionsToRemove) {
+            Y_ABORT_UNLESS(!portionInfo.Empty());
+            Y_ABORT_UNLESS(portionInfo.HasRemoveSnapshot());
+
+            const TPortionInfo& oldInfo = self.GetGranuleVerified(portionInfo.GetPathId()).GetPortionVerified(portionInfo.GetPortion());
+
+            self.UpsertPortion(portionInfo, &oldInfo);
+
+            for (auto& record : portionInfo.Records) {
+                self.ColumnsTable->Write(context.DB, portionInfo, record);
+            }
         }
-        self.UpsertPortion(portionInfo);
-        for (auto& record : portionInfo.Records) {
-            self.ColumnsTable->Write(context.DB, portionInfo, record);
-        }
-    }
-
-    auto g = self.GranulesStorage->StartPackModification();
-    for (auto& [_, portionInfo] : PortionsToRemove) {
-        Y_ABORT_UNLESS(!portionInfo.Empty());
-        Y_ABORT_UNLESS(portionInfo.HasRemoveSnapshot());
-
-        const ui64 granule = portionInfo.GetGranule();
-        const ui64 portion = portionInfo.GetPortion();
-
-        const TPortionInfo& oldInfo = self.GetGranuleVerified(granule).GetPortionVerified(portion);
-
-        self.UpsertPortion(portionInfo, &oldInfo);
-
-        for (auto& record : portionInfo.Records) {
-            self.ColumnsTable->Write(context.DB, portionInfo, record);
+        for (auto& portionInfoWithBlobs : AppendedPortions) {
+            auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
+            Y_ABORT_UNLESS(!portionInfo.Empty());
+            self.UpsertPortion(portionInfo);
+            for (auto& record : portionInfo.Records) {
+                self.ColumnsTable->Write(context.DB, portionInfo, record);
+            }
         }
     }
 
@@ -126,11 +107,11 @@ std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(cons
     auto resultSchema = context.SchemaVersions.GetSchema(snapshot);
     std::vector<TPortionInfoWithBlobs> out;
 
-    NOlap::TSerializationStats stats;
+    std::shared_ptr<NOlap::TSerializationStats> stats = std::make_shared<NOlap::TSerializationStats>();
     if (granuleMeta) {
         stats = granuleMeta->BuildSerializationStats(resultSchema);
     }
-    auto schema = std::make_shared<TDefaultSchemaDetails>(resultSchema, SaverContext, std::move(stats));
+    auto schema = std::make_shared<TDefaultSchemaDetails>(resultSchema, SaverContext, stats);
     TRBSplitLimiter limiter(context.Counters.SplitterCounters, schema, batch, SplitSettings);
 
     std::vector<std::vector<IPortionColumnChunk::TPtr>> chunkByBlobs;

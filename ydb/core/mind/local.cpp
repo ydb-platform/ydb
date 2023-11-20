@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/services/services.pb.h>
@@ -174,7 +175,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     void TryToRegister(const TActorContext &ctx) {
         LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::TryToRegister");
 
-        Y_VERIFY_DEBUG(!HivePipeClient);
+        Y_DEBUG_ABORT_UNLESS(!HivePipeClient);
 
         // pipe client is in use for convenience, real info update come from EvPing
         NTabletPipe::TClientConfig pipeConfig;
@@ -1223,25 +1224,29 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
             return;
         }
         Y_ABORT_UNLESS(rec.GetPathDescription().HasDomainDescription());
-        Y_ABORT_UNLESS(rec.GetPathDescription().GetDomainDescription().GetDomainKey().GetSchemeShard() == SchemeRoot);
+        const auto &domainDesc = rec.GetPathDescription().GetDomainDescription();
+        Y_ABORT_UNLESS(domainDesc.GetDomainKey().GetSchemeShard() == SchemeRoot);
 
         TVector<TTabletId> hiveIds(HiveIds);
-        TString path = rec.GetPath();
-
-        TTabletId hiveId = rec.GetPathDescription().GetDomainDescription().GetProcessingParams().GetHive();
+        TTabletId hiveId = domainDesc.GetProcessingParams().GetHive();
         if (hiveId) {
             hiveIds.emplace_back(hiveId);
         }
+        TTabletId sharedHiveId = domainDesc.GetSharedHive();
+        if (sharedHiveId) {
+            hiveIds.emplace_back(sharedHiveId);
+        }
         RegisterAsSubDomain(rec, task, hiveIds, ctx);
 
+        const TString &path = rec.GetPath();
         auto itTenant = RunningTenants.find(path);
         if (itTenant != RunningTenants.end()) {
             TTenantInfo& tenant = itTenant->second;
 
             tenant.HiveIds = hiveIds;
 
-            SendStatus(rec.GetPath(), task.Senders, ctx);
-            ResolveTasks.erase(rec.GetPath());
+            SendStatus(path, task.Senders, ctx);
+            ResolveTasks.erase(path);
 
             // subscribe for schema updates
             const auto& domains = *AppData()->DomainsInfo;
@@ -1413,7 +1418,7 @@ public:
 
             HFunc(TEvLocal::TEvLocalDrainNode, HandleDrain);
         default:
-            Y_FAIL("Unexpected event for TDomainLocal");
+            Y_ABORT("Unexpected event for TDomainLocal");
             break;
         }
     }

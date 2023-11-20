@@ -1324,6 +1324,9 @@ TFuture<TListJobsResult> TClient::ListJobs(
     if (options.WithCompetitors) {
         req->set_with_competitors(*options.WithCompetitors);
     }
+    if (options.WithMonitoringDescriptor) {
+        req->set_with_monitoring_descriptor(*options.WithMonitoringDescriptor);
+    }
     if (options.TaskName) {
         req->set_task_name(*options.TaskName);
     }

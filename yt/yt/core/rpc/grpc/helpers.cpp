@@ -418,8 +418,17 @@ TErrorCode StatusCodeToErrorCode(grpc_status_code statusCode)
         case GRPC_STATUS_INVALID_ARGUMENT:
         case GRPC_STATUS_RESOURCE_EXHAUSTED:
             return NRpc::EErrorCode::ProtocolError;
-        default:
+        case GRPC_STATUS_UNAUTHENTICATED:
+            return NRpc::EErrorCode::AuthenticationError;
+        case GRPC_STATUS_PERMISSION_DENIED:
+            return NRpc::EErrorCode::InvalidCredentials;
+        case GRPC_STATUS_UNIMPLEMENTED:
+            return NRpc::EErrorCode::NoSuchMethod;
+        case GRPC_STATUS_UNAVAILABLE:
             return NRpc::EErrorCode::TransportError;
+        default:
+            // Do not retry request after unclassified error.
+            return NYT::EErrorCode::Generic;
     }
 }
 
@@ -559,7 +568,7 @@ void TGuardedGrpcCompletionQueue::Shutdown()
             return;
         }
         State_ = EState::Shutdown;
-        if (LocksCount_ != 0) {
+        if (LocksCount_.load() != 0) {
             guard.Release();
             ReleaseDone_.Wait();
         }
@@ -582,7 +591,7 @@ grpc_completion_queue* TGuardedGrpcCompletionQueue::UnwrapUnsafe()
 void TGuardedGrpcCompletionQueue::Release()
 {
     auto guard = ReaderGuard(SpinLock_);
-    if (LocksCount_.fetch_sub(1, std::memory_order::release) == 0 && State_ == EState::Shutdown) {
+    if (LocksCount_.fetch_sub(1, std::memory_order::release) == 1 && State_ == EState::Shutdown) {
         guard.Release();
         ReleaseDone_.NotifyOne();
     }

@@ -15,6 +15,5 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         NYql::IHTTPGateway::TPtr httpGateway = nullptr,
         NYql::NConnector::IClient::TPtr connectorClient = nullptr,
         NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver = nullptr,
-        std::optional<NKikimrConfig::TAppConfig> appConfig = std::nullopt
-        );
+        std::optional<NKikimrConfig::TAppConfig> appConfig = std::nullopt);
 }

@@ -371,15 +371,13 @@ public:
         return MetricRegistryPtr_.Get() != nullptr;
     }
 
-    void IncSessionsOnHost(const TStringType& host);
-    void DecSessionsOnHost(const TStringType& host);
+    void IncSessionsOnHost(const std::string& host);
+    void DecSessionsOnHost(const std::string& host);
 
-    void IncTransportErrorsByHost(const TStringType& host);
+    void IncTransportErrorsByHost(const std::string& host);
 
-    void IncGRpcInFlightByHost(const TStringType& host);
-    void DecGRpcInFlightByHost(const TStringType& host);
-
-    void DeleteHost(const TStringType& host);
+    void IncGRpcInFlightByHost(const std::string& host);
+    void DecGRpcInFlightByHost(const std::string& host);
 private:
     const TStringType Database_;
     const ::NMonitoring::TLabel DatabaseLabel_;

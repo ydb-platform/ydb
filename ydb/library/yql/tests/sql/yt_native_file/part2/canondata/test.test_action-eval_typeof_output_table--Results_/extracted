@@ -1,0 +1,22 @@
+<tmp_path>/program.sql:<main>: Error: Expression evaluation
+
+    <tmp_path>/program.sql:<main>:13:6: Error: At function: EvaluateCode
+    	$c = EvaluateCode(ReprCode(FormatType(TypeOf($input))));
+	     ^
+        <tmp_path>/program.sql:<main>: Error: Type annotation
+        
+            <tmp_path>/program.sql:<main>:13:19: Error: At function: SerializeCode, At function: ReprCode
+            	$c = EvaluateCode(ReprCode(FormatType(TypeOf($input))));
+	                  ^
+                <tmp_path>/program.sql:<main>:13:28: Error: At function: FormatType
+                	$c = EvaluateCode(ReprCode(FormatType(TypeOf($input))));
+	                           ^
+                    <tmp_path>/program.sql:<main>:13:39: Error: At function: TypeOf
+                    	$c = EvaluateCode(ReprCode(FormatType(TypeOf($input))));
+	                                      ^
+                        <tmp_path>/program.sql:<main>:12:10: Error: At function: RemoveSystemMembers, At function: Merge, At function: YtSection, At function: YtPath
+                        	$input = PROCESS Output;
+	         ^
+                            <tmp_path>/program.sql:<main>:12:10: Error: Table "Output" does not exist
+                            	$input = PROCESS Output;
+	         ^

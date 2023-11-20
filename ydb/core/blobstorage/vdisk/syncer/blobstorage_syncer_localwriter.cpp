@@ -96,7 +96,7 @@ namespace NKikimr {
 
         // record handlers
         auto blobHandler = [&] (const NSyncLog::TLogoBlobRec *rec) {
-            Y_VERIFY_DEBUG(TIngress::MustKnowAboutLogoBlob(vctx->Top.get(), vctx->ShortSelfVDisk, rec->LogoBlobID()),
+            Y_DEBUG_ABORT_UNLESS(TIngress::MustKnowAboutLogoBlob(vctx->Top.get(), vctx->ShortSelfVDisk, rec->LogoBlobID()),
                     "logoBlobID# %s ShortSelfVDisk# %s top# %s", rec->LogoBlobID().ToString().data(),
                     vctx->ShortSelfVDisk.ToString().data(), vctx->Top->ToString().data());
 

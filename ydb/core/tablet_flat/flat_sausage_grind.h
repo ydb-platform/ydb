@@ -37,9 +37,9 @@ namespace NPageCollection {
             , Slots(Max<ui8>(), Max<ui8>())
         {
             if ((cookieRange.Head & ~Mask) || (cookieRange.Tail & ~Mask)) {
-                Y_FAIL("CookieRange range can use only lower 24 bits");
+                Y_ABORT("CookieRange range can use only lower 24 bits");
             } else if (cookieRange.Head > cookieRange.Tail) {
-                Y_FAIL("Invalid TLogoBlobID cookieRange capacity range");
+                Y_ABORT("Invalid TLogoBlobID cookieRange capacity range");
             }
 
             for (auto &one: row) {

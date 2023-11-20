@@ -83,7 +83,7 @@ public:
                 try { \
                     static_cast<TYPE&>(*Message).Record = dynamic_cast<const TYPE::RecordType&>(*RequestContext->GetRequest()); \
                 } catch (const std::bad_cast&) { \
-                    Y_FAIL("incorrect request message type"); \
+                    Y_ABORT("incorrect request message type"); \
                 } \
                 return;
 
@@ -141,7 +141,7 @@ public:
 #undef MTYPE
         }
 
-        Y_FAIL();
+        Y_ABORT();
     }
 
     ~TImplGRpc() {
@@ -183,7 +183,7 @@ public:
             REPLY_OPTION(TBusConsoleResponse)
 
             default:
-                Y_FAIL("unexpected response type %" PRIu32, type);
+                Y_ABORT("unexpected response type %" PRIu32, type);
         }
         RequestContext = nullptr;
     }

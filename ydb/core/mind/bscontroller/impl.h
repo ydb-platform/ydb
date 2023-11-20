@@ -135,7 +135,7 @@ public:
                 if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) { // became "replicating"
                     LastGotReplicating = instant;
                 } else if (Status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) { // was "replicating"
-                    Y_VERIFY_DEBUG(LastGotReplicating != TInstant::Zero());
+                    Y_DEBUG_ABORT_UNLESS(LastGotReplicating != TInstant::Zero());
                     ReplicationTime += instant - LastGotReplicating;
                     LastGotReplicating = {};
                 }
@@ -164,7 +164,7 @@ public:
             const TMonotonic readyAfter = now + ReadyStablePeriod; // vdisk will be treated as READY one shortly, but not now
             Y_ABORT_UNLESS(VSlotReadyTimestampIter == TVSlotReadyTimestampQ::iterator());
             Y_ABORT_UNLESS(Group);
-            Y_VERIFY_DEBUG(VSlotReadyTimestampQ.empty() || VSlotReadyTimestampQ.back().first <= readyAfter);
+            Y_DEBUG_ABORT_UNLESS(VSlotReadyTimestampQ.empty() || VSlotReadyTimestampQ.back().first <= readyAfter);
             VSlotReadyTimestampIter = VSlotReadyTimestampQ.emplace(VSlotReadyTimestampQ.end(), readyAfter, this);
         }
 
@@ -488,7 +488,7 @@ public:
                 case NKikimrBlobStorage::EDecommitStatus::EDecommitStatus_INT_MAX_SENTINEL_DO_NOT_USE_:
                     break;
             }
-            Y_FAIL("unexpected EDecommitStatus");
+            Y_ABORT("unexpected EDecommitStatus");
         }
 
         bool HasGoodExpectedStatus() const {
@@ -507,7 +507,7 @@ public:
                 case NKikimrBlobStorage::EDriveStatus::EDriveStatus_INT_MAX_SENTINEL_DO_NOT_USE_:
                     break;
             }
-            Y_FAIL("unexpected EDriveStatus");
+            Y_ABORT("unexpected EDriveStatus");
         }
 
         TString PathOrSerial() const {
@@ -1425,7 +1425,7 @@ public:
                     return hostIt->second.Location;
                 }
             }
-            Y_FAIL();
+            Y_ABORT();
         }
 
         TMaybe<TNodeId> ResolveNodeId(const THostId& hostId) const {
@@ -1491,6 +1491,8 @@ private:
     TActorId StatProcessorActorId;
     TInstant LastMetricsCommit;
     bool SelfHealEnable = false;
+    bool UseSelfHealLocalPolicy = false;
+    bool TryToRelocateBrokenDisksLocallyFirst = false;
     bool DonorMode = false;
     TDuration ScrubPeriodicity;
     NKikimrBlobStorage::TStorageConfig StorageConfig;
@@ -1501,6 +1503,7 @@ private:
     bool GroupLayoutSanitizerEnabled = false;
     bool AllowMultipleRealmsOccupation = true;
     bool StorageConfigObtained = false;
+    bool Loaded = false;
 
     std::set<std::tuple<TGroupId, TNodeId>> GroupToNode;
 
@@ -1626,10 +1629,10 @@ private:
 
     TGroupInfo* FindGroup(TGroupId id) {
         if (const auto it = GroupLookup.find(id); it != GroupLookup.end()) {
-            Y_VERIFY_DEBUG(GroupMap[id].Get() == it->second && it->second);
+            Y_DEBUG_ABORT_UNLESS(GroupMap[id].Get() == it->second && it->second);
             return it->second;
         } else {
-            Y_VERIFY_DEBUG(!GroupMap.count(id));
+            Y_DEBUG_ABORT_UNLESS(!GroupMap.count(id));
             return nullptr;
         }
     }
@@ -1743,6 +1746,8 @@ private:
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev);
     void Handle(TEvents::TEvUndelivered::TPtr ev);
+    void ApplyStorageConfig();
+    void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
     void ProcessPostQuery(const NActorsProto::TRemoteHttpInfo& query, TActorId sender);
@@ -2048,6 +2053,7 @@ public:
             cFunc(TEvPrivate::EvVSlotNotReadyHistogramUpdate, VSlotNotReadyHistogramUpdate);
             cFunc(TEvPrivate::EvProcessIncomingEvent, ProcessIncomingEvent);
             hFunc(TEvNodeWardenStorageConfig, Handle);
+            hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
@@ -2073,6 +2079,8 @@ public:
         UpdateSystemViews();
         UpdateSelfHealCounters();
         SignalTabletActive(TActivationContext::AsActorContext());
+        Loaded = true;
+        ApplyStorageConfig();
 
         for (const auto& [id, info] : GroupMap) {
             if (info->VirtualGroupState) {
@@ -2156,7 +2164,7 @@ public:
         auto sh = std::make_unique<TEvControllerUpdateSelfHealInfo>();
         for (auto it = VSlotReadyTimestampQ.begin(); it != VSlotReadyTimestampQ.end() && it->first <= now;
                 it = VSlotReadyTimestampQ.erase(it)) {
-            Y_VERIFY_DEBUG(!it->second->IsReady);
+            Y_DEBUG_ABORT_UNLESS(!it->second->IsReady);
             
             sh->VDiskIsReadyUpdate.emplace_back(it->second->GetVDiskId(), true);
             it->second->IsReady = true;
@@ -2213,7 +2221,7 @@ public:
                     hist.IncrementFor(timeBeingReplicating.Seconds());
                 }
             } else {
-                Y_VERIFY_DEBUG(false);
+                Y_DEBUG_ABORT_UNLESS(false);
             }
         }
         Schedule(TDuration::Seconds(15), new TEvPrivate::TEvVSlotNotReadyHistogramUpdate);

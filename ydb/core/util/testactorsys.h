@@ -8,10 +8,13 @@
 #include <library/cpp/actors/core/mailbox.h>
 #include <library/cpp/actors/core/scheduler_queue.h>
 #include <library/cpp/actors/interconnect/interconnect_common.h>
+#include <library/cpp/actors/util/should_continue.h>
+#include <library/cpp/actors/core/monotonic_provider.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <util/system/env.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include "single_thread_ic_mock.h"
 
@@ -408,7 +411,7 @@ public:
             Schedule(Clock, ev, nullptr, nodeId);
             return true;
         } else {
-            Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown), nodeId);
+            Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown), nodeId);
             return false;
         }
     }
@@ -520,7 +523,7 @@ public:
             }
 
             if (!item) {
-                Y_FAIL("test actor system stalled -- no progress made"); // ensure we are doing progress
+                Y_ABORT("test actor system stalled -- no progress made"); // ensure we are doing progress
             }
 
             if (item->Cookie && !item->Cookie->Detach()) { // item is not relevant anymore
@@ -756,8 +759,8 @@ private:
 class TFakeSchedulerCookie : public ISchedulerCookie {
 public:
     bool Detach() noexcept override { delete this; return false; }
-    bool DetachEvent() noexcept override { Y_FAIL(); }
-    bool IsArmed() noexcept override { Y_FAIL(); }
+    bool DetachEvent() noexcept override { Y_ABORT(); }
+    bool IsArmed() noexcept override { Y_ABORT(); }
 };
 
 } // NKikimr

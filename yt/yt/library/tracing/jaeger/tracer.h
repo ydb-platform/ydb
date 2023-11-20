@@ -164,7 +164,7 @@ private:
 
     TMpscStack<TTraceContextPtr> TraceQueue_;
 
-    TInstant LastSuccessfullFlushTime_ = TInstant::Now();
+    TInstant LastSuccessfulFlushTime_ = TInstant::Now();
 
     THashMap<TString, TBatchInfo> BatchInfo_;
     i64 TotalMemory_ = 0;

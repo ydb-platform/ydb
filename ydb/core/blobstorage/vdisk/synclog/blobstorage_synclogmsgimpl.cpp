@@ -30,7 +30,7 @@ namespace NKikimr {
                 case Lz4Signature: return ECodec::Lz4;
                 case OrderedLz4Signature: return ECodec::OrderedLz4;
                 case CustomCodecSignature: return ECodec::CustomCodec;
-                default: Y_FAIL("Unknown codec; signature# %" PRIu64, signature);
+                default: Y_ABORT("Unknown codec; signature# %" PRIu64, signature);
             }
         }
 
@@ -81,7 +81,7 @@ namespace NKikimr {
                     Steps.push_back(id.Step());
                     Cookies.push_back(id.Cookie());
                     Sizes.push_back(id.BlobSize());
-                    Y_VERIFY_DEBUG(id.PartId() == 0);
+                    Y_DEBUG_ABORT_UNLESS(id.PartId() == 0);
                     Ingresses.push_back(x.Ingress.Raw());
                     Counters.push_back(x.Counter);
                 }
@@ -106,7 +106,7 @@ namespace NKikimr {
 
             ui32 Size() const {
                 const ui32 blobsSize = TabletIds.size();
-                Y_VERIFY_DEBUG(blobsSize == Channels.size() && blobsSize == Generations.size() &&
+                Y_DEBUG_ABORT_UNLESS(blobsSize == Channels.size() && blobsSize == Generations.size() &&
                              blobsSize == Steps.size() && blobsSize == Cookies.size() &&
                              blobsSize == Sizes.size() && blobsSize == Ingresses.size() &&
                              blobsSize == Counters.size());
@@ -325,7 +325,7 @@ namespace NKikimr {
                         LogoBlobsColumns.reset(new TLogoBlobColumnsCustomCodec);
                         break;
                     default:
-                        Y_FAIL("Unexpected case");
+                        Y_ABORT("Unexpected case");
                 }
             }
 

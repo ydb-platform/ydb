@@ -39,7 +39,7 @@ namespace NKikimr {
             iter.PutToMerger(&indexMerger);
             indexMerger.Finish();
             auto status = essence->Keep(iter.GetCurKey(), indexMerger.GetMemRec(), indexMerger.GetMemRecsMerged(),
-                Snap->HullCtx->AllowKeepFlags);
+                Snap->HullCtx->AllowKeepFlags, true /*allowGarbageCollection*/);
             indexMerger.Clear();
 
             const TLogoBlobID& id = iter.GetCurKey().LogoBlobID();

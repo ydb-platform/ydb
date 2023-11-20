@@ -1,0 +1,3 @@
+<tmp_path>/program.sql:<main>: Fatal: Table metadata loading
+
+    <tmp_path>/program.sql:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:xxx: Table not found: plato.a

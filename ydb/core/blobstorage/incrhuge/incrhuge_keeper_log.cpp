@@ -176,7 +176,7 @@ namespace NKikimr {
                 }
 
                 default:
-                    Y_FAIL("unexpected case");
+                    Y_ABORT("unexpected case");
             }
         }
 
@@ -302,7 +302,7 @@ namespace NKikimr {
         }
 
         TString TDeleteRecordMerger::Serialize(const TDeleteChunk& /*record*/) {
-            Y_FAIL("this function should never be called");
+            Y_ABORT("this function should never be called");
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -255,13 +255,13 @@ Y_UNIT_TEST(PartitionFirstClass) {
 
         tc.Prepare(dispatchName, setup, activeZone, true, true, true);
         tc.Runtime->SetScheduledLimit(1000);
-        tc.Runtime->SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+        tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == NSysView::TEvSysView::EvRegisterDbCounters) {
                 auto database = event.Get()->Get<NSysView::TEvSysView::TEvRegisterDbCounters>()->Database;
                 UNIT_ASSERT_VALUES_EQUAL(database, "/Root/PQ");
                 dbRegistered = true;
             }
-            return TTestActorRuntime::DefaultObserverFunc(runtime, event);
+            return TTestActorRuntime::DefaultObserverFunc(event);
         });
 
         PQTabletPrepare({.deleteTime=3600, .meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS}, {{"client", true}}, tc);

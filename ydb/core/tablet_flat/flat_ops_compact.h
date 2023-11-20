@@ -137,7 +137,7 @@ namespace NTabletFlatExecutor {
 
                 return Flush(true /* final flush, sleep or finish */);
             } else {
-                Y_FAIL("Compaction scan op should get only two Seeks()");
+                Y_ABORT("Compaction scan op should get only two Seeks()");
             }
         }
 
@@ -363,9 +363,9 @@ namespace NTabletFlatExecutor {
             if (fail) {
                 prod->Results.clear(); /* shouldn't sent w/o fixation in bs */
             } else if (bool(prod->Results) != bool(WriteStats.Rows > 0)) {
-                Y_FAIL("Unexpexced rows production result after compaction");
+                Y_ABORT("Unexpexced rows production result after compaction");
             } else if ((bool(prod->Results) || bool(prod->TxStatus)) != bool(Blobs > 0)) {
-                Y_FAIL("Unexpexced blobs production result after compaction");
+                Y_ABORT("Unexpexced blobs production result after compaction");
             }
 
             Driver = nullptr;
@@ -406,18 +406,18 @@ namespace NTabletFlatExecutor {
                 if (!std::exchange(Failed, true))
                     Driver->Touch(EScan::Final);
             } else {
-                Y_FAIL("Compaction actor got an unexpected event");
+                Y_ABORT("Compaction actor got an unexpected event");
             }
         }
 
         void Handle(TEvPutResult &msg) noexcept
         {
             if (!NPageCollection::TGroupBlobsByCookie::IsInPlane(msg.Id, Mask)) {
-                Y_FAIL("TEvPutResult Id mask is differ from used");
+                Y_ABORT("TEvPutResult Id mask is differ from used");
             } else if (Writing < msg.Id.BlobSize()) {
-                Y_FAIL("Compaction writing bytes counter is out of sync");
+                Y_ABORT("Compaction writing bytes counter is out of sync");
             } else if (Flushing < msg.Id.BlobSize()) {
-                Y_FAIL("Compaction flushing bytes counter is out of sync");
+                Y_ABORT("Compaction flushing bytes counter is out of sync");
             }
 
             Writing -= msg.Id.BlobSize();
@@ -426,7 +426,7 @@ namespace NTabletFlatExecutor {
 
             if (msg.StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
                 const ui32 channel = msg.Id.Channel();
-                Y_VERIFY_DEBUG(channel < 256);
+                Y_DEBUG_ABORT_UNLESS(channel < 256);
                 if (!SeenYellowMoveChannels[channel]) {
                     SeenYellowMoveChannels[channel] = true;
                     YellowMoveChannels.push_back(channel);
@@ -434,7 +434,7 @@ namespace NTabletFlatExecutor {
             }
             if (msg.StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
                 const ui32 channel = msg.Id.Channel();
-                Y_VERIFY_DEBUG(channel < 256);
+                Y_DEBUG_ABORT_UNLESS(channel < 256);
                 if (!SeenYellowStopChannels[channel]) {
                     SeenYellowStopChannels[channel] = true;
                     YellowStopChannels.push_back(channel);
@@ -460,7 +460,7 @@ namespace NTabletFlatExecutor {
                     WriteQueue.pop_front();
                 }
 
-                Y_VERIFY_DEBUG(Flushing == 0 || Writing > 0, "Unexpected: Flushing > 0 and Writing == 0");
+                Y_DEBUG_ABORT_UNLESS(Flushing == 0 || Writing > 0, "Unexpected: Flushing > 0 and Writing == 0");
 
                 if (Flushing == 0) {
                     Spent->Alter(true /* resource available again */);
@@ -482,7 +482,7 @@ namespace NTabletFlatExecutor {
             if (Writing < MaxFlight && WriteQueue.empty()) {
                 SendToBs(std::move(glob));
             } else {
-                Y_VERIFY_DEBUG(Failed || Writing > 0, "Unexpected: enqueued blob when Writing == 0");
+                Y_DEBUG_ABORT_UNLESS(Failed || Writing > 0, "Unexpected: enqueued blob when Writing == 0");
                 WriteQueue.emplace_back(std::move(glob));
             }
         }
@@ -492,7 +492,7 @@ namespace NTabletFlatExecutor {
             auto id = glob.GId;
 
             Writing += id.Logo.BlobSize();
-            Y_VERIFY_DEBUG(Writing <= Flushing, "Unexpected: Writing > Flushing");
+            Y_DEBUG_ABORT_UNLESS(Writing <= Flushing, "Unexpected: Writing > Flushing");
 
             if (auto logl = Logger->Log(ELnLev::Debug)) {
                 logl

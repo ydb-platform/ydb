@@ -8,6 +8,7 @@
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -56,7 +57,7 @@ TMaybeNode<TDqPhyPrecompute> BuildLookupKeysPrecompute(const TExprBase& input, T
                     .Build()
                 .Build()
             .Settings(TDqStageSettings::New()
-                .SetSinglePartition()
+                .SetPartitionMode(TDqStageSettings::EPartitionMode::Single)
                 .BuildNode(ctx, input.Pos()))
             .Done();
 
@@ -161,7 +162,7 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
                     .Build()
                 .Build()
             .Settings(TDqStageSettings::New()
-                .SetSinglePartition()
+                .SetPartitionMode(TDqStageSettings::EPartitionMode::Single)
                 .BuildNode(ctx, read.Pos()))
             .Done();
 
@@ -214,7 +215,7 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
             .Body(phyRead.Cast())
             .Build()
         .Settings(TDqStageSettings::New()
-            .SetSinglePartition(singleKey && UseSource(kqpCtx, tableDesc))
+            .SetPartitionMode(singleKey && UseSource(kqpCtx, tableDesc) ? TDqStageSettings::EPartitionMode::Single : TDqStageSettings::EPartitionMode::Default)
             .BuildNode(ctx, read.Pos()))
         .Done();
 
@@ -261,7 +262,7 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
                         .Build()
                     .Build()
                 .Settings(TDqStageSettings::New()
-                    .SetSinglePartition()
+                    .SetPartitionMode(TDqStageSettings::EPartitionMode::Single)
                     .BuildNode(ctx, read.Pos()))
                 .Done();
         } else {
@@ -549,7 +550,7 @@ NYql::NNodes::TExprBase KqpBuildSequencerStages(NYql::NNodes::TExprBase node, NY
         .Build().Done();
 }
 
-NYql::NNodes::TExprBase KqpRewriteLookupTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx) {
 
     if (!node.Maybe<TDqStage>() || !kqpCtx.Config->EnableKqpDataQueryStreamLookup) {
@@ -693,7 +694,7 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
                             .Build()
                         .Build()
                     .Settings(TDqStageSettings::New()
-                        .SetSinglePartition()
+                        .SetPartitionMode(TDqStageSettings::EPartitionMode::Single)
                         .BuildNode(ctx, lookup.Pos()))
                     .Build()
                 .Index().Build("0")

@@ -208,7 +208,7 @@ private:
         default:
             LOG_S_WARN("Unhandled event type: " << ev->GetTypeRewrite()
                        << " event: " << ev->ToString());
-            Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
+            Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown));
             break;
         };
     }
@@ -446,7 +446,7 @@ private:
         const ui64 readCookie = ev->Cookie;
 
         if (ev->Get()->ResponseSz < 1) {
-            Y_FAIL("Unexpected reply from blobstorage");
+            Y_ABORT("Unexpected reply from blobstorage");
         }
 
         if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {

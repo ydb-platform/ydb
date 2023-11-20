@@ -7,6 +7,7 @@ namespace NConsoleClient {
 enum class EOutputFormat {
     Default /* "default" */,
     Pretty /* "pretty" */,
+    PrettyTable /* "pretty-table" */,
     Json /* "json" */,
     JsonUnicode /* "json-unicode" */,
     JsonUnicodeArray /* "json-unicode-array" */,

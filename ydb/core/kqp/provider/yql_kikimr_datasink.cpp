@@ -163,6 +163,12 @@ private:
         return TStatus::Error;
     }
 
+    TStatus HandlePgDropObject(TPgDropObject node, TExprContext& ctx) override {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "PgDropObject is not yet implemented for intent determination transformer"));
+        return TStatus::Error;
+    }
+
     static void HandleDropTable(TIntrusivePtr<TKikimrSessionContext>& ctx, const NCommon::TWriteTableSettings& settings,
         const TKikimrKey& key, const TStringBuf& cluster)
     {
@@ -288,6 +294,8 @@ private:
                 return TStatus::Ok;
             case TKikimrKey::Type::Permission:
                 return TStatus::Ok;
+            case TKikimrKey::Type::PGObject:
+                return TStatus::Ok;
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid table key type."));
@@ -361,9 +369,9 @@ public:
         Y_UNUSED(FunctionRegistry);
         Y_UNUSED(Types);
 
-        Y_VERIFY_DEBUG(gateway);
-        Y_VERIFY_DEBUG(sessionCtx);
-        Y_VERIFY_DEBUG(queryExecutor);
+        Y_DEBUG_ABORT_UNLESS(gateway);
+        Y_DEBUG_ABORT_UNLESS(sessionCtx);
+        Y_DEBUG_ABORT_UNLESS(queryExecutor);
     }
 
     ~TKikimrDataSink() {}
@@ -471,6 +479,10 @@ public:
             return true;
         }
 
+        if(node.IsCallable(TPgDropObject::CallableName())) {
+            return true;
+        }
+
         if (auto maybeRight = TMaybeNode<TCoNth>(&node).Tuple().Maybe<TCoRight>()) {
             if (maybeRight.Input().Maybe<TKiExecDataQuery>()) {
                 return true;
@@ -505,6 +517,23 @@ public:
             .Build()
             .Done()
             .Ptr();
+    }
+
+    static TExprNode::TPtr MakePgDropObject(const TExprNode::TPtr& node, const NCommon::TPgObjectSettings& settings,
+                                           const TKikimrKey& key, TExprContext& ctx)
+    {
+        bool missingOk = (settings.IfExists.Cast().Value() == "true");
+
+        return Build<TPgDropObject>(ctx, node->Pos())
+                .World(node->Child(0))
+                .DataSink(node->Child(1))
+                .ObjectId().Build(key.GetPGObjectId())
+                .TypeId().Build(key.GetPGObjectType())
+                .MissingOk<TCoAtom>()
+                    .Value(missingOk)
+                .Build()
+                .Done()
+                .Ptr();
     }
 
     bool RewriteIOExternal(const TKikimrKey& key, const TExprNode::TPtr& node, const TCoAtom& mode, TExprContext& ctx, TExprNode::TPtr& resultNode) {
@@ -942,6 +971,19 @@ public:
                 }
                 break;
             }
+
+            case TKikimrKey::Type::PGObject: {
+                NCommon::TPgObjectSettings settings = NCommon::ParsePgObjectSettings(TExprList(node->Child(4)), ctx);
+
+                YQL_ENSURE(settings.Mode);
+                auto mode = settings.Mode.Cast();
+
+                if (mode == "dropIndex") {
+                    return MakePgDropObject(node, settings, key, ctx);
+                } else {
+                    YQL_ENSURE(false, "unknown PGObject mode \"" << TString(mode) << "\"");
+                }
+            }
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Failed to rewrite IO."));
@@ -1074,6 +1116,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = TMaybeNode<TKiDropGroup>(input)) {
         return HandleDropGroup(node.Cast(), ctx);
+    }
+
+    if(auto node = TMaybeNode<TPgDropObject>(input)) {
+        return HandlePgDropObject(node.Cast(), ctx);
     }
 
     if (input->IsCallable(WriteName)) {

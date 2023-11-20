@@ -97,7 +97,7 @@ namespace NActors {
                 if (Y_UNLIKELY(current == CpuStopped)) {
                     return false;
                 }
-                Y_VERIFY_DEBUG(current < MaxPools, "unexpected already waiting state of cpu (%d)", (int)current);
+                Y_DEBUG_ABORT_UNLESS(current < MaxPools, "unexpected already waiting state of cpu (%d)", (int)current);
                 if (AtomicCas(&State, (state & ~CurrentMask) | CpuSpinning, state)) { // successfully marked as spinning
                     return true;
                 }

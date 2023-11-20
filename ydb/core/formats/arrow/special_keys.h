@@ -25,7 +25,7 @@ public:
     TSpecialKeys(const TString& data, const std::shared_ptr<arrow::Schema>& schema) {
         Data = NArrow::DeserializeBatch(data, schema);
         Y_ABORT_UNLESS(Data);
-        Y_VERIFY_DEBUG(Data->ValidateFull().ok());
+        Y_DEBUG_ABORT_UNLESS(Data->ValidateFull().ok());
     }
 
     TSpecialKeys(const TString& data) {
@@ -58,7 +58,7 @@ public:
     {
         Y_ABORT_UNLESS(Data->num_rows() == 1 || Data->num_rows() == 2);
     }
-    explicit TFirstLastSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::vector<TString>& columnNames = {});
+    explicit TFirstLastSpecialKeys(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<TString>& columnNames = {});
 };
 
 class TMinMaxSpecialKeys: public TSpecialKeys {

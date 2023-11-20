@@ -76,7 +76,7 @@ namespace NPageCollection {
                     if (was == Glob.Group || was == TLargeGlobId::InvalidGroup) {
 
                     } else if (it != bound.Lo.Blob) {
-                        Y_FAIL("Page placed over different groups");
+                        Y_ABORT("Page placed over different groups");
                     } else if (from < Queue.size()) {
                         /* Have to do each grow over the same group */
 

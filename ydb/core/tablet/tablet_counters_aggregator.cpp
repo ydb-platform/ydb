@@ -10,7 +10,9 @@
 #include <library/cpp/actors/core/mon.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
+#include <library/cpp/time_provider/time_provider.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -1811,7 +1813,7 @@ public:
                         break;
                         }
                     default:
-                        Y_FAIL("unknown type");
+                        Y_ABORT("unknown type");
                 }
                 labeledCounter.SetAggregateFunc(NKikimr::TLabeledCounterOptions::EAggregateFunc(g.second->GetAggrFuncs()[i]));
                 labeledCounter.SetType(NKikimr::TLabeledCounterOptions::ECounterType(g.second->GetTypes()[i]));

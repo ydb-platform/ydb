@@ -142,6 +142,14 @@ namespace NKikimr::NBsController {
                             ev->AllowMultipleRealmsOccupation = Self->AllowMultipleRealmsOccupation;
                             Self->Send(Self->SelfHealId, ev.release());
                         }
+                        for (bool value : settings.GetUseSelfHealLocalPolicy()) {
+                            Self->UseSelfHealLocalPolicy = value;
+                            db.Table<T>().Key(true).Update<T::UseSelfHealLocalPolicy>(Self->UseSelfHealLocalPolicy);
+                        }
+                        for (bool value : settings.GetTryToRelocateBrokenDisksLocallyFirst()) {
+                            Self->TryToRelocateBrokenDisksLocallyFirst = value;
+                            db.Table<T>().Key(true).Update<T::TryToRelocateBrokenDisksLocallyFirst>(Self->TryToRelocateBrokenDisksLocallyFirst);
+                        }
                         return true;
                     }
 
@@ -353,7 +361,7 @@ namespace NKikimr::NBsController {
                         throw TExError() << "unsupported command";
                 }
 
-                Y_FAIL();
+                Y_ABORT();
             }
 
             void Complete(const TActorContext&) override {

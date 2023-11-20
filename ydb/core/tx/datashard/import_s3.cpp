@@ -7,6 +7,7 @@
 #include "import_s3.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -406,7 +407,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             Reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
             break;
         case NBackupRestoreTraits::ECompressionCodec::Invalid:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
 
         ETag = result.GetResult().GetETag();

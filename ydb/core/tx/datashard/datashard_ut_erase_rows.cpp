@@ -1,6 +1,6 @@
 #include "defs.h"
 #include "datashard_distributed_erase.h"
-#include "datashard_ut_common.h"
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -738,7 +738,7 @@ key = 4, value = (empty maybe)
         )");
 
         THolder<IEventHandle> delayed;
-        auto prevObserver = server->GetRuntime()->SetObserverFunc([&delayed](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = server->GetRuntime()->SetObserverFunc([&delayed](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::TEvEraseRowsRequest::EventType:
                 delayed.Reset(ev.Release());
@@ -901,7 +901,7 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
         TVector<THolder<IEventHandle>> delayed;
 
         auto& runtime = *server->GetRuntime();
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvTxProxy::TEvProposeTransaction::EventType:
                 delayed.emplace_back(ev.Release());
@@ -933,7 +933,7 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
         TActorId eraser;
 
         auto& runtime = *server->GetRuntime();
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::TEvEraseRowsRequest::EventType:
                 delayed.emplace_back(ev.Release());
@@ -1300,7 +1300,7 @@ tkey = 100, key = 4
 
         using TSimpleEventObserver = std::function<void(TAutoPtr<IEventHandle>&)>;
         auto check = [&](TEvResponse::ProtoRecordType::EStatus status, const TString& error, TSimpleEventObserver observer) {
-            auto prevObserver = runtime.SetObserverFunc([observer](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            auto prevObserver = runtime.SetObserverFunc([observer](TAutoPtr<IEventHandle>& ev) {
                 observer(ev);
                 return TTestActorRuntime::EEventAction::PROCESS;
             });

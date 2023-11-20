@@ -388,7 +388,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TFinalizeBuildIndex");
+        Y_ABORT("no AbortPropose for TFinalizeBuildIndex");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

@@ -11,7 +11,8 @@ TString MakeData(ui32 dataSize) {
     return data;
 }
 
-class TInflightActor : public TActorBootstrapped<TInflightActor> {
+template <typename TDerived>
+class TInflightActor : public TActorBootstrapped<TDerived> {
 public:
     TInflightActor(ui32 requests, ui32 inflight)
         : RequestCount(requests)
@@ -59,6 +60,7 @@ public:
     ui32 Fails = 0;
 };
 
+template <typename TInflightActor>
 void Test(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* actor) {
     const ui32 groupSize = topology.TotalVDisks;
     const auto& groupErasure = topology.GType;
@@ -138,7 +140,7 @@ void Test(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* acto
     UNIT_ASSERT_VALUES_EQUAL_C(dsproxyCost, vdiskCost, str.Str());
 }
 
-class TInflightActorPut : public TInflightActor {
+class TInflightActorPut : public TInflightActor<TInflightActorPut> {
 public:
     TInflightActorPut(ui32 requests, ui32 inflight, ui32 dataSize = 1024)
         : TInflightActor(requests, inflight)
@@ -194,7 +196,7 @@ Y_UNIT_TEST(Test##requestType##erasure##Requests##requests##Inflight##inflight##
     Test(topology, actor);                                                                              \
 }
 
-class TInflightActorGet : public TInflightActor {
+class TInflightActorGet : public TInflightActor<TInflightActorGet> {
 public:
     TInflightActorGet(ui32 requests, ui32 inflight, ui32 dataSize = 1024)
         : TInflightActor(requests, inflight)
@@ -230,7 +232,7 @@ private:
     ui32 DataSize;
 };
 
-class TInflightActorPatch : public TInflightActor {
+class TInflightActorPatch : public TInflightActor<TInflightActorPatch> {
 public:
     TInflightActorPatch(ui32 requests, ui32 inflight, ui32 dataSize = 1024)
         : TInflightActor(requests, inflight)

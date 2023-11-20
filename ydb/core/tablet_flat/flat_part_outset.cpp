@@ -5,7 +5,7 @@ namespace NKikimr {
 namespace NTable {
 
 void TPageCollectionComponents::ParsePacket(TSharedData meta) {
-    Y_VERIFY_DEBUG(!Packet, "Packet is already parsed");
+    Y_DEBUG_ABORT_UNLESS(!Packet, "Packet is already parsed");
 
     Packet = new NPageCollection::TPageCollection(LargeGlobId, std::move(meta));
 }

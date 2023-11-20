@@ -2,23 +2,14 @@
 
 namespace NKikimr::NOlap::NPlainReader {
 
-TPlainReadData::TPlainReadData(TReadMetadata::TConstPtr readMetadata, const TReadContext& context)
-    : TBase(context, readMetadata)
-    , EFColumns(std::make_shared<TColumnsSet>(GetReadMetadata()->GetEarlyFilterColumnIds(), GetReadMetadata()->GetIndexInfo()))
-    , PKColumns(std::make_shared<TColumnsSet>(GetReadMetadata()->GetPKColumnIds(), GetReadMetadata()->GetIndexInfo()))
-    , FFColumns(std::make_shared<TColumnsSet>(GetReadMetadata()->GetAllColumns(), GetReadMetadata()->GetIndexInfo()))
-    , TrivialEFFlag(EFColumns->ColumnsOnly(GetReadMetadata()->GetIndexInfo().ArrowSchemaSnapshot()->field_names()))
+TPlainReadData::TPlainReadData(const std::shared_ptr<NOlap::TReadContext>& context)
+    : TBase(context)
+    , SpecialReadContext(std::make_shared<TSpecialReadContext>(context))
 {
-    PKFFColumns = std::make_shared<TColumnsSet>(*PKColumns + *FFColumns);
-    EFPKColumns = std::make_shared<TColumnsSet>(*EFColumns + *PKColumns);
-    FFMinusEFColumns = std::make_shared<TColumnsSet>(*FFColumns - *EFColumns);
-    FFMinusEFPKColumns = std::make_shared<TColumnsSet>(*FFColumns - *EFColumns - *PKColumns);
-
-    Y_ABORT_UNLESS(FFColumns->Contains(EFColumns));
     ui32 sourceIdx = 0;
     std::deque<std::shared_ptr<IDataSource>> sources;
     const auto& portionsOrdered = GetReadMetadata()->SelectInfo->GetPortionsOrdered(GetReadMetadata()->IsDescSorted());
-    const auto& committed = readMetadata->CommittedBlobs;
+    const auto& committed = GetReadMetadata()->CommittedBlobs;
     auto itCommitted = committed.begin();
     auto itPortion = portionsOrdered.begin();
     ui64 portionsBytes = 0;
@@ -38,17 +29,17 @@ TPlainReadData::TPlainReadData(TReadMetadata::TConstPtr readMetadata, const TRea
             portionsBytes += (*itPortion)->BlobsBytes();
             auto start = GetReadMetadata()->BuildSortedPosition((*itPortion)->IndexKeyStart());
             auto finish = GetReadMetadata()->BuildSortedPosition((*itPortion)->IndexKeyEnd());
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "portions_for_merge")("start", start.DebugJson())("finish", finish.DebugJson());
-            sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, *itPortion, *this, start, finish));
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", start.DebugJson())("finish", finish.DebugJson());
+            sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, *itPortion, SpecialReadContext, start, finish));
             ++itPortion;
         } else {
             auto start = GetReadMetadata()->BuildSortedPosition(itCommitted->GetFirstVerified());
             auto finish = GetReadMetadata()->BuildSortedPosition(itCommitted->GetLastVerified());
-            sources.emplace_back(std::make_shared<TCommittedDataSource>(sourceIdx++, *itCommitted, *this, start, finish));
+            sources.emplace_back(std::make_shared<TCommittedDataSource>(sourceIdx++, *itCommitted, SpecialReadContext, start, finish));
             ++itCommitted;
         }
     }
-    Scanner = std::make_shared<TScanHead>(std::move(sources), *this);
+    Scanner = std::make_shared<TScanHead>(std::move(sources), SpecialReadContext);
 
     auto& stats = GetReadMetadata()->ReadStats;
     stats->IndexPortions = GetReadMetadata()->SelectInfo->PortionsOrderedPK.size();
@@ -60,80 +51,31 @@ TPlainReadData::TPlainReadData(TReadMetadata::TConstPtr readMetadata, const TRea
 }
 
 std::vector<NKikimr::NOlap::TPartialReadResult> TPlainReadData::DoExtractReadyResults(const int64_t maxRowsInBatch) {
-    Scanner->DrainResults();
-    if (ReadyResultsCount < maxRowsInBatch && !Scanner->IsFinished()) {
+    if ((GetContext().GetIsInternalRead() && ReadyResultsCount < maxRowsInBatch) && !Scanner->IsFinished()) {
         return {};
     }
-    ReadyResultsCount = 0;
-
-    auto result = TPartialReadResult::SplitResults(PartialResults, maxRowsInBatch);
-    PartialResults.clear();
+    auto result = TPartialReadResult::SplitResults(std::move(PartialResults), maxRowsInBatch, GetContext().GetIsInternalRead());
     ui32 count = 0;
     for (auto&& r: result) {
-        r.BuildLastKey(ReadMetadata->GetIndexInfo().GetReplaceKey());
-        r.StripColumns(ReadMetadata->GetResultSchema());
         count += r.GetRecordsCount();
-        r.ApplyProgram(ReadMetadata->GetProgram());
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "DoExtractReadyResults")("result", result.size())("count", count)("finished", Scanner->IsFinished());
+    AFL_VERIFY(count == ReadyResultsCount);
+
+    ReadyResultsCount = 0;
+    PartialResults.clear();
+
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractReadyResults")("result", result.size())("count", count)("finished", Scanner->IsFinished());
     return result;
 }
 
-std::shared_ptr<NBlobOperations::NRead::ITask> TPlainReadData::DoExtractNextReadTask(const bool /*hasReadyResults*/) {
-    while (PriorityQueue.empty() && Queue.empty() && Scanner->BuildNextInterval()) {
-    }
-    {
-        auto task = PriorityQueue.pop_front();
-        if (task) {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "DoExtractNextBlob")("task", (*task)->DebugString());
-            return *task;
-        } else {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "DoExtractNextBlob")("task", "nothing");
-        }
-    }
-
-    {
-        auto task = Queue.pop_front();
-        if (task) {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "DoExtractNextBlob")("task", (*task)->DebugString());
-            return *task;
-        } else {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "DoExtractNextBlob")("task", "nothing");
-        }
-    }
-    return nullptr;
+bool TPlainReadData::DoReadNextInterval() {
+    return Scanner->BuildNextInterval();
 }
 
-void TPlainReadData::OnIntervalResult(std::shared_ptr<arrow::RecordBatch> batch) {
-    if (batch && batch->num_rows()) {
-        TPartialReadResult result(std::make_shared<TScanMemoryLimiter::TGuard>(Context.GetMemoryAccessor()), batch);
-        ReadyResultsCount += result.GetRecordsCount();
-        PartialResults.emplace_back(std::move(result));
-    }
-}
-
-NKikimr::NOlap::NPlainReader::TFetchingPlan TPlainReadData::GetColumnsFetchingPlan(const bool exclusiveSource) const {
-    if (exclusiveSource) {
-        if (Context.GetIsInternalRead()) {
-            return TFetchingPlan(FFColumns, EmptyColumns, true);
-        } else {
-            if (TrivialEFFlag) {
-                return TFetchingPlan(FFColumns, EmptyColumns, true);
-            } else {
-                return TFetchingPlan(EFColumns, FFMinusEFColumns, true);
-            }
-        }
-    } else {
-        if (GetContext().GetIsInternalRead()) {
-            return TFetchingPlan(PKFFColumns, EmptyColumns, false);
-        } else {
-            if (TrivialEFFlag) {
-                return TFetchingPlan(PKFFColumns, EmptyColumns, false);
-            } else {
-                return TFetchingPlan(EFPKColumns, FFMinusEFPKColumns, false);
-            }
-        }
-    }
+void TPlainReadData::OnIntervalResult(const std::shared_ptr<TPartialReadResult>& result) {
+    result->GetResourcesGuardOnly()->Update(result->GetMemorySize());
+    ReadyResultsCount += result->GetRecordsCount();
+    PartialResults.emplace_back(std::move(*result));
 }
 
 }

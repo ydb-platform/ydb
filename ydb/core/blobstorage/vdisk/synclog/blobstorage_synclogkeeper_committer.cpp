@@ -69,7 +69,7 @@ namespace NKikimr {
 
             void FillInPortion(ui32 freePagesInChunk) {
                 Parts->Clear();
-                Y_VERIFY_DEBUG(SwapSnap->Size() > SwapSnapPos);
+                Y_DEBUG_ABORT_UNLESS(SwapSnap->Size() > SwapSnapPos);
                 ui32 pagesLeft = ui32(SwapSnap->Size()) - SwapSnapPos;
                 ui32 m = Min(freePagesInChunk, pagesLeft);
                 for (ui32 i = 0; i < m; i++) {
@@ -88,7 +88,7 @@ namespace NKikimr {
                     ui32 offset = 0;
                     if (lastChunkFreePages > 0) {
                         // append to the chunk
-                        Y_VERIFY_DEBUG(SwapSnapPos == 0);
+                        Y_DEBUG_ABORT_UNLESS(SwapSnapPos == 0);
                         chunkIdx = SyncLogSnap->DiskSnapPtr->LastChunkIdx();
                         offset = (PagesInChunk - lastChunkFreePages) * PageSize;
                         FillInPortion(lastChunkFreePages);
@@ -101,7 +101,7 @@ namespace NKikimr {
 
                     // generate write
                     Parts->GenRefs();
-                    Y_VERIFY_DEBUG(Parts->Size());
+                    Y_DEBUG_ABORT_UNLESS(Parts->Size());
                     NPDisk::TEvChunkWrite::TPartsPtr p(Parts.Get());
                     ctx.Send(SlCtx->PDiskCtx->PDiskId,
                              new NPDisk::TEvChunkWrite(SlCtx->PDiskCtx->Dsk->Owner, SlCtx->PDiskCtx->Dsk->OwnerRound,
@@ -134,7 +134,7 @@ namespace NKikimr {
                     FillInPortion(PagesInChunk);
                     // generate write
                     Parts->GenRefs();
-                    Y_VERIFY_DEBUG(Parts->Size());
+                    Y_DEBUG_ABORT_UNLESS(Parts->Size());
                     NPDisk::TEvChunkWrite::TPartsPtr p(Parts.Get());
                     ctx.Send(SlCtx->PDiskCtx->PDiskId,
                              new NPDisk::TEvChunkWrite(SlCtx->PDiskCtx->Dsk->Owner, SlCtx->PDiskCtx->Dsk->OwnerRound,

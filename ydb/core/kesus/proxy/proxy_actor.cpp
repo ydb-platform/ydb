@@ -360,7 +360,7 @@ private:
         }
 
         if (record.GetError().GetStatus() != Ydb::StatusIds::SUCCESS) {
-            Y_FAIL("Unexpected proxy registration error");
+            Y_ABORT("Unexpected proxy registration error");
         }
 
         Y_ABORT_UNLESS(State == STATE_REGISTERING);
@@ -374,7 +374,7 @@ private:
                     SendAttachSession(data);
                     break;
                 case ESessionState::ATTACHED:
-                    Y_FAIL("Unexpected ATTACHED session during registration");
+                    Y_ABORT("Unexpected ATTACHED session during registration");
                     break;
                 case ESessionState::DESTROYING:
                     SendDestroySession(data);
@@ -838,7 +838,7 @@ private:
             hFunc(TEvKesus::TEvReleaseSemaphoreResult, Handle);
 
             default:
-                Y_FAIL("Unexpected event 0x%x for TKesusProxyActor", ev->GetTypeRewrite());
+                Y_ABORT("Unexpected event 0x%x for TKesusProxyActor", ev->GetTypeRewrite());
         }
     }
 };

@@ -15,7 +15,7 @@ namespace NKikimr {
         }
 
         const TMemRec &GetMemRec() const {
-            Y_VERIFY_DEBUG(Finished);
+            Y_DEBUG_ABORT_UNLESS(Finished);
             return MemRec;
         }
 
@@ -93,7 +93,7 @@ namespace NKikimr {
         }
 
         void Finish() {
-            Y_VERIFY_DEBUG(!Empty());
+            Y_DEBUG_ABORT_UNLESS(!Empty());
             Finished = true;
         }
     };
@@ -146,7 +146,7 @@ namespace NKikimr {
         }
 
         void AddFromSegment(const TMemRec &memRec, const TDiskPart *outbound, const TKey &key, ui64 circaLsn) {
-            Y_VERIFY_DEBUG(NeedToLoadData != ELoadData::NotSet);
+            Y_DEBUG_ABORT_UNLESS(NeedToLoadData != ELoadData::NotSet);
             AddBasic(memRec, key);
             switch (memRec.GetType()) {
                 case TBlobType::DiskBlob: {
@@ -165,13 +165,13 @@ namespace NKikimr {
                     break;
                 }
                 default:
-                    Y_FAIL("Impossible case");
+                    Y_ABORT("Impossible case");
             }
             VerifyConsistency(memRec, outbound);
         }
 
         void AddFromFresh(const TMemRec &memRec, const TRope *data, const TKey &key, ui64 lsn) {
-            Y_VERIFY_DEBUG(NeedToLoadData != ELoadData::NotSet);
+            Y_DEBUG_ABORT_UNLESS(NeedToLoadData != ELoadData::NotSet);
             AddBasic(memRec, key);
             if (memRec.HasData()) {
                 if (data) {
@@ -223,13 +223,13 @@ namespace NKikimr {
 
         void VerifyConsistency() {
             if constexpr (std::is_same_v<TMemRec, TMemRecLogoBlob>) {
-                Y_VERIFY_DEBUG(DataMerger.GetHugeBlobMerger().Empty() || MemRec.GetIngress().LocalParts(GType).CountBits() ==
+                Y_DEBUG_ABORT_UNLESS(DataMerger.GetHugeBlobMerger().Empty() || MemRec.GetIngress().LocalParts(GType).CountBits() ==
                     DataMerger.GetHugeBlobMerger().GetNumParts());
             }
         }
 
         void Finish() {
-            Y_VERIFY_DEBUG(!Empty());
+            Y_DEBUG_ABORT_UNLESS(!Empty());
             VerifyConsistency();
 
             // in case when we keep data and disk merger contains small blobs, we set up small blob record -- this logic
@@ -249,7 +249,7 @@ namespace NKikimr {
         }
 
         const TDataMerger *GetDataMerger() const {
-            Y_VERIFY_DEBUG(Finished);
+            Y_DEBUG_ABORT_UNLESS(Finished);
             return &DataMerger;
         }
 
@@ -410,7 +410,7 @@ namespace NKikimr {
                         // deduplicate huge blob
                         LastWriteWinsMerger.Add(extr.SwearOne(), v, circaLsn);
                     } else {
-                        Y_FAIL("Unexpected case");
+                        Y_ABORT("Unexpected case");
                     }
 
                     break;
@@ -454,7 +454,7 @@ namespace NKikimr {
         }
 
         void Finish() {
-            Y_VERIFY_DEBUG(!Empty());
+            Y_DEBUG_ABORT_UNLESS(!Empty());
             LastWriteWinsMerger.Finish(Callback);
             Finished = true;
         }
@@ -467,7 +467,7 @@ namespace NKikimr {
             {}
 
             void Add(const TDiskPart &diskPart, NMatrix::TVectorType v, ui64 circaLsn) {
-                Y_VERIFY_DEBUG(v.CountBits() == 1u);
+                Y_DEBUG_ABORT_UNLESS(v.CountBits() == 1u);
                 const ui8 idx = v.FirstPosition();
                 TResItem& item = Res[idx];
                 if (item.CircaLsn < circaLsn) {

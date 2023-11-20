@@ -89,7 +89,7 @@ namespace NActors {
             try {
                 TPipeHandle::Pipe(ReadEnd, WriteEnd, CloseOnExec);
             } catch (const TFileError& err) {
-                Y_FAIL("failed to create pipe");
+                Y_ABORT("failed to create pipe");
             }
 
             // switch the read/write ends to nonblocking mode
@@ -134,7 +134,7 @@ namespace NActors {
                         if (err == EINTR) {
                             continue;
                         } else {
-                            Y_FAIL("WriteEnd.Write() failed with %s", strerror(err));
+                            Y_ABORT("WriteEnd.Write() failed with %s", strerror(err));
                         }
                     } else {
                         Y_ABORT_UNLESS(nwritten);
@@ -157,7 +157,7 @@ namespace NActors {
                     } else if (error == EAGAIN || error == EWOULDBLOCK) {
                         break;
                     } else {
-                        Y_FAIL("read() failed with %s", strerror(errno));
+                        Y_ABORT("read() failed with %s", strerror(errno));
                     }
                 } else {
                     Y_ABORT_UNLESS(n);
@@ -178,7 +178,7 @@ namespace NActors {
                 } else if (std::get_if<TPollerWakeup>(&op->Operation)) {
                     op->SignalDone();
                 } else {
-                    Y_FAIL();
+                    Y_ABORT();
                 }
             } while (SyncOperationsQ.Pop());
             return true;
@@ -232,7 +232,23 @@ namespace NActors {
 
         void Request(bool read, bool write) {
             if (auto thread = Thread.lock()) {
-                thread->Request(Record, read, write);
+                thread->Request(Record, read, write, false, false);
+            }
+        }
+
+        bool RequestReadNotificationAfterWouldBlock() {
+            if (auto thread = Thread.lock()) {
+                return thread->Request(Record, true, false, true, true);
+            } else {
+                return false;
+            }
+        }
+
+        bool RequestWriteNotificationAfterWouldBlock() {
+            if (auto thread = Thread.lock()) {
+                return thread->Request(Record, false, true, true, true);
+            } else {
+                return false;
             }
         }
 
@@ -285,6 +301,14 @@ namespace NActors {
 
     void TPollerToken::Request(bool read, bool write) {
         Impl->Request(read, write);
+    }
+
+    bool TPollerToken::RequestReadNotificationAfterWouldBlock() {
+        return Impl->RequestReadNotificationAfterWouldBlock();
+    }
+
+    bool TPollerToken::RequestWriteNotificationAfterWouldBlock() {
+        return Impl->RequestWriteNotificationAfterWouldBlock();
     }
 
     IActor* CreatePollerActor() {

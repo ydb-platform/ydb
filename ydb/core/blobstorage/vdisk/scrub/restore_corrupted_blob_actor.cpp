@@ -72,7 +72,7 @@ namespace NKikimr {
                         break;
 
                     case TBlobType::MemBlob:
-                        Y_FAIL();
+                        Y_ABORT();
                 }
             }
 

@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:5:1: Warning: At function: RemovePrefixMembers, At function: RemoveSystemMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select
+	^
+        <tmp_path>/program.sql:<main>:7:23: Warning: At function: -
+        	(ROW_NUMBER() over w) - 1 as position_cnt,
+	                      ^
+            <tmp_path>/program.sql:<main>:7:23: Warning: Integral type implicit bitcast: Uint64 and Int32
+            	(ROW_NUMBER() over w) - 1 as position_cnt,
+	                      ^

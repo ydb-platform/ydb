@@ -63,7 +63,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvLocalStatusResult::TPtr &ev, const TActorContext &ctx) {
-            Y_VERIFY_DEBUG(Counter > 0);
+            Y_DEBUG_ABORT_UNLESS(Counter > 0);
             --Counter;
 
             Result->Record.MergeFrom(ev->Get()->Record);

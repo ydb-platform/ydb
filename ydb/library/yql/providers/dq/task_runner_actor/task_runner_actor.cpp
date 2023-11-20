@@ -257,19 +257,20 @@ private:
         auto* actorSystem = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
         auto selfId = SelfId();
 
-        TVector<TString> strings;
         YQL_ENSURE(!batch.IsWide());
-        batch.ForEachRow([&strings](const auto& value) {
-            strings.emplace_back(value.AsStringRef());
-        });
 
-        Invoker->Invoke([strings=std::move(strings),taskRunner=TaskRunner, actorSystem, selfId, cookie, parentId=ParentId, space, finish, index, settings=Settings, stageId=StageId]() mutable {
+        auto source = TaskRunner->GetSource(index);
+        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), 
+            // NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0
+            NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_PICKLE_1_0
+        );
+        TDqSerializedBatch serialized = dataSerializer.Serialize(batch, source->GetInputType());
+
+        Invoker->Invoke([serialized=std::move(serialized),taskRunner=TaskRunner, actorSystem, selfId, cookie, parentId=ParentId, space, finish, index, settings=Settings, stageId=StageId]() mutable {
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
                 auto source = taskRunner->GetSource(index);
-                if (!strings.empty()) {
-                    (static_cast<NTaskRunnerProxy::IStringSource*>(source.Get()))->PushString(std::move(strings), space);
-                }
+                source->Push(std::move(serialized), space);
                 if (finish) {
                     source->Finish();
                 }
@@ -368,9 +369,10 @@ private:
     void OnSinkPopFinished(TEvSinkPopFinished::TPtr& ev) {
         auto guard = TaskRunner->BindAllocator();
         NKikimr::NMiniKQL::TUnboxedValueBatch batch;
-        for (auto& row: ev->Get()->Strings) {
-            batch.emplace_back(NKikimr::NMiniKQL::MakeString(row));
-        }
+        auto sink = TaskRunner->GetSink(ev->Get()->Index);
+        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
+        dataSerializer.Deserialize(std::move(ev->Get()->Batch), sink->GetOutputType(), batch);
+
         Parent->SinkSend(
             ev->Get()->Index,
             std::move(batch),
@@ -392,13 +394,13 @@ private:
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
                 auto sink = taskRunner->GetSink(ev->Get()->Index);
-                TVector<TString> batch;
+                NDq::TDqSerializedBatch batch;
                 NDqProto::TCheckpoint checkpoint;
                 TMaybe<NDqProto::TCheckpoint> maybeCheckpoint;
                 i64 size = 0;
                 i64 checkpointSize = 0;
                 if (ev->Get()->Size > 0) {
-                    size = (static_cast<NTaskRunnerProxy::IStringSink*>(sink.Get()))->PopString(batch, ev->Get()->Size);
+                    size = sink->Pop(batch, ev->Get()->Size);
                 }
                 bool hasCheckpoint = sink->Pop(checkpoint);
                 if (hasCheckpoint) {
@@ -410,7 +412,7 @@ private:
                 auto event = MakeHolder<TEvSinkPopFinished>(
                     ev->Get()->Index,
                     std::move(maybeCheckpoint), size, checkpointSize, finished, changed);
-                event->Strings = std::move(batch);
+                event->Batch = std::move(batch);
                 // repack data and forward
                 actorSystem->Send(
                     new IEventHandle(

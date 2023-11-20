@@ -1,4 +1,6 @@
 #include "kqp_pure_compute_actor.h"
+#include <ydb/core/base/feature_flags.h>
+
 
 namespace NKikimr {
 namespace NKqp {
@@ -49,8 +51,7 @@ void TKqpComputeActor::DoBootstrap() {
     execCtx.PatternCache = GetKqpResourceManager()->GetPatternCache();
 
     TDqTaskRunnerSettings settings;
-    settings.CollectBasicStats = RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC;
-    settings.CollectProfileStats = RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE;
+    settings.StatsMode = RuntimeSettings.StatsMode;
 
     settings.OptLLVM = (GetTask().HasUseLlvm() && GetTask().GetUseLlvm()) ? "--compile-options=disable-opt" : "OFF";
     settings.UseCacheForLLVM = AppData()->FeatureFlags.GetEnableLLVMCache();
@@ -73,7 +74,7 @@ void TKqpComputeActor::DoBootstrap() {
     auto wakeup = [this]{ ContinueExecute(); };
     try {
         PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling,
-            std::move(wakeup), TlsActivationContext->AsActorContext()));
+            std::move(wakeup)));
     } catch (const NMiniKQL::TKqpEnsureFail& e) {
         InternalError((TIssuesIds::EIssueCode) e.GetCode(), e.GetMessage());
         return;
@@ -188,11 +189,11 @@ void TKqpComputeActor::PassAway() {
 }
 
 void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
-    Y_VERIFY_DEBUG(ScanData);
+    Y_DEBUG_ABORT_UNLESS(ScanData);
 
     auto& msg = ev->Get()->Record;
 
-    Y_VERIFY_DEBUG(SysViewActorId == ActorIdFromProto(msg.GetScanActorId()));
+    Y_DEBUG_ABORT_UNLESS(SysViewActorId == ActorIdFromProto(msg.GetScanActorId()));
 
     CA_LOG_D("Got sysview scan initial event, scan actor: " << SysViewActorId << ", scanId: 0");
     Send(ev->Sender, new TEvKqpCompute::TEvScanDataAck(GetMemoryLimits().ChannelBufferSize));
@@ -200,8 +201,8 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev) 
 }
 
 void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
-    Y_VERIFY_DEBUG(ScanData);
-    Y_VERIFY_DEBUG(SysViewActorId == ev->Sender);
+    Y_DEBUG_ABORT_UNLESS(ScanData);
+    Y_DEBUG_ABORT_UNLESS(SysViewActorId == ev->Sender);
 
     auto& msg = *ev->Get();
 
@@ -210,15 +211,15 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
     {
         auto guard = TaskRunner->BindAllocator();
         switch (msg.GetDataFormat()) {
-            case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
-            case NKikimrTxDataShard::EScanDataFormat::CELLVEC: {
+            case NKikimrDataEvents::FORMAT_UNSPECIFIED:
+            case NKikimrDataEvents::FORMAT_CELLVEC: {
                 if (!msg.Rows.empty()) {
                     bytes = ScanData->AddData(msg.Rows, {}, TaskRunner->GetHolderFactory());
                     rowsCount = msg.Rows.size();
                 }
                 break;
             }
-            case NKikimrTxDataShard::EScanDataFormat::ARROW: {
+            case NKikimrDataEvents::FORMAT_ARROW: {
                 if(msg.ArrowBatch != nullptr) {
                     bytes = ScanData->AddData(*msg.ArrowBatch, {}, TaskRunner->GetHolderFactory());
                     rowsCount = msg.ArrowBatch->num_rows();
@@ -260,7 +261,7 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
 }
 
 void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) {
-    Y_VERIFY_DEBUG(ScanData);
+    Y_DEBUG_ABORT_UNLESS(ScanData);
 
     TIssues issues;
     Ydb::StatusIds::StatusCode status = ev->Get()->Record.GetStatus();

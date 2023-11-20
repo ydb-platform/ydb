@@ -181,7 +181,6 @@
                                                                                 }
                                                                             ],
                                                                             "FunctionType": 2,
-                                                                            "Id": 9,
                                                                             "KernelIdx": 0
                                                                         }
                                                                     }
@@ -530,7 +529,7 @@
                                                                     }
                                                                 }
                                                             ],
-                                                            "Version": 3
+                                                            "Version": 4
                                                         },
                                                         "Table": "clickbench/plans/column/hits"
                                                     }

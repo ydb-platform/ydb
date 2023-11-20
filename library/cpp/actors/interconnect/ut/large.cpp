@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(LargeMessage) {
                 Y_ABORT_UNLESS(SessionId != ev->InterconnectSession);
                 Done.Signal();
             } else {
-                Y_FAIL("incorrect sequence number");
+                Y_ABORT("incorrect sequence number");
             }
         }
 

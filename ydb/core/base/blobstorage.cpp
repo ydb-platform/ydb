@@ -13,7 +13,7 @@ NKikimrBlobStorage::EPDiskType PDiskTypeToPDiskType(const NPDisk::EDeviceType ty
         case NPDisk::DEVICE_TYPE_UNKNOWN:
             return NKikimrBlobStorage::EPDiskType::UNKNOWN_TYPE;
         default:
-            Y_FAIL("Device type is unknown; type# %" PRIu64, (ui64)type);
+            Y_ABORT("Device type is unknown; type# %" PRIu64, (ui64)type);
     }
 }
 
@@ -28,7 +28,7 @@ NPDisk::EDeviceType PDiskTypeToPDiskType(const NKikimrBlobStorage::EPDiskType ty
         case NKikimrBlobStorage::EPDiskType::UNKNOWN_TYPE:
             return NPDisk::DEVICE_TYPE_UNKNOWN;
         default:
-            Y_FAIL("Device type is unknown; type# %" PRIu64, (ui64)type);
+            Y_ABORT("Device type is unknown; type# %" PRIu64, (ui64)type);
     }
 }
 

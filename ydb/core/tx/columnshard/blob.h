@@ -181,9 +181,9 @@ public:
         case S3_BLOB:
             return std::get<TS3BlobId>(Id).DsBlobId.BlobId.BlobSize();
         case INVALID:
-            Y_FAIL("Invalid blob id");
+            Y_ABORT("Invalid blob id");
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 
     bool IsSmallBlob() const {
@@ -222,9 +222,9 @@ public:
         case S3_BLOB:
             return std::get<TS3BlobId>(Id).DsBlobId.BlobId.TabletID();
         case INVALID:
-            Y_FAIL("Invalid blob id");
+            Y_ABORT("Invalid blob id");
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 
     ui64 Hash() const noexcept {
@@ -238,7 +238,7 @@ public:
         case S3_BLOB:
             return std::get<TS3BlobId>(Id).Hash();
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 
     // This is only implemented for DS for backward compatibility with persisted data.
@@ -255,11 +255,11 @@ public:
         case TABLET_SMALL_BLOB:
             return std::get<TSmallBlobId>(Id).ToStringLegacy();
         case S3_BLOB:
-            Y_FAIL("Not implemented");
+            Y_ABORT("Not implemented");
         case INVALID:
             return "<Invalid blob id>";
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 
     TString ToStringNew() const {
@@ -273,7 +273,7 @@ public:
         case INVALID:
             return "<Invalid blob id>";
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 };
 

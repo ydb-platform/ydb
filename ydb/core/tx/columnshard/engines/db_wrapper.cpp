@@ -40,21 +40,6 @@ bool TDbWrapper::Load(TInsertTableAccessor& insertTable,
     return NColumnShard::Schema::InsertTable_Load(db, DsGroupSelector, insertTable, loadTime);
 }
 
-void TDbWrapper::WriteGranule(ui32 index, const IColumnEngine& engine, const TGranuleRecord& row) {
-    NIceDb::TNiceDb db(Database);
-    NColumnShard::Schema::IndexGranules_Write(db, index, engine, row);
-}
-
-void TDbWrapper::EraseGranule(ui32 index, const IColumnEngine& engine, const TGranuleRecord& row) {
-    NIceDb::TNiceDb db(Database);
-    NColumnShard::Schema::IndexGranules_Erase(db, index, engine, row);
-}
-
-bool TDbWrapper::LoadGranules(ui32 index, const IColumnEngine& engine, const std::function<void(const TGranuleRecord&)>& callback) {
-    NIceDb::TNiceDb db(Database);
-    return NColumnShard::Schema::IndexGranules_Load(db, index, engine, callback);
-}
-
 void TDbWrapper::WriteColumn(ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
     NIceDb::TNiceDb db(Database);
     NColumnShard::Schema::IndexColumns_Write(db, index, portion, row);

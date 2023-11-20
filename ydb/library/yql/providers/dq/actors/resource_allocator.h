@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
@@ -16,5 +17,6 @@ namespace NYql {
         const TDqConfiguration::TPtr& settings,
         const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         const TVector<NYql::NDqProto::TDqTask>& tasks = {},
-        const TString& computeActorType = "old");
+        const TString& computeActorType = "old",
+        NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_UNSPECIFIED);
 } // namespace NYql

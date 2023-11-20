@@ -1,0 +1,9 @@
+RECURSE(
+    anynil
+    iobufpool
+    nbconn
+    pgio
+    pgmock
+    sanitize
+    stmtcache
+)

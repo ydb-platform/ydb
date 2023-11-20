@@ -290,7 +290,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         if (lag) {
             Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
         } else {
-            Y_VERIFY_DEBUG(false);
+            Y_DEBUG_ABORT_UNLESS(false);
         }
 
         const auto now = ctx.Now();
@@ -438,7 +438,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
             break;
 
         default:
-          Y_FAIL("Unknown batch status");
+          Y_ABORT("Unknown batch status");
     }
 }
 

@@ -136,6 +136,9 @@ struct TSqsEvents {
         EvReloadStateResponse,
         EvLeaderStarted,
 
+        EvActionCounterChanged,
+        EvLocalCounterChanged,
+
         EvEnd,
     };
 
@@ -393,6 +396,27 @@ struct TSqsEvents {
             : QueuePath(other.QueuePath)
             , Boundary(other.Boundary)
             , Shard(other.Shard)
+        {
+        }
+    };
+
+    struct TEvActionCounterChanged: public NActors::TEventPB<TEvActionCounterChanged, NKikimrClient::TSqsActionCounterChanged, EvActionCounterChanged> {
+        using TEventPB::TEventPB;
+    };
+
+    struct TEvLocalCounterChanged: public NActors::TEventLocal<TEvLocalCounterChanged, EvLocalCounterChanged> {
+        enum class ECounterType{
+            ReceiveMessageImmediateDuration,
+            ReceiveMessageEmptyCount,
+            MessagesPurged,
+            ClientMessageProcessingDuration,
+        };
+
+        ECounterType CounterType;
+        ui32 Value;
+        TEvLocalCounterChanged(ECounterType counterType, ui32 value)
+            : CounterType(counterType)
+            , Value(value)
         {
         }
     };

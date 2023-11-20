@@ -63,7 +63,7 @@ namespace {
                     return ctx.MakeType<TStreamExprType>(OutputStruct_);
             }
 
-            Y_FAIL("Unexpected");
+            Y_ABORT("Unexpected");
         }
 
         const TTypeAnnotationNode* MakeExpectedItemType() {
@@ -82,7 +82,7 @@ namespace {
                 case ETypeAnnotationKind::List:
                     return actualType->Cast<TListExprType>()->GetItemType();
                 default:
-                    Y_FAIL("unexpected return type");
+                    Y_ABORT("unexpected return type");
             }
         }
     };

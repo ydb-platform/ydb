@@ -78,7 +78,7 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
 
 TConsumerDescription::TConsumerDescription(Ydb::Topic::DescribeConsumerResult&& result)
     : Proto_(std::move(result))
-    , Consumer_(result.consumer())
+    , Consumer_(Proto_.consumer())
 {
     for (const auto& part : Proto_.partitions()) {
         Partitions_.emplace_back(part);
@@ -182,7 +182,7 @@ const TVector<TConsumer>& TTopicDescription::GetConsumers() const {
 
 void TTopicDescription::SerializeTo(Ydb::Topic::CreateTopicRequest& request) const {
     Y_UNUSED(request);
-    Y_FAIL("Not implemented");
+    Y_ABORT("Not implemented");
 }
 
 const Ydb::Topic::DescribeTopicResult& TTopicDescription::GetProto() const {

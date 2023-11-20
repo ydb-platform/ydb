@@ -4,7 +4,9 @@
 
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/services/services.pb.h>
 
+#include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
 #include <util/generic/ptr.h>
@@ -458,7 +460,7 @@ public:
             HFunc(TEvResourceBroker::TEvResourceBrokerRequest, Handle);
             HFunc(NMon::TEvHttpInfo, Handle);
         default:
-            Y_FAIL("TResourceBroker::StateWork unexpected event type: %" PRIx32 " event: %s",
+            Y_ABORT("TResourceBroker::StateWork unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(),
                    ev->ToString().data());
         }

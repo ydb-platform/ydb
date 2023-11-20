@@ -71,5 +71,35 @@ NActors::IActor* MakeDescribeListedBindingActor(
     TDuration requestTimeout,
     TPermissions permissions);
 
+/// Uniqueness constraint
+
+NActors::IActor* MakeListBindingIdsActor(
+    const TActorId proxyActorId,
+    const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request,
+    TCounters& counters,
+    TDuration requestTimeout,
+    TPermissions permissions);
+
+NActors::IActor* MakeListConnectionIdsActor(
+    const TActorId proxyActorId,
+    const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request,
+    TCounters& counters,
+    TDuration requestTimeout,
+    TPermissions permissions);
+
+NActors::IActor* MakeListBindingIdsActor(
+    const TActorId proxyActorId,
+    const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request,
+    TCounters& counters,
+    TDuration requestTimeout,
+    TPermissions permissions);
+
+NActors::IActor* MakeListConnectionIdsActor(
+    const TActorId proxyActorId,
+    const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request,
+    TCounters& counters,
+    TDuration requestTimeout,
+    TPermissions permissions);
+
 } // namespace NPrivate
 } // namespace NFq

@@ -75,6 +75,7 @@ public:
 };
 
 class IDqIntegration;
+class IDqOptimization;
 
 class IOptimizationContext;
 
@@ -174,6 +175,7 @@ public:
 
     // DQ
     virtual IDqIntegration* GetDqIntegration() = 0;
+    virtual IDqOptimization* GetDqOptimization() = 0;
 };
 
 struct IPipelineConfigurator;

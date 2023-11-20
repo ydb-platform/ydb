@@ -1,4 +1,4 @@
-#include "datashard_ut_common.h"
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_active_transaction.h"
 #include "datashard_ut_read_table.h"
 
@@ -328,7 +328,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         auto shard2actor = ResolveTablet(runtime, shards[1]);
 
         TVector<THolder<IEventHandle>> capturedPropose;
-        auto capturePropose = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto capturePropose = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvProposeTransaction::EventType: {
                     const auto* msg = ev->Get<TEvDataShard::TEvProposeTransaction>();
@@ -418,7 +418,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         }
 
         TVector<size_t> rowLimits;
-        auto inspectResponses = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto inspectResponses = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvStreamQuotaResponse::EventType: {
                     const auto* msg = ev->Get<TEvTxProcessing::TEvStreamQuotaResponse>();
@@ -499,7 +499,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         TVector<THolder<IEventHandle>> capturedTxIds;
         size_t captureResolveKeySetResultPartitions = 3;
         TVector<THolder<IEventHandle>> capturedResolveKeySetResults;
-        auto capturePropose = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto capturePropose = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxUserProxy::TEvAllocateTxIdResult::EventType: {
                     if (captureTxIds) {
@@ -572,6 +572,42 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             "key = 5, value = 55\n"
             "key = 6, value = 66\n");
     }
+
+    Y_UNIT_TEST(CorruptedDyNumber) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+        runtime.GetAppData().AllowReadTableImmediate = true;
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "Table",
+            TShardedTableOptions().Columns({
+                {"key", "Uint32", true, false},
+                {"value", "DyNumber", false, false}
+            }));
+
+        // Write bad DyNumber
+        UploadRows(runtime, "/Root/Table", 
+            {{"key", Ydb::Type::UINT32}, {"value", Ydb::Type::DYNUMBER}},
+            {TCell::Make(ui32(1))}, {TCell::Make(ui32(55555))}
+            );
+
+        auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/Table", true));
+
+        UNIT_ASSERT(!table1state.Next());
+
+        UNIT_ASSERT(table1state.IsError);
+        UNIT_ASSERT_VALUES_EQUAL(table1state.LastResult, "ERROR: ExecError\n");
+    }    
 
 } // Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots)
 

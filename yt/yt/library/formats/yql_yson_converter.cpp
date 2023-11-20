@@ -816,7 +816,7 @@ static TWeightLimitedUnversionedValueToYqlConverter CreateWeightLimitedUnversion
             return TComplexUnversionedValueToYqlConverter(logicalType, std::move(config));
         case ELogicalMetatype::Tagged:
             // DenullifyLogicalType should have cleaned type of tagged types.
-            Y_FAIL();
+            Y_ABORT();
     }
 }
 

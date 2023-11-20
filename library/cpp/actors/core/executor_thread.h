@@ -69,7 +69,7 @@ namespace NActors {
         void GetCurrentStats(TExecutorThreadStats& statsCopy) const;
 
         TThreadId GetThreadId() const; // blocks, must be called after Start()
-        TWorkerId GetWorkerId() const { return Ctx.WorkerId; }
+        TWorkerId GetWorkerId() const;
 
     private:
         void* ThreadProc();

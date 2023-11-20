@@ -1,4 +1,4 @@
-#include "datashard_ut_common.h"
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
@@ -92,8 +92,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         bool sawResolve = false;
         bool dropResolve = restart;
         // Remove table path from propose.
-        auto captureTableId = [&](TTestActorRuntimeBase&,
-                                  TAutoPtr<IEventHandle> &event) -> auto {
+        auto captureTableId = [&](TAutoPtr<IEventHandle> &event) -> auto {
             if (event->GetTypeRewrite() == TEvDataShard::EvProposeTransaction) {
                 auto &rec = event->Get<TEvDataShard::TEvProposeTransaction>()->Record;
                 if (rec.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {

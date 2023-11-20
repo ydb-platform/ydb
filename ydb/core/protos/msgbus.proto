@@ -671,6 +671,13 @@ message TSqsResponse {
     optional bool IsFifo = 33;
 }
 
+message TSqsActionCounterChanged {
+    optional uint32 Action = 1;
+    optional uint32 ErrorsCount = 2;
+    optional uint64 DurationMs = 3;
+    optional uint64 WorkingDurationMs = 4;
+}
+
 message TInterconnectDebug {
     optional string Name = 1;
     optional uint32 Channel = 2;

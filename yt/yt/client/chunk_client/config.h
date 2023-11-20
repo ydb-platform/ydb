@@ -481,10 +481,10 @@ public:
     //! will stop being accessed within periodic updates and then will be evicted via expiring cache logic.
     TDuration ChunkInfoCacheExpirationTimeout;
 
-    //! Upper bound on length of simultaneously requested fragments withing a reading session.
+    //! Upper bound on length of simultaneously requested fragments within a reading session.
     i64 MaxInflightFragmentLength;
 
-    //! Upper bound on count of simultaneously requested fragments withing a reading session.
+    //! Upper bound on count of simultaneously requested fragments within a reading session.
     i64 MaxInflightFragmentCount;
 
     REGISTER_YSON_STRUCT(TChunkFragmentReaderConfig);

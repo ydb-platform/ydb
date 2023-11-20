@@ -2,20 +2,35 @@
 
 namespace NYdb::NQuery {
 
-const TVector<TResultSet>& TExecuteQueryResult::GetResultSets() const {
-    return ResultSets_;
-}
-
-TResultSet TExecuteQueryResult::GetResultSet(size_t resultIndex) const {
-    if (resultIndex >= ResultSets_.size()) {
-        RaiseError(TString("Requested index out of range\n"));
+std::optional<EStatsMode> ParseStatsMode(std::string_view statsMode) {
+    if (statsMode == "unspecified") {
+        return EStatsMode::Unspecified;
+    } else if (statsMode == "none") {
+        return EStatsMode::None;
+    } else if (statsMode == "basic") {
+        return EStatsMode::Basic;
+    } else if (statsMode == "full") {
+        return EStatsMode::Full;
+    } else if (statsMode == "profile") {
+        return EStatsMode::Profile;
     }
 
-    return ResultSets_[resultIndex];
+    return {};
 }
 
-TResultSetParser TExecuteQueryResult::GetResultSetParser(size_t resultIndex) const {
-    return TResultSetParser(GetResultSet(resultIndex));
+std::string_view StatsModeToString(const EStatsMode statsMode) {
+    switch (statsMode) {
+    case EStatsMode::Unspecified:
+        return "unspecified";
+    case EStatsMode::None:
+        return "none";
+    case EStatsMode::Basic:
+        return "basic";
+    case EStatsMode::Full:
+        return "full";
+    case EStatsMode::Profile:
+        return "profile";
+    }
 }
 
 TScriptExecutionOperation::TScriptExecutionOperation(TStatus&& status, Ydb::Operations::Operation&& operation)
@@ -35,5 +50,9 @@ TScriptExecutionOperation::TScriptExecutionOperation(TStatus&& status, Ydb::Oper
         Metadata_.ScriptContent.Text = metadata.script_content().text();
     }
 }
+
+TCommitTransactionResult::TCommitTransactionResult(TStatus&& status)
+    : TStatus(std::move(status))
+{}
 
 } // namespace NYdb::NQuery

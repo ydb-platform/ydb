@@ -157,7 +157,7 @@ namespace NActors {
                     return MakeHolder<NAddr::TIPv4Addr>(TIpAddress(msg->GetAddrV4().s_addr, Port));
                 }
 
-                Y_FAIL("Unexpected result address family");
+                Y_ABORT("Unexpected result address family");
             }
 
             return nullptr;

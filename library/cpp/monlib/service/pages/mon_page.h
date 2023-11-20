@@ -20,12 +20,18 @@ namespace NMonitoring {
     static const char HTTPNOTFOUND[] = "HTTP/1.1 404 Invalid URI\r\nConnection: Close\r\n\r\nInvalid URL\r\n";
     static const char HTTPUNAUTHORIZED[] = "HTTP/1.1 401 Unauthorized\r\nConnection: Close\r\n\r\nUnauthorized\r\n";
     static const char HTTPFORBIDDEN[] = "HTTP/1.1 403 Forbidden\r\nConnection: Close\r\n\r\nForbidden\r\n";
+    static const char HTTPOKJAVASCRIPT_CACHED[] = "HTTP/1.1 200 Ok\r\nContent-Type: text/javascript\r\nCache-Control: public, max-age=31536000\r\nConnection: Close\r\n\r\n";
+    static const char HTTPOKCSS_CACHED[] = "HTTP/1.1 200 Ok\r\nContent-Type: text/css\r\nCache-Control: public, max-age=31536000\r\nConnection: Close\r\n\r\n";
 
     // Fonts
     static const char HTTPOKFONTEOT[] = "HTTP/1.1 200 Ok\r\nContent-Type: application/vnd.ms-fontobject\r\nConnection: Close\r\n\r\n";
     static const char HTTPOKFONTTTF[] = "HTTP/1.1 200 Ok\r\nContent-Type: application/x-font-ttf\r\nConnection: Close\r\n\r\n";
     static const char HTTPOKFONTWOFF[] = "HTTP/1.1 200 Ok\r\nContent-Type: application/font-woff\r\nConnection: Close\r\n\r\n";
     static const char HTTPOKFONTWOFF2[] = "HTTP/1.1 200 Ok\r\nContent-Type: application/font-woff2\r\nConnection: Close\r\n\r\n";
+    static const char HTTPOKFONTEOT_CACHED[] = "HTTP/1.1 200 Ok\r\nContent-Type: application/vnd.ms-fontobject\r\nCache-Control: public, max-age=31536000\r\nConnection: Close\r\n\r\n";
+    static const char HTTPOKFONTTTF_CACHED[] = "HTTP/1.1 200 Ok\r\nContent-Type: application/x-font-ttf\r\nCache-Control: public, max-age=31536000\r\nConnection: Close\r\n\r\n";
+    static const char HTTPOKFONTWOFF_CACHED[] = "HTTP/1.1 200 Ok\r\nContent-Type: application/font-woff\r\nCache-Control: public, max-age=31536000\r\nConnection: Close\r\n\r\n";
+    static const char HTTPOKFONTWOFF2_CACHED[] = "HTTP/1.1 200 Ok\r\nContent-Type: application/font-woff2\r\nCache-Control: public, max-age=31536000\r\nConnection: Close\r\n\r\n";
 
     // Images
     static const char HTTPOKPNG[] = "HTTP/1.1 200 Ok\r\nContent-Type: image/png\r\nConnection: Close\r\n\r\n";

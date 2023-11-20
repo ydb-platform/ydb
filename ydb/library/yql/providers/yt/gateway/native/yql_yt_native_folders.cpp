@@ -132,9 +132,13 @@ IYtGateway::TBatchFolderResult ExecResolveLinks(const TExecContext<IYtGateway::T
 
             batchRes.push_back(
                 batchGet->Get(targetPath, TGetOptions().AttributeFilter(attrFilter))
-                    .Apply([path] (const auto& f) {
-                        const auto linkNode = f.GetValue();
-                        return MakeFolderItem(linkNode, path);
+                    .Apply([path, pos = execCtx->Options_.Pos()] (const auto& f) {
+                        try {
+                            const auto linkNode = f.GetValue();
+                            return MakeFolderItem(linkNode, path);
+                        } catch (const NYT::TErrorResponse& e) {
+                            return MakeFolderItem(NYT::TNode::CreateMap(), path);
+                        }
                     })
             );
         }
@@ -148,7 +152,7 @@ IYtGateway::TBatchFolderResult ExecResolveLinks(const TExecContext<IYtGateway::T
         batchGet->ExecuteBatch();
         WaitAll(batchRes).Wait();
         for (auto& f : batchRes) {
-            res.Items.emplace_back(f.ExtractValue());
+            res.Items.push_back(f.ExtractValue());
         }
         return res;
     }

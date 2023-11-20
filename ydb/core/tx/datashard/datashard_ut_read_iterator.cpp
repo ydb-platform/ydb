@@ -1,4 +1,4 @@
-#include "datashard_ut_common.h"
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
 #include "datashard_active_transaction.h"
 #include "read_iterator.h"
@@ -193,10 +193,10 @@ void CheckResult(
     UNIT_ASSERT_VALUES_EQUAL(record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
     if (gold.size()) {
         switch (record.GetResultFormat()) {
-        case NKikimrTxDataShard::ARROW:
+        case NKikimrDataEvents::FORMAT_ARROW:
             CheckResultArrow(userTable, result, gold, goldTypes, columns);
             break;
-        case NKikimrTxDataShard::CELLVEC:
+        case NKikimrDataEvents::FORMAT_CELLVEC:
             CheckResultCellVec(userTable, result, gold, goldTypes, columns);
             break;
         default:
@@ -481,7 +481,7 @@ struct TTestHelper {
     std::unique_ptr<TEvDataShard::TEvRead> GetBaseReadRequest(
         const TString& tableName,
         ui64 readId,
-        NKikimrTxDataShard::EScanDataFormat format = NKikimrTxDataShard::ARROW,
+        NKikimrDataEvents::EDataFormat format = NKikimrDataEvents::FORMAT_ARROW,
         const TRowVersion& snapshot = {})
     {
         const auto& table = Tables[tableName];
@@ -536,7 +536,7 @@ struct TTestHelper {
         record.AddColumns(1);
         record.AddColumns(2);
 
-        record.SetResultFormat(NKikimrTxDataShard::CELLVEC);
+        record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
 
         return request;
     }
@@ -653,14 +653,14 @@ struct TTestHelper {
 
         auto readResult = SendRead(tableName, request.release());
 
-        const NKikimrTxDataShard::TLock* prevLock;
+        const NKikimrDataEvents::TLock* prevLock;
         if (prevResult.Record.TxLocksSize()) {
             prevLock = &prevResult.Record.GetTxLocks(0);
         } else {
             prevLock = &prevResult.Record.GetBrokenTxLocks(0);
         }
 
-        const NKikimrTxDataShard::TLock* newLock;
+        const NKikimrDataEvents::TLock* newLock;
         if (readResult->Record.TxLocksSize()) {
             newLock = &readResult->Record.GetTxLocks(0);
         } else {
@@ -676,7 +676,7 @@ struct TTestHelper {
     void TestChunkRead(ui32 chunkSize, ui32 rowCount, ui32 ranges = 1, ui32 limit = Max<ui32>()) {
         UpsertMany(1, rowCount);
 
-        auto request = GetBaseReadRequest("table-1-many", 1, NKikimrTxDataShard::CELLVEC, TRowVersion::Max());
+        auto request = GetBaseReadRequest("table-1-many", 1, NKikimrDataEvents::FORMAT_CELLVEC, TRowVersion::Max());
         request->Record.ClearSnapshot();
 
         ui32 base = 1;
@@ -760,7 +760,7 @@ struct TTestHelper {
         bool capturePlanStep = true;
         bool dropRS = true;
 
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle> &event) -> auto {
             switch (event->GetTypeRewrite()) {
                 case TEvTxProcessing::EvPlanStep: {
                     if (capturePlanStep) {
@@ -871,7 +871,7 @@ public:
     THashMap<TString, TTableInfo> Tables;
 };
 
-void TestReadKey(NKikimrTxDataShard::EScanDataFormat format, bool withFollower = false) {
+void TestReadKey(NKikimrDataEvents::EDataFormat format, bool withFollower = false) {
     TTestHelper helper(withFollower);
 
     for (ui32 k: {1, 3, 5}) {
@@ -883,7 +883,7 @@ void TestReadKey(NKikimrTxDataShard::EScanDataFormat format, bool withFollower =
     }
 }
 
-void TestReadRangeInclusiveEnds(NKikimrTxDataShard::EScanDataFormat format) {
+void TestReadRangeInclusiveEnds(NKikimrDataEvents::EDataFormat format) {
     TTestHelper helper;
 
     auto request = helper.GetBaseReadRequest("table-1", 1, format);
@@ -903,7 +903,7 @@ void TestReadRangeInclusiveEnds(NKikimrTxDataShard::EScanDataFormat format) {
     });
 }
 
-void TestReadRangeMovies(NKikimrTxDataShard::EScanDataFormat format) {
+void TestReadRangeMovies(NKikimrDataEvents::EDataFormat format) {
     // test just to check if non-trivial type like string is properly replied
     TTestHelper helper;
 
@@ -938,19 +938,19 @@ void TestReadRangeMovies(NKikimrTxDataShard::EScanDataFormat format) {
 
 Y_UNIT_TEST_SUITE(DataShardReadIterator) {
     Y_UNIT_TEST(ShouldReadKeyCellVec) {
-        TestReadKey(NKikimrTxDataShard::CELLVEC);
+        TestReadKey(NKikimrDataEvents::FORMAT_CELLVEC);
     }
 
     Y_UNIT_TEST(ShouldReadKeyArrow) {
-        TestReadKey(NKikimrTxDataShard::ARROW);
+        TestReadKey(NKikimrDataEvents::FORMAT_ARROW);
     }
 
     Y_UNIT_TEST(ShouldReadRangeCellVec) {
-        TestReadRangeMovies(NKikimrTxDataShard::CELLVEC);
+        TestReadRangeMovies(NKikimrDataEvents::FORMAT_CELLVEC);
     }
 
     Y_UNIT_TEST(ShouldReadRangeArrow) {
-        TestReadRangeMovies(NKikimrTxDataShard::ARROW);
+        TestReadRangeMovies(NKikimrDataEvents::FORMAT_ARROW);
     }
 
     Y_UNIT_TEST(ShouldReadKeyOnlyValueColumn) {
@@ -1017,7 +1017,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // KIKIMR-16897: no columns mean we want to calc row count
         TTestHelper helper;
 
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::CELLVEC);
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_CELLVEC);
         request->Record.ClearColumns();
         AddKeyQuery(*request, {3, 3, 3});
         AddKeyQuery(*request, {1, 1, 1});
@@ -1037,7 +1037,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // KIKIMR-16897: no columns mean we want to calc row count
         TTestHelper helper;
 
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW);
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW);
         request->Record.ClearColumns();
         AddKeyQuery(*request, {3, 3, 3});
         AddKeyQuery(*request, {1, 1, 1});
@@ -1057,7 +1057,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // KIKIMR-16897: no columns mean we want to calc row count
         TTestHelper helper;
 
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::CELLVEC);
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_CELLVEC);
         request->Record.ClearColumns();
         AddRangeQuery<ui32>(
             *request,
@@ -1081,7 +1081,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // KIKIMR-16897: no columns mean we want to calc row count
         TTestHelper helper;
 
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW);
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW);
         request->Record.ClearColumns();
         AddRangeQuery<ui32>(
             *request,
@@ -1156,7 +1156,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         request1->Record.SetMaxRowsInResult(1);
 
         ui32 continueCounter = 0;
-        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
@@ -1215,7 +1215,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         request1->Record.SetReverse(true);
 
         ui32 continueCounter = 0;
-        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
@@ -1275,7 +1275,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         request1->Record.SetMaxRows(1);
 
         ui32 continueCounter = 0;
-        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
@@ -1332,7 +1332,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         request1->Record.SetMaxRowsInResult(1);
 
         ui32 continueCounter = 0;
-        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
@@ -1487,7 +1487,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         request1->Record.SetMaxRows(8);
 
         ui32 continueCounter = 0;
-        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
@@ -1531,7 +1531,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         request1->Record.SetMaxRows(8);
 
         ui32 continueCounter = 0;
-        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
@@ -1572,7 +1572,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         request1->Record.SetMaxRows(5);
 
         ui32 continueCounter = 0;
-        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
@@ -1629,7 +1629,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         request1->Record.SetMaxRows(5);
 
         ui32 continueCounter = 0;
-        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
@@ -1679,7 +1679,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         request1->Record.SetMaxRows(1);
 
         ui32 continueCounter = 0;
-        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
                 ++continueCounter;
             }
@@ -1718,11 +1718,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
     }
 
     Y_UNIT_TEST(ShouldReadRangeInclusiveEndsCellVec) {
-        TestReadRangeInclusiveEnds(NKikimrTxDataShard::CELLVEC);
+        TestReadRangeInclusiveEnds(NKikimrDataEvents::FORMAT_CELLVEC);
     }
 
     Y_UNIT_TEST(ShouldReadRangeInclusiveEndsArrow) {
-        TestReadRangeInclusiveEnds(NKikimrTxDataShard::ARROW);
+        TestReadRangeInclusiveEnds(NKikimrDataEvents::FORMAT_ARROW);
     }
 
     Y_UNIT_TEST(ShouldReadRangeReverse) {
@@ -2189,11 +2189,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // capture original observer func by setting dummy one
         auto& runtime = *helper.Server->GetRuntime();
 
-        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+        auto originalObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>&) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
         // now set our observer backed up by original
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvReadContinue: {
                 if (shouldDrop) {
@@ -2203,7 +2203,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
             default:
-                return originalObserver(runtime, ev);
+                return originalObserver(ev);
             }
         });
 
@@ -2278,11 +2278,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // capture original observer func by setting dummy one
         auto& runtime = *helper.Server->GetRuntime();
 
-        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+        auto originalObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>&) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
         // now set our observer backed up by original
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvReadContinue: {
                 if (shouldDrop) {
@@ -2292,7 +2292,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
             default:
-                return originalObserver(runtime, ev);
+                return originalObserver(ev);
             }
         });
 
@@ -2372,7 +2372,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
     }
 
     Y_UNIT_TEST(ShouldReadFromFollower) {
-        TestReadKey(NKikimrTxDataShard::CELLVEC, true);
+        TestReadKey(NKikimrDataEvents::FORMAT_CELLVEC, true);
     }
 
     Y_UNIT_TEST(ShouldNotReadFutureMvccFromFollower) {
@@ -2385,7 +2385,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         TTestHelper helper(serverSettings, shardCount, true);
 
         TRowVersion someVersion = TRowVersion(10000, Max<ui64>());
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, someVersion);
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, someVersion);
         AddKeyQuery(*request, {3, 3, 3});
         auto readResult = helper.SendRead("table-1", request.release());
         const auto& record = readResult->Record;
@@ -2401,7 +2401,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         const ui64 shardCount = 1;
         TTestHelper helper(serverSettings, shardCount, true);
 
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, TRowVersion::Max());
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, TRowVersion::Max());
         request->Record.ClearSnapshot();
         AddKeyQuery(*request, {3, 3, 3});
         auto readResult = helper.SendRead("table-1", request.release());
@@ -2429,7 +2429,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         ui32 continueCounter = 0;
         bool connectedFromDifferentNode = false;
         ui32 serverConnectedCount = 0;
-        runtime.SetObserverFunc([&continueCounter, &connectedFromDifferentNode, &serverConnectedCount](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&continueCounter, &connectedFromDifferentNode, &serverConnectedCount](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvReadContinue:
                 ++continueCounter;
@@ -2470,8 +2470,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         waitFor([&]{ return serverConnectedCount != 0; }, "intercepted EvServerConnected");
         if (!connectedFromDifferentNode) {
             ++node;
+            sender = runtime.AllocateEdgeActor(node);
+            serverConnectedCount = 0;
             table.ClientId = runtime.ConnectToPipe(table.TabletId, sender, node, GetPipeConfigWithRetries());
             UNIT_ASSERT(table.ClientId);
+            waitFor([&]{ return serverConnectedCount != 0; }, "intercepted EvServerConnected");
         }
         UNIT_ASSERT(connectedFromDifferentNode);
 
@@ -2491,10 +2494,10 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         runtime.DisconnectNodes(0, 1);
         table.ClientId = runtime.ConnectToPipe(table.TabletId, sender, node, GetPipeConfigWithRetries());
 
-        exhaustedCount = helper.GetSimpleCounter("table-1", "DataShard/ReadIteratorsExhaustedCount", 0);
+        exhaustedCount = helper.GetSimpleCounter("table-1", "DataShard/ReadIteratorsExhaustedCount", node);
         while (exhaustedCount != 0) {
             SimulateSleep(helper.Server, TDuration::Seconds(1));
-            exhaustedCount = helper.GetSimpleCounter("table-1", "DataShard/ReadIteratorsExhaustedCount", 0);
+            exhaustedCount = helper.GetSimpleCounter("table-1", "DataShard/ReadIteratorsExhaustedCount", node);
         }
 
         iteratorsCount = helper.GetSimpleCounter("table-1", "DataShard/ReadIteratorsCount", node);
@@ -2505,7 +2508,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // read from HEAD when there is no conflicting operation
         TTestHelper helper;
 
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, TRowVersion::Max());
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, TRowVersion::Max());
         request->Record.ClearSnapshot();
         AddKeyQuery(*request, {3, 3, 3});
 
@@ -2532,7 +2535,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         auto hangedInfo = helper.HangWithTransactionWaitingRS(shardCount, false);
 
         {
-            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, TRowVersion::Max());
+            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, TRowVersion::Max());
             request->Record.ClearSnapshot();
             AddKeyQuery(*request, {3, 3, 3});
             AddKeyQuery(*request, {1, 1, 1});
@@ -2587,7 +2590,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         {
             // now read HEAD
-            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, TRowVersion::Max());
+            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, TRowVersion::Max());
             request->Record.ClearSnapshot();
             AddKeyQuery(*request, {3, 3, 3});
             AddKeyQuery(*request, {1, 1, 1});
@@ -2684,7 +2687,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 2a: read prior data
         {
             auto oldVersion = TRowVersion(hangedStep - 1, Max<ui64>());
-            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, oldVersion);
+            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, oldVersion);
             AddKeyQuery(*request, {3, 3, 3});
 
             auto readResult = helper.SendRead("table-1", request.release());
@@ -2698,7 +2701,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 2b-1 (key): try to read hanged step, note that we have hanged write to the same key
         {
             auto oldVersion = TRowVersion(hangedStep, Max<ui64>());
-            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, oldVersion);
+            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, oldVersion);
             AddKeyQuery(*request, {3, 3, 3});
 
             auto readResult = helper.SendRead(
@@ -2713,7 +2716,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 2b-2 (range): try to read hanged step, note that we have hanged write to the same key
         {
             auto oldVersion = TRowVersion(hangedStep, Max<ui64>());
-            auto request = helper.GetBaseReadRequest("table-1", 2, NKikimrTxDataShard::ARROW, oldVersion);
+            auto request = helper.GetBaseReadRequest("table-1", 2, NKikimrDataEvents::FORMAT_ARROW, oldVersion);
 
             AddRangeQuery<ui32>(
                 *request,
@@ -2735,7 +2738,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 2b-3 (key prefix, equals to range): try to read hanged step, note that we have hanged write to the same key
         {
             auto oldVersion = TRowVersion(hangedStep, Max<ui64>());
-            auto request = helper.GetBaseReadRequest("table-1", 3, NKikimrTxDataShard::ARROW, oldVersion);
+            auto request = helper.GetBaseReadRequest("table-1", 3, NKikimrDataEvents::FORMAT_ARROW, oldVersion);
             AddKeyQuery(*request, {3});
 
             auto readResult = helper.SendRead(
@@ -2795,7 +2798,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 4: try to read hanged step again
         {
             auto oldVersion = TRowVersion(hangedStep, Max<ui64>());
-            auto request = helper.GetBaseReadRequest("table-1", 4, NKikimrTxDataShard::ARROW, oldVersion);
+            auto request = helper.GetBaseReadRequest("table-1", 4, NKikimrDataEvents::FORMAT_ARROW, oldVersion);
             AddKeyQuery(*request, {3, 3, 3});
 
             auto readResult = helper.SendRead("table-1", request.release());
@@ -2809,7 +2812,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 5: read prior data again
         {
             auto oldVersion = TRowVersion(hangedStep - 1, Max<ui64>());
-            auto request = helper.GetBaseReadRequest("table-1", 5, NKikimrTxDataShard::ARROW, oldVersion);
+            auto request = helper.GetBaseReadRequest("table-1", 5, NKikimrDataEvents::FORMAT_ARROW, oldVersion);
             AddKeyQuery(*request, {3, 3, 3});
 
             auto readResult = helper.SendRead("table-1", request.release());
@@ -2851,7 +2854,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         ui64 waitPlanStep = 0;
         ui64 notifyPlanStep = 0;
 
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle> &event) -> auto {
             switch (event->GetTypeRewrite()) {
                 case TEvMediatorTimecast::EvUpdate: {
                     auto* update = event->Get<TEvMediatorTimecast::TEvUpdate>();
@@ -2903,7 +2906,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // future snapshot
         snapshot = TRowVersion(lastStep + 3000, Max<ui64>());
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, snapshot);
+        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, snapshot);
         AddKeyQuery(*request1, {3, 3, 3});
         AddKeyQuery(*request1, {1, 1, 1});
         AddKeyQuery(*request1, {5, 5, 5});
@@ -2983,7 +2986,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         ui64 notifyPlanStep = 0;
         size_t readResults = 0;
 
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle> &event) -> auto {
             switch (event->GetTypeRewrite()) {
                 case TEvMediatorTimecast::EvUpdate: {
                     auto* update = event->Get<TEvMediatorTimecast::TEvUpdate>();
@@ -3039,7 +3042,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // future snapshot
         snapshot = TRowVersion(lastStep + 3000, Max<ui64>());
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, snapshot);
+        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, snapshot);
         AddKeyQuery(*request1, {3, 3, 3});
         AddKeyQuery(*request1, {1, 1, 1});
         AddKeyQuery(*request1, {5, 5, 5});
@@ -3182,7 +3185,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         const ui64 lockTxId = 1011121314;
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, readVersion);
+        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, readVersion);
         request1->Record.SetLockTxId(lockTxId);
 
         AddRangeQuery<ui32>(
@@ -3221,7 +3224,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         const ui64 lockTxId = 1011121314;
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, readVersion);
+        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, readVersion);
         request1->Record.SetLockTxId(lockTxId);
         AddRangeQuery<ui32>(
             *request1,
@@ -3245,7 +3248,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             (300, 0, 0, 3000);
         )");
 
-        auto request2 = helper.GetBaseReadRequest("table-1", 2, NKikimrTxDataShard::ARROW, readVersion);
+        auto request2 = helper.GetBaseReadRequest("table-1", 2, NKikimrDataEvents::FORMAT_ARROW, readVersion);
         request2->Record.SetLockTxId(lockTxId);
         AddRangeQuery<ui32>(
             *request2,
@@ -3469,7 +3472,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         const ui64 lockTxId = 1011121314;
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, readVersion);
+        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, readVersion);
         request1->Record.SetLockTxId(lockTxId);
         request1->Record.SetMaxRows(1); // set quota so that DS hangs waiting for ACK
 
@@ -3592,7 +3595,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorSysTables) {
             true
         );
 
-        request->Record.SetResultFormat(NKikimrTxDataShard::ARROW);
+        request->Record.SetResultFormat(NKikimrDataEvents::FORMAT_ARROW);
 
         auto readResult = helper.SendRead("table-1", request.release());
         const auto& record = readResult->Record;
@@ -3694,7 +3697,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
         size_t observedReadResults = 0;
         bool captureCacheRequests = true;
         std::vector<std::unique_ptr<IEventHandle>> capturedCacheRequests;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvReadResult::EventType: {
                     auto* msg = ev->Get<TEvDataShard::TEvReadResult>();

@@ -20,12 +20,13 @@ std::shared_ptr<NKikimr::NOlap::IBlobsReadingAction> TOperator::DoStartReadingAc
     return std::make_shared<TReadingAction>(GetStorageId(), BlobCacheActorId);
 }
 
-std::shared_ptr<IBlobsGCAction> TOperator::DoStartGCAction() const {
+std::shared_ptr<IBlobsGCAction> TOperator::DoStartGCAction(const std::shared_ptr<TRemoveGCCounters>& counters) const {
     auto gcTask = Manager->BuildGCTask(GetStorageId(), Manager);
     if (!gcTask || gcTask->IsEmpty()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartGCSkipped");
         return nullptr;
     }
+    gcTask->SetCounters(counters);
     auto requests = gcTask->BuildRequests(PerGenerationCounter, Manager->GetTabletId(), Manager->GetCurrentGen());
     AFL_VERIFY(requests.size());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartGC")("requests_count", requests.size());

@@ -193,7 +193,7 @@ private:
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                Y_FAIL("TNodeBroker::StateWork unexpected event type: %" PRIx32 " event: %s from %s",
+                Y_ABORT("TNodeBroker::StateWork unexpected event type: %" PRIx32 " event: %s from %s",
                        ev->GetTypeRewrite(), ev->ToString().data(),
                        ev->Sender.ToString().data());
             }

@@ -1,5 +1,5 @@
 #include "change_record.h"
-#include "datashard_ut_common.h"
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
@@ -267,7 +267,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
         InitRoot(server, sender);
 
         // prevent change sending
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvChangeExchange::TEvActivateSender::EventType:
                 return TTestActorRuntime::EEventAction::DROP;
@@ -645,7 +645,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         InitRoot(server, sender);
 
         // prevent change sending
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvChangeExchange::TEvActivateSender::EventType:
                 return TTestActorRuntime::EEventAction::DROP;

@@ -226,7 +226,7 @@ namespace NKikimr {
         }
 
         void TSyncerJobTask::HandleStatusFlags(const NKikimrBlobStorage::TEvVSyncResult &record) {
-            Y_VERIFY_DEBUG(record.GetStatus() == NKikimrProto::OK ||
+            Y_DEBUG_ABORT_UNLESS(record.GetStatus() == NKikimrProto::OK ||
                 record.GetStatus() == NKikimrProto::ALREADY ||
                 record.GetStatus() == NKikimrProto::NODATA ||
                 record.GetStatus() == NKikimrProto::RESTART);

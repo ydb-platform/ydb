@@ -113,4 +113,5 @@ CFLAGS(
     -Dpg_hmac_update=yql_pg_hmac_update
     -Dpg_hmac_init=yql_pg_hmac_init
     -Dpg_hmac_create=yql_pg_hmac_create
+    -Dpg_pwritev_with_retry=yql_pg_pwritev_with_retry
 )

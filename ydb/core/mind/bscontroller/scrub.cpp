@@ -141,7 +141,7 @@ class TBlobStorageController::TScrubState::TImpl {
             case TVDiskItem::EScrubState::ENQUEUED: return "ENQUEUED";
             case TVDiskItem::EScrubState::IN_PROGRESS: return "IN_PROGRESS";
         }
-        Y_FAIL();
+        Y_ABORT();
     }
 
     friend class TBlobStorageController;

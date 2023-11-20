@@ -146,7 +146,7 @@ TBusServerSessionPtr TBusMessageQueue::CreateDestination(TBusProtocol* proto, IB
         Add(session.Get());
         return session.Release();
     } catch (...) {
-        Y_FAIL("create destination failure: %s", CurrentExceptionMessage().c_str());
+        Y_ABORT("create destination failure: %s", CurrentExceptionMessage().c_str());
     }
 }
 
@@ -157,7 +157,7 @@ TBusServerSessionPtr TBusMessageQueue::CreateDestination(TBusProtocol* proto, IB
         Add(session.Get());
         return session.Release();
     } catch (...) {
-        Y_FAIL("create destination failure: %s", CurrentExceptionMessage().c_str());
+        Y_ABORT("create destination failure: %s", CurrentExceptionMessage().c_str());
     }
 }
 

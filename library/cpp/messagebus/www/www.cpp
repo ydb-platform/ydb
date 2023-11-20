@@ -57,7 +57,7 @@ namespace {
                 }
             }
 
-            Y_FAIL("unregistered");
+            Y_ABORT("unregistered");
         }
 
         void Add(TValuePtr p) {

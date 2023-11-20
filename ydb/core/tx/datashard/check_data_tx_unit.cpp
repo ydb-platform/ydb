@@ -79,7 +79,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
         BuildResult(op)->AddError(NKikimrTxDataShard::TError::OUT_OF_SPACE, err);
         op->Abort(EExecutionUnitKind::FinishPropose);
 
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
+        LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
 
         return EExecutionStatus::Executed;
     }
@@ -217,7 +217,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                             BuildResult(op)->AddError(NKikimrTxDataShard::TError::OUT_OF_SPACE, err);
                             op->Abort(EExecutionUnitKind::FinishPropose);
 
-                            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
+                            LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
 
                             return EExecutionStatus::Executed;
                         }

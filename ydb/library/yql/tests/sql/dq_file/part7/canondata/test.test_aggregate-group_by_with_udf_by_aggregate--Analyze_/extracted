@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:14:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: SqlProject
+    	select count(*), val, $majority_vote(aggregate_list(subkey)) from plato.Input group by cast(key as uint32) % 2 as val;
+	^
+        <tmp_path>/program.sql:<main>:14:73: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: FlatMap, At function: AsList, At function: AddMember
+        	select count(*), val, $majority_vote(aggregate_list(subkey)) from plato.Input group by cast(key as uint32) % 2 as val;
+	                                                                        ^
+            <tmp_path>/program.sql:<main>:14:108: Warning: At function: %
+            	select count(*), val, $majority_vote(aggregate_list(subkey)) from plato.Input group by cast(key as uint32) % 2 as val;
+	                                                                                                           ^
+                <tmp_path>/program.sql:<main>:14:108: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                	select count(*), val, $majority_vote(aggregate_list(subkey)) from plato.Input group by cast(key as uint32) % 2 as val;
+	                                                                                                           ^

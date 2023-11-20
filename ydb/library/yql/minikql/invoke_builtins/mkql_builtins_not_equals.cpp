@@ -166,11 +166,11 @@ struct TNotEqualsOp<TLeft, TRight, bool> : public TNotEquals<TLeft, TRight, fals
 };
 
 template<typename TLeft, typename TRight, bool Aggr>
-struct TDiffDateNotEquals : public TCompareArithmeticBinary<TLeft, TRight, TDiffDateNotEquals<TLeft, TRight, Aggr>>, public TAggrNotEquals {
-    static bool Do(TLeft left, TRight right)
+struct TDiffDateNotEquals : public TCompareArithmeticBinary<typename TLeft::TLayout, typename TRight::TLayout, TDiffDateNotEquals<TLeft, TRight, Aggr>>, public TAggrNotEquals {
+    static bool Do(typename TLeft::TLayout left, typename TRight::TLayout right)
     {
         return std::is_same<TLeft, TRight>::value ?
-            NotEquals<TLeft, TRight, Aggr>(left, right):
+            NotEquals<typename TLeft::TLayout, typename TRight::TLayout, Aggr>(left, right):
             NotEquals<TScaledDate, TScaledDate, Aggr>(ToScaledDate<TLeft>(left), ToScaledDate<TRight>(right));
     }
 
@@ -179,7 +179,7 @@ struct TDiffDateNotEquals : public TCompareArithmeticBinary<TLeft, TRight, TDiff
     {
         auto& context = ctx.Codegen.GetContext();
         return std::is_same<TLeft, TRight>::value ?
-            GenNotEquals<TLeft, TRight, Aggr>(left, right, context, block):
+            GenNotEquals<typename TLeft::TLayout, typename TRight::TLayout, Aggr>(left, right, context, block):
             GenNotEquals<TScaledDate, TScaledDate, Aggr>(GenToScaledDate<TLeft>(left, context, block), GenToScaledDate<TRight>(right, context, block), context, block);
     }
 #endif
@@ -189,7 +189,7 @@ template<typename TLeft, typename TRight, typename TOutput>
 struct TDiffDateNotEqualsOp;
 
 template<typename TLeft, typename TRight>
-struct TDiffDateNotEqualsOp<TLeft, TRight, bool> : public TDiffDateNotEquals<TLeft, TRight, false> {
+struct TDiffDateNotEqualsOp<TLeft, TRight, NUdf::TDataType<bool>> : public TDiffDateNotEquals<TLeft, TRight, false> {
     static constexpr bool DefaultNulls = true;
 };
 
@@ -281,6 +281,7 @@ void RegisterNotEquals(IBuiltinFunctionRegistry& registry) {
 
     RegisterComparePrimitive<TNotEquals, TCompareArgsOpt>(registry, name);
     RegisterCompareDatetime<TDiffDateNotEquals, TCompareArgsOpt>(registry, name);
+    RegisterCompareBigDatetime<TDiffDateNotEquals, TCompareArgsOpt>(registry, name);
 
     RegisterCompareStrings<TCustomNotEquals, TCompareArgsOpt>(registry, name);
     RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, TDecimalNotEquals, TCompareArgsOpt>(registry, name);

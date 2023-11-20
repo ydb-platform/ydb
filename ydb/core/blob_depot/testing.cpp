@@ -12,7 +12,7 @@ namespace NKikimr::NBlobDepot {
         if (auto *x = dynamic_cast<TBlobDepot*>(actor)) {
             x->Validate(overseer);
         } else {
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 
@@ -20,7 +20,7 @@ namespace NKikimr::NBlobDepot {
         if (auto *x = dynamic_cast<TBlobDepot*>(actor)) {
             x->OnSuccessfulGetResult(id);
         } else {
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 
@@ -30,7 +30,7 @@ namespace NKikimr::NBlobDepot {
             switch (userState) {
                 case NTesting::EBlobState::NOT_WRITTEN:
                 case NTesting::EBlobState::CERTAINLY_COLLECTED_OR_NEVER_WRITTEN:
-                    Y_FAIL();
+                    Y_ABORT();
 
                 case NTesting::EBlobState::POSSIBLY_WRITTEN:
                     break;

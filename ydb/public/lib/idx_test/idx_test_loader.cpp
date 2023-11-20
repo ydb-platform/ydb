@@ -602,7 +602,7 @@ private:
 
                         return GetCheckIndexOp()(i + 1, session, in, mainResultSet, err);
                     } catch (...) {
-                        Y_FAIL("Unexpected exception");
+                        Y_ABORT("Unexpected exception");
                         return FinishTxAsync(result);
                     }
                 });

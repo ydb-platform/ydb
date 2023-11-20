@@ -125,7 +125,7 @@ public:
     /// this handler should not be called because this server does not send replies
     void OnSent(TAutoPtr<TBusMessage> mess) override {
         Y_UNUSED(mess);
-        Y_FAIL("This server does not sent replies");
+        Y_ABORT("This server does not sent replies");
     }
 };
 

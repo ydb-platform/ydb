@@ -31,6 +31,31 @@ class TProgramBuilder;
 
 namespace NYql::NDq {
 
+enum class EResumeSource : ui32 {
+    Default,
+    ChannelsHandleWork,
+    ChannelsHandleUndeliveredData,
+    ChannelsHandleUndeliveredAck,
+    AsyncPopFinished,
+    CheckpointRegister,
+    CheckpointInject,
+    CABootstrap,
+    CABootstrapWakeup,
+    CAPendingInput,
+    CATakeInput,
+    CASinkFinished,
+    CATransformFinished,
+    CAStart,
+    CAPollAsync,
+    CAPollAsyncNoSpace,
+    CANewAsyncInput,
+    CADataSent,
+    CAPendingOutput,
+    CATaskRunnerCreated,
+
+    Last,
+};
+
 struct IMemoryQuotaManager {
     using TPtr = std::shared_ptr<IMemoryQuotaManager>;
     using TWeakPtr = std::weak_ptr<IMemoryQuotaManager>;
@@ -38,6 +63,7 @@ struct IMemoryQuotaManager {
     virtual bool AllocateQuota(ui64 memorySize) = 0;
     virtual void FreeQuota(ui64 memorySize) = 0;
     virtual ui64 GetCurrentQuota() const = 0;
+    virtual ui64 GetMaxMemorySize() const = 0;
 };
 
 // Source/transform.
@@ -79,6 +105,8 @@ struct IDqComputeActorAsyncInput {
 
     virtual ui64 GetInputIndex() const = 0;
 
+    virtual const TDqAsyncStats& GetIngressStats() const = 0;
+
     // Gets data and returns space used by filled data batch.
     // Watermark will be returned if source watermark was moved forward. Watermark should be handled AFTER data.
     // Method should be called under bound mkql allocator.
@@ -93,10 +121,6 @@ struct IDqComputeActorAsyncInput {
     virtual void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TSourceState& state) = 0;
     virtual void CommitState(const NDqProto::TCheckpoint& checkpoint) = 0; // Apply side effects related to this checkpoint.
     virtual void LoadState(const NDqProto::TSourceState& state) = 0;
-
-    virtual ui64 GetIngressBytes() {
-        return 0;
-    }
 
     virtual TDuration GetCpuTime() {
         return TDuration::Zero();
@@ -137,7 +161,7 @@ struct IDqComputeActorAsyncInput {
 // 8. When checkpoint is written into database, checkpoints actor calls IDqComputeActorAsyncOutput::CommitState() to apply all side effects.
 struct IDqComputeActorAsyncOutput {
     struct ICallbacks { // Compute actor
-        virtual void ResumeExecution() = 0;
+        virtual void ResumeExecution(EResumeSource source = EResumeSource::Default) = 0;
         virtual void OnAsyncOutputError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) = 0;
 
         // Checkpointing
@@ -153,6 +177,8 @@ struct IDqComputeActorAsyncOutput {
 
     virtual i64 GetFreeSpace() const = 0;
 
+    virtual const TDqAsyncStats& GetEgressStats() const = 0;
+
     // Sends data.
     // Method shoud be called under bound mkql allocator.
     // Could throw YQL errors.
@@ -164,10 +190,6 @@ struct IDqComputeActorAsyncOutput {
     // Checkpointing.
     virtual void CommitState(const NDqProto::TCheckpoint& checkpoint) = 0; // Apply side effects related to this checkpoint.
     virtual void LoadState(const NDqProto::TSinkState& state) = 0;
-
-    virtual ui64 GetEgressBytes() {
-        return 0;
-    }
 
     virtual void PassAway() = 0; // The same signature as IActor::PassAway()
 
@@ -181,6 +203,7 @@ public:
     struct TSourceArguments {
         const NDqProto::TTaskInput& InputDesc;
         ui64 InputIndex;
+        TCollectStatsLevel StatsLevel;
         TTxId TxId;
         ui64 TaskId;
         const THashMap<TString, TString>& SecureParams;
@@ -199,6 +222,7 @@ public:
     struct TSinkArguments {
         const NDqProto::TTaskOutput& OutputDesc;
         ui64 OutputIndex;
+        TCollectStatsLevel StatsLevel;
         TTxId TxId;
         ui64 TaskId;
         IDqComputeActorAsyncOutput::ICallbacks* Callback;
@@ -212,6 +236,7 @@ public:
     struct TInputTransformArguments {
         const NDqProto::TTaskInput& InputDesc;
         const ui64 InputIndex;
+        TCollectStatsLevel StatsLevel;
         TTxId TxId;
         ui64 TaskId;
         const NUdf::TUnboxedValue TransformInput;
@@ -227,6 +252,7 @@ public:
     struct TOutputTransformArguments {
         const NDqProto::TTaskOutput& OutputDesc;
         const ui64 OutputIndex;
+        TCollectStatsLevel StatsLevel;
         TTxId TxId;
         ui64 TaskId;
         const IDqOutputConsumer::TPtr TransformOutput;

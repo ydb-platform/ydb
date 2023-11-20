@@ -2,6 +2,8 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/cms/console/config_helpers.h>
+#include <ydb/core/base/domain.h>
+#include <ydb/core/base/nameservice.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -945,9 +947,9 @@ void TTenantSlotBroker::DetachSlotNoConfigureNoDb(TSlot::TPtr slot,
     if (updateUnhappy)
         RemoveUnhappyTenant(tenant);
 
-    Y_VERIFY_DEBUG(!UnhappyTenants.contains(tenant));
-    Y_VERIFY_DEBUG(!MisplacedTenants.contains(tenant));
-    Y_VERIFY_DEBUG(!SplitTenants.contains(tenant));
+    Y_DEBUG_ABORT_UNLESS(!UnhappyTenants.contains(tenant));
+    Y_DEBUG_ABORT_UNLESS(!MisplacedTenants.contains(tenant));
+    Y_DEBUG_ABORT_UNLESS(!SplitTenants.contains(tenant));
 
     auto allocation = tenant->GetAllocation(slot->UsedAs);
     allocation->RemoveAssignedSlot(slot);
@@ -1005,7 +1007,7 @@ void TTenantSlotBroker::AttachSlotNoConfigureNoDb(TSlot::TPtr slot,
                                                   const TString &label)
 {
     Y_ABORT_UNLESS(!slot->AssignedTenant);
-    Y_VERIFY_DEBUG(!UnhappyTenants.contains(tenant));
+    Y_DEBUG_ABORT_UNLESS(!UnhappyTenants.contains(tenant));
 
     if (slot->IsFree())
         FreeSlots.Remove(slot);

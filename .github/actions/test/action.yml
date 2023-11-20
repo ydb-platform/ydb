@@ -132,6 +132,11 @@ runs:
     run: |
       echo "10 [Test history](${TEST_HISTORY_URL})" >> $SUMMARY_LINKS
 
+  - name: set environment variables required by some tests
+    shell: bash
+    run: |
+      echo "PSQL_BINARY=/usr/bin/psql" >> $GITHUB_ENV
+
   - name: Run unit tests
     id: ctest
     if: inputs.run_unit_tests == 'true'

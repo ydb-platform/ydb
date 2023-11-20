@@ -38,7 +38,7 @@ namespace NKikimr {
                 }
 
                 TSyncPos(IInputStream &) {
-                    Y_FAIL("Not supported");
+                    Y_ABORT("Not supported");
                 }
             };
 
@@ -68,7 +68,7 @@ namespace NKikimr {
                 if (Neighbors.GetTotalDisks() == 1) {
                     return (ui64)-1;
                 }
-                Y_VERIFY_DEBUG(CheckSyncPosQueue());
+                Y_DEBUG_ABORT_UNLESS(CheckSyncPosQueue());
                 // TAvlTree doesn't have const Begin, se we have to remove 'const' qualifier
                 ui64 result = (const_cast<TSyncLogNeighbors*>(this))->SyncPosQueue.Begin()->SyncedLsn;
                 return result;
@@ -96,12 +96,12 @@ namespace NKikimr {
                 TNeighbors::TValue &diskData = Neighbors[vdisk];
                 TSyncPos &ref = diskData.Get();
                 // reorder
-                Y_VERIFY_DEBUG(syncedLsn > ref.SyncedLsn);
+                Y_DEBUG_ABORT_UNLESS(syncedLsn > ref.SyncedLsn);
                 ref.SyncedLsn = syncedLsn;
                 ref.Unlink();
                 SyncPosQueue.Insert(&ref);
 
-                Y_VERIFY_DEBUG(CheckSyncPosQueue());
+                Y_DEBUG_ABORT_UNLESS(CheckSyncPosQueue());
             }
 
             ui64 GetSyncedLsn(const TVDiskID &vdisk) {
@@ -128,7 +128,7 @@ namespace NKikimr {
                         SyncPosQueue.Insert(&(it->Get()));
                     }
                 }
-                Y_VERIFY_DEBUG(CheckSyncPosQueue());
+                Y_DEBUG_ABORT_UNLESS(CheckSyncPosQueue());
             }
 
         private:

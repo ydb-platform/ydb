@@ -293,6 +293,35 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(SelectNoAsciiValue) {
+        auto kikimr = DefaultKikimrRunner();
+        TScriptingClient client(kikimr.GetDriver());
+
+        auto result = client.ExecuteYqlScript(R"(
+            --!syntax_v1
+            CREATE TABLE ascii_test
+            (
+                id String,
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto insertResult = client.ExecuteYqlScript(R"(
+            --!syntax_v1
+            INSERT INTO ascii_test (id) VALUES
+                ('\xBF');
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), EStatus::SUCCESS, insertResult.GetIssues().ToString());
+
+        auto selectResult = client.ExecuteYqlScript(R"(
+            --!syntax_v1
+            SELECT * FROM ascii_test WHERE id='\xBF';
+        )").GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(selectResult.GetStatus(), EStatus::SUCCESS, selectResult.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(ColumnTypeMismatch) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -490,6 +519,209 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         UNIT_ASSERT_C(result.GetIssues().Size() == 0, result.GetIssues().ToString());
 
         CompareYson(R"([[[%true]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(UuidPrimaryKey) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TVector<TString> testUuids = {
+            "5b99a330-04ef-4f1a-9b64-ba6d5f44eafe",
+            "afcbef30-9ac3-481a-aa6a-8d9b785dbb0a",
+            "b91cd23b-861c-4cc1-9119-801a4dac1cb9",
+            "65df9ecc-a97d-47b2-ae56-3c023da6ee8c",
+        };
+
+        {
+            const auto query = Q_(R"(
+                CREATE TABLE test(
+                    key uuid NOT NULL,
+                    val int,
+                    PRIMARY KEY (key)
+                );
+            )");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            int val = 0;
+            for (const auto& uuid : testUuids) {
+                const auto query = Sprintf("\
+                    INSERT INTO test (key, val)\n\
+                    VALUES (Uuid(\"%s\"), %u);\n\
+                ", uuid.Data(), val++);
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+        }
+        {
+            const auto query = Q_(R"(
+                INSERT INTO test (key, val)
+                VALUES (Uuid("invalid-uuid"), 1000);
+            )");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+        {
+            const auto query = Q_(R"(
+                SELECT * FROM test ORDER BY val ASC;
+            )");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            TResultSetParser parser(result.GetResultSetParser(0));
+            for (size_t i = 0; parser.TryNextRow(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("key").GetUuid().ToString(), testUuids[i]);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().GetRef(), i);
+            }
+        }
+        {
+            int val = 0;
+            for (const auto& uuid : testUuids) {
+                const auto query = Sprintf("\
+                    SELECT (val) FROM test WHERE key=CAST(\"%s\" as uuid);\n\
+                ", uuid.Data());
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+                TResultSetParser parser(result.GetResultSetParser(0));
+                UNIT_ASSERT(parser.TryNextRow());
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().GetRef(), val++);
+                UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
+            }
+        }
+        {
+            const auto query = Q_(R"(
+                SELECT * FROM test ORDER BY key;
+            )");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            TResultSetParser parser(result.GetResultSetParser(0));
+            for (size_t i = 0; parser.TryNextRow(); ++i) {
+                UNIT_ASSERT_EQUAL(parser.ColumnParser("key").GetUuid().ToString(), testUuids[i]);
+            }
+        }
+        {
+            const auto query = Q_(R"(
+                SELECT * FROM test ORDER BY key DESC;
+            )");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            TResultSetParser parser(result.GetResultSetParser(0));
+            for (size_t i = 0; parser.TryNextRow(); ++i) {
+                UNIT_ASSERT_EQUAL(parser.ColumnParser("key").GetUuid().ToString(), testUuids[testUuids.size() - 1 - i]);
+            }
+        }
+        {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$rows")
+                    .BeginList()
+                    .AddListItem()
+                        .BeginStruct()
+                            .AddMember("Key").Uuid(TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe"))
+                            .AddMember("Value").OptionalInt32(0)
+                        .EndStruct()
+                    .AddListItem()
+                        .BeginStruct()
+                            .AddMember("Key").Uuid(TUuidValue("afcbef30-9ac3-481a-aa6a-8d9b785dbb0a"))
+                            .AddMember("Value").OptionalInt32(1)
+                        .EndStruct()
+                    .AddListItem()
+                        .BeginStruct()
+                            .AddMember("Key").Uuid(TUuidValue("b91cd23b-861c-4cc1-9119-801a4dac1cb9"))
+                            .AddMember("Value").OptionalInt32(2)
+                        .EndStruct()
+                    .AddListItem()
+                        .BeginStruct()
+                            .AddMember("Key").Uuid(TUuidValue("65df9ecc-a97d-47b2-ae56-3c023da6ee8c"))
+                            .AddMember("Value").OptionalInt32(3)
+                        .EndStruct()
+                    .EndList()
+                    .Build()
+                .Build();
+            
+            const auto query = Q_(R"(
+                DECLARE $rows AS
+                    List<Struct<
+                        Key: Uuid,
+                        Value: Int32?>>;
+                
+                SELECT * FROM AS_TABLE($rows) ORDER BY Key;
+            )");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            TResultSetParser parser(result.GetResultSetParser(0));
+            for (size_t i = 0; parser.TryNextRow(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Key").GetUuid().ToString(), testUuids[i]);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Value").GetOptionalInt32().GetRef(), i);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(UuidPrimaryKeyBulkUpsert) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        auto kikimr = TKikimrRunner{settings};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TVector<TString> testUuids = {
+            "5b99a330-04ef-4f1a-9b64-ba6d5f44eafe",
+            "afcbef30-9ac3-481a-aa6a-8d9b785dbb0a",
+            "b91cd23b-861c-4cc1-9119-801a4dac1cb9",
+            "65df9ecc-a97d-47b2-ae56-3c023da6ee8c",
+        };
+
+        {
+            const auto query = Q_(R"(
+                CREATE TABLE test(
+                    key uuid NOT NULL,
+                    val int,
+                    PRIMARY KEY (key)
+                );
+            )");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (size_t i = 0; i < testUuids.size(); ++i) {
+                rows.AddListItem()
+                    .BeginStruct()
+                        .AddMember("key").Uuid(TUuidValue(testUuids[i]))
+                        .AddMember("val").Int32(i)
+                    .EndStruct();
+            }
+            rows.EndList();
+
+            auto upsertResult = db.BulkUpsert("/Root/test", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+        }
+        {
+            const auto query = Q_(R"(
+                SELECT * FROM test ORDER BY val ASC;
+            )");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            TResultSetParser parser(result.GetResultSetParser(0));
+            for (size_t i = 0; parser.TryNextRow(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("key").GetUuid().ToString(), testUuids[i]);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().GetRef(), i);
+            }
+        }
     }
 }
 

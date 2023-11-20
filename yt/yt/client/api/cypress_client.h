@@ -122,6 +122,7 @@ struct TCopyNodeOptionsBase
     bool PreserveExpirationTimeout = false;
     bool PreserveAcl = false;
     bool PessimisticQuotaCheck = true;
+    bool EnableCrossCellCopying = true;
 };
 
 struct TCopyNodeOptions

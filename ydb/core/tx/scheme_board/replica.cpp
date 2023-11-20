@@ -674,7 +674,7 @@ private:
         desc->Subscribe(subscriber, path, domainOwnerId, capabilities);
 
         auto it = Subscribers.find(subscriber);
-        Y_VERIFY_DEBUG(it == Subscribers.end() || std::holds_alternative<TPath>(it->second) && std::get<TPath>(it->second) == path);
+        Y_DEBUG_ABORT_UNLESS(it == Subscribers.end() || std::holds_alternative<TPath>(it->second) && std::get<TPath>(it->second) == path);
         Subscribers.emplace(subscriber, path);
     }
 

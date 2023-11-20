@@ -212,7 +212,7 @@ namespace NPresort {
                         ctx.Filled = byte & OptionalFilled;
                         break;
                     default:
-                        Y_FAIL("Invalid record code: %d", (int)code);
+                        Y_ABORT("Invalid record code: %d", (int)code);
                 }
                 ctx.Code = (ECode)code;
                 return true;

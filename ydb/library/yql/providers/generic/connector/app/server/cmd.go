@@ -12,7 +12,7 @@ var Cmd = &cobra.Command{
 	Use:   "server",
 	Short: "Connector server",
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := runServer(cmd, args); err != nil {
+		if err := run(cmd, args); err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}

@@ -3,6 +3,7 @@ option cc_enable_arenas = true;
 
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 
 package Yql.DqsProto;
@@ -86,6 +87,7 @@ message ExecuteGraphRequest {
     string RateLimiter = 14;
     string RateLimiterResource = 15;
     map<string, bytes> CommonTaskParams = 16; // to be merged into each task TTaskMeta.TaskParams
+    NYql.NDqProto.EDqStatsMode StatsMode = 17;
 }
 
 message ExecuteGraphResponse {

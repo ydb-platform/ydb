@@ -41,7 +41,7 @@ namespace NActor {
             } else if (newState == E_WAITING) {
                 return false;
             }
-            Y_FAIL("unknown");
+            Y_ABORT("unknown");
         }
     };
 

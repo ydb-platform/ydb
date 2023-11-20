@@ -67,7 +67,7 @@ private:
         if (HasLength)
             return Abs(To_ - From_);
 
-        Y_FAIL("No length!");
+        Y_ABORT("No length!");
     }
 
     bool HasListItems() const override {

@@ -210,6 +210,16 @@ void THttpHeader::SetToken(const TString& token)
     Token = token;
 }
 
+void THttpHeader::SetProxyAddress(const TString& proxyAddress)
+{
+    ProxyAddress = proxyAddress;
+}
+
+void THttpHeader::SetHostPort(const TString& hostPort)
+{
+    HostPort = hostPort;
+}
+
 void THttpHeader::SetImpersonationUser(const TString& impersonationUser)
 {
     ImpersonationUser = impersonationUser;
@@ -250,9 +260,18 @@ TString THttpHeader::GetCommand() const
     return Command;
 }
 
-TString THttpHeader::GetUrl() const
+TString THttpHeader::GetUrl(bool needProxy) const
 {
     TStringStream url;
+
+    if (needProxy && !ProxyAddress.empty()) {
+        url << ProxyAddress << "/";
+        return url.Str();
+    }
+
+    if (!ProxyAddress.empty()) {
+        url << HostPort;
+    }
 
     if (IsApi) {
         url << "/api/" << TConfig::Get()->ApiVersion << "/" << Command;
@@ -274,7 +293,7 @@ TString THttpHeader::GetHeaderAsString(const TString& hostName, const TString& r
 
     result << Method << " " << GetUrl() << " HTTP/1.1\r\n";
 
-    GetHeader(hostName, requestId, includeParameters).Get()->WriteTo(&result);
+    GetHeader(HostPort.Empty() ? hostName : HostPort, requestId, includeParameters).Get()->WriteTo(&result);
 
     if (ShouldAcceptFraming()) {
         result << "X-YT-Accept-Framing: 1\r\n";
@@ -914,7 +933,7 @@ void THttpRequest::Connect(TString hostName, TDuration socketTimeout)
 IOutputStream* THttpRequest::StartRequestImpl(const THttpHeader& header, bool includeParameters)
 {
     auto strHeader = header.GetHeaderAsString(HostName, RequestId, includeParameters);
-    Url_ = header.GetUrl();
+    Url_ = header.GetUrl(true);
 
     LogRequest(header, Url_, includeParameters, RequestId, HostName);
 

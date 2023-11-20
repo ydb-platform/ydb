@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Warning: Table metadata loading
+
+    <tmp_path>/program.sql:<main>: Warning: Table Output
+    
+        <tmp_path>/program.sql:<main>: Warning: Native descending sort is ignored
+        
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:4:13: Warning: At function: YtPublish!
+    	insert into Output
+	            ^
+        <tmp_path>/program.sql:<main>:4:13: Warning: Sort order of written data differs from the order of "Output" table content. Result table content will be unordered
+        	insert into Output
+	            ^

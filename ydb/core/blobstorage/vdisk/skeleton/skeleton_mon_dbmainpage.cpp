@@ -33,7 +33,7 @@ namespace NKikimr {
             } else if (str == "Barriers") {
                 return TDbMon::DbMainPageBarriers;
             } else {
-                Y_FAIL("Unexpected value: %s", str.data());
+                Y_ABORT("Unexpected value: %s", str.data());
             }
         }
 
@@ -99,13 +99,13 @@ namespace NKikimr {
 
         void Handle(NMon::TEvHttpInfoRes::TPtr &ev, const TActorContext &ctx) {
             NMon::TEvHttpInfoRes *ptr = dynamic_cast<NMon::TEvHttpInfoRes*>(ev->Get());
-            Y_VERIFY_DEBUG(ptr);
+            Y_DEBUG_ABORT_UNLESS(ptr);
             if (ptr->SubRequestId == ConvertToSubRequestId(DbName)) {
                 HullCompactionAnswer = ptr->Answer;
             } else if (ptr->SubRequestId == TDbMon::Defrag) {
                 DefragAnswer = ptr->Answer;
             } else {
-                Y_FAIL("unexpected SubRequestId# %d", int(ptr->SubRequestId));
+                Y_ABORT("unexpected SubRequestId# %d", int(ptr->SubRequestId));
             }
 
             if (HullCompactionAnswer && DefragAnswer) {

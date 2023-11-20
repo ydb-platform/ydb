@@ -57,7 +57,7 @@ namespace NKikimr::NTesting {
             if (const auto it = GroupStates.find(groupId); it != GroupStates.end()) {
                 return it->second.EnumerateBlobs(callback);
             } else {
-                Y_FAIL();
+                Y_ABORT();
             }
         }
 

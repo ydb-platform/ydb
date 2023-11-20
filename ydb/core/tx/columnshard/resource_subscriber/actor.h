@@ -41,7 +41,7 @@ public:
             hFunc(TEvStartTask, Handle);
             hFunc(NKikimr::NResourceBroker::TEvResourceBroker::TEvResourceAllocated, Handle);
             default:
-                break;
+                AFL_VERIFY(false);
         }
     }
 };

@@ -3,6 +3,7 @@
 #include "kqp_compute_actor_impl.h"
 #include <ydb/core/grpc_services/local_rate_limiter.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
@@ -109,10 +110,10 @@ void TKqpScanComputeActor::HandleEvWakeup(EEvWakeupTag tag) {
             ProcessRlNoResourceAndDie();
             break;
         case TimeoutTag:
-            Y_FAIL("TimeoutTag must be handled in base class");
+            Y_ABORT("TimeoutTag must be handled in base class");
             break;
         case PeriodicStatsTag:
-            Y_FAIL("PeriodicStatsTag must be handled in base class");
+            Y_ABORT("PeriodicStatsTag must be handled in base class");
             break;
     }
 }
@@ -193,8 +194,7 @@ void TKqpScanComputeActor::DoBootstrap() {
     const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
 
     NDq::TDqTaskRunnerSettings settings;
-    settings.CollectBasicStats = GetStatsMode() >= NYql::NDqProto::DQ_STATS_MODE_BASIC;
-    settings.CollectProfileStats = GetStatsMode() >= NYql::NDqProto::DQ_STATS_MODE_PROFILE;
+    settings.StatsMode = GetStatsMode();
     settings.OptLLVM = (GetTask().HasUseLlvm() && GetTask().GetUseLlvm()) ? "--compile-options=disable-opt" : "OFF";
     settings.UseCacheForLLVM = AppData()->FeatureFlags.GetEnableLLVMCache();
 
@@ -222,8 +222,7 @@ void TKqpScanComputeActor::DoBootstrap() {
     TBase::SetTaskRunner(taskRunner);
 
     auto wakeup = [this] { ContinueExecute(); };
-    TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, std::move(wakeup),
-        TlsActivationContext->AsActorContext()));
+    TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, std::move(wakeup)));
 
     ComputeCtx.AddTableScan(0, Meta, GetStatsMode());
     ScanData = &ComputeCtx.GetTableScan(0);

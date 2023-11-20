@@ -138,13 +138,13 @@ public:
         TRopeFastView() = default;
 
         ui64 GetContiguousSize(size_t pos) {
-            Y_VERIFY_DEBUG(pos >= Offset);
+            Y_DEBUG_ABORT_UNLESS(pos >= Offset);
             return (BlockBeginIndx <= (pos - Offset) && (pos - Offset) < BlockEndIndx)
                                                              ? (BlockEndIndx - pos + Offset) : 0;
         }
 
         char* DataPtrAt(size_t pos) {
-            Y_VERIFY_DEBUG(pos >= Offset);
+            Y_DEBUG_ABORT_UNLESS(pos >= Offset);
             return (BlockBeginIndx <= (pos - Offset) && (pos - Offset) < BlockEndIndx)
                                      ? BlockData + (pos - BlockBeginIndx) - Offset : UpdateCurrent(pos - Offset);
         }
@@ -309,10 +309,10 @@ struct TPartFragment {
     }
 
     char *GetDataAt(ui64 getOffset) const {
-        Y_VERIFY_DEBUG(Size);
-        Y_VERIFY_DEBUG(getOffset >= Offset, "%s", (TStringBuilder() << "get_offset# " << getOffset
+        Y_DEBUG_ABORT_UNLESS(Size);
+        Y_DEBUG_ABORT_UNLESS(getOffset >= Offset, "%s", (TStringBuilder() << "get_offset# " << getOffset
                     << " Offset# " << Offset << " Size# " << Size << " capacity# " << OwnedRope.GetSize()).c_str());
-        Y_VERIFY_DEBUG(getOffset < Offset + Size, "%s", (TStringBuilder() << "get_offset# " << getOffset
+        Y_DEBUG_ABORT_UNLESS(getOffset < Offset + Size, "%s", (TStringBuilder() << "get_offset# " << getOffset
                     << " Offset# " << Offset << " Size# " << Size << " capacity# " << OwnedRope.GetSize()).c_str());
         return FastViewer.DataPtrAt(getOffset);
     }

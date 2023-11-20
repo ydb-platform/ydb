@@ -30,7 +30,6 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleAttaching);
-                hFunc(NKqp::TEvKqp::TEvProcessResponse, HandleAttachin);
                 default:
                     UnexpectedEvent(__func__, ev);
             }
@@ -114,6 +113,14 @@ private:
             return ReplyFinishStream(Ydb::StatusIds::NOT_FOUND);
         }
 
+        if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            if (record.GetIssues().size() > 0) {
+                Request->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, record.GetIssues().at(0).message()));
+            }
+
+            return ReplyFinishStream(record.GetStatus());
+        }
+
         if (record.GetResponse().GetSessionStatus() != Ydb::Table::KeepAliveResult::SESSION_STATUS_READY) {
             return ReplyFinishStream(Ydb::StatusIds::SESSION_BUSY);
         }
@@ -151,17 +158,6 @@ private:
     void UnexpectedEvent(const TString& state, TAutoPtr<NActors::IEventHandle>& ev) {
         InternalError(TStringBuilder() << "TAttachSessionRPC in state " << state << " received unexpected event " <<
             ev->GetTypeName() << Sprintf("(0x%08" PRIx32 ")", ev->GetTypeRewrite()));
-    }
-
-    void HandleAttachin(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev) {
-        const auto& record = ev->Get()->Record;
-        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-            // KQP should not send TEvProcessResponse with SUCCESS for CreateSession rpc.
-            // We expect TEvKqp::TEvPingSessionResponse instead.
-            InternalError("Unexpected TEvProcessResponse with success status for PingSession request");
-        } else {
-            return ReplyResponseError(record);
-        }
     }
 
     void ReplyFinishStream(Ydb::StatusIds::StatusCode status) {

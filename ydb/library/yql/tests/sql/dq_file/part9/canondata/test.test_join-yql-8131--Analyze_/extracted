@@ -1,0 +1,13 @@
+<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
+
+    <tmp_path>/program.sql:<main>: Info: Type annotation
+    
+        <tmp_path>/program.sql:<main>:9:1: Info: At function: Sort
+        	SELECT *
+	^
+            <tmp_path>/program.sql:<main>:10:103: Info: At function: DqJoin
+            	FROM (select distinct key,subkey from Input where cast(key as Int32) > 100 order by key limit 100) as a
+	                                                                                                      ^
+                <tmp_path>/program.sql:<main>:10:103: Info: different labels for left table
+                	FROM (select distinct key,subkey from Input where cast(key as Int32) > 100 order by key limit 100) as a
+	                                                                                                      ^

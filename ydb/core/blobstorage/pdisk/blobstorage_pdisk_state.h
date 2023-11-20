@@ -57,18 +57,27 @@ struct TOwnerData {
         VDISK_STATUS_READING_LOG = 3,
         VDISK_STATUS_LOGGED = 4,
     };
+    struct TLogEndPosition {
+        ui32 ChunkIdx;
+        ui32 SectorIdx;
+        
+        explicit TLogEndPosition(ui32 chunkIdx, ui32 sectorIdx) : ChunkIdx(chunkIdx), SectorIdx(sectorIdx) {}
+    };
     TMap<TLogSignature, NPDisk::TLogRecord> StartingPoints;
     TVDiskID VDiskId = TVDiskID::InvalidId;
     EVDiskStatus Status = VDISK_STATUS_DEFAULT;
     ui64 CurrentFirstLsnToKeep = 0;
     ui64 LastWrittenCommitLsn = 0;
     TActorId CutLogId;
+    TLogEndPosition LogEndPosition {0, 0};
     TActorId WhiteboardProxyId;
     ui64 LogRecordsInitiallyRead = 0;
     ui64 LogRecordsConsequentlyRead = 0;
     TOwnerRound OwnerRound = 0;
     TInstant AskedToCutLogAt;
     ui64 AskedFreeUpToLsn = 0;
+    size_t LogChunkCountBeforeCut = 0;
+    size_t AskedLogChunkToCut = 0;
     TInstant CutLogAt;
     ui64 LastSeenLsn = 0;
     bool HasAlreadyLoggedThisIncarnation = false;

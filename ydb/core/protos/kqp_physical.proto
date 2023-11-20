@@ -10,6 +10,7 @@ import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_table.proto";
+import "ydb/core/protos/index_builder.proto";
 
 message TKqpPhyExternalBinding {
 }
@@ -68,6 +69,7 @@ message TKqpPhyColumn {
         string DefaultFromSequence = 4;
         NKikimrMiniKQL.TResult DefaultFromLiteral = 5;
     }
+    bool NotNull = 6;
 }
 
 enum EKqpPhyTableKind {
@@ -191,6 +193,8 @@ message TKqpPhyOpReadOlapRanges {
 
     // Type of read result: unboxed values or Arrow blocks of data
     EReadType ReadType = 13;
+
+    repeated string GroupByColumnNames = 14;
 }
 
 message TKqpPhyOpReadRanges {
@@ -377,15 +381,15 @@ message TKqpSchemeOperation {
         FLAG_PG_MODE = 1; // set if pg compatible mode
         FLAG_IF_NOT_EXISTS = 2; // set if IF_NOT_EXISTS modificator present
     };
-    message TAlterTable {
-        Ydb.Table.AlterTableRequest Req = 1;
-        string Type = 2;
-        uint64 Flags = 3;
-    }
+
     oneof Operation {
         NKikimrSchemeOp.TModifyScheme CreateTable = 1;
         NKikimrSchemeOp.TModifyScheme DropTable = 2;
-        TAlterTable AlterTable = 3;
+        NKikimrSchemeOp.TModifyScheme AlterTable = 3;
+        NKikimrIndexBuilder.TIndexBuildSettings BuildOperation = 4;
+
+        string Type = 9;
+        uint64 Flags = 10;
     }
 }
 
@@ -454,4 +458,5 @@ message TKqpPhyQuery {
     repeated TKqpTableInfo TableInfos = 8;
     bool HasUncommittedChangesRead = 9;
 
+    string QueryDiagnostics = 10;
 }

@@ -21,7 +21,7 @@
 #include "tls/s2n_tls.h"
 #include "utils/s2n_safety.h"
 
-static S2N_RESULT s2n_post_handshake_process(struct s2n_connection *conn, struct s2n_stuffer *in, uint8_t message_type)
+S2N_RESULT s2n_post_handshake_process(struct s2n_connection *conn, struct s2n_stuffer *in, uint8_t message_type)
 {
     RESULT_ENSURE_REF(conn);
 
@@ -186,6 +186,11 @@ S2N_RESULT s2n_post_handshake_write_records(struct s2n_connection *conn, s2n_blo
 int s2n_post_handshake_send(struct s2n_connection *conn, s2n_blocked_status *blocked)
 {
     POSIX_ENSURE_REF(conn);
+
+    /* Currently, we only support TLS1.3 post-handshake messages. */
+    if (conn->actual_protocol_version < S2N_TLS13) {
+        return S2N_SUCCESS;
+    }
 
     POSIX_GUARD_RESULT(s2n_post_handshake_write_records(conn, blocked));
 

@@ -36,7 +36,8 @@ TAllocState::TAllocState(const TSourceLocation& location, const NKikimr::TAligne
 void TAllocState::CleanupPAllocList(TListEntry* root) {
     for (auto curr = root->Right; curr != root; ) {
         auto next = curr->Right;
-        MKQLFreeDeprecated(curr); // may free items from OffloadedBlocksRoot
+        auto size = ((TMkqlPAllocHeader*)curr)->Size;
+        MKQLFreeWithSize(curr, size, EMemorySubPool::Default); // may free items from OffloadedBlocksRoot
         curr = next;
     }
 
@@ -141,13 +142,16 @@ void TAllocState::UnlockObject(::NKikimr::NUdf::TUnboxedValuePod value) {
 
 void TScopedAlloc::Acquire() {
     if (!AttachedCount_) {
+        if (PrevState_) {
+            PgReleaseThreadContext(PrevState_->MainContext);
+        }
         PrevState_ = TlsAllocState;
         TlsAllocState = &MyState_;
         PgAcquireThreadContext(MyState_.MainContext);
     } else {
         Y_ABORT_UNLESS(TlsAllocState == &MyState_, "Mismatch allocator in thread");
-    }
 
+    }
     ++AttachedCount_;
 }
 
@@ -156,6 +160,9 @@ void TScopedAlloc::Release() {
         Y_ABORT_UNLESS(TlsAllocState == &MyState_, "Mismatch allocator in thread");
         PgReleaseThreadContext(MyState_.MainContext);
         TlsAllocState = PrevState_;
+        if (PrevState_) {
+            PgAcquireThreadContext(PrevState_->MainContext);
+        }
         PrevState_ = nullptr;
     }
 }
@@ -184,8 +191,8 @@ void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
 }
 
 void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state, const EMemorySubPool mPool) noexcept {
-    Y_VERIFY_DEBUG(state);
-    Y_VERIFY_DEBUG(header->MyAlloc == state, "%s", (TStringBuilder() << "wrong allocator was used; "
+    Y_DEBUG_ABORT_UNLESS(state);
+    Y_DEBUG_ABORT_UNLESS(header->MyAlloc == state, "%s", (TStringBuilder() << "wrong allocator was used; "
         "allocated with: " << header->MyAlloc->GetInfo() << " freed with: " << TlsAllocState->GetInfo()).data());
     state->ReturnBlock(header, header->Capacity);
     if (header == state->CurrentPages[(TMemorySubPoolIdx)mPool]) {

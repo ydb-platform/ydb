@@ -24,11 +24,11 @@ namespace NActors {
                 return false;
             }
 
-            Y_FAIL();
+            Y_ABORT();
         }
 
         bool DetachEvent() noexcept override {
-            Y_FAIL();
+            Y_ABORT();
         }
     };
 
@@ -60,7 +60,7 @@ namespace NActors {
                 return false;
             }
 
-            Y_FAIL();
+            Y_ABORT();
         }
 
         bool DetachEvent() noexcept override {
@@ -74,7 +74,7 @@ namespace NActors {
                 return false;
             }
 
-            Y_FAIL();
+            Y_ABORT();
         }
     };
 

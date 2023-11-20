@@ -117,6 +117,9 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev) {
 
     CompileStats.Swap(&ev->Stats);
     PreparedQuery = CompileResult->PreparedQuery;
+    if (ev->ReplayMessage) {
+        ReplayMessage = *ev->ReplayMessage;
+    }
     return true;
 }
 
@@ -128,6 +131,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
     settings.Syntax = GetSyntax();
+    settings.IsPrepareQuery = GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE;
 
     bool keepInCache = false;
     switch (GetAction()) {
@@ -161,7 +165,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     }
 
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, uid,
-        std::move(query), keepInCache, compileDeadline, DbCounters, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState);
+        std::move(query), keepInCache, compileDeadline, DbCounters, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics());
 }
 
 std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie) {
@@ -175,6 +179,7 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
     settings.Syntax = GetSyntax();
 
     switch (GetAction()) {
+        case NKikimrKqp::QUERY_ACTION_EXPLAIN:
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
             query = TKqpQueryId(Cluster, Database, GetQuery(), settings, GetQueryParameterTypes());
             break;

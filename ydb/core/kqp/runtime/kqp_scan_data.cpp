@@ -62,6 +62,7 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, const NSc
         case NTypeIds::Yson:
         case NTypeIds::JsonDocument:
         case NTypeIds::DyNumber:
+        case NTypeIds::Uuid:
         case NTypeIds::PairUi64Ui64:
         {
             if (value.IsEmbedded()) {

@@ -159,11 +159,11 @@ struct TLessOrEqualOp<TLeft, TRight, bool> : public TLessOrEqual<TLeft, TRight, 
 };
 
 template<typename TLeft, typename TRight, bool Aggr>
-struct TDiffDateLessOrEqual : public TCompareArithmeticBinary<TLeft, TRight, TDiffDateLessOrEqual<TLeft, TRight, Aggr>>, public TAggrLessOrEqual {
-    static bool Do(TLeft left, TRight right)
+struct TDiffDateLessOrEqual : public TCompareArithmeticBinary<typename TLeft::TLayout, typename TRight::TLayout, TDiffDateLessOrEqual<TLeft, TRight, Aggr>>, public TAggrLessOrEqual {
+    static bool Do(typename TLeft::TLayout left, typename TRight::TLayout right)
     {
         return std::is_same<TLeft, TRight>::value ?
-            LessOrEqual<TLeft, TRight, Aggr>(left, right):
+            LessOrEqual<typename TLeft::TLayout, typename TRight::TLayout, Aggr>(left, right):
             LessOrEqual<TScaledDate, TScaledDate, Aggr>(ToScaledDate<TLeft>(left), ToScaledDate<TRight>(right));
     }
 
@@ -172,7 +172,7 @@ struct TDiffDateLessOrEqual : public TCompareArithmeticBinary<TLeft, TRight, TDi
     {
         auto& context = ctx.Codegen.GetContext();
         return std::is_same<TLeft, TRight>::value ?
-            GenLessOrEqual<TLeft, TRight, Aggr>(left, right, context, block):
+            GenLessOrEqual<typename TLeft::TLayout, typename TRight::TLayout, Aggr>(left, right, context, block):
             GenLessOrEqual<TScaledDate, TScaledDate, Aggr>(GenToScaledDate<TLeft>(left, context, block), GenToScaledDate<TRight>(right, context, block), context, block);
     }
 #endif
@@ -182,7 +182,7 @@ template<typename TLeft, typename TRight, typename TOutput>
 struct TDiffDateLessOrEqualOp;
 
 template<typename TLeft, typename TRight>
-struct TDiffDateLessOrEqualOp<TLeft, TRight, bool> : public TDiffDateLessOrEqual<TLeft, TRight, false> {
+struct TDiffDateLessOrEqualOp<TLeft, TRight, NUdf::TDataType<bool>> : public TDiffDateLessOrEqual<TLeft, TRight, false> {
     static constexpr bool DefaultNulls = true;
 };
 
@@ -278,6 +278,7 @@ void RegisterLessOrEqual(IBuiltinFunctionRegistry& registry) {
 
     RegisterComparePrimitive<TLessOrEqual, TCompareArgsOpt>(registry, name);
     RegisterCompareDatetime<TDiffDateLessOrEqual, TCompareArgsOpt>(registry, name);
+    RegisterCompareBigDatetime<TDiffDateLessOrEqual, TCompareArgsOpt>(registry, name);
 
     RegisterCompareStrings<TCustomLessOrEqual, TCompareArgsOpt>(registry, name);
     RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, TDecimalLessOrEqual, TCompareArgsOpt>(registry, name);

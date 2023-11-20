@@ -138,20 +138,20 @@ namespace NKikimr {
             It.Prev();
         }
         void SeekToFirst() {
-            Y_VERIFY_DEBUG(SkipListIndex);
+            Y_DEBUG_ABORT_UNLESS(SkipListIndex);
             It = SkipListIndex->Idx.SeekToFirst();
         }
         void SeekToLast() {
-            Y_VERIFY_DEBUG(SkipListIndex);
+            Y_DEBUG_ABORT_UNLESS(SkipListIndex);
             It = SkipListIndex->Idx.SeekToLast();
         }
         void SeekTo(const TIdxKey &key) {
-            Y_VERIFY_DEBUG(SkipListIndex);
+            Y_DEBUG_ABORT_UNLESS(SkipListIndex);
             It = SkipListIndex->Idx.SeekTo(key);
         }
 
         const TIdxKey& GetValue() const {
-            Y_VERIFY_DEBUG(It.IsValid());
+            Y_DEBUG_ABORT_UNLESS(It.IsValid());
             return It.GetValue();
         }
 
@@ -184,7 +184,7 @@ namespace NKikimr {
         Index->Insert(idxKey); // every key is unique, thanks to lsn
 
         Inserts++;
-        Y_VERIFY_DEBUG(lsn != ui64(-1) && (LastLsn <= lsn || LastLsn == 0));
+        Y_DEBUG_ABORT_UNLESS(lsn != ui64(-1) && (LastLsn <= lsn || LastLsn == 0));
         if (FirstLsn == ui64(-1)) {
             FirstLsn = lsn;
         }
@@ -201,12 +201,10 @@ namespace NKikimr {
     inline void TFreshIndexAndData<TKeyLogoBlob, TMemRecLogoBlob>::PutLogoBlobWithData(ui64 lsn,
             const TKeyLogoBlob &key, ui8 partId, const TIngress &ingress, TRope buffer) {
         TMemRecLogoBlob memRec(ingress);
-        const size_t before = Arena->GetSize();
         buffer = TRope::CopySpaceOptimized(std::move(buffer), 128, *Arena);
         const ui64 fullDataSize = key.LogoBlobID().BlobSize();
+        const size_t delta = buffer.size();
         TRope blob = TDiskBlob::Create(fullDataSize, partId, HullCtx->VCtx->Top->GType.TotalPartCount(), std::move(buffer), *Arena);
-        const size_t after = Arena->GetSize();
-        const size_t delta = after - before;
         FreshDataMemConsumer.Add(delta);
         const ui32 blobSize = blob.GetSize();
 
@@ -242,7 +240,7 @@ namespace NKikimr {
 
     template <class TKey, class TMemRec>
     inline const TRope& TFreshIndexAndData<TKey, TMemRec>::GetLogoBlobData(const TMemPart& /*memPart*/) const {
-        Y_FAIL("invalid call");
+        Y_ABORT("invalid call");
     }
 
     template <class TKey, class TMemRec>
@@ -262,7 +260,7 @@ namespace NKikimr {
                 HugeDataSize += memRec.DataSize();
                 break;
             default:
-                Y_FAIL("Unexpected type: type# %d", int(type));
+                Y_ABORT("Unexpected type: type# %d", int(type));
         }
         PutPrepared(lsn, key, memRec);
     }
@@ -324,7 +322,7 @@ namespace NKikimr {
         template <class TRecordMerger>
         void PutToMerger(TRecordMerger *merger) {
             TIterator cursor = It;
-            Y_VERIFY_DEBUG(cursor.Valid());
+            Y_DEBUG_ABORT_UNLESS(cursor.Valid());
             TKey key = It.GetValue().Key;
             while (cursor.Valid() && key == cursor.GetValue().Key) {
                 ui64 cursorLsn = cursor.GetValue().Lsn;
@@ -366,7 +364,7 @@ namespace NKikimr {
         TIterator It;
 
         bool HasSatisfyingValues() const {
-            Y_VERIFY_DEBUG(It.Valid());
+            Y_DEBUG_ABORT_UNLESS(It.Valid());
             TIterator cursor = It;
             TKey key = cursor.GetValue().Key;
             while (cursor.Valid() && key == cursor.GetValue().Key) {
@@ -443,7 +441,7 @@ namespace NKikimr {
         }
 
         void Next() {
-            Y_VERIFY_DEBUG(It.Valid());
+            Y_DEBUG_ABORT_UNLESS(It.Valid());
 
             // switch to the next
             TKey key = It.GetValue().Key;
@@ -524,7 +522,7 @@ namespace NKikimr {
         }
 
         void Prev() {
-            Y_VERIFY_DEBUG(It.Valid());
+            Y_DEBUG_ABORT_UNLESS(It.Valid());
 
             while (true) {
                 It.Prev();
@@ -565,7 +563,7 @@ namespace NKikimr {
 
 
         void ToTheChainStart() {
-            Y_VERIFY_DEBUG(It.Valid());
+            Y_DEBUG_ABORT_UNLESS(It.Valid());
             TKey key = It.GetValue().Key;
 
             TIterator cursor = It;
@@ -690,7 +688,7 @@ namespace NKikimr {
                 std::vector<std::pair<TKey, TMemRec>>& Recs;
 
                 void AddFromSegment(const TMemRec&, const TDiskPart*, const TKey&, ui64) {
-                    Y_VERIFY_DEBUG(false, "should not be called");
+                    Y_DEBUG_ABORT_UNLESS(false, "should not be called");
                 }
 
                 void AddFromFresh(const TMemRec& memRec, const TRope* /*data*/, const TKey& key, ui64 /*lsn*/) {

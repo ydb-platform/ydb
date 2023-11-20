@@ -158,7 +158,7 @@ namespace NKikimr::NSchemeShard {
                     case EAction::Alter: return ProposeAlter(owner, context);
                     case EAction::Drop: return ProposeDrop(owner, context);
                 }
-                Y_FAIL("unreachable code");
+                Y_ABORT("unreachable code");
             }
 
             void AbortPropose(TOperationContext& context) override {
@@ -166,7 +166,7 @@ namespace NKikimr::NSchemeShard {
                     << " OperationId# " << OperationId
                     << " at schemeshard# " << context.SS->SelfTabletId());
 
-                Y_FAIL();
+                Y_ABORT();
             }
 
             void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
@@ -404,7 +404,7 @@ namespace NKikimr::NSchemeShard {
             };
 
             TTxState::ETxState NextState(TTxState::ETxState) const override {
-                Y_FAIL("unreachable");
+                Y_ABORT("unreachable");
             }
 
             TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {

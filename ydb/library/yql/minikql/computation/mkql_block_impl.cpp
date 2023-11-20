@@ -133,9 +133,7 @@ arrow::Datum MakeArrayFromScalar(const arrow::Scalar& scalar, size_t len, TType*
     auto builder = MakeArrayBuilder(TTypeInfoHelper(), type, pool, len, nullptr);
 
     auto scalarItem = reader->GetScalarItem(scalar);
-    for (size_t i = 0; i < len; ++i) {
-        builder->Add(scalarItem);
-    }
+    builder->Add(scalarItem, len);
 
     return builder->Build(true);
 }
@@ -195,7 +193,7 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
     std::vector<arrow::Datum> argDatums;
     for (ui32 i = 0; i < ArgsNodes.size(); ++i) {
         argDatums.emplace_back(TArrowBlock::From(ArgsNodes[i]->GetValue(ctx)).GetDatum());
-        Y_VERIFY_DEBUG(ArgsValuesDescr[i] == argDatums.back().descr());
+        Y_DEBUG_ABORT_UNLESS(ArgsValuesDescr[i] == argDatums.back().descr());
     }
 
     if (ScalarOutput) {
@@ -273,6 +271,10 @@ TBlockState::TBlockState(TMemoryUsageInfo* memInfo, size_t width)
     Pointer_ = Values.data();
 }
 
+void TBlockState::ClearValues() {
+    Values.assign(Values.size(), NUdf::TUnboxedValuePod());
+}
+
 void TBlockState::FillArrays() {
     auto& counterDatum = TArrowBlock::From(Values.back()).GetDatum();
     MKQL_ENSURE(counterDatum.is_scalar(), "Unexpected block length type (expecting scalar)");
@@ -334,15 +336,6 @@ NUdf::TUnboxedValuePod TBlockState::Get(const ui64 sliceSize, const THolderFacto
         return holderFactory.CreateArrowBlock(std::move(array));
     else
         return Values[idx];
-}
-
-void TBlockState::FillOutputs(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-    const auto sliceSize = Slice();
-    for (size_t i = 0; i < Values.size(); ++i) {
-        if (const auto out = output[i]) {
-            *out = Get(sliceSize, ctx.HolderFactory, i);
-        }
-    }
 }
 
 }

@@ -1,8 +1,3 @@
-import os
-
-from _common import sort_by_keywords
-
-
 def on_style(unit, *args):
     def it():
         yield 'DONT_PARSE'

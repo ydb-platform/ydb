@@ -1,0 +1,29 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:14:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: RemovePrefixMembers, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	SELECT t.*, $linear(cast(key as uint64), cast(subkey as uint64), $shiftSteps) FROM Input as t;
+	^
+        <tmp_path>/program.sql:<main>:9:42: Warning: At function: ShiftLeft
+        	  $shift = ($item, $sk) -> {return $item << $func($sk)};
+	                                         ^
+            <tmp_path>/program.sql:<main>:8:16: Warning: At function: +
+            	  $v = 10 * $z + $x;
+	               ^
+                <tmp_path>/program.sql:<main>:8:11: Warning: At function: *
+                	  $v = 10 * $z + $x;
+	          ^
+                    <tmp_path>/program.sql:<main>:8:11: Warning: Integral type implicit bitcast: Int32 and Optional<Uint64>
+                    	  $v = 10 * $z + $x;
+	          ^
+            <tmp_path>/program.sql:<main>:5:57: Warning: At function: Coalesce
+            	$shiftSteps=($item) -> { return Cast($item % 4 as Uint8)??0 };
+	                                                        ^
+                <tmp_path>/program.sql:<main>:5:33: Warning: At function: SafeCast
+                	$shiftSteps=($item) -> { return Cast($item % 4 as Uint8)??0 };
+	                                ^
+                    <tmp_path>/program.sql:<main>:5:44: Warning: At function: %
+                    	$shiftSteps=($item) -> { return Cast($item % 4 as Uint8)??0 };
+	                                           ^
+                        <tmp_path>/program.sql:<main>:5:44: Warning: Integral type implicit bitcast: Optional<Uint64> and Int32
+                        	$shiftSteps=($item) -> { return Cast($item % 4 as Uint8)??0 };
+	                                           ^

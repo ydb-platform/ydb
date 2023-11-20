@@ -1,5 +1,4 @@
 #include "yql_generic_provider_impl.h"
-
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
@@ -30,52 +29,80 @@ namespace NYql {
                 if (!State_->DatabaseResolver)
                     return TStatus::Ok;
 
-                THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth> ids;
-                if (auto reads = FindNodes(input,
-                                           [&](const TExprNode::TPtr& node) {
-                                               const TExprBase nodeExpr(node);
-                                               if (!nodeExpr.Maybe<TGenRead>())
-                                                   return false;
+                auto reads = FindNodes(input,
+                                       [&](const TExprNode::TPtr& node) {
+                                           const TExprBase nodeExpr(node);
+                                           if (!nodeExpr.Maybe<TGenRead>())
+                                               return false;
 
-                                               auto read = nodeExpr.Maybe<TGenRead>().Cast();
-                                               if (read.DataSource().Category().Value() != GenericProviderName) {
-                                                   return false;
-                                               }
-                                               return true;
-                                           });
-                    !reads.empty()) {
-                    for (auto& node : reads) {
-                        const TGenRead read(node);
-                        const auto clusterName = read.DataSource().Cluster().StringValue();
-                        YQL_CLOG(DEBUG, ProviderGeneric) << "found cluster name: " << clusterName;
-
-                        auto& cluster = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
-                        auto databaseId = cluster.GetDatabaseId();
-                        if (databaseId) {
-                            YQL_CLOG(DEBUG, ProviderGeneric) << "found database id: " << databaseId;
-                            const auto idKey = std::make_pair(databaseId, DatabaseTypeFromDataSourceKind(cluster.GetKind()));
-                            const auto iter = State_->DatabaseAuth.find(idKey);
-                            if (iter != State_->DatabaseAuth.end()) {
-                                YQL_CLOG(DEBUG, ProviderGeneric) << "resolve database id: " << databaseId;
-                                ids[idKey] = iter->second;
-                            }
-                        }
-                    }
-                }
-                YQL_CLOG(DEBUG, ProviderGeneric) << "total database ids to resolve: " << ids.size();
-
-                if (ids.empty()) {
+                                           auto read = nodeExpr.Maybe<TGenRead>().Cast();
+                                           if (read.DataSource().Category().Value() != GenericProviderName) {
+                                               return false;
+                                           }
+                                           return true;
+                                       });
+                if (reads.empty()) {
                     return TStatus::Ok;
                 }
 
-                // FIXME: overengineered code - instead of using weak_ptr, directly copy shared_ptr in callback in this way:
-                // Apply([response = DbResolverResponse_](...))
-                const std::weak_ptr<NYql::TDatabaseResolverResponse> response = DbResolverResponse_;
-                AsyncFuture_ = State_->DatabaseResolver->ResolveIds(ids).Apply([response](auto future) {
-                    if (const auto res = response.lock()) {
-                        *res = std::move(future.ExtractValue());
+                // Collect clusters that are in need of resolving
+                IDatabaseAsyncResolver::TDatabaseAuthMap unresolvedClusters;
+                for (auto& node : reads) {
+                    const TGenRead read(node);
+                    const auto clusterName = read.DataSource().Cluster().StringValue();
+                    YQL_CLOG(DEBUG, ProviderGeneric) << "discovered cluster name: " << clusterName;
+
+                    auto& cluster = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
+                    auto databaseId = cluster.GetDatabaseId();
+                    if (databaseId) {
+                        YQL_CLOG(DEBUG, ProviderGeneric) << "discovered database id: " << databaseId;
+                        const auto idKey = std::make_pair(databaseId, DatabaseTypeFromDataSourceKind(cluster.GetKind()));
+                        const auto iter = State_->DatabaseAuth.find(idKey);
+                        if (iter != State_->DatabaseAuth.end()) {
+                            YQL_CLOG(DEBUG, ProviderGeneric) << "requesting to resolve"
+                                                             << ": clusterName=" << clusterName
+                                                             << ", databaseId=" << databaseId;
+
+                            unresolvedClusters[idKey] = iter->second;
+                        }
                     }
-                });
+                }
+
+                if (unresolvedClusters.empty()) {
+                    return TStatus::Ok;
+                }
+
+                YQL_CLOG(DEBUG, ProviderGeneric) << "total database ids to be resolved: " << unresolvedClusters.size();
+                // Resolve MDB clusters
+                TDatabaseResolverResponse::TDatabaseDescriptionMap descriptions;
+
+                for (const auto& [databaseIdWithType, databaseAuth] : unresolvedClusters) {
+                    // Now it's only possible to emit a single request with a single cluster ID simultaneously.
+                    // FIXME: use batch async handling after YQ-2536 is fixed.
+                    IDatabaseAsyncResolver::TDatabaseAuthMap request;
+                    request[databaseIdWithType] = databaseAuth;
+                    auto response = State_->DatabaseResolver->ResolveIds(request).GetValueSync();
+
+                    if (!response.Success) {
+                        ctx.IssueManager.AddIssues(response.Issues);
+                        return TStatus::Error;
+                    }
+
+                    for (const auto& [databaseIdWithType, databaseDescription] : response.DatabaseDescriptionMap) {
+                        YQL_CLOG(INFO, ProviderGeneric) << "resolved database id into endpoint"
+                                                        << ": databaseId=" << databaseIdWithType.first
+                                                        << ", host=" << databaseDescription.Host
+                                                        << ", port=" << databaseDescription.Port;
+                    }
+
+                    // save ids for the further use
+                    DatabaseDescriptions_.insert(response.DatabaseDescriptionMap.cbegin(),
+                                                 response.DatabaseDescriptionMap.cend());
+                }
+
+                auto promise = NThreading::NewPromise<void>();
+                promise.SetValue();
+                AsyncFuture_ = promise.GetFuture();
 
                 return TStatus::Async;
             }
@@ -87,23 +114,22 @@ namespace NYql {
             TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
                 output = input;
                 AsyncFuture_.GetValue();
-                if (!DbResolverResponse_->Success) {
-                    ctx.IssueManager.AddIssues(DbResolverResponse_->Issues);
-                    return TStatus::Error;
-                }
-
-                // Copy resolver results and reallocate pointer
-                auto databaseIdsToEndpointsResolved = std::move(DbResolverResponse_->DatabaseDescriptionMap);
-
-                DbResolverResponse_ = std::make_shared<NYql::TDatabaseResolverResponse>();
 
                 // Modify cluster configs with resolved ids
-                return ModifyClusterConfigs(databaseIdsToEndpointsResolved, ctx);
+                auto status = ModifyClusterConfigs(DatabaseDescriptions_, ctx);
+
+                // Clear results map
+                if (!DatabaseDescriptions_.empty()) {
+                    DatabaseDescriptions_ = {};
+                }
+
+                return status;
             }
 
             void Rewind() final {
                 AsyncFuture_ = {};
-                DbResolverResponse_.reset(new NYql::TDatabaseResolverResponse);
+                // Clear results map
+                DatabaseDescriptions_.clear();
             }
 
         private:
@@ -116,9 +142,6 @@ namespace NYql {
 
                     Y_ENSURE(databaseDescription.Host, "Empty resolved database host");
                     Y_ENSURE(databaseDescription.Port, "Empty resolved database port");
-                    YQL_CLOG(INFO, ProviderGeneric) << "resolved database id: " << databaseId
-                                                    << ", host: " << databaseDescription.Host
-                                                    << ", port: " << databaseDescription.Port;
 
                     auto clusterNamesIter = databaseIdsToClusterNames.find(databaseId);
 
@@ -149,9 +172,8 @@ namespace NYql {
             }
 
             const TGenericState::TPtr State_;
-
+            TDatabaseResolverResponse::TDatabaseDescriptionMap DatabaseDescriptions_;
             NThreading::TFuture<void> AsyncFuture_;
-            std::shared_ptr<NYql::TDatabaseResolverResponse> DbResolverResponse_ = std::make_shared<NYql::TDatabaseResolverResponse>();
         };
     }
 

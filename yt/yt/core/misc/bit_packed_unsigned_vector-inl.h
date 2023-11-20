@@ -4,6 +4,8 @@
 #include "bit_packed_unsigned_vector.h"
 #endif
 
+#include "bit_packing.h"
+
 #include <util/generic/bitops.h>
 
 namespace NYT {
@@ -79,6 +81,14 @@ BitPackUnsignedVector(TRange<T> values, ui64 maxValue, ui64* dst)
     return (offset == 0 ? 0 : 1) + word - dst;
 }
 
+template <class T>
+TSharedRef BitpackVector(TRange<T> values, ui64 maxValue, ui32* size, ui8* width)
+{
+    auto data = BitPackUnsignedVector(values, maxValue);
+    *size = GetCompressedVectorSize(data.Begin());
+    *width = GetCompressedVectorWidth(data.Begin());
+    return data;
+}
 
 template <class T>
 typename std::enable_if<std::is_unsigned<T>::value, TSharedRef>::type

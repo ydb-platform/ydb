@@ -397,7 +397,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
     void RegisterMessageGroup() {
         if (Registered) {
-            Y_VERIFY_DEBUG(false);
+            Y_DEBUG_ABORT_UNLESS(false);
             return InitResult("Already registered", NKikimrClient::TResponse());
         }
 
@@ -595,7 +595,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
     void Write(ui64 cookie, NKikimrClient::TPersQueueRequest&& req) {
         auto ev = MakeHolder<TEvPersQueue::TEvRequest>();
-        ev->Record = req;
+        ev->Record = std::move(req);
 
         auto& request = *ev->Record.MutablePartitionRequest();
         request.SetMessageNo(MessageNo++);
@@ -666,7 +666,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         auto msg = ev->Get();
         DEBUG("TEvClientConnected Status " << msg->Status << ", TabletId: " << msg->TabletId << ", NodeId " << msg->ServerId.NodeId() << ", Generation: " << msg->Generation);
-        Y_VERIFY_DEBUG(msg->TabletId == TabletId);
+        Y_DEBUG_ABORT_UNLESS(msg->TabletId == TabletId);
 
         if (msg->Status != NKikimrProto::OK) {
             ERROR("received TEvClientConnected with status " << ev->Get()->Status);
@@ -812,7 +812,7 @@ private:
         bool QuotaAccepted;
 
         RequestHolder(NKikimrClient::TPersQueueRequest&& request, bool quotaChecked)
-            : Request(request)
+            : Request(std::move(request))
             , QuotaChecked(quotaChecked)
             , QuotaAccepted(false) {
         }

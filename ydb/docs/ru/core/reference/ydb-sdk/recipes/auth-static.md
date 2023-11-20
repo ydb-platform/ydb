@@ -73,6 +73,24 @@
 
   {% include [auth-static](../../../../_includes/python/async/auth-static.md) %}
 
+- C# (.NET)
+
+  ```C#
+  using Ydb.Sdk;
+  using Ydb.Sdk.Auth;
+
+  const string endpoint = "grpc://localhost:2136";
+  const string database = "/local";
+
+  var config = new DriverConfig(
+      endpoint: endpoint, // Database endpoint, "grpcs://host:port"
+      database: database, // Full database path
+      credentials: new StaticCredentialsProvider(user, password)
+  );
+
+  await using var driver = await Driver.CreateInitialized(config);
+  ```
+
 - PHP
 
   ```php

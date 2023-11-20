@@ -122,7 +122,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             break;
 
         default:
-            Y_VERIFY_DEBUG(false, "Unknown export kind");
+            Y_DEBUG_ABORT_UNLESS(false, "Unknown export kind");
         }
 
         Y_ABORT_UNLESS(exportInfo != nullptr);
@@ -785,7 +785,7 @@ private:
                                 exportInfo->DependencyTxIds.insert(path->LastTxId);
                                 SubscribeTx(path->LastTxId);
 
-                                Y_VERIFY_DEBUG(itemIdx == Max<ui32>());
+                                Y_DEBUG_ABORT_UNLESS(itemIdx == Max<ui32>());
                                 Self->TxIdToDependentExport[path->LastTxId].insert(exportInfo->Id);
                             }
                         }

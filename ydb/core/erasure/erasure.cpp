@@ -2453,7 +2453,7 @@ void TErasureType::BlockSplitRange(ECrcMode crcMode, ui64 blobSize, ui64 wholeBe
             }
         }
     }
-    Y_VERIFY_DEBUG(outRange->EndPartIdx != Max<ui64>());
+    Y_DEBUG_ABORT_UNLESS(outRange->EndPartIdx != Max<ui64>());
 }
 
 ui32 TErasureType::BlockSplitPartIndex(ui64 offset, ui64 dataSize, ui64 &outPartOffset) const {
@@ -2770,7 +2770,7 @@ void TErasureType::SplitDiffs(ECrcMode crcMode, ui32 dataSize, const TVector<TDi
             MirrorSplitDiff(*this, diffs, outDiffSet);
             break;
         case TErasureType::ErasureParityStripe:
-            Y_FAIL("Not implemented");
+            Y_ABORT("Not implemented");
             break;
         case TErasureType::ErasureParityBlock:
             Y_ABORT_UNLESS(erasure.ParityParts == 2, "Other is not implemented");
@@ -2851,10 +2851,10 @@ void TErasureType::MakeXorDiff(ECrcMode crcMode, ui32 dataSize, const ui8 *src,
     const TErasureParameters& erasure = ErasureSpeciesParameters[ErasureSpecies];
     switch (erasure.ErasureFamily) {
         case TErasureType::ErasureMirror:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
             break;
         case TErasureType::ErasureParityStripe:
-            Y_FAIL("Not implemented");
+            Y_ABORT("Not implemented");
             break;
         case TErasureType::ErasureParityBlock:
             Y_ABORT_UNLESS(erasure.ParityParts == 2, "Other is not implemented");
@@ -2987,10 +2987,10 @@ void TErasureType::ApplyXorDiff(ECrcMode crcMode, ui32 dataSize, ui8 *dst,
     const TErasureParameters& erasure = ErasureSpeciesParameters[ErasureSpecies];
     switch (erasure.ErasureFamily) {
         case TErasureType::ErasureMirror:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
             break;
         case TErasureType::ErasureParityStripe:
-            Y_FAIL("Not implemented");
+            Y_ABORT("Not implemented");
             break;
         case TErasureType::ErasureParityBlock:
             Y_ABORT_UNLESS(erasure.ParityParts == 2, "Other is not implemented");
@@ -3022,8 +3022,8 @@ void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool res
         ythrow TWithBackTrace<yexception>() << "Incorrect partSet size, received " << partSet.Parts.size()
             << " while expected " << (erasure.DataParts + erasure.ParityParts);
     }
-    Y_VERIFY_DEBUG(restoreFullData || restoreParts);
-    Y_VERIFY_DEBUG(erasure.Prime <= MAX_LINES_IN_BLOCK);
+    Y_DEBUG_ABORT_UNLESS(restoreFullData || restoreParts);
+    Y_DEBUG_ABORT_UNLESS(erasure.Prime <= MAX_LINES_IN_BLOCK);
     switch (erasure.ErasureFamily) {
         case TErasureType::ErasureMirror:
             if (restoreParts) {

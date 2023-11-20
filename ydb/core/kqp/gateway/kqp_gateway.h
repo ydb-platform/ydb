@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
-#include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/tx_proxy.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 
@@ -9,11 +8,11 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/ydb_convert/table_profiles.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/dq/common/dq_value.h>
 
 #include <library/cpp/actors/wilson/wilson_trace.h>
 #include <library/cpp/actors/core/actorid.h>
@@ -128,7 +127,7 @@ public:
         NKikimr::TControlWrapper PerRequestDataSizeLimit;
         NKikimr::TControlWrapper MaxShardCount;
         TVector<TPhysicalTxData> Transactions;
-        TMap<ui64, TVector<NKikimrTxDataShard::TLock>> DataShardLocks;
+        TMap<ui64, TVector<NKikimrDataEvents::TLock>> DataShardLocks;
         NKikimr::NKqp::TTxAllocatorState::TPtr TxAlloc;
         ELocksOp LocksOp = ELocksOp::Unspecified;
         TMaybe<ui64> AcquireLocksTxId;

@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 2019 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -117,7 +117,7 @@ static struct altsvc *altsvc_createid(const char *srchost,
   as->dst.port = curlx_ultous(dstport);
 
   return as;
-  error:
+error:
   altsvc_free(as);
   return NULL;
 }
@@ -217,7 +217,7 @@ static CURLcode altsvc_load(struct altsvcinfo *asi, const char *file)
   }
   return result;
 
-  fail:
+fail:
   Curl_safefree(asi->filename);
   free(line);
   fclose(fp);
@@ -424,7 +424,7 @@ static void altsvc_flush(struct altsvcinfo *asi, enum alpnid srcalpnid,
 #ifdef DEBUGBUILD
 /* to play well with debug builds, we can *set* a fixed time this will
    return */
-static time_t debugtime(void *unused)
+static time_t altsvc_debugtime(void *unused)
 {
   char *timestr = getenv("CURL_TIME");
   (void)unused;
@@ -434,7 +434,8 @@ static time_t debugtime(void *unused)
   }
   return time(NULL);
 }
-#define time(x) debugtime(x)
+#undef time
+#define time(x) altsvc_debugtime(x)
 #endif
 
 #define ISNEWLINE(x) (((x) == '\n') || (x) == '\r')
@@ -517,15 +518,21 @@ CURLcode Curl_altsvc_parse(struct Curl_easy *data,
           dsthost = srchost;
         }
         if(*p == ':') {
-          /* a port number */
-          unsigned long port = strtoul(++p, &end_ptr, 10);
-          if(port > USHRT_MAX || end_ptr == p || *end_ptr != '\"') {
+          unsigned long port = 0;
+          p++;
+          if(ISDIGIT(*p))
+            /* a port number */
+            port = strtoul(p, &end_ptr, 10);
+          else
+            end_ptr = (char *)p; /* not left uninitialized */
+          if(!port || port > USHRT_MAX || end_ptr == p || *end_ptr != '\"') {
             infof(data, "Unknown alt-svc port number, ignoring.");
             valid = FALSE;
           }
-          else
+          else {
             dstport = curlx_ultous(port);
-          p = end_ptr;
+            p = end_ptr;
+          }
         }
         if(*p++ != '\"')
           break;

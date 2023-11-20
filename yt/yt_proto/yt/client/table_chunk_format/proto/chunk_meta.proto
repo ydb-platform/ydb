@@ -238,6 +238,13 @@ message TColumnMetaExt
     repeated NTableChunkFormat.NProto.TColumnMeta columns = 1;
 }
 
+message TColumnGroupInfosExt
+{
+    repeated int32 block_group_indexes = 1;
+    repeated int32 segment_meta_offsets = 2;
+    repeated int32 column_to_group = 3;
+}
+
 message TColumnarStatisticsExt
 {
     repeated int64 column_data_weights = 1;

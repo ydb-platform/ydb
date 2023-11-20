@@ -35,6 +35,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools) {
     Settings->SetDynamicNodeCount(dynamicNodes);
 
     NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableStatistics(true);
     Settings->SetFeatureFlags(featureFlags);
 
     for (ui32 i : xrange(storagePools)) {

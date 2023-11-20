@@ -1,10 +1,13 @@
 #include "abstract.h"
 #include <library/cpp/actors/core/monotonic.h>
+#include <library/cpp/actors/core/log.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NConveyor {
 bool ITask::Execute(std::shared_ptr<TTaskSignals> signals) {
+    AFL_VERIFY(!ExecutedFlag);
+    ExecutedFlag = true;
     bool result = false;
     const TMonotonic start = TMonotonic::Now();
     try {

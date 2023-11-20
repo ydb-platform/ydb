@@ -11,13 +11,7 @@ PEERDIR(
 )
 
 IF(NOT OPENSOURCE)
-    SRCS(
-        tvm.cpp
-    )
-
-    PEERDIR(
-        library/cpp/tvmauth/client
-    )
+    INCLUDE(ya_non_opensource.inc)
 ENDIF()
 
 END()

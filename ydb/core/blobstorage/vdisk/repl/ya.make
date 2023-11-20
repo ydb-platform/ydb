@@ -26,6 +26,7 @@ SRCS(
     blobstorage_replproxy.cpp
     blobstorage_replproxy.h
     blobstorage_replrecoverymachine.h
+    blobstorage_replmonhandler.cpp
     defs.h
     query_donor.h
     repl_quoter.h

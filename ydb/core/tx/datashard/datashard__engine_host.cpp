@@ -184,7 +184,7 @@ public:
         if (tableId.PathId.LocalPathId == TSysTables::SysTableLocks)
             return Locks;
 
-        Y_FAIL("unexpected sys table id");
+        Y_ABORT("unexpected sys table id");
     }
 };
 
@@ -1278,13 +1278,9 @@ NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(NKikimrTxDataShard::TKqpTra
         NYql::NDq::TDqTaskRunnerSettings settings;
 
         if (tx.HasRuntimeSettings() && tx.GetRuntimeSettings().HasStatsMode()) {
-            auto statsMode = tx.GetRuntimeSettings().GetStatsMode();
-            // Always collect basic stats for system views / request unit computation.
-            settings.CollectBasicStats = true;
-            settings.CollectProfileStats = statsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE;
+            settings.StatsMode = tx.GetRuntimeSettings().GetStatsMode();
         } else {
-            settings.CollectBasicStats = false;
-            settings.CollectProfileStats = false;
+            settings.StatsMode = NYql::NDqProto::DQ_STATS_MODE_NONE;
         }
 
         settings.OptLLVM = "OFF";

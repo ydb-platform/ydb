@@ -1,0 +1,26 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:18:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select FormatType(TypeOf($BadPredicate));
+	^
+        <tmp_path>/program.sql:<main>:18:8: Error: At function: FormatType
+        	select FormatType(TypeOf($BadPredicate));
+	       ^
+            <tmp_path>/program.sql:<main>:18:19: Error: At function: TypeOf
+            	select FormatType(TypeOf($BadPredicate));
+	                  ^
+                <tmp_path>/program.sql:<main>:8:24: Error: At function: SingleMember, At function: SqlAccess, At function: Take
+                	$BadPredicate = select TableRow() from (select * from AS_TABLE($data) MATCH_RECOGNIZE(
+	                       ^
+                    <tmp_path>/program.sql:<main>:8:17: Error: At function: PersistableRepr, At function: OrderedSqlProject
+                    	$BadPredicate = select TableRow() from (select * from AS_TABLE($data) MATCH_RECOGNIZE(
+	                ^
+                        <tmp_path>/program.sql:<main>:8:41: Error: At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject
+                        	$BadPredicate = select TableRow() from (select * from AS_TABLE($data) MATCH_RECOGNIZE(
+	                                        ^
+                            <tmp_path>/program.sql:<main>:8:70: Error: At function: MatchRecognize, At function: MatchRecognizeParams, At function: MatchRecognizeDefines
+                            	$BadPredicate = select TableRow() from (select * from AS_TABLE($data) MATCH_RECOGNIZE(
+	                                                                     ^
+                                <tmp_path>/program.sql:<main>:15:12: Error: DEFINE expression must be a predicate
+                                	      A as 123 -- must fail, Bool expected
+	           ^

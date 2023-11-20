@@ -13,7 +13,7 @@ TLogoBlobID ParseLogoBlobId(TString blobId) {
     TLogoBlobID logoBlobId;
     TString err;
     if (!TLogoBlobID::Parse(logoBlobId, blobId, err)) {
-        Y_FAIL("%s", err.c_str());
+        Y_ABORT("%s", err.c_str());
     }
     return logoBlobId;
 }
@@ -157,7 +157,7 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
             BlobsToDelete.insert(unifiedBlobId.GetLogoBlobId());
             BlobsManagerCounters.OnDeleteBlobMarker(unifiedBlobId.BlobSize());
         } else {
-            Y_FAIL("Unexpected blob id: %s", unifiedBlobId.ToStringNew().c_str());
+            Y_ABORT("Unexpected blob id: %s", unifiedBlobId.ToStringNew().c_str());
         }
     }
     BlobsManagerCounters.OnBlobsDelete(BlobsToDelete);
@@ -329,7 +329,7 @@ void TBlobManager::DoSaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) {
     // Add this batch to KeepQueue
     TGenStep edgeGenStep = EdgeGenStep();
     for (auto&& blobId: blobBatch.BatchInfo->GetBlobIds()) {
-        Y_VERIFY_DEBUG(blobId.IsDsBlob(), "Not a DS blob id: %s", blobId.ToStringNew().c_str());
+        Y_DEBUG_ABORT_UNLESS(blobId.IsDsBlob(), "Not a DS blob id: %s", blobId.ToStringNew().c_str());
 
         auto logoBlobId = blobId.GetLogoBlobId();
         TGenStep genStep{logoBlobId.Generation(), logoBlobId.Step()};

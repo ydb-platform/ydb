@@ -178,7 +178,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TDropCdcStream");
+        Y_ABORT("no AbortPropose for TDropCdcStream");
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {

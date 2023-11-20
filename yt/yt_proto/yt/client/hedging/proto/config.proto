@@ -28,7 +28,7 @@ message TReplicationLagPenaltyProviderConfig
     optional string TablePath = 2; // Table that needs checks for replication lag.
     optional uint32 LagPenalty = 3 [default = 10]; // penalty in milliseconds, same as BanPenalty in THedgingClientConfig.
     optional uint32 MaxTabletLag = 4 [default = 300]; // Tablet is considered "lagged" if CurrentTimestamp - TabletLastReplicationTimestamp >= MaxTabletLag (in seconds).
-    optional float MaxTabletsWithLagFraction = 5 [default = 0.05]; // Real value from 0.0 to 1.0. Replica cluster recieves LagPenalty if NumberOfTabletsWithLag >= MaxTabletsWithLagFraction * TotalNumberOfTablets.
+    optional float MaxTabletsWithLagFraction = 5 [default = 0.05]; // Real value from 0.0 to 1.0. Replica cluster receives LagPenalty if NumberOfTabletsWithLag >= MaxTabletsWithLagFraction * TotalNumberOfTablets.
     optional uint32 CheckPeriod = 6 [default = 60]; // Replication lag check period (in seconds).
-    optional bool ClearPenaltiesOnErrors = 7 [default = false]; // In case of any erros from master client - clear all penalties.
+    optional bool ClearPenaltiesOnErrors = 7 [default = false]; // In case of any errors from master client - clear all penalties.
 }

@@ -9,8 +9,9 @@ namespace NYT::NDriver {
 class TStartTransactionCommand
     : public TTypedCommand<NApi::TTransactionStartOptions>
 {
-public:
-    TStartTransactionCommand();
+    REGISTER_YSON_STRUCT_LITE(TStartTransactionCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NTransactionClient::ETransactionType Type;
@@ -24,6 +25,11 @@ private:
 class TPingTransactionCommand
     : public TTypedCommand<NApi::TTransactionalOptions>
 {
+    REGISTER_YSON_STRUCT_LITE(TPingTransactionCommand);
+
+    static void Register(TRegistrar /*registrar*/)
+    { }
+
 private:
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -33,6 +39,11 @@ private:
 class TCommitTransactionCommand
     : public TTypedCommand<NApi::TTransactionCommitOptions>
 {
+    REGISTER_YSON_STRUCT_LITE(TCommitTransactionCommand);
+
+    static void Register(TRegistrar /*registrar*/)
+    { }
+
 private:
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -43,7 +54,9 @@ class TAbortTransactionCommand
     : public TTypedCommand<NApi::TTransactionAbortOptions>
 {
 public:
-    TAbortTransactionCommand();
+    REGISTER_YSON_STRUCT_LITE(TAbortTransactionCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     void DoExecute(ICommandContextPtr context) override;
@@ -57,6 +70,11 @@ struct TGenerateTimestampOptions
 class TGenerateTimestampCommand
     : public TTypedCommand<TGenerateTimestampOptions>
 {
+    REGISTER_YSON_STRUCT_LITE(TGenerateTimestampCommand);
+
+    static void Register(TRegistrar /*registrar*/)
+    { }
+
 private:
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -64,4 +82,3 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDriver
-

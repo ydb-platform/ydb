@@ -145,7 +145,7 @@ public:
 
         if (topicKeyParser.GetTimestampFormatName()) {
             settings.Add(topicKeyParser.GetTimestampFormatName());
-            hasDateTimeFormatName = true;
+            hasTimestampFormatName = true;
             if (!NCommon::ValidateTimestampFormatName(topicKeyParser.GetTimestampFormatName()->Child(1)->Content(), ctx)) {
                 return nullptr;
             }

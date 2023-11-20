@@ -390,7 +390,7 @@ namespace NBus {
             if (call.Status == MESSAGE_OK) {
                 ++it; // keep pending list until we get reply
             } else if (call.Status == MESSAGE_BUSY) {
-                Y_FAIL("MESSAGE_BUSY is prohibited in modules. Please increase MaxInFlight");
+                Y_ABORT("MESSAGE_BUSY is prohibited in modules. Please increase MaxInFlight");
             } else if (call.Status == MESSAGE_CONNECT_FAILED && call.NumRetries < call.MaxRetries) {
                 ++it; // try up to call.MaxRetries times to send message
                 call.NumRetries++;
@@ -480,7 +480,7 @@ namespace NBus {
 
         /// if not found, report error
         if (i == Pending.size()) {
-            Y_FAIL("must not happen");
+            Y_ABORT("must not happen");
         }
 
         /// fill in response into job state

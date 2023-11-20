@@ -11,8 +11,9 @@ namespace NYT::NDriver {
 class TReadFileCommand
     : public TTypedCommand<NApi::TFileReaderOptions>
 {
-public:
-    TReadFileCommand();
+    REGISTER_YSON_STRUCT_LITE(TReadFileCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -28,8 +29,9 @@ private:
 class TWriteFileCommand
     : public TTypedCommand<NApi::TFileWriterOptions>
 {
-public:
-    TWriteFileCommand();
+    REGISTER_YSON_STRUCT_LITE(TWriteFileCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -44,8 +46,9 @@ private:
 class TGetFileFromCacheCommand
     : public TTypedCommand<NApi::TGetFileFromCacheOptions>
 {
-public:
-    TGetFileFromCacheCommand();
+    REGISTER_YSON_STRUCT_LITE(TGetFileFromCacheCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     TString MD5;
@@ -58,8 +61,9 @@ private:
 class TPutFileToCacheCommand
     : public TTypedCommand<NApi::TPutFileToCacheOptions>
 {
-public:
-    TPutFileToCacheCommand();
+    REGISTER_YSON_STRUCT_LITE(TPutFileToCacheCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TYPath Path;
@@ -71,4 +75,3 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDriver
-

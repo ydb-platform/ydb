@@ -455,6 +455,7 @@
   - linux/erspan.h
   - linux/ethtool.h
   - linux/ethtool_netlink.h
+  - linux/eventfd.h
   - linux/eventpoll.h
   - linux/ext4.h
   - linux/f2fs.h
@@ -986,6 +987,7 @@
   - linux/tipc_sockets_diag.h
   - linux/tls.h
   - linux/toshiba.h
+  - linux/tps6594_pfsm.h
   - linux/tty.h
   - linux/tty_flags.h
   - linux/types.h

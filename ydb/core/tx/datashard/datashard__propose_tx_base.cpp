@@ -63,13 +63,13 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                         << Self->TabletID() << " status: " << result->GetStatus());
             TString errors = result->GetError();
             if (errors.Size()) {
-                LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
+                LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
                             "Errors while proposing transaction txid " << TxId
                             << " at tablet " << Self->TabletID() << " status: "
                             << result->GetStatus() << " errors: " << errors);
             }
 
-            TActorId target = Op ? Op->GetTarget() : Ev->Get()->GetSource();
+            TActorId target = Op ? Op->GetTarget() : Ev->Sender;
             ui64 cookie = Op ? Op->GetCookie() : Ev->Cookie;
 
             if (ProposeTransactionSpan) {
@@ -83,7 +83,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
         if (Ev) {
             Y_ABORT_UNLESS(!Op);
 
-            if (Self->CheckDataTxRejectAndReply(Ev->Get(), ctx)) {
+            if (Self->CheckDataTxRejectAndReply(Ev, ctx)) {
                 Ev = nullptr;
                 return true;
             }
@@ -163,13 +163,13 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
         return false;
     } catch (const TSchemeErrorTabletException &ex) {
         Y_UNUSED(ex);
-        Y_FAIL();
+        Y_ABORT();
     } catch (const TMemoryLimitExceededException &ex) {
-        Y_FAIL("there must be no leaked exceptions: TMemoryLimitExceededException");
+        Y_ABORT("there must be no leaked exceptions: TMemoryLimitExceededException");
     } catch (const std::exception &e) {
-        Y_FAIL("there must be no leaked exceptions: %s", e.what());
+        Y_ABORT("there must be no leaked exceptions: %s", e.what());
     } catch (...) {
-        Y_FAIL("there must be no leaked exceptions");
+        Y_ABORT("there must be no leaked exceptions");
     }
 }
 

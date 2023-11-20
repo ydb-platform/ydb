@@ -28,23 +28,6 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
     return NKikimr::FillCreateTableSettingsDesc(out, in, code, error, warnings, tableProfileSet);
 }
 
-bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
-    const Ydb::Table::AlterTableRequest& in, const TTableProfiles& profiles,
-    Ydb::StatusIds::StatusCode& code, TString& error, const TAppData* appData) {
-
-    bool changed = false;
-    auto &partitionConfig = *out.MutablePartitionConfig();
-
-    if (in.set_compaction_policy()) {
-        if (!profiles.ApplyCompactionPolicy(in.set_compaction_policy(), partitionConfig, code, error, appData)) {
-            return false;
-        }
-
-        changed = true;
-    }
-
-    return NKikimr::FillAlterTableSettingsDesc(out, in, code, error, changed);
-}
 
 } // namespace NGRpcService
 } // namespace NKikimr

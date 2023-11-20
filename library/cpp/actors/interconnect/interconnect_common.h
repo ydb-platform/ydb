@@ -61,6 +61,30 @@ namespace NActors {
         }
     };
 
+    struct TWhiteboardSessionStatus {
+        TActorSystem* ActorSystem;
+        ui32 PeerId;
+        TString Peer;
+        bool Connected;
+        bool Green;
+        bool Yellow;
+        bool Orange;
+        bool Red;
+        i64 ClockSkew;
+
+        TWhiteboardSessionStatus(TActorSystem* actorSystem, ui32 peerId, const TString& peer, bool connected, bool green, bool yellow, bool orange, bool red, i64 clockSkew)
+            : ActorSystem(actorSystem)
+            , PeerId(peerId)
+            , Peer(peer)
+            , Connected(connected)
+            , Green(green)
+            , Yellow(yellow)
+            , Orange(orange)
+            , Red(red)
+            , ClockSkew(clockSkew)
+            {}
+    };
+
     struct TChannelSettings {
         ui16 Weight;
     };
@@ -72,8 +96,7 @@ namespace NActors {
 
     using TInitWhiteboardCallback = std::function<void(ui16 icPort, TActorSystem* actorSystem)>;
 
-    using TUpdateWhiteboardCallback = std::function<void(const TString& peer, bool connected, bool green, bool yellow,
-                                                         bool orange, bool red, TActorSystem* actorSystem)>;
+    using TUpdateWhiteboardCallback = std::function<void(const TWhiteboardSessionStatus& data)>;
 
     struct TInterconnectProxyCommon : TAtomicRefCount<TInterconnectProxyCommon> {
         TActorId NameserviceId;

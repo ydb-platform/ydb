@@ -32,7 +32,6 @@ public:
 struct TShardState: public TCommonRetriesState {
     using TPtr = std::shared_ptr<TShardState>;
     const ui64 TabletId;
-    const ui32 ScannerIdx = 0;
     TSmallVec<TSerializedTableRange> Ranges;
     EShardState State = EShardState::Initial;
     ui32 Generation = 0;
@@ -43,10 +42,7 @@ struct TShardState: public TCommonRetriesState {
 
     TString PrintLastKey(TConstArrayRef<NScheme::TTypeInfo> keyTypes) const;
 
-    TShardState(const ui64 tabletId, const ui32 scanIdx)
-        : TabletId(tabletId)
-        , ScannerIdx(scanIdx) {
-    }
+    TShardState(const ui64 tabletId);
 
     TString ToString(TConstArrayRef<NScheme::TTypeInfo> keyTypes) const;
     const TSmallVec<TSerializedTableRange> GetScanRanges(TConstArrayRef<NScheme::TTypeInfo> keyTypes) const;

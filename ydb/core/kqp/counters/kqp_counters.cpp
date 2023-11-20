@@ -1,6 +1,7 @@
 #include "kqp_counters.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/core/sys_view/service/db_counters.h>
@@ -383,13 +384,16 @@ TString TKqpCountersBase::GetIssueName(ui32 issueCode) {
     return TStringBuilder() << "CODE:" << ToString(issueCode);
 }
 
-void TKqpCountersBase::ReportIssues(const Ydb::Issue::IssueMessage& issue) {
-    auto issueCounter = IssueCounters.FindPtr(issue.issue_code());
+void TKqpCountersBase::ReportIssues(
+    THashMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr>& issueCounters,
+    const Ydb::Issue::IssueMessage& issue)
+{
+    auto issueCounter = issueCounters.FindPtr(issue.issue_code());
     if (!issueCounter) {
         auto counterName = TStringBuilder() << "Issues/" << GetIssueName(issue.issue_code());
         auto counter = KqpGroup->GetCounter(counterName , true);
 
-        auto result = IssueCounters.emplace(issue.issue_code(), counter);
+        auto result = issueCounters.emplace(issue.issue_code(), counter);
         issueCounter = &result.first->second;
     }
 
@@ -400,7 +404,7 @@ void TKqpCountersBase::ReportIssues(const Ydb::Issue::IssueMessage& issue) {
     }
 
     for (auto& childIssue : issue.issues()) {
-        ReportIssues(childIssue);
+        ReportIssues(issueCounters, childIssue);
     }
 }
 
@@ -721,7 +725,8 @@ void TKqpCounters::UpdateTxCounters(const TKqpTransactionInfo& txInfo,
 }
 
 TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const TActorContext* ctx)
-    : AllocCounters(counters, "kqp")
+    : NYql::NDq::TSpillingCounters(counters)
+    , AllocCounters(counters, "kqp")
 {
     Counters = counters;
     KqpGroup = GetServiceCounters(counters, "kqp");
@@ -777,20 +782,11 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     NodeServiceStartEventDelivery = KqpGroup->GetHistogram(
         "NodeService/StartEventDeliveryUs", NMonitoring::ExponentialHistogram(20, 2, 1));
     NodeServiceProcessTime = KqpGroup->GetHistogram(
-        "jodeService/ProcessStartEventUs", NMonitoring::ExponentialHistogram(20, 2, 1));
+        "NodeService/ProcessStartEventUs", NMonitoring::ExponentialHistogram(20, 2, 1));
     NodeServiceProcessCancelTime = KqpGroup->GetHistogram(
         "NodeService/ProcessCancelEventUs", NMonitoring::ExponentialHistogram(20, 2, 1));
     RmMaxSnapshotLatency = KqpGroup->GetCounter("RM/MaxSnapshotLatency", false);
     RmNodeNumberInSnapshot = KqpGroup->GetCounter("RM/NodeNumberInSnapshot", false);
-
-    /* Spilling */
-    SpillingWriteBlobs = KqpGroup->GetCounter("Spilling/WriteBlobs", true);
-    SpillingReadBlobs = KqpGroup->GetCounter("Spilling/ReadBlobs", true);
-    SpillingStoredBlobs = KqpGroup->GetCounter("Spilling/StoredBlobs", false);
-    SpillingTotalSpaceUsed = KqpGroup->GetCounter("Spilling/TotalSpaceUsed", false);
-    SpillingTooBigFileErrors = KqpGroup->GetCounter("Spilling/TooBigFileErrors", true);
-    SpillingNoSpaceErrors = KqpGroup->GetCounter("Spilling/NoSpaceErrors", true);
-    SpillingIoErrors = KqpGroup->GetCounter("Spilling/IoErrors", true);
 
     /* Scan queries */
     ScanQueryShardDisconnect = KqpGroup->GetCounter("ScanQuery/ShardDisconnect", true);
@@ -980,10 +976,13 @@ void TKqpCounters::ReportResultsBytes(TKqpDbCountersPtr dbCounters, ui64 results
     }
 }
 
-void TKqpCounters::ReportIssues(TKqpDbCountersPtr dbCounters, const Ydb::Issue::IssueMessage& issue) {
-    TKqpCountersBase::ReportIssues(issue);
+void TKqpCounters::ReportIssues(TKqpDbCountersPtr dbCounters,
+    THashMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr>& issueCounters,
+    const Ydb::Issue::IssueMessage& issue)
+{
+    TKqpCountersBase::ReportIssues(issueCounters, issue);
     if (dbCounters) {
-        dbCounters->ReportIssues(issue);
+        dbCounters->ReportIssues(issueCounters, issue);
     }
 }
 

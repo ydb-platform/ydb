@@ -170,7 +170,7 @@ public:
     template <class T>
     void AddTag(const TString& tagName, const T& tagValue);
 
-    //! Adds error tag. Spans containing errors are highlited in Jaeger UI.
+    //! Adds error tag. Spans containing errors are highlighted in Jaeger UI.
     void AddErrorTag();
 
     struct TTraceLogEntry
@@ -389,6 +389,8 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+bool IsCurrentTraceContextRecorded();
 
 template <class TFn>
 void AnnotateTraceContext(TFn&& fn);

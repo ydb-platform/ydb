@@ -1,8 +1,7 @@
 LIBRARY()
 
 SRCS(
-    client_grpc.cpp
-    client_mock.cpp
+    client.cpp
     error.cpp
     utils.cpp
 )
@@ -23,6 +22,5 @@ PEERDIR(
 END()
 
 RECURSE(
-    cli
     ut_helpers
 )

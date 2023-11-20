@@ -22,7 +22,7 @@ namespace NKikimr {
 
         bool hasAdded = false;
         for (const auto& track : tracks.GetTrack()) {
-            Y_VERIFY_DEBUG(track.HopSize() > 0);
+            Y_DEBUG_ABORT_UNLESS(track.HopSize() > 0);
             bool result = AddToTree(track);
             hasAdded = hasAdded || result;
         }

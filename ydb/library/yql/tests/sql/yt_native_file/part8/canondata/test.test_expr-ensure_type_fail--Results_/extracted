@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:5:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select EnsureType(42, String, "message");
+	^
+        <tmp_path>/program.sql:<main>:5:8: Error: At function: EnsureType
+        	select EnsureType(42, String, "message");
+	       ^
+            <tmp_path>/program.sql:<main>:5:8: Error: Mismatch types: Int32 != String (message)
+            	select EnsureType(42, String, "message");
+	       ^

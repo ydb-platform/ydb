@@ -107,14 +107,14 @@ namespace NKikimr {
                             break;
 
                         default:
-                            Y_FAIL("unexpected OutputState");
+                            Y_ABORT("unexpected OutputState");
                     }
                 }
             } else if (dynamic_cast<NPDisk::TEvChunkReserve*>(msg.get())) {
                 // we are issuing chunk allocation message and shall wait for it to finish
                 State = EState::NOT_READY;
             } else {
-                Y_FAIL("unexpected message type");
+                Y_ABORT("unexpected message type");
             }
 
             return msg;
@@ -203,7 +203,7 @@ namespace NKikimr {
                         break;
 
                     default:
-                        Y_FAIL("incorrect output state");
+                        Y_ABORT("incorrect output state");
                 }
             }
         }

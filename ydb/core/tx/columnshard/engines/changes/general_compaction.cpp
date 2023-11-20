@@ -3,6 +3,7 @@
 #include "compaction/column_cursor.h"
 #include "compaction/merge_context.h"
 #include "compaction/merged_column.h"
+#include "counters/general.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
@@ -18,11 +19,27 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     std::vector<TPortionInfoWithBlobs> portions = TPortionInfoWithBlobs::RestorePortions(SwitchedPortions, Blobs);
     Blobs.clear();
     std::optional<TSnapshot> maxSnapshot;
+    i64 portionsSize = 0;
+    i64 portionsCount = 0;
+    i64 insertedPortionsSize = 0;
+    i64 compactedPortionsSize = 0;
+    i64 otherPortionsSize = 0;
     for (auto&& i : SwitchedPortions) {
         if (!maxSnapshot || *maxSnapshot < i.GetMinSnapshot()) {
             maxSnapshot = i.GetMinSnapshot();
         }
+        if (i.GetMeta().GetProduced() == TPortionMeta::EProduced::INSERTED) {
+            insertedPortionsSize += i.GetBlobBytes();
+        } else if (i.GetMeta().GetProduced() == TPortionMeta::EProduced::SPLIT_COMPACTED) {
+            compactedPortionsSize += i.GetBlobBytes();
+        } else {
+            otherPortionsSize += i.GetBlobBytes();
+        }
+        portionsSize += i.GetBlobBytes();
+        ++portionsCount;
     }
+    NChanges::TGeneralCompactionCounters::OnPortionsKind(insertedPortionsSize, compactedPortionsSize, otherPortionsSize);
+    NChanges::TGeneralCompactionCounters::OnRepackPortions(portionsCount, portionsSize);
     Y_ABORT_UNLESS(maxSnapshot);
 
     static const TString portionIdFieldName = "$$__portion_id";
@@ -59,23 +76,23 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
                 NArrow::NConstruction::IArrayBuilder::TPtr column = std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::UInt32Type>>>(portionRecordIndexFieldName);
                 batch = NArrow::TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), portionRecordIndexField, column->BuildArray(batch->num_rows())));
             }
-            Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, resultSchema->GetIndexInfo().GetReplaceKey()));
-            mergeStream.AddPoolSource({}, batch, nullptr);
+            Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, resultSchema->GetIndexInfo().GetReplaceKey()));
+            mergeStream.AddSource(batch, nullptr);
         }
-        batchResults = mergeStream.DrainAllParts(CheckPoints, indexFields, true);
+        batchResults = mergeStream.DrainAllParts(CheckPoints, indexFields);
     }
     Y_ABORT_UNLESS(batchResults.size());
 
-    TSerializationStats stats;
+    std::shared_ptr<TSerializationStats> stats = std::make_shared<TSerializationStats>();
     for (auto&& i : SwitchedPortions) {
-        stats.Merge(i.GetSerializationStat(*resultSchema));
+        stats->Merge(i.GetSerializationStat(*resultSchema));
     }
 
     std::vector<std::map<std::string, std::vector<TColumnPortionResult>>> chunkGroups;
     chunkGroups.resize(batchResults.size());
     for (auto&& f : resultSchema->GetSchema()->fields()) {
         const ui32 columnId = resultSchema->GetColumnId(f->name());
-        auto columnInfo = stats.GetColumnInfo(columnId);
+        auto columnInfo = stats->GetColumnInfo(columnId);
         Y_ABORT_UNLESS(columnInfo);
 
         std::vector<TPortionColumnCursor> cursors;
@@ -147,7 +164,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         }
 
         std::vector<TGeneralSerializedSlice> batchSlices;
-        std::shared_ptr<TDefaultSchemaDetails> schemaDetails(new TDefaultSchemaDetails(resultSchema, SaverContext, std::move(stats)));
+        std::shared_ptr<TDefaultSchemaDetails> schemaDetails(new TDefaultSchemaDetails(resultSchema, SaverContext, stats));
 
         for (ui32 i = 0; i < columnChunks.begin()->second.size(); ++i) {
             std::map<ui32, std::vector<IPortionColumnChunk::TPtr>> portionColumns;
@@ -165,7 +182,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
             TGeneralSerializedSlice slice(std::move(i));
             auto b = batchResult->Slice(recordIdx, slice.GetRecordsCount());
             std::vector<std::vector<IPortionColumnChunk::TPtr>> chunksByBlobs = slice.GroupChunksByBlobs();
-            AppendedPortions.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(chunksByBlobs, nullptr, GranuleMeta->GetGranuleId(), *maxSnapshot, SaverContext.GetStorageOperator()));
+            AppendedPortions.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(chunksByBlobs, nullptr, GranuleMeta->GetPathId(), *maxSnapshot, SaverContext.GetStorageOperator()));
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
             AppendedPortions.back().GetPortionInfo().AddMetadata(*resultSchema, primaryKeys, snapshotKeys, SaverContext.GetTierName());
@@ -208,11 +225,8 @@ NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounter
     return isSuccess ? NColumnShard::COUNTER_COMPACTION_SUCCESS : NColumnShard::COUNTER_COMPACTION_FAIL;
 }
 
-void TGeneralCompactColumnEngineChanges::AddCheckPoint(const NIndexedReader::TSortableBatchPosition& position) {
-    if (CheckPoints.size()) {
-        AFL_VERIFY(CheckPoints.back().Compare(position) == std::partial_ordering::less);
-    }
-    CheckPoints.emplace_back(position);
+void TGeneralCompactColumnEngineChanges::AddCheckPoint(const NIndexedReader::TSortableBatchPosition& position, const bool include, const bool validationDuplications) {
+    AFL_VERIFY(CheckPoints.emplace(position, include).second || !validationDuplications);
 }
 
 }

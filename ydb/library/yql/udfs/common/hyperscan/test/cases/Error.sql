@@ -1,4 +1,4 @@
 /* syntax version 1 */
+PRAGMA config.flags("LLVM","OFF"); -- TODO: fix error handling with LLVM
 $match = Hyperscan::Match("*");
---PRAGMA config.flags("LLVM","OFF");
 SELECT $match(value) AS match FROM Input;

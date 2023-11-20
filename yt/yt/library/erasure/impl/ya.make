@@ -16,7 +16,7 @@ SRCS(
 IF (OPENSOURCE)
     SRCS(codec_opensource.cpp)
 ELSE()
-    SRCS(codec_yandex.cpp)
+    INCLUDE(ya_non_opensource.inc)
 ENDIF()
 
 END()

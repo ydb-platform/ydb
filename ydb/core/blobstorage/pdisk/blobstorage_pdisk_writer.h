@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include "blobstorage_pdisk.h"
+#include "blobstorage_pdisk_completion.h"
 #include "blobstorage_pdisk_crypto.h"
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_drivemodel.h"
@@ -64,6 +65,13 @@ struct TChunkIdxWithInfo {
     TLogChunkInfo *Info;
 };
 
+struct TFirstUncommitted {
+    ui32 ChunkIdx;
+    ui32 SectorIdx;
+
+    explicit TFirstUncommitted(ui32 chunkIdx, ui32 sectorIdx) : ChunkIdx(chunkIdx), SectorIdx(sectorIdx) {}
+};
+
 ////////////////////////////////////////////////////////////////////////////
 // TSectorWriter
 ////////////////////////////////////////////////////////////////////////////
@@ -81,6 +89,7 @@ public:
     ui64 FirstSectorIdx;
     ui64 EndSectorIdx;
     ui32 ChunkIdx;
+    std::atomic<TFirstUncommitted> FirstUncommitted = TFirstUncommitted(0, 0);
     ui64 RecordBytesLeft;
     ui64 DataMagic;
     TDeque<TChunkIdxWithInfo> NextChunks;

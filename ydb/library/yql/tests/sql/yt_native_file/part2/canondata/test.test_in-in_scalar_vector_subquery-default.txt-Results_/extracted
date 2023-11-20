@@ -1,0 +1,86 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:11:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject
+    	select "1" in AsList($barr), "2" in AsList($barr);
+	^
+        <tmp_path>/program.sql:<main>:11:1: Warning: At function: SqlProjectItem
+        	select "1" in AsList($barr), "2" in AsList($barr);
+	^
+            <tmp_path>/program.sql:<main>:11:8: Warning: At function: SqlIn
+            	select "1" in AsList($barr), "2" in AsList($barr);
+	       ^
+                <tmp_path>/program.sql:<main>:11:8: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	select "1" in AsList($barr), "2" in AsList($barr);
+	       ^
+        <tmp_path>/program.sql:<main>:11:1: Warning: At function: SqlProjectItem
+        	select "1" in AsList($barr), "2" in AsList($barr);
+	^
+            <tmp_path>/program.sql:<main>:11:30: Warning: At function: SqlIn
+            	select "1" in AsList($barr), "2" in AsList($barr);
+	                             ^
+                <tmp_path>/program.sql:<main>:11:30: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	select "1" in AsList($barr), "2" in AsList($barr);
+	                             ^
+    <tmp_path>/program.sql:<main>:12:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select "3" in AsList($barr);
+	^
+        <tmp_path>/program.sql:<main>:12:8: Warning: At function: SqlIn
+        	select "3" in AsList($barr);
+	       ^
+            <tmp_path>/program.sql:<main>:12:8: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+            	select "3" in AsList($barr);
+	       ^
+    <tmp_path>/program.sql:<main>:15:1: Warning: At function: RemovePrefixMembers, At function: RemoveSystemMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject
+    	select * from Input where subkey in AsList($barr) order by subkey;
+	^
+        <tmp_path>/program.sql:<main>:15:15: Warning: At function: OrderedFilter, At function: Coalesce
+        	select * from Input where subkey in AsList($barr) order by subkey;
+	              ^
+            <tmp_path>/program.sql:<main>:15:27: Warning: At function: SqlIn
+            	select * from Input where subkey in AsList($barr) order by subkey;
+	                          ^
+                <tmp_path>/program.sql:<main>:15:27: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	select * from Input where subkey in AsList($barr) order by subkey;
+	                          ^
+    <tmp_path>/program.sql:<main>:24:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject
+    	select "1" in AsList($bazz), "2" in AsList($bazz);
+	^
+        <tmp_path>/program.sql:<main>:24:1: Warning: At function: SqlProjectItem
+        	select "1" in AsList($bazz), "2" in AsList($bazz);
+	^
+            <tmp_path>/program.sql:<main>:24:8: Warning: At function: SqlIn
+            	select "1" in AsList($bazz), "2" in AsList($bazz);
+	       ^
+                <tmp_path>/program.sql:<main>:24:8: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	select "1" in AsList($bazz), "2" in AsList($bazz);
+	       ^
+        <tmp_path>/program.sql:<main>:24:1: Warning: At function: SqlProjectItem
+        	select "1" in AsList($bazz), "2" in AsList($bazz);
+	^
+            <tmp_path>/program.sql:<main>:24:30: Warning: At function: SqlIn
+            	select "1" in AsList($bazz), "2" in AsList($bazz);
+	                             ^
+                <tmp_path>/program.sql:<main>:24:30: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	select "1" in AsList($bazz), "2" in AsList($bazz);
+	                             ^
+    <tmp_path>/program.sql:<main>:25:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select "3" in AsList($bazz);
+	^
+        <tmp_path>/program.sql:<main>:25:8: Warning: At function: SqlIn
+        	select "3" in AsList($bazz);
+	       ^
+            <tmp_path>/program.sql:<main>:25:8: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+            	select "3" in AsList($bazz);
+	       ^
+    <tmp_path>/program.sql:<main>:28:1: Warning: At function: RemovePrefixMembers, At function: RemoveSystemMembers, At function: Sort, At function: PersistableRepr, At function: OrderedSqlProject
+    	select * from Input where subkey in AsList($bazz) order by subkey;
+	^
+        <tmp_path>/program.sql:<main>:28:15: Warning: At function: OrderedFilter, At function: Coalesce
+        	select * from Input where subkey in AsList($bazz) order by subkey;
+	              ^
+            <tmp_path>/program.sql:<main>:28:27: Warning: At function: SqlIn
+            	select * from Input where subkey in AsList($bazz) order by subkey;
+	                          ^
+                <tmp_path>/program.sql:<main>:28:27: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	select * from Input where subkey in AsList($bazz) order by subkey;
+	                          ^

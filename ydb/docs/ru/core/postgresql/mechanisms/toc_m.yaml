@@ -1,0 +1,4 @@
+items:
+- name: Блокировки
+  href: locks.md
+  hidden: false

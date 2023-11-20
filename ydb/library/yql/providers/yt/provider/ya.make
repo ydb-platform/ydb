@@ -37,6 +37,7 @@ SRCS(
     yql_yt_table_desc.cpp
     yql_yt_table.cpp
     yql_yt_dq_integration.cpp
+    yql_yt_dq_optimize.cpp
     yql_yt_dq_hybrid.cpp
     yql_yt_wide_flow.cpp
 )
@@ -63,6 +64,7 @@ PEERDIR(
     ydb/library/yql/core/url_lister/interface
     ydb/library/yql/dq/integration
     ydb/library/yql/dq/opt
+    ydb/library/yql/dq/type_ann
     ydb/library/yql/minikql
     ydb/library/yql/providers/common/codec
     ydb/library/yql/providers/common/config

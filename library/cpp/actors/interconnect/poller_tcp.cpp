@@ -4,7 +4,7 @@ namespace NInterconnect {
     TPollerThreads::TPollerThreads(size_t units, bool useSelect)
         : Units(units)
     {
-        Y_VERIFY_DEBUG(!Units.empty());
+        Y_DEBUG_ABORT_UNLESS(!Units.empty());
         for (auto& unit : Units)
             unit = TPollerUnit::Make(useSelect);
     }

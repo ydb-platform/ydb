@@ -16,6 +16,7 @@
 #include "skeleton_capturevdisklayout.h"
 #include "skeleton_compactionstate.h"
 #include "skeleton_block_and_get.h"
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <ydb/core/blobstorage/vdisk/localrecovery/localrecovery_public.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
@@ -114,7 +115,7 @@ namespace NKikimr {
 
                 case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
-                    Y_VERIFY_DEBUG(false);
+                    Y_DEBUG_ABORT_UNLESS(false);
                     return true;
             }
         }
@@ -127,6 +128,8 @@ namespace NKikimr {
                 ReplyError(NKikimrProto::ERROR, "disk is in donor mode", ev, ctx, TAppData::TimeProvider->Now());
             } else if (BlockWrites(GInfo->DecommitStatus)) {
                 ReplyError(NKikimrProto::ERROR, "group is being decommitted", ev, ctx, TAppData::TimeProvider->Now());
+            } else if (Config->BaseInfo.ReadOnly) {
+                ReplyError(NKikimrProto::ERROR, "disk is in readonly mode", ev, ctx, TAppData::TimeProvider->Now());
             } else {
                 return true;
             }
@@ -360,7 +363,7 @@ namespace NKikimr {
                 ui64 cookie, NLWTrace::TOrbit &&orbit, TVPutInfo &info,
                 std::unique_ptr<TEvResult> result)
         {
-            Y_VERIFY_DEBUG(info.HullStatus.Status == NKikimrProto::OK);
+            Y_DEBUG_ABORT_UNLESS(info.HullStatus.Status == NKikimrProto::OK);
             const TLogoBlobID &id = info.BlobId;
             TRope &buffer = info.Buffer;
             const TLsnSeg &seg = info.Lsn;
@@ -404,7 +407,7 @@ namespace NKikimr {
                 ui64 cookie, bool ignoreBlock, NKikimrBlobStorage::EPutHandleClass handleClass, TVPutInfo &info,
                 std::unique_ptr<TEvBlobStorage::TEvVPutResult> res)
         {
-            Y_VERIFY_DEBUG(info.HullStatus.Status == NKikimrProto::OK);
+            Y_DEBUG_ABORT_UNLESS(info.HullStatus.Status == NKikimrProto::OK);
             info.Buffer = TDiskBlob::Create(info.BlobId.BlobSize(), info.BlobId.PartId(), Db->GType.TotalPartCount(),
                 std::move(info.Buffer), *Arena);
             UpdatePDiskWriteBytes(info.Buffer.GetSize());
@@ -717,6 +720,7 @@ namespace NKikimr {
                 NKikimrBlobStorage::EPutHandleClass handleClass = record.GetHandleClass();
                 auto hugeWrite = CreateHullWriteHugeBlob(ev->Sender, ev->Cookie, ignoreBlock, handleClass, info,
                     std::move(result));
+                hugeWrite->Orbit = std::move(ev->Get()->Orbit);
                 ctx.Send(Db->HugeKeeperID, hugeWrite.release(), 0, 0, std::move(info.TraceId));
             } else {
                 ctx.Send(SelfId(), new TEvHullLogHugeBlob(0, info.BlobId, info.Ingress, TDiskPart(), ignoreBlock,
@@ -821,7 +825,7 @@ namespace NKikimr {
         // Add already constructed ssts
         ////////////////////////////////////////////////////////////////////////
         void Handle(TEvAddBulkSst::TPtr &ev, const TActorContext &ctx) {
-            Y_FAIL("not implemented yet");
+            Y_ABORT("not implemented yet");
 
             const TLsnSeg seg = Db->LsnMngr->AllocLsnForHull(ev->Get()->Essence.GetLsnRange());
             NPDisk::TCommitRecord commitRecord;
@@ -1701,6 +1705,7 @@ namespace NKikimr {
                                                           HugeBlobCtx,
                                                           Db->GetVDiskIncarnationGuid());
             ctx.Send(*SkeletonFrontIDPtr, msg.release());
+            Hull->PermitGarbageCollection(ctx);
             // propagate status to Node Warden unless replication is on -- in that case it sets the status itself
             if (!runRepl) {
                 ReplDone = true;
@@ -1821,7 +1826,7 @@ namespace NKikimr {
                 TString localRecovInfoStr = Db->LocalRecoveryInfo ? Db->LocalRecoveryInfo->ToString() : TString("{}");
                 auto hugeKeeperCtx = std::make_shared<THugeKeeperCtx>(VCtx, PDiskCtx, Db->LsnMngr,
                         ctx.SelfID, (TActorId)(Db->LoggerID), (TActorId)(Db->LogCutterID),
-                        localRecovInfoStr);
+                        localRecovInfoStr, Config->BaseInfo.ReadOnly);
                 auto hugeKeeper = CreateHullHugeBlobKeeper(hugeKeeperCtx, ev->Get()->RepairedHuge);
                 Db->HugeKeeperID.Set(ctx.Register(hugeKeeper));
                 ActiveActors.Insert(Db->HugeKeeperID); // keep forever
@@ -1839,7 +1844,8 @@ namespace NKikimr {
                         Config->SyncLogMaxEntryPointSize,
                         Config->SyncLogMaxMemAmount,
                         Config->MaxResponseSize,
-                        Db->SyncLogFirstLsnToKeep);
+                        Db->SyncLogFirstLsnToKeep,
+                        Config->BaseInfo.ReadOnly);
                 Db->SyncLogID.Set(ctx.Register(CreateSyncLogActor(slCtx, GInfo, SelfVDiskId, std::move(repairedSyncLog))));
                 ActiveActors.Insert(Db->SyncLogID); // keep forever
 
@@ -2164,10 +2170,13 @@ namespace NKikimr {
         // CUT LOG FORWARDER SECTOR
         ////////////////////////////////////////////////////////////////////////
         void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {
+            if (Config->BaseInfo.ReadOnly) {
+                return;
+            }
             std::unique_ptr<NPDisk::TEvCutLog> msg(ev->Release().Release());
 
             if (LocalDbInitialized) {
-                Y_VERIFY_DEBUG(msg->Owner == PDiskCtx->Dsk->Owner);
+                Y_DEBUG_ABORT_UNLESS(msg->Owner == PDiskCtx->Dsk->Owner);
                 Y_ABORT_UNLESS(!CutLogDelayedMsg);
                 LOG_DEBUG_S(ctx, BS_LOGCUTTER, VCtx->VDiskLogPrefix
                         << "Handle " << msg->ToString()
@@ -2184,7 +2193,7 @@ namespace NKikimr {
         }
 
         void SpreadCutLog(std::unique_ptr<NPDisk::TEvCutLog> msg, const TActorContext &ctx) {
-            Y_VERIFY_DEBUG(msg->Owner == PDiskCtx->Dsk->Owner);
+            Y_DEBUG_ABORT_UNLESS(msg->Owner == PDiskCtx->Dsk->Owner);
 
             ui32 counter = 0;
             // setup FreeUpToLsn for Hull Database
@@ -2233,7 +2242,7 @@ namespace NKikimr {
 
             LocalDbInitialized = true;
             if (CutLogDelayedMsg) {
-                Y_VERIFY_DEBUG(CutLogDelayedMsg->Owner == PDiskCtx->Dsk->Owner);
+                Y_DEBUG_ABORT_UNLESS(CutLogDelayedMsg->Owner == PDiskCtx->Dsk->Owner);
                 SpreadCutLog(std::exchange(CutLogDelayedMsg, nullptr), ctx);
                 Y_ABORT_UNLESS(!CutLogDelayedMsg);
             }
@@ -2430,6 +2439,18 @@ namespace NKikimr {
             RescheduleSnapshotExpirationCheck();
         }
 
+        void Handle(TEvReplInvoke::TPtr ev) {
+            if (Db->ReplID) {
+                TActivationContext::Send(ev->Forward(Db->ReplID));
+            } else {
+                HandleReplNotInProgress(ev);
+            }
+        }
+
+        void HandleReplNotInProgress(TEvReplInvoke::TPtr ev) {
+            ev->Get()->Callback({}, "replication is not in progress");
+        }
+
         // NOTES: we have 4 state functions, one of which is an error state (StateDatabaseError) and
         // others are good: StateLocalRecovery, StateSyncGuidRecovery, StateNormal
         // We switch between states in the following manner:
@@ -2482,6 +2503,7 @@ namespace NKikimr {
             HFunc(TEvProxyQueueState, Handle)
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
+            hFunc(TEvReplInvoke, HandleReplNotInProgress)
         )
 
         STRICT_STFUNC(StateSyncGuidRecovery,
@@ -2534,6 +2556,7 @@ namespace NKikimr {
             HFunc(TEvProxyQueueState, Handle)
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
+            hFunc(TEvReplInvoke, HandleReplNotInProgress)
         )
 
         STRICT_STFUNC(StateNormal,
@@ -2600,6 +2623,7 @@ namespace NKikimr {
             HFunc(TEvProxyQueueState, Handle)
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
+            hFunc(TEvReplInvoke, Handle)
         )
 
         STRICT_STFUNC(StateDatabaseError,
@@ -2626,6 +2650,7 @@ namespace NKikimr {
             hFunc(TEvVPatchDyingRequest, Handle)
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
+            hFunc(TEvReplInvoke, HandleReplNotInProgress)
         )
 
         PDISK_TERMINATE_STATE_FUNC_DEF;

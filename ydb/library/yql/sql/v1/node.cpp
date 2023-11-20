@@ -320,7 +320,7 @@ void INode::VisitTree(const TVisitFunc& func, TVisitNodeSet& visited) const {
 }
 
 TNodePtr INode::ShallowCopy() const {
-    Y_VERIFY_DEBUG(false, "Node is not copyable");
+    Y_DEBUG_ABORT_UNLESS(false, "Node is not copyable");
     return nullptr;
 }
 
@@ -334,7 +334,7 @@ void INode::PrecacheState() const {
 
     /// Not work right now! It's better use Init at first, because some kind of update depend on it
     /// \todo turn on and remove all issues
-    //Y_VERIFY_DEBUG(State.Test(ENodeState::Initialized));
+    //Y_DEBUG_ABORT_UNLESS(State.Test(ENodeState::Initialized));
     if (State.Test(ENodeState::Precached)) {
         return;
     }
@@ -349,7 +349,7 @@ void INode::DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) cons
 
 void INode::DoAdd(TNodePtr node) {
     Y_UNUSED(node);
-    Y_VERIFY_DEBUG(false, "Node is not expandable");
+    Y_DEBUG_ABORT_UNLESS(false, "Node is not expandable");
 }
 
 void MergeHints(TTableHints& base, const TTableHints& overrides) {
@@ -501,8 +501,8 @@ TNodePtr TAstListNode::ShallowCopy() const {
 }
 
 void TAstListNode::DoAdd(TNodePtr node) {
-    Y_VERIFY_DEBUG(node);
-    Y_VERIFY_DEBUG(node.Get() != this);
+    Y_DEBUG_ABORT_UNLESS(node);
+    Y_DEBUG_ABORT_UNLESS(node.Get() != this);
     Nodes.push_back(node);
 }
 
@@ -963,7 +963,7 @@ void TColumns::Merge(const TColumns& columns) {
 }
 
 void TColumns::SetPrefix(const TString& prefix) {
-    Y_VERIFY_DEBUG(!prefix.empty());
+    Y_DEBUG_ABORT_UNLESS(!prefix.empty());
     auto addPrefixFunc = [&prefix](const TString& str) {
         return prefix + "." + str;
     };
@@ -1270,7 +1270,7 @@ ITableKeys* ITableKeys::GetTableKeys() {
 }
 
 TAstNode* ITableKeys::Translate(TContext& ctx) const {
-    Y_VERIFY_DEBUG(false);
+    Y_DEBUG_ABORT_UNLESS(false);
     Y_UNUSED(ctx);
     return nullptr;
 }
@@ -1301,7 +1301,7 @@ IAggregation::IAggregation(TPosition pos, const TString& name, const TString& fu
 {}
 
 TAstNode* IAggregation::Translate(TContext& ctx) const {
-    Y_VERIFY_DEBUG(false);
+    Y_DEBUG_ABORT_UNLESS(false);
     Y_UNUSED(ctx);
     return nullptr;
 }
@@ -2007,8 +2007,8 @@ public:
         , IsColumnRequired(false)
         , AccessOpName("AccessNode")
     {
-        Y_VERIFY_DEBUG(Ids.size() > 1);
-        Y_VERIFY_DEBUG(Ids[0].Expr);
+        Y_DEBUG_ABORT_UNLESS(Ids.size() > 1);
+        Y_DEBUG_ABORT_UNLESS(Ids[0].Expr);
         auto column = dynamic_cast<TColumnNode*>(Ids[0].Expr.Get());
         if (column) {
             ui32 idx = 1;
@@ -2121,7 +2121,7 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         return Node->Translate(ctx);
     }
 
@@ -2152,7 +2152,7 @@ protected:
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         Node->VisitTree(func, visited);
     }
 
@@ -2657,7 +2657,7 @@ public:
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
-        Y_VERIFY_DEBUG(FuncNode);
+        Y_DEBUG_ABORT_UNLESS(FuncNode);
         FuncNode->VisitTree(func, visited);
     }
 protected:
@@ -2748,7 +2748,7 @@ public:
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         Node->VisitTree(func, visited);
     }
 private:
@@ -2865,7 +2865,7 @@ public:
     }
 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         Node->VisitTree(func, visited);
     }
 protected:

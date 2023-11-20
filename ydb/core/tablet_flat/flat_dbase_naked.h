@@ -225,9 +225,9 @@ namespace NTable {
             Serial_++;
 
             // Sanity checks
-            Y_VERIFY_DEBUG(Annex.empty());
-            Y_VERIFY_DEBUG(Flushed.empty());
-            Y_VERIFY_DEBUG(Prepared.empty());
+            Y_DEBUG_ABORT_UNLESS(Annex.empty());
+            Y_DEBUG_ABORT_UNLESS(Flushed.empty());
+            Y_DEBUG_ABORT_UNLESS(Prepared.empty());
         }
 
         TEpoch FlushTable(ui32 tid) noexcept
@@ -568,7 +568,7 @@ namespace NTable {
         TTableWrapper& MakeTable(ui32 table, TSnapEdge edge) noexcept
         {
             if (edge.TxStamp == Max<ui64>()) {
-                Y_FAIL("Cannot make table on undefined TxStamp edge");
+                Y_ABORT("Cannot make table on undefined TxStamp edge");
             } else if (edge.Head == TEpoch::Zero()) {
                 /* Table written in compatability mode utilizes global
                     TxStamp instead of private TEpoch values. In order
@@ -656,7 +656,7 @@ namespace NTable {
 
                 for (auto it : xrange(Annex.size()))
                     if (Annex[it].GId != *annex[it]) {
-                        Y_FAIL("NRedo EvAnnex isn't match to assigned annex");
+                        Y_ABORT("NRedo EvAnnex isn't match to assigned annex");
                     }
 
             } else {

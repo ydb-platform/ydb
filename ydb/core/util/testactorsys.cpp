@@ -5,6 +5,13 @@
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
+#include <library/cpp/time_provider/time_provider.h>
+#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/nameservice.h>
+#include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/base/domain.h>
 
 #include <util/generic/singleton.h>
 
@@ -58,11 +65,11 @@ public:
     {}
 
     ui32 GetReadyActivation(TWorkerContext& /*wctx*/, ui64 /*revolvingCounter*/) override {
-        Y_FAIL();
+        Y_ABORT();
     }
 
     void ReclaimMailbox(TMailboxType::EType /*mailboxType*/, ui32 /*hint*/, NActors::TWorkerId /*workerId*/, ui64 /*revolvingCounter*/) override {
-        Y_FAIL();
+        Y_ABORT();
     }
 
     TMailboxHeader *ResolveMailbox(ui32 hint) override {
@@ -99,15 +106,15 @@ public:
     }
 
     void ScheduleActivation(ui32 /*activation*/) override {
-        Y_FAIL();
+        Y_ABORT();
     }
 
     void SpecificScheduleActivation(ui32 /*activation*/) override {
-        Y_FAIL();
+        Y_ABORT();
     }
 
     void ScheduleActivationEx(ui32 /*activation*/, ui64 /*revolvingCounter*/) override {
-        Y_FAIL();
+        Y_ABORT();
     }
 
     TActorId Register(IActor* actor, TMailboxType::EType /*mailboxType*/, ui64 /*revolvingCounter*/, const TActorId& parentId) override {
@@ -135,7 +142,7 @@ public:
     }
 
     TAffinity* Affinity() const override {
-        Y_FAIL();
+        Y_ABORT();
     }
 };
 

@@ -2270,7 +2270,7 @@ public:
     TActorTestSlayLogWriteRace(const TIntrusivePtr<TTestConfig> &cfg)
         : TCommonBaseTest(cfg)
     {
-        Become(&TActorTestSlayLogWriteRace::StateFunc);
+        this->UnsafeBecome(&TActorTestSlayLogWriteRace::StateFunc);
     }
 
 private:

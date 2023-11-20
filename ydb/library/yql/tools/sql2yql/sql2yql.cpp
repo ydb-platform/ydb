@@ -85,7 +85,14 @@ static void ExtractQuery(TPosOutput& out, const google::protobuf::Message& node)
     }
 }
 
-bool TestFormat(const TString& query, const NSQLTranslation::TTranslationSettings& settings, const TString& queryFile, const NYql::TAstParseResult& parseRes, const TString& outFileName) {
+bool TestFormat(
+    const TString& query,
+    const NSQLTranslation::TTranslationSettings& settings,
+    const TString& queryFile,
+    const NYql::TAstParseResult& parseRes,
+    const TString& outFileName,
+    const bool checkDoubleFormatting
+) {
     TStringStream yqlProgram;
     parseRes.Root->PrettyPrintTo(yqlProgram, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);
 
@@ -117,6 +124,12 @@ bool TestFormat(const TString& query, const NSQLTranslation::TTranslationSetting
     TString frmQuery2;
     if (!formatter->Format(frmQuery, frmQuery2, issues)) {
         Cerr << "Failed to format already formatted query: " << issues.ToString() << Endl;
+        return false;
+    }
+
+    if (checkDoubleFormatting && frmQuery != frmQuery2) {
+        Cerr << "Formatting an already formatted query yielded a different resut" << Endl
+             << "Add /* skip double format */ to suppress" << Endl;
         return false;
     }
 
@@ -182,6 +195,7 @@ int BuildAST(int argc, char* argv[]) {
     opts.AddLongOption('F', "flags", "SQL pragma flags").SplitHandler(&flags, ',');
     opts.AddLongOption("assume-ydb-on-slash", "Assume YDB provider if cluster name starts with '/'").NoArgument();
     opts.AddLongOption("test-format", "compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported).").NoArgument();
+    opts.AddLongOption("test-double-format", "check if formatting already formatted query produces the same result").NoArgument();
     opts.AddLongOption("format-output", "Saves formatted query to it").RequiredArgument("format-output").StoreResult(&outFileNameFormat);
     opts.SetFreeArgDefaultTitle("query file");
     opts.AddHelpOption();
@@ -330,7 +344,7 @@ int BuildAST(int argc, char* argv[]) {
             }
 
             if (res.Has("test-format") && syntaxVersion == 1 && !hasError && parseRes.Root) {
-                hasError = !TestFormat(query, settings, queryFile, parseRes, outFileNameFormat);
+                hasError = !TestFormat(query, settings, queryFile, parseRes, outFileNameFormat, res.Has("test-double-format"));
             }
 
             if (hasError) {

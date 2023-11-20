@@ -23,6 +23,7 @@
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/test_tablet/test_tablet.h>
 #include <ydb/core/blob_depot/blob_depot.h>
+#include <ydb/core/statistics/aggregator/aggregator.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 
@@ -161,7 +162,7 @@ TTabletTypes::EType BootstrapperTypeToTabletType(ui32 type) {
     case NKikimrConfig::TBootstrap::CONSOLE:
         return TTabletTypes::Console;
     default:
-        Y_FAIL("unknown tablet type");
+        Y_ABORT("unknown tablet type");
     }
     return TTabletTypes::TypeInvalid;
 }
@@ -226,6 +227,9 @@ TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(
         break;
     case TTabletTypes::BlobDepot:
         createFunc = &NBlobDepot::CreateBlobDepot;
+        break;
+    case TTabletTypes::StatisticsAggregator:
+        createFunc = &NStat::CreateStatisticsAggregator;
         break;
     default:
         return nullptr;

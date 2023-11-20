@@ -160,7 +160,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
     } else if (action == TAlterRecord::SetCompactionPolicy) {
         changes |= SetCompactionPolicy(table, delta.GetCompactionPolicy());
     } else {
-        Y_FAIL("unknown scheme delta record type");
+        Y_ABORT("unknown scheme delta record type");
     }
 
     if (delta.HasTableId() && changes)

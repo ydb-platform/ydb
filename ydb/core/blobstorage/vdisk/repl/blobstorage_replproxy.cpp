@@ -34,7 +34,7 @@ namespace NKikimr {
         {}
 
         TActorId TVDiskProxy::Run(const TActorId& parentId) {
-            Y_VERIFY_DEBUG(State == Initial);
+            Y_DEBUG_ABORT_UNLESS(State == Initial);
             State = RunProxy;
             STLOG(PRI_DEBUG, BS_REPL, BSVR19, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxy::Run"));
             ParentId = parentId;
@@ -70,7 +70,7 @@ namespace NKikimr {
                     State = Error;
                     break;
                 default:
-                    Y_FAIL("Unexpected value: %d", portion.Status);
+                    Y_ABORT("Unexpected value: %d", portion.Status);
             }
 
             Y_ABORT_UNLESS(!DataPortion.Valid());
@@ -358,7 +358,7 @@ namespace NKikimr {
                     case NKikimrProto::TRYLATER:
                     case NKikimrProto::TRYLATER_TIME:
                     case NKikimrProto::TRYLATER_SIZE:
-                        Y_FAIL("unexpected Status# %s from BS_QUEUE", EReplyStatus_Name(rec.GetStatus()).data());
+                        Y_ABORT("unexpected Status# %s from BS_QUEUE", EReplyStatus_Name(rec.GetStatus()).data());
                     default:
                         ++Stat.VDiskRespOther;
                         STLOG(PRI_DEBUG, BS_REPL, BSVR24, VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
@@ -388,7 +388,7 @@ namespace NKikimr {
                             ++CurPosIdx;
 
                         if (q.GetStatus() == NKikimrProto::OK) {
-                            Y_VERIFY_DEBUG(msg->HasBlob(q));
+                            Y_DEBUG_ABORT_UNLESS(msg->HasBlob(q));
                             TRope buffer = msg->GetBlobData(q);
                             if (buffer.size() != GType.PartSize(id)) {
                                 TString message = VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
@@ -396,7 +396,7 @@ namespace NKikimr {
                                     " VDISK CAN NOT REPLICATE A BLOB BECAUSE HAS FOUND INCONSISTENCY IN BLOB SIZE",
                                     id.ToString().data(), buffer.size());
                                 STLOG(PRI_CRIT, BS_REPL, BSVR26, message, (BlobId, id), (BufferSize, buffer.size()));
-                                Y_VERIFY_DEBUG(false, "%s", message.data());
+                                Y_DEBUG_ABORT_UNLESS(false, "%s", message.data());
 
                                 // count this blob as erroneous one
                                 portion.DataPortion.AddError(id, NKikimrProto::ERROR);

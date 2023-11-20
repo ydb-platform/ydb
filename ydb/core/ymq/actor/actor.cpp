@@ -74,7 +74,7 @@ IActor* CreateActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyC
             return new TUnimplementedRequestActor(req, std::move(cb));
     }
 
-    Y_FAIL();
+    Y_ABORT();
 }
 
 IActor* CreateProxyActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb, bool enableQueueLeader) {

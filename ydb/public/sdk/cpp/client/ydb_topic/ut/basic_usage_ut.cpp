@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
     Y_UNIT_TEST(WriteRead) {
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
         TTopicClient client = setup.MakeClient();
-        
+
         {
             auto writeSettings = TWriteSessionSettings()
                         .Path(TEST_TOPIC)
@@ -652,6 +652,47 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         // UNIT_ASSERT(false);
     }
+
+    Y_UNIT_TEST(ConflictingWrites) {
+
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+
+        NTopic::TWriteSessionSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath()).MessageGroupId(TEST_MESSAGE_GROUP_ID);
+        writeSettings.Path(setup.GetTopicPath()).ProducerId(TEST_MESSAGE_GROUP_ID);
+        writeSettings.Codec(NTopic::ECodec::RAW);
+        NTopic::IExecutor::TPtr executor = new NTopic::TSyncExecutor();
+        writeSettings.CompressionExecutor(executor);
+
+        ui64 count = 100u;
+
+        auto client = setup.MakeClient();
+        auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
+
+        TString messageBase = "message----";
+
+        for (auto i = 0u; i < count; i++) {
+            auto res = session->Write(messageBase);
+            UNIT_ASSERT(res);
+            if (i % 10 == 0) {
+                setup.GetServer().KillTopicPqTablets(setup.GetTopicPath());
+            }
+        }
+        session->Close();
+
+        auto describeTopicSettings = TDescribeTopicSettings().IncludeStats(true);
+        auto result = client.DescribeTopic(setup.GetTopicPath(), describeTopicSettings).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        auto description = result.GetTopicDescription();
+        UNIT_ASSERT(description.GetPartitions().size() == 1);
+        auto stats = description.GetPartitions().front().GetPartitionStats();
+        UNIT_ASSERT(stats.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(stats->GetEndOffset(), count);
+
+    }
+
+
 
 }
 

@@ -8,6 +8,7 @@
 
 add_subdirectory(abstract)
 add_subdirectory(compaction)
+add_subdirectory(counters)
 
 add_library(columnshard-engines-changes)
 target_link_libraries(columnshard-engines-changes PUBLIC
@@ -18,6 +19,7 @@ target_link_libraries(columnshard-engines-changes PUBLIC
   columnshard-engines-insert_table
   engines-changes-abstract
   engines-changes-compaction
+  engines-changes-counters
   tx-columnshard-splitter
   ydb-core-tablet_flat
   core-tx-tiering
@@ -28,7 +30,6 @@ target_sources(columnshard-engines-changes PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/ttl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/indexation.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/cleanup.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/mark_granules.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/with_appended.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/general_compaction.cpp
 )

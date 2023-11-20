@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math"
 	"os"
 
@@ -12,16 +11,36 @@ import (
 )
 
 func validateServerConfig(c *config.TServerConfig) error {
-	if err := validateEndpoint(c.Endpoint); err != nil {
-		return fmt.Errorf("validate `Server`: %w", err)
-	}
-
-	if err := validateServerTLSConfig(c.Tls); err != nil {
-		return fmt.Errorf("validate `TLS`: %w", err)
+	if err := validateConnectorServerConfig(c.ConnectorServer); err != nil {
+		return fmt.Errorf("validate `connector_server`: %w", err)
 	}
 
 	if err := validateServerReadLimit(c.ReadLimit); err != nil {
-		return fmt.Errorf("validate `ReadLimit`: %w", err)
+		return fmt.Errorf("validate `read_limit`: %w", err)
+	}
+
+	if err := validatePprofServerConfig(c.PprofServer); err != nil {
+		return fmt.Errorf("validate `pprof_server`: %w", err)
+	}
+
+	if err := validatePagingConfig(c.Paging); err != nil {
+		return fmt.Errorf("validate `paging`: %w", err)
+	}
+
+	return nil
+}
+
+func validateConnectorServerConfig(c *config.TConnectorServerConfig) error {
+	if c == nil {
+		return fmt.Errorf("required section is missing")
+	}
+
+	if err := validateEndpoint(c.Endpoint); err != nil {
+		return fmt.Errorf("validate `endpoint`: %w", err)
+	}
+
+	if err := validateServerTLSConfig(c.Tls); err != nil {
+		return fmt.Errorf("validate `tls`: %w", err)
 	}
 
 	return nil
@@ -29,15 +48,15 @@ func validateServerConfig(c *config.TServerConfig) error {
 
 func validateEndpoint(c *api_common.TEndpoint) error {
 	if c == nil {
-		return fmt.Errorf("missing required field `Server`")
+		return fmt.Errorf("required section is missing")
 	}
 
 	if c.Host == "" {
-		return fmt.Errorf("invalid value of field `Server.Host`: %v", c.Host)
+		return fmt.Errorf("invalid value of field `host`: %v", c.Host)
 	}
 
 	if c.Port == 0 || c.Port > math.MaxUint16 {
-		return fmt.Errorf("invalid value of field `Server.Port`: %v", c.Port)
+		return fmt.Errorf("invalid value of field `port`: %v", c.Port)
 	}
 
 	return nil
@@ -50,11 +69,11 @@ func validateServerTLSConfig(c *config.TServerTLSConfig) error {
 	}
 
 	if err := fileMustExist(c.Key); err != nil {
-		return fmt.Errorf("invalid value of field `TLS.Key`: %w", err)
+		return fmt.Errorf("invalid value of field `key`: %w", err)
 	}
 
 	if err := fileMustExist(c.Cert); err != nil {
-		return fmt.Errorf("invalid value of field `TLS.Cert`: %w", err)
+		return fmt.Errorf("invalid value of field `cert`: %w", err)
 	}
 
 	return nil
@@ -68,7 +87,43 @@ func validateServerReadLimit(c *config.TServerReadLimit) error {
 
 	// but if it's not nil, one must set limits explicitly
 	if c.GetRows() == 0 {
-		return fmt.Errorf("invalid value of field `ServerReadLimit.Rows`")
+		return fmt.Errorf("invalid value of field `rows`")
+	}
+
+	return nil
+}
+
+func validatePprofServerConfig(c *config.TPprofServerConfig) error {
+	if c == nil {
+		// It's OK to disable profiler
+		return nil
+	}
+
+	if err := validateEndpoint(c.Endpoint); err != nil {
+		return fmt.Errorf("validate `endpoint`: %w", err)
+	}
+
+	if err := validateServerTLSConfig(c.Tls); err != nil {
+		return fmt.Errorf("validate `tls`: %w", err)
+	}
+
+	return nil
+}
+
+const maxInterconnectMessageSize = 50 * 1024 * 1024
+
+func validatePagingConfig(c *config.TPagingConfig) error {
+	if c == nil {
+		return fmt.Errorf("required section is missing")
+	}
+
+	limitIsSet := c.BytesPerPage != 0 || c.RowsPerPage != 0
+	if !limitIsSet {
+		return fmt.Errorf("you must set either `bytes_per_page` or `rows_per_page` or both of them")
+	}
+
+	if c.BytesPerPage > maxInterconnectMessageSize {
+		return fmt.Errorf("`bytes_per_page` limit exceeds the limits of interconnect system used by YDB engine")
 	}
 
 	return nil
@@ -88,14 +143,19 @@ func fileMustExist(path string) error {
 }
 
 func newConfigFromPath(configPath string) (*config.TServerConfig, error) {
-	data, err := ioutil.ReadFile(configPath)
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("read file %v: %w", configPath, err)
 	}
 
 	var cfg config.TServerConfig
 
-	if err := prototext.Unmarshal(data, &cfg); err != nil {
+	unmarshaller := prototext.UnmarshalOptions{
+		// Do not emit an error if config contains outdated or too fresh fields
+		DiscardUnknown: true,
+	}
+
+	if err := unmarshaller.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("prototext unmarshal `%v`: %w", string(data), err)
 	}
 

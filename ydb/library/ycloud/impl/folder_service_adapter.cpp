@@ -72,7 +72,7 @@ class TFolderServiceRequestHandler: public NActors::TActor<TFolderServiceRequest
     }
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr&) {
-        Y_FAIL("Can't deliver local message");
+        Y_ABORT("Can't deliver local message");
     }
 
     std::unique_ptr<NActors::IEventBase> CreateListFolderRequest(NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderRequest::TPtr& ev) {

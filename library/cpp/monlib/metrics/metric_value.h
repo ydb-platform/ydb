@@ -120,7 +120,7 @@ namespace NMonitoring {
                 case EMetricValueType::UNKNOWN:
                     ythrow yexception() << "unknown value type";
             }
-            Y_FAIL(); // for GCC
+            Y_ABORT(); // for GCC
         }
 
         ui64 AsUint64() const noexcept {
@@ -146,7 +146,7 @@ namespace NMonitoring {
                 case EMetricValueType::UNKNOWN:
                     ythrow yexception() << "unknown value type";
             }
-            Y_FAIL(); // for GCC
+            Y_ABORT(); // for GCC
         }
 
         i64 AsInt64() const noexcept {
@@ -172,7 +172,7 @@ namespace NMonitoring {
                 case EMetricValueType::UNKNOWN:
                     ythrow yexception() << "unknown value type";
             }
-            Y_FAIL(); // for GCC
+            Y_ABORT(); // for GCC
         }
 
         IHistogramSnapshot* AsHistogram() const noexcept {

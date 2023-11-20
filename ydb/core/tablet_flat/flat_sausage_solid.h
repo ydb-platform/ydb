@@ -249,7 +249,7 @@ namespace NPageCollection {
                 return ++BlobsLoaded == Blobs.size();
             }
 
-            Y_FAIL("Apply unknown blob %s", id.ToString().c_str());
+            Y_ABORT("Apply unknown blob %s", id.ToString().c_str());
         }
 
         explicit operator bool() const {
@@ -261,7 +261,7 @@ namespace NPageCollection {
         }
 
         TString ExtractString() {
-            Y_VERIFY_DEBUG(BlobsLoaded == Bodies.size());
+            Y_DEBUG_ABORT_UNLESS(BlobsLoaded == Bodies.size());
 
             TString data;
 
@@ -273,7 +273,7 @@ namespace NPageCollection {
                     data.append(body);
                 }
             }
-            Y_VERIFY_DEBUG(data.size() == BytesLoaded);
+            Y_DEBUG_ABORT_UNLESS(data.size() == BytesLoaded);
 
             TBodies().swap(Bodies);
 
@@ -281,7 +281,7 @@ namespace NPageCollection {
         }
 
         TSharedData ExtractSharedData() {
-            Y_VERIFY_DEBUG(BlobsLoaded == Bodies.size());
+            Y_DEBUG_ABORT_UNLESS(BlobsLoaded == Bodies.size());
 
             TSharedData data = TSharedData::Uninitialized(BytesLoaded);
 
@@ -290,7 +290,7 @@ namespace NPageCollection {
                 ::memcpy(ptr, body.data(), body.size());
                 ptr += body.size();
             }
-            Y_VERIFY_DEBUG(ptr == data.mutable_end());
+            Y_DEBUG_ABORT_UNLESS(ptr == data.mutable_end());
 
             TBodies().swap(Bodies);
 

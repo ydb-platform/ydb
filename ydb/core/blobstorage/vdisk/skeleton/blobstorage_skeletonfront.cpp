@@ -14,6 +14,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/skeleton_events.h>
 #include <ydb/core/blobstorage/vdisk/scrub/scrub_actor.h>
+#include <ydb/core/blobstorage/vdisk/repl/blobstorage_repl.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_server.h>
 
@@ -70,7 +71,7 @@ namespace NKikimr {
                 EVENT_TYPE(TEvVGetBarrier)
 #undef EVENT_TYPE
             }
-            Y_FAIL("unsupported event type");
+            Y_ABORT("unsupported event type");
         }
 
         struct TUpdateInQueueTime {
@@ -275,7 +276,7 @@ namespace NKikimr {
                     const ui64 cost = rec->Cost;
                     if (CanSendToSkeleton(cost) || forceError) {
                         ui32 recByteSize = rec->ByteSize;
-                        Y_VERIFY_DEBUG(DelayedCount > 0 && DelayedBytes >= recByteSize);
+                        Y_DEBUG_ABORT_UNLESS(DelayedCount > 0 && DelayedBytes >= recByteSize);
 
                         --DelayedCount;
                         DelayedBytes -= recByteSize;
@@ -400,7 +401,7 @@ namespace NKikimr {
                     case EInFlightBytes: return CalculateSignalLight(InFlightBytes, Max<ui64>(), yellow);
                     case EDelayedCount:  return CalculateSignalLight(DelayedCount, 0, red);
                     case EDelayedBytes:  return CalculateSignalLight(DelayedBytes, 0, red);
-                    default: Y_FAIL("Unexpected param");
+                    default: Y_ABORT("Unexpected param");
                 }
             }
 
@@ -856,7 +857,7 @@ namespace NKikimr {
                         Become(&TThis::StateFunc);
                         SendNotifications(ctx);
                         break;
-                    default: Y_FAIL("Unexpected case");
+                    default: Y_ABORT("Unexpected case");
                 }
             }
         }
@@ -905,6 +906,57 @@ namespace NKikimr {
                                 TABLER() {
                                     TABLED() {str << "Read only";}
                                     TABLED() {str << (Config->BaseInfo.ReadOnly ? "True" : "False");}
+                                }
+                                std::vector<std::pair<TString, TString>> rows;
+                                TABLER() {
+                                    TABLED() { str << "Replication"; };
+                                    TABLED() {
+                                        if (ReplMonGroup.ReplUnreplicatedVDisks()) {
+                                            THtmlLightSignalRenderer(NKikimrWhiteboard::Yellow, "Ongoing").Output(str);
+                                            str << "&emsp;<a href=\"?repl=1&maxRows=1000\">inspect problem blobs</a>";
+
+                                            ui64 n = ReplMonGroup.ReplSecondsRemaining();
+                                            TString time;
+                                            time = TStringBuilder() << n % 60 << "s";
+                                            n /= 60;
+                                            if (n) {
+                                                time = TStringBuilder() << n % 60 << "m" << time;
+                                                n /= 60;
+                                                if (n) {
+                                                    time = TStringBuilder() << n << "h" << time;
+                                                }
+                                            }
+
+                                            rows.emplace_back("&emsp;Replication time remaining", time);
+                                            rows.emplace_back("&emsp;Blobs", TStringBuilder()
+                                                << ReplMonGroup.ReplItemsDone() << " processed after VDisk start<br/>"
+                                                << ReplMonGroup.ReplItemsRemaining() << " to go");
+                                            const ui64 blobsWithProblems = ReplMonGroup.ReplTotalBlobsWithProblems();
+                                            const ui64 phantoms = ReplMonGroup.ReplPhantomBlobsWithProblems();
+                                            rows.emplace_back("&emsp;Blobs with problems", TStringBuilder()
+                                                << blobsWithProblems);
+                                            rows.emplace_back("&emsp;Phantom-like blobs among them", TStringBuilder()
+                                                << phantoms);
+
+                                            TStringStream s;
+                                            if (blobsWithProblems == 0) {
+                                                THtmlLightSignalRenderer(NKikimrWhiteboard::Green, "ongoing normally").Output(s);
+                                            } else if (blobsWithProblems == phantoms) {
+                                                THtmlLightSignalRenderer(NKikimrWhiteboard::Yellow, "phantoms only").Output(s);
+                                            } else {
+                                                THtmlLightSignalRenderer(NKikimrWhiteboard::Yellow, "problems were encountered").Output(s);
+                                            }
+                                            rows.emplace_back("&emsp;Conclusion", s.Str());
+                                        } else {
+                                            THtmlLightSignalRenderer(NKikimrWhiteboard::Green, "Finished").Output(str);
+                                        }
+                                    }
+                                }
+                                for (const auto& [key, value] : rows) {
+                                    TABLER() {
+                                        TABLED() { str << key; }
+                                        TABLED() { str << value; }
+                                    }
                                 }
                                 if (VDiskMonGroup.VDiskState() == NKikimrWhiteboard::PDiskError) {
                                     TABLER() {
@@ -1078,7 +1130,7 @@ namespace NKikimr {
 
         template <class TEventPtr>
         inline void CheckEvent(TEventPtr &ev, const char *msgName) {
-            Y_VERIFY_DEBUG(VCtx->CostModel);
+            Y_DEBUG_ABORT_UNLESS(VCtx->CostModel);
             Y_ABORT_UNLESS(ev->Get(), "Incoming message of type %s is null at the VDisk border. This MUST never happens, "
                    "check VDisk clients: bufSize# %u", msgName, unsigned(ev->GetSize()));
         }
@@ -1259,7 +1311,7 @@ namespace NKikimr {
                 /*GetLowRead*/   {false, false, false, false, false,  false, false, true}
             };
 
-            Y_VERIFY_DEBUG(int(extId) >= 0 && int(extId) <= 7 && int(intId) >= 0 && int(intId) <= 7);
+            Y_DEBUG_ABORT_UNLESS(int(extId) >= 0 && int(extId) <= 7 && int(intId) >= 0 && int(intId) <= 7);
             return compatibilityMatrix[extId][intId];
         }
 
@@ -1329,7 +1381,7 @@ namespace NKikimr {
                         HandleRequestWithQoS(ctx, ev, "TEvVPut", cost, *IntQueueHugePutsBackground);
                         break;
                     default:
-                        Y_FAIL("Unexpected case");
+                        Y_ABORT("Unexpected case");
                 }
             }
         }
@@ -1356,7 +1408,7 @@ namespace NKikimr {
                         HandleRequestWithQoS(ctx, ev, "TEvVMultiPut", cost, *IntQueueHugePutsBackground);
                         break;
                     default:
-                        Y_FAIL("Unexpected case");
+                        Y_ABORT("Unexpected case");
                 }
             }
         }
@@ -1381,7 +1433,7 @@ namespace NKikimr {
                     intQueueId = NKikimrBlobStorage::EVDiskInternalQueueId::IntLowRead;
                     break;
                 default:
-                    Y_FAIL("Unexpected case");
+                    Y_ABORT("Unexpected case");
             }
             TIntQueueClass &queue = GetIntQueue(intQueueId);
             HandleRequestWithQoS(ctx, ev, "TEvVGet", cost, queue);
@@ -1437,7 +1489,7 @@ namespace NKikimr {
                 std::optional<NBackpressure::TMessageId> expectedMsgId;
                 if (record.HasQoS()) {
                     const auto& qos = record.GetQoS();
-                    Y_VERIFY_DEBUG(qos.HasExtQueueId());
+                    Y_DEBUG_ABORT_UNLESS(qos.HasExtQueueId());
                     if (qos.HasExtQueueId()) {
                         auto& queue = GetExtQueue(qos.GetExtQueueId());
                         expectedMsgId = queue.GetExpectedMsgId(ev->Sender);
@@ -1542,9 +1594,13 @@ namespace NKikimr {
             const TString& type = cgi.Get("type");
             TString html = (type == TString()) ? GenerateHtmlState(ctx) : TString();
 
-            auto aid = ctx.Register(CreateFrontSkeletonMonRequestHandler(SelfVDiskId, ctx.SelfID, SkeletonId,
-                ctx.SelfID, Config, Top, ev, html, VDiskMonGroup));
-            ActiveActors.Insert(aid);
+            if (cgi.Has("repl")) {
+                ActiveActors.Insert(ctx.Register(CreateReplMonRequestHandler(SkeletonId, SelfVDiskId, Top, ev)));
+            } else {
+                auto aid = ctx.Register(CreateFrontSkeletonMonRequestHandler(SelfVDiskId, ctx.SelfID, SkeletonId,
+                    ctx.SelfID, Config, Top, ev, html, VDiskMonGroup));
+                ActiveActors.Insert(aid);
+            }
         }
 
         void Handle(TEvVDiskStatRequest::TPtr &ev) {
@@ -1678,7 +1734,7 @@ namespace NKikimr {
                 case NKikimrBlobStorage::EVDiskQueueId::GetLowRead:
                     extQueue = &ExtQueueLowGets;
                     break;
-                default: Y_FAIL("Unexpected case extQueueId# %" PRIu32, static_cast<ui32>(extQueueId));
+                default: Y_ABORT("Unexpected case extQueueId# %" PRIu32, static_cast<ui32>(extQueueId));
             }
             return *extQueue;
         }
@@ -1707,7 +1763,7 @@ namespace NKikimr {
                 case NKikimrBlobStorage::EVDiskInternalQueueId::IntPutHugeBackground:
                     intQueue = IntQueueHugePutsBackground.get();
                     break;
-                default: Y_FAIL("Unexpected case");
+                default: Y_ABORT("Unexpected case");
             }
             return *intQueue;
         }
@@ -2044,7 +2100,7 @@ namespace NKikimr {
                 HFuncStatus(TEvBlobStorage::TEvVGetBlock, status, errorReason, now, wstatus);
                 HFuncStatus(TEvBlobStorage::TEvVCollectGarbage, status, errorReason, now, wstatus);
                 HFuncStatus(TEvBlobStorage::TEvVGetBarrier, status, errorReason, now, wstatus);
-                default: Y_VERIFY_DEBUG(false, "Unsupported message %d", ev->GetTypeRewrite());
+                default: Y_DEBUG_ABORT_UNLESS(false, "Unsupported message %d", ev->GetTypeRewrite());
             }
         }
 

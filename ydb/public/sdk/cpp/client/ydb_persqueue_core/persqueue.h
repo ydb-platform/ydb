@@ -1128,8 +1128,7 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     FLUENT_SETTING_DEFAULT(bool, ValidateSeqNo, true);
 
     //! Manages cluster discovery mode.
-    FLUENT_SETTING_OPTIONAL(EClusterDiscoveryMode, ClusterDiscoveryMode);
-
+    FLUENT_SETTING_DEFAULT(EClusterDiscoveryMode, ClusterDiscoveryMode, EClusterDiscoveryMode::Auto);
 };
 
 //! Read settings for single topic.

@@ -36,6 +36,8 @@ AnnotateHappensAfter;
 AnnotateHappensBefore;
 AnnotateIgnoreWritesBegin;
 AnnotateIgnoreWritesEnd;
+AnnotateIgnoreReadsBegin;
+AnnotateIgnoreReadsEnd;
 
 # tsan interceptors
 abort;

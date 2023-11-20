@@ -18,10 +18,10 @@ private:
     ui32 ChunkIdx = 0;
     IPortionColumnChunk::TPtr CurrentBlobChunk;
     const TColumnRecord* CurrentColumnChunk = nullptr;
-    std::shared_ptr<arrow::RecordBatch> CurrentBatch;
+    std::shared_ptr<arrow::Array> CurrentArray;
     std::shared_ptr<TColumnLoader> ColumnLoader;
 
-    const arrow::RecordBatch& GetCurrentBatch();
+    const std::shared_ptr<arrow::Array>& GetCurrentArray();
 
     bool NextChunk();
 

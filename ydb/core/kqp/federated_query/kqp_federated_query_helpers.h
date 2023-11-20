@@ -17,6 +17,7 @@ namespace NKikimr::NKqp {
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
         NYql::IDatabaseAsyncResolver::TPtr DatabaseAsyncResolver;
         NYql::TS3GatewayConfig S3GatewayConfig;
+        NYql::TGenericGatewayConfig GenericGatewayConfig;
     };
 
     struct IKqpFederatedQuerySetupFactory {
@@ -45,11 +46,11 @@ namespace NKikimr::NKqp {
         NYql::THttpGatewayConfig HttpGatewayConfig;
         NYql::IHTTPGateway::TPtr HttpGateway;
         NYql::TS3GatewayConfig S3GatewayConfig;
+        NYql::TGenericGatewayConfig GenericGatewaysConfig;
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
         NYql::NConnector::IClient::TPtr ConnectorClient;
         std::optional<NActors::TActorId> DatabaseResolverActorId;
         NYql::IMdbEndpointGenerator::TPtr MdbEndpointGenerator;
-        std::optional<TString> MdbGateway;
     };
 
     struct TKqpFederatedQuerySetupFactoryMock: public IKqpFederatedQuerySetupFactory {
@@ -60,18 +61,20 @@ namespace NKikimr::NKqp {
             NYql::NConnector::IClient::TPtr connectorClient,
             NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
             NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver,
-            const NYql::TS3GatewayConfig& s3GatewayConfig)
+            const NYql::TS3GatewayConfig& s3GatewayConfig,
+            const NYql::TGenericGatewayConfig& genericGatewayConfig)
             : HttpGateway(httpGateway)
             , ConnectorClient(connectorClient)
             , CredentialsFactory(credentialsFactory)
             , DatabaseAsyncResolver(databaseAsyncResolver)
             , S3GatewayConfig(s3GatewayConfig)
+            , GenericGatewayConfig(genericGatewayConfig)
         {
         }
 
         std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem*) override {
             return TKqpFederatedQuerySetup{
-                HttpGateway, ConnectorClient, CredentialsFactory, DatabaseAsyncResolver, S3GatewayConfig};
+                HttpGateway, ConnectorClient, CredentialsFactory, DatabaseAsyncResolver, S3GatewayConfig, GenericGatewayConfig};
         }
 
     private:
@@ -80,6 +83,7 @@ namespace NKikimr::NKqp {
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
         NYql::IDatabaseAsyncResolver::TPtr DatabaseAsyncResolver;
         NYql::TS3GatewayConfig S3GatewayConfig;
+        NYql::TGenericGatewayConfig GenericGatewayConfig;
     };
 
     IKqpFederatedQuerySetupFactory::TPtr MakeKqpFederatedQuerySetupFactory(

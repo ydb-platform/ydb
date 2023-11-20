@@ -112,7 +112,7 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::PassAway() {
-        Y_FAIL("TInterconnectSessionTCP::PassAway() can't be called directly");
+        Y_ABORT("TInterconnectSessionTCP::PassAway() can't be called directly");
     }
 
     void TInterconnectSessionTCP::Forward(STATEFN_SIG) {
@@ -326,7 +326,7 @@ namespace NActors {
                 switch (EUpdateState state = ReceiveContext->UpdateState) {
                     case EUpdateState::NONE:
                     case EUpdateState::CONFIRMING:
-                        Y_FAIL("unexpected state");
+                        Y_ABORT("unexpected state");
 
                     case EUpdateState::INFLIGHT:
                         // this message we are processing was the only one in flight, so we can reset state to NONE here
@@ -545,17 +545,18 @@ namespace NActors {
 
     void TInterconnectSessionTCP::Handle(TEvPollerRegisterResult::TPtr ev) {
         auto *msg = ev->Get();
+        bool sendPollerReady = false;
 
         if (msg->Socket == Socket) {
             PollerToken = std::move(msg->PollerToken);
-            if (ReceiveContext->MainWriteBlocked) {
-                Socket->Request(*PollerToken, false, true);
-            }
+            sendPollerReady = ReceiveContext->MainWriteBlocked;
         } else if (msg->Socket == XdcSocket) {
             XdcPollerToken = std::move(msg->PollerToken);
-            if (ReceiveContext->XdcWriteBlocked) {
-                XdcSocket->Request(*XdcPollerToken, false, true);
-            }
+            sendPollerReady = ReceiveContext->XdcWriteBlocked;
+        }
+
+        if (sendPollerReady) {
+            Send(SelfId(), new TEvPollerReady(msg->Socket, false, true));
         }
     }
 
@@ -568,18 +569,21 @@ namespace NActors {
             size_t totalWritten = 0;
 
             if (stream && socket && !*writeBlocked) {
-                if (const ssize_t r = Write(stream, *socket, maxBytes); r > 0) {
-                    stream.Advance(r);
-                    totalWritten += r;
-                } else if (r == -1) {
-                    *writeBlocked = true;
-                    if (token) {
-                        socket->Request(*token, false, true);
+                for (;;) {
+                    if (const ssize_t r = Write(stream, *socket, maxBytes); r > 0) {
+                        stream.Advance(r);
+                        totalWritten += r;
+                    } else if (r == -1) {
+                        if (token && socket->RequestWriteNotificationAfterWouldBlock(*token)) {
+                            continue; // we can try again
+                        }
+                        *writeBlocked = true;
+                    } else if (r == 0) {
+                        // error condition
+                    } else {
+                        Y_UNREACHABLE();
                     }
-                } else if (r == 0) {
-                    // error condition
-                } else {
-                    Y_UNREACHABLE();
+                    break;
                 }
             }
 
@@ -591,7 +595,7 @@ namespace NActors {
         static constexpr size_t maxBytesAtOnce = 256 * 1024;
         size_t bytesToSendInMain = maxBytesAtOnce;
 
-        Y_VERIFY_DEBUG(OutgoingIndex < SendQueue.size() || (OutgoingIndex == SendQueue.size() && !OutgoingOffset && !OutgoingStream));
+        Y_DEBUG_ABORT_UNLESS(OutgoingIndex < SendQueue.size() || (OutgoingIndex == SendQueue.size() && !OutgoingOffset && !OutgoingStream));
 
         if (OutOfBandStream) {
             bytesToSendInMain = 0;
@@ -603,7 +607,7 @@ namespace NActors {
             // align send up to packet boundary
             size_t offset = OutgoingOffset;
             for (auto it = sendQueueIt; ForcedWriteLength; ++it, offset = 0) {
-                Y_VERIFY_DEBUG(it != SendQueue.end());
+                Y_DEBUG_ABORT_UNLESS(it != SendQueue.end());
                 bytesToSendInMain += it->PacketSize - offset; // send remainder of current packet
                 ForcedWriteLength -= Min(it->PacketSize - offset, ForcedWriteLength);
             }
@@ -861,7 +865,7 @@ namespace NActors {
         size_t bytesDropped = 0;
         size_t bytesDroppedFromXdc = 0;
         ui64 frontPacketSerial = OutputCounter - SendQueue.size() + 1;
-        Y_VERIFY_DEBUG(OutgoingIndex < SendQueue.size() || (OutgoingIndex == SendQueue.size() && !OutgoingOffset && !OutgoingStream),
+        Y_DEBUG_ABORT_UNLESS(OutgoingIndex < SendQueue.size() || (OutgoingIndex == SendQueue.size() && !OutgoingOffset && !OutgoingStream),
             "OutgoingIndex# %zu SendQueue.size# %zu OutgoingOffset# %zu Unsent# %zu Total# %zu",
             OutgoingIndex, SendQueue.size(), OutgoingOffset, OutgoingStream.CalculateUnsentSize(),
             OutgoingStream.CalculateOutgoingSize());
@@ -910,7 +914,7 @@ namespace NActors {
         Y_ABORT_UNLESS(NumEventsInQueue);
         while (NumEventsInQueue) {
             TEventOutputChannel *channel = ChannelScheduler->PickChannelWithLeastConsumedWeight();
-            Y_VERIFY_DEBUG(!channel->IsEmpty());
+            Y_DEBUG_ABORT_UNLESS(!channel->IsEmpty());
 
             // generate some data within this channel
             const ui64 netBefore = channel->GetBufferedAmountOfData();
@@ -918,14 +922,14 @@ namespace NActors {
             const bool eventDone = channel->FeedBuf(task, serial, &gross);
             channel->UnaccountedTraffic += gross;
             const ui64 netAfter = channel->GetBufferedAmountOfData();
-            Y_VERIFY_DEBUG(netAfter <= netBefore); // net amount should shrink
+            Y_DEBUG_ABORT_UNLESS(netAfter <= netBefore); // net amount should shrink
             const ui64 net = netBefore - netAfter; // number of net bytes serialized
 
             // adjust metrics for local and global queue size
             TotalOutputQueueSize -= net;
             Proxy->Metrics->SubOutputBuffersTotalSize(net);
             bytesGenerated += gross;
-            Y_VERIFY_DEBUG(!!net == !!gross && gross >= net, "net# %" PRIu64 " gross# %" PRIu64, net, gross);
+            Y_DEBUG_ABORT_UNLESS(!!net == !!gross && gross >= net, "net# %" PRIu64 " gross# %" PRIu64, net, gross);
 
             // return it back to queue or delete, depending on whether this channel is still working or not
             ChannelScheduler->FinishPick(gross, EqualizeCounter);
@@ -994,13 +998,15 @@ namespace NActors {
                 } while (false);
             }
 
-            callback(Proxy->Metrics->GetHumanFriendlyPeerHostName(),
+            callback({TlsActivationContext->ExecutorThread.ActorSystem,
+                     Proxy->PeerNodeId,
+                     Proxy->Metrics->GetHumanFriendlyPeerHostName(),
                      connected,
                      flagState == EFlag::GREEN,
                      flagState == EFlag::YELLOW,
                      flagState == EFlag::ORANGE,
                      flagState == EFlag::RED,
-                     TlsActivationContext->ExecutorThread.ActorSystem);
+                     ReceiveContext->ClockSkew_us.load()});
         }
 
         if (connected) {

@@ -38,3 +38,11 @@ class TestSqsThrottlingOnNonexistentQueue(KikimrSqsTestBase):
                 pattern=throttling_exception_pattern
             )
         )
+
+        assert_that(
+            lambda: self._sqs_api.get_queue_url(self.queue_name + "_nonex"),
+            raises(
+                RuntimeError,
+                pattern=throttling_exception_pattern
+            )
+        )

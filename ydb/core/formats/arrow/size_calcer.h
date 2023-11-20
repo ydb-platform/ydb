@@ -46,29 +46,54 @@ public:
     ui32 GetRowBytesSize(const ui32 row) const;
 };
 
+class TBatchSplitttingContext {
+private:
+    YDB_ACCESSOR(ui64, SizeLimit, 6 * 1024 * 1024);
+    YDB_ACCESSOR_DEF(std::vector<TString>, FieldsForSpecialKeys);
+public:
+    explicit TBatchSplitttingContext(const ui64 size)
+        : SizeLimit(size)
+    {
+
+    }
+
+    void SetFieldsForSpecialKeys(const std::shared_ptr<arrow::Schema>& schema) {
+        std::vector<TString> local;
+        for (auto&& i : schema->fields()) {
+            local.emplace_back(i->name());
+        }
+        std::swap(local, FieldsForSpecialKeys);
+    }
+};
+
 class TSerializedBatch {
 private:
     YDB_READONLY_DEF(TString, SchemaData);
     YDB_READONLY_DEF(TString, Data);
     YDB_READONLY(ui32, RowsCount, 0);
     YDB_READONLY(ui32, RawBytes, 0);
-    TFirstLastSpecialKeys SpecialKeys;
+    std::optional<TFirstLastSpecialKeys> SpecialKeys;
 public:
     size_t GetSize() const {
         return Data.size();
     }
 
-    const TFirstLastSpecialKeys& GetSpecialKeys() const {
-        return SpecialKeys;
+    const TFirstLastSpecialKeys& GetSpecialKeysSafe() const {
+        AFL_VERIFY(SpecialKeys);
+        return *SpecialKeys;
+    }
+
+    bool HasSpecialKeys() const {
+        return !!SpecialKeys;
     }
 
     TString DebugString() const;
 
-    static bool BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const ui32 sizeLimit, std::vector<TSerializedBatch>& result, TString* errorMessage);
-    static bool BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const ui32 sizeLimit, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR, TString* errorMessage);
-    static TSerializedBatch Build(std::shared_ptr<arrow::RecordBatch> batch);
+    static bool BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context, std::vector<TSerializedBatch>& result, TString* errorMessage);
+    static bool BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR, TString* errorMessage);
+    static TSerializedBatch Build(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context);
 
-    TSerializedBatch(TString&& schemaData, TString&& data, const ui32 rowsCount, const ui32 rawBytes, const TFirstLastSpecialKeys& specialKeys)
+    TSerializedBatch(TString&& schemaData, TString&& data, const ui32 rowsCount, const ui32 rawBytes, const std::optional<TFirstLastSpecialKeys>& specialKeys)
         : SchemaData(schemaData)
         , Data(data)
         , RowsCount(rowsCount)
@@ -101,7 +126,7 @@ public:
     }
 };
 
-TSplitBlobResult SplitByBlobSize(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 sizeLimit);
+TSplitBlobResult SplitByBlobSize(const std::shared_ptr<arrow::RecordBatch>& batch, const TBatchSplitttingContext& context);
 
 // Return size in bytes including size of bitmap mask
 ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch);

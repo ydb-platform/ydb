@@ -1278,6 +1278,8 @@ public:
             return "RC";
         case TTabletTypes::BlobDepot:
             return "BD";
+        case TTabletTypes::StatisticsAggregator:
+            return "SA";
         default:
             return Sprintf("%d", (int)type);
         }
@@ -3341,8 +3343,8 @@ public:
         result["AllowLeaderPromotion"] = group.AllowLeaderPromotion;
         result["AllowClientRead"] = group.AllowClientRead;
         result["RequireAllDataCenters"] = group.RequireAllDataCenters;
-        result["AllowedNodes"] = MakeFrom(group.AllowedNodes);
-        result["AllowedDataCenters"] = MakeFrom(group.AllowedDataCenters);
+        result["AllowedNodes"] = MakeFrom(group.NodeFilter.AllowedNodes);
+        result["AllowedDataCenters"] = MakeFrom(group.NodeFilter.AllowedDataCenters);
         result["LocalNodeOnly"] = group.LocalNodeOnly;
         result["RequireDifferentNodes"] = group.RequireDifferentNodes;
         result["FollowerCountPerDataCenter"] = group.FollowerCountPerDataCenter;
@@ -3355,10 +3357,10 @@ public:
         result["Id"] = TStringBuilder() << tablet.Id;
         result["State"] = ETabletStateName(tablet.State);
         result["Type"] = TTabletTypes::EType_Name(tablet.Type);
-        result["ObjectId"] = tablet.ObjectId;
+        result["ObjectId"] = TStringBuilder() << tablet.ObjectId;
         result["ObjectDomain"] = TStringBuilder() << tablet.ObjectDomain;
-        result["AllowedNodes"] = MakeFrom(tablet.AllowedNodes);
-        result["AllowedDataCenters"] = MakeFrom(tablet.AllowedDataCenters);
+        result["AllowedNodes"] = MakeFrom(tablet.NodeFilter.AllowedNodes);
+        result["AllowedDataCenters"] = MakeFrom(tablet.NodeFilter.AllowedDataCenters);
         result["DataCenterPreference"] = MakeFrom(tablet.DataCentersPreference);
         result["TabletStorageInfo"] = MakeFrom(tablet.TabletStorageInfo);
         result["BoundChannels"] = MakeFrom(tablet.BoundChannels);
@@ -3367,7 +3369,7 @@ public:
         result["KnownGeneration"] = tablet.KnownGeneration;
         result["BootMode"] = NKikimrHive::ETabletBootMode_Name(tablet.BootMode);
         result["Owner"] = TStringBuilder() << tablet.Owner;
-        result["EffectiveAllowedDomain"] = MakeFrom(tablet.EffectiveAllowedDomains);
+        result["EffectiveAllowedDomain"] = MakeFrom(tablet.NodeFilter.AllowedDomains);
         result["StorageInfoSubscribers"] = MakeFrom(tablet.StorageInfoSubscribers);
         result["LockedToActor"] = MakeFrom(tablet.LockedToActor);
         result["LockedReconnectTimeout"] = tablet.LockedReconnectTimeout.ToString();
@@ -3420,7 +3422,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_OBJECT_STATS; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        std::map<ui64, std::vector<std::pair<ui64, ui64>>> distributionOfObjects;
+        std::map<TFullObjectId, std::vector<std::pair<ui64, ui64>>> distributionOfObjects;
         for (const auto& node : Self->Nodes) {
             for (const auto& obj : node.second.TabletsOfObject) {
                 distributionOfObjects[obj.first].emplace_back(node.first, obj.second.size());
@@ -3430,7 +3432,7 @@ public:
         Result.SetType(NJson::JSON_ARRAY);
         for (const auto& [key, val] : distributionOfObjects) {
             NJson::TJsonValue listItem;
-            listItem["objectId"] = key;
+            listItem["objectId"] = TStringBuilder() << key;
             NJson::TJsonValue& distribution = listItem["distribution"];
             for (const auto& [node, cnt] : val) {
                 distribution[TStringBuilder() << node] = cnt;
@@ -3514,7 +3516,7 @@ public:
         } else if (Error) {
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
         } else {
-            Y_FAIL("unexpected state");
+            Y_ABORT("unexpected state");
         }
     }
 };

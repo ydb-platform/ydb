@@ -10,7 +10,7 @@
 add_library(libs-apache-avro)
 target_compile_options(libs-apache-avro PRIVATE
   -DAVRO_SOURCE
-  -DAVRO_VERSION="1.11.1"
+  -DAVRO_VERSION="1.11.3"
   -DSNAPPY_CODEC_AVAILABLE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
@@ -32,7 +32,7 @@ target_sources(libs-apache-avro PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/BinaryDecoder.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/BinaryEncoder.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/Compiler.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/CustomFields.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/CustomAttributes.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/DataFile.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/FileStream.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/Generic.cc

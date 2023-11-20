@@ -1,5 +1,7 @@
 #include "blobstorage_hullhugerecovery.h"
 #include "blobstorage_hullhugeheap.h"
+#include <library/cpp/random_provider/random_provider.h>
+
 
 using namespace NKikimrServices;
 
@@ -248,7 +250,7 @@ namespace NKikimr {
 
             // log pos
             TString serializedLogPos = LogPos.Serialize();
-            Y_VERIFY_DEBUG(serializedLogPos.size() == THullHugeRecoveryLogPos::SerializedSize);
+            Y_DEBUG_ABORT_UNLESS(serializedLogPos.size() == THullHugeRecoveryLogPos::SerializedSize);
             str.Write(serializedLogPos.data(), THullHugeRecoveryLogPos::SerializedSize);
 
             // heap
@@ -525,7 +527,7 @@ namespace NKikimr {
                     logPosDelLsn = &LogPos.BarriersDbSlotDelLsn;
                     break;
                 default:
-                    Y_FAIL("Unexpected case");
+                    Y_ABORT("Unexpected case");
             }
             if (lsn > *logPosDelLsn) {
                 // apply

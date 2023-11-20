@@ -13,7 +13,7 @@ public:
         : Cells(cells)
         , Types(types)
     {
-        Y_VERIFY_DEBUG(Cells.size() <= Types.size());
+        Y_DEBUG_ABORT_UNLESS(Cells.size() <= Types.size());
     }
 
     friend IOutputStream& operator<<(IOutputStream& out, const TPrintableTypedCells& v) {

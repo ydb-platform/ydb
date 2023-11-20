@@ -914,7 +914,7 @@ protected:
     }
 
     bool GetCachedConfig(NKikimrConfig::TAppConfig &appConfig) {
-        Y_VERIFY_DEBUG(RunConfig.PathToConfigCacheFile, "GetCachedConfig called with a cms config cache file set");
+        Y_DEBUG_ABORT_UNLESS(RunConfig.PathToConfigCacheFile, "GetCachedConfig called with a cms config cache file set");
 
         try {
             auto cacheFile = TFileInput(RunConfig.PathToConfigCacheFile);
@@ -1281,7 +1281,7 @@ protected:
     }
 
     bool SaveConfigForNodeToCache(const NKikimrConfig::TAppConfig &appConfig) {
-        Y_VERIFY_DEBUG(RunConfig.PathToConfigCacheFile, "SaveConfigForNodeToCache called without a cms config cache file set");
+        Y_DEBUG_ABORT_UNLESS(RunConfig.PathToConfigCacheFile, "SaveConfigForNodeToCache called without a cms config cache file set");
 
         // Ensure "atomicity" by writing to temp file and renaming it
         const TString pathToTempFile = RunConfig.PathToConfigCacheFile + ".tmp";

@@ -5,6 +5,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <library/cpp/actors/core/interconnect.h>
 
+#include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -187,7 +188,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             WaitForReplicasToSuccess = (Replicas.size() / 2 + 1);
             break;
         default:
-            Y_FAIL("unsupported mode");
+            Y_ABORT("unsupported mode");
         }
 
         Become(&TThis::StateLookup);
@@ -282,7 +283,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             replica.State = EReplicaState::NoInfo;
             ++Stats.NoInfo;
         } else {
-            Y_VERIFY_DEBUG(record.GetInfo().size());
+            Y_DEBUG_ABORT_UNLESS(record.GetInfo().size());
             replica.State = EReplicaState::Ready;
             ++Stats.HasInfo;
 
@@ -502,6 +503,7 @@ public:
         , StateStorageGroupId(groupId)
         , Subscriber(Mode == EBoardLookupMode::Subscription)
         , BoardRetrySettings(std::move(boardRetrySettings))
+        , WaitForReplicasToSuccess(0)
     {}
 
     void Bootstrap() {

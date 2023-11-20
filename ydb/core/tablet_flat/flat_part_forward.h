@@ -55,14 +55,14 @@ namespace NTable {
             EnsureStarted();
 
             if (PageOf(Tail) > until) {
-                Y_FAIL("Part lookups goes below of its trace pages");
+                Y_ABORT("Part lookups goes below of its trace pages");
             } else {
                 const auto edgeId = Max(PageOf(Edge), until);
 
                 while (Edge != End && Edge->GetPageId() < until) ++Edge;
 
                 if (PageOf(Edge) != edgeId)
-                    Y_FAIL("Part lookup page is out of its index");
+                    Y_ABORT("Part lookup page is out of its index");
 
                 if (Tail == Head) Tail = Head = Edge;
             }

@@ -15,56 +15,25 @@ NJson::TJsonValue TSortableBatchPosition::DebugJson() const {
     return result;
 }
 
-std::optional<ui64> TSortableBatchPosition::FindPosition(std::shared_ptr<arrow::RecordBatch> batch, const TSortableBatchPosition& forFound, const bool greater, const bool include) {
-    if (!batch || !batch->num_rows()) {
-        return {};
-    }
-
-    const auto checkEqualBorder = [batch, greater, include](const i64 position) ->std::optional<i64> {
-        if (include) {
-            return position;
-        } else if (greater) {
-            if (batch->num_rows() > position + 1) {
-                return position + 1;
-            } else {
-                return {};
-            }
-        } else {
-            if (position) {
-                return position - 1;
-            } else {
-                return {};
-            }
-        }
-    };
-
-    i64 posStart = 0;
-    i64 posFinish = batch->num_rows() - 1;
-    TSortableBatchPosition position = forFound.BuildSame(batch, posStart);
+std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindPosition(TSortableBatchPosition& position, const ui64 posStartExt, const ui64 posFinishExt, const TSortableBatchPosition& forFound, const bool greater) {
+    ui64 posStart = posStartExt;
+    ui64 posFinish = posFinishExt;
     {
         position.InitPosition(posStart);
         auto cmp = position.Compare(forFound);
         if (cmp == std::partial_ordering::greater) {
-            if (greater) {
-                return posStart;
-            } else {
-                return {};
-            }
+            return TFoundPosition::Greater(posStart);
         } else if (cmp == std::partial_ordering::equivalent) {
-            return checkEqualBorder(posStart);
+            return TFoundPosition::Equal(posStart);
         }
     }
     {
         position.InitPosition(posFinish);
         auto cmp = position.Compare(forFound);
         if (cmp == std::partial_ordering::less) {
-            if (greater) {
-                return {};
-            } else {
-                return posFinish;
-            }
+            return TFoundPosition::Less(posFinish);
         } else if (cmp == std::partial_ordering::equivalent) {
-            return checkEqualBorder(posFinish);
+            return TFoundPosition::Equal(posFinish);
         }
     }
     while (posFinish > posStart + 1) {
@@ -75,18 +44,49 @@ std::optional<ui64> TSortableBatchPosition::FindPosition(std::shared_ptr<arrow::
         } else if (comparision == std::partial_ordering::greater) {
             posFinish = position.Position;
         } else {
-            return checkEqualBorder(position.Position);
+            return TFoundPosition::Equal(position.Position);
         }
     }
     Y_ABORT_UNLESS(posFinish != posStart);
     if (greater) {
-        return posFinish;
+        Y_ABORT_UNLESS(position.InitPosition(posFinish));
+        return TFoundPosition::Greater(posFinish);
     } else {
-        return posStart;
+        Y_ABORT_UNLESS(position.InitPosition(posStart));
+        return TFoundPosition::Less(posStart);
     }
 }
 
-TSortableScanData::TSortableScanData(std::shared_ptr<arrow::RecordBatch> batch, const std::vector<std::string>& columns) {
+std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const TSortableBatchPosition& forFound, const bool greater, const std::optional<ui32> includedStartPosition) {
+    if (!batch || !batch->num_rows()) {
+        return {};
+    }
+    i64 posStart = 0;
+    i64 posFinish = batch->num_rows() - 1;
+    if (forFound.IsReverseSort()) {
+        std::swap(posStart, posFinish);
+    }
+    if (includedStartPosition) {
+        posStart = *includedStartPosition;
+    }
+
+    TSortableBatchPosition position = forFound.BuildSame(batch, posStart);
+    return FindPosition(position, posStart, posFinish, forFound, greater);
+}
+
+TSortableBatchPosition::TFoundPosition TSortableBatchPosition::SkipToLower(const TSortableBatchPosition& forFound) {
+    const ui32 posStart = Position;
+    auto pos = FindPosition(*this, posStart, ReverseSort ? 0 : (RecordsCount - 1), forFound, true);
+    AFL_VERIFY(pos)("cursor", DebugJson())("found", forFound.DebugJson());
+    if (ReverseSort) {
+        AFL_VERIFY(Position <= posStart)("pos", Position)("pos_skip", pos->GetPosition())("reverse", true);
+    } else {
+        AFL_VERIFY(posStart <= Position)("pos", Position)("pos_skip", pos->GetPosition())("reverse", false);
+    }
+    return *pos;
+}
+
+TSortableScanData::TSortableScanData(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns) {
     for (auto&& i : columns) {
         auto c = batch->GetColumnByName(i);
         AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns));

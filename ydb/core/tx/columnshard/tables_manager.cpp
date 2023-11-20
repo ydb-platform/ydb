@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/tiering/manager.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
 
 namespace NKikimr::NColumnShard {
@@ -13,8 +14,7 @@ void TSchemaPreset::Deserialize(const NKikimrSchemeOp::TColumnTableSchemaPreset&
     Name = presetProto.GetName();
 }
 
-bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const ui64 tabletId) {
-    TabletId = tabletId;
+bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     {
         auto rowset = db.Table<Schema::TableInfo>().Select();
         if (!rowset.IsReady()) {
@@ -138,20 +138,13 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const ui64 tabletId) {
     return true;
 }
 
-bool TTablesManager::LoadIndex(NOlap::TDbWrapper& idxDB, THashSet<NOlap::TUnifiedBlobId>& lostEvictions) {
+bool TTablesManager::LoadIndex(NOlap::TDbWrapper& idxDB) {
     if (PrimaryIndex) {
-        if (!PrimaryIndex->Load(idxDB, lostEvictions, PathsToDrop)) {
+        if (!PrimaryIndex->Load(idxDB)) {
             return false;
         }
     }
     return true;
-}
-
-void TTablesManager::Clear() {
-    Tables.clear();
-    SchemaPresets.clear();
-    PathsToDrop.clear();
-    PrimaryIndex.reset();
 }
 
 bool TTablesManager::HasTable(const ui64 pathId) const {
@@ -163,7 +156,7 @@ bool TTablesManager::HasTable(const ui64 pathId) const {
 }
 
 bool TTablesManager::IsReadyForWrite(const ui64 pathId) const {
-    return HasPrimaryIndex() &&  HasTable(pathId);
+    return HasPrimaryIndex() && HasTable(pathId);
 }
 
 bool TTablesManager::HasPreset(const ui32 presetId) const {
@@ -210,7 +203,11 @@ void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
     Y_ABORT_UNLESS(table.IsEmpty());
 
     Schema::SaveTableInfo(db, table.GetPathId(), table.GetTieringUsage());
-    Tables.insert_or_assign(table.GetPathId(), std::move(table));
+    const ui64 pathId = table.GetPathId();
+    Tables.insert_or_assign(pathId, std::move(table));
+    if (PrimaryIndex) {
+        PrimaryIndex->RegisterTable(pathId);
+    }
 }
 
 bool TTablesManager::RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIceDb::TNiceDb& db) {
@@ -280,6 +277,7 @@ void TTablesManager::IndexSchemaVersion(const TRowVersion& version, const NKikim
     NOlap::TSnapshot snapshot{version.Step, version.TxId};
     NOlap::TIndexInfo indexInfo = DeserializeIndexInfoFromProto(schema);
     indexInfo.SetAllKeys();
+    const bool isFirstPrimaryIndexInitialization = !PrimaryIndex;
     if (!PrimaryIndex) {
         PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, NOlap::TCompactionLimits(), StoragesManager);
     } else {
@@ -288,6 +286,11 @@ void TTablesManager::IndexSchemaVersion(const TRowVersion& version, const NKikim
         Y_ABORT_UNLESS(lastIndexInfo.GetIndexKey()->Equals(indexInfo.GetIndexKey()));
     }
     PrimaryIndex->UpdateDefaultSchema(snapshot, std::move(indexInfo));
+    if (isFirstPrimaryIndexInitialization) {
+        for (auto&& i : Tables) {
+            PrimaryIndex->RegisterTable(i.first);
+        }
+    }
     PrimaryIndex->OnTieringModified(nullptr, Ttl);
 }
 
@@ -296,4 +299,25 @@ NOlap::TIndexInfo TTablesManager::DeserializeIndexInfoFromProto(const NKikimrSch
     Y_ABORT_UNLESS(indexInfo);
     return *indexInfo;
 }
+
+TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId)
+    : StoragesManager(storagesManager)
+    , TabletId(tabletId)
+{
+}
+
+bool TTablesManager::TryFinalizeDropPath(NTabletFlatExecutor::TTransactionContext& txc, const ui64 pathId) {
+    auto itDrop = PathsToDrop.find(pathId);
+    if (itDrop == PathsToDrop.end()) {
+        return false;
+    }
+    if (GetPrimaryIndexSafe().HasDataInPathId(pathId)) {
+        return false;
+    }
+    PathsToDrop.erase(itDrop);
+    NIceDb::TNiceDb db(txc.DB);
+    NColumnShard::Schema::EraseTableInfo(db, pathId);
+    return true;
+}
+
 }

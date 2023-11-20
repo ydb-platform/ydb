@@ -90,6 +90,9 @@ IF (OS_WINDOWS)
             -DENGINESDIR="\"C:\\\\Program\ Files\ \(x86\)\\\\OpenSSL\\\\lib\\\\engines-1_1\""
             -DOPENSSLDIR="\"C:\\\\Program\ Files\ \(x86\)\\\\Common\ Files\\\\SSL\""
         )
+        LDFLAGS(
+            /safeseh
+        )
     ENDIF()
     CFLAGS(
         -DOPENSSL_SYS_WIN32

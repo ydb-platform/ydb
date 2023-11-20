@@ -299,7 +299,7 @@ public:
                 case Ydb::DynamicConfig::YamlLabelExt::EMPTY:
                     return TVerboseResolveConfigResult::TLabel::EType::Empty;
                 default:
-                    Y_FAIL("unexpected enum value");
+                    Y_ABORT("unexpected enum value");
                 }
             };
 

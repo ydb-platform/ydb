@@ -50,7 +50,7 @@ void TBaseQuotaRequester::Handle(TEvQuota::TEvClearance::TPtr& ev) {
         ++Stats.OkResponses;
         break;
     default:
-        Y_FAIL("Error result");
+        Y_ABORT("Error result");
     }
 }
 

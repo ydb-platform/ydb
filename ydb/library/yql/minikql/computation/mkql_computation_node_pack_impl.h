@@ -86,7 +86,7 @@ public:
     }
 
     inline void Skip(size_t size) {
-        Y_VERIFY_DEBUG(size <= Len_);
+        Y_DEBUG_ABORT_UNLESS(size <= Len_);
         Data_ += size;
         Len_ -= size;
     }
@@ -109,7 +109,7 @@ public:
     }
 
     inline TRope ReleaseRope() {
-        Y_VERIFY_DEBUG(OriginalLen_ >= Len_);
+        Y_DEBUG_ABORT_UNLESS(OriginalLen_ >= Len_);
         Rope_.EraseFront(OriginalLen_ - Len_);
         TRope result = std::move(Rope_);
 
@@ -121,12 +121,12 @@ public:
     }
 
     void Next() {
-        Y_VERIFY_DEBUG(Len_ == 0);
+        Y_DEBUG_ABORT_UNLESS(Len_ == 0);
         Rope_.EraseFront(OriginalLen_);
         if (!Rope_.IsEmpty()) {
             Len_ = OriginalLen_ = Rope_.begin().ContiguousSize();
             Data_ = Rope_.begin().ContiguousData();
-            Y_VERIFY_DEBUG(Len_ > 0);
+            Y_DEBUG_ABORT_UNLESS(Len_ > 0);
         } else {
             Len_ = OriginalLen_ = 0;
             Data_ = nullptr;
@@ -178,7 +178,7 @@ T UnpackUInt(TChunkedInputBuffer& buf) {
     }
 
     char tmpBuf[MAX_PACKED64_SIZE];
-    Y_VERIFY_DEBUG(buf.size() < MAX_PACKED64_SIZE);
+    Y_DEBUG_ABORT_UNLESS(buf.size() < MAX_PACKED64_SIZE);
     std::memcpy(tmpBuf, buf.data(), buf.size());
     size_t pos = buf.size();
     buf.Skip(buf.size());
@@ -188,7 +188,7 @@ T UnpackUInt(TChunkedInputBuffer& buf) {
             buf.Next();
             MKQL_ENSURE(buf.size() > 0, "Bad uint packed data");
         }
-        Y_VERIFY_DEBUG(pos < MAX_PACKED64_SIZE);
+        Y_DEBUG_ABORT_UNLESS(pos < MAX_PACKED64_SIZE);
         tmpBuf[pos++] = *buf.data();
         buf.Skip(1);
         if constexpr (std::is_same_v<T, ui64>) {

@@ -1,8 +1,7 @@
 #include "granule.h"
 #include "storage.h"
 #include <library/cpp/actors/core/log.h>
-#include "optimizer/intervals/optimizer.h"
-#include "optimizer/levels/optimizer.h"
+#include "optimizer/lbuckets/optimizer.h"
 
 namespace NKikimr::NOlap {
 
@@ -16,9 +15,9 @@ ui64 TGranuleMeta::Size() const {
 }
 
 void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info.DebugString())("granule", GetGranuleId());
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info.DebugString())("path_id", GetPathId());
     auto it = Portions.find(info.GetPortion());
-    AFL_VERIFY(info.GetGranule() == GetGranuleId())("event", "incompatible_granule")("portion", info.DebugString())("granule", GetGranuleId());
+    AFL_VERIFY(info.GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info.DebugString())("path_id", GetPathId());
 
     AFL_VERIFY(info.Valid())("event", "invalid_portion")("portion", info.DebugString());
     AFL_VERIFY(info.ValidSnapshotInfo())("event", "incorrect_portion_snapshots")("portion", info.DebugString());
@@ -40,10 +39,10 @@ void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
 bool TGranuleMeta::ErasePortion(const ui64 portion) {
     auto it = Portions.find(portion);
     if (it == Portions.end()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased_already")("portion_id", portion)("pathId", Record.PathId);
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased_already")("portion_id", portion)("pathId", PathId);
         return false;
     } else {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased")("portion_info", it->second->DebugString())("pathId", Record.PathId);
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased")("portion_info", it->second->DebugString())("pathId", PathId);
     }
     OnBeforeChangePortion(it->second);
     Portions.erase(it);
@@ -72,13 +71,7 @@ void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> port
     if (portionAfter) {
         AFL_VERIFY(PortionsByPK[portionAfter->IndexKeyStart()].emplace(portionAfter->GetPortion(), portionAfter).second);
 
-        THashMap<TUnifiedBlobId, ui64> blobIdSize;
-        for (auto&& i : portionAfter->Records) {
-            blobIdSize[i.BlobRange.BlobId] += i.BlobRange.Size;
-        }
-        for (auto&& i : blobIdSize) {
-            PortionInfoGuard.OnNewBlob(portionAfter->HasRemoveSnapshot() ? NPortion::EProduced::INACTIVE : portionAfter->GetMeta().Produced, i.second);
-        }
+        PortionInfoGuard.OnNewPortion(portionAfter);
         if (!portionAfter->HasRemoveSnapshot()) {
             if (modificationGuard) {
                 modificationGuard->AddPortion(portionAfter);
@@ -111,13 +104,7 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
             }
         }
 
-        THashMap<TUnifiedBlobId, ui64> blobIdSize;
-        for (auto&& i : portionBefore->Records) {
-            blobIdSize[i.BlobRange.BlobId] += i.BlobRange.Size;
-        }
-        for (auto&& i : blobIdSize) {
-            PortionInfoGuard.OnDropBlob(portionBefore->HasRemoveSnapshot() ? NPortion::EProduced::INACTIVE : portionBefore->GetMeta().Produced, i.second);
-        }
+        PortionInfoGuard.OnDropPortion(portionBefore);
         if (!portionBefore->HasRemoveSnapshot()) {
             OptimizerPlanner->StartModificationGuard().RemovePortion(portionBefore);
         }
@@ -171,14 +158,14 @@ const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary(
     return *AdditiveSummaryCache;
 }
 
-TGranuleMeta::TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex)
-    : Owner(owner)
+TGranuleMeta::TGranuleMeta(const ui64 pathId, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex)
+    : PathId(pathId)
+    , Owner(owner)
     , Counters(counters)
     , PortionInfoGuard(Owner->GetCounters().BuildPortionBlobsGuard())
-    , Record(rec)
 {
     Y_ABORT_UNLESS(Owner);
-    OptimizerPlanner = std::make_shared<NStorageOptimizer::NLevels::TLevelsOptimizerPlanner>(rec.Granule, owner->GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey());
+    OptimizerPlanner = std::make_shared<NStorageOptimizer::NBuckets::TOptimizerPlanner>(PathId, owner->GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey());
 
 }
 

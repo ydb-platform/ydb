@@ -1123,7 +1123,7 @@ private:
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                Y_FAIL("TTenantSlotBroker::StateWork unexpected event type: %" PRIx32 " event: %s",
+                Y_ABORT("TTenantSlotBroker::StateWork unexpected event type: %" PRIx32 " event: %s",
                        ev->GetTypeRewrite(), ev->ToString().data());
             }
         }

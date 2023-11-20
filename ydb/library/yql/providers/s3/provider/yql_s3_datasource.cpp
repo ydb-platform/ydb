@@ -33,12 +33,21 @@ public:
         State_->Configuration->AddValidCluster(name);
         auto& settings = State_->Configuration->Clusters[name];
         settings.Url = properties.Value("location", "");
-        auto signReference = properties.Value("serviceAccountIdSignatureReference", "");
-        if (signReference) {
-            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccountWithSecret(properties.Value("serviceAccountId", ""), signReference, properties.Value("serviceAccountIdSignature", ""));
-        } else {
-            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccount(properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignature", ""), properties.Value("authToken", ""));
+        if (!settings.Url.EndsWith("/")) {
+            settings.Url += "/";
         }
+        auto authMethod = properties.Value("authMethod", "");
+        if (authMethod == "SERVICE_ACCOUNT") {
+            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccountWithSecret(properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignatureReference", ""), properties.Value("serviceAccountIdSignature", ""));
+            return;
+        }
+
+        if (authMethod == "AWS") {
+            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForBasicAuthWithSecret(properties.Value("awsAccessKeyId", ""), properties.Value("awsSecretAccessKeyReference", ""), properties.Value("awsSecretAccessKey", ""));
+            return;
+        }
+
+        State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccount(properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignature", ""), properties.Value("authToken", ""));
     }
 
     TStringBuf GetName() const override {

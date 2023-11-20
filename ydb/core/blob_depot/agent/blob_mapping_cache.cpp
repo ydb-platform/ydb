@@ -91,7 +91,7 @@ namespace NKikimr::NBlobDepot {
                 item.SetKey(resolveContext.Key);
                 process(item, true);
             } else {
-                Y_FAIL("unexpected resolve response");
+                Y_ABORT("unexpected resolve response");
             }
         }
     }
@@ -161,7 +161,7 @@ namespace NKikimr::NBlobDepot {
                 }
             }
         } else {
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 

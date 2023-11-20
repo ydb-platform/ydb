@@ -103,6 +103,7 @@ struct TTestMetricConsumer
             << ", count: " << snapshot->GetCount()
             << ", last: " << snapshot->GetLast()
             << "}" << Endl;
+        Summaries[FormatName()] = snapshot;
     }
 
     TString Name;
@@ -110,6 +111,7 @@ struct TTestMetricConsumer
 
     THashMap<TString, i64> Counters;
     THashMap<TString, double> Gauges;
+    THashMap<TString, NMonitoring::ISummaryDoubleSnapshotPtr> Summaries;
     THashMap<TString, NMonitoring::IHistogramSnapshotPtr> Histograms;
 
     std::vector<TString> LabelsCache;
@@ -870,6 +872,77 @@ TEST(TSolomonRegistry, ProducerRemoveSupport)
     result = CollectSensors(impl);
     ASSERT_EQ(result.Counters.size(), 1u);
     ASSERT_EQ(result.Gauges.size(), 1u);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TGaugeSummaryTriple
+{
+public:
+    TGaugeSummaryTriple(TProfiler* profiler, const TString& name, ESummaryPolicy policy)
+        : First_(profiler->GaugeSummary(name, policy))
+        , Second_(profiler->GaugeSummary(name, policy))
+        , Third_(profiler->GaugeSummary(name, policy))
+    { }
+
+    void Update(double a, double b, double c)
+    {
+        First_.Update(a);
+        Second_.Update(b);
+        Third_.Update(c);
+    }
+
+private:
+    TGauge First_;
+    TGauge Second_;
+    TGauge Third_;
+};
+
+class TOmitNameLabelSuffixTest
+    : public ::testing::TestWithParam<bool>
+{ };
+
+INSTANTIATE_TEST_SUITE_P(
+    TSolomonRegistry,
+    TOmitNameLabelSuffixTest,
+    testing::Values(false, true));
+
+TEST_P(TOmitNameLabelSuffixTest, GaugeSummary)
+{
+    bool omitNameLabelSuffix = GetParam();
+
+    auto impl = New<TSolomonRegistry>();
+    impl->SetWindowSize(12);
+    TProfiler profiler(impl, "/d");
+
+    ESummaryPolicy additionalPolicy = omitNameLabelSuffix ? ESummaryPolicy::OmitNameLabelSuffix : ESummaryPolicy::Default;
+
+    TGaugeSummaryTriple all(&profiler, "all", ESummaryPolicy::All);
+    TGaugeSummaryTriple sum(&profiler, "sum", ESummaryPolicy::Sum | additionalPolicy);
+    TGaugeSummaryTriple min(&profiler, "min", ESummaryPolicy::Min | additionalPolicy);
+    TGaugeSummaryTriple max(&profiler, "max", ESummaryPolicy::Max | additionalPolicy);
+    TGaugeSummaryTriple avg(&profiler, "avg", ESummaryPolicy::Avg | additionalPolicy);
+
+    all.Update(40, 20, 50);
+
+    sum.Update(21, 31, 41);
+    min.Update(1337, 32, 322);
+    max.Update(22, 44, 11);
+    avg.Update(55, 44, 22);
+
+    auto result = CollectSensors(impl);
+    auto& gauges = result.Gauges;
+    auto& summaries = result.Summaries;
+
+    ASSERT_NEAR(summaries["yt.dall{}"]->GetSum(), 110, 1e-6);
+    ASSERT_NEAR(summaries["yt.dall{}"]->GetMin(), 20, 1e-6);
+    ASSERT_NEAR(summaries["yt.dall{}"]->GetMax(), 50, 1e-6);
+    ASSERT_NEAR(summaries["yt.dall{}"]->GetCount(), 3, 1e-6);
+
+    ASSERT_NEAR(gauges[Format("yt.dsum%v{}", omitNameLabelSuffix ? "" : ".sum")], 93, 1e-6);
+    ASSERT_NEAR(gauges[Format("yt.dmin%v{}", omitNameLabelSuffix ? "" : ".min")], 32, 1e-6);
+    ASSERT_NEAR(gauges[Format("yt.dmax%v{}", omitNameLabelSuffix ? "" : ".max")], 44, 1e-6);
+    ASSERT_NEAR(gauges[Format("yt.davg%v{}", omitNameLabelSuffix ? "" : ".avg")], 40 + 1 / 3.0, 1e-6);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

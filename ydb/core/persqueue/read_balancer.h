@@ -206,7 +206,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         ResourceMetrics = Executor()->GetResourceMetrics();
         Become(&TThis::StateWork);
         if (Executor()->GetStats().IsFollower)
-            Y_FAIL("is follower works well with Balancer?");
+            Y_ABORT("is follower works well with Balancer?");
         else
             Execute(new TTxPreInit(this), ctx);
     }

@@ -150,15 +150,15 @@ public:
     }
 
     bool ProgressState(TOperationContext&) override {
-        Y_FAIL("no progress state for TDeallocatePQ");
+        Y_ABORT("no progress state for TDeallocatePQ");
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TDeallocatePQ");
+        Y_ABORT("no AbortPropose for TDeallocatePQ");
     }
 
     void AbortUnsafe(TTxId, TOperationContext&) override {
-        Y_FAIL("no AbortUnsafe for TDeallocatePQ");
+        Y_ABORT("no AbortUnsafe for TDeallocatePQ");
     }
 };
 

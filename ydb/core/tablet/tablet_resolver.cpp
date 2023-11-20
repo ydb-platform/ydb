@@ -14,6 +14,8 @@
 #include <ydb/core/util/queue_oneone_inplace.h>
 #include <util/generic/map.h>
 #include <util/generic/deque.h>
+#include <library/cpp/random_provider/random_provider.h>
+
 
 namespace NKikimr {
 
@@ -313,7 +315,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         if (endpoint.first) {
             ctx.Send(sender, new TEvTabletResolver::TEvForwardResult(msg->TabletID, endpoint.second, endpoint.first, LastCacheEpoch));
             if (!!msg->Ev) {
-                ctx.ExecutorThread.Send(IEventHandle::Forward(msg->Ev, msg->SelectActor(endpoint.second, endpoint.first)));
+                ctx.ExecutorThread.Send(IEventHandle::Forward(std::move(msg->Ev), msg->SelectActor(endpoint.second, endpoint.first)));
             }
             return true;
         } else {
@@ -514,7 +516,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 PushQueue(ev, entry, ctx);
             break;
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 
@@ -566,7 +568,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
             break;
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 
@@ -609,7 +611,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         switch (entry.State) {
         case TEntry::StInit:
-            Y_FAIL("must not happens");
+            Y_ABORT("must not happens");
         case TEntry::StInitResolve:
             if (success) {
                 if (msg->CurrentLeaderTablet) {
@@ -669,7 +671,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         case TEntry::StNormal:
             break;
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 
@@ -704,7 +706,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
             break;
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 
@@ -735,7 +737,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
             break;
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 
@@ -767,7 +769,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
             break;
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 

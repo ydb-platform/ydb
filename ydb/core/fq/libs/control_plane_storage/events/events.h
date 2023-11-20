@@ -32,8 +32,8 @@ struct TAuditDetails {
 
     size_t GetByteSize() const {
         return sizeof(*this)
-                + Before.Empty() ? 0 : Before->ByteSizeLong()
-                + After.Empty() ? 0 : After->ByteSizeLong()
+                + (Before.Empty() ? 0 : Before->ByteSizeLong())
+                + (After.Empty() ? 0 : After->ByteSizeLong())
                 + CloudId.Size();
     }
 };
@@ -771,6 +771,7 @@ struct TEvControlPlaneStorage {
         TString CloudId;
         TString Scope;
         TMaybe<bool> Synchronized;
+        TMaybe<TInstant> LastAccessAt;
     };
 
     struct TEvModifyDatabaseResponse : NActors::TEventLocal<TEvModifyDatabaseResponse, EvModifyDatabaseResponse> {

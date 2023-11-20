@@ -111,7 +111,7 @@ public:
                 tableDesc->AddKeyColumnNames(k);
             }
         } else {
-            Y_VERIFY_DEBUG(OperationType == NKikimrSchemeOp::ESchemeOpAlterTable);
+            Y_DEBUG_ABORT_UNLESS(OperationType == NKikimrSchemeOp::ESchemeOpAlterTable);
             tableDesc = modifyScheme.MutableAlterTable();
         }
         tableDesc->SetName(TableName());
@@ -139,6 +139,8 @@ public:
             case EStatus::PathNotTable:
                 [[fallthrough]];
             case EStatus::PathNotPath:
+                [[fallthrough]];
+            case EStatus::AccessDenied:
                 [[fallthrough]];
             case EStatus::RedirectLookupError:
                 Fail(result.Status);

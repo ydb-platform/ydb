@@ -94,7 +94,7 @@ struct TMessage {
         case 4:
             return std::get<4>(Body).Cookie;
         default:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
     }
 

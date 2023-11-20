@@ -198,7 +198,7 @@ namespace NTable {
                 sub.back() = hole.Cut(sub.back());
 
                 if (!sub.front() || !sub.back()) {
-                    Y_FAIL("Produced trival edges on screen cutting");
+                    Y_ABORT("Produced trival edges on screen cutting");
                 }
 
                 return new TScreen(std::move(sub));
@@ -215,7 +215,7 @@ namespace NTable {
             } else if (two == nullptr || two->Size() == 0) {
                 return one;
             } else if (one->Bounds().Cut(two->Bounds())) {
-                Y_FAIL("Cannot join two intersecting screens");
+                Y_ABORT("Cannot join two intersecting screens");
             } else if (one->Bounds().End > two->Bounds().Begin) {
                 std::swap(one, two);
             }

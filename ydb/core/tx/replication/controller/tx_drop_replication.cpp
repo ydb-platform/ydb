@@ -31,7 +31,7 @@ public:
         } else if (PrivEv) {
             return ExecutePriv(txc, ctx);
         } else {
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
     }
 

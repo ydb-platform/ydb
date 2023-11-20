@@ -10,8 +10,7 @@
 #include <util/string/builder.h>
 #include <util/string/subst.h>
 
-namespace NKikimr {
-namespace NValidation {
+namespace NKikimr::NValidation {
 
 static TString ProtoFileNameStripped(const google::protobuf::Descriptor* message) {
     return google::protobuf::compiler::cpp::StripProto(message->file()->name());
@@ -70,5 +69,4 @@ bool IsCustomMessage(const google::protobuf::Descriptor* message) {
     return true;
 }
 
-} // NValidation
-} // NKikimr
+}

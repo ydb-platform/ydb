@@ -12,29 +12,21 @@ namespace NKikimr::NOlap::NBlobOperations::NRead {
 
 class TActor: public TActorBootstrapped<TActor> {
 private:
-    ui64 TabletId;
-    NActors::TActorId Parent;
-    NActors::TActorId BlobCacheActorId;
-    THashMap<TBlobRange, std::vector<std::shared_ptr<ITask>>> BlobTasks;
+    std::shared_ptr<ITask> Task;
 public:
     static TAtomicCounter WaitingBlobsCount;
-    TActor(ui64 tabletId, const TActorId& parent);
+    TActor(const std::shared_ptr<ITask>& task);
 
-    void Handle(TEvStartReadTask::TPtr& ev);
     void Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev);
 
-    void Bootstrap() {
-        Become(&TThis::StateWait);
-    }
+    void Bootstrap();
 
     STFUNC(StateWait) {
-        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent", Parent));
+        TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD);
         switch (ev->GetTypeRewrite()) {
-            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
-            hFunc(TEvStartReadTask, Handle);
             hFunc(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult, Handle);
             default:
-                break;
+                AFL_VERIFY(false);
         }
     }
 

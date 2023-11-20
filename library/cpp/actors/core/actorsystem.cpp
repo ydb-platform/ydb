@@ -105,7 +105,7 @@ namespace NActors {
 
         if (recpNodeId != NodeId && recpNodeId != 0) {
             // if recipient is not local one - rewrite with forward instruction
-            Y_VERIFY_DEBUG(!ev->HasEvent() || ev->GetBase()->IsSerializable());
+            Y_DEBUG_ABORT_UNLESS(!ev->HasEvent() || ev->GetBase()->IsSerializable());
             Y_ABORT_UNLESS(ev->Recipient == recipient,
                 "Event rewrite from %s to %s would be lost via interconnect",
                 ev->Recipient.ToString().c_str(),
@@ -134,7 +134,7 @@ namespace NActors {
             ev->Rewrite(ev->GetTypeRewrite(), recipient);
         }
 
-        Y_VERIFY_DEBUG(recipient == ev->GetRecipientRewrite());
+        Y_DEBUG_ABORT_UNLESS(recipient == ev->GetRecipientRewrite());
         const ui32 recpPool = recipient.PoolID();
         if (recipient && recpPool < ExecutorPoolCount) {
             if ((CpuManager->GetExecutorPool(recpPool)->*EPSpecificSend)(ev)) {
@@ -200,7 +200,7 @@ namespace NActors {
     }
 
     ui64 TActorSystem::AllocateIDSpace(ui64 count) {
-        Y_VERIFY_DEBUG(count < Max<ui32>() / 65536);
+        Y_DEBUG_ABORT_UNLESS(count < Max<ui32>() / 65536);
 
         static_assert(sizeof(TAtomic) == sizeof(ui64), "expect sizeof(TAtomic) == sizeof(ui64)");
 

@@ -50,7 +50,7 @@ void TBlockIO::Inbox(TEventHandlePtr &eh)
     } else if (eh->CastAsLocal<TEvents::TEvPoison>()) {
         PassAway();
     } else {
-        Y_FAIL("Page collection blocks IO actor got an unexpected event");
+        Y_ABORT("Page collection blocks IO actor got an unexpected event");
     }
 }
 
@@ -103,7 +103,7 @@ void TBlockIO::Dispatch() noexcept
             auto glob = Origin->PageCollection->Glob(brick.Blob);
 
             if ((group = (on ? group : glob.Group)) != glob.Group)
-                Y_FAIL("Cannot handle different groups in one request");
+                Y_ABORT("Cannot handle different groups in one request");
 
             query[on].Id = glob.Logo;
             query[on].Shift = brick.Skip;
@@ -206,12 +206,12 @@ void TBlockIO::Terminate(EStatus code) noexcept
             << ", " << BlockStates.size() << " pages";
     }
 
-    auto *ev = new TEvData(std::move(Origin->PageCollection), Origin->Cookie, code);
+    auto *ev = new TEvData(Origin, code);
 
     if (code == NKikimrProto::OK) {
         size_t index = 0;
-        ev->Blocks.reserve(Origin->Pages.size());
-        for (ui32 pageId : Origin->Pages) {
+        ev->Blocks.reserve(ev->Fetch->Pages.size());
+        for (ui32 pageId : ev->Fetch->Pages) {
             auto& state = BlockStates.at(index++);
             ev->Blocks.emplace_back(pageId, std::move(state.Data));
         }

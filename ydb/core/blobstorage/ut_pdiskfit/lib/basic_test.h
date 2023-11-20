@@ -85,7 +85,8 @@ public:
         Y_ABORT_UNLESS(ctx.ExecutorThread.ActorSystem);
         Y_ABORT_UNLESS(PDiskConfig);
         Y_ABORT_UNLESS(AppData(ctx));
-        std::unique_ptr<IActor> pdiskActor(CreatePDisk(PDiskConfig, {1}, Counters->GetSubgroup("subsystem", "pdisk")));
+        std::unique_ptr<IActor> pdiskActor(CreatePDisk(PDiskConfig, NPDisk::TMainKey{ .Keys = { 1 }, .IsInitialized = true },
+                Counters->GetSubgroup("subsystem", "pdisk")));
         const TActorId actorId = ctx.ExecutorThread.ActorSystem->Register(pdiskActor.release(), TMailboxType::Simple,
                 AppData(ctx)->SystemPoolId);
         PDiskServiceId = MakeBlobStoragePDiskID(ctx.ExecutorThread.ActorSystem->NodeId, PDiskConfig->PDiskId);
@@ -101,7 +102,7 @@ public:
 
     STFUNC(StateFunc) {
         switch (const ui32 type = ev->GetTypeRewrite()) {
-            default: Y_FAIL("unexpected message 0x%08" PRIx32, type);
+            default: Y_ABORT("unexpected message 0x%08" PRIx32, type);
         }
     }
 };

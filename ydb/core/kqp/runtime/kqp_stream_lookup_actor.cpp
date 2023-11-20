@@ -25,9 +25,10 @@ static constexpr ui64 MAX_SHARD_RETRIES = 10;
 
 class TKqpStreamLookupActor : public NActors::TActorBootstrapped<TKqpStreamLookupActor>, public NYql::NDq::IDqComputeActorAsyncInput {
 public:
-    TKqpStreamLookupActor(ui64 inputIndex, const NUdf::TUnboxedValue& input, const NActors::TActorId& computeActorId,
-        const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
-        std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc, NKikimrKqp::TKqpStreamLookupSettings&& settings,
+    TKqpStreamLookupActor(ui64 inputIndex, NYql::NDq::TCollectStatsLevel statsLevel, const NUdf::TUnboxedValue& input,
+        const NActors::TActorId& computeActorId, const NMiniKQL::TTypeEnvironment& typeEnv,
+        const NMiniKQL::THolderFactory& holderFactory, std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc,
+        const NYql::NDqProto::TTaskInput& inputDesc, NKikimrKqp::TKqpStreamLookupSettings&& settings,
         TIntrusivePtr<TKqpCounters> counters)
         : LogPrefix(TStringBuilder() << "StreamLookupActor, inputIndex: " << inputIndex << ", CA Id " << computeActorId)
         , InputIndex(inputIndex)
@@ -38,10 +39,11 @@ public:
         , Snapshot(settings.GetSnapshot().GetStep(), settings.GetSnapshot().GetTxId())
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
-        , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), typeEnv, holderFactory))
+        , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), typeEnv, holderFactory, inputDesc))
         , Counters(counters)
     {
-    };
+        IngressStats.Level = statsLevel;
+    }
 
     virtual ~TKqpStreamLookupActor() {
         if (Alloc) {
@@ -152,6 +154,10 @@ private:
         return InputIndex;
     }
 
+    const NYql::NDq::TDqAsyncStats& GetIngressStats() const final {
+        return IngressStats;
+    }
+
     void PassAway() final {
         Counters->StreamLookupActorsCount->Dec();
         {
@@ -174,8 +180,8 @@ private:
         YQL_ENSURE(!batch.IsWide(), "Wide stream is not supported");
 
         auto replyResultStats = StreamLookupWorker->ReplyResult(batch, freeSpace);
-        ReadRowsCount += replyResultStats.RowsCount;
-        ReadBytesCount += replyResultStats.BytesCount;
+        ReadRowsCount += replyResultStats.ReadRowsCount;
+        ReadBytesCount += replyResultStats.ReadBytesCount;
 
         auto status = FetchInputRows();
 
@@ -187,10 +193,10 @@ private:
             && AllReadsFinished()
             && StreamLookupWorker->AllRowsProcessed();
 
-        CA_LOG_D("Returned " << replyResultStats.BytesCount << " bytes, " << replyResultStats.RowsCount
+        CA_LOG_D("Returned " << replyResultStats.ResultBytesCount << " bytes, " << replyResultStats.ResultRowsCount
             << " rows, finished: " << finished);
 
-        return replyResultStats.BytesCount;
+        return replyResultStats.ResultBytesCount;
     }
 
     TMaybe<google::protobuf::Any> ExtraData() override {
@@ -383,14 +389,15 @@ private:
 
         record.SetMaxRows(Max<ui16>());
         record.SetMaxBytes(5_MB);
-        record.SetResultFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
+        record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
 
         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(request.Release(), shardId, true),
             IEventHandle::FlagTrackDelivery);
 
         read.State = EReadState::Running;
 
-        const auto [readIt, succeeded] = Reads.insert({read.Id, std::move(read)});
+        auto readId = read.Id;
+        const auto [readIt, succeeded] = Reads.insert({readId, std::move(read)});
         YQL_ENSURE(succeeded);
         ReadsPerShard[shardId].Reads.push_back(&readIt->second);
 
@@ -466,6 +473,7 @@ private:
 private:
     const TString LogPrefix;
     const ui64 InputIndex;
+    NYql::NDq::TDqAsyncStats IngressStats;
     NUdf::TUnboxedValue Input;
     const NActors::TActorId ComputeActorId;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
@@ -477,8 +485,8 @@ private:
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
     const TDuration SchemeCacheRequestTimeout;
     NActors::TActorId SchemeCacheRequestTimeoutTimer;
-    TVector<NKikimrTxDataShard::TLock> Locks;
-    TVector<NKikimrTxDataShard::TLock> BrokenLocks;
+    TVector<NKikimrDataEvents::TLock> Locks;
+    TVector<NKikimrDataEvents::TLock> BrokenLocks;
     std::unique_ptr<TKqpStreamLookupWorker> StreamLookupWorker;
     ui64 ReadId = 0;
 
@@ -492,12 +500,12 @@ private:
 } // namespace
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateStreamLookupActor(ui64 inputIndex,
-    const NUdf::TUnboxedValue& input, const NActors::TActorId& computeActorId, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const NMiniKQL::THolderFactory& holderFactory, std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc,
-    NKikimrKqp::TKqpStreamLookupSettings&& settings,
-    TIntrusivePtr<TKqpCounters> counters) {
-    auto actor = new TKqpStreamLookupActor(inputIndex, input, computeActorId, typeEnv, holderFactory, alloc,
-        std::move(settings), counters);
+    NYql::NDq::TCollectStatsLevel statsLevel, const NUdf::TUnboxedValue& input, const NActors::TActorId& computeActorId,
+    const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
+    std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc, const NYql::NDqProto::TTaskInput& inputDesc,
+    NKikimrKqp::TKqpStreamLookupSettings&& settings, TIntrusivePtr<TKqpCounters> counters) {
+    auto actor = new TKqpStreamLookupActor(inputIndex, statsLevel, input, computeActorId, typeEnv, holderFactory,
+        alloc, inputDesc, std::move(settings), counters);
     return {actor, actor};
 }
 

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "kqp_tasks_graph.h"
-#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <util/generic/vector.h>
 
 namespace NKikimr {
@@ -26,7 +25,7 @@ public:
     std::unordered_set<ui64> AffectedShards;
     ui32 TotalTasks = 0;
     std::atomic<ui64> ResultBytes = 0;
-    std::atomic<ui64> ResultRows = 0;    
+    std::atomic<ui64> ResultRows = 0;
     TDuration ExecuterCpuTime;
 
     TInstant StartTs;
@@ -42,6 +41,8 @@ public:
     TDuration ResolveWallTime;
     TVector<NKikimrQueryStats::TTxStats> DatashardStats;
 
+    bool CollectStatsByLongTasks = false;
+
     TQueryExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode, const TKqpTasksGraph* const tasksGraph,
         NYql::NDqProto::TDqExecutionStats* const result)
         : StatsMode(statsMode)
@@ -50,7 +51,11 @@ public:
     {
     }
 
-    void AddComputeActorStats(ui32 nodeId, NYql::NDqProto::TDqComputeActorStats&& stats);
+    void AddComputeActorStats(
+        ui32 nodeId,
+        NYql::NDqProto::TDqComputeActorStats&& stats,
+        TDuration collectLongTaskStatsTimeout = TDuration::Max()
+    );
     void AddNodeShardsCount(const ui32 stageId, const ui32 nodeId, const ui32 shardsCount) {
         Y_ABORT_UNLESS(ShardsCountByNode[stageId].emplace(nodeId, shardsCount).second);
     }
@@ -59,9 +64,24 @@ public:
     }
 
     void AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&& txStats);
-    void AddDatashardStats(NYql::NDqProto::TDqComputeActorStats&& stats, NKikimrQueryStats::TTxStats&& txStats);
+    void AddDatashardStats(
+        NYql::NDqProto::TDqComputeActorStats&& stats,
+        NKikimrQueryStats::TTxStats&& txStats,
+        TDuration collectLongTaskStatsTimeout = TDuration::Max()
+    );
 
     void Finish();
+
+private:
+    void AddComputeActorFullStatsByTask(
+        const NYql::NDqProto::TDqTaskStats& task,
+        const NYql::NDqProto::TDqComputeActorStats& stats);
+    void AddComputeActorProfileStatsByTask(
+        const NYql::NDqProto::TDqTaskStats& task,
+        const NYql::NDqProto::TDqComputeActorStats& stats);
+    void AddDatashardFullStatsByTask(
+        const NYql::NDqProto::TDqTaskStats& task,
+        ui64 datashardCpuTimeUs);
 };
 
 struct TTableStat {

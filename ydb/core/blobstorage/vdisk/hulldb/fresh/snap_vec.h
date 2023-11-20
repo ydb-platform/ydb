@@ -32,12 +32,12 @@ namespace NKikimr {
             }
 
             void Next() {
-                Y_VERIFY_DEBUG(Valid());
+                Y_DEBUG_ABORT_UNLESS(Valid());
                 ++Pos;
             }
 
             const std::shared_ptr<T> &Get() const {
-                Y_VERIFY_DEBUG(Valid());
+                Y_DEBUG_ABORT_UNLESS(Valid());
                 return Snap->VecPtr->at(Pos);
             }
 
@@ -184,7 +184,7 @@ namespace NKikimr {
             }
 
             void Next() {
-                Y_VERIFY_DEBUG(Valid());
+                Y_DEBUG_ABORT_UNLESS(Valid());
                 ++IntraLevelIt;
                 if (IntraLevelIt == (*ViaLevelsIt)->end()) {
                     ++ViaLevelsIt;
@@ -193,7 +193,7 @@ namespace NKikimr {
             }
 
             const std::shared_ptr<T> &Get() const {
-                Y_VERIFY_DEBUG(Valid());
+                Y_DEBUG_ABORT_UNLESS(Valid());
                 return *IntraLevelIt;
             }
 
@@ -240,7 +240,7 @@ namespace NKikimr {
             }
 
             void Next() {
-                Y_VERIFY_DEBUG(Valid());
+                Y_DEBUG_ABORT_UNLESS(Valid());
                 if (StagingIt.Valid()) {
                     StagingIt.Next();
                 } else {
@@ -249,7 +249,7 @@ namespace NKikimr {
             }
 
             const std::shared_ptr<T> &Get() const {
-                Y_VERIFY_DEBUG(Valid());
+                Y_DEBUG_ABORT_UNLESS(Valid());
                 if (StagingIt.Valid()) {
                     return StagingIt.Get();
                 } else {

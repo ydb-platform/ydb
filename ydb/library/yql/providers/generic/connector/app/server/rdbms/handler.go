@@ -3,45 +3,27 @@ package rdbms
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb/library/go/core/log"
-	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
+	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
-type Handler interface {
-	DescribeTable(
-		ctx context.Context,
-		logger log.Logger,
-		request *api_service_protos.TDescribeTableRequest,
-	) (*api_service_protos.TDescribeTableResponse, error)
-
-	ReadSplit(
-		ctx context.Context,
-		logger log.Logger,
-		dataSourceInstance *api_common.TDataSourceInstance,
-		split *api_service_protos.TSplit,
-		pagingWriter *utils.PagingWriter,
-	) error
-
-	TypeMapper() utils.TypeMapper
-}
-
-type handlerImpl[CONN utils.Connection] struct {
+type handlerImpl struct {
 	typeMapper        utils.TypeMapper
-	queryBuilder      utils.QueryExecutor[CONN]
-	connectionManager utils.ConnectionManager[CONN]
+	sqlFormatter      utils.SQLFormatter
+	connectionManager utils.ConnectionManager
 	logger            log.Logger
 }
 
-func (h *handlerImpl[CONN]) DescribeTable(
+func (h *handlerImpl) DescribeTable(
 	ctx context.Context,
 	logger log.Logger,
 	request *api_service_protos.TDescribeTableRequest,
 ) (*api_service_protos.TDescribeTableResponse, error) {
+	query, args := utils.MakeDescribeTableQuery(logger, h.sqlFormatter, request)
+
 	conn, err := h.connectionManager.Make(ctx, logger, request.DataSourceInstance)
 	if err != nil {
 		return nil, fmt.Errorf("make connection: %w", err)
@@ -49,7 +31,7 @@ func (h *handlerImpl[CONN]) DescribeTable(
 
 	defer h.connectionManager.Release(logger, conn)
 
-	rows, err := h.queryBuilder.DescribeTable(ctx, conn, request)
+	rows, err := conn.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query builder error: %w", err)
 	}
@@ -61,7 +43,7 @@ func (h *handlerImpl[CONN]) DescribeTable(
 		typeName   string
 	)
 
-	sb := &schemaBuilder{typeMapper: h.typeMapper}
+	sb := &schemaBuilder{typeMapper: h.typeMapper, typeMappingSettings: request.TypeMappingSettings}
 
 	for rows.Next() {
 		if err := rows.Scan(&columnName, &typeName); err != nil {
@@ -85,94 +67,42 @@ func (h *handlerImpl[CONN]) DescribeTable(
 	return &api_service_protos.TDescribeTableResponse{Schema: schema}, nil
 }
 
-func (h *handlerImpl[CONN]) ReadSplit(
+func (h *handlerImpl) doReadSplit(
 	ctx context.Context,
 	logger log.Logger,
-	dataSourceInstance *api_common.TDataSourceInstance,
 	split *api_service_protos.TSplit,
-	pagingWriter *utils.PagingWriter,
+	sink paging.Sink,
 ) error {
-	conn, err := h.connectionManager.Make(ctx, logger, dataSourceInstance)
+	query, args, err := utils.MakeReadSplitQuery(logger, h.sqlFormatter, split.Select)
+	if err != nil {
+		return fmt.Errorf("make read split query: %w", err)
+	}
+
+	conn, err := h.connectionManager.Make(ctx, logger, split.Select.DataSourceInstance)
 	if err != nil {
 		return fmt.Errorf("make connection: %w", err)
 	}
 
 	defer h.connectionManager.Release(logger, conn)
 
-	// SELECT $columns
-
-	// interpolate request
-	var sb strings.Builder
-
-	sb.WriteString("SELECT ")
-
-	// accumulate acceptors
-	var acceptors []any
-
-	columns, err := utils.SelectWhatToYDBColumns(split.Select.What)
-	if err != nil {
-		return fmt.Errorf("convert Select.What.Items to Ydb.Columns: %w", err)
-	}
-
-	// for the case of empty column set select some constant for constructing a valid sql statement
-	if len(columns) == 0 {
-		sb.WriteString("0")
-
-		var acceptor any
-
-		ydbType := Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_INT32}}
-		acceptor, err = h.typeMapper.YDBTypeToAcceptor(&ydbType)
-
-		if err != nil {
-			return fmt.Errorf("map ydb column to acceptor: %w", err)
-		}
-
-		acceptors = append(acceptors, acceptor)
-	} else {
-		for i, column := range columns {
-			sb.WriteString(column.GetName())
-
-			if i != len(columns)-1 {
-				sb.WriteString(", ")
-			}
-
-			var acceptor any
-
-			acceptor, err = h.typeMapper.YDBTypeToAcceptor(column.GetType())
-			if err != nil {
-				return fmt.Errorf("map ydb column to acceptor: %w", err)
-			}
-
-			acceptors = append(acceptors, acceptor)
-		}
-	}
-
-	// SELECT $columns FROM $from
-	tableName := split.GetSelect().GetFrom().GetTable()
-	if tableName == "" {
-		return fmt.Errorf("empty table name")
-	}
-
-	sb.WriteString(" FROM ")
-	sb.WriteString(tableName)
-
-	// execute query
-
-	query := sb.String()
-
-	rows, err := conn.Query(ctx, query)
+	rows, err := conn.Query(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("query '%s' error: %w", query, err)
 	}
 
 	defer func() { utils.LogCloserError(logger, rows, "close rows") }()
 
+	acceptors, err := rows.MakeAcceptors()
+	if err != nil {
+		return fmt.Errorf("make acceptors: %w", err)
+	}
+
 	for rows.Next() {
 		if err := rows.Scan(acceptors...); err != nil {
 			return fmt.Errorf("rows scan error: %w", err)
 		}
 
-		if err := pagingWriter.AddRow(acceptors); err != nil {
+		if err := sink.AddRow(acceptors); err != nil {
 			return fmt.Errorf("add row to paging writer: %w", err)
 		}
 	}
@@ -184,15 +114,29 @@ func (h *handlerImpl[CONN]) ReadSplit(
 	return nil
 }
 
-func (h *handlerImpl[CONN]) TypeMapper() utils.TypeMapper { return h.typeMapper }
-
-func newHandler[CONN utils.Connection](
+func (h *handlerImpl) ReadSplit(
+	ctx context.Context,
 	logger log.Logger,
-	preset *preset[CONN],
+	split *api_service_protos.TSplit,
+	sink paging.Sink,
+) {
+	err := h.doReadSplit(ctx, logger, split, sink)
+	if err != nil {
+		sink.AddError(err)
+	}
+
+	sink.Finish()
+}
+
+func (h *handlerImpl) TypeMapper() utils.TypeMapper { return h.typeMapper }
+
+func newHandler(
+	logger log.Logger,
+	preset *handlerPreset,
 ) Handler {
-	return &handlerImpl[CONN]{
+	return &handlerImpl{
 		logger:            logger,
-		queryBuilder:      preset.queryExecutor,
+		sqlFormatter:      preset.sqlFormatter,
 		connectionManager: preset.connectionManager,
 		typeMapper:        preset.typeMapper,
 	}

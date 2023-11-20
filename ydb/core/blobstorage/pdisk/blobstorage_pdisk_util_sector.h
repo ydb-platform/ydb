@@ -49,17 +49,17 @@ public:
     }
 
     TDataSectorFooter *GetDataFooter() {
-        Y_VERIFY_DEBUG(Size() >= sizeof(TDataSectorFooter));
+        Y_DEBUG_ABORT_UNLESS(Size() >= sizeof(TDataSectorFooter));
         return (TDataSectorFooter*) (End() - sizeof(TDataSectorFooter));
     }
 
     ui64 GetCanary() const {
-        Y_VERIFY_DEBUG(Size() >= sizeof(TDataSectorFooter) + CanarySize);
+        Y_DEBUG_ABORT_UNLESS(Size() >= sizeof(TDataSectorFooter) + CanarySize);
         return ReadUnaligned<ui64>(End() - sizeof(TDataSectorFooter) - CanarySize);
     }
 
     void SetCanary(ui64 canary = NPDisk::Canary) {
-        Y_VERIFY_DEBUG(Size() >= sizeof(TDataSectorFooter) + CanarySize);
+        Y_DEBUG_ABORT_UNLESS(Size() >= sizeof(TDataSectorFooter) + CanarySize);
         WriteUnaligned<ui64>(End() - sizeof(TDataSectorFooter) - CanarySize, canary);
     }
 

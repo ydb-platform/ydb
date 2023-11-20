@@ -1,0 +1,17 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:11:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject
+    	select * from $strict();
+	^
+        <tmp_path>/program.sql:<main>:11:15: Error: At function: UnorderedSubquery
+        	select * from $strict();
+	              ^
+            <tmp_path>/program.sql:<main>:7:3: Error: At function: PersistableRepr, At function: SqlProject
+            	  select count(*) from Input1 as a join Input2 as b using(k1)
+	  ^
+                <tmp_path>/program.sql:<main>:7:34: Error: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: EquiJoin
+                	  select count(*) from Input1 as a join Input2 as b using(k1)
+	                                 ^
+                    <tmp_path>/program.sql:<main>:7:34: Error: Strict key type match requested, but keys have different types: (a.k1 has type: String, b.k1 has type: Optional<String>)
+                    	  select count(*) from Input1 as a join Input2 as b using(k1)
+	                                 ^

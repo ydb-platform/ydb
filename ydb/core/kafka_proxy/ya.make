@@ -11,6 +11,10 @@ SRCS(
     actors/kafka_list_offsets_actor.cpp
     actors/kafka_topic_offsets_actor.cpp
     actors/kafka_fetch_actor.cpp
+    actors/kafka_find_coordinator_actor.cpp
+    actors/kafka_read_session_actor.cpp
+    actors/kafka_offset_fetch_actor.cpp
+    actors/kafka_offset_commit_actor.cpp
     kafka_connection.cpp
     kafka_connection.h
     kafka_listener.h
@@ -23,6 +27,7 @@ SRCS(
     kafka_messages_int.h
     kafka_proxy.h
     kafka_records.cpp
+    kafka_consumer_protocol.cpp
     kafka_metrics.cpp
 )
 

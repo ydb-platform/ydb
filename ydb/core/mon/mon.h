@@ -2,6 +2,9 @@
 
 #include <library/cpp/monlib/service/monservice.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/service/pages/resources/css_mon_page.h>
+#include <library/cpp/monlib/service/pages/resources/fonts_mon_page.h>
+#include <library/cpp/monlib/service/pages/resources/js_mon_page.h>
 #include <library/cpp/monlib/service/pages/tablesorter/css_mon_page.h>
 #include <library/cpp/monlib/service/pages/tablesorter/js_mon_page.h>
 
@@ -9,6 +12,10 @@
 #include <library/cpp/actors/core/mon.h>
 
 namespace NActors {
+
+IEventHandle* GetAuthorizeTicketHandle(const NActors::TActorId& owner, const TString& ticket);
+IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner, NMonitoring::IMonHttpRequest& request);
+IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner);
 
 class TActorSystem;
 struct TActorId;

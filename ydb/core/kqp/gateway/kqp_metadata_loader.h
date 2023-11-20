@@ -4,11 +4,10 @@
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <library/cpp/threading/future/core/future.h>
 
 #include <util/system/mutex.h>
-#include <util/generic/noncopyable.h>
 
 namespace NKikimr::NKqp {
 
@@ -31,7 +30,7 @@ public:
         const TString& cluster, const TString& table, const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken);
 
-    TVector<TString> GetCollectedSchemeData();
+    TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData();
 
     ~TKqpTableMetadataLoader() = default;
 
@@ -57,7 +56,7 @@ private:
 
     void OnLoadedTableMetadata(NYql::IKikimrGateway::TTableMetadataResult& loadTableMetadataResult);
 
-    TVector<TString> CollectedSchemeData;
+    TVector<NKikimrKqp::TKqpTableMetadataProto> CollectedSchemeData;
     TMutex Lock;
     bool NeedCollectSchemeData;
     TActorSystem* ActorSystem;

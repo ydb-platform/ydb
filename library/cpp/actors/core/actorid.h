@@ -43,7 +43,7 @@ namespace NActors {
         }
 
         explicit TActorId(ui32 nodeId, ui32 poolId, ui64 localId, ui32 hint) noexcept {
-            Y_VERIFY_DEBUG(poolId <= MaxPoolID);
+            Y_DEBUG_ABORT_UNLESS(poolId <= MaxPoolID);
             Raw.N.LocalId = localId;
             Raw.N.Hint = hint;
             Raw.N.NodeId = nodeId | (poolId << PoolIndexShift);
@@ -83,7 +83,7 @@ namespace NActors {
         }
 
         TStringBuf ServiceId() const noexcept {
-            Y_VERIFY_DEBUG(IsService());
+            Y_DEBUG_ABORT_UNLESS(IsService());
             return TStringBuf((const char*)Raw.Buf, MaxServiceIDLength);
         }
 
@@ -166,7 +166,7 @@ namespace NActors {
 
         struct TOrderedCmp {
             bool operator()(const TActorId &left, const TActorId &right) const noexcept {
-                Y_VERIFY_DEBUG(!left.IsService() && !right.IsService(), "ordered compare works for plain actorids only");
+                Y_DEBUG_ABORT_UNLESS(!left.IsService() && !right.IsService(), "ordered compare works for plain actorids only");
                 const ui32 n1 = left.NodeId();
                 const ui32 n2 = right.NodeId();
 

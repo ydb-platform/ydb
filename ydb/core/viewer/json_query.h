@@ -109,7 +109,7 @@ public:
     }
 
     TJsonQuery(TEvViewer::TEvViewerRequest::TPtr& ev)
-        : ViewerRequest(ev) 
+        : ViewerRequest(ev)
     {
         auto& request = ViewerRequest->Get()->Record.GetQueryRequest();
 
@@ -143,7 +143,6 @@ public:
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             hFunc(TEvViewer::TEvViewerResponse, HandleReply);
             hFunc(NKqp::TEvKqp::TEvQueryResponse, HandleReply);
-            hFunc(NKqp::TEvKqp::TEvProcessResponse, HandleReply);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, HandleReply);
@@ -334,7 +333,7 @@ private:
 
     void SendDynamicNodeQueryRequest() {
         ui64 hash = std::hash<TString>()(Event->Get()->Request.GetRemoteAddr());
-        
+
         auto itPos = std::next(TenantDynamicNodes.begin(), hash % TenantDynamicNodes.size());
         std::nth_element(TenantDynamicNodes.begin(), itPos, TenantDynamicNodes.end());
 
@@ -386,7 +385,12 @@ private:
                 jsonResponse = std::move(jsonResponse["result"]);
             }
 
-            out << NJson::WriteJson(jsonResponse, false);
+            TStringStream stream;
+            NJson::TJsonWriterConfig config;
+            config.ValidateUtf8 = false;
+            config.WriteNanAsString = true;
+            NJson::WriteJson(&stream, &jsonResponse, config);
+            out << stream.Str();
 
             ReplyAndPassAway(out);
         } else {
@@ -403,10 +407,6 @@ private:
 
     void HandleReply(TEvViewer::TEvViewerResponse::TPtr& ev) {
         Handle(*(ev.Get()->Get()->Record.MutableQueryResponse()));
-    }
-
-    void HandleReply(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev) {
-        Y_UNUSED(ev);
     }
 
     void HandleReply(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {

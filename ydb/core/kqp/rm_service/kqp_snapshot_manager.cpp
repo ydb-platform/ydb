@@ -118,7 +118,7 @@ private:
 
             bool sent = Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
                     Snapshot, NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)));
-            Y_VERIFY_DEBUG(sent);
+            Y_DEBUG_ABORT_UNLESS(sent);
 
             PassAway();
         } else {
@@ -171,7 +171,7 @@ private:
 
             bool sent = Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
                 Snapshot, NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)));
-            Y_VERIFY_DEBUG(sent);
+            Y_DEBUG_ABORT_UNLESS(sent);
 
             Become(&TThis::StateRefreshing);
             ScheduleRefresh();

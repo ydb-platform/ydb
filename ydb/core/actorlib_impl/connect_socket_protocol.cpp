@@ -26,7 +26,7 @@ void TConnectSocketProtocol::ProtocolFunc(
         break;
 
     default:
-        Y_FAIL("Unknown message type dispatched");
+        Y_ABORT("Unknown message type dispatched");
     }
 }
 
@@ -56,15 +56,15 @@ bool TConnectSocketProtocol::CheckConnectResult(
         break;
 
     case EBADF:
-        Y_FAIL("bad descriptor");
+        Y_ABORT("bad descriptor");
     case EFAULT:
-        Y_FAIL("socket structure address is outside the user's address space");
+        Y_ABORT("socket structure address is outside the user's address space");
     case EAFNOSUPPORT:
-        Y_FAIL("EAFNOSUPPORT");
+        Y_ABORT("EAFNOSUPPORT");
     case EISCONN:
-        Y_FAIL("socket is already connected");
+        Y_ABORT("socket is already connected");
     case ENOTSOCK:
-        Y_FAIL("descriptor is not a socket");
+        Y_ABORT("descriptor is not a socket");
 
     case EACCES:
         CatchConnectError(ctx, "permission denied");
@@ -105,22 +105,22 @@ static TDelegate CheckConnectionRoutine(
     if (GetSockOpt(*sock, SOL_SOCKET, SO_ERROR, errCode) == -1) {
         switch (errno) {
         case EBADF:
-            Y_FAIL("Bad descriptor");
+            Y_ABORT("Bad descriptor");
 
         case EFAULT:
-            Y_FAIL("Invalid optval in getsockopt");
+            Y_ABORT("Invalid optval in getsockopt");
 
         case EINVAL:
-            Y_FAIL("Invalid optlne in getsockopt");
+            Y_ABORT("Invalid optlne in getsockopt");
 
         case ENOPROTOOPT:
-            Y_FAIL("Unknown option getsockopt");
+            Y_ABORT("Unknown option getsockopt");
 
         case ENOTSOCK:
-            Y_FAIL("Not a socket in getsockopt");
+            Y_ABORT("Not a socket in getsockopt");
 
         default:
-            Y_FAIL("Unexpected error from getsockopt");
+            Y_ABORT("Unexpected error from getsockopt");
         }
     }
 

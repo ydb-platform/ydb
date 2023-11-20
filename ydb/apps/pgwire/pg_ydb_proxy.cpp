@@ -93,6 +93,7 @@ public:
         TActorId actorId = Register(actor);
         PgToYdbConnection[ev->Sender] = actorId;
         BLOG_D("Created ydb connection " << actorId);
+        Send(ev->Sender, new NPG::TEvPGEvents::TEvFinishHandshake(), 0, ev->Cookie);
     }
 
     void Handle(NPG::TEvPGEvents::TEvConnectionClosed::TPtr& ev) {

@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(TaskActor) {
                 case TEvStop::EventType:
                     co_return false;
                 default:
-                    Y_FAIL("Unexpected event");
+                    Y_ABORT("Unexpected event");
             }
         };
         while (co_await singleRequest()) {

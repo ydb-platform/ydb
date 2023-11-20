@@ -229,7 +229,7 @@ TFingerprint CompositeFarmHash(TYsonStringBuf value)
         }
         case EYsonItemType::EndOfStream:
             // Invalid yson, parser should have thrown.
-            Y_FAIL();
+            Y_ABORT();
     }
 
     for (;;) {

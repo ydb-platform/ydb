@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/tx_processing.h>
@@ -18,6 +17,9 @@
 #include <util/generic/ptr.h>
 
 namespace NKikimr {
+
+struct TAppData;
+
 namespace NSchemeCache {
 
 struct TSchemeCacheConfig : public TThrRefBase {
@@ -101,6 +103,7 @@ struct TSchemeCacheNavigate {
         TableCreationNotComplete = 5,
         LookupError = 6,
         RedirectLookupError = 7,
+        AccessDenied = 8,
         Ok = 128,
     };
 
@@ -319,6 +322,7 @@ struct TSchemeCacheRequest {
         PathErrorUnknown = 3,
         PathErrorNotExist = 4,
         LookupError = 5,
+        AccessDenied = 6,
         OkScheme = 128,
         OkData = 129,
     };
@@ -353,7 +357,7 @@ struct TSchemeCacheRequest {
         explicit TEntry(THolder<TKeyDesc> keyDesc)
             : KeyDescription(std::move(keyDesc))
         {
-            Y_VERIFY_DEBUG(KeyDescription);
+            Y_DEBUG_ABORT_UNLESS(KeyDescription);
         }
 
         TEntry(TKeyDesc* keyDesc) = delete;

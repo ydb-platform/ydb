@@ -64,7 +64,7 @@ public:
                         break;
 
                     default:
-                        Y_FAIL();
+                        Y_ABORT();
                 }
 
                 // now collect information about actually written replicas

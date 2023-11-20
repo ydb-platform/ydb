@@ -19,8 +19,9 @@ private:
     const ui64 TaskIdentifier = 0;
     const TString ExternalTaskId;
     bool AbortFlag = false;
-    std::optional<ui64> WaitBlobsSize;
-    std::optional<ui64> WaitBlobsCount;
+    std::optional<ui64> AllRangesSize;
+    std::optional<ui64> AllRangesCount;
+    std::optional<ui64> ReadRangesCount;
     TString TaskCustomer;
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
     ui32 BlobErrorsCount = 0;
@@ -34,10 +35,10 @@ protected:
     THashMap<TBlobRange, TString> ExtractBlobsData();
 
     virtual void DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) = 0;
-    virtual bool DoOnError(const TBlobRange& range) = 0;
+    virtual bool DoOnError(const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) = 0;
 
     void OnDataReady();
-    bool OnError(const TBlobRange& range);
+    bool OnError(const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status);
 
     virtual TString DoDebugString() const {
         return "";
@@ -45,6 +46,10 @@ protected:
 public:
     void Abort() {
         AbortFlag = true;
+    }
+
+    bool IsFinished() const {
+        return BlobsWaiting.empty() && BlobsFetchingStarted;
     }
 
     ui64 GetTaskIdentifier() const {
@@ -57,14 +62,19 @@ public:
 
     TString DebugString() const;
 
-    ui64 GetExpectedBlobsSize() const {
-        Y_ABORT_UNLESS(WaitBlobsSize);
-        return *WaitBlobsSize;
+    ui64 GetAllRangesSize() const {
+        Y_ABORT_UNLESS(AllRangesSize);
+        return *AllRangesSize;
     }
 
-    ui64 GetExpectedBlobsCount() const {
-        Y_ABORT_UNLESS(WaitBlobsCount);
-        return *WaitBlobsCount;
+    ui64 GetAllRangesCount() const {
+        Y_ABORT_UNLESS(AllRangesCount);
+        return *AllRangesCount;
+    }
+
+    ui64 GetReadRangesCount() const {
+        Y_ABORT_UNLESS(ReadRangesCount);
+        return *ReadRangesCount;
     }
 
     THashSet<TBlobRange> GetExpectedRanges() const {
@@ -89,15 +99,13 @@ public:
     class TReadSubscriber: public NResourceBroker::NSubscribe::ITask {
     private:
         using TBase = NResourceBroker::NSubscribe::ITask;
-        const TActorId ReadActorId;
         std::shared_ptr<NRead::ITask> Task;
     protected:
         virtual void DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) override;
     public:
-        TReadSubscriber(const TActorId& readActor, const std::shared_ptr<NRead::ITask>& readTask, const ui32 cpu, const ui64 memory, const TString& name,
+        TReadSubscriber(const std::shared_ptr<NRead::ITask>& readTask, const ui32 cpu, const ui64 memory, const TString& name,
             const NResourceBroker::NSubscribe::TTaskContext& context)
             : TBase(cpu, memory, name, context)
-            , ReadActorId(readActor)
             , Task(readTask)
         {
 

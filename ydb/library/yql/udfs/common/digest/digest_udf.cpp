@@ -173,7 +173,7 @@ namespace {
         return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(&out[0]), outSize));
     }
 
-    SIMPLE_STRICT_UDF_OPTIONS(TBlake2B, char*(TAutoMap<char*>, TOptional<char*>), builder.OptionalArgs(1)) {
+    SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TBlake2B, char*(TAutoMap<char*>, TOptional<char*>), 1) {
         const static ui32 outSize = 32;
         const static NArgonish::TBlake2BFactory bfactory;
         const TStringRef inputRef = args[0].AsStringRef();

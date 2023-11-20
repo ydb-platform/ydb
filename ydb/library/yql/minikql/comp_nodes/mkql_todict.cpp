@@ -1096,7 +1096,7 @@ public:
         , Items(std::move(items))
         , Key(key)
         , ItemsCountHint(itemsCountHint)
-        , PasstroughKey(GetPasstroughtMap({Key}, Items).front())
+        , PasstroughKey(GetPasstroughtMap(TComputationNodePtrVector{Key}, Items).front())
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {
         GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded, UseIHash);
@@ -1614,8 +1614,8 @@ public:
         , Key(key)
         , Payload(payload)
         , ItemsCountHint(itemsCountHint)
-        , PasstroughKey(GetPasstroughtMap({Key, Payload}, Items).front())
-        , PasstroughPayload(GetPasstroughtMap({Key, Payload}, Items).back())
+        , PasstroughKey(GetPasstroughtMap(TComputationNodePtrVector{Key}, Items).front())
+        , PasstroughPayload(GetPasstroughtMap(TComputationNodePtrVector{Payload}, Items).front())
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {
         GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded, UseIHash);

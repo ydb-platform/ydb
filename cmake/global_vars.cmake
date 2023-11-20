@@ -26,6 +26,12 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_
   set(RAGEL_FLAGS -L -I ${CMAKE_SOURCE_DIR}/)
 endif()
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  set(BISON_FLAGS -v)
+  set(FBS_CPP_FLAGS --no-warnings --cpp --keep-prefix --gen-mutable --schema -b --yandex-maps-iter --gen-object-api --filename-suffix .fbs)
+  set(RAGEL_FLAGS -L -I ${CMAKE_SOURCE_DIR}/)
+endif()
+
 if(WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
   set(YASM_FLAGS -f win64 -D WIN64 -D _x86_64_ -D_YASM_)
   set(BISON_FLAGS -v)

@@ -6,7 +6,6 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
-#include <ydb/core/tx/columnshard/engines/granules_table.h>
 #include <ydb/core/tx/columnshard/engines/columns_table.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
@@ -32,7 +31,6 @@ struct Schema : NIceDb::Schema {
     using TSettings = SchemaSettings<EmptySettings>;
 
     using TInsertedData = NOlap::TInsertedData;
-    using TGranuleRecord = NOlap::TGranuleRecord;
     using TColumnRecord = NOlap::TColumnRecord;
 
     enum EIndexTables : ui32 {
@@ -245,10 +243,11 @@ struct Schema : NIceDb::Schema {
         struct Metadata : Column<11, NScheme::NTypeIds::String> {}; // NKikimrTxColumnShard.TIndexColumnMeta
         struct Offset : Column<12, NScheme::NTypeIds::Uint32> {};
         struct Size : Column<13, NScheme::NTypeIds::Uint32> {};
+        struct PathId : Column<14, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<Index, Granule, ColumnIdx, PlanStep, TxId, Portion, Chunk>;
         using TColumns = TableColumns<Index, Granule, ColumnIdx, PlanStep, TxId, Portion, Chunk,
-                                    XPlanStep, XTxId, Blob, Metadata, Offset, Size>;
+                                    XPlanStep, XTxId, Blob, Metadata, Offset, Size, PathId>;
     };
 
     struct IndexCounters : NIceDb::Schema::Table<CountersTableId> {
@@ -504,64 +503,6 @@ struct Schema : NIceDb::Schema {
                                  NOlap::TInsertTableAccessor& insertTable,
                                  const TInstant& loadTime);
 
-    // IndexGranules activities
-
-    static void IndexGranules_Write(NIceDb::TNiceDb& db, ui32 index, const NOlap::IColumnEngine& engine,
-                                    const TGranuleRecord& row) {
-        TString metaStr;
-        const auto& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
-        if (indexInfo.IsCompositeIndexKey()) {
-            NKikimrTxColumnShard::TIndexGranuleMeta meta;
-            Y_ABORT_UNLESS(indexInfo.GetIndexKey());
-            meta.SetMarkSize(indexInfo.GetIndexKey()->num_fields());
-            Y_ABORT_UNLESS(meta.SerializeToString(&metaStr));
-        }
-
-        db.Table<IndexGranules>().Key(index, row.PathId, engine.SerializeMark(row.Mark)).Update(
-            NIceDb::TUpdate<IndexGranules::Granule>(row.Granule),
-            NIceDb::TUpdate<IndexGranules::PlanStep>(row.GetCreatedAt().GetPlanStep()),
-            NIceDb::TUpdate<IndexGranules::TxId>(row.GetCreatedAt().GetTxId()),
-            NIceDb::TUpdate<IndexGranules::Metadata>(metaStr)
-        );
-    }
-
-    static void IndexGranules_Erase(NIceDb::TNiceDb& db, ui32 index, const NOlap::IColumnEngine& engine,
-                                    const TGranuleRecord& row) {
-        db.Table<IndexGranules>().Key(index, row.PathId, engine.SerializeMark(row.Mark)).Delete();
-    }
-
-    static bool IndexGranules_Load(NIceDb::TNiceDb& db, ui32 index, const NOlap::IColumnEngine& engine,
-                                   const std::function<void(const TGranuleRecord&)>& callback) {
-        auto rowset = db.Table<IndexGranules>().Prefix(index).Select();
-        if (!rowset.IsReady())
-            return false;
-
-        while (!rowset.EndOfSet()) {
-            ui64 pathId = rowset.GetValue<IndexGranules::PathId>();
-            TString indexKey = rowset.GetValue<IndexGranules::IndexKey>();
-            ui64 granule = rowset.GetValue<IndexGranules::Granule>();
-            ui64 planStep = rowset.GetValue<IndexGranules::PlanStep>();
-            ui64 txId = rowset.GetValue<IndexGranules::TxId>();
-            TString metaStr = rowset.GetValue<IndexGranules::Metadata>();
-
-            std::optional<ui32> markNumKeys;
-            if (metaStr.size()) {
-                NKikimrTxColumnShard::TIndexGranuleMeta meta;
-                Y_ABORT_UNLESS(meta.ParseFromString(metaStr));
-                if (meta.HasMarkSize()) {
-                    markNumKeys = meta.GetMarkSize();
-                }
-            }
-
-            callback(TGranuleRecord(pathId, granule, NOlap::TSnapshot(planStep, txId),
-                engine.DeserializeMark(indexKey, markNumKeys)));
-
-            if (!rowset.Next())
-                return false;
-        }
-        return true;
-    }
-
     // IndexColumns activities
 
     static void IndexColumns_Write(NIceDb::TNiceDb& db, ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
@@ -570,19 +511,20 @@ struct Schema : NIceDb::Schema {
         if (proto) {
             *rowProto.MutablePortionMeta() = std::move(*proto);
         }
-        db.Table<IndexColumns>().Key(index, portion.GetGranule(), row.ColumnId,
+        db.Table<IndexColumns>().Key(index, portion.GetDeprecatedGranuleId(), row.ColumnId,
             portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Update(
                 NIceDb::TUpdate<IndexColumns::XPlanStep>(portion.GetRemoveSnapshot().GetPlanStep()),
                 NIceDb::TUpdate<IndexColumns::XTxId>(portion.GetRemoveSnapshot().GetTxId()),
                 NIceDb::TUpdate<IndexColumns::Blob>(row.SerializedBlobId()),
                 NIceDb::TUpdate<IndexColumns::Metadata>(rowProto.SerializeAsString()),
                 NIceDb::TUpdate<IndexColumns::Offset>(row.BlobRange.Offset),
-                NIceDb::TUpdate<IndexColumns::Size>(row.BlobRange.Size)
+                NIceDb::TUpdate<IndexColumns::Size>(row.BlobRange.Size),
+                NIceDb::TUpdate<IndexColumns::PathId>(portion.GetPathId())
             );
     }
 
     static void IndexColumns_Erase(NIceDb::TNiceDb& db, ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
-        db.Table<IndexColumns>().Key(index, portion.GetGranule(), row.ColumnId,
+        db.Table<IndexColumns>().Key(index, portion.GetDeprecatedGranuleId(), row.ColumnId,
             portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Delete();
     }
 

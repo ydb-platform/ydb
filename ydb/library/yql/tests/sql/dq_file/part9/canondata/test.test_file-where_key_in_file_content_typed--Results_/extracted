@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject
+    	select * from plato.Input where cast(key as Uint32) in ParseFile('uint32', "keyid.lst");
+	^
+        <tmp_path>/program.sql:<main>:2:21: Warning: At function: OrderedFilter, At function: Coalesce
+        	select * from plato.Input where cast(key as Uint32) in ParseFile('uint32', "keyid.lst");
+	                    ^
+            <tmp_path>/program.sql:<main>:2:45: Warning: At function: SqlIn
+            	select * from plato.Input where cast(key as Uint32) in ParseFile('uint32', "keyid.lst");
+	                                            ^
+                <tmp_path>/program.sql:<main>:2:45: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	select * from plato.Input where cast(key as Uint32) in ParseFile('uint32', "keyid.lst");
+	                                            ^

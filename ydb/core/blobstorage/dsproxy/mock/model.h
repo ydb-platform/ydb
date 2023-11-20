@@ -368,7 +368,7 @@ namespace NFake {
                 std::make_pair(id.Generation(), id.Step()) <= it->second.MakeCollectPair();
         }
 
-        void DoCollection(ui32 tablet, ui32 channel, bool force, ui32 Gen, ui32 Step) {
+        void DoCollection(ui64 tablet, ui32 channel, bool force, ui32 Gen, ui32 Step) {
             TLogoBlobID id(tablet, 0, 0, channel, 0, 0);
             auto it = Blobs.lower_bound(id);
             while (it != Blobs.end() && it->first.TabletID() == tablet &&

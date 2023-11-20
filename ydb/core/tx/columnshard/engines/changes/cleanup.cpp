@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 
 namespace NKikimr::NOlap {
 
@@ -14,15 +15,20 @@ void TCleanupColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     }
 }
 
-void TCleanupColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& /*context*/) {
+void TCleanupColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
     self.IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
     THashSet<TUnifiedBlobId> blobIds;
+    THashSet<ui64> pathIds;
     for (auto&& p : PortionsToDrop) {
         auto removing = BlobsAction.GetRemoving(p);
         for (auto&& r : p.Records) {
             removing->DeclareRemove(r.BlobRange.BlobId);
         }
+        pathIds.emplace(p.GetPathId());
         self.IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, p.RawBytesSum());
+    }
+    for (auto&& p: pathIds) {
+        self.TablesManager.TryFinalizeDropPath(context.Txc, p);
     }
 }
 

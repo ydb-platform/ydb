@@ -81,7 +81,7 @@ class TBlobStorageGroupMultiCollectRequest
     }
 
     std::unique_ptr<IEventBase> RestartQuery(ui32) {
-        Y_FAIL();
+        Y_ABORT();
     }
 
 public:

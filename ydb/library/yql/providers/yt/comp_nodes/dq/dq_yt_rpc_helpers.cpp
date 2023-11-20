@@ -71,7 +71,7 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
             ++inputIdx;
             continue;
         }
-        originalIndexes.emplace_back(inputIdx);
+        originalIndexes.emplace_back(inputIdx++);
 
         auto request = apiServiceProxy.ReadTable();
         client->InitStreamingRequest(*request);

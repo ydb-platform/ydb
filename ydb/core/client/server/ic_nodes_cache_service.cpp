@@ -47,12 +47,12 @@ private:
     }
 
     void BuildNodesMap() {
-        Y_VERIFY_DEBUG(NodeIdsMapping->empty());
+        Y_DEBUG_ABORT_UNLESS(NodeIdsMapping->empty());
         for (auto i = 0u; i < NodesCache->size(); i++) {
             auto res = NodeIdsMapping->insert(
                 std::make_pair((*NodesCache)[i].NodeId, i)
             );
-            Y_VERIFY_DEBUG(res.second);
+            Y_DEBUG_ABORT_UNLESS(res.second);
         }
     }
 

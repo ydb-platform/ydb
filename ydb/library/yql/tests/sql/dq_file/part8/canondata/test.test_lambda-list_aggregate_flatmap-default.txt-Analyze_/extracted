@@ -1,0 +1,32 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:17:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: SqlProject
+    	SELECT AGGREGATE_LIST($subst(names, indices))
+	^
+        <tmp_path>/program.sql:<main>:18:6: Warning: At function: AssumeColumnOrderPartial
+        	FROM $table;
+	     ^
+            <tmp_path>/program.sql:<main>:17:8: Warning: At function: Aggregate
+            	SELECT AGGREGATE_LIST($subst(names, indices))
+	       ^
+                <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Warning: At function: AggregationTraits
+                	
+	                 ^
+                    <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Warning: At function: MatchType
+                    	
+	                                ^
+                        <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Warning: At function: ListItemType
+                        	
+	                    ^
+                            <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Warning: At function: ListType
+                            	
+	                              ^
+                                <tmp_path>/program.sql:/lib/yql/aggregate.yql:xxx:yyy: Warning: At function: TypeOf
+                                	
+	                                        ^
+                                    <tmp_path>/program.sql:<main>:3:12: Warning: At function: OrderedFlatMapWarn
+                                    	    RETURN ListFlatMap(
+	           ^
+                                        <tmp_path>/program.sql:<main>:3:12: Warning: ListFlatMap with optional result is deprecated, please use ListNotNull and ListMap instead
+                                        	    RETURN ListFlatMap(
+	           ^

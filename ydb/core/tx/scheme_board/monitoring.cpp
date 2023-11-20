@@ -4,6 +4,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/statestorage_impl.h>
+#include <ydb/core/base/tabletid.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -1061,7 +1063,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             return NKikimr::MakeStateStorageProxyID(domain.second->DefaultSchemeBoardGroup);
         }
 
-        Y_FAIL("unreachable");
+        Y_ABORT("unreachable");
     }
 
     template <typename TDerived, typename TEvResponse>
@@ -1157,7 +1159,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             case 1:
                 return new TEvStateStorage::TEvResolveSchemeBoard(std::get<TPathId>(Path));
             default:
-                Y_FAIL("unreachable");
+                Y_ABORT("unreachable");
             }
         }
 
@@ -1228,7 +1230,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             case 1:
                 return new TSchemeBoardMonEvents::TEvDescribeRequest(std::get<TPathId>(Path));
             default:
-                Y_FAIL("unreachable");
+                Y_ABORT("unreachable");
             }
         }
 

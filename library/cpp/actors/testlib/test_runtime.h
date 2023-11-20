@@ -217,7 +217,7 @@ namespace NActors {
             RESCHEDULE
         };
 
-        typedef std::function<EEventAction(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event)> TEventObserver;
+        typedef std::function<EEventAction(TAutoPtr<IEventHandle>& event)> TEventObserver;
         typedef std::function<void(TTestActorRuntimeBase& runtime, TScheduledEventsList& scheduledEvents, TEventsList& queue)> TScheduledEventsSelector;
         typedef std::function<bool(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event)> TEventFilter;
         typedef std::function<bool(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline)> TScheduledEventFilter;
@@ -230,13 +230,13 @@ namespace NActors {
         TTestActorRuntimeBase(ui32 nodeCount = 1, bool useRealThreads = false);
         virtual ~TTestActorRuntimeBase();
         bool IsRealThreads() const;
-        static EEventAction DefaultObserverFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event);
+        static EEventAction DefaultObserverFunc(TAutoPtr<IEventHandle>& event);
         static void DroppingScheduledEventsSelector(TTestActorRuntimeBase& runtime, TScheduledEventsList& scheduledEvents, TEventsList& queue);
         static void CollapsedTimeScheduledEventsSelector(TTestActorRuntimeBase& runtime, TScheduledEventsList& scheduledEvents, TEventsList& queue);
         static bool DefaultFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event);
         static bool NopFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline);
         static void DefaultRegistrationObserver(TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId);
-        TEventObserver SetObserverFunc(TEventObserver observerFunc);
+        TEventObserver SetObserverFunc(TEventObserver observerFunc);  // deprecated, use AddObserver
         TScheduledEventsSelector SetScheduledEventsSelectorFunc(TScheduledEventsSelector scheduledEventsSelectorFunc);
         TEventFilter SetEventFilter(TEventFilter filterFunc);
         TScheduledEventFilter SetScheduledEventFilter(TScheduledEventFilter filterFunc);
@@ -295,6 +295,68 @@ namespace NActors {
         bool IsScheduleForActorEnabled(const TActorId& actorId) const;
         TIntrusivePtr<NMonitoring::TDynamicCounters> GetDynamicCounters(ui32 nodeIndex = 0);
         void SetupMonitoring();
+
+        using TEventObserverCollection = std::list<std::function<void(TAutoPtr<IEventHandle>& event)>>;
+        class TEventObserverHolder {
+        public:
+            TEventObserverHolder(TEventObserverCollection& list, TEventObserverCollection::iterator&& iter)
+                : List(list)
+                , Iter(iter)
+            {
+            }
+
+            ~TEventObserverHolder()
+            {
+                Remove();
+            }
+
+            void Remove()
+            {
+                if (Iter == List.end()) {
+                    return;
+                }
+
+                List.erase(Iter);
+                Iter = List.end();
+            }
+        private:
+            TEventObserverCollection& List;
+            TEventObserverCollection::iterator Iter;
+        };
+
+        // An example of using AddObserver in unit tests
+        /*
+            auto observerHolder = runtime.AddObserver<TEvDataShard::TEvRead>([&](TEvDataShard::TEvRead::TPtr& event) {
+                // Do something with the event inside the calback
+                Cout << "An event is observed " << ev->Get()->Record.ShortDebugString() << Endl;
+
+                // Optionally reset the event, all subsequent handlers of this event will not be called
+                event.Reset();
+            });
+
+            // Do something inside the main code of the unit test
+
+            // Optionally remove the observer, otherwise it will be destroyed in its destructor
+            observerHolder.Remove();
+        */
+
+        template <typename TEvType>
+        TEventObserverHolder AddObserver(std::function<void(typename TEvType::TPtr&)> observerFunc)
+        {
+            auto baseFunc = [observerFunc](TAutoPtr<IEventHandle>& event) {
+                if (event && event->GetTypeRewrite() == TEvType::EventType)
+                    observerFunc(*(reinterpret_cast<typename TEvType::TPtr*>(&event)));
+            };
+
+            auto iter = ObserverFuncs.insert(ObserverFuncs.end(), baseFunc);
+            return TEventObserverHolder(ObserverFuncs, std::move(iter));
+        }
+
+        TEventObserverHolder AddObserver(std::function<void(TAutoPtr<IEventHandle>&)> observerFunc)
+        {
+            auto iter = ObserverFuncs.insert(ObserverFuncs.end(), observerFunc);
+            return TEventObserverHolder(ObserverFuncs, std::move(iter));
+        }
 
         template<typename T>
         void AppendToLogSettings(NLog::EComponent minVal, NLog::EComponent maxVal, T func) {
@@ -653,6 +715,7 @@ namespace NActors {
         TDuration DispatchTimeout;
         TDuration ReschedulingDelay;
         TEventObserver ObserverFunc;
+        TEventObserverCollection ObserverFuncs;
         TScheduledEventsSelector ScheduledEventsSelectorFunc;
         TEventFilter EventFilterFunc;
         TScheduledEventFilter ScheduledEventFilterFunc;

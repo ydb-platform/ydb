@@ -648,13 +648,14 @@ public:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvYdbCompute::TEvSynchronizeRequest, Handle);
         hFunc(TEvYdbCompute::TEvSynchronizeResponse, Handle);
+        hFunc(TEvYdbCompute::TEvInvalidateSynchronizationRequest, Handle);
     )
 
     void Handle(TEvYdbCompute::TEvSynchronizeRequest::TPtr& ev) {
         const TString& cloudId = ev->Get()->CloudId;
         const TString& scope = ev->Get()->Scope;
         if (!ComputeConfig.GetYdb().GetSynchronizationService().GetEnable()) {
-            Send(ev->Sender, new TEvYdbCompute::TEvSynchronizeResponse{scope});
+            Send(ev->Sender, new TEvYdbCompute::TEvSynchronizeResponse{scope}, 0, ev->Cookie);
             return;
         }
 
@@ -670,7 +671,7 @@ public:
 
         switch (it->second.Status) {
             case EScopeStatus::SYNCHRONIZED: {
-                Send(ev->Sender, new TEvYdbCompute::TEvSynchronizeResponse{scope});
+                Send(ev->Sender, new TEvYdbCompute::TEvSynchronizeResponse{scope}, 0, ev->Cookie);
                 break;
             }
             case EScopeStatus::IN_PROGRESS: {
@@ -688,7 +689,7 @@ public:
         }
 
         for (const auto& request: it->second.Requests) {
-            Send(request->Sender, new TEvYdbCompute::TEvSynchronizeResponse{ev->Get()->Scope, ev->Get()->Issues, ev->Get()->Status});
+            Send(request->Sender, new TEvYdbCompute::TEvSynchronizeResponse{ev->Get()->Scope, ev->Get()->Issues, ev->Get()->Status}, 0, request->Cookie);
         }
 
         it->second.Requests.clear();
@@ -705,6 +706,31 @@ public:
             Counters.IncFailed(ev->Get()->Scope);
             Cache.erase(it);
         }
+    }
+
+    void Handle(TEvYdbCompute::TEvInvalidateSynchronizationRequest::TPtr& ev) {
+        const TString& scope = ev->Get()->Scope;
+        if (!ComputeConfig.GetYdb().GetSynchronizationService().GetEnable()) {
+            Send(ev->Sender, new TEvYdbCompute::TEvInvalidateSynchronizationResponse{{}}, 0, ev->Cookie);
+            return;
+        }
+
+        auto it = Cache.find(scope);
+        if (it == Cache.end()) {
+            Send(ev->Sender, new TEvYdbCompute::TEvInvalidateSynchronizationResponse{{}}, 0, ev->Cookie);
+            return;
+        }
+
+        switch (it->second.Status) {
+            case EScopeStatus::SYNCHRONIZED: {
+                Cache.erase(scope);
+                break;
+            }
+            case EScopeStatus::IN_PROGRESS: {
+                break;
+            }
+        }
+        Send(ev->Sender, new TEvYdbCompute::TEvInvalidateSynchronizationResponse{{}}, 0, ev->Cookie);
     }
 
 private:

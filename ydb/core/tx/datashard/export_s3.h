@@ -35,7 +35,7 @@ public:
         case ECompressionCodec::Zstd:
             return CreateS3ExportBufferZstd(Task.GetCompression().GetLevel(), Columns, maxRows, maxBytes, minBytes);
         case ECompressionCodec::Invalid:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
     }
 

@@ -252,7 +252,7 @@ void TRemoteClientConnection::ReaderProcessMessageUnknownVersion(TArrayRef<const
     LWPROBE(Error, ToString(MESSAGE_INVALID_VERSION), ToString(PeerAddr), "");
     ReaderData.Status.Incremental.StatusCounter[MESSAGE_INVALID_VERSION] += 1;
     // TODO: close connection
-    Y_FAIL("unknown message");
+    Y_ABORT("unknown message");
 }
 
 void TRemoteClientConnection::ClearOutgoingQueue(TMessagesPtrs& result, bool reconnect) {

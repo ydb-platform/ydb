@@ -172,7 +172,7 @@ public:
         }
         const TVDiskID& vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         TDiskState& disk = DiskState[Info->GetOrderNumber(vdiskId)];
-        Y_VERIFY_DEBUG(disk.VDiskId == vdiskId);
+        Y_DEBUG_ABORT_UNLESS(disk.VDiskId == vdiskId);
         const EDiskState prev = std::exchange(disk.State, EDiskState::IDLE);
         Y_ABORT_UNLESS(prev == EDiskState::READ_PENDING);
         NumUnrepliedDisks -= !std::exchange(disk.Replied, true);
@@ -270,7 +270,7 @@ public:
             Doubted = false;
             switch (Info->GetTopology().GetQuorumChecker().GetBlobState(layout, failedSubgroupDisks)) {
                 case TBlobStorageGroupInfo::EBS_DISINTEGRATED:
-                    Y_FAIL("incorrect state"); // we should not reach this point as we check failure model a bit earlier
+                    Y_ABORT("incorrect state"); // we should not reach this point as we check failure model a bit earlier
 
                 case TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY:
                     // this blob is not recoverable, so, possibly, it must have never been written; we may skip it
@@ -291,7 +291,7 @@ public:
                 }
 
                 default:
-                    Y_FAIL("unexpected blob state");
+                    Y_ABORT("unexpected blob state");
             }
         }
 

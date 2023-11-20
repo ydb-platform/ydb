@@ -390,7 +390,7 @@ message TEmbedded1Message {
         string str_variant = 101;
         uint64 uint_variant = 102;
     }
-    optional uint64 embedded_num = 10; // make intensional field_num collision!
+    optional uint64 embedded_num = 10; // make intentional field_num collision!
     optional string embedded_extra_field = 11;
 }
 

@@ -160,7 +160,7 @@ ui64 TDriveEstimator::EstimateTrimSpeed() {
 }
 
 ui64 TDriveEstimator::MeasureOperationDuration(const ui32 type, const ui64 size) {
-    constexpr ui32 eventsToSkip = Repeats / 4;
+    constexpr ui32 eventsToSkip = Repeats / 8;
 
     TStackVec<TLoadCompl*, Repeats> completions;
     for (ui32 repeat = 0; repeat < Repeats; ++repeat) {
@@ -181,7 +181,7 @@ ui64 TDriveEstimator::MeasureOperationDuration(const ui32 type, const ui64 size)
                         TReqId(TReqId::EstimatorDurationWrite, 0), nullptr);
                 break;
             default:
-                Y_FAIL();
+                Y_ABORT();
         }
         if (repeat == eventsToSkip) {
             start = HPNow();

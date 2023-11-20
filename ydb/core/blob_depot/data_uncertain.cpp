@@ -201,7 +201,7 @@ namespace NKikimr::NBlobDepot {
                     break;
 
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
             if (--request->NumUncertainKeys == 0) { // we can finish the request
                 STLOG(PRI_DEBUG, BLOB_DEPOT, BDT67, "uncertainty resolver finished", (Id, Self->GetLogId()),

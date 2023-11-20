@@ -105,7 +105,7 @@ namespace NPage {
 
         void AddCommitted(ui64 txId, TRowVersion rowVersion) {
             auto it = CommittedMap.find(txId);
-            Y_VERIFY_DEBUG(it == CommittedMap.end());
+            Y_DEBUG_ABORT_UNLESS(it == CommittedMap.end());
             TTxStatusPage::TCommittedItem* item;
             if (it == CommittedMap.end()) {
                 size_t index = CommittedItems.size();
@@ -122,7 +122,7 @@ namespace NPage {
 
         void AddRemoved(ui64 txId) {
             auto it = RemovedMap.find(txId);
-            Y_VERIFY_DEBUG(it == RemovedMap.end());
+            Y_DEBUG_ABORT_UNLESS(it == RemovedMap.end());
             if (it == RemovedMap.end()) {
                 size_t index = RemovedItems.size();
                 auto& item = RemovedItems.emplace_back();

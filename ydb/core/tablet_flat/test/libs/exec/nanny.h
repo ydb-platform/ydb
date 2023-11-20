@@ -141,11 +141,11 @@ namespace NFake {
         void Handle(NFake::TEvReady &ev) noexcept
         {
             if (std::exchange(State, EDo::More) != EDo::Born) {
-                Y_FAIL("Got an unexpected TEvReady{ } event");
+                Y_ABORT("Got an unexpected TEvReady{ } event");
             } else if (std::exchange(Tablet, ev.ActorId)) {
-                Y_FAIL("Child tablet actor is still alive");
+                Y_ABORT("Child tablet actor is still alive");
             } else if (TxInFlight > 0) {
-                Y_FAIL("Just bron(rebooted) tablet has pending tx");
+                Y_ABORT("Just bron(rebooted) tablet has pending tx");
             }
 
             QueueTx(CompareDbs);
@@ -166,7 +166,7 @@ namespace NFake {
             } else if (State == EDo::Stop) {
                 Send(std::exchange(Tablet, { }), new TEvents::TEvPoison);
             } else {
-                Y_FAIL("TNanny actor cannot progress: no tx, no EDo");
+                Y_ABORT("TNanny actor cannot progress: no tx, no EDo");
             }
         }
 

@@ -195,7 +195,7 @@ void TSignalSafeProfiler::RecordSample(NBacktrace::TFramePointerCursor* cursor, 
         if (count != 0) {
             // First IP points to next executing instruction.
             // All other IP's are return addresses.
-            // Substract 1 to get accurate line information for profiler.
+            // Subtract 1 to get accurate line information for profiler.
             ip = reinterpret_cast<const void*>(reinterpret_cast<uintptr_t>(ip) - 1);
         }
 

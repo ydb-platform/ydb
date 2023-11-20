@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select ParseFile('uuid', "keyid.lst");
+	^
+        <tmp_path>/program.sql:<main>:2:8: Error: At function: Apply, At function: Udf, At File.ByLines
+        	select ParseFile('uuid', "keyid.lst");
+	       ^
+            <tmp_path>/program.sql:<main>:2:8: Error: Failed to find UDF function: File.ByLines, reason: Error: Module: File, function: ByLines, error: User type Uuid is not supported
+            	select ParseFile('uuid', "keyid.lst");
+	       ^

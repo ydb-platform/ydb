@@ -13,7 +13,7 @@ namespace NKikimr {
                                              ui64 lsn,
                                              const TLogoBlobID &id,
                                              const TIngress &ingress) {
-            //Y_VERIFY_DEBUG(id.PartId() == 0);
+            //Y_DEBUG_ABORT_UNLESS(id.PartId() == 0);
             TRecordHdr *hdr = (TRecordHdr *)buf;
             TLogoBlobRec *rec = (TLogoBlobRec *)(hdr + 1);
             hdr->RecType = TRecordHdr::RecLogoBlob;
@@ -100,7 +100,7 @@ namespace NKikimr {
             for (ui32 i = 0; i < record.KeepSize(); ++i, ++lsnPos) {
                 if (lsnPos > lastLsnOfIndexRecord) {
                     TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetKeep(i));
-                    Y_VERIFY_DEBUG(id.PartId() == 0);
+                    Y_DEBUG_ABORT_UNLESS(id.PartId() == 0);
                     ui32 size = SetLogoBlob(gtype, pos, lsnPos, id, ingressKeep);
                     pos += size;
                 }
@@ -112,7 +112,7 @@ namespace NKikimr {
             for (ui32 i = 0; i < record.DoNotKeepSize(); ++i, ++lsnPos) {
                 if (lsnPos > lastLsnOfIndexRecord) {
                     TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetDoNotKeep(i));
-                    Y_VERIFY_DEBUG(id.PartId() == 0);
+                    Y_DEBUG_ABORT_UNLESS(id.PartId() == 0);
                     ui32 size = SetLogoBlob(gtype, pos, lsnPos, id, ingressDontKeep);
                     pos += size;
                 }

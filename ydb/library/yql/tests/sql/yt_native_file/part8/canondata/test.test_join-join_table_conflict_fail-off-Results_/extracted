@@ -1,0 +1,29 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:9:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:11:6: Error: At function: EquiJoin, At function: RemoveSystemMembers
+        	FROM Input JOIN $data as d ON Input.subkey = d.kk
+	     ^
+            <tmp_path>/program.sql:<main>:9:1: Error: At function: Merge, At function: YtSection, At function: YtPath
+            	SELECT
+	^
+                <tmp_path>/program.sql:<main>:9:1: Error: Table "Input" does not exist
+                	SELECT
+	^
+        <tmp_path>/program.sql:<main>:11:6: Error: At function: RemoveSystemMembers
+        	FROM Input JOIN $data as d ON Input.subkey = d.kk
+	     ^
+            <tmp_path>/program.sql:<main>:6:10: Error: At function: PersistableRepr, At function: OrderedSqlProject
+            	$data = (SELECT key as kk, subkey as sk, value || value as value FROM Input WHERE cast(key as uint32)/100 > 3);
+	         ^
+                <tmp_path>/program.sql:<main>:6:71: Error: At function: OrderedFilter
+                	$data = (SELECT key as kk, subkey as sk, value || value as value FROM Input WHERE cast(key as uint32)/100 > 3);
+	                                                                      ^
+                    <tmp_path>/program.sql:<main>:6:10: Error: At function: Merge, At function: YtSection, At function: YtPath
+                    	$data = (SELECT key as kk, subkey as sk, value || value as value FROM Input WHERE cast(key as uint32)/100 > 3);
+	         ^
+                        <tmp_path>/program.sql:<main>:6:10: Error: Table "Input" does not exist
+                        	$data = (SELECT key as kk, subkey as sk, value || value as value FROM Input WHERE cast(key as uint32)/100 > 3);
+	         ^

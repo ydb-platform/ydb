@@ -61,7 +61,11 @@ public:
         KqpSessionSpan = NWilson::TSpan(
             TWilsonKqp::KqpSession, std::move(traceId),
             "Session.query." + NKikimrKqp::EQueryAction_Name(action), NWilson::EFlags::AUTO_END);
-        UserRequestContext = MakeIntrusive<TUserRequestContext>(RequestEv->GetTraceId(), Database, sessionId);
+        if (RequestEv->GetUserRequestContext()) {
+            UserRequestContext = RequestEv->GetUserRequestContext();
+        } else {
+            UserRequestContext = MakeIntrusive<TUserRequestContext>(RequestEv->GetTraceId(), Database, sessionId);
+        }
     }
 
     // the monotonously growing counter, the ordinal number of the query,
@@ -113,6 +117,8 @@ public:
 
     TKqpTempTablesState::TConstPtr TempTablesState;
 
+    TString ReplayMessage;
+
     NKikimrKqp::EQueryAction GetAction() const {
         return RequestEv->GetAction();
     }
@@ -135,6 +141,10 @@ public:
 
     Ydb::Query::Syntax GetSyntax() const {
         return RequestEv->GetSyntax();
+    }
+
+    const TString& GetRequestType() const {
+        return RequestEv->GetRequestType();
     }
 
     std::shared_ptr<std::map<TString, Ydb::Type>> GetQueryParameterTypes() const {
@@ -238,7 +248,8 @@ public:
 
     bool NeedPersistentSnapshot() const {
         auto type = GetType();
-        if (type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY) {
+        if (type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY ||
+            type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
             return ::NKikimr::NKqp::HasOlapTableInTx(PreparedQuery->GetPhysicalQuery());
         }
         return (
@@ -422,6 +433,10 @@ public:
     // Returns nullptr in case of no local event
     google::protobuf::Arena* GetArena() {
         return RequestEv->GetArena();
+    }
+
+    bool GetCollectDiagnostics() {
+        return RequestEv->GetCollectDiagnostics();
     }
 
     //// Topic ops ////

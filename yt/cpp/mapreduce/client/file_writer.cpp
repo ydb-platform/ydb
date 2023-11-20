@@ -55,6 +55,11 @@ void TFileWriter::DoFinish()
     RetryfulWriter_.Finish();
 }
 
+size_t TFileWriter::GetBufferMemoryUsage() const
+{
+    return RetryfulWriter_.GetBufferMemoryUsage();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

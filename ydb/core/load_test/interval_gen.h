@@ -63,10 +63,10 @@ namespace NKikimr {
                         return TPoissonItem(proto.GetPoisson());
 
                     case TProto::DISTRIBUTION_NOT_SET:
-                        Y_FAIL("TIntervalInfo.Distribution not set");
+                        Y_ABORT("TIntervalInfo.Distribution not set");
                 }
 
-                Y_FAIL("unreachable code");
+                Y_ABORT("unreachable code");
             }
 
             TDuration Generate() const {

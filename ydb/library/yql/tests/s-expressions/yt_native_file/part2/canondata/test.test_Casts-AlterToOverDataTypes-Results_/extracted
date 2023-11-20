@@ -1,0 +1,40 @@
+<tmp_path>/program.yql:<main>: Warning: Execution
+
+    <tmp_path>/program.yql:/home/alterto.yql:6:23: Warning: At function: IfPresent, At function: StrictCast
+    	(let config (DataSource 'config))
+	                      ^
+        <tmp_path>/program.yql:<main>:20:59: Warning: Consider using RemoveTimezone to convert into UTC time
+        	(let world (Apply (bind alterto_module 'doAlterTo) world (TzTimestamp '"1546992000000000,GMT") (DataType 'Date) (Date '3)))
+	                                                          ^
+<tmp_path>/program.yql:<main>: Warning: Execution
+
+    <tmp_path>/program.yql:/home/alterto.yql:6:23: Warning: At function: IfPresent, At function: StrictCast
+    	(let config (DataSource 'config))
+	                      ^
+        <tmp_path>/program.yql:<main>:21:59: Warning: Consider using RemoveTimezone to convert into UTC time
+        	(let world (Apply (bind alterto_module 'doAlterTo) world (TzTimestamp '"1546992000000001,GMT") (DataType 'Date) (Date '4)))
+	                                                          ^
+<tmp_path>/program.yql:<main>: Warning: Execution
+
+    <tmp_path>/program.yql:/home/alterto.yql:6:23: Warning: At function: IfPresent, At function: StrictCast
+    	(let config (DataSource 'config))
+	                      ^
+        <tmp_path>/program.yql:<main>:23:59: Warning: Consider using RemoveTimezone to convert into UTC time
+        	(let world (Apply (bind alterto_module 'doAlterTo) world (TzTimestamp '"1546981200000000,Europe/Moscow") (DataType 'Date) (Date '5)))
+	                                                          ^
+<tmp_path>/program.yql:<main>: Warning: Execution
+
+    <tmp_path>/program.yql:/home/alterto.yql:6:23: Warning: At function: IfPresent, At function: StrictCast
+    	(let config (DataSource 'config))
+	                      ^
+        <tmp_path>/program.yql:<main>:25:59: Warning: Consider using RemoveTimezone to convert into UTC time
+        	(let world (Apply (bind alterto_module 'doAlterTo) world (TzTimestamp '"1546992000000000,Europe/Moscow") (DataType 'Date) (Date '6)))
+	                                                          ^
+<tmp_path>/program.yql:<main>: Warning: Execution
+
+    <tmp_path>/program.yql:/home/alterto.yql:6:23: Warning: At function: IfPresent, At function: StrictCast
+    	(let config (DataSource 'config))
+	                      ^
+        <tmp_path>/program.yql:<main>:26:59: Warning: Consider using RemoveTimezone to convert into UTC time
+        	(let world (Apply (bind alterto_module 'doAlterTo) world (TzTimestamp '"1546992000000001,Europe/Moscow") (DataType 'Date) (Date '7)))
+	                                                          ^

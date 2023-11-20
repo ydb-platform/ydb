@@ -3,6 +3,7 @@
 #include "util.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -106,7 +107,7 @@ public:
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
 
             default:
-                Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
+                Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
                        ev->GetTypeRewrite(), ev->ToString().data());
         }
     }

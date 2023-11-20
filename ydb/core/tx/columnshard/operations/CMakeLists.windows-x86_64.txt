@@ -12,7 +12,7 @@ target_link_libraries(tx-columnshard-operations PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-protos
-  core-tx-ev_write
+  core-tx-data_events
   ydb-services-metadata
 )
 target_sources(tx-columnshard-operations PRIVATE

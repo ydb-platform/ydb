@@ -117,7 +117,7 @@ namespace NTable {
                 }
             }
 
-            Y_FAIL("Cannot locate part metadata in page collections of PartComponents");
+            Y_ABORT("Cannot locate part metadata in page collections of PartComponents");
         }
 
         static TLogoBlobID BlobsLabelFor(const TLogoBlobID &base) noexcept
@@ -181,6 +181,8 @@ namespace NTable {
         TPageId TxIdStatsId = Max<TPageId>();
         TVector<TPageId> GroupIndexesIds;
         TVector<TPageId> HistoricIndexesIds;
+        TVector<NPage::TBtreeIndexMeta> BTreeGroupIndexes;
+        TVector<NPage::TBtreeIndexMeta> BTreeHistoricIndexes;
         TRowVersion MinRowVersion;
         TRowVersion MaxRowVersion;
         NProto::TRoot Root;

@@ -24,10 +24,12 @@ PEERDIR(
     ydb/core/tx/tx_proxy
     ydb/core/tx/scheme_cache
     ydb/core/tx/schemeshard
+    ydb/core/mon
     ydb/library/query_actor
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/common/proto
     ydb/library/yql/public/issue
+    ydb/library/yql/dq/actors/spilling
     ydb/public/api/protos
     ydb/public/lib/operation_id
     ydb/public/lib/scheme_types

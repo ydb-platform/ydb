@@ -4,6 +4,8 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/health_check/health_check.h>
 #include <ydb/core/protos/db_metadata_cache.pb.h>
@@ -188,7 +190,7 @@ public:
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
             hFunc(NHealthCheck::TEvSelfCheckRequestProto, Handle);
-            default: Y_FAIL("Unexpected event: %s", ev->ToString().c_str());
+            default: Y_ABORT("Unexpected event: %s", ev->ToString().c_str());
         }
     }
 
@@ -200,7 +202,7 @@ public:
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
-            default: Y_FAIL("Unexpected event: %s", ev->ToString().c_str());
+            default: Y_ABORT("Unexpected event: %s", ev->ToString().c_str());
         }
     }
 
@@ -212,7 +214,7 @@ public:
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
-            default: Y_FAIL("Unexpected event: %s", ev->ToString().c_str());
+            default: Y_ABORT("Unexpected event: %s", ev->ToString().c_str());
         }
     }
 };

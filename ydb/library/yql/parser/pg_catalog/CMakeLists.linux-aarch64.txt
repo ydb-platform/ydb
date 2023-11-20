@@ -74,6 +74,7 @@ target_link_libraries(yql-parser-pg_catalog PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-resource
+  yql-public-issue
 )
 target_sources(yql-parser-pg_catalog PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_catalog/catalog.cpp
@@ -85,6 +86,7 @@ target_link_libraries(yql-parser-pg_catalog.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-resource
+  yql-public-issue
 )
 target_sources(yql-parser-pg_catalog.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/eadca93c2963e941669f9c2a2aa57764.cpp

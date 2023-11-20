@@ -48,6 +48,7 @@ message TYdbComputeControlPlane {
         TYdbcp Ydbcp = 4;
     }
     string DatabasePrefix = 5;
+    string DatabasesCacheReloadPeriod = 6;
 }
 
 message TYdbCompute {

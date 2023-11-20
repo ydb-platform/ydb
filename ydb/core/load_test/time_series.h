@@ -10,10 +10,10 @@ namespace NKikimr {
 
     protected:
         struct TItem {
-            TInstant Timestamp;
+            TMonotonic Timestamp;
             T Value;
 
-            TItem(TInstant timestamp, T value)
+            TItem(TMonotonic timestamp, T value)
                 : Timestamp(timestamp)
                 , Value(value)
             {}
@@ -27,12 +27,12 @@ namespace NKikimr {
             : MaxLifetime(maxLifetime)
         {}
 
-        void Add(TInstant timestamp, T value) {
+        void Add(TMonotonic timestamp, T value) {
             // ensure that timestamps are coming in nondecreasing order
             Y_ABORT_UNLESS(!Items || Items.back().Timestamp <= timestamp);
 
             // drop old entries
-            auto comp = [](const TItem &x, TInstant y) { return x.Timestamp < y; };
+            auto comp = [](const TItem &x, TMonotonic y) { return x.Timestamp < y; };
             auto it = std::lower_bound(Items.begin(), Items.end(), timestamp - MaxLifetime, comp);
             Items.erase(Items.begin(), it);
 

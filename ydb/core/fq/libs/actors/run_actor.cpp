@@ -57,6 +57,7 @@
 #include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/compute/common/pinger.h>
+#include <ydb/core/fq/libs/compute/common/utils.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
@@ -337,6 +338,25 @@ public:
         , Compressor(Params.Config.GetCommon().GetQueryArtifactsCompressionMethod(), Params.Config.GetCommon().GetQueryArtifactsCompressionMinSize())
     {
         QueryCounters.SetUptimePublicAndServiceCounter(0);
+
+        switch (Params.Config.GetControlPlaneStorage().GetStatsMode()) {
+            case Ydb::Query::StatsMode::STATS_MODE_NONE:
+                StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
+                break;
+            case Ydb::Query::StatsMode::STATS_MODE_BASIC:
+                StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_BASIC;
+                break;
+            case Ydb::Query::StatsMode::STATS_MODE_FULL:
+                StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_FULL;
+                break;
+            case Ydb::Query::StatsMode::STATS_MODE_PROFILE:
+                StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_PROFILE;
+                break;
+            case Ydb::Query::StatsMode::STATS_MODE_UNSPECIFIED:
+            default:
+                StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_FULL;
+                break;
+        }
     }
 
     static constexpr char ActorName[] = "YQ_RUN_ACTOR";
@@ -928,6 +948,11 @@ private:
     }
 
     void Handle(TEvDqStats::TPtr& ev) {
+
+        if (!CollectBasic()) {
+            return;
+        }
+
         auto& proto = ev->Get()->Record;
 
         TString GraphKey;
@@ -1050,26 +1075,26 @@ private:
                 if (Children.empty()) {
                     if (Name.EndsWith("Us")) { // TDuration
                         writer.OnKeyedItem("sum");
-                        writer.OnStringScalar(TDuration::MicroSeconds(Sum).ToString());
+                        writer.OnStringScalar(FormatDurationUs(Sum));
                         writer.OnKeyedItem("count");
                         writer.OnInt64Scalar(Count);
                         writer.OnKeyedItem("avg");
-                        writer.OnStringScalar(TDuration::MicroSeconds(Avg).ToString());
+                        writer.OnStringScalar(FormatDurationUs(Avg));
                         writer.OnKeyedItem("max");
-                        writer.OnStringScalar(TDuration::MicroSeconds(Max).ToString());
+                        writer.OnStringScalar(FormatDurationUs(Max));
                         writer.OnKeyedItem("min");
-                        writer.OnStringScalar(TDuration::MicroSeconds(Min).ToString());
+                        writer.OnStringScalar(FormatDurationUs(Min));
                     } else if (Name.EndsWith("Ms")) { // TInstant
                         writer.OnKeyedItem("sum");
                         writer.OnStringScalar("N/A");
                         writer.OnKeyedItem("count");
                         writer.OnInt64Scalar(Count);
                         writer.OnKeyedItem("avg");
-                        writer.OnStringScalar(TInstant::MilliSeconds(Avg).FormatLocalTime("%H:%M:%S.%ms"));
+                        writer.OnStringScalar(FormatInstant(TInstant::MilliSeconds(Avg)));
                         writer.OnKeyedItem("max");
-                        writer.OnStringScalar(TInstant::MilliSeconds(Max).FormatLocalTime("%H:%M:%S.%ms"));
+                        writer.OnStringScalar(FormatInstant(TInstant::MilliSeconds(Max)));
                         writer.OnKeyedItem("min");
-                        writer.OnStringScalar(TInstant::MilliSeconds(Min).FormatLocalTime("%H:%M:%S.%ms"));
+                        writer.OnStringScalar(FormatInstant(TInstant::MilliSeconds(Min)));
                     } else {
                         writer.OnKeyedItem("sum");
                         writer.OnInt64Scalar(Sum);
@@ -1195,9 +1220,11 @@ private:
 
         QueryStateUpdateRequest.mutable_result_id()->set_value(Params.ResultId);
 
-        TString statistics;
-        if (SaveAndPackStatistics("Graph=" + ToString(DqGraphIndex), result.metric(), statistics)) {
-            QueryStateUpdateRequest.set_statistics(statistics);
+        if (CollectBasic()) {
+            TString statistics;
+            if (SaveAndPackStatistics("Graph=" + ToString(DqGraphIndex), result.metric(), statistics)) {
+                QueryStateUpdateRequest.set_statistics(statistics);
+            }
         }
         KillExecuter();
     }
@@ -1249,9 +1276,11 @@ private:
                 queryResult.SetSuccess();
             }
 
-            TString statistics;
-            if (SaveAndPackStatistics("Precompute=" + ToString(it->second.Index), result.metric(), statistics)) {
-                QueryStateUpdateRequest.set_statistics(statistics);
+            if (CollectBasic()) {
+                TString statistics;
+                if (SaveAndPackStatistics("Precompute=" + ToString(it->second.Index), result.metric(), statistics)) {
+                    QueryStateUpdateRequest.set_statistics(statistics);
+                }
             }
 
             queryResult.AddIssues(issues);
@@ -1553,6 +1582,8 @@ private:
         auto& commonTaskParams = *request.MutableCommonTaskParams();
         commonTaskParams["fq.job_id"] = Params.JobId;
         commonTaskParams["fq.restart_count"] = ToString(Params.RestartCount);
+        request.SetStatsMode(StatsMode);
+
         NTasksPacker::UnPack(*request.MutableTask(), dqGraphParams.GetTasks(), dqGraphParams.GetStageProgram());
         Send(ExecuterId, new NYql::NDqs::TEvGraphRequest(request, ControlId, resultId));
         LOG_D("Executer: " << ExecuterId << ", Controller: " << ControlId << ", ResultIdActor: " << resultId);
@@ -1850,15 +1881,17 @@ private:
         *gatewaysConfig.MutableS3() = Params.Config.GetGateways().GetS3();
         gatewaysConfig.MutableS3()->ClearClusterMapping();
 
+        *gatewaysConfig.MutableGeneric() = Params.Config.GetGateways().GetGeneric();
+        gatewaysConfig.MutableGeneric()->ClearClusterMapping();
+
         THashMap<TString, TString> clusters;
 
         TString monitoringEndpoint = Params.Config.GetCommon().GetMonitoringEndpoint();
 
         //todo: consider cluster name clashes
         AddClustersFromConfig(gatewaysConfig, clusters);
-        AddClustersFromConnections(YqConnections,
-            Params.Config.GetCommon().GetUseBearerForYdb(),
-            Params.Config.GetCommon().GetObjectStorageEndpoint(),
+        AddClustersFromConnections(Params.Config.GetCommon(),
+            YqConnections,
             monitoringEndpoint,
             Params.AuthToken,
             Params.AccountIdSignatures,
@@ -1925,7 +1958,7 @@ private:
         sqlSettings.SyntaxVersion = 1;
         sqlSettings.PgParser = (Params.QuerySyntax == FederatedQuery::QueryContent::PG);
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
-        sqlSettings.Flags.insert({ "DqEngineEnable", "DqEngineForce", "DisableAnsiOptionalAs", "FlexibleTypes" });
+        sqlSettings.Flags.insert({ "DqEngineEnable", "DqEngineForce", "DisableAnsiOptionalAs", "FlexibleTypes", "AnsiInForEmptyOrNullableItemsCollections" });
         try {
             AddTableBindingsFromBindings(Params.Bindings, YqConnections, sqlSettings);
         } catch (const std::exception& e) {
@@ -2171,6 +2204,10 @@ private:
             << " }");
     }
 
+    bool CollectBasic() {
+        return StatsMode >= NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_BASIC;
+    }
+
 private:
     TActorId FetcherId;
     TActorId ProgramRunnerId;
@@ -2202,8 +2239,10 @@ private:
     const ui64 MaxTasksPerOperation;
     const TCompressor Compressor;
 
-    // Consumers creation
+    NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     TMap<TString, TString> Statistics;
+
+    // Consumers creation
     NActors::TActorId ReadRulesCreatorId;
 
     // Rate limiter resource creation
@@ -2239,7 +2278,8 @@ IActor* CreateRunActor(
     const ::NYql::NCommon::TServiceCounters& serviceCounters,
     TRunActorParams&& params
 ) {
-    return new NYql::NDq::TLogWrapReceive(new TRunActor(fetcherId, serviceCounters, std::move(params)), params.QueryId);
+    auto queryId = params.QueryId;
+    return new NYql::NDq::TLogWrapReceive(new TRunActor(fetcherId, serviceCounters, std::move(params)), queryId);
 }
 
 } /* NFq */

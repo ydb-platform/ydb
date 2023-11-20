@@ -29,6 +29,7 @@
 #include <ydb/services/discovery/grpc_service.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
 #include <ydb/services/persqueue_cluster_discovery/grpc_service.h>
+#include <ydb/services/deprecated/persqueue_v0/persqueue.h>
 #include <ydb/services/persqueue_v1/persqueue.h>
 #include <ydb/services/persqueue_v1/topic.h>
 #include <ydb/services/persqueue_v1/grpc_pq_write.h>
@@ -56,6 +57,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
+#include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -93,6 +95,7 @@
 #include <ydb/core/kesus/proxy/proxy.h>
 #include <ydb/core/kesus/tablet/tablet.h>
 #include <ydb/core/sys_view/processor/processor.h>
+#include <ydb/core/statistics/aggregator/aggregator.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
@@ -341,7 +344,7 @@ namespace Tests {
             }
             desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
 
-            TVector<TString> grpcServices = {"yql", "clickhouse_internal", "datastreams", "table_service", "scripting", "experimental", "discovery", "pqcd", "fds", "pq", "pqv1" };
+            TVector<TString> grpcServices = {"yql", "clickhouse_internal", "datastreams", "table_service", "scripting", "experimental", "discovery", "pqcd", "fds", "pq", "pqv0", "pqv1" };
             desc->ServedServices.insert(desc->ServedServices.end(), grpcServices.begin(), grpcServices.end());
 
             system->Register(NGRpcService::CreateGrpcEndpointPublishActor(desc.Get()), TMailboxType::ReadAsFilled, appData.UserPoolId);
@@ -362,7 +365,7 @@ namespace Tests {
                 try {
                     result.GetValue();
                 } catch (const std::exception& ex) {
-                    Y_FAIL("Unable to prepare GRpc service: %s", ex.what());
+                    Y_ABORT("Unable to prepare GRpc service: %s", ex.what());
                 }
             } else {
                 grpcService->Start();
@@ -721,6 +724,10 @@ namespace Tests {
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NReplication::CreateController, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[TTabletTypes::StatisticsAggregator] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NStat::CreateStatisticsAggregator, TMailboxType::Revolving, appData.UserPoolId,
+                TMailboxType::Revolving, appData.SystemPoolId));
     }
 
     void TServer::SetupLocalService(ui32 nodeIdx, const TString &domainName) {
@@ -854,27 +861,28 @@ namespace Tests {
                 auto databaseResolverActorId = NFq::MakeDatabaseResolverActorId();
                 Runtime->RegisterService(
                     databaseResolverActorId,
-                    Runtime->Register(NFq::CreateDatabaseResolver(httpProxyActorId, nullptr), nodeIdx),
+                    Runtime->Register(NFq::CreateDatabaseResolver(httpProxyActorId, Settings->CredentialsFactory), nodeIdx),
                     nodeIdx
                 );
-                
+
                 std::shared_ptr<NFq::TDatabaseAsyncResolverImpl> databaseAsyncResolver;
-                if (queryServiceConfig.HasMdbGateway() && queryServiceConfig.HasMdbTransformHost()) {
+                if (queryServiceConfig.GetGeneric().HasMdbGateway() && queryServiceConfig.HasMdbTransformHost()) {
                     databaseAsyncResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
                         Runtime->GetActorSystem(nodeIdx),
                         databaseResolverActorId,
                         "",
-                        queryServiceConfig.GetMdbGateway(),
+                        queryServiceConfig.GetGeneric().GetMdbGateway(),
                         NFq::MakeMdbEndpointGeneratorGeneric(queryServiceConfig.GetMdbTransformHost())
                     );
                 }
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NYql::IHTTPGateway::Make(&queryServiceConfig.GetHttpGateway()),
-                    NYql::NConnector::MakeClientGRPC(queryServiceConfig.GetConnector()),
-                    nullptr,
+                    NYql::NConnector::MakeClientGRPC(queryServiceConfig.GetGeneric().GetConnector()),
+                    Settings->CredentialsFactory,
                     databaseAsyncResolver,
-                    queryServiceConfig.GetS3()
+                    queryServiceConfig.GetS3(),
+                    queryServiceConfig.GetGeneric()
                 );
             }
 
@@ -887,6 +895,10 @@ namespace Tests {
                                                                   federatedQuerySetupFactory);
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
+
+            IActor* scriptFinalizeService = NKqp::CreateKqpFinalizeScriptService(Settings->AppConfig.GetQueryServiceConfig().GetFinalizeScriptServiceConfig(), Settings->AppConfig.GetMetadataProviderConfig(), federatedQuerySetupFactory);
+            TActorId scriptFinalizeServiceId = Runtime->Register(scriptFinalizeService, nodeIdx);
+            Runtime->RegisterService(NKqp::MakeKqpFinalizeScriptServiceId(Runtime->GetNodeId(nodeIdx)), scriptFinalizeServiceId, nodeIdx);
         }
 
         {

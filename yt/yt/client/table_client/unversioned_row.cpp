@@ -1237,6 +1237,54 @@ void ValidateDuplicateAndRequiredValueColumns(
     }
 }
 
+bool ValidateNonKeyColumnsAgainstLock(
+    TUnversionedRow row,
+    const TLockMask& locks,
+    const TTableSchema& schema,
+    const TNameTableToSchemaIdMapping& idMapping,
+    const TNameTablePtr nameTable,
+    const std::vector<int>& columnIndexToLockIndex,
+    bool allowSharedWriteLocks)
+{
+    bool hasNonKeyColumns = false;
+    for (const auto value : row) {
+        int mappedId = ApplyIdMapping(value, &idMapping);
+        if (mappedId < 0 || mappedId >= std::ssize(schema.Columns())) {
+            int size = nameTable->GetSize();
+            if (value.Id < 0 || value.Id >= size) {
+                THROW_ERROR_EXCEPTION("Expected value id in range [0:%v] but got %v",
+                    size - 1,
+                    value.Id);
+            }
+
+            THROW_ERROR_EXCEPTION("Unexpected column %Qv",
+                nameTable->GetName(value.Id));
+        }
+
+        auto lockIndex = columnIndexToLockIndex[mappedId];
+        if (lockIndex == -1) {
+            continue;
+        }
+
+        auto lockType = locks.Get(lockIndex);
+
+        if (lockType == ELockType::SharedWrite && !allowSharedWriteLocks) {
+            THROW_ERROR_EXCEPTION("Shared write locks are not allowed for the table");
+        }
+
+        if (mappedId >= schema.GetKeyColumnCount()) {
+            hasNonKeyColumns = true;
+
+            if (lockType != ELockType::Exclusive && lockType != ELockType::SharedWrite) {
+                THROW_ERROR_EXCEPTION("No write lock taken for column %Qv",
+                    nameTable->GetName(value.Id));
+            }
+        }
+    }
+
+    return hasNonKeyColumns;
+}
+
 void ValidateClientKey(TLegacyKey key)
 {
     for (const auto& value : key) {

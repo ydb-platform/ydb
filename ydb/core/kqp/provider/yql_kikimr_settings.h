@@ -4,7 +4,11 @@
 #include <ydb/library/yql/providers/common/config/yql_dispatch.h>
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
-#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
+
+namespace NKikimrConfig {
+    enum TTableServiceConfig_EIndexAutoChooseMode : int;
+}
 
 namespace NYql {
 
@@ -152,8 +156,11 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSequentialReads = false;
     bool EnablePreparedDdl = false;
     bool EnableSequences = false;
+    bool EnableColumnsWithDefault = false;
     NSQLTranslation::EBindingsMode BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
-    NKikimrConfig::TTableServiceConfig::EIndexAutoChooseMode IndexAutoChooserMode = NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_DISABLED;
+    NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode IndexAutoChooserMode;
+    bool EnableAstCache = false;
+    bool EnablePgConstsToParams = false;
 };
 
 }

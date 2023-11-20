@@ -2,8 +2,6 @@
 
 #include "datashard_user_table.h"
 
-#include <library/cpp/json/json_value.h>
-
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 
@@ -33,12 +31,6 @@ public:
         CdcHeartbeat,
     };
 
-    struct TAwsJsonOptions {
-        TString AwsRegion;
-        NKikimrSchemeOp::ECdcStreamMode StreamMode;
-        ui64 ShardId;
-    };
-
 public:
     ui64 GetOrder() const { return Order; }
     ui64 GetGroup() const { return Group; }
@@ -53,11 +45,9 @@ public:
 
     const TPathId& GetTableId() const { return TableId; }
     ui64 GetSchemaVersion() const { return SchemaVersion; }
+    TUserTable::TCPtr GetSchema() const { return Schema; }
 
-    void SerializeToProto(NKikimrChangeExchange::TChangeRecord& record) const;
-    void SerializeToYdbJson(NJson::TJsonValue& json, bool virtualTimestamps) const;
-    void SerializeToDynamoDBStreamsJson(NJson::TJsonValue& json, const TAwsJsonOptions& opts) const;
-    void SerializeToDebeziumJson(NJson::TJsonValue& keyJson, NJson::TJsonValue& valueJson, bool virtualTimestamps, TUserTable::TCdcStream::EMode streamMode) const;
+    void Serialize(NKikimrChangeExchange::TChangeRecord& record) const;
 
     TConstArrayRef<TCell> GetKey() const;
     i64 GetSeqNo() const;
@@ -95,6 +85,7 @@ class TChangeRecordBuilder {
 
 public:
     explicit TChangeRecordBuilder(EKind kind);
+    explicit TChangeRecordBuilder(TChangeRecord&& record);
 
     TChangeRecordBuilder& WithLockId(ui64 lockId);
     TChangeRecordBuilder& WithLockOffset(ui64 lockOffset);

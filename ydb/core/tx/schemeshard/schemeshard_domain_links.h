@@ -41,6 +41,7 @@ public:
         ui64 UserAttributesVersion = 0;
         TTabletId TenantHive = InvalidTabletId;
         TTabletId TenantSysViewProcessor = InvalidTabletId;
+        TTabletId TenantStatisticsAggregator = InvalidTabletId;
         TString TenantRootACL;
 
         TLink() = default;
@@ -76,4 +77,3 @@ template<>
 inline void Out<NKikimr::NSchemeShard::TSubDomainsLinks::TLink>(IOutputStream& o, const NKikimr::NSchemeShard::TSubDomainsLinks::TLink& x) {
     return x.Out(o);
 }
-

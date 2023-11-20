@@ -2046,6 +2046,11 @@ namespace {
 
         TVector<ui32> nonNullNodes;
         for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
+            if (!input->Child(i)->GetTypeAnn()) {
+                YQL_ENSURE(input->Child(i)->IsLambda());
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(i)->Pos()), TStringBuilder() << "Lambda is not expected as argument of " << input->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
             if (input->Child(i)->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Null) {
                 nonNullNodes.push_back(i);
             }

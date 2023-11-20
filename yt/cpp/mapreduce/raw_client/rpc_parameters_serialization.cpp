@@ -32,6 +32,11 @@ static void SetOperationIdParam(TNode* node, const TOperationId& operationId)
     (*node)["operation_id"] = GetGuidAsString(operationId);
 }
 
+static void SetAliasParam(TNode* node, const TString& alias)
+{
+    (*node)["operation_alias"] = alias;
+}
+
 static void SetPathParam(TNode* node, const TString& pathPrefix, const TYPath& path)
 {
     TYPath updatedPath = AddPathPrefix(path, pathPrefix);
@@ -392,14 +397,30 @@ TNode SerializeParamsForListOperations(
     return result;
 }
 
-TNode SerializeParamsForGetOperation(
-    const TOperationId& operationId,
-    const TGetOperationOptions& options)
+TNode SerializeParamsForGetOperation(const std::variant<TString, TOperationId>& aliasOrOperationId, const TGetOperationOptions& options)
 {
+    auto includeRuntime = options.IncludeRuntime_;
     TNode result;
-    SetOperationIdParam(&result, operationId);
+    std::visit([&] (const auto& value) {
+        using TValue = std::decay_t<decltype(value)>;
+        if constexpr (std::is_same_v<TValue, TString>) {
+            SetAliasParam(&result, value);
+            if (includeRuntime.Empty()) {
+                // Getting operation by operation alias requires enabling this option.
+                // So enable it unless user explicitly set it.
+                includeRuntime = true;
+            }
+        } else if constexpr (std::is_same_v<TValue, TOperationId>) {
+            SetOperationIdParam(&result, value);
+        } else {
+            static_assert(std::is_same_v<TValue, void>, "unreachable");
+        }
+    }, aliasOrOperationId);
     if (options.AttributeFilter_) {
         result["attributes"] = SerializeAttributeFilter(*options.AttributeFilter_);
+    }
+    if (includeRuntime.Defined()) {
+        result["include_runtime"] = *includeRuntime;
     }
     return result;
 }

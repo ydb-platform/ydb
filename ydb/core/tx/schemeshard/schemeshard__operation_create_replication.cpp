@@ -394,7 +394,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TCreateReplication");
+        Y_ABORT("no AbortPropose for TCreateReplication");
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {

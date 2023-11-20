@@ -531,6 +531,9 @@ protected:
         switch (request->ResultSet[0].Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+            self->Reply(StatusIds::UNAUTHORIZED, "Access denied.", NKikimrIssues::TIssuesIds::ACCESS_DENIED, ctx);
+            return false;
         case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
         case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
             self->Reply(StatusIds::SCHEME_ERROR, "Path isn't exist.", NKikimrIssues::TIssuesIds::PATH_NOT_EXIST, ctx);
@@ -792,7 +795,7 @@ protected:
         if (const auto &partition = desc.GetPartitions(rec.partition_id()); partition.GetPartitionId() == partitionId) {
             KVTabletId = partition.GetTabletId();
         } else {
-            Y_VERIFY_DEBUG(false);
+            Y_DEBUG_ABORT_UNLESS(false);
             for (const NKikimrSchemeOp::TSolomonVolumeDescription::TPartition &partition : desc.GetPartitions()) {
                 if (partition.GetPartitionId() == partitionId)  {
                     KVTabletId = partition.GetTabletId();

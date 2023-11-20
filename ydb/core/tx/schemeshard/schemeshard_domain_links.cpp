@@ -28,6 +28,7 @@ THolder<TEvSchemeShard::TEvSyncTenantSchemeShard> TParentDomainLink::MakeSyncMsg
                                                                     rootPath->UserAttrs->AlterVersion,
                                                                     ui64(rootSubdomain->GetTenantHiveID()),
                                                                     ui64(rootSubdomain->GetTenantSysViewProcessorID()),
+                                                                    ui64(rootSubdomain->GetTenantStatisticsAggregatorID()),
                                                                     rootPath->ACL);
 }
 
@@ -107,6 +108,7 @@ void TSubDomainsLinks::TLink::Out(IOutputStream& stream) const {
            << ", UserAttributesVersion: " << UserAttributesVersion
            << ", TenantHive: " << TenantHive
            << ", TenantSysViewProcessor: " << TenantSysViewProcessor
+           << ", TenantStatisticsAggregator: " << TenantStatisticsAggregator
            << ", TenantRootACL: " << TenantRootACL
            << "}";
 }
@@ -121,6 +123,8 @@ TSubDomainsLinks::TLink::TLink(const NKikimrScheme::TEvSyncTenantSchemeShard &re
     , TenantHive(record.HasTenantHive() ? TTabletId(record.GetTenantHive()) : InvalidTabletId)
     , TenantSysViewProcessor(record.HasTenantSysViewProcessor() ?
         TTabletId(record.GetTenantSysViewProcessor()) : InvalidTabletId)
+    , TenantStatisticsAggregator(record.HasTenantStatisticsAggregator() ?
+        TTabletId(record.GetTenantStatisticsAggregator()) : InvalidTabletId)
     , TenantRootACL(record.GetTenantRootACL())
 {}
 

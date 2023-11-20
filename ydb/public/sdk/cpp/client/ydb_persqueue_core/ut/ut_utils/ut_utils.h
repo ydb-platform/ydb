@@ -359,7 +359,7 @@ public:
                         (iter->second)();
                     } catch (...) {
                         Cerr << "Failed on compression call: " << CurrentExceptionMessage() << Endl;
-                        Y_FAIL();
+                        Y_ABORT();
                     }
                     Cerr << "Compression of " << id << " Done\n";
                     Tasks.erase(iter);

@@ -6,7 +6,7 @@ namespace NSQLTranslationV0 {
 
 TAstNode* TListBuiltin::Translate(TContext& ctx) const {
     Y_UNUSED(ctx);
-    Y_VERIFY_DEBUG(Node);
+    Y_DEBUG_ABORT_UNLESS(Node);
     return Node->Translate(ctx);
 }
 

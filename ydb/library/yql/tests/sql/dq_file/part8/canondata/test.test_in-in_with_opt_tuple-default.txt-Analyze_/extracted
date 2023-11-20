@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT *
+	^
+        <tmp_path>/program.sql:<main>:3:12: Warning: At function: OrderedFilter, At function: Coalesce
+        	FROM plato.Input
+	           ^
+            <tmp_path>/program.sql:<main>:4:50: Warning: At function: SqlIn
+            	WHERE AsTuple(cast(key as int32), cast(subkey as int32)) in (
+	                                                 ^
+                <tmp_path>/program.sql:<main>:4:50: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	WHERE AsTuple(cast(key as int32), cast(subkey as int32)) in (
+	                                                 ^

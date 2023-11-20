@@ -112,6 +112,29 @@
 
   {% include [auth-sa-data](../../../../_includes/python/async/auth-service-account.md) %}
 
+- C# (.NET)
+
+  ```C#
+  using Ydb.Sdk;
+  using Ydb.Sdk.Yc;
+
+  const string endpoint = "grpc://localhost:2136";
+  const string database = "/local";
+
+  var saProvider = new ServiceAccountProvider(
+      saFilePath: "path/to/sa_file.json" // Path to file with service account JSON info);
+  );
+  await saProvider.Initialize();
+
+  var config = new DriverConfig(
+      endpoint: endpoint,
+      database: database,
+      credentials: saProvider
+  );
+
+  await using var driver = await Driver.CreateInitialized(config);
+  ```
+
 - PHP
 
   ```php

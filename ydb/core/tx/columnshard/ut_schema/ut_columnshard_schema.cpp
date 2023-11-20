@@ -7,6 +7,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
@@ -27,7 +28,7 @@ enum class EInitialEviction {
     Tiering
 };
 
-class TWaitCompactionController: public NKikimr::NYDBTest::ICSController {
+class TWaitCompactionController: public NKikimr::NYDBTest::NColumnShard::TController {
 private:
     using TBase = NKikimr::NYDBTest::ICSController;
     TAtomic TTLFinishedCounter = 0;

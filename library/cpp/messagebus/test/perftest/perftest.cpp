@@ -279,7 +279,7 @@ public:
                 //delete message;
                 //Sleep(TDuration::MilliSeconds(1));
                 //continue;
-                Y_FAIL("unreachable");
+                Y_ABORT("unreachable");
             } else if (ret == MESSAGE_SHUTDOWN) {
                 delete message;
             } else {

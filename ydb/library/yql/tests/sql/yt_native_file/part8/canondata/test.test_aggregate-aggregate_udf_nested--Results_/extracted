@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:6:10: Warning: GROUP BY will aggregate by column `value` instead of aggregating by SELECT expression with same alias
+    	GROUP BY value
+	         ^
+    <tmp_path>/program.sql:<main>:4:12: Warning: You should probably use alias in GROUP BY instead of using it here. Please consult documentation for more details
+    	   String::HexText(String::HexText(value)) as value
+	           ^

@@ -78,7 +78,8 @@ void TReadSession::CreateClusterSessionsImpl(NPersQueue::TDeferredActions<false>
         AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred);
         return;
     }
-    Session = std::make_shared<NPersQueue::TSingleClusterReadSessionImpl<false>>(
+
+    CbContext = NPersQueue::MakeWithCallbackContext<NPersQueue::TSingleClusterReadSessionImpl<false>>(
         Settings,
         DbDriverState->Database,
         SessionId,
@@ -87,9 +88,9 @@ void TReadSession::CreateClusterSessionsImpl(NPersQueue::TDeferredActions<false>
         Client->CreateReadSessionConnectionProcessorFactory(),
         EventsQueue,
         context,
-        1, 1);
+        1, 1
+    );
 
-    CbContext = Session->MakeCallbackContext();
     deferred.DeferStartSession(CbContext);
 }
 
@@ -271,7 +272,7 @@ bool TReadSession::Close(TDuration timeout) {
         }
 
         Closing = true;
-        session = Session;
+        session = CbContext->TryGet();
     }
     session->Close(callback);
 
@@ -352,7 +353,7 @@ void TReadSession::AbortImpl(NPersQueue::TDeferredActions<false>&) {
         if (DumpCountersContext) {
             DumpCountersContext->Cancel();
         }
-        Session->Abort();
+        CbContext->TryGet()->Abort();
     }
 }
 

@@ -242,7 +242,7 @@ const TTypeAnnotationNode* ConvertMiniKQLType(TPosition position, NKikimr::NMini
     using namespace NKikimr::NMiniKQL;
     switch (type->GetKind()) {
     case TType::EKind::Type:
-        YQL_ENSURE(false, "Not supported");
+        return ctx.MakeType<TGenericExprType>();
 
     case TType::EKind::Void:
         return ctx.MakeType<TVoidExprType>();

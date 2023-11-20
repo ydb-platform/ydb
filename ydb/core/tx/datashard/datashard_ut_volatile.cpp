@@ -1,4 +1,4 @@
-#include "datashard_ut_common.h"
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
 #include "datashard_ut_common_pq.h"
 #include "datashard_active_transaction.h"
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
 
         TVector<THolder<IEventHandle>> capturedPlans;
-        auto capturePlans = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto capturePlans = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvPlanStep::EventType: {
                     Cerr << "... captured TEvPlanStep" << Endl;
@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         TVector<THolder<IEventHandle>> capturedPlans;
         TVector<THolder<IEventHandle>> capturedReadSets;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvPlanStep::EventType: {
                     const auto* msg = ev->Get<TEvTxProcessing::TEvPlanStep>();
@@ -343,7 +343,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
 
         TVector<THolder<IEventHandle>> capturedReadSets;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
                     const auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
@@ -411,7 +411,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
 
         TVector<THolder<IEventHandle>> capturedReadSets;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
                     const auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
@@ -504,7 +504,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         size_t observedPlans = 0;
         TVector<THolder<IEventHandle>> capturedPlans;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvPlanStep::EventType: {
                     ++observedPlans;
@@ -590,7 +590,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         size_t observedPlans = 0;
         TVector<THolder<IEventHandle>> capturedPlans;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvPlanStep::EventType: {
                     const auto* msg = ev->Get<TEvTxProcessing::TEvPlanStep>();
@@ -660,7 +660,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         size_t observedPropose = 0;
         TVector<THolder<IEventHandle>> capturedReadSets;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvProposeTransaction::EventType: {
                     ++observedPropose;
@@ -738,7 +738,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
 
         TVector<THolder<IEventHandle>> capturedReadSets;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
                     const auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
@@ -820,7 +820,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         size_t observedPropose = 0;
         TVector<THolder<IEventHandle>> capturedReadSets;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvProposeTransaction::EventType: {
                     ++observedPropose;
@@ -900,7 +900,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         size_t observedSplit = 0;
         TVector<THolder<IEventHandle>> capturedReadSets;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvSplit::EventType: {
                     ++observedSplit;
@@ -988,7 +988,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         ui64 maxReadSetStep = 0;
         bool captureReadSets = true;
         TVector<THolder<IEventHandle>> capturedReadSets;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
                     const auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
@@ -1048,7 +1048,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             msg->Record.MutableSnapshot()->SetTxId(Max<ui64>());
             msg->Record.AddColumns(1);
             msg->Record.AddColumns(2);
-            msg->Record.SetResultFormat(NKikimrTxDataShard::ARROW);
+            msg->Record.SetResultFormat(NKikimrDataEvents::FORMAT_ARROW);
 
             TVector<TCell> fromKeyCells = { TCell::Make(ui32(0)) };
             TVector<TCell> toKeyCells = { TCell::Make(ui32(10)) };
@@ -1118,7 +1118,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         ui64 maxReadSetStep = 0;
         bool captureReadSets = true;
         TVector<THolder<IEventHandle>> capturedReadSets;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
                     const auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
@@ -1178,7 +1178,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             msg->Record.MutableSnapshot()->SetTxId(Max<ui64>());
             msg->Record.AddColumns(1);
             msg->Record.AddColumns(2);
-            msg->Record.SetResultFormat(NKikimrTxDataShard::ARROW);
+            msg->Record.SetResultFormat(NKikimrDataEvents::FORMAT_ARROW);
             msg->Record.SetMaxRowsInResult(1);
 
             TVector<TCell> fromKeyCells = { TCell::Make(ui32(0)) };
@@ -1269,7 +1269,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         ui64 maxReadSetStep = 0;
         bool captureReadSets = true;
         TVector<THolder<IEventHandle>> capturedReadSets;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
                     const auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
@@ -1447,7 +1447,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         ui64 maxReadSetStep = 0;
         bool captureReadSets = true;
         TVector<THolder<IEventHandle>> capturedReadSets;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
                     const auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
@@ -1609,7 +1609,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         ui64 maxReadSetStep = 0;
         bool captureReadSets = true;
         TVector<THolder<IEventHandle>> capturedReadSets;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
                     const auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
@@ -1737,7 +1737,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         ui64 maxReadSetStep = 0;
         bool captureReadSets = true;
         TVector<THolder<IEventHandle>> capturedReadSets;
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
                     const auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
@@ -1833,7 +1833,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         bool removeTransactions = true;
         size_t removedTransactions = 0;
         size_t receivedReadSets = 0;
-        auto observer = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto observer = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvPlanStep::EventType: {
                     auto* msg = ev->Get<TEvTxProcessing::TEvPlanStep>();
@@ -1926,7 +1926,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         bool removeTransactions = true;
         size_t removedTransactions = 0;
         size_t receivedReadSets = 0;
-        auto observer = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto observer = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvPlanStep::EventType: {
                     auto* msg = ev->Get<TEvTxProcessing::TEvPlanStep>();

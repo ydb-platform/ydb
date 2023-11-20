@@ -46,7 +46,8 @@ class TGRpcRequestProxySimple
     using TBase = TActorBootstrapped<TGRpcRequestProxySimple>;
 public:
     explicit TGRpcRequestProxySimple(const NKikimrConfig::TAppConfig& appConfig)
-        : AppConfig(MakeIntrusiveConst<TAppConfig>(appConfig))
+        : AppConfig(appConfig)
+        , ChannelBufferSize(appConfig.GetTableServiceConfig().GetResourceManager().GetChannelBufferSize())
     {
     }
 
@@ -74,7 +75,7 @@ private:
 
         THolder<TEvListEndpointsRequest> request(event->Release().Release());
         auto *result = TEvListEndpointsRequest::AllocateResult<Ydb::Discovery::ListEndpointsResult>(request);
-        const auto& grpcConfig = AppConfig->GetGRpcConfig();
+        const auto& grpcConfig = AppConfig.GetGRpcConfig();
         AddEndpointsForGrpcConfig(grpcConfig, *result);
 
         for (const auto& externalEndpoint : grpcConfig.GetExtEndpoints()) {
@@ -135,15 +136,16 @@ private:
         requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
     }
 
-    TIntrusiveConstPtr<TAppConfig> GetAppConfig() const override {
-        return AppConfig;
+    ui64 GetChannelBufferSize() const override {
+        return ChannelBufferSize.load();
     }
 
     TActorId RegisterActor(IActor* actor) const override {
         return TActivationContext::AsActorContext().Register(actor);
     }
 
-    TIntrusiveConstPtr<TAppConfig> AppConfig;
+    const NKikimrConfig::TAppConfig AppConfig;
+    std::atomic<ui64> ChannelBufferSize;
     IGRpcProxyCounters::TPtr Counters;
 };
 
@@ -206,7 +208,7 @@ void TGRpcRequestProxySimple::StateFunc(TAutoPtr<IEventHandle>& ev) {
         HFunc(TEvListEndpointsRequest, PreHandle);
         HFunc(TEvProxyRuntimeEvent, PreHandle);
         default:
-            Y_FAIL("Unknown request: %u\n", ev->GetTypeRewrite());
+            Y_ABORT("Unknown request: %u\n", ev->GetTypeRewrite());
         break;
     }
 }

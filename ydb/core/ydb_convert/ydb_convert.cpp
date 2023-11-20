@@ -147,7 +147,7 @@ void ConvertMiniKQLTypeToYdbType(const NKikimrMiniKQL::TType& input, Ydb::Type& 
             break;
         }
         default: {
-            Y_FAIL("Unknown protobuf type: %s", input.DebugString().c_str());
+            Y_ABORT("Unknown protobuf type: %s", input.DebugString().c_str());
         }
     }
 }
@@ -1084,6 +1084,10 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
         // DyNumber value was verified at parsing time
         break;
 
+    case NScheme::NTypeIds::Uuid:
+        // Uuid value was verified at parsing time
+        break;
+
     case NScheme::NTypeIds::Pg:
         // no pg validation here
         break;
@@ -1171,11 +1175,12 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
             c = TCell(v.data(), v.size());
             break;
         }
-    case NScheme::NTypeIds::Decimal : {
-        std::pair<ui64,ui64>& decimalVal = *valueDataPool.Allocate<std::pair<ui64,ui64> >();
-        decimalVal.first = val.low_128();
-        decimalVal.second = val.high_128();
-        c = TCell((const char*)&decimalVal, sizeof(decimalVal));
+    case NScheme::NTypeIds::Decimal :
+    case NScheme::NTypeIds::Uuid : {
+        std::pair<ui64,ui64>& valInPool = *valueDataPool.Allocate<std::pair<ui64,ui64> >();
+        valInPool.first = val.low_128();
+        valInPool.second = val.high_128();
+        c = TCell((const char*)&valInPool, sizeof(valInPool));
         break;
     }
     case NScheme::NTypeIds::Pg : {
@@ -1185,8 +1190,7 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
         if (!text.empty()) {
             isText = true;
             auto desc = type.GetTypeDesc();
-            auto id = NPg::PgTypeIdFromTypeDesc(desc);
-            auto res = NPg::PgNativeBinaryFromNativeText(text, id);
+            auto res = NPg::PgNativeBinaryFromNativeText(text, desc);
             if (res.Error) {
                 err = TStringBuilder() << "Invalid text value for "
                     << NPg::PgTypeNameFromTypeDesc(desc) << ": " << *res.Error;

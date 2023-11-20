@@ -86,9 +86,9 @@ namespace NActors {
 
         Y_FORCE_INLINE explicit operator bool() const { return Size_ > 0; }
 
-        Y_FORCE_INLINE char* mutable_data() { Y_VERIFY_DEBUG(IsPrivate()); return Data_; }
-        Y_FORCE_INLINE char* mutable_begin() { Y_VERIFY_DEBUG(IsPrivate()); return Data_; }
-        Y_FORCE_INLINE char* mutable_end() { Y_VERIFY_DEBUG(IsPrivate()); return Data_ + Size_; }
+        Y_FORCE_INLINE char* mutable_data() { Y_DEBUG_ABORT_UNLESS(IsPrivate()); return Data_; }
+        Y_FORCE_INLINE char* mutable_begin() { Y_DEBUG_ABORT_UNLESS(IsPrivate()); return Data_; }
+        Y_FORCE_INLINE char* mutable_end() { Y_DEBUG_ABORT_UNLESS(IsPrivate()); return Data_ + Size_; }
 
         Y_FORCE_INLINE const char* data() const { return Data_; }
         Y_FORCE_INLINE const char* begin() const { return Data_; }
@@ -188,7 +188,7 @@ namespace NActors {
 
     private:
         Y_FORCE_INLINE THeader* Header() const noexcept {
-            Y_VERIFY_DEBUG(Data_);
+            Y_DEBUG_ABORT_UNLESS(Data_);
             return reinterpret_cast<THeader*>(Data_ - sizeof(THeader));
         }
 

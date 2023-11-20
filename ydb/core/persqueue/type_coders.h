@@ -61,7 +61,7 @@ template <>
 class TCoderMask<false> {
 public:
     inline size_t MaxSize() const { return 0; }
-    inline void AddNull() { Y_FAIL("Null values are not supported."); }
+    inline void AddNull() { Y_ABORT("Null values are not supported."); }
     inline void AddNonNull() { }
     inline void Seal(TBuffer&) { }
 };
@@ -294,7 +294,7 @@ public:
 
 protected:
     void DoAddData(const char* data, size_t size) override {
-        Y_VERIFY_DEBUG(size == sizeof(bool));
+        Y_DEBUG_ABORT_UNLESS(size == sizeof(bool));
         if (IsNullable)
             Mask.Append(1, 1);
         Mask.Append(*(const bool*)data, 1);

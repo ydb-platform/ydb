@@ -7,6 +7,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/load_test/ycsb/test_load_actor.h>
@@ -18,8 +19,10 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 #include <google/protobuf/text_format.h>
+#include <google/protobuf/util/json_util.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/guid.h>
@@ -818,7 +821,7 @@ public:
             auto status = google::protobuf::util::JsonStringToMessage(content, &*record);
             success = status.ok();
         } else {
-            Y_FAIL_S("content: " << content.Quote());
+            LOG_D("Unable to parse request, content: " << content.Quote());
         }
         if (!success) {
             record.reset();
@@ -907,7 +910,7 @@ public:
                 HandlePost(request, info, id);
                 break;
             default:
-                Y_FAIL();
+                Y_ABORT();
         }
     }
 

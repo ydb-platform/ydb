@@ -16,13 +16,12 @@ bool TPortionColumnCursor::Fetch(TMergedColumn& column) {
     }
 
     ui32 currentStart = currentStartPortionIdx - ChunkRecordIndexStartPosition;
-
     while (currentFinishPortionIdx - ChunkRecordIndexStartPosition >= CurrentColumnChunk->GetMeta().GetNumRowsVerified()) {
         const ui32 currentFinish = CurrentColumnChunk->GetMeta().GetNumRowsVerified();
         if (currentStart == 0) {
             column.AppendBlob(CurrentBlobChunk->GetData(), *CurrentColumnChunk);
         } else {
-            column.AppendSlice(GetCurrentBatch().Slice(currentStart, currentFinish - currentStart));
+            column.AppendSlice(GetCurrentArray(), currentStart, currentFinish - currentStart);
         }
         currentStart = 0;
         if (!NextChunk()) {
@@ -33,7 +32,7 @@ bool TPortionColumnCursor::Fetch(TMergedColumn& column) {
     const ui32 currentFinish = currentFinishPortionIdx - ChunkRecordIndexStartPosition;
     if (currentStart < currentFinish) {
         Y_ABORT_UNLESS(currentFinish < CurrentColumnChunk->GetMeta().GetNumRowsVerified());
-        column.AppendSlice(GetCurrentBatch().Slice(currentStart, currentFinish - currentStart));
+        column.AppendSlice(GetCurrentArray(), currentStart, currentFinish - currentStart);
     }
 
     RecordIndexStart.reset();
@@ -57,7 +56,7 @@ bool TPortionColumnCursor::Next(const ui32 portionRecordIdx, TMergedColumn& colu
 }
 
 bool TPortionColumnCursor::NextChunk() {
-    CurrentBatch = nullptr;
+    CurrentArray = nullptr;
     if (++ChunkIdx == ColumnChunks.size()) {
         return false;
     } else {
@@ -68,14 +67,16 @@ bool TPortionColumnCursor::NextChunk() {
     }
 }
 
-const arrow::RecordBatch& TPortionColumnCursor::GetCurrentBatch() {
+const std::shared_ptr<arrow::Array>& TPortionColumnCursor::GetCurrentArray() {
     Y_ABORT_UNLESS(ChunkIdx < ColumnChunks.size());
     Y_ABORT_UNLESS(CurrentBlobChunk);
 
-    if (!CurrentBatch) {
-        CurrentBatch = NArrow::TStatusValidator::GetValid(ColumnLoader->Apply(CurrentBlobChunk->GetData()));
+    if (!CurrentArray) {
+        auto res = NArrow::TStatusValidator::GetValid(ColumnLoader->Apply(CurrentBlobChunk->GetData()));
+        AFL_VERIFY(res->num_columns() == 1);
+        CurrentArray = res->column(0);
     }
-    return *CurrentBatch;
+    return CurrentArray;
 }
 
 }

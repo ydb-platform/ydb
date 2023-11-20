@@ -79,16 +79,19 @@ protected:
     void OnAccept(const NActors::TActorContext& ctx) {
         int res;
         bool read = false, write = false;
-        if ((res = TSocketImpl::OnAccept(Endpoint, read, write)) != 1) {
-            if (-res == EAGAIN) {
-                if (PollerToken) {
-                    PollerToken->Request(read, write);
+        for (;;) {
+            if ((res = TSocketImpl::OnAccept(Endpoint, read, write)) != 1) {
+                if (-res == EAGAIN) {
+                    if (PollerToken && PollerToken->RequestReadNotificationAfterWouldBlock()) {
+                        continue;
+                    }
+                    return; // wait for further notifications
+                } else {
+                    LOG_ERROR_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - error in Accept: " << strerror(-res));
+                    return Die(ctx);
                 }
-                return; // wait for further notifications
-            } else {
-                LOG_ERROR_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - error in Accept: " << strerror(-res));
-                return Die(ctx);
             }
+            break;
         }
         TBase::Become(&TIncomingConnectionActor::StateConnected);
         ctx.Send(ctx.SelfID, new TEvPollerReady(nullptr, true, true));
@@ -147,7 +150,9 @@ protected:
                         if (!read && !write) {
                             read = true;
                         }
-                        PollerToken->Request(read, write);
+                        if (PollerToken->RequestNotificationAfterWouldBlock(read, write)) {
+                            continue;
+                        }
                     }
                     break;
                 } else if (-res == EINTR) {
@@ -258,7 +263,9 @@ protected:
                     if (!read && !write) {
                         write = true;
                     }
-                    PollerToken->Request(read, write);
+                    if (PollerToken->RequestNotificationAfterWouldBlock(read, write)) {
+                        continue;
+                    }
                 }
                 break;
             } else {

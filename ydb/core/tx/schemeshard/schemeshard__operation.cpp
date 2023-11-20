@@ -1024,12 +1024,12 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxCreateSequence:
         return CreateNewSequence(NextPartId(), txState);
     case TTxState::ETxType::TxAlterSequence:
-        Y_FAIL("TODO: implement");
+        Y_ABORT("TODO: implement");
     case TTxState::ETxType::TxDropSequence:
         return CreateDropSequence(NextPartId(), txState);
 
     case TTxState::ETxType::TxFillIndex:
-        Y_FAIL("deprecated");
+        Y_ABORT("deprecated");
 
     case TTxState::ETxType::TxMoveTable:
         return CreateMoveTable(NextPartId(), txState);
@@ -1040,7 +1040,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxCreateReplication:
         return CreateNewReplication(NextPartId(), txState);
     case TTxState::ETxType::TxAlterReplication:
-        Y_FAIL("TODO: implement");
+        Y_ABORT("TODO: implement");
     case TTxState::ETxType::TxDropReplication:
         return CreateDropReplication(NextPartId(), txState);
 
@@ -1056,13 +1056,13 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxDropExternalTable:
         return CreateDropExternalTable(NextPartId(), txState);
     case TTxState::ETxType::TxAlterExternalTable:
-        Y_FAIL("TODO: implement");
+        Y_ABORT("TODO: implement");
     case TTxState::ETxType::TxCreateExternalDataSource:
         return CreateNewExternalDataSource(NextPartId(), txState);
     case TTxState::ETxType::TxDropExternalDataSource:
         return CreateDropExternalDataSource(NextPartId(), txState);
     case TTxState::ETxType::TxAlterExternalDataSource:
-        Y_FAIL("TODO: implement");
+        Y_ABORT("TODO: implement");
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
@@ -1085,7 +1085,7 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
         return CreateNewTable(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
-        Y_FAIL("in general, alter table is multipart operation now due table indexes");
+        Y_ABORT("in general, alter table is multipart operation now due table indexes");
     case NKikimrSchemeOp::EOperationType::ESchemeOpSplitMergeTablePartitions:
         return CreateSplitMerge(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackup:
@@ -1093,15 +1093,15 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestore:
         return CreateRestore(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTable:
-        Y_FAIL("in general, drop table is multipart operation now due table indexes");
+        Y_ABORT("in general, drop table is multipart operation now due table indexes");
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable:
-        Y_FAIL("multipart operations are handled before, also they require transaction details");
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex:
-        Y_FAIL("is handled as part of ESchemeOpCreateIndexedTable");
+        Y_ABORT("is handled as part of ESchemeOpCreateIndexedTable");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex:
-        Y_FAIL("is handled as part of ESchemeOpDropTable");
+        Y_ABORT("is handled as part of ESchemeOpDropTable");
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables:
-        Y_FAIL("multipart operations are handled before, also they require transaction details");
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume:
         return CreateNewRTMR(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore:
@@ -1136,11 +1136,11 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
         return CreateSubDomain(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain:
-        Y_FAIL("run in compatible");
+        Y_ABORT("run in compatible");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSubDomain:
         return CreateDropSubdomain(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropSubDomain:
-        Y_FAIL("run in compatible");
+        Y_ABORT("run in compatible");
 
     // ExtSubDomain
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
@@ -1148,7 +1148,7 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomain:
         return CreateAlterExtSubDomain(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomainCreateHive:
-        Y_FAIL("multipart operations are handled before, also they require transaction details");
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropExtSubDomain:
         return CreateForceDropExtSubDomain(NextPartId(), tx);
 
@@ -1164,7 +1164,7 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
         return CreateUpgradeSubDomainDecision(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild:
-        Y_FAIL("multipart operations are handled before, also they require transaction details");
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
         return CreateLock(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropLock:
@@ -1196,50 +1196,50 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence:
         return CreateNewSequence(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSequence:
-        Y_FAIL("TODO: implement");
+        Y_ABORT("TODO: implement");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence:
         return CreateDropSequence(NextPartId(), tx);
 
     // Index
     case NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild:
-        Y_FAIL("multipart operations are handled before, also they require transaction details");
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex:
-        Y_FAIL("multipart operations are handled before, also they require transaction details");
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable:
-        Y_FAIL("multipart operations are handled before, also they require transaction details");
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable:
-        Y_FAIL("multipart operations are handled before, also they require transaction details");
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable:
-        Y_FAIL("multipart operations are handled before, also they require transaction details");
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable:
-        Y_FAIL("multipart operations are handled before, also they require transaction details");
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCancelIndexBuild:
-        Y_FAIL("multipart operations are handled before, also they require transaction details");
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropIndex:
-        Y_FAIL("multipart operations are handled before, also they require transaction details");
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndexAtMainTable:
-        Y_FAIL("multipart operations are handled before, also they require transaction details");
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
 
     // CDC
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable:
-        Y_FAIL("multipart operations are handled before, also they require transaction details");
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStream:
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamImpl:
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamAtTable:
-        Y_FAIL("multipart operations are handled before, also they require transaction details");
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream:
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl:
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable:
-        Y_FAIL("multipart operations are handled before, also they require transaction details");
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
 
     case NKikimrSchemeOp::EOperationType::ESchemeOp_DEPRECATED_35:
-        Y_FAIL("impossible");
+        Y_ABORT("impossible");
 
     // Move
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable:
@@ -1247,13 +1247,13 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTableIndex:
         return CreateMoveTableIndex(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex:
-        Y_FAIL("impossible");
+        Y_ABORT("impossible");
 
     // Replication
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication:
         return CreateNewReplication(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterReplication:
-        Y_FAIL("TODO: implement");
+        Y_ABORT("TODO: implement");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication:
         return CreateDropReplication(NextPartId(), tx);
 
@@ -1271,7 +1271,7 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalTable:
         return CreateDropExternalTable(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalTable:
-        Y_FAIL("TODO: implement");
+        Y_ABORT("TODO: implement");
 
     // ExternalDataSource
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
@@ -1279,7 +1279,7 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalDataSource:
         return CreateDropExternalDataSource(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalDataSource:
-        Y_FAIL("TODO: implement");
+        Y_ABORT("TODO: implement");
     }
 
     Y_UNREACHABLE();

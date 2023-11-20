@@ -10,7 +10,7 @@ namespace NYT::NAuth {
 
 /// This wrapper is required because NYT::NAuth::IServiceTicketAuthPtr is NYT::TIntrusivePtr,
 /// and, if we used this pointer in interfaces of `mapreduce/yt` client, a lot of users of this library
-/// could get unexpected build errors that `TIntrusivePtr` is ambigious
+/// could get unexpected build errors that `TIntrusivePtr` is ambiguous
 /// (from `::` namespace and from `::NYT::` namespace).
 /// So we use this wrapper in our interfaces to avoid such problems for users.
 struct IServiceTicketAuthPtrWrapper

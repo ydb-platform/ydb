@@ -9,15 +9,25 @@
 
 add_library(restricted-aws-s2n)
 target_compile_options(restricted-aws-s2n PRIVATE
+  -DS2N_ATOMIC_SUPPORTED
+  -DS2N_CLOEXEC_SUPPORTED
+  -DS2N_CLOEXEC_XOPEN_SUPPORTED
   -DS2N_CLONE_SUPPORTED
+  -DS2N_DIAGNOSTICS_POP_SUPPORTED
+  -DS2N_DIAGNOSTICS_PUSH_SUPPORTED
+  -DS2N_EXECINFO_AVAILABLE
   -DS2N_FALL_THROUGH_SUPPORTED
+  -DS2N_KYBER512R3_AVX2_BMI2_SUPPORTED
+  -DS2N_KYBER512R3_M256_INTRINSICS_SUPPORTED
   -DS2N_LIBCRYPTO_SUPPORTS_EVP_MD5_SHA1_HASH
   -DS2N_LIBCRYPTO_SUPPORTS_EVP_MD_CTX_SET_PKEY_CTX
   -DS2N_LIBCRYPTO_SUPPORTS_EVP_RC4
+  -DS2N_LIBCRYPTO_SUPPORTS_FLAG_NO_CHECK_TIME
   -DS2N_MADVISE_SUPPORTED
-  -DS2N_PLATFORM_SUPPORTS_KTLS
   -DS2N___RESTRICT__SUPPORTED
   -DS2N_FEATURES_AVAILABLE
+  -DS2N_LINUX_SENDFILE
+  -DS2N_KTLS_SUPPORTED
   -DS2N_STACKTRACE
   -DS2N_CPUID_AVAILABLE
   -DS2N_KYBER512R3_AVX2_BMI2
@@ -76,7 +86,7 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_polyvec.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_reduce.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_symmetric-shake.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/s2n_kyber_512_evp.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/s2n_kyber_evp.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/s2n_pq.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/s2n_pq_random.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer.c
@@ -162,6 +172,7 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_key_log.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_key_update.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_ktls.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_ktls_io.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_next_protocol.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_ocsp_stapling.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_post_handshake.c
@@ -200,11 +211,12 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_tls13_secrets.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/s2n_x509_validator.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_array.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_asn1_time.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_atomic.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_blob.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_ensure.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_fork_detection.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_init.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_io.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_map.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_mem.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_random.c

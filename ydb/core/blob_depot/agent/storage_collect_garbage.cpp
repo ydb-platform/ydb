@@ -81,7 +81,7 @@ namespace NKikimr::NBlobDepot {
                 } else if (auto *p = std::get_if<TEvBlobDepot::TEvCollectGarbageResult*>(&response)) {
                     HandleCollectGarbageResult(std::move(context), (*p)->Record);
                 } else {
-                    Y_FAIL();
+                    Y_ABORT();
                 }
             }
 

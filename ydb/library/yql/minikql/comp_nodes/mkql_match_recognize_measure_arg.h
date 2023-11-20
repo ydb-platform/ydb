@@ -9,7 +9,7 @@ namespace NKikimr::NMiniKQL::NMatchRecognize {
 
 using NYql::NMatchRecognize::EMeasureInputDataSpecialColumns;
 
-using TMeasureInputColumnOrder = TVector<std::pair<EMeasureInputDataSpecialColumns, size_t>>;
+using TMeasureInputColumnOrder = std::vector<std::pair<EMeasureInputDataSpecialColumns, size_t>, TMKQLAllocator<std::pair<EMeasureInputDataSpecialColumns, size_t>>>;
 
 //Input row augmented with lightweight special columns for calculating MEASURE lambdas
 class TRowForMeasureValue: public TComputationValue<TRowForMeasureValue>

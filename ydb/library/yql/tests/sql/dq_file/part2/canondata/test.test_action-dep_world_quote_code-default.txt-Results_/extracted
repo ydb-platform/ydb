@@ -1,0 +1,20 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:24:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT * FROM $fullQuery();
+	^
+        <tmp_path>/program.sql:<main>:24:15: Warning: At function: UnorderedSubquery
+        	SELECT * FROM $fullQuery();
+	              ^
+            <tmp_path>/program.sql:<main>:11:16: Warning: At function: Extend
+            	        RETURN FuncCode("Extend", $queries);
+	               ^
+                <tmp_path>/program.sql:<main>:20:4: Warning: At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+                	   SELECT $n + $k FROM $z;
+	   ^
+                    <tmp_path>/program.sql:<main>:20:14: Warning: At function: +
+                    	   SELECT $n + $k FROM $z;
+	             ^
+                        <tmp_path>/program.sql:<main>:20:14: Warning: Integral type implicit bitcast: Int32 and Optional<Uint64>
+                        	   SELECT $n + $k FROM $z;
+	             ^

@@ -64,7 +64,7 @@ TAutoPtr<TTableIt> TDatabase::Iterate(ui32 table, TRawVals key, TTagsRef tags, E
             }
         }
 
-        Y_FAIL("Don't know how to convert ELookup to ESeek mode");
+        Y_ABORT("Don't know how to convert ELookup to ESeek mode");
     };
 
     IteratedTables.insert(table);
@@ -133,7 +133,7 @@ TAutoPtr<TTableIt> TDatabase::IterateRange(ui32 table, const TKeyRange& range, T
 {
     Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
 
-    Y_VERIFY_DEBUG(!IsAmbiguousRange(range, Require(table)->GetScheme()->Keys->Size()),
+    Y_DEBUG_ABORT_UNLESS(!IsAmbiguousRange(range, Require(table)->GetScheme()->Keys->Size()),
         "%s", IsAmbiguousRangeReason(range, Require(table)->GetScheme()->Keys->Size()));
 
     IteratedTables.insert(table);
@@ -162,7 +162,7 @@ TAutoPtr<TTableReverseIt> TDatabase::IterateRangeReverse(ui32 table, const TKeyR
 {
     Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
 
-    Y_VERIFY_DEBUG(!IsAmbiguousRange(range, Require(table)->GetScheme()->Keys->Size()),
+    Y_DEBUG_ABORT_UNLESS(!IsAmbiguousRange(range, Require(table)->GetScheme()->Keys->Size()),
         "%s", IsAmbiguousRangeReason(range, Require(table)->GetScheme()->Keys->Size()));
 
     IteratedTables.insert(table);
@@ -272,11 +272,11 @@ bool TDatabase::Precharge(ui32 table, TRawVals minKey, TRawVals maxKey,
 
 void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, TRowVersion rowVersion)
 {
-    Y_VERIFY_DEBUG(rowVersion != TRowVersion::Max(), "Updates cannot have v{max} as row version");
+    Y_DEBUG_ABORT_UNLESS(rowVersion != TRowVersion::Max(), "Updates cannot have v{max} as row version");
 
     for (size_t index = 0; index < key.size(); ++index) {
         if (auto error = NScheme::HasUnexpectedValueSize(key[index])) {
-            Y_FAIL("Key index %" PRISZT " validation failure: %s", index, error.c_str());
+            Y_ABORT("Key index %" PRISZT " validation failure: %s", index, error.c_str());
         }
     }
 
@@ -291,7 +291,7 @@ void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUp
     for (size_t index = 0; index < ModifiedOps.size(); ++index) {
         TUpdateOp& op = ModifiedOps[index];
         if (auto error = NScheme::HasUnexpectedValueSize(op.Value)) {
-            Y_FAIL("Op index %" PRISZT " tag %" PRIu32 " validation failure: %s", index, op.Tag, error.c_str());
+            Y_ABORT("Op index %" PRISZT " tag %" PRIu32 " validation failure: %s", index, op.Tag, error.c_str());
         }
 
         if (op.Value.IsEmpty()) {
@@ -322,7 +322,7 @@ void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const T
 {
     for (size_t index = 0; index < key.size(); ++index) {
         if (auto error = NScheme::HasUnexpectedValueSize(key[index])) {
-            Y_FAIL("Key index %" PRISZT " validation failure: %s", index, error.c_str());
+            Y_ABORT("Key index %" PRISZT " validation failure: %s", index, error.c_str());
         }
     }
 
@@ -330,7 +330,7 @@ void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const T
     for (size_t index = 0; index < ModifiedOps.size(); ++index) {
         TUpdateOp& op = ModifiedOps[index];
         if (auto error = NScheme::HasUnexpectedValueSize(op.Value)) {
-            Y_FAIL("Op index %" PRISZT " tag %" PRIu32 " validation failure: %s", index, op.Tag, error.c_str());
+            Y_ABORT("Op index %" PRISZT " tag %" PRIu32 " validation failure: %s", index, op.Tag, error.c_str());
         }
 
         if (op.Value.IsEmpty()) {

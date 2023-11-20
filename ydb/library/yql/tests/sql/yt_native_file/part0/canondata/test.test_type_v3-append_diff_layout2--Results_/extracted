@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:38:13: Warning: At function: YtPublish!
+    	insert into Output3
+	            ^
+        <tmp_path>/program.sql:<main>:38:13: Warning: Sort order of written data differs from the order of "Output3" table content. Result table content will be unordered
+        	insert into Output3
+	            ^

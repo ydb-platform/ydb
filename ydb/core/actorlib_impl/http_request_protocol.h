@@ -236,7 +236,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             CFuncCtx(TEvHTTPProtocolRetry::EventType, Retry, ctx);
         default:
-            Y_FAIL("Unknown message type dispatched");
+            Y_ABORT("Unknown message type dispatched");
         }
     }
 

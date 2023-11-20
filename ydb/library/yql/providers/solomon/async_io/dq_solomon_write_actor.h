@@ -21,6 +21,7 @@ constexpr i64 DqSolomonDefaultFreeSpace = 16_MB;
 std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(
     NYql::NSo::NProto::TDqSolomonShard&& settings,
     ui64 outputIndex,
+    TCollectStatsLevel statsLevel,
     const TTxId& txId,
     const THashMap<TString, TString>& secureParams,
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks,

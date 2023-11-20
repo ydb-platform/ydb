@@ -24,6 +24,8 @@ namespace NKikimr {
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
 
+        mutable NLWTrace::TOrbit Orbit;
+
         TEvHullWriteHugeBlob(const TActorId &senderId,
                              ui64 cookie,
                              const TLogoBlobID &logoBlobId,
@@ -222,6 +224,7 @@ namespace NKikimr {
         const TString LocalRecoveryInfoDbg;
         NMonGroup::TLsmHullGroup LsmHullGroup;
         NMonGroup::TDskOutOfSpaceGroup DskOutOfSpaceGroup;
+        const bool IsReadOnlyVDisk;
 
         THugeKeeperCtx(
                 TIntrusivePtr<TVDiskContext> vctx,
@@ -230,7 +233,8 @@ namespace NKikimr {
                 TActorId skeletonId,
                 TActorId loggerId,
                 TActorId logCutterId,
-                const TString &localRecoveryInfoDbg);
+                const TString &localRecoveryInfoDbg,
+                bool isReadOnlyVDisk);
         ~THugeKeeperCtx();
     };
 

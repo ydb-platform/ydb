@@ -847,6 +847,7 @@ template<size_t N, class T>
 #include <__memory/allocator_arg_t.h>
 #include <__memory/allocator_traits.h>
 #include <__memory/assume_aligned.h>
+#include <__memory/auto_ptr.h>
 #include <__memory/compressed_pair.h>
 #include <__memory/concepts.h>
 #include <__memory/construct_at.h>
@@ -859,12 +860,10 @@ template<size_t N, class T>
 #include <__memory/uninitialized_algorithms.h>
 #include <__memory/unique_ptr.h>
 #include <__memory/uses_allocator.h>
-#include <compare>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <iosfwd>
-#include <iterator>
 #include <new>
 #include <stdexcept>
 #include <stlfwd>
@@ -873,17 +872,13 @@ template<size_t N, class T>
 #include <typeinfo>
 #include <version>
 
-// TODO: remove these headers
-#include <__functional/binary_function.h>
-#include <__functional/invoke.h>
-#include <__functional/operations.h>
-#include <__functional/reference_wrapper.h>
-#include <__functional/unary_function.h>
-#include <__functional/weak_result_type.h>
-
-#if _LIBCPP_STD_VER <= 14 || defined(_LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR)
-#   include <__memory/auto_ptr.h>
+#ifndef _LIBCPP_REMOVE_TRANSITIVE_INCLUDES
+#  include <iterator>
+#  include <utility>
 #endif
+
+// standard-mandated includes
+#include <compare>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header

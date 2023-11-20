@@ -17,7 +17,7 @@ namespace NKikimr::NMiniKQL {
 namespace NMatchRecognize {
 
 enum class EOutputColumnSource {PartitionKey, Measure};
-using TOutputColumnOrder = TVector<std::pair<EOutputColumnSource, size_t>>;
+using TOutputColumnOrder = std::vector<std::pair<EOutputColumnSource, size_t>, TMKQLAllocator<std::pair<EOutputColumnSource, size_t>>>;
 
 using namespace NYql::NMatchRecognize;
 
@@ -41,9 +41,12 @@ class TBackTrackingMatchRecognize {
     using TMatchedVars = TMatchedVars<TRange>;
 public:
     //TODO(YQL-16486): create a tree for backtracking(replace var names with indexes)
-    struct TPatternConfiguration {
-        using TPtr = std::shared_ptr<TPatternConfiguration>;
-        static TPtr Create(const TRowPattern& pattern, const THashMap<TString, size_t>& varNameToIndex) {
+
+    struct TPatternConfiguration {};
+
+    struct TPatternConfigurationBuilder {
+        using TPatternConfigurationPtr = std::shared_ptr<TPatternConfiguration>;
+        static TPatternConfigurationPtr Create(const TRowPattern& pattern, const THashMap<TString, size_t>& varNameToIndex) {
             Y_UNUSED(pattern);
             Y_UNUSED(varNameToIndex);
             return std::make_shared<TPatternConfiguration>();
@@ -53,7 +56,7 @@ public:
     TBackTrackingMatchRecognize(
         NUdf::TUnboxedValue&& partitionKey,
         const TMatchRecognizeProcessorParameters& parameters,
-        const TPatternConfiguration::TPtr pattern,
+        const TPatternConfigurationBuilder::TPatternConfigurationPtr pattern,
         const TContainerCacheOnContext& cache
     )
     : PartitionKey(std::move(partitionKey))
@@ -126,7 +129,7 @@ private:
     const TContainerCacheOnContext& Cache;
     TSimpleList Rows;
     TMatchedVars CurMatchedVars;
-    std::deque<TMatchedVars> Matches;
+    std::deque<TMatchedVars, TMKQLAllocator<TMatchedVars>> Matches;
     ui64 MatchNumber;
 };
 
@@ -135,7 +138,7 @@ class TStreamingMatchRecognize {
     using TRange = TPartitionList::TRange;
     using TMatchedVars = TMatchedVars<TRange>;
 public:
-    using TPatternConfiguration = TNfaTransitionGraph;
+    using TPatternConfigurationBuilder = TNfaTransitionGraphBuilder;
     TStreamingMatchRecognize(
         NUdf::TUnboxedValue&& partitionKey,
         const TMatchRecognizeProcessorParameters& parameters,
@@ -198,7 +201,7 @@ template <typename Algo>
 class TStateForNonInterleavedPartitions
     : public TComputationValue<TStateForNonInterleavedPartitions<Algo>>
 {
-    using TRowPatternConfiguration = typename Algo::TPatternConfiguration;
+    using TRowPatternConfigurationBuilder = typename Algo::TPatternConfigurationBuilder;
 public:
     TStateForNonInterleavedPartitions(
             TMemoryUsageInfo* memInfo,
@@ -213,7 +216,7 @@ public:
     , PartitionKey(partitionKey)
     , PartitionKeyPacker(true, partitionKeyType)
     , Parameters(parameters)
-    , RowPatternConfiguration(TRowPatternConfiguration::Create(parameters.Pattern, parameters.VarNamesLookup))
+    , RowPatternConfiguration(TRowPatternConfigurationBuilder::Create(parameters.Pattern, parameters.VarNamesLookup))
     , Cache(cache)
     , Terminating(false)
     {}
@@ -280,7 +283,7 @@ private:
     IComputationNode* PartitionKey;
     TValuePackerGeneric<false> PartitionKeyPacker;
     const TMatchRecognizeProcessorParameters& Parameters;
-    const typename TRowPatternConfiguration::TPtr RowPatternConfiguration;
+    const typename TRowPatternConfigurationBuilder::TPatternConfigurationPtr RowPatternConfiguration;
     const TContainerCacheOnContext& Cache;
     NUdf::TUnboxedValue DelayedRow;
     bool Terminating;
@@ -289,7 +292,8 @@ private:
 class TStateForInterleavedPartitions
     : public TComputationValue<TStateForInterleavedPartitions>
 {
-    using TPartitionMap = std::unordered_map<TString, std::unique_ptr<TStreamingMatchRecognize>>;
+    using TPartitionMapValue = std::unique_ptr<TStreamingMatchRecognize>;
+    using TPartitionMap = std::unordered_map<TString, TPartitionMapValue, std::hash<TString>, std:: equal_to<TString>, TMKQLAllocator<std::pair<const TString, TPartitionMapValue>>>;
 public:
     TStateForInterleavedPartitions(
         TMemoryUsageInfo* memInfo,
@@ -304,7 +308,7 @@ public:
     , PartitionKey(partitionKey)
     , PartitionKeyPacker(true, partitionKeyType)
     , Parameters(parameters)
-    , NfaTransitionGraph(TNfaTransitionGraph::Create(parameters.Pattern, parameters.VarNamesLookup))
+    , NfaTransitionGraph(TNfaTransitionGraphBuilder::Create(parameters.Pattern, parameters.VarNamesLookup))
     , Cache(cache)
 {
 }
@@ -360,7 +364,7 @@ private:
 
 private:
     TPartitionMap Partitions;
-    std::stack<TPartitionMap::iterator> HasReadyOutput;
+    std::stack<TPartitionMap::iterator, std::deque<TPartitionMap::iterator, TMKQLAllocator<TPartitionMap::iterator>>> HasReadyOutput;
     bool Terminating = false;
 
     IComputationExternalNode* InputRowArg;
@@ -446,7 +450,8 @@ private:
 };
 
 TOutputColumnOrder GetOutputColumnOrder(TRuntimeNode partitionKyeColumnsIndexes, TRuntimeNode measureColumnsIndexes) {
-    std::unordered_map<size_t, std::pair<EOutputColumnSource, size_t>> temp;
+    using tempMapValue = std::pair<EOutputColumnSource, size_t>;
+    std::unordered_map<size_t, tempMapValue, std::hash<size_t>, std::equal_to<size_t>, TMKQLAllocator<std::pair<const size_t, tempMapValue>, EMemorySubPool::Temporary>> temp;
     {
         auto list = AS_VALUE(TListLiteral, partitionKyeColumnsIndexes);
         for (ui32 i = 0; i != list->GetItemsCount(); ++i) {

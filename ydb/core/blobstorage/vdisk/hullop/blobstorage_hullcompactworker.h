@@ -318,7 +318,7 @@ namespace NKikimr {
             for (;;) {
                 switch (State) {
                     case EState::Invalid:
-                        Y_FAIL("unexpected state");
+                        Y_ABORT("unexpected state");
 
                     case EState::GetNextItem:
                         if (It.Valid()) {
@@ -474,7 +474,7 @@ namespace NKikimr {
                     return nullptr;
 
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
         }
 

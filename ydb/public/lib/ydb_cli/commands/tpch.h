@@ -39,12 +39,16 @@ protected:
     TString ExternalQueriesFile;
     TString ExternalQueriesDir;
     TString ExternalVariablesString;
+    TString QueryExecutorType;
+
 public:
     TTpchCommandRun();
     void Config(TConfig& config);
     int Run(TConfig& config);
     TString PatchQuery(const TStringBuf& original) const;
     bool NeedRun(const ui32 queryIdx) const;
+
+    template <typename TClient>
     bool RunBench(TConfig& config);
 
     TVector<TString> GetQueries() const;

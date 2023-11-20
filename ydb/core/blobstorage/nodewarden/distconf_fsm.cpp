@@ -156,7 +156,7 @@ namespace NKikimr::NStorage {
             STLOG(PRI_CRIT, BS_NODE, NWDC08, "Multiple nonintersecting node sets have quorum",
                 (BaseConfigs.size, baseConfigs.size()), (CommittedConfigs.size, committedConfigs.size()),
                 (ProposedConfigs.size, proposedConfigs.size()));
-            Y_VERIFY_DEBUG(false);
+            Y_DEBUG_ABORT_UNLESS(false);
             Halt();
             return;
         }

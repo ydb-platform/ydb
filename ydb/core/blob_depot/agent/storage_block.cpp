@@ -40,7 +40,7 @@ namespace NKikimr::NBlobDepot {
                 } else if (auto *p = std::get_if<TEvBlobDepot::TEvBlockResult*>(&response)) {
                     return HandleBlockResult(std::move(context), **p);
                 } else {
-                    Y_FAIL();
+                    Y_ABORT();
                 }
             }
 

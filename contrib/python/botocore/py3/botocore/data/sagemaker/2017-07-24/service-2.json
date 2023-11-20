@@ -137,7 +137,7 @@
         {"shape":"ResourceInUse"},
         {"shape":"ResourceLimitExceeded"}
       ],
-      "documentation":"<p>Creates an Autopilot job also referred to as Autopilot experiment or AutoML job.</p> <note> <p>We recommend using the new versions <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_CreateAutoMLJobV2.html\">CreateAutoMLJobV2</a> and <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DescribeAutoMLJobV2.html\">DescribeAutoMLJobV2</a>, which offer backward compatibility.</p> <p> <code>CreateAutoMLJobV2</code> can manage tabular problem types identical to those of its previous version <code>CreateAutoMLJob</code>, as well as time-series forecasting, and non-tabular problem types such as image or text classification.</p> <p>Find guidelines about how to migrate a <code>CreateAutoMLJob</code> to <code>CreateAutoMLJobV2</code> in <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/autopilot-automate-model-development-create-experiment-api.html#autopilot-create-experiment-api-migrate-v1-v2\">Migrate a CreateAutoMLJob to CreateAutoMLJobV2</a>.</p> </note> <p>You can find the best-performing model after you run an AutoML job by calling <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DescribeAutoMLJobV2.html\">DescribeAutoMLJobV2</a> (recommended) or <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DescribeAutoMLJob.html\">DescribeAutoMLJob</a>.</p>"
+      "documentation":"<p>Creates an Autopilot job also referred to as Autopilot experiment or AutoML job.</p> <note> <p>We recommend using the new versions <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_CreateAutoMLJobV2.html\">CreateAutoMLJobV2</a> and <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DescribeAutoMLJobV2.html\">DescribeAutoMLJobV2</a>, which offer backward compatibility.</p> <p> <code>CreateAutoMLJobV2</code> can manage tabular problem types identical to those of its previous version <code>CreateAutoMLJob</code>, as well as time-series forecasting, non-tabular problem types such as image or text classification, and text generation (LLMs fine-tuning).</p> <p>Find guidelines about how to migrate a <code>CreateAutoMLJob</code> to <code>CreateAutoMLJobV2</code> in <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/autopilot-automate-model-development-create-experiment-api.html#autopilot-create-experiment-api-migrate-v1-v2\">Migrate a CreateAutoMLJob to CreateAutoMLJobV2</a>.</p> </note> <p>You can find the best-performing model after you run an AutoML job by calling <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DescribeAutoMLJobV2.html\">DescribeAutoMLJobV2</a> (recommended) or <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DescribeAutoMLJob.html\">DescribeAutoMLJob</a>.</p>"
     },
     "CreateAutoMLJobV2":{
       "name":"CreateAutoMLJobV2",
@@ -151,7 +151,7 @@
         {"shape":"ResourceInUse"},
         {"shape":"ResourceLimitExceeded"}
       ],
-      "documentation":"<p>Creates an Autopilot job also referred to as Autopilot experiment or AutoML job V2.</p> <note> <p> <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_CreateAutoMLJobV2.html\">CreateAutoMLJobV2</a> and <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DescribeAutoMLJobV2.html\">DescribeAutoMLJobV2</a> are new versions of <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_CreateAutoMLJob.html\">CreateAutoMLJob</a> and <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DescribeAutoMLJob.html\">DescribeAutoMLJob</a> which offer backward compatibility.</p> <p> <code>CreateAutoMLJobV2</code> can manage tabular problem types identical to those of its previous version <code>CreateAutoMLJob</code>, as well as time-series forecasting, and non-tabular problem types such as image or text classification.</p> <p>Find guidelines about how to migrate a <code>CreateAutoMLJob</code> to <code>CreateAutoMLJobV2</code> in <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/autopilot-automate-model-development-create-experiment-api.html#autopilot-create-experiment-api-migrate-v1-v2\">Migrate a CreateAutoMLJob to CreateAutoMLJobV2</a>.</p> </note> <p>For the list of available problem types supported by <code>CreateAutoMLJobV2</code>, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_AutoMLProblemTypeConfig.html\">AutoMLProblemTypeConfig</a>.</p> <p>You can find the best-performing model after you run an AutoML job V2 by calling <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DescribeAutoMLJobV2.html\">DescribeAutoMLJobV2</a>.</p>"
+      "documentation":"<p>Creates an Autopilot job also referred to as Autopilot experiment or AutoML job V2.</p> <note> <p> <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_CreateAutoMLJobV2.html\">CreateAutoMLJobV2</a> and <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DescribeAutoMLJobV2.html\">DescribeAutoMLJobV2</a> are new versions of <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_CreateAutoMLJob.html\">CreateAutoMLJob</a> and <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DescribeAutoMLJob.html\">DescribeAutoMLJob</a> which offer backward compatibility.</p> <p> <code>CreateAutoMLJobV2</code> can manage tabular problem types identical to those of its previous version <code>CreateAutoMLJob</code>, as well as time-series forecasting, non-tabular problem types such as image or text classification, and text generation (LLMs fine-tuning).</p> <p>Find guidelines about how to migrate a <code>CreateAutoMLJob</code> to <code>CreateAutoMLJobV2</code> in <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/autopilot-automate-model-development-create-experiment-api.html#autopilot-create-experiment-api-migrate-v1-v2\">Migrate a CreateAutoMLJob to CreateAutoMLJobV2</a>.</p> </note> <p>For the list of available problem types supported by <code>CreateAutoMLJobV2</code>, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_AutoMLProblemTypeConfig.html\">AutoMLProblemTypeConfig</a>.</p> <p>You can find the best-performing model after you run an AutoML job V2 by calling <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_DescribeAutoMLJobV2.html\">DescribeAutoMLJobV2</a>.</p>"
     },
     "CreateCodeRepository":{
       "name":"CreateCodeRepository",
@@ -319,7 +319,7 @@
         {"shape":"ResourceInUse"},
         {"shape":"ResourceLimitExceeded"}
       ],
-      "documentation":"<p>Create a new <code>FeatureGroup</code>. A <code>FeatureGroup</code> is a group of <code>Features</code> defined in the <code>FeatureStore</code> to describe a <code>Record</code>. </p> <p>The <code>FeatureGroup</code> defines the schema and features contained in the FeatureGroup. A <code>FeatureGroup</code> definition is composed of a list of <code>Features</code>, a <code>RecordIdentifierFeatureName</code>, an <code>EventTimeFeatureName</code> and configurations for its <code>OnlineStore</code> and <code>OfflineStore</code>. Check <a href=\"https://docs.aws.amazon.com/general/latest/gr/aws_service_limits.html\">Amazon Web Services service quotas</a> to see the <code>FeatureGroup</code>s quota for your Amazon Web Services account.</p> <important> <p>You must include at least one of <code>OnlineStoreConfig</code> and <code>OfflineStoreConfig</code> to create a <code>FeatureGroup</code>.</p> </important>"
+      "documentation":"<p>Create a new <code>FeatureGroup</code>. A <code>FeatureGroup</code> is a group of <code>Features</code> defined in the <code>FeatureStore</code> to describe a <code>Record</code>. </p> <p>The <code>FeatureGroup</code> defines the schema and features contained in the <code>FeatureGroup</code>. A <code>FeatureGroup</code> definition is composed of a list of <code>Features</code>, a <code>RecordIdentifierFeatureName</code>, an <code>EventTimeFeatureName</code> and configurations for its <code>OnlineStore</code> and <code>OfflineStore</code>. Check <a href=\"https://docs.aws.amazon.com/general/latest/gr/aws_service_limits.html\">Amazon Web Services service quotas</a> to see the <code>FeatureGroup</code>s quota for your Amazon Web Services account.</p> <p>Note that it can take approximately 10-15 minutes to provision an <code>OnlineStore</code> <code>FeatureGroup</code> with the <code>InMemory</code> <code>StorageType</code>.</p> <important> <p>You must include at least one of <code>OnlineStoreConfig</code> and <code>OfflineStoreConfig</code> to create a <code>FeatureGroup</code>.</p> </important>"
     },
     "CreateFlowDefinition":{
       "name":"CreateFlowDefinition",
@@ -983,7 +983,7 @@
       "errors":[
         {"shape":"ResourceNotFound"}
       ],
-      "documentation":"<p>Delete the <code>FeatureGroup</code> and any data that was written to the <code>OnlineStore</code> of the <code>FeatureGroup</code>. Data cannot be accessed from the <code>OnlineStore</code> immediately after <code>DeleteFeatureGroup</code> is called. </p> <p>Data written into the <code>OfflineStore</code> will not be deleted. The Amazon Web Services Glue database and tables that are automatically created for your <code>OfflineStore</code> are not deleted. </p>"
+      "documentation":"<p>Delete the <code>FeatureGroup</code> and any data that was written to the <code>OnlineStore</code> of the <code>FeatureGroup</code>. Data cannot be accessed from the <code>OnlineStore</code> immediately after <code>DeleteFeatureGroup</code> is called. </p> <p>Data written into the <code>OfflineStore</code> will not be deleted. The Amazon Web Services Glue database and tables that are automatically created for your <code>OfflineStore</code> are not deleted. </p> <p>Note that it can take approximately 10-15 minutes to delete an <code>OnlineStore</code> <code>FeatureGroup</code> with the <code>InMemory</code> <code>StorageType</code>.</p>"
     },
     "DeleteFlowDefinition":{
       "name":"DeleteFlowDefinition",
@@ -3895,6 +3895,32 @@
       "max":15,
       "min":1
     },
+    "AdditionalS3DataSource":{
+      "type":"structure",
+      "required":[
+        "S3DataType",
+        "S3Uri"
+      ],
+      "members":{
+        "S3DataType":{
+          "shape":"AdditionalS3DataSourceDataType",
+          "documentation":"<p>The data type of the additional data source that you specify for use in inference or training. </p>"
+        },
+        "S3Uri":{
+          "shape":"S3Uri",
+          "documentation":"<p>The uniform resource identifier (URI) used to identify an additional data source used in inference or training.</p>"
+        },
+        "CompressionType":{
+          "shape":"CompressionType",
+          "documentation":"<p>The type of compression used for an additional data source used in inference or training. Specify <code>None</code> if your additional data source is not compressed.</p>"
+        }
+      },
+      "documentation":"<p>A data source used for training or inference that is in addition to the input dataset or model data.</p>"
+    },
+    "AdditionalS3DataSourceDataType":{
+      "type":"string",
+      "enum":["S3Object"]
+    },
     "AgentVersion":{
       "type":"structure",
       "required":[
@@ -3960,7 +3986,7 @@
       "type":"string",
       "max":2048,
       "min":1,
-      "pattern":"arn:aws[a-z\\-]*:sagemaker:[a-z0-9\\-]*:[0-9]{12}:algorithm/.*"
+      "pattern":"^arn:aws(-cn|-us-gov)?:sagemaker:[a-z0-9\\-]{9,16}:[0-9]{12}:algorithm/[\\S]{1,2048}$"
     },
     "AlgorithmImage":{
       "type":"string",
@@ -5014,7 +5040,7 @@
         },
         "ContentType":{
           "shape":"ContentType",
-          "documentation":"<p>The content type of the data from the input source. The following are the allowed content types for different problems:</p> <ul> <li> <p>For tabular problem types: <code>text/csv;header=present</code> or <code>x-application/vnd.amazon+parquet</code>. The default value is <code>text/csv;header=present</code>.</p> </li> <li> <p>For image classification: <code>image/png</code>, <code>image/jpeg</code>, or <code>image/*</code>. The default value is <code>image/*</code>.</p> </li> <li> <p>For text classification: <code>text/csv;header=present</code> or <code>x-application/vnd.amazon+parquet</code>. The default value is <code>text/csv;header=present</code>.</p> </li> <li> <p>For time-series forecasting: <code>text/csv;header=present</code> or <code>x-application/vnd.amazon+parquet</code>. The default value is <code>text/csv;header=present</code>.</p> </li> </ul>"
+          "documentation":"<p>The content type of the data from the input source. The following are the allowed content types for different problems:</p> <ul> <li> <p>For tabular problem types: <code>text/csv;header=present</code> or <code>x-application/vnd.amazon+parquet</code>. The default value is <code>text/csv;header=present</code>.</p> </li> <li> <p>For image classification: <code>image/png</code>, <code>image/jpeg</code>, or <code>image/*</code>. The default value is <code>image/*</code>.</p> </li> <li> <p>For text classification: <code>text/csv;header=present</code> or <code>x-application/vnd.amazon+parquet</code>. The default value is <code>text/csv;header=present</code>.</p> </li> <li> <p>For time-series forecasting: <code>text/csv;header=present</code> or <code>x-application/vnd.amazon+parquet</code>. The default value is <code>text/csv;header=present</code>.</p> </li> <li> <p>For text generation (LLMs fine-tuning): <code>text/csv;header=present</code> or <code>x-application/vnd.amazon+parquet</code>. The default value is <code>text/csv;header=present</code>.</p> </li> </ul>"
         },
         "CompressionType":{
           "shape":"CompressionType",
@@ -5032,7 +5058,7 @@
       "members":{
         "MaxCandidates":{
           "shape":"MaxCandidates",
-          "documentation":"<p>The maximum number of times a training job is allowed to run.</p> <p>For text and image classification, as well as time-series forecasting problem types, the supported value is 1. For tabular problem types, the maximum value is 750.</p>"
+          "documentation":"<p>The maximum number of times a training job is allowed to run.</p> <p>For text and image classification, time-series forecasting, as well as text generation (LLMs fine-tuning) problem types, the supported value is 1. For tabular problem types, the maximum value is 750.</p>"
         },
         "MaxRuntimePerTrainingJobInSeconds":{
           "shape":"MaxRuntimePerTrainingJobInSeconds",
@@ -5089,10 +5115,10 @@
       "members":{
         "MetricName":{
           "shape":"AutoMLMetricEnum",
-          "documentation":"<p>The name of the objective metric used to measure the predictive quality of a machine learning system. During training, the model's parameters are updated iteratively to optimize its performance based on the feedback provided by the objective metric when evaluating the model on the validation dataset.</p> <p>For the list of all available metrics supported by Autopilot, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/autopilot-metrics-validation.html#autopilot-metrics\">Autopilot metrics</a>.</p> <p>If you do not specify a metric explicitly, the default behavior is to automatically use:</p> <ul> <li> <p>For tabular problem types:</p> <ul> <li> <p>Regression: <code>MSE</code>.</p> </li> <li> <p>Binary classification: <code>F1</code>.</p> </li> <li> <p>Multiclass classification: <code>Accuracy</code>.</p> </li> </ul> </li> <li> <p>For image or text classification problem types: <code>Accuracy</code> </p> </li> <li> <p>For time-series forecasting problem types: <code>AverageWeightedQuantileLoss</code> </p> </li> </ul>"
+          "documentation":"<p>The name of the objective metric used to measure the predictive quality of a machine learning system. During training, the model's parameters are updated iteratively to optimize its performance based on the feedback provided by the objective metric when evaluating the model on the validation dataset.</p> <p>The list of available metrics supported by Autopilot and the default metric applied when you do not specify a metric name explicitly depend on the problem type.</p> <ul> <li> <p>For tabular problem types:</p> <ul> <li> <p>List of available metrics: </p> <ul> <li> <p> Regression: <code>InferenceLatency</code>, <code>MAE</code>, <code>MSE</code>, <code>R2</code>, <code>RMSE</code> </p> </li> <li> <p> Binary classification: <code>Accuracy</code>, <code>AUC</code>, <code>BalancedAccuracy</code>, <code>F1</code>, <code>InferenceLatency</code>, <code>LogLoss</code>, <code>Precision</code>, <code>Recall</code> </p> </li> <li> <p> Multiclass classification: <code>Accuracy</code>, <code>BalancedAccuracy</code>, <code>F1macro</code>, <code>InferenceLatency</code>, <code>LogLoss</code>, <code>PrecisionMacro</code>, <code>RecallMacro</code> </p> </li> </ul> <p>For a description of each metric, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/autopilot-metrics-validation.html#autopilot-metrics\">Autopilot metrics for classification and regression</a>.</p> </li> <li> <p>Default objective metrics:</p> <ul> <li> <p>Regression: <code>MSE</code>.</p> </li> <li> <p>Binary classification: <code>F1</code>.</p> </li> <li> <p>Multiclass classification: <code>Accuracy</code>.</p> </li> </ul> </li> </ul> </li> <li> <p>For image or text classification problem types:</p> <ul> <li> <p>List of available metrics: <code>Accuracy</code> </p> <p>For a description of each metric, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/text-classification-data-format-and-metric.html\">Autopilot metrics for text and image classification</a>.</p> </li> <li> <p>Default objective metrics: <code>Accuracy</code> </p> </li> </ul> </li> <li> <p>For time-series forecasting problem types:</p> <ul> <li> <p>List of available metrics: <code>RMSE</code>, <code>wQL</code>, <code>Average wQL</code>, <code>MASE</code>, <code>MAPE</code>, <code>WAPE</code> </p> <p>For a description of each metric, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/timeseries-objective-metric.html\">Autopilot metrics for time-series forecasting</a>.</p> </li> <li> <p>Default objective metrics: <code>AverageWeightedQuantileLoss</code> </p> </li> </ul> </li> <li> <p>For text generation problem types (LLMs fine-tuning): Fine-tuning language models in Autopilot does not require setting the <code>AutoMLJobObjective</code> field. Autopilot fine-tunes LLMs without requiring multiple candidates to be trained and evaluated. Instead, using your dataset, Autopilot directly fine-tunes your target model to enhance a default objective metric, the cross-entropy loss. After fine-tuning a language model, you can evaluate the quality of its generated text using different metrics. For a list of the available metrics, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/llms-finetuning-models.html\">Metrics for fine-tuning LLMs in Autopilot</a>.</p> </li> </ul>"
         }
       },
-      "documentation":"<p>Specifies a metric to minimize or maximize as the objective of a job.</p>"
+      "documentation":"<p>Specifies a metric to minimize or maximize as the objective of an AutoML job.</p>"
     },
     "AutoMLJobObjectiveType":{
       "type":"string",
@@ -5247,7 +5273,14 @@
         "MAPE",
         "MASE",
         "WAPE",
-        "AverageWeightedQuantileLoss"
+        "AverageWeightedQuantileLoss",
+        "Rouge1",
+        "Rouge2",
+        "RougeL",
+        "RougeLSum",
+        "Perplexity",
+        "ValidationLoss",
+        "TrainingLoss"
       ]
     },
     "AutoMLMode":{
@@ -5307,11 +5340,15 @@
         },
         "TabularJobConfig":{
           "shape":"TabularJobConfig",
-          "documentation":"<p>Settings used to configure an AutoML job V2 for a tabular problem type (regression, classification).</p>"
+          "documentation":"<p>Settings used to configure an AutoML job V2 for the tabular problem type (regression, classification).</p>"
         },
         "TimeSeriesForecastingJobConfig":{
           "shape":"TimeSeriesForecastingJobConfig",
-          "documentation":"<p>Settings used to configure an AutoML job V2 for a time-series forecasting problem type.</p>"
+          "documentation":"<p>Settings used to configure an AutoML job V2 for the time-series forecasting problem type.</p>"
+        },
+        "TextGenerationJobConfig":{
+          "shape":"TextGenerationJobConfig",
+          "documentation":"<p>Settings used to configure an AutoML job V2 for the text generation (LLMs fine-tuning) problem type.</p> <note> <p>The text generation models that support fine-tuning in Autopilot are currently accessible exclusively in regions supported by Canvas. Refer to the documentation of Canvas for the <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/canvas.html\">full list of its supported Regions</a>.</p> </note>"
         }
       },
       "documentation":"<p>A collection of settings specific to the problem type used to configure an AutoML job V2. There must be one and only one config of the following type.</p>",
@@ -5323,7 +5360,8 @@
         "ImageClassification",
         "TextClassification",
         "Tabular",
-        "TimeSeriesForecasting"
+        "TimeSeriesForecasting",
+        "TextGeneration"
       ]
     },
     "AutoMLProblemTypeResolvedAttributes":{
@@ -5331,10 +5369,14 @@
       "members":{
         "TabularResolvedAttributes":{
           "shape":"TabularResolvedAttributes",
-          "documentation":"<p>Defines the resolved attributes for the <code>TABULAR</code> problem type.</p>"
+          "documentation":"<p>The resolved attributes for the tabular problem type.</p>"
+        },
+        "TextGenerationResolvedAttributes":{
+          "shape":"TextGenerationResolvedAttributes",
+          "documentation":"<p>The resolved attributes for the text generation problem type.</p>"
         }
       },
-      "documentation":"<p>The resolved attributes specific to the problem type of an AutoML job V2.</p>",
+      "documentation":"<p>Stores resolved attributes specific to the problem type of an AutoML job V2.</p>",
       "union":true
     },
     "AutoMLProcessingUnit":{
@@ -5474,6 +5516,12 @@
     "BacktestResultsLocation":{
       "type":"string",
       "min":1
+    },
+    "BaseModelName":{
+      "type":"string",
+      "max":256,
+      "min":1,
+      "pattern":"^[a-zA-Z0-9](-*[a-zA-Z0-9])*"
     },
     "BatchDataCaptureConfig":{
       "type":"structure",
@@ -5855,7 +5903,7 @@
       "members":{
         "TimeSeriesForecastingSettings":{
           "shape":"TimeSeriesForecastingSettings",
-          "documentation":"<p>Time series forecast settings for the Canvas application.</p>"
+          "documentation":"<p>Time series forecast settings for the SageMaker Canvas application.</p>"
         },
         "ModelRegisterSettings":{
           "shape":"ModelRegisterSettings",
@@ -5868,6 +5916,14 @@
         "IdentityProviderOAuthSettings":{
           "shape":"IdentityProviderOAuthSettings",
           "documentation":"<p>The settings for connecting to an external data source with OAuth.</p>"
+        },
+        "KendraSettings":{
+          "shape":"KendraSettings",
+          "documentation":"<p>The settings for document querying.</p>"
+        },
+        "DirectDeploySettings":{
+          "shape":"DirectDeploySettings",
+          "documentation":"<p>The model deployment settings for the SageMaker Canvas application.</p>"
         }
       },
       "documentation":"<p>The SageMaker Canvas application settings.</p>"
@@ -6511,7 +6567,7 @@
       "type":"string",
       "max":2048,
       "min":1,
-      "pattern":"arn:aws[a-z\\-]*:sagemaker:[a-z0-9\\-]*:[0-9]{12}:code-repository/.*"
+      "pattern":"^arn:aws(-cn|-us-gov)?:sagemaker:[a-z0-9\\-]{9,16}:[0-9]{12}:code-repository/[\\S]{1,2048}$"
     },
     "CodeRepositoryContains":{
       "type":"string",
@@ -7352,7 +7408,7 @@
         },
         "AutoMLJobInputDataConfig":{
           "shape":"AutoMLJobInputDataConfig",
-          "documentation":"<p>An array of channel objects describing the input data and their location. Each channel is a named input source. Similar to the <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_CreateAutoMLJob.html#sagemaker-CreateAutoMLJob-request-InputDataConfig\">InputDataConfig</a> attribute in the <code>CreateAutoMLJob</code> input parameters. The supported formats depend on the problem type:</p> <ul> <li> <p>For tabular problem types: <code>S3Prefix</code>, <code>ManifestFile</code>.</p> </li> <li> <p>For image classification: <code>S3Prefix</code>, <code>ManifestFile</code>, <code>AugmentedManifestFile</code>.</p> </li> <li> <p>For text classification: <code>S3Prefix</code>.</p> </li> <li> <p>For time-series forecasting: <code>S3Prefix</code>.</p> </li> </ul>"
+          "documentation":"<p>An array of channel objects describing the input data and their location. Each channel is a named input source. Similar to the <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_CreateAutoMLJob.html#sagemaker-CreateAutoMLJob-request-InputDataConfig\">InputDataConfig</a> attribute in the <code>CreateAutoMLJob</code> input parameters. The supported formats depend on the problem type:</p> <ul> <li> <p>For tabular problem types: <code>S3Prefix</code>, <code>ManifestFile</code>.</p> </li> <li> <p>For image classification: <code>S3Prefix</code>, <code>ManifestFile</code>, <code>AugmentedManifestFile</code>.</p> </li> <li> <p>For text classification: <code>S3Prefix</code>.</p> </li> <li> <p>For time-series forecasting: <code>S3Prefix</code>.</p> </li> <li> <p>For text generation (LLMs fine-tuning): <code>S3Prefix</code>.</p> </li> </ul>"
         },
         "OutputDataConfig":{
           "shape":"AutoMLOutputDataConfig",
@@ -7376,7 +7432,7 @@
         },
         "AutoMLJobObjective":{
           "shape":"AutoMLJobObjective",
-          "documentation":"<p>Specifies a metric to minimize or maximize as the objective of a job. If not specified, the default objective metric depends on the problem type. For the list of default values per problem type, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_AutoMLJobObjective.html\">AutoMLJobObjective</a>.</p> <note> <p>For tabular problem types, you must either provide both the <code>AutoMLJobObjective</code> and indicate the type of supervised learning problem in <code>AutoMLProblemTypeConfig</code> (<code>TabularJobConfig.ProblemType</code>), or none at all.</p> </note>"
+          "documentation":"<p>Specifies a metric to minimize or maximize as the objective of a job. If not specified, the default objective metric depends on the problem type. For the list of default values per problem type, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_AutoMLJobObjective.html\">AutoMLJobObjective</a>.</p> <note> <ul> <li> <p>For tabular problem types: You must either provide both the <code>AutoMLJobObjective</code> and indicate the type of supervised learning problem in <code>AutoMLProblemTypeConfig</code> (<code>TabularJobConfig.ProblemType</code>), or none at all.</p> </li> <li> <p>For text generation problem types (LLMs fine-tuning): Fine-tuning language models in Autopilot does not require setting the <code>AutoMLJobObjective</code> field. Autopilot fine-tunes LLMs without requiring multiple candidates to be trained and evaluated. Instead, using your dataset, Autopilot directly fine-tunes your target model to enhance a default objective metric, the cross-entropy loss. After fine-tuning a language model, you can evaluate the quality of its generated text using different metrics. For a list of the available metrics, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/llms-finetuning-models.html\">Metrics for fine-tuning LLMs in Autopilot</a>.</p> </li> </ul> </note>"
         },
         "ModelDeployConfig":{
           "shape":"ModelDeployConfig",
@@ -15196,6 +15252,16 @@
       "max":8192,
       "min":1
     },
+    "DirectDeploySettings":{
+      "type":"structure",
+      "members":{
+        "Status":{
+          "shape":"FeatureStatus",
+          "documentation":"<p>Describes whether model deployment permissions are enabled or disabled in the Canvas application.</p>"
+        }
+      },
+      "documentation":"<p>The model deployment settings for the SageMaker Canvas application.</p> <note> <p>In order to enable model deployment for Canvas, the SageMaker Domain's or user profile's Amazon Web Services IAM execution role must have the <code>AmazonSageMakerCanvasDirectDeployAccess</code> policy attached. You can also turn on model deployment permissions through the SageMaker Domain's or user profile's settings in the SageMaker console.</p> </note>"
+    },
     "DirectInternetAccess":{
       "type":"string",
       "enum":[
@@ -17403,7 +17469,9 @@
     },
     "GitConfigUrl":{
       "type":"string",
-      "pattern":"^https://([^/]+)/?(.*)$"
+      "max":1024,
+      "min":11,
+      "pattern":"^https://([^/]+)/?.{3,1016}$"
     },
     "Group":{
       "type":"string",
@@ -18271,7 +18339,7 @@
           "documentation":"<p>The name of the metric to use for the objective metric.</p>"
         }
       },
-      "documentation":"<p>Defines the objective metric for a hyperparameter tuning job. Hyperparameter tuning uses the value of this metric to evaluate the training jobs it launches, and returns the training job that results in either the highest or lowest value for this metric, depending on the value you specify for the <code>Type</code> parameter.</p>"
+      "documentation":"<p>Defines the objective metric for a hyperparameter tuning job. Hyperparameter tuning uses the value of this metric to evaluate the training jobs it launches, and returns the training job that results in either the highest or lowest value for this metric, depending on the value you specify for the <code>Type</code> parameter. If you want to define a custom objective metric, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/automatic-model-tuning-define-metrics-variables.html\">Define metrics and environment variables</a>.</p>"
     },
     "HyperParameterTuningJobObjectiveType":{
       "type":"string",
@@ -18571,7 +18639,7 @@
           "documentation":"<p>The ARN of an Amazon Web Services Secrets Manager secret that stores the credentials from your identity provider, such as the client ID and secret, authorization URL, and token URL. </p>"
         }
       },
-      "documentation":"<p>The Amazon SageMaker Canvas app setting where you configure OAuth for connecting to an external data source, such as Snowflake.</p>"
+      "documentation":"<p>The Amazon SageMaker Canvas application setting where you configure OAuth for connecting to an external data source, such as Snowflake.</p>"
     },
     "IdentityProviderOAuthSettings":{
       "type":"list",
@@ -18642,7 +18710,7 @@
           "documentation":"<p>How long a job is allowed to run, or how many candidates a job is allowed to generate.</p>"
         }
       },
-      "documentation":"<p>Stores the configuration information for the image classification problem of an AutoML job V2.</p>"
+      "documentation":"<p>The collection of settings used by an AutoML job V2 for the image classification problem type.</p>"
     },
     "ImageConfig":{
       "type":"structure",
@@ -19574,6 +19642,16 @@
       "type":"integer",
       "max":3600,
       "min":0
+    },
+    "KendraSettings":{
+      "type":"structure",
+      "members":{
+        "Status":{
+          "shape":"FeatureStatus",
+          "documentation":"<p>Describes whether the document querying feature is enabled or disabled in the Canvas application.</p>"
+        }
+      },
+      "documentation":"<p>The Amazon SageMaker Canvas application setting where you configure document querying.</p>"
     },
     "KernelDisplayName":{
       "type":"string",
@@ -24701,7 +24779,8 @@
           "shape":"MonitoringAlertSummaryList",
           "documentation":"<p>A JSON array where each element is a summary for a monitoring alert.</p>"
         },
-        "LastMonitoringExecutionSummary":{"shape":"MonitoringExecutionSummary"}
+        "LastMonitoringExecutionSummary":{"shape":"MonitoringExecutionSummary"},
+        "BatchTransformInput":{"shape":"BatchTransformInput"}
       },
       "documentation":"<p>A monitoring schedule for a model displayed in the Amazon SageMaker Model Dashboard.</p>"
     },
@@ -25099,7 +25178,7 @@
       "type":"string",
       "max":2048,
       "min":1,
-      "pattern":"arn:aws[a-z\\-]*:sagemaker:[a-z0-9\\-]*:[0-9]{12}:model-package/.*"
+      "pattern":"^arn:aws(-cn|-us-gov)?:sagemaker:[a-z0-9\\-]{9,16}:[0-9]{12}:model-package/[\\S]{1,2048}$"
     },
     "ModelPackageArnList":{
       "type":"list",
@@ -25150,6 +25229,10 @@
         "NearestModelName":{
           "shape":"String",
           "documentation":"<p>The name of a pre-trained machine learning benchmarked by Amazon SageMaker Inference Recommender model that matches your model. You can find a list of benchmarked models by calling <code>ListModelMetadata</code>.</p>"
+        },
+        "AdditionalS3DataSource":{
+          "shape":"AdditionalS3DataSource",
+          "documentation":"<p>The additional data source that is used during inference in the Docker container for your model package.</p>"
         }
       },
       "documentation":"<p>Describes the Docker container for the model package.</p>"
@@ -25201,7 +25284,7 @@
       "type":"string",
       "max":2048,
       "min":1,
-      "pattern":"arn:aws[a-z\\-]*:sagemaker:[a-z0-9\\-]*:[0-9]{12}:model-package-group/.*"
+      "pattern":"^arn:aws(-cn|-us-gov)?:sagemaker:[a-z0-9\\-]{9,16}:[0-9]{12}:model-package-group/[\\S]{1,2048}$"
     },
     "ModelPackageGroupSortBy":{
       "type":"string",
@@ -28439,7 +28522,8 @@
         "ml.inf2.xlarge",
         "ml.inf2.8xlarge",
         "ml.inf2.24xlarge",
-        "ml.inf2.48xlarge"
+        "ml.inf2.48xlarge",
+        "ml.p5.48xlarge"
       ]
     },
     "ProductionVariantList":{
@@ -28758,7 +28842,7 @@
       "type":"string",
       "max":2048,
       "min":1,
-      "pattern":"arn:aws[a-z\\-]*:sagemaker:[a-z0-9\\-]*:[0-9]{12}:project:.*"
+      "pattern":"^arn:aws(-cn|-us-gov)?:sagemaker:[a-z0-9\\-]{9,16}:[0-9]{12}:project/[\\S]{1,2048}$"
     },
     "ProjectEntityName":{
       "type":"string",
@@ -30595,14 +30679,11 @@
     },
     "SelectiveExecutionConfig":{
       "type":"structure",
-      "required":[
-        "SourcePipelineExecutionArn",
-        "SelectedSteps"
-      ],
+      "required":["SelectedSteps"],
       "members":{
         "SourcePipelineExecutionArn":{
           "shape":"PipelineExecutionArn",
-          "documentation":"<p>The ARN from a reference execution of the current pipeline. Used to copy input collaterals needed for the selected steps to run. The execution status of the pipeline can be either <code>Failed</code> or <code>Success</code>.</p>"
+          "documentation":"<p>The ARN from a reference execution of the current pipeline. Used to copy input collaterals needed for the selected steps to run. The execution status of the pipeline can be either <code>Failed</code> or <code>Success</code>.</p> <p>This field is required if the steps you specify for <code>SelectedSteps</code> depend on output collaterals from any non-specified pipeline steps. For more information, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/pipelines-selective-ex.html\">Selective Execution for Pipeline Steps</a>.</p>"
         },
         "SelectedSteps":{
           "shape":"SelectedStepList",
@@ -31664,7 +31745,7 @@
           "documentation":"<p>If specified, this column name indicates which column of the dataset should be treated as sample weights for use by the objective metric during the training, evaluation, and the selection of the best model. This column is not considered as a predictive feature. For more information on Autopilot metrics, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/autopilot-metrics-validation.html\">Metrics and validation</a>.</p> <p>Sample weights should be numeric, non-negative, with larger values indicating which rows are more important than others. Data points that have invalid or no weight value are excluded.</p> <p>Support for sample weights is available in <a href=\"https://docs.aws.amazon.com/sagemaker/latest/APIReference/API_AutoMLAlgorithmConfig.html\">Ensembling</a> mode only.</p>"
         }
       },
-      "documentation":"<p>The collection of settings used by an AutoML job V2 for the <code>TABULAR</code> problem type.</p>"
+      "documentation":"<p>The collection of settings used by an AutoML job V2 for the tabular problem type.</p>"
     },
     "TabularResolvedAttributes":{
       "type":"structure",
@@ -31674,7 +31755,7 @@
           "documentation":"<p>The type of supervised learning problem available for the model candidates of the AutoML job V2 (Binary Classification, Multiclass Classification, Regression). For more information, see <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/autopilot-datasets-problem-types.html#autopilot-problem-types\"> Amazon SageMaker Autopilot problem types</a>.</p>"
         }
       },
-      "documentation":"<p>The resolved attributes specific to the <code>TABULAR</code> problem type.</p>"
+      "documentation":"<p>The resolved attributes specific to the tabular problem type.</p>"
     },
     "Tag":{
       "type":"structure",
@@ -31942,7 +32023,28 @@
           "documentation":"<p>The name of the column used to provide the class labels. It should not be same as the content column.</p>"
         }
       },
-      "documentation":"<p>Stores the configuration information for the text classification problem of an AutoML job V2.</p>"
+      "documentation":"<p>The collection of settings used by an AutoML job V2 for the text classification problem type.</p>"
+    },
+    "TextGenerationJobConfig":{
+      "type":"structure",
+      "members":{
+        "CompletionCriteria":{"shape":"AutoMLJobCompletionCriteria"},
+        "BaseModelName":{
+          "shape":"BaseModelName",
+          "documentation":"<p>The name of the base model to fine-tune. Autopilot supports fine-tuning a variety of large language models. For information on the list of supported models, see <a href=\"https://docs.aws.amazon.com/sagemaker/src/AWSIronmanApiDoc/build/server-root/sagemaker/latest/dg/llms-finetuning-models.html#llms-finetuning-supported-llms\">Text generation models supporting fine-tuning in Autopilot</a>. If no <code>BaseModelName</code> is provided, the default model used is Falcon-7B-Instruct. </p>"
+        }
+      },
+      "documentation":"<p>The collection of settings used by an AutoML job V2 for the text generation problem type.</p> <note> <p>The text generation models that support fine-tuning in Autopilot are currently accessible exclusively in regions supported by Canvas. Refer to the documentation of Canvas for the <a href=\"https://docs.aws.amazon.com/sagemaker/latest/dg/canvas.html\">full list of its supported Regions</a>.</p> </note>"
+    },
+    "TextGenerationResolvedAttributes":{
+      "type":"structure",
+      "members":{
+        "BaseModelName":{
+          "shape":"BaseModelName",
+          "documentation":"<p>The name of the base model to fine-tune.</p>"
+        }
+      },
+      "documentation":"<p>The resolved attributes specific to the text generation problem type.</p>"
     },
     "ThingName":{
       "type":"string",
@@ -32127,7 +32229,7 @@
     "TrainingContainerEntrypoint":{
       "type":"list",
       "member":{"shape":"TrainingContainerEntrypointString"},
-      "max":10,
+      "max":100,
       "min":1
     },
     "TrainingContainerEntrypointString":{
@@ -32144,7 +32246,7 @@
       "type":"map",
       "key":{"shape":"TrainingEnvironmentKey"},
       "value":{"shape":"TrainingEnvironmentValue"},
-      "max":48
+      "max":100
     },
     "TrainingEnvironmentValue":{
       "type":"string",
@@ -32600,6 +32702,10 @@
         "SupportedTuningJobObjectiveMetrics":{
           "shape":"HyperParameterTuningJobObjectives",
           "documentation":"<p>A list of the metrics that the algorithm emits that can be used as the objective metric in a hyperparameter tuning job.</p>"
+        },
+        "AdditionalS3DataSource":{
+          "shape":"AdditionalS3DataSource",
+          "documentation":"<p>The additional data source used during the training job.</p>"
         }
       },
       "documentation":"<p>Defines how the algorithm is used for a training job.</p>"

@@ -23,7 +23,7 @@ TString QueueIdName(NKikimrBlobStorage::EVDiskQueueId queueId) {
         case NKikimrBlobStorage::EVDiskQueueId::GetFastRead:  return "GetFastRead";
         case NKikimrBlobStorage::EVDiskQueueId::GetDiscover:  return "GetDiscover";
         case NKikimrBlobStorage::EVDiskQueueId::GetLowRead:   return "GetLowRead";
-        default:                                              Y_FAIL("unexpected EVDiskQueueId");
+        default:                                              Y_ABORT("unexpected EVDiskQueueId");
     }
 }
 
@@ -63,7 +63,7 @@ TGroupSessions::TGroupSessions(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
                     break;
 
                 default:
-                    Y_FAIL("unexpected queue id");
+                    Y_ABORT("unexpected queue id");
             }
 
             TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord(new NBackpressure::TFlowRecord);

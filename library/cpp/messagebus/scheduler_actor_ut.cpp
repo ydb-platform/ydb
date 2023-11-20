@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(TSchedulerActorTests) {
 
         void Act(TDefaultTag) {
             if (!Alarm.FetchTask()) {
-                Y_FAIL("must not have no spurious wakeups in test");
+                Y_ABORT("must not have no spurious wakeups in test");
             }
 
             TestSync.WaitForAndIncrement(Iteration++);

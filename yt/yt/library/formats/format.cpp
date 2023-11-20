@@ -465,6 +465,9 @@ std::unique_ptr<IParser> CreateParserForFormat(const TFormat& format, EDataType 
             return CreateParserForYson(consumer, DataTypeToYsonType(dataType));
         case EFormatType::Json: {
             auto config = ConvertTo<TJsonFormatConfigPtr>(&format.Attributes());
+            if (config->NestingLevelLimit == 0) {
+                config->NestingLevelLimit = NYT::NJson::NestingLevelLimit;
+            }
             return std::unique_ptr<IParser>(new TParserAdapter<TJsonParser>(consumer, config, DataTypeToYsonType(dataType)));
         }
         case EFormatType::Dsv: {

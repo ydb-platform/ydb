@@ -61,7 +61,7 @@ private:
             ProcessorId = runtime->Register(Processor);
             runtime->EnableScheduleForActor(ProcessorId, true);
             parent->Server->GetRuntime()->SetObserverFunc(
-                    [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&)
+                    [&](TAutoPtr<IEventHandle>&)
                     {
                         if (Processor->GetReindexCount() >= 1) return TTestActorRuntimeBase::EEventAction::DROP;
                         else return TTestActorRuntimeBase::EEventAction::PROCESS;

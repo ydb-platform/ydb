@@ -3,6 +3,7 @@
 #include "hive.h"
 #include "tablet_info.h"
 #include "follower_tablet_info.h"
+#include <ydb/core/base/channel_profiles.h>
 
 namespace NKikimr {
 namespace NHive {
@@ -28,10 +29,9 @@ public:
     TTabletId Id;
     ETabletState State;
     TTabletTypes::EType Type;
-    TObjectId ObjectId;
+    TFullObjectId ObjectId;
     TSubDomainKey ObjectDomain;
-    TVector<TNodeId> AllowedNodes;
-    TVector<TDataCenterId> AllowedDataCenters;
+    TNodeFilter NodeFilter;
     NKikimrHive::TDataCentersPreference DataCentersPreference;
     TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
     TChannelsBindings BoundChannels;
@@ -42,7 +42,6 @@ public:
     TList<TFollowerGroup> FollowerGroups;
     TList<TFollowerTabletInfo> Followers;
     TOwnerIdxType::TValueType Owner;
-    TVector<TSubDomainKey> EffectiveAllowedDomains; // AllowedDomains | ObjectDomain
     NKikimrHive::ETabletBootMode BootMode;
     TVector<TActorId> StorageInfoSubscribers;
     TActorId LockedToActor;
@@ -57,7 +56,7 @@ public:
         , Id(id)
         , State(ETabletState::Unknown)
         , Type(TTabletTypes::TypeInvalid)
-        , ObjectId(0)
+        , ObjectId(0, 0)
         , ChannelProfileReassignReason(NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO)
         , KnownGeneration(0)
         , Category(nullptr)

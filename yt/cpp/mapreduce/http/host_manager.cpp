@@ -94,7 +94,7 @@ void THostManager::Reset()
 
 TString THostManager::GetProxyForHeavyRequest(const TClientContext& context)
 {
-    auto cluster = context.ServerName;
+    auto cluster = context.ProxyAddress ? *context.ProxyAddress : context.ServerName;
     {
         auto guard = Guard(Lock_);
         auto it = ClusterHosts_.find(cluster);
@@ -121,10 +121,10 @@ THostManager::TClusterHostList THostManager::GetHosts(const TClientContext& cont
     THttpHeader header("GET", hostsEndpoint, false);
 
     try {
-        auto hostName = context.ServerName;
         auto requestId = CreateGuidAsString();
         // TODO: we need to set socket timeout here
-        auto response = context.HttpClient->Request(GetFullUrl(hostName, context, header), requestId, header);
+        UpdateHeaderForProxyIfNeed(context.ServerName, context, header);
+        auto response = context.HttpClient->Request(GetFullUrlForProxy(context.ServerName, context, header), requestId, header);
         auto hosts = ParseJsonStringArray(response->GetResponse());
         for (auto& host : hosts) {
             host = CreateHostNameWithPort(host, context);

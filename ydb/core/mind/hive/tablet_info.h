@@ -191,7 +191,7 @@ public:
     TFollowerTabletInfo& AsFollower();
     const TFollowerTabletInfo& AsFollower() const;
     std::pair<TTabletId, TFollowerId> GetFullTabletId() const;
-    TObjectId GetObjectId() const;
+    TFullObjectId GetObjectId() const;
     TTabletTypes::EType GetTabletType() const;
     TString ToString() const;
     TString StateString() const;
@@ -269,8 +269,7 @@ public:
         PostponedStart = nextStart;
     }
 
-    const TVector<TNodeId>& GetAllowedNodes() const;
-    const TVector<TDataCenterId>& GetAllowedDataCenters() const;
+    const TNodeFilter& GetNodeFilter() const;
     bool InitiateStart(TNodeInfo* node);
 
     const NKikimrTabletBase::TMetrics& GetResourceValues() const {

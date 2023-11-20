@@ -468,6 +468,10 @@ private:
     const std::shared_ptr<IStoragesManager> StoragesManager;
     std::shared_ptr<TCounters> Counters;
 protected:
+    virtual std::vector<NIndexedReader::TSortableBatchPosition> GetBucketPositions() const override {
+        return {};
+    }
+
     virtual void DoModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) override {
         const TInstant currentInstant = TInstant::Now();
         for (auto&& i : add) {
@@ -501,10 +505,12 @@ protected:
     virtual TString DoDebugString() const override {
         return "";
     }
+    virtual void DoActualize(const TInstant /*currentInstant*/) override {
 
+    }
 public:
-    TLevelsOptimizerPlanner(const ui64 granuleId, const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema)
-        : TBase(granuleId)
+    TLevelsOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema)
+        : TBase(pathId)
         , StoragesManager(storagesManager)
         , Counters(std::make_shared<TCounters>())
     {

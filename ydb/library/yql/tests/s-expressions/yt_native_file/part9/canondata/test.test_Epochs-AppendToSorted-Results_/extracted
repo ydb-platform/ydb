@@ -1,0 +1,8 @@
+<tmp_path>/program.yql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.yql:<main>:9:13: Warning: At function: YtPublish!
+    	(let world (Write! world sink (Key '('table (String 'Output))) input '('('mode 'append))))
+	            ^
+        <tmp_path>/program.yql:<main>:9:13: Warning: Sort order of written data differs from the order of "Output" table content. Result table content will be unordered
+        	(let world (Write! world sink (Key '('table (String 'Output))) input '('('mode 'append))))
+	            ^

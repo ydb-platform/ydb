@@ -48,7 +48,7 @@ public:
     }
 
     ~TOneOneQueueInplace() {
-        Y_VERIFY_DEBUG(Head() == 0);
+        Y_DEBUG_ABORT_UNLESS(Head() == 0);
         delete ReadFrom;
     }
 

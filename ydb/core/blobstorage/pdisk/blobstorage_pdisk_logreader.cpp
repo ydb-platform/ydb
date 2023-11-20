@@ -533,7 +533,7 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
             break;
         }
         default:
-            Y_FAIL();
+            Y_ABORT();
             break;
         }
     }// while (true)
@@ -573,7 +573,7 @@ bool TLogReader::PrepareToRead() {
     TDiskFormat &format = PDisk->Format;
     if (Position == TLogPosition::Invalid()) {
         if (IsInitial) {
-            Y_FAIL();
+            Y_ABORT();
         }
         ReplyOk();
         return true;

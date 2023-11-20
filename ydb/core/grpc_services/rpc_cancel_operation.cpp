@@ -49,7 +49,7 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
         case TOperationId::BUILD_INDEX:
             return new TEvIndexBuilder::TEvCancelRequest(TxId, DatabaseName, RawOperationId);
         default:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
     }
 

@@ -128,6 +128,25 @@
 
   {% include [auth-access-token](../../../../_includes/python/async/auth-access-token.md) %}
 
+- C# (.NET)
+
+  ```C#
+  using Ydb.Sdk;
+  using Ydb.Sdk.Auth;
+
+  const string endpoint = "grpc://localhost:2136";
+  const string database = "/local";
+  const string token = "MY_VERY_SECURE_TOKEN";
+
+  var config = new DriverConfig(
+      endpoint: endpoint,
+      database: database,
+      credentials: new TokenProvider(token)
+  );
+
+  await using var driver = await Driver.CreateInitialized(config);
+  ```
+
 - PHP
 
   ```php

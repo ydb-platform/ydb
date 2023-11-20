@@ -314,7 +314,7 @@ public:
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TCreateExternalDataSource AbortPropose"
             << ": opId# " << OperationId);
-        Y_FAIL("no AbortPropose for TCreateExternalDataSource");
+        Y_ABORT("no AbortPropose for TCreateExternalDataSource");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

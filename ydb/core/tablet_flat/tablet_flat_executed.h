@@ -70,6 +70,7 @@ protected:
     void Handle(TEvTablet::TEvFAuxUpdate::TPtr&);
     void Handle(TEvTablet::TEvFollowerGcApplied::TPtr&);
     void Handle(TEvTablet::TEvNewFollowerAttached::TPtr&);
+    void Handle(TEvTablet::TEvFollowerDetached::TPtr&);
     void Handle(TEvTablet::TEvUpdateConfig::TPtr&);
 
     /**
@@ -131,7 +132,7 @@ private:
             HANDLERS                                                                                \
             default:                                                                                \
                 if (!TTabletExecutedFlat::HandleDefaultEvents(ev, SelfId()))                             \
-                    Y_VERIFY_DEBUG(false, "%s: unexpected event type: %" PRIx32 " event: %s",       \
+                    Y_DEBUG_ABORT_UNLESS(false, "%s: unexpected event type: %" PRIx32 " event: %s",       \
                                    __func__, ev->GetTypeRewrite(),                                  \
                                    ev->ToString().data());                                          \
         }                                                                                           \

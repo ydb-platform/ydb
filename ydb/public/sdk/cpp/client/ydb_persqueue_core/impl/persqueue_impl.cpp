@@ -26,7 +26,7 @@ std::shared_ptr<IWriteSession> TPersQueueClient::TImpl::CreateWriteSession(
         const TWriteSessionSettings& settings
 ) {
     TMaybe<TWriteSessionSettings> maybeSettings;
-    if (!settings.CompressionExecutor_ || !settings.EventHandlers_.HandlersExecutor_ || !settings.ClusterDiscoveryMode_) {
+    if (!settings.CompressionExecutor_ || !settings.EventHandlers_.HandlersExecutor_) {
         maybeSettings = settings;
         with_lock (Lock) {
             if (!settings.CompressionExecutor_) {
@@ -34,9 +34,6 @@ std::shared_ptr<IWriteSession> TPersQueueClient::TImpl::CreateWriteSession(
             }
             if (!settings.EventHandlers_.HandlersExecutor_) {
                 maybeSettings->EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
-            }
-            if (!settings.ClusterDiscoveryMode_) {
-                maybeSettings->ClusterDiscoveryMode(Settings.ClusterDiscoveryMode_);
             }
         }
     }

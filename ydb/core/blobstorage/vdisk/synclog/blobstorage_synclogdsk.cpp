@@ -62,19 +62,19 @@ namespace NKikimr {
         // TOneChunkIndex
         ////////////////////////////////////////////////////////////////////////////
         void TOneChunkIndex::UpdateIndex(const TVector<TSyncLogPageSnap> &pages, ui32 indexBulk) {
-            Y_VERIFY_DEBUG(!Index.empty() && !pages.empty());
+            Y_DEBUG_ABORT_UNLESS(!Index.empty() && !pages.empty());
             TSyncLogPageSnap firstPage = pages.front();
             ui64 firstPageFirstLsn = firstPage.GetFirstLsn();
             ui64 firstPageLastLsn = firstPage.GetLastLsn();
 
-            Y_VERIFY_DEBUG(LastRealLsn < firstPageFirstLsn ||
+            Y_DEBUG_ABORT_UNLESS(LastRealLsn < firstPageFirstLsn ||
                          (firstPageFirstLsn <= LastRealLsn && LastRealLsn < firstPageLastLsn));
             // save freePagePos before updating index
             ui32 freePagePos = FreePagePos();
             if (firstPageFirstLsn <= LastRealLsn) {
                 // remove or update last index rec
                 TDiskIndexRecord &lastRec = Index.back();
-                Y_VERIFY_DEBUG(lastRec.PagesNum >= 1);
+                Y_DEBUG_ABORT_UNLESS(lastRec.PagesNum >= 1);
                 if (lastRec.PagesNum > 1) {
                     lastRec.PagesNum--;
                 } else {
@@ -90,7 +90,7 @@ namespace NKikimr {
                                          ui32 indexBulk,
                                          ui32 freePagePos) {
             ui32 s = pages.size();
-            Y_VERIFY_DEBUG(s > 0);
+            Y_DEBUG_ABORT_UNLESS(s > 0);
             LastRealLsn = pages[s - 1].GetLastLsn();
             for (ui32 i = 0; i < s; i += indexBulk) {
                 ui64 firstLsn = pages[i].GetFirstLsn();
@@ -315,7 +315,7 @@ namespace NKikimr {
             , ManyIdxChunks()
         {
             if (serializedDataBegin) {
-                Y_VERIFY_DEBUG(serializedDataEnd && serializedDataBegin < serializedDataEnd);
+                Y_DEBUG_ABORT_UNLESS(serializedDataEnd && serializedDataBegin < serializedDataEnd);
                 Deserialize(serializedDataBegin, serializedDataEnd);
             }
         }
@@ -415,7 +415,7 @@ namespace NKikimr {
             // ChunkDescription ::= [ChunkIdx=4b] [LastRealLsn=8b]
             //                      [DiskIndexRecsNum=4b] DiskIndexRec*
             // DiskIndexRec ::= [FirstLsn=8b] [OffsetInPages=2b] [PagesNum=2b]
-            Y_VERIFY_DEBUG(pos < end);
+            Y_DEBUG_ABORT_UNLESS(pos < end);
             if (size_t(end - pos) < 4)
                 return false;
 
@@ -476,7 +476,7 @@ namespace NKikimr {
                 const ui32 lastChunkFreePages = PrivateLastChunkFreePagesNum();
                 if (swapPagesSize > lastChunkFreePages) {
                     swapPagesSize -= lastChunkFreePages;
-                    Y_VERIFY_DEBUG(swapPagesSize > 0);
+                    Y_DEBUG_ABORT_UNLESS(swapPagesSize > 0);
                     numChunksToAdd = swapPagesSize / PagesInChunk;
                     if (numChunksToAdd * PagesInChunk != swapPagesSize) {
                         ++numChunksToAdd;
@@ -498,7 +498,7 @@ namespace NKikimr {
         }
 
         ui32 TDiskRecLog::PrivateLastChunkIdx() const {
-            Y_VERIFY_DEBUG(!PrivateEmpty());
+            Y_DEBUG_ABORT_UNLESS(!PrivateEmpty());
             return ManyIdxChunks.back()->GetChunkIdx();
         }
 
@@ -513,11 +513,11 @@ namespace NKikimr {
                                              const TVector<TSyncLogPageSnap> &pages) {
             if (!PrivateEmpty() && PrivateLastChunkIdx() == chunkIdx) {
                 // update last chunk
-                Y_VERIFY_DEBUG(pages.size() <= PrivateLastChunkFreePagesNum());
+                Y_DEBUG_ABORT_UNLESS(pages.size() <= PrivateLastChunkFreePagesNum());
                 ManyIdxChunks.back()->UpdateIndex(pages, IndexBulk);
             } else {
                 // add new
-                Y_VERIFY_DEBUG(pages.size() <= PagesInChunk);
+                Y_DEBUG_ABORT_UNLESS(pages.size() <= PagesInChunk);
                 TIndexedChunkPtr ptr(new TIndexedChunk(chunkIdx, pages, IndexBulk));
                 ManyIdxChunks.push_back(ptr);
             }

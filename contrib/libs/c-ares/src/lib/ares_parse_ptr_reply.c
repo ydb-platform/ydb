@@ -1,17 +1,28 @@
-
-/* Copyright 1998 by the Massachusetts Institute of Technology.
+/* MIT License
  *
- * Permission to use, copy, modify, and distribute this
- * software and its documentation for any purpose and without
- * fee is hereby granted, provided that the above copyright
- * notice appear in all copies and that both that copyright
- * notice and this permission notice appear in supporting
- * documentation, and that the name of M.I.T. not be used in
- * advertising or publicity pertaining to distribution of the
- * software without specific, written prior permission.
- * M.I.T. makes no representations about the suitability of
- * this software for any purpose.  It is provided "as is"
- * without express or implied warranty.
+ * Copyright (c) 1998 Massachusetts Institute of Technology
+ * Copyright (c) The c-ares project and its contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ *
+ * SPDX-License-Identifier: MIT
  */
 
 #include "ares_setup.h"
@@ -29,21 +40,16 @@
 #  include <strings.h>
 #endif
 
-#ifdef HAVE_LIMITS_H
-#  include <limits.h>
-#endif
-
 #include "ares.h"
 #include "ares_dns.h"
 #include "ares_nowarn.h"
 #include "ares_private.h"
 
 int ares_parse_ptr_reply(const unsigned char *abuf, int alen, const void *addr,
-                         int addrlen, int family, struct hostent **host,
-                         int *hostttl)
+                         int addrlen, int family, struct hostent **host)
 {
   unsigned int qdcount, ancount;
-  int status, i, rr_type, rr_class, rr_len, rr_ttl;
+  int status, i, rr_type, rr_class, rr_len;
   long len;
   const unsigned char *aptr;
   char *ptrname, *hostname, *rr_name, *rr_data;
@@ -55,8 +61,6 @@ int ares_parse_ptr_reply(const unsigned char *abuf, int alen, const void *addr,
 
   /* Set *host to NULL for all failure cases. */
   *host = NULL;
-  if (hostttl)
-    *hostttl = INT_MAX;
 
   /* Give up if abuf doesn't have room for a header. */
   if (alen < HFIXEDSZ)
@@ -104,7 +108,6 @@ int ares_parse_ptr_reply(const unsigned char *abuf, int alen, const void *addr,
       rr_type = DNS_RR_TYPE(aptr);
       rr_class = DNS_RR_CLASS(aptr);
       rr_len = DNS_RR_LEN(aptr);
-      rr_ttl = DNS_RR_TTL(aptr);
       aptr += RRFIXEDSZ;
       if (aptr + rr_len > abuf + alen)
         {
@@ -147,13 +150,6 @@ int ares_parse_ptr_reply(const unsigned char *abuf, int alen, const void *addr,
               break;
             }
             aliases = ptr;
-          }
-          if (hostttl)
-          {
-            if (*hostttl > rr_ttl)
-            {
-              *hostttl = rr_ttl;
-            }
           }
         }
 

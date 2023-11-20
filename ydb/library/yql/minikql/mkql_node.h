@@ -25,7 +25,7 @@ class TTaggedPointer {
 public:
     TTaggedPointer() {}
     TTaggedPointer(T* ptr, bool mark) {
-        Y_VERIFY_DEBUG((uintptr_t(ptr) & 1) == 0);
+        Y_DEBUG_ABORT_UNLESS((uintptr_t(ptr) & 1) == 0);
         Raw = (void*)(uintptr_t(ptr) | (mark ? 1 : 0));
     }
 
@@ -350,7 +350,7 @@ public:
 
     // Optimized comparison (only by pointer)
     bool operator == (const TInternName& other) const {
-        Y_VERIFY_DEBUG(StrBuf.data() != other.StrBuf.data() || StrBuf.size() == other.StrBuf.size(),
+        Y_DEBUG_ABORT_UNLESS(StrBuf.data() != other.StrBuf.data() || StrBuf.size() == other.StrBuf.size(),
                        "Lengths must be equal if pointers are equal");
         return StrBuf.data() == other.StrBuf.data();
     }
@@ -488,8 +488,8 @@ public:
     void ClearCookies() const;
 
     NUdf::TUnboxedValuePod NewStringValue(const NUdf::TStringRef& data) const {
-        Y_VERIFY_DEBUG(TlsAllocState);
-        Y_VERIFY_DEBUG(&Alloc.Ref() == TlsAllocState, "%s", (TStringBuilder()
+        Y_DEBUG_ABORT_UNLESS(TlsAllocState);
+        Y_DEBUG_ABORT_UNLESS(&Alloc.Ref() == TlsAllocState, "%s", (TStringBuilder()
             << "typeEnv's: " << Alloc.Ref().GetInfo() << " Tls: " << TlsAllocState->GetInfo()
         ).data());
         if (data.Size() > NUdf::TUnboxedValue::InternalBufferSize) {
@@ -508,8 +508,8 @@ public:
     TScopedAlloc& GetAllocator() const { return Alloc; }
 
     const NUdf::TStringValue& NewString(ui32 size) const {
-        Y_VERIFY_DEBUG(TlsAllocState);
-        Y_VERIFY_DEBUG(&Alloc.Ref() == TlsAllocState, "%s", (TStringBuilder()
+        Y_DEBUG_ABORT_UNLESS(TlsAllocState);
+        Y_DEBUG_ABORT_UNLESS(&Alloc.Ref() == TlsAllocState, "%s", (TStringBuilder()
             << "typeEnv's: " << Alloc.Ref().GetInfo() << " Tls: " << TlsAllocState->GetInfo()
         ).data());
         Strings.emplace(size);
@@ -710,17 +710,17 @@ public:
     }
 
     TStringBuf GetMemberName(ui32 index) const {
-        Y_VERIFY_DEBUG(index < MembersCount);
+        Y_DEBUG_ABORT_UNLESS(index < MembersCount);
         return Members[index].first.Str();
     }
 
     TInternName GetMemberNameStr(ui32 index) const {
-        Y_VERIFY_DEBUG(index < MembersCount);
+        Y_DEBUG_ABORT_UNLESS(index < MembersCount);
         return Members[index].first;
     }
 
     TType* GetMemberType(ui32 index) const {
-        Y_VERIFY_DEBUG(index < MembersCount);
+        Y_DEBUG_ABORT_UNLESS(index < MembersCount);
         return Members[index].second;
     }
 
@@ -753,7 +753,7 @@ public:
     }
 
     TRuntimeNode GetValue(ui32 index) const {
-        Y_VERIFY_DEBUG(index < GetValuesCount());
+        Y_DEBUG_ABORT_UNLESS(index < GetValuesCount());
         return Values[index];
     }
 
@@ -933,7 +933,7 @@ public:
     }
 
     TRuntimeNode GetItem() const {
-        Y_VERIFY_DEBUG(Item.GetNode());
+        Y_DEBUG_ABORT_UNLESS(Item.GetNode());
         return Item;
     }
 
@@ -999,7 +999,7 @@ public:
     }
 
     std::pair<TRuntimeNode, TRuntimeNode> GetItem(ui32 index) const {
-        Y_VERIFY_DEBUG(index < ItemsCount);
+        Y_DEBUG_ABORT_UNLESS(index < ItemsCount);
         return Items[index];
     }
 
@@ -1053,7 +1053,7 @@ public:
     }
 
     TType* GetArgumentType(ui32 index) const {
-        Y_VERIFY_DEBUG(index < ArgumentsCount);
+        Y_DEBUG_ABORT_UNLESS(index < ArgumentsCount);
         return Arguments[index];
     }
 
@@ -1102,7 +1102,7 @@ public:
     }
 
     TRuntimeNode GetInput(ui32 index) const {
-        Y_VERIFY_DEBUG(index < InputsCount);
+        Y_DEBUG_ABORT_UNLESS(index < InputsCount);
         return Inputs[index];
     }
 
@@ -1111,7 +1111,7 @@ public:
     }
 
     TRuntimeNode GetResult() const {
-        Y_VERIFY_DEBUG(!!Result.GetNode());
+        Y_DEBUG_ABORT_UNLESS(!!Result.GetNode());
         return Result;
     }
 
@@ -1145,7 +1145,7 @@ inline TTypeBase::TTypeBase(EKind kind, TTypeType* type)
     : TNode(type)
     , Kind(kind)
 {
-    Y_VERIFY_DEBUG(kind != EKind::Type);
+    Y_DEBUG_ABORT_UNLESS(kind != EKind::Type);
 }
 
 
@@ -1197,7 +1197,7 @@ public:
     }
 
     TRuntimeNode GetItem() const {
-        Y_VERIFY_DEBUG(Item.GetNode());
+        Y_DEBUG_ABORT_UNLESS(Item.GetNode());
         return Item;
     }
 
@@ -1285,7 +1285,7 @@ public:
     }
 
     TType* GetElementType(ui32 index) const {
-        Y_VERIFY_DEBUG(index < ElementsCount);
+        Y_DEBUG_ABORT_UNLESS(index < ElementsCount);
         return Elements[index];
     }
 
@@ -1308,7 +1308,7 @@ private:
             auto elementIt = links.find(element);
             if (elementIt != links.end()) {
                 TNode* newNode = elementIt->second;
-                Y_VERIFY_DEBUG(element->Equals(*newNode));
+                Y_DEBUG_ABORT_UNLESS(element->Equals(*newNode));
                 element = static_cast<TType*>(newNode);
             }
         }
@@ -1398,7 +1398,7 @@ public:
     }
 
     TRuntimeNode GetValue(ui32 index) const {
-        Y_VERIFY_DEBUG(index < GetValuesCount());
+        Y_DEBUG_ABORT_UNLESS(index < GetValuesCount());
         return Values[index];
     }
 

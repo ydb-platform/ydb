@@ -1,4 +1,4 @@
-#include "datashard_ut_common.h"
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
@@ -93,16 +93,15 @@ private:
         }
 
         void Attach(NActors::TTestActorRuntime* runtime) {
-            runtime->SetObserverFunc(
-                [this](NActors::TTestActorRuntimeBase& rt, TAutoPtr<NActors::IEventHandle>& event) {
+            runtime->SetObserverFunc([this, runtime](TAutoPtr<NActors::IEventHandle>& event) {
 
                     if (event->GetTypeRewrite() == TEvDataShard::TEvProposeTransactionResult::EventType) {
                         auto status = event.Get()->Get<TEvDataShard::TEvProposeTransactionResult>()->GetStatus();
                         if (status == NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE) {
                             StartedScans++;
                             if (StartedScans == 3 && !ActionDone && Counter <= 0 && !Reason) {
-                                auto edge = rt.AllocateEdgeActor(0);
-                                rt.Send(new IEventHandle(rt.GetInterconnectProxy(0, 1), edge,
+                                auto edge = runtime->AllocateEdgeActor(0);
+                                runtime->Send(new IEventHandle(runtime->GetInterconnectProxy(0, 1), edge,
                                     new TEvInterconnect::TEvPoisonSession), 0, true);
                                 ActionDone = true;
                             }
@@ -118,12 +117,12 @@ private:
                         if (Reason) {
                             auto evUndelivered = new TEvents::TEvUndelivered(event->GetTypeRewrite(), *Reason);
                             auto handle = new IEventHandle(event->Sender, TActorId(), evUndelivered, 0, event->Cookie);
-                            rt.Send(handle, 0, true);
+                            runtime->Send(handle, 0, true);
                             ActionDone = true;
                         } else {
                             if (Counter <= 0 && StartedScans == 3 && !ActionDone) {
-                                auto edge = rt.AllocateEdgeActor(0);
-                                rt.Send(new IEventHandle(rt.GetInterconnectProxy(0, 1), edge,
+                                auto edge = runtime->AllocateEdgeActor(0);
+                                runtime->Send(new IEventHandle(runtime->GetInterconnectProxy(0, 1), edge,
                                     new TEvInterconnect::TEvPoisonSession), 0, true);
                                 ActionDone = true;
                             }

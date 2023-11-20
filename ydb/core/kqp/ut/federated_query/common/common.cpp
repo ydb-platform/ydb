@@ -31,7 +31,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             connectorClient,
             nullptr,
             databaseAsyncResolver,
-            appConfig ? appConfig->GetQueryServiceConfig().GetS3() : NYql::TS3GatewayConfig());
+            appConfig ? appConfig->GetQueryServiceConfig().GetS3() : NYql::TS3GatewayConfig(),
+            appConfig ? appConfig->GetQueryServiceConfig().GetGeneric() : NYql::TGenericGatewayConfig());
 
         auto settings = TKikimrSettings()
                             .SetFeatureFlags(featureFlags)

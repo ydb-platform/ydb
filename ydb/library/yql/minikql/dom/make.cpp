@@ -32,7 +32,7 @@ TUnboxedValuePod MakeData(const TDataTypeId nodeType, const TUnboxedValuePod val
         default: break;
     }
 
-    Y_FAIL("Unsupported data type.");
+    Y_ABORT("Unsupported data type.");
 }
 
 TUnboxedValuePod MakeList(const ITypeInfoHelper* typeHelper, const TType* itemType, const TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
@@ -125,7 +125,7 @@ TUnboxedValuePod MakeVariant(const ITypeInfoHelper* typeHelper, const TType* sha
         default:
             break;
     }
-    Y_FAIL("Unsupported underlying type.");
+    Y_ABORT("Unsupported underlying type.");
 }
 
 }
@@ -163,7 +163,7 @@ TUnboxedValuePod MakeDom(const ITypeInfoHelper* typeHelper, const TType* shape, 
                 return value;
             [[fallthrough]];
         default:
-            Y_FAIL("Unsupported data kind: %s", ToCString(kind));
+            Y_ABORT("Unsupported data kind: %s", ToCString(kind));
     }
 }
 

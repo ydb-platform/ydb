@@ -32,11 +32,17 @@ target_link_libraries(contrib-libs-c-ares PUBLIC
 target_sources(contrib-libs-c-ares PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares__addrinfo2hostent.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares__addrinfo_localhost.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares__buf.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares__close_sockets.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares__get_hostent.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares__htable.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares__htable_asvp.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares__htable_stvp.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares__llist.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares__parse_into_addrinfo.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares__read_line.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares__readaddrinfo.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares__slist.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares__sortaddrinfo.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares__timeval.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares_android.c
@@ -58,7 +64,6 @@ target_sources(contrib-libs-c-ares PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares_getsock.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares_init.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares_library_init.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares_llist.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares_mkquery.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares_nowarn.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares_options.c
@@ -85,7 +90,6 @@ target_sources(contrib-libs-c-ares PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares_strsplit.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares_timeout.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares_version.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/ares_writev.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/atomic.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/bitncmp.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/src/lib/inet_net_pton.c

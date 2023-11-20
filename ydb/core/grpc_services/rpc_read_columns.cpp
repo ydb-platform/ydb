@@ -291,7 +291,7 @@ private:
             }
         }
 
-        Y_VERIFY_DEBUG(columns.size() == KeyColumnTypes.size() + ValueColumnTypes.size());
+        Y_DEBUG_ABORT_UNLESS(columns.size() == KeyColumnTypes.size() + ValueColumnTypes.size());
 
         {
             TString format = "clickhouse_native";
@@ -382,7 +382,7 @@ private:
         size_t rowsExtracted = 0;
         bool skippedBeforeMinKey = false;
 
-        if (ev->Get()->GetDataFormat() == NKikimrTxDataShard::ARROW) {
+        if (ev->Get()->GetDataFormat() == NKikimrDataEvents::FORMAT_ARROW) {
             return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, "Arrow format not supported yet", ctx);
         }
 

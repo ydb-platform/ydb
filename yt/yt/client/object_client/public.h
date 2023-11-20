@@ -252,6 +252,7 @@ DEFINE_ENUM(EObjectType,
     ((MasterTableSchema)                           (1300))
     ((MasterTableSchemaMap)                        (1301))
     ((TableCollocation)                            (1302))
+    ((SecondaryIndex)                              (1303))
 
     // Global stuff
     // A mysterious creature representing the master as a whole.

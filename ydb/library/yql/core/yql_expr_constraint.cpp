@@ -121,6 +121,8 @@ public:
         Functions["CastStruct"] = &TCallableConstraintTransformer::SelectMembersWrap;
         Functions["SafeCast"] = &TCallableConstraintTransformer::CastWrap<false>;
         Functions["StrictCast"] = &TCallableConstraintTransformer::CastWrap<true>;
+        Functions["ToString"] = &TCallableConstraintTransformer::CastWrap<true>;
+        Functions["ToBytes"] = &TCallableConstraintTransformer::CastWrap<true>;
         Functions["DivePrefixMembers"] = &TCallableConstraintTransformer::DivePrefixMembersWrap;
         Functions["OrderedFilter"] = &TCallableConstraintTransformer::FilterWrap<true>;
         Functions["Filter"] = &TCallableConstraintTransformer::FilterWrap<false>;
@@ -595,9 +597,11 @@ private:
     TStatus CastWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
         const auto outItemType = input->GetTypeAnn();
         const auto inItemType = input->Head().GetTypeAnn();
-        const auto filter = [inItemType, outItemType](const TPartOfConstraintBase::TPathType& path) {
-            if (const auto outType = TPartOfConstraintBase::GetSubTypeByPath(path, *outItemType))
-                return IsSameAnnotation(*outType, *TPartOfConstraintBase::GetSubTypeByPath(path, *inItemType));
+        const auto filter = [inItemType, outItemType, toString = input->IsCallable({"ToString", "ToBytes"})](const TPartOfConstraintBase::TPathType& path) {
+            if (const auto outType = TPartOfConstraintBase::GetSubTypeByPath(path, *outItemType)) {
+                const auto inType = TPartOfConstraintBase::GetSubTypeByPath(path, *inItemType);
+                return (toString && inType->GetKind() == ETypeAnnotationKind::Data && inType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Utf8) || IsSameAnnotation(*outType, *inType);
+            }
             return false;
         };
 

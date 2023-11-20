@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/shared_quota.h>
 #include <ydb/core/base/tablet_types.h>
+#include <ydb/core/base/resource_profile.h>
 #include <functional>
 
 namespace NKikimr {

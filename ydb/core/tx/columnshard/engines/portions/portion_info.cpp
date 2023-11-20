@@ -28,12 +28,12 @@ const TColumnRecord& TPortionInfo::AppendOneChunkColumn(TColumnRecord&& record) 
 
 void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch, const TString& tierName) {
     Y_ABORT_UNLESS(batch->num_rows() == NumRows());
-    AddMetadata(snapshotSchema, NArrow::TFirstLastSpecialKeys(batch), NArrow::TMinMaxSpecialKeys(batch, TIndexInfo::ArrowSchemaSnapshot()), tierName);
+    AddMetadata(snapshotSchema, NArrow::TFirstLastSpecialKeys(NArrow::ExtractColumns(batch, snapshotSchema.GetIndexInfo().GetReplaceKey())),
+        NArrow::TMinMaxSpecialKeys(batch, TIndexInfo::ArrowSchemaSnapshot()), tierName);
 }
 
 void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const NArrow::TFirstLastSpecialKeys& primaryKeys, const NArrow::TMinMaxSpecialKeys& snapshotKeys, const TString& tierName) {
     const auto& indexInfo = snapshotSchema.GetIndexInfo();
-    Meta = {};
     Meta.FirstPkColumn = indexInfo.GetPKFirstColumnId();
     Meta.FillBatchInfo(primaryKeys, snapshotKeys, indexInfo);
     Meta.SetTierName(tierName);
@@ -70,7 +70,7 @@ std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
 }
 
 TPortionInfo TPortionInfo::CopyWithFilteredColumns(const THashSet<ui32>& columnIds) const {
-    TPortionInfo result(Granule, Portion, GetMinSnapshot(), BlobsOperator);
+    TPortionInfo result(PathId, Portion, GetMinSnapshot(), BlobsOperator);
     result.Meta = Meta;
     result.Records.reserve(columnIds.size());
 
@@ -100,6 +100,22 @@ ui64 TPortionInfo::GetRawBytes(const std::vector<ui32>& columnIds) const {
     return sum;
 }
 
+ui64 TPortionInfo::GetRawBytes(const std::set<ui32>& columnIds) const {
+    ui64 sum = 0;
+    const ui32 numRows = NumRows();
+    for (auto&& i : TIndexInfo::GetSpecialColumnIds()) {
+        if (columnIds.contains(i)) {
+            sum += numRows * TIndexInfo::GetSpecialColumnByteWidth(i);
+        }
+    }
+    for (auto&& r : Records) {
+        if (columnIds.contains(r.ColumnId)) {
+            sum += r.GetMeta().GetRawBytesVerified();
+        }
+    }
+    return sum;
+}
+
 int TPortionInfo::CompareSelfMaxItemMinByPk(const TPortionInfo& item, const TIndexInfo& info) const {
     return CompareByColumnIdsImpl<TMaxGetter, TMinGetter>(item, info.KeyColumns);
 }
@@ -108,13 +124,19 @@ int TPortionInfo::CompareMinByPk(const TPortionInfo& item, const TIndexInfo& inf
     return CompareMinByColumnIds(item, info.KeyColumns);
 }
 
-TString TPortionInfo::DebugString() const {
+TString TPortionInfo::DebugString(const bool withDetails) const {
     TStringBuilder sb;
     sb << "(portion_id:" << Portion << ";" <<
-        "granule_id:" << Granule << ";records_count:" << NumRows() << ";"
-        "min_snapshot:(" << MinSnapshot.DebugString() << ");" <<
-//        "from:" << IndexKeyStart().DebugString() << ";" <<
-//        "to:" << IndexKeyEnd().DebugString() << ";" <<
+        "path_id:" << PathId << ";records_count:" << NumRows() << ";"
+        "min_schema_snapshot:(" << MinSnapshot.DebugString() << ");";
+    if (withDetails) {
+        sb <<
+            "records_snapshot_min:(" << RecordSnapshotMin().DebugString() << ");" <<
+            "records_snapshot_max:(" << RecordSnapshotMax().DebugString() << ");" <<
+            "from:" << IndexKeyStart().DebugString() << ";" <<
+            "to:" << IndexKeyEnd().DebugString() << ";";
+    }
+    sb <<
         "size:" << BlobsBytes() << ";" <<
         "meta:(" << Meta.DebugString() << ");";
     if (RemoveSnapshot.Valid()) {
@@ -177,7 +199,7 @@ size_t TPortionInfo::NumBlobs() const {
 }
 
 bool TPortionInfo::IsEqualWithSnapshots(const TPortionInfo& item) const {
-    return Granule == item.Granule && MinSnapshot == item.MinSnapshot
+    return PathId == item.PathId && MinSnapshot == item.MinSnapshot
         && Portion == item.Portion && RemoveSnapshot == item.RemoveSnapshot;
 }
 
@@ -196,7 +218,7 @@ std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() c
     return (*res)->column(0);
 }
 
-std::shared_ptr<arrow::RecordBatch> TPortionInfo::TPreparedBatchData::Assemble(const TAssembleOptions& options) const {
+std::shared_ptr<arrow::Table> TPortionInfo::TPreparedBatchData::AssembleTable(const TAssembleOptions& options) const {
     std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (auto&& i : Columns) {
@@ -207,7 +229,11 @@ std::shared_ptr<arrow::RecordBatch> TPortionInfo::TPreparedBatchData::Assemble(c
         fields.emplace_back(i.GetField());
     }
 
-    auto table = arrow::Table::Make(std::make_shared<arrow::Schema>(fields), columns);
+    return arrow::Table::Make(std::make_shared<arrow::Schema>(fields), columns);
+}
+
+std::shared_ptr<arrow::RecordBatch> TPortionInfo::TPreparedBatchData::Assemble(const TAssembleOptions& options) const {
+    auto table = AssembleTable(options);
     auto res = table->CombineChunks();
     Y_ABORT_UNLESS(res.ok());
     return NArrow::ToBatch(*res);

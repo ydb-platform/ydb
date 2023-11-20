@@ -106,7 +106,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
             Self->UpdateSchemaSeqNo(seqNo, txc);
 
             // FIXME: current tests don't provide processing params!
-            // Y_VERIFY_DEBUG(record.HasProcessingParams());
+            // Y_DEBUG_ABORT_UNLESS(record.HasProcessingParams());
             if (!Self->ProcessingParams && record.HasProcessingParams()) {
                 Self->ProcessingParams.emplace().CopyFrom(record.GetProcessingParams());
                 Schema::SaveSpecialProtoValue(db, Schema::EValueIds::ProcessingParams, *Self->ProcessingParams);

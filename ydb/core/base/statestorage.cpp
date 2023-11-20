@@ -54,7 +54,7 @@ public:
         , Delta(Primes[hash % 128])
         , A(hash + Delta)
     {
-        Y_VERIFY_DEBUG(Delta > Sz);
+        Y_DEBUG_ABORT_UNLESS(Delta > Sz);
     }
 
     ui32 Next() {
@@ -242,7 +242,7 @@ static void CopyStateStorageRingInfo(
         return;
     }
 
-    Y_FAIL("must have rings or legacy node config");
+    Y_ABORT("must have rings or legacy node config");
 }
 
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActorId::MaxServiceIDLength], const NKikimrConfig::TDomainsConfig::TStateStorage& config) {

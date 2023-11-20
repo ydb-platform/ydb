@@ -192,12 +192,15 @@ template<class Callable, class ...Args>
 #include <__threading_support>
 #include <__utility/forward.h>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #ifndef _LIBCPP_CXX03_LANG
 # include <tuple>
 #endif
 #include <version>
+
+#ifndef _LIBCPP_REMOVE_TRANSITIVE_INCLUDES
+#  include <functional>
+#endif
 
 #if !defined(_LIBCPP_HAS_NO_THREADS) && !defined(_LIBCPP_CXX03_LANG)
 #include <atomic>

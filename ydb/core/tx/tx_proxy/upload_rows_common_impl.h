@@ -11,6 +11,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -605,6 +606,8 @@ private:
                 return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "unknown table", ctx);
             case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
                 return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "unknown database", ctx);
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+                return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, LogPrefix() << "access denied", ctx);
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
                 return ReplyWithError(Ydb::StatusIds::GENERIC_ERROR, LogPrefix() << "unknown error", ctx);
         }
@@ -1221,7 +1224,7 @@ private:
 
         SetError(status, message);
 
-        Y_VERIFY_DEBUG(ShardRepliesLeft.empty());
+        Y_DEBUG_ABORT_UNLESS(ShardRepliesLeft.empty());
         ReplyIfDone(ctx);
     }
 
@@ -1234,7 +1237,7 @@ private:
         if (LongTxId != NLongTxService::TLongTxId()) {
             // LongTxId is reset after successful commit
             // If it si still there it means we need to rollback
-            Y_VERIFY_DEBUG(status != ::Ydb::StatusIds::SUCCESS);
+            Y_DEBUG_ABORT_UNLESS(status != ::Ydb::StatusIds::SUCCESS);
             RollbackLongTx(ctx);
         }
 

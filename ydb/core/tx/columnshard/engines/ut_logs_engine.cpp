@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 
 
 namespace NKikimr {
@@ -14,6 +15,7 @@ using namespace NOlap;
 namespace NTypeIds = NScheme::NTypeIds;
 using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
+using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
 
 namespace {
 
@@ -22,8 +24,7 @@ private:
     std::map<TPortionAddress, std::map<TChunkAddress, TColumnChunkLoadContext>> LoadContexts;
 public:
     struct TIndex {
-        THashMap<ui64, std::vector<TGranuleRecord>> Granules; // pathId -> granule
-        THashMap<ui64, THashMap<ui64, TPortionInfo>> Columns; // granule -> portions
+        THashMap<ui64, THashMap<ui64, TPortionInfo>> Columns; // pathId -> portions
         THashMap<ui32, ui64> Counters;
     };
 
@@ -68,45 +69,6 @@ public:
         return true;
     }
 
-    void WriteGranule(ui32 index, const IColumnEngine&, const TGranuleRecord& row) override {
-        auto& granules = Indices[index].Granules[row.PathId];
-
-        bool replaced = false;
-        for (auto& rec : granules) {
-            if (rec == row) {
-                rec = row;
-                replaced = true;
-                break;
-            }
-        }
-        if (!replaced) {
-            granules.push_back(row);
-        }
-    }
-
-    void EraseGranule(ui32 index, const IColumnEngine&, const TGranuleRecord& row) override {
-        auto& pathGranules = Indices[index].Granules[row.PathId];
-
-        std::vector<TGranuleRecord> filtered;
-        filtered.reserve(pathGranules.size());
-        for (const TGranuleRecord& rec : pathGranules) {
-            if (rec.Granule != row.Granule) {
-                filtered.push_back(rec);
-            }
-        }
-        pathGranules.swap(filtered);
-    }
-
-    bool LoadGranules(ui32 index, const IColumnEngine&, const std::function<void(const TGranuleRecord&)>& callback) override {
-        auto& granules = Indices[index].Granules;
-        for (auto& [pathId, vec] : granules) {
-            for (const auto& rec : vec) {
-                callback(rec);
-            }
-        }
-        return true;
-    }
-
     void WriteColumn(ui32 index, const TPortionInfo& portion, const TColumnRecord& row) override {
         auto proto = portion.GetMeta().SerializeToProto(row.ColumnId, row.Chunk);
         auto rowProto = row.GetMeta().SerializeToProto();
@@ -114,7 +76,7 @@ public:
             *rowProto.MutablePortionMeta() = std::move(*proto);
         }
 
-        auto& data = Indices[index].Columns[portion.GetGranule()];
+        auto& data = Indices[index].Columns[portion.GetPathId()];
         NOlap::TColumnChunkLoadContext loadContext(row.GetAddress(), row.BlobRange, rowProto);
         auto itInsertInfo = LoadContexts[portion.GetAddress()].emplace(row.GetAddress(), loadContext);
         if (!itInsertInfo.second) {
@@ -124,7 +86,7 @@ public:
         if (it == data.end()) {
             it = data.emplace(portion.GetPortion(), portion.CopyWithFilteredColumns({})).first;
         } else {
-            Y_ABORT_UNLESS(portion.GetGranule() == it->second.GetGranule() && portion.GetPortion() == it->second.GetPortion());
+            Y_ABORT_UNLESS(portion.GetPathId() == it->second.GetPathId() && portion.GetPortion() == it->second.GetPortion());
         }
         it->second.SetMinSnapshot(portion.GetMinSnapshot());
         it->second.SetRemoveSnapshot(portion.GetRemoveSnapshot());
@@ -143,7 +105,7 @@ public:
     }
 
     void EraseColumn(ui32 index, const TPortionInfo& portion, const TColumnRecord& row) override {
-        auto& data = Indices[index].Columns[portion.GetGranule()];
+        auto& data = Indices[index].Columns[portion.GetPathId()];
         auto it = data.find(portion.GetPortion());
         Y_ABORT_UNLESS(it != data.end());
         auto& portionLocal = it->second;
@@ -159,7 +121,7 @@ public:
 
     bool LoadColumns(ui32 index, const std::function<void(const TPortionInfo&, const TColumnChunkLoadContext&)>& callback) override {
         auto& columns = Indices[index].Columns;
-        for (auto& [granule, portions] : columns) {
+        for (auto& [pathId, portions] : columns) {
             for (auto& [portionId, portionLocal] : portions) {
                 auto copy = portionLocal;
                 copy.ResetMeta();
@@ -439,8 +401,10 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
         TSnapshot indexSnaphot(1, 1);
         engine.UpdateDefaultSchema(indexSnaphot, TIndexInfo(tableInfo));
-        THashSet<TUnifiedBlobId> lostBlobs;
-        engine.Load(db, lostBlobs);
+        for (auto&& i : paths) {
+            engine.RegisterTable(i);
+        }
+        engine.Load(db);
 
         std::vector<TInsertedData> dataToIndex = {
             TInsertedData(2, paths[0], "", blobRanges[0].BlobId, {}, 0, {}),
@@ -469,21 +433,21 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         { // select from snap before insert
             ui64 planStep = 1;
             ui64 txId = 0;
-            auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), columnIds, NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 0);
         }
 
         { // select from snap between insert (greater txId)
             ui64 planStep = 1;
             ui64 txId = 2;
-            auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), columnIds, NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 0);
         }
 
         { // select from snap after insert (greater planStep)
             ui64 planStep = 2;
             ui64 txId = 1;
-            auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK[0]->NumChunks(), columnIds.size() + TIndexInfo::GetSpecialColumnNames().size());
         }
@@ -491,7 +455,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         { // select another pathId
             ui64 planStep = 2;
             ui64 txId = 1;
-            auto selectInfo = engine.Select(paths[1], TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(paths[1], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 0);
         }
     }
@@ -516,14 +480,14 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
 
+        ui64 pathId = 1;
+        ui32 step = 1000;
+
         TSnapshot indexSnapshot(1, 1);
         TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
         engine.UpdateDefaultSchema(indexSnapshot, TIndexInfo(tableInfo));
-        THashSet<TUnifiedBlobId> lostBlobs;
-        engine.Load(db, lostBlobs);
-
-        ui64 pathId = 1;
-        ui32 step = 1000;
+        engine.RegisterTable(pathId);
+        engine.Load(db);
 
         // insert
         ui64 planStep = 1;
@@ -562,7 +526,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         { // full scan
             ui64 txId = 1;
-            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
+            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 20);
         }
 
@@ -576,7 +540,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             }
             NOlap::TPKRangesFilter pkFilter(false);
             Y_ABORT_UNLESS(pkFilter.Add(gt10k, nullptr, nullptr));
-            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, pkFilter);
+            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), pkFilter);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 10);
         }
 
@@ -588,7 +552,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             }
             NOlap::TPKRangesFilter pkFilter(false);
             Y_ABORT_UNLESS(pkFilter.Add(nullptr, lt10k, nullptr));
-            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, pkFilter);
+            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), pkFilter);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 9);
         }
     }
@@ -610,6 +574,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
     Y_UNIT_TEST(IndexWriteOverload) {
         TTestDbWrapper db;
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);;
 
         ui64 pathId = 1;
@@ -621,8 +586,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
         TSnapshot indexSnapshot(1, 1);
         engine.UpdateDefaultSchema(indexSnapshot, TIndexInfo(tableInfo));
-        THashSet<TUnifiedBlobId> lostBlobs;
-        engine.Load(db, lostBlobs);
+        engine.RegisterTable(pathId);
+        engine.Load(db);
 
         ui64 numRows = 1000;
         ui64 rowPos = 0;
@@ -648,7 +613,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         { // check it's overloaded after reload
             TColumnEngineForLogs tmpEngine(0, TestLimits(), CommonStoragesManager);
             tmpEngine.UpdateDefaultSchema(TSnapshot::Zero(), TIndexInfo(tableInfo));
-            tmpEngine.Load(db, lostBlobs);
+            tmpEngine.RegisterTable(pathId);
+            tmpEngine.Load(db);
         }
 
         // compact
@@ -678,7 +644,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         { // check it's not overloaded after reload
             TColumnEngineForLogs tmpEngine(0, TestLimits(), CommonStoragesManager);
             tmpEngine.UpdateDefaultSchema(TSnapshot::Zero(), TIndexInfo(tableInfo));
-            tmpEngine.Load(db, lostBlobs);
+            tmpEngine.RegisterTable(pathId);
+            tmpEngine.Load(db);
         }
     }
 
@@ -691,12 +658,12 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         // insert
         ui64 planStep = 1;
-        THashSet<TUnifiedBlobId> lostBlobs;
         TSnapshot indexSnapshot(1, 1);
         {
             TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
             engine.UpdateDefaultSchema(indexSnapshot, TIndexInfo(tableInfo));
-            engine.Load(db, lostBlobs);
+            engine.RegisterTable(pathId);
+            engine.Load(db);
 
             ui64 numRows = 1000;
             ui64 rowPos = 0;
@@ -729,7 +696,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
             { // full scan
                 ui64 txId = 1;
-                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
+                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 20);
             }
 
@@ -738,7 +705,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
             { // full scan
                 ui64 txId = 1;
-                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
+                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 20);
             }
 
@@ -754,7 +721,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
             { // full scan
                 ui64 txId = 1;
-                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
+                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 10);
             }
         }
@@ -762,15 +729,15 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // load
             TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
             engine.UpdateDefaultSchema(indexSnapshot, TIndexInfo(tableInfo));
-            engine.Load(db, lostBlobs);
-            UNIT_ASSERT_VALUES_EQUAL(engine.GetTotalStats().EmptyGranules, 0);
+            engine.RegisterTable(pathId);
+            engine.Load(db);
 
             const TIndexInfo& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
             THashSet<ui32> oneColumnId = {indexInfo.GetColumnId(testColumns[0].first)};
 
             { // full scan
                 ui64 txId = 1;
-                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
+                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false));
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 10);
             }
         }

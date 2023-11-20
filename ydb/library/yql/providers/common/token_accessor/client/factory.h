@@ -23,5 +23,10 @@ ISecuredServiceAccountCredentialsFactory::TPtr CreateSecuredServiceAccountCreden
     const TDuration& requestTimeout = TDuration::Seconds(10)
 );
 
-std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFactoryForStructuredToken(ISecuredServiceAccountCredentialsFactory::TPtr factory, const TString& structuredTokenJson, bool addBearerToToken = false);
+std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFactoryForStructuredToken(
+    ISecuredServiceAccountCredentialsFactory::TPtr factory,
+    const TString& structuredTokenJson,
+    bool addBearerToToken = false,
+    const std::function<TString(const TString&, const TString&)>& basicToToken = {}
+);
 }

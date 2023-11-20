@@ -777,7 +777,7 @@ TExprNode::TPtr BuildOutputFlattenMembersArg(const TCoEquiJoinInput& input, cons
             .Callable(1, "FlattenMembers")
                 .List(0)
                     .Atom(0, "")
-                    .Callable(1, "FlatMap")
+                    .Callable(1, flatMap.CallableName())
                         .Callable(0, "FilterNullMembers")
                             .Callable(0, "AssumeAllMembersNullableAtOnce")
                                 .Callable(0, "Just")
@@ -998,7 +998,7 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
 
     auto newLambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), { afterJoinArg }), std::move(newLambdaBody));
 
-    return ctx.NewCallable(node->Pos(), "FlatMap", { newEquiJoin, newLambda });
+    return ctx.NewCallable(node->Pos(), "OrderedFlatMap", { newEquiJoin, newLambda });
 }
 
 TExprNode::TPtr OptimizeFromFlow(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {

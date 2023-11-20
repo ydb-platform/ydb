@@ -226,7 +226,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
         if (request.filter().name()) {
             queryBuilder.AddString("filter_name", request.filter().name());
             if (event.IsExactNameMatch) {
-                filters.push_back("`" NAME_COLUMN_NAME "` = '$filter_name'");
+                filters.push_back("`" NAME_COLUMN_NAME "` = $filter_name");
             } else {
                 filters.push_back("`" NAME_COLUMN_NAME "` LIKE '%' || $filter_name || '%'");
             }
@@ -374,7 +374,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
         if (!hasViewAccess) {
             ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
         }
-        
+
         PrepareSensitiveFields(*result.mutable_connection(), extractSensitiveFields);
         return result;
     };

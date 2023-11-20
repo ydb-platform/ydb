@@ -41,6 +41,15 @@ uint32_t TPGInitial::GetProtocol() const {
     return protocol;
 }
 
+TPGInitial::TPGBackendData TPGInitial::GetBackendData() const {
+    TPGBackendData backendData;
+    TPGStreamInput stream(*this);
+    uint32_t protocol = 0;
+    stream >> protocol;
+    stream >> backendData.Pid >> backendData.Key;
+    return backendData;
+}
+
 std::unordered_map<TString, TString> TPGInitial::GetClientParams() const {
     std::unordered_map<TString, TString> params;
     TPGStreamInput stream(*this);
@@ -60,6 +69,14 @@ std::unordered_map<TString, TString> TPGInitial::GetClientParams() const {
         params[TString(key)] = value;
     }
     return params;
+}
+
+TString TPGBackendKeyData::Dump() const {
+    TPGStreamInput stream(*this);
+    uint32_t pid = 0;
+    uint32_t key = 0;
+    stream >> pid >> key;
+    return TStringBuilder() << "cancellation PID " << pid << " KEY " << key;
 }
 
 TString TPGNoticeResponse::Dump() const {

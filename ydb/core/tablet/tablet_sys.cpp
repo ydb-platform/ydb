@@ -7,6 +7,7 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/actors/core/log.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 #include <util/generic/deque.h>
 #include <util/generic/hash.h>
@@ -73,7 +74,7 @@ void TTablet::PromoteToCandidate(ui32 gen) {
 
     StateStorageInfo.KnownStep = 0;
 
-    Y_VERIFY_DEBUG(SetupInfo);
+    Y_DEBUG_ABORT_UNLESS(SetupInfo);
     if (!UserTablet)
         UserTablet = SetupInfo->Apply(Info.Get(), SelfId());
     if (IntrospectionTrace) {
@@ -193,7 +194,7 @@ void TTablet::WriteZeroEntry(TEvTablet::TDependencyGraph *graph) {
                 ++confirmedIterator;
 
             for (ui32 i = confirmedStep + 1; i <= lastInGeneration; ++i) {
-                Y_VERIFY_DEBUG(confirmedIterator != end);
+                Y_DEBUG_ABORT_UNLESS(confirmedIterator != end);
                 if (confirmedIterator->Id.second == i) {
                     value |= mask;
                     ++confirmedIterator;
@@ -344,7 +345,7 @@ void TTablet::HandleByFollower(TEvTabletBase::TEvTryBuildFollowerGraph::TPtr &ev
     Y_UNUSED(ev);
 
     BLOG_TRACE("Follower starting to rebuild history", "TSYS02");
-    Y_VERIFY_DEBUG(!RebuildGraphRequest);
+    Y_DEBUG_ABORT_UNLESS(!RebuildGraphRequest);
     RebuildGraphRequest = Register(CreateTabletReqRebuildHistoryGraph(SelfId(), Info.Get(), 0, nullptr, ++FollowerInfo.RebuildGraphCookie));
 
     // todo: tracing? at least as event
@@ -562,6 +563,10 @@ TTablet::EraseFollowerInfo(TMap<TActorId, TLeaderInfo>::iterator followerIt) {
 
     auto retIt = LeaderInfo.erase(followerIt);
 
+    if (UserTablet) {
+        Send(UserTablet, new TEvTablet::TEvFollowerDetached(LeaderInfo.size()));
+    }
+
     TryPumpWaitingForGc();
     TryFinishFollowerSync();
 
@@ -760,7 +765,7 @@ void TTablet::HandleByLeader(TEvTablet::TEvFollowerGcAck::TPtr &ev) {
         return;
 
     const ui32 step = record.GetStep();
-    Y_VERIFY_DEBUG(followerInfo->ConfirmedGCStep < step);
+    Y_DEBUG_ABORT_UNLESS(followerInfo->ConfirmedGCStep < step);
     followerInfo->ConfirmedGCStep = Max(step, followerInfo->ConfirmedGCStep);
 
     TryPumpWaitingForGc();
@@ -820,7 +825,7 @@ void TTablet::HandleStateStorageInfoResolve(TEvStateStorage::TEvInfo::TPtr &ev) 
     case NKikimrProto::TIMEOUT:
         return LockedInitializationPath();
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 
@@ -853,7 +858,7 @@ void TTablet::HandleStateStorageInfoLock(TEvStateStorage::TEvInfo::TPtr &ev) {
     case NKikimrProto::RACE:
         return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootRace);
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 
@@ -889,7 +894,7 @@ void TTablet::HandleStateStorageInfoUpgrade(TEvStateStorage::TEvInfo::TPtr &ev) 
     case NKikimrProto::RACE:
         return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootRace);
     default:
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 
@@ -1479,8 +1484,8 @@ void TTablet::ProgressFollowerQueue() {
         if (GcInFly) {
             // Since we always confirm the last commit it should be impossible
             // to ever try to commit inside a garbage collected range.
-            Y_VERIFY_DEBUG(GcInFlyStep < Graph.SyncCommit.SyncStep);
-            Y_VERIFY_DEBUG(GcNextStep < Graph.SyncCommit.SyncStep);
+            Y_DEBUG_ABORT_UNLESS(GcInFlyStep < Graph.SyncCommit.SyncStep);
+            Y_DEBUG_ABORT_UNLESS(GcNextStep < Graph.SyncCommit.SyncStep);
         }
 
         TLogoBlobID entryId(TabletID(), StateStorageInfo.KnownGeneration, Graph.SyncCommit.SyncStep, 0, 0, 1);
@@ -1491,8 +1496,8 @@ void TTablet::ProgressFollowerQueue() {
         entry->SetIsSnapshot(false);
         entry->SetIsTotalSnapshot(false);
 
-        Y_VERIFY_DEBUG(Graph.Confirmed == Graph.SyncCommit.SyncStep); // last entry must be confirmed
-        Y_VERIFY_DEBUG(Graph.SyncCommit.SyncStep > Graph.ConfirmedCommited); // commit should make some progress
+        Y_DEBUG_ABORT_UNLESS(Graph.Confirmed == Graph.SyncCommit.SyncStep); // last entry must be confirmed
+        Y_DEBUG_ABORT_UNLESS(Graph.SyncCommit.SyncStep > Graph.ConfirmedCommited); // commit should make some progress
 
         TVector<TEvTablet::TLogEntryReference> refs;
         Register(
@@ -1525,7 +1530,7 @@ void TTablet::HandleQueued(TEvTabletPipe::TEvConnect::TPtr& ev) {
 }
 
 void TTablet::HandleByFollower(TEvTabletPipe::TEvConnect::TPtr &ev) {
-    Y_VERIFY_DEBUG(!Leader);
+    Y_DEBUG_ABORT_UNLESS(!Leader);
     if (PipeConnectAcceptor->IsActive() && !PipeConnectAcceptor->IsStopped()) {
         PipeConnectAcceptor->Accept(ev, SelfId(), UserTablet, false, StateStorageInfo.KnownGeneration);
     } else {
@@ -1542,7 +1547,7 @@ void TTablet::Handle(TEvTabletBase::TEvWriteLogResult::TPtr &ev) {
     switch (status) {
     case NKikimrProto::OK:
     {
-        Y_VERIFY_DEBUG(logid.Generation() == StateStorageInfo.KnownGeneration && logid.TabletID() == TabletID());
+        Y_DEBUG_ABORT_UNLESS(logid.Generation() == StateStorageInfo.KnownGeneration && logid.TabletID() == TabletID());
         const ui32 step = logid.Step();
 
         if (logid.Cookie() == 0) {
@@ -1563,7 +1568,7 @@ void TTablet::Handle(TEvTabletBase::TEvWriteLogResult::TPtr &ev) {
 
             CheckEntry(indexIt);
         } else {
-            Y_VERIFY_DEBUG(logid.Cookie() == 1 && step == Graph.SyncCommit.SyncStep);
+            Y_DEBUG_ABORT_UNLESS(logid.Cookie() == 1 && step == Graph.SyncCommit.SyncStep);
 
             Graph.ConfirmedCommited = Max(Graph.ConfirmedCommited, step);
             Graph.SyncCommit.SyncStep = 0;

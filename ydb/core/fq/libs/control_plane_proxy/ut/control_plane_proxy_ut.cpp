@@ -2396,7 +2396,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         auto event = request->Get<TEvControlPlaneStorage::TEvCreateConnectionRequest>();
         auto permissions = event->Permissions;
         UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
-        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
         UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
         UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
         UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
@@ -2415,7 +2415,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         auto event = request->Get<TEvControlPlaneStorage::TEvCreateConnectionRequest>();
         auto permissions = event->Permissions;
         UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
-        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
         UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
         UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
         UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
@@ -2571,7 +2571,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
         UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
         UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
-        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
         UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
     }
@@ -2881,7 +2881,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             auto event = request->Get<TEvControlPlaneStorage::TEvCreateConnectionRequest>();
             auto permissions = event->Permissions;
             UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
-            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
             UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
             UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
             UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
@@ -2993,7 +2993,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
             UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
             UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
-            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
             UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_QUERY_TEXT));
         }
@@ -3289,7 +3289,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             auto event = request->Get<TEvControlPlaneStorage::TEvCreateConnectionRequest>();
             auto permissions = event->Permissions;
             UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
-            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
             UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
             UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
             UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));

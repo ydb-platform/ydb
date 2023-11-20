@@ -338,6 +338,10 @@ public:
     bool ReturnBoundaryKeys;
     bool CastAnyToComposite = false;
     bool SingleColumnGroupByDefault = false;
+    bool EnableColumnarValueStatistics;
+    bool EnableRowCountInColumnarStatistics;
+    bool EnableSegmentMetaInBlocks;
+
     NYTree::INodePtr CastAnyToCompositeNode;
 
     ETableSchemaModification SchemaModification;

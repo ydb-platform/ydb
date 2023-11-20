@@ -211,7 +211,7 @@ void WriteActualChunkSize(TBuffer& output, ui32 sizeOffset)
     Y_ABORT_UNLESS(currSize >= sizeOffset + sizeof(ui32));
     ui32 size = currSize - sizeOffset - sizeof(ui32);
 
-    Y_VERIFY_DEBUG(ReadUnaligned<ui32>(output.data() + sizeOffset) == CHUNK_SIZE_PLACEMENT);
+    Y_DEBUG_ABORT_UNLESS(ReadUnaligned<ui32>(output.data() + sizeOffset) == CHUNK_SIZE_PLACEMENT);
     WriteUnaligned<ui32>(output.data() + sizeOffset, size);
 }
 
@@ -434,7 +434,7 @@ void TBatch::UnpackTo(TVector<TClientBlob> *blobs)
             UnpackToType1(blobs);
             break;
         default:
-        Y_FAIL("uknown type");
+        Y_ABORT("uknown type");
     };
 }
 

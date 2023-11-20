@@ -103,7 +103,7 @@ public:
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
             } else {
-                Y_FAIL("unexpected tablet type");
+                Y_ABORT("unexpected tablet type");
             }
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -254,7 +254,7 @@ public:
                     break;
                 }
                 default: {
-                    Y_FAIL("unexpected tablet type");
+                    Y_ABORT("unexpected tablet type");
                 }
             }
 
@@ -456,7 +456,7 @@ public:
                     break;
                 }
                 default: {
-                    Y_FAIL("Unexpected tablet type");
+                    Y_ABORT("Unexpected tablet type");
                 }
             }
         }
@@ -504,7 +504,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TCreateOlapStore");
+        Y_ABORT("no AbortPropose for TCreateOlapStore");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

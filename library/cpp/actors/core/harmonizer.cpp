@@ -194,6 +194,9 @@ struct TPoolInfo {
     TAtomic MaxBookedCpu = 0;
     TAtomic MinBookedCpu = 0;
 
+    std::unique_ptr<TWaitingStats<ui64>> WaitingStats;
+    std::unique_ptr<TWaitingStats<double>> MovingWaitingStats;
+
     double GetBooked(i16 threadIdx);
     double GetlastSecondPoolBooked(i16 threadIdx);
     double GetConsumed(i16 threadIdx);
@@ -252,6 +255,13 @@ TCpuConsumption TPoolInfo::PullStats(ui64 ts) {
     RelaxedStore(&MinBookedCpu, Booked.GetMinInt());
     NewNotEnoughCpuExecutions = acc.NotEnoughCpuExecutions - NotEnoughCpuExecutions;
     NotEnoughCpuExecutions = acc.NotEnoughCpuExecutions;
+    if (WaitingStats && BasicPool) {
+        WaitingStats->Clear();
+        BasicPool->GetWaitingStats(*WaitingStats);
+        if constexpr (!NFeatures::TSpinFeatureFlags::CalcPerThread) {
+            MovingWaitingStats->Add(*WaitingStats, 0.8, 0.2);
+        }
+    }
     return acc;
 }
 #undef UNROLL_HISTORY
@@ -290,6 +300,9 @@ private:
     TAtomic MinConsumedCpu = 0;
     TAtomic MaxBookedCpu = 0;
     TAtomic MinBookedCpu = 0;
+
+    std::atomic<double> AvgAwakeningTimeUs = 0;
+    std::atomic<double> AvgWakingUpTimeUs = 0;
 
     void PullStats(ui64 ts);
     void HarmonizeImpl(ui64 ts);
@@ -351,6 +364,58 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
     TStackVec<bool, 8> isNeedyByPool;
 
     size_t sumOfAdditionalThreads = 0;
+
+
+    ui64 TotalWakingUpTime = 0;
+    ui64 TotalWakingUps = 0;
+    ui64 TotalAwakeningTime = 0;
+    ui64 TotalAwakenings = 0;
+    for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
+        TPoolInfo& pool = Pools[poolIdx];
+        if (pool.WaitingStats) {
+            TotalWakingUpTime += pool.WaitingStats->WakingUpTotalTime;
+            TotalWakingUps += pool.WaitingStats->WakingUpCount;
+            TotalAwakeningTime += pool.WaitingStats->AwakingTotalTime;
+            TotalAwakenings += pool.WaitingStats->AwakingCount;
+        }
+    }
+
+    constexpr ui64 knownAvgWakingUpTime = TWaitingStatsConstants::KnownAvgWakingUpTime;
+    constexpr ui64 knownAvgAwakeningUpTime = TWaitingStatsConstants::KnownAvgAwakeningTime;
+
+    ui64 realAvgWakingUpTime = (TotalWakingUps ? TotalWakingUpTime / TotalWakingUps : knownAvgWakingUpTime);
+    ui64 avgWakingUpTime = realAvgWakingUpTime;
+    if (avgWakingUpTime > 2 * knownAvgWakingUpTime || !realAvgWakingUpTime) {
+        avgWakingUpTime = knownAvgWakingUpTime;
+    }
+    AvgWakingUpTimeUs = Ts2Us(avgWakingUpTime);
+
+    ui64 realAvgAwakeningTime = (TotalAwakenings ? TotalAwakeningTime / TotalAwakenings : knownAvgAwakeningUpTime);
+    ui64 avgAwakeningTime = realAvgAwakeningTime;
+    if (avgAwakeningTime > 2 * knownAvgAwakeningUpTime || !realAvgAwakeningTime) {
+        avgAwakeningTime = knownAvgAwakeningUpTime;
+    }
+    AvgAwakeningTimeUs = Ts2Us(avgAwakeningTime);
+
+    ui64 avgWakingUpConsumption = avgWakingUpTime + avgAwakeningTime;
+    LWPROBE(WakingUpConsumption, Ts2Us(avgWakingUpTime), Ts2Us(avgWakingUpTime), Ts2Us(avgAwakeningTime), Ts2Us(realAvgAwakeningTime), Ts2Us(avgWakingUpConsumption));
+
+    for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
+        TPoolInfo& pool = Pools[poolIdx];
+        if (!pool.BasicPool) {
+            continue;
+        }
+        if constexpr (NFeatures::TSpinFeatureFlags::CalcPerThread) {
+            pool.BasicPool->CalcSpinPerThread(avgWakingUpConsumption);
+        } else if constexpr (NFeatures::TSpinFeatureFlags::UsePseudoMovingWindow) {
+            ui64 newSpinThreshold = pool.MovingWaitingStats->CalculateGoodSpinThresholdCycles(avgWakingUpConsumption);
+            pool.BasicPool->SetSpinThresholdCycles(newSpinThreshold);
+        } else {
+            ui64 newSpinThreshold = pool.WaitingStats->CalculateGoodSpinThresholdCycles(avgWakingUpConsumption);
+            pool.BasicPool->SetSpinThresholdCycles(newSpinThreshold);
+        }
+        pool.BasicPool->ClearWaitingStats();
+    }
 
     for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
         TPoolInfo& pool = Pools[poolIdx];
@@ -584,7 +649,11 @@ void THarmonizer::AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo) {
         poolInfo.AvgPingCounterWithSmallWindow = pingInfo->AvgPingCounterWithSmallWindow;
         poolInfo.MaxAvgPingUs = pingInfo->MaxAvgPingUs;
     }
-    Pools.push_back(poolInfo);
+    if (poolInfo.BasicPool) {
+        poolInfo.WaitingStats.reset(new TWaitingStats<ui64>());
+        poolInfo.MovingWaitingStats.reset(new TWaitingStats<double>());
+    }
+    Pools.push_back(std::move(poolInfo));
     PriorityOrder.clear();
 }
 
@@ -623,6 +692,8 @@ THarmonizerStats THarmonizer::GetStats() const {
         .MinConsumedCpu = static_cast<i64>(RelaxedLoad(&MinConsumedCpu)),
         .MaxBookedCpu = static_cast<i64>(RelaxedLoad(&MaxBookedCpu)),
         .MinBookedCpu = static_cast<i64>(RelaxedLoad(&MinBookedCpu)),
+        .AvgAwakeningTimeUs = AvgAwakeningTimeUs,
+        .AvgWakingUpTimeUs = AvgWakingUpTimeUs,
     };
 }
 

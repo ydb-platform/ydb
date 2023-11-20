@@ -75,12 +75,8 @@ TWriteSessionImpl::TWriteSessionImpl(
 
 }
 
-void TWriteSessionImpl::SetCallbackContext(std::shared_ptr<NPersQueue::TCallbackContext<TWriteSessionImpl>> ctx) {
-    CbContext = std::move(ctx);
-}
-
 void TWriteSessionImpl::Start(const TDuration& delay) {
-    Y_ABORT_UNLESS(CbContext);
+    Y_ABORT_UNLESS(SelfContext);
     ++ConnectionAttemptsDone;
     if (!Started) {
         with_lock(Lock) {
@@ -162,7 +158,7 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
     request.set_partition_id(*Settings.PartitionId_);
     request.set_include_location(true);
 
-    auto extractor = [cbContext = CbContext, context = describePartitionContext](Ydb::Topic::DescribePartitionResponse* response, TPlainStatus status) mutable {
+    auto extractor = [cbContext = SelfContext, context = describePartitionContext](Ydb::Topic::DescribePartitionResponse* response, TPlainStatus status) mutable {
         Ydb::Topic::DescribePartitionResult result;
         if (response)
             response->operation().result().UnpackTo(&result);
@@ -319,17 +315,26 @@ TVector<TWriteSessionEvent::TEvent> TWriteSessionImpl::GetEvents(bool block, TMa
     return EventsQueue->GetEvents(block, maxEventsCount);
 }
 
-ui64 TWriteSessionImpl::GetNextSeqNoImpl(const TMaybe<ui64>& seqNo) {
+ui64 TWriteSessionImpl::GetIdImpl(ui64 seqNo) {
+    Y_ABORT_UNLESS(AutoSeqNoMode.Defined());
+    Y_ABORT_UNLESS(!*AutoSeqNoMode || InitSeqNo.Defined() && seqNo > *InitSeqNo);
+    return *AutoSeqNoMode ? seqNo - *InitSeqNo : seqNo;
+}
+
+ui64 TWriteSessionImpl::GetSeqNoImpl(ui64 id) {
+    Y_ABORT_UNLESS(AutoSeqNoMode.Defined());
+    Y_ABORT_UNLESS(InitSeqNo.Defined());
+    return *AutoSeqNoMode ? id + *InitSeqNo : id;
+
+}
+
+ui64 TWriteSessionImpl::GetNextIdImpl(const TMaybe<ui64>& seqNo) {
+
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    ui64 seqNoValue = LastSeqNo + 1;
+    ui64 id = ++NextId;
     if (!AutoSeqNoMode.Defined()) {
         AutoSeqNoMode = !seqNo.Defined();
-        //! Disable SeqNo shift for manual SeqNo mode;
-        if (seqNo.Defined()) {
-            OnSeqNoShift = false;
-            SeqNoShift = 0;
-        }
     }
     if (seqNo.Defined()) {
         if (!Settings.DeduplicationEnabled_.GetOrElse(true)) {
@@ -345,7 +350,7 @@ ui64 TWriteSessionImpl::GetNextSeqNoImpl(const TMaybe<ui64>& seqNo) {
                 "Cannot call write() with defined SeqNo on WriteSession running in auto-seqNo mode"
             );
         } else {
-            seqNoValue = *seqNo;
+            id = *seqNo;
         }
     } else if (!(*AutoSeqNoMode)) {
         LOG_LAZY(DbDriverState->Log,
@@ -356,9 +361,9 @@ ui64 TWriteSessionImpl::GetNextSeqNoImpl(const TMaybe<ui64>& seqNo) {
             "Cannot call write() without defined SeqNo on WriteSession running in manual-seqNo mode"
         );
     }
-    LastSeqNo = seqNoValue;
-    return seqNoValue;
+    return id;
 }
+
 inline void TWriteSessionImpl::CheckHandleResultImpl(THandleResult& result) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
@@ -384,7 +389,7 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
     size_t bufferSize = message.Data.size();
     with_lock(Lock) {
         CurrentBatch.Add(
-                GetNextSeqNoImpl(message.SeqNo_), createdAtValue, message.Data, message.Codec, message.OriginalSize,
+                GetNextIdImpl(message.SeqNo_), createdAtValue, message.Data, message.Codec, message.OriginalSize,
                 message.MessageMeta_,
                 message.GetTxPtr()
         );
@@ -477,14 +482,14 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
 
         reqSettings = TRpcRequestSettings::Make(Settings, PreferredPartitionLocation.Endpoint);
 
-        connectCallback = [cbContext = CbContext,
+        connectCallback = [cbContext = SelfContext,
                            connectContext = connectContext](TPlainStatus&& st, typename IProcessor::TPtr&& processor) {
             if (auto self = cbContext->LockShared()) {
                 self->OnConnect(std::move(st), std::move(processor), connectContext);
             }
         };
 
-        connectTimeoutCallback = [cbContext = CbContext, connectTimeoutContext = connectTimeoutContext](bool ok) {
+        connectTimeoutCallback = [cbContext = SelfContext, connectTimeoutContext = connectTimeoutContext](bool ok) {
             if (ok) {
                 if (auto self = cbContext->LockShared()) {
                     self->OnConnectTimeout(connectTimeoutContext);
@@ -612,7 +617,7 @@ void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&&
     if (Aborting) {
         return;
     }
-    auto callback = [cbContext = CbContext,
+    auto callback = [cbContext = SelfContext,
                      connectionGeneration = ConnectionGeneration](NGrpc::TGrpcStatus&& grpcStatus) {
         if (auto self = cbContext->LockShared()) {
             self->OnWriteDone(std::move(grpcStatus), connectionGeneration);
@@ -633,7 +638,7 @@ void TWriteSessionImpl::ReadFromProcessor() {
         }
         prc = Processor;
         generation = ConnectionGeneration;
-        callback = [cbContext = CbContext,
+        callback = [cbContext = SelfContext,
                     connectionGeneration = generation,
                     processor = prc,
                     serverMessage = ServerMessage]
@@ -775,17 +780,13 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
             SessionId = initResponse.session_id();
             PartitionId = initResponse.partition_id();
             ui64 newLastSeqNo = initResponse.last_seq_no();
-            // SeqNo increased, so there's a risk of loss, apply SeqNo shift.
-            // MinUnsentSeqNo must be > 0 if anything was ever sent yet
-            if (Settings.DeduplicationEnabled_.GetOrElse(true)) {
-                 if(MinUnsentSeqNo && OnSeqNoShift && newLastSeqNo > MinUnsentSeqNo) {
-                     SeqNoShift = newLastSeqNo - MinUnsentSeqNo;
-                 }
-            } else {
-                newLastSeqNo = 1;
-	    }
+            if (!Settings.DeduplicationEnabled_.GetOrElse(true)) {
+                newLastSeqNo = 0;
+            }
             result.InitSeqNo = newLastSeqNo;
-            LastSeqNo = newLastSeqNo;
+            if (!InitSeqNo.Defined()) {
+                InitSeqNo = newLastSeqNo;
+            }
 
             SessionEstablished = true;
             LastCountersUpdateTs = TInstant::Now();
@@ -835,7 +836,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                 ui64 offset = ack.has_written() ? ack.written().offset() : 0;
 
                 acksEvent.Acks.push_back(TWriteSessionEvent::TWriteAck{
-                    sequenceNumber - SeqNoShift,
+                    GetIdImpl(sequenceNumber),
                     msgWriteStatus,
                     TWriteSessionEvent::TWriteAck::TWrittenMessageDetails {
                         offset,
@@ -844,7 +845,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                     writeStat,
                 });
 
-                if (CleanupOnAcknowledged(sequenceNumber - SeqNoShift)) {
+                if (CleanupOnAcknowledged(GetIdImpl(sequenceNumber))) {
                     result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{{}, TContinuationToken{}});
                 }
             }
@@ -862,14 +863,14 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
     return result;
 }
 
-bool TWriteSessionImpl::CleanupOnAcknowledged(ui64 sequenceNumber) {
+bool TWriteSessionImpl::CleanupOnAcknowledged(ui64 id) {
     bool result = false;
-    LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: acknoledged message " << sequenceNumber);
+    LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: acknoledged message " << id);
     UpdateTimedCountersImpl();
     const auto& sentFront = SentOriginalMessages.front();
     ui64 size = 0;
     ui64 compressedSize = 0;
-    if(!SentPackedMessage.empty() && SentPackedMessage.front().Offset == sequenceNumber) {
+    if(!SentPackedMessage.empty() && SentPackedMessage.front().Offset == id) {
         auto memoryUsage = OnMemoryUsageChangedImpl(-SentPackedMessage.front().Data.size());
         result = memoryUsage.NowOk && !memoryUsage.WasOk;
         const auto& front = SentPackedMessage.front();
@@ -898,7 +899,7 @@ bool TWriteSessionImpl::CleanupOnAcknowledged(ui64 sequenceNumber) {
     Y_ABORT_UNLESS(Counters->BytesInflightCompressed->Val() >= 0);
     Y_ABORT_UNLESS(Counters->BytesInflightUncompressed->Val() >= 0);
 
-    Y_ABORT_UNLESS(sentFront.SeqNo == sequenceNumber);
+    Y_ABORT_UNLESS(sentFront.Id == id);
 
     (*Counters->BytesInflightTotal) = MemoryUsage;
     SentOriginalMessages.pop();
@@ -953,7 +954,7 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
 
     std::shared_ptr<TBlock> blockPtr(std::make_shared<TBlock>());
     blockPtr->Move(block_);
-    auto lambda = [cbContext = CbContext,
+    auto lambda = [cbContext = SelfContext,
                    codec = Settings.Codec_,
                    level = Settings.CompressionLevel_,
                    isSyncCompression = !CompressionExecutor->IsAsync(),
@@ -1013,7 +1014,7 @@ void TWriteSessionImpl::ResetForRetryImpl() {
         PackedMessagesToSend.emplace(std::move(SentPackedMessage.front()));
         SentPackedMessage.pop();
     }
-    ui64 minSeqNo = PackedMessagesToSend.empty() ? LastSeqNo + 1 : PackedMessagesToSend.top().Offset;
+    ui64 minId = PackedMessagesToSend.empty() ? NextId + 1 : PackedMessagesToSend.top().Offset;
     std::queue<TOriginalMessage> freshOriginalMessagesToSend;
     OriginalMessagesToSend.swap(freshOriginalMessagesToSend);
     while (!SentOriginalMessages.empty()) {
@@ -1024,9 +1025,9 @@ void TWriteSessionImpl::ResetForRetryImpl() {
         OriginalMessagesToSend.emplace(std::move(freshOriginalMessagesToSend.front()));
         freshOriginalMessagesToSend.pop();
     }
-    if (!OriginalMessagesToSend.empty() && OriginalMessagesToSend.front().SeqNo < minSeqNo)
-        minSeqNo = OriginalMessagesToSend.front().SeqNo;
-    MinUnsentSeqNo = minSeqNo;
+    if (!OriginalMessagesToSend.empty() && OriginalMessagesToSend.front().Id < minId)
+        minId = OriginalMessagesToSend.front().Id;
+    MinUnsentId = minId;
     Y_ABORT_UNLESS(PackedMessagesToSend.size() == totalPackedMessages);
     Y_ABORT_UNLESS(OriginalMessagesToSend.size() == totalOriginalMessages);
 }
@@ -1054,8 +1055,8 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
 
     LOG_LAZY(DbDriverState->Log,
         TLOG_DEBUG,
-        LogPrefix() << "Write " << CurrentBatch.Messages.size() << " messages with seqNo from "
-            << CurrentBatch.Messages.begin()->SeqNo << " to " << CurrentBatch.Messages.back().SeqNo
+        LogPrefix() << "Write " << CurrentBatch.Messages.size() << " messages with Id from "
+            << CurrentBatch.Messages.begin()->Id << " to " << CurrentBatch.Messages.back().Id
     );
 
     Y_ABORT_UNLESS(CurrentBatch.Messages.size() <= MaxBlockMessageCount);
@@ -1070,11 +1071,11 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
         TBlock block{};
         for (; block.OriginalSize < MaxBlockSize && i != CurrentBatch.Messages.size(); ++i) {
             auto& currMessage = CurrentBatch.Messages[i];
-            auto sequenceNumber = currMessage.SeqNo;
+            auto id = currMessage.Id;
             auto createTs = currMessage.CreatedAt;
 
             if (!block.MessageCount) {
-                block.Offset = sequenceNumber;
+                block.Offset = id;
             }
 
             block.MessageCount += 1;
@@ -1093,11 +1094,11 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             (*Counters->BytesInflightUncompressed) += datum.size();
             (*Counters->MessagesInflight)++;
             if (!currMessage.MessageMeta.empty()) {
-                OriginalMessagesToSend.emplace(sequenceNumber, createTs, datum.size(),
+                OriginalMessagesToSend.emplace(id, createTs, datum.size(),
                                                std::move(currMessage.MessageMeta),
                                                currMessage.Tx);
             } else {
-                OriginalMessagesToSend.emplace(sequenceNumber, createTs, datum.size(),
+                OriginalMessagesToSend.emplace(id, createTs, datum.size(),
                                                currMessage.Tx);
             }
         }
@@ -1131,9 +1132,9 @@ bool TWriteSessionImpl::IsReadyToSendNextImpl() const {
         return false;
     }
     Y_ABORT_UNLESS(!OriginalMessagesToSend.empty(), "There are packed messages but no original messages");
-    Y_ABORT_UNLESS(OriginalMessagesToSend.front().SeqNo <= PackedMessagesToSend.top().Offset, "Lost original message(s)");
+    Y_ABORT_UNLESS(OriginalMessagesToSend.front().Id <= PackedMessagesToSend.top().Offset, "Lost original message(s)");
 
-    return PackedMessagesToSend.top().Offset == OriginalMessagesToSend.front().SeqNo;
+    return PackedMessagesToSend.top().Offset == OriginalMessagesToSend.front().Id;
 }
 
 
@@ -1184,7 +1185,7 @@ void TWriteSessionImpl::SendImpl() {
                     writeRequest->mutable_tx()->set_session(message.Tx->GetSession().GetId());
                 }
 
-                msgData->set_seq_no(message.SeqNo + SeqNoShift);
+                msgData->set_seq_no(GetSeqNoImpl(message.Id));
                 *msgData->mutable_created_at() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(message.CreatedAt.MilliSeconds());
 
                 if (!message.MessageMeta.empty()) {
@@ -1272,7 +1273,7 @@ void TWriteSessionImpl::HandleWakeUpImpl() {
     if (AtomicGet(Aborting)) {
         return;
     }
-    auto callback = [cbContext = CbContext] (bool ok)
+    auto callback = [cbContext = SelfContext] (bool ok)
     {
         if (!ok) {
             return;

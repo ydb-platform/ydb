@@ -171,7 +171,7 @@ namespace NActors {
                 }
 
                 default:
-                    Y_FAIL("unexpected legacy key# %d", key);
+                    Y_ABORT("unexpected legacy key# %d", key);
             }
         }
 

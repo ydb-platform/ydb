@@ -158,14 +158,17 @@ struct TEvTaskRunnerCreate
     TEvTaskRunnerCreate(
         const NDqProto::TDqTask& task,
         const TDqTaskRunnerMemoryLimits& memoryLimits,
-        const std::shared_ptr<IDqTaskRunnerExecutionContext>& execCtx = std::shared_ptr<IDqTaskRunnerExecutionContext>(new TDqTaskRunnerExecutionContext()))
+        NDqProto::EDqStatsMode statsMode,
+        const std::shared_ptr<IDqTaskRunnerExecutionContext>& execCtx)
         : Task(task)
         , MemoryLimits(memoryLimits)
+        , StatsMode(statsMode)
         , ExecCtx(execCtx)
     { }
 
     NDqProto::TDqTask Task;
     TDqTaskRunnerMemoryLimits MemoryLimits;
+    NDqProto::EDqStatsMode StatsMode;
     std::shared_ptr<IDqTaskRunnerExecutionContext> ExecCtx;
 };
 
@@ -386,7 +389,7 @@ struct TEvSinkPopFinished
     { }
 
     const ui64 Index;
-    TVector<TString> Strings;
+    NDq::TDqSerializedBatch Batch;
     TMaybe<NDqProto::TCheckpoint> Checkpoint;
     i64 Size;
     i64 CheckpointSize;

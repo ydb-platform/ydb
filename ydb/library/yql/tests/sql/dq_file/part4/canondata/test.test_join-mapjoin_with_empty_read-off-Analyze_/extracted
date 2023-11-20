@@ -1,0 +1,86 @@
+<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
+
+    <tmp_path>/program.sql:<main>: Info: Type annotation
+    
+        <tmp_path>/program.sql:<main>:13:1: Info: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject
+        	select * from Input as a
+	^
+            <tmp_path>/program.sql:<main>:13:24: Info: At function: EquiJoin, At function: RemoveSystemMembers
+            	select * from Input as a
+	                       ^
+                <tmp_path>/program.sql:<main>:11:60: Info: At function: Take, At function: Skip, At function: Coalesce
+                	$in1 = (select key from Input where key != "" order by key limit 10 offset $offset);
+	                                                           ^
+                    <tmp_path>/program.sql:<main>:9:23: Info: At function: Coalesce
+                    	$offset = ($cnt + 10) ?? 0;
+	                      ^
+                        <tmp_path>/program.sql:<main>:9:17: Info: At function: +
+                        	$offset = ($cnt + 10) ?? 0;
+	                ^
+                            <tmp_path>/program.sql:<main>:9:17: Info: Integral type implicit bitcast: Optional<Uint64> and Int32
+                            	$offset = ($cnt + 10) ?? 0;
+	                ^
+        <tmp_path>/program.sql:<main>:20:1: Info: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject
+        	select * from Input as a
+	^
+            <tmp_path>/program.sql:<main>:20:24: Info: At function: EquiJoin, At function: RemoveSystemMembers
+            	select * from Input as a
+	                       ^
+                <tmp_path>/program.sql:<main>:18:47: Info: At function: Take, At function: Coalesce
+                	$in2 = (select key from Input where key != "" limit $limit);
+	                                              ^
+                    <tmp_path>/program.sql:<main>:16:23: Info: At function: Coalesce
+                    	$limit = ($cnt / 100) ?? 0;
+	                      ^
+                        <tmp_path>/program.sql:<main>:16:16: Info: At function: /
+                        	$limit = ($cnt / 100) ?? 0;
+	               ^
+                            <tmp_path>/program.sql:<main>:16:16: Info: Integral type implicit bitcast: Optional<Uint64> and Int32
+                            	$limit = ($cnt / 100) ?? 0;
+	               ^
+    <tmp_path>/program.sql:<main>: Info: Type annotation
+    
+        <tmp_path>/program.sql:<main>:13:24: Info: At function: DqJoin
+        	select * from Input as a
+	                       ^
+            <tmp_path>/program.sql:<main>:13:24: Info: different labels for left table
+            	select * from Input as a
+	                       ^
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:13:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject
+    	select * from Input as a
+	^
+        <tmp_path>/program.sql:<main>:13:24: Warning: At function: EquiJoin, At function: RemoveSystemMembers
+        	select * from Input as a
+	                       ^
+            <tmp_path>/program.sql:<main>:11:60: Warning: At function: Take, At function: Skip, At function: Coalesce
+            	$in1 = (select key from Input where key != "" order by key limit 10 offset $offset);
+	                                                           ^
+                <tmp_path>/program.sql:<main>:9:23: Warning: At function: Coalesce
+                	$offset = ($cnt + 10) ?? 0;
+	                      ^
+                    <tmp_path>/program.sql:<main>:9:17: Warning: At function: +
+                    	$offset = ($cnt + 10) ?? 0;
+	                ^
+                        <tmp_path>/program.sql:<main>:9:17: Warning: Integral type implicit bitcast: Optional<Uint64> and Int32
+                        	$offset = ($cnt + 10) ?? 0;
+	                ^
+    <tmp_path>/program.sql:<main>:20:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject
+    	select * from Input as a
+	^
+        <tmp_path>/program.sql:<main>:20:24: Warning: At function: EquiJoin, At function: RemoveSystemMembers
+        	select * from Input as a
+	                       ^
+            <tmp_path>/program.sql:<main>:18:47: Warning: At function: Take, At function: Coalesce
+            	$in2 = (select key from Input where key != "" limit $limit);
+	                                              ^
+                <tmp_path>/program.sql:<main>:16:23: Warning: At function: Coalesce
+                	$limit = ($cnt / 100) ?? 0;
+	                      ^
+                    <tmp_path>/program.sql:<main>:16:16: Warning: At function: /
+                    	$limit = ($cnt / 100) ?? 0;
+	               ^
+                        <tmp_path>/program.sql:<main>:16:16: Warning: Integral type implicit bitcast: Optional<Uint64> and Int32
+                        	$limit = ($cnt / 100) ?? 0;
+	               ^

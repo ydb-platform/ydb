@@ -218,7 +218,7 @@ namespace NSQLTranslationV1 {
 
         template <typename... TVals>
         TPtr L(TPtr list, TVals... vals) const {
-            Y_VERIFY_DEBUG(list);
+            Y_DEBUG_ABORT_UNLESS(list);
             auto copy = list->ShallowCopy();
             copy->Add(vals...);
             return copy;
@@ -967,6 +967,7 @@ namespace NSQLTranslationV1 {
         NYql::TResetableSetting<TNodePtr, void> Tiering;
         TMaybe<TIdentifier> StoreType;
         TNodePtr PartitionByHashFunction;
+        TMaybe<TIdentifier> StoreExternalBlobs;
 
         TNodePtr DataSourcePath;
         TNodePtr Location;
@@ -976,7 +977,7 @@ namespace NSQLTranslationV1 {
             return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad
                 || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter
                 || ReadReplicasSettings || TtlSettings || Tiering || StoreType || PartitionByHashFunction
-                || DataSourcePath || Location || ExternalSourceParameters;
+                || StoreExternalBlobs || DataSourcePath || Location || ExternalSourceParameters;
         }
     };
 
@@ -994,6 +995,7 @@ namespace NSQLTranslationV1 {
         enum class EType {
             GlobalSync,
             GlobalAsync,
+            GlobalSyncUnique,
         };
 
         TIndexDescription(const TIdentifier& name, EType type = EType::GlobalSync)

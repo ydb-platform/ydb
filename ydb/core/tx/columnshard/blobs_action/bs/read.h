@@ -13,7 +13,7 @@ private:
 protected:
     virtual void DoStartReading(const THashMap<TUnifiedBlobId, THashSet<TBlobRange>>& ranges) override {
         for (auto&& i : ranges) {
-            NBlobCache::TReadBlobRangeOptions readOpts{.CacheAfterRead = true, .IsBackgroud = true, .WithDeadline = false};
+            NBlobCache::TReadBlobRangeOptions readOpts{.CacheAfterRead = true, .IsBackgroud = GetIsBackgroundProcess(), .WithDeadline = false};
             std::vector<TBlobRange> rangesLocal(i.second.begin(), i.second.end());
             TActorContext::AsActorContext().Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRangeBatch(std::move(rangesLocal), std::move(readOpts)));
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("blob_id", i.first)("count", i.second.size());

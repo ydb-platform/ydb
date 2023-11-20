@@ -20,7 +20,7 @@ void TEffectiveACL::Init(const TString &effectiveACL)
 
 void TEffectiveACL::Update(const TEffectiveACL &parent, const TString &selfACL, bool isContainer)
 {
-    Y_VERIFY_DEBUG(parent);
+    Y_DEBUG_ABORT_UNLESS(parent);
 
     if (!selfACL) {
         InheritFrom(parent, isContainer);

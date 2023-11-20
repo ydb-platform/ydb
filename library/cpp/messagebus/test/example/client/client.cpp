@@ -36,7 +36,7 @@ namespace NCalculator {
                 int b = requestMul->Record.GetB();
                 Cerr << a << " * " << b << " = " << response->Record.GetResult() << "\n";
             } else {
-                Y_FAIL("unknown request");
+                Y_ABORT("unknown request");
             }
         }
 

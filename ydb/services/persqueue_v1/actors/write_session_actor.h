@@ -107,7 +107,6 @@ private:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
 
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
-            HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
             HFunc(NMetadata::NProvider::TEvManagerPrepared, Handle);
 
@@ -125,7 +124,6 @@ private:
 
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const TActorContext &ctx);
-    void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr &ev, const TActorContext &ctx);
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr &ev, const NActors::TActorContext& ctx);
     void TryCloseSession(const TActorContext& ctx);
 

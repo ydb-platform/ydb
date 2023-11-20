@@ -23,7 +23,7 @@ namespace NKikimr {
         public:
 
             void CheckMagic() {
-                Y_VERIFY_DEBUG(Magic_ == TListChunkMagic);
+                Y_DEBUG_ABORT_UNLESS(Magic_ == TListChunkMagic);
             }
 
             static TSelf* AllocateChunk(ui64 length) {
@@ -404,17 +404,17 @@ namespace NKikimr {
             }
 
             TSelf SkipFromBegin(ui64 count) const {
-                Y_VERIFY_DEBUG((count > 0) && (count < GetLength()));
+                Y_DEBUG_ABORT_UNLESS((count > 0) && (count < GetLength()));
                 return TSelf(Chunk_, Begin_ + count, End_, Type::Freezed);
             }
 
             TSelf SkipFromEnd(ui64 count) const {
-                Y_VERIFY_DEBUG((count > 0) && (count < GetLength()));
+                Y_DEBUG_ABORT_UNLESS((count > 0) && (count < GetLength()));
                 return TSelf(Chunk_, Begin_, End_ - count, Type::Freezed);
             }
 
             T GetItemByIndex(ui64 index) const {
-                Y_VERIFY_DEBUG((index >= 0) && (index < GetLength()));
+                Y_DEBUG_ABORT_UNLESS((index >= 0) && (index < GetLength()));
                 return Begin_[index];
             }
 

@@ -94,8 +94,8 @@ struct TVirtualTimestamp
     }
 
     bool operator<(const TVirtualTimestamp& ts) const {
-        Y_VERIFY_DEBUG(Step, "Comparing with unset timestamp");
-        Y_VERIFY_DEBUG(ts.Step, "Comparing with unset timestamp");
+        Y_DEBUG_ABORT_UNLESS(Step, "Comparing with unset timestamp");
+        Y_DEBUG_ABORT_UNLESS(ts.Step, "Comparing with unset timestamp");
         return static_cast<const TRowVersion&>(*this) < ts;
     }
 

@@ -96,6 +96,16 @@ private:
                     tableInfo->Replicas.push_back(replicaInfo);
                 }
 
+                tableInfo->Indices.reserve(rsp->indices_size());
+                for (const auto& protoIndexInfo: rsp->indices()) {
+                    TIndexInfo indexInfo;
+                    FromProto(&indexInfo.TableId, protoIndexInfo.index_table_id());
+                    indexInfo.Kind = FromProto<ESecondaryIndexKind>(protoIndexInfo.index_kind());
+                    THROW_ERROR_EXCEPTION_IF(!TEnumTraits<ESecondaryIndexKind>::FindLiteralByValue(indexInfo.Kind).has_value(),
+                        "Unsupported secondary index kind %v (client not up-to-date)", indexInfo.Kind);
+                    tableInfo->Indices.push_back(indexInfo);
+                }
+
                 if (tableInfo->IsSorted()) {
                     tableInfo->LowerCapBound = MinKey();
                     tableInfo->UpperCapBound = MaxKey();

@@ -140,7 +140,7 @@ inline IComputationNode* CreateUdfWrapper(
                 return new TUdfWrapper<TValidateErrorPolicyThrow,TValidateModeGreedy<TValidateErrorPolicyThrow>>(ctx.Mutables, std::move(node), std::move(functionName), runConfigNode, callableType);
             }
         default:
-            Y_FAIL("Unexpected validate mode: %u", static_cast<unsigned>(ctx.ValidateMode));
+            Y_ABORT("Unexpected validate mode: %u", static_cast<unsigned>(ctx.ValidateMode));
     };
 }
 

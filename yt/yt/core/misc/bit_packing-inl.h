@@ -9,23 +9,6 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T>
-size_t UnpackBitVector(TCompressedVectorView view, std::vector<T>* container)
-{
-    container->resize(view.GetSize());
-    view.UnpackTo(container->data());
-    return view.GetSizeInWords();
-}
-
-template <class T>
-size_t UnpackBitVector(const ui64* input, std::vector<T>* container)
-{
-    TCompressedVectorView view(input);
-    return UnpackBitVector(view, container);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 inline size_t GetCompressedVectorSize(const void* ptr)
 {
     return *static_cast<const ui64*>(ptr) & MaskLowerBits(56);

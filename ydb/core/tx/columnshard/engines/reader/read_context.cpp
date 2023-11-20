@@ -4,28 +4,13 @@
 
 namespace NKikimr::NOlap {
 
-TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager,
-    const NColumnShard::TConcreteScanCounters& counters,
-    std::shared_ptr<NOlap::TActorBasedMemoryAccesor> memoryAccessor, const bool isInternalRead)
-    : StoragesManager(storagesManager)
-    , Counters(counters)
-    , MemoryAccessor(memoryAccessor)
-    , IsInternalRead(isInternalRead)
-{
-
-}
-
 void TActorBasedMemoryAccesor::DoOnBufferReady() {
     OwnerId.Send(OwnerId, new NActors::TEvents::TEvWakeup(1));
 }
 
 
-IDataReader::IDataReader(const TReadContext& context, NOlap::TReadMetadata::TConstPtr readMetadata)
-    : Context(context)
-    , ReadMetadata(readMetadata)
-{
-    Y_ABORT_UNLESS(ReadMetadata);
-    Y_ABORT_UNLESS(ReadMetadata->SelectInfo);
+IDataReader::IDataReader(const std::shared_ptr<NOlap::TReadContext>& context)
+    : Context(context) {
 }
 
 }

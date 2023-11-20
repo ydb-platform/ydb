@@ -198,6 +198,37 @@ bool TSerializedCellVec::DoTryParse(const TString& data) {
     return TryDeserializeCellVec(data, Buf, Cells);
 }
 
+void TCellsStorage::Reset(TArrayRef<const TCell> cells)
+{
+    size_t cellsSize = cells.size();
+    size_t cellsDataSize = sizeof(TCell) * cellsSize;
+
+    for (size_t i = 0; i < cellsSize; ++i) {
+        const auto & cell = cells[i];
+        if (!cell.IsNull() && !cell.IsInline() && cell.Size() != 0) {
+            cellsDataSize += AlignUp(static_cast<size_t>(cell.Size()));
+        }
+    }
+
+    CellsData.resize(cellsDataSize);
+
+    char *cellsData = CellsData.data();
+    Cells = TArrayRef<TCell>{reinterpret_cast<TCell *>(cellsData), cellsSize};
+    cellsData += sizeof(TCell) * cellsSize;
+
+    for (size_t i = 0; i < cellsSize; ++i) {
+        const auto & cell = cells[i];
+
+        if (!cell.IsNull() && !cell.IsInline() && cell.Size() != 0) {
+            memcpy(cellsData, cell.Data(), cell.Size());
+            Cells[i] = TCell(cellsData, cell.Size());
+            cellsData += AlignUp(static_cast<size_t>(cell.Size()));
+        } else {
+            Cells[i] = cell;
+        }
+    }
+}
+
 TOwnedCellVecBatch::TOwnedCellVecBatch()
     : Pool(std::make_unique<TMemoryPool>(InitialPoolSize)) {
 }

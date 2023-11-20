@@ -41,4 +41,5 @@ RECURSE(
     tx_proxy
     tiering
     sharding
+    tracing
 )

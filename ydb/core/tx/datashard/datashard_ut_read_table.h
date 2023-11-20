@@ -1,5 +1,5 @@
 #pragma once
-#include "datashard_ut_common.h"
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/read_table.h>
@@ -29,10 +29,12 @@ namespace NDataShardReadTableTest {
         struct TEvResult : public TEventLocal<TEvResult, EvResult> {
             TString Result;
             bool Finished;
+            bool IsError;
 
-            TEvResult(TString result, bool finished)
+            TEvResult(TString result, bool finished, bool isError)
                 : Result(std::move(result))
                 , Finished(finished)
+                , IsError(isError)
             { }
         };
 
@@ -87,17 +89,17 @@ namespace NDataShardReadTableTest {
                         result << Endl;
                     }
                     NotifyReady(ctx);
-                    ctx.Send(Edge, new TEvResult(result, false));
+                    ctx.Send(Edge, new TEvResult(result, false, false));
                     break;
                 }
                 case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete: {
                     NotifyReady(ctx);
-                    ctx.Send(Edge, new TEvResult({ }, true));
+                    ctx.Send(Edge, new TEvResult({ }, true, false));
                     return Die(ctx);
                 }
                 default: {
                     NotifyReady(ctx);
-                    ctx.Send(Edge, new TEvResult(TStringBuilder() << "ERROR: " << status << Endl, true));
+                    ctx.Send(Edge, new TEvResult(TStringBuilder() << "ERROR: " << status << Endl, true, true));
                     return Die(ctx);
                 }
             }
@@ -158,7 +160,7 @@ namespace NDataShardReadTableTest {
                 break;
 
             default:
-                Y_FAIL("Unhandled");
+                Y_ABORT("Unhandled");
             }
         }
 
@@ -173,7 +175,7 @@ namespace NDataShardReadTableTest {
                 break;
 
             default:
-                Y_FAIL("Unhandled");
+                Y_ABORT("Unhandled");
             }
         }
 
@@ -201,6 +203,7 @@ namespace NDataShardReadTableTest {
         TString LastResult;
         TStringBuilder Result;
         bool Finished = false;
+        bool IsError = false;
 
         TReadTableState(Tests::TServer::TPtr server, const NTxProxy::TReadTableSettings& settings)
             : Runtime(*server->GetRuntime())
@@ -218,6 +221,7 @@ namespace NDataShardReadTableTest {
                 auto ev = Runtime.GrabEdgeEventRethrow<TReadTableDriver::TEvResult>(Edge);
                 LastResult = ev->Get()->Result;
                 Finished = ev->Get()->Finished;
+                IsError = ev->Get()->IsError;
                 Result << LastResult;
             }
 

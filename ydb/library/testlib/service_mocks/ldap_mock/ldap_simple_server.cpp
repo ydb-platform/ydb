@@ -12,6 +12,10 @@
 namespace LdapMock {
 
 TLdapSimpleServer::TLdapSimpleServer(ui16 port, const TLdapMockResponses& responses)
+    : TLdapSimpleServer(port, {responses, {}})
+{}
+
+TLdapSimpleServer::TLdapSimpleServer(ui16 port, const std::pair<TLdapMockResponses, TLdapMockResponses>& responses)
     : Port(port)
     , Responses(responses)
 {
@@ -34,7 +38,7 @@ TLdapSimpleServer::TLdapSimpleServer(ui16 port, const TLdapMockResponses& respon
     ThreadPool->Start(1);
 
     auto receiveFinish = MakeAtomicShared<TInetStreamSocket>(socketPair[0]);
-    ListenerThread = ThreadPool->Run([listenSocket, receiveFinish, &responses = this->Responses] {
+    ListenerThread = ThreadPool->Run([listenSocket, receiveFinish, &useFirstSetResponses = this->UseFirstSetResponses, &responses = this->Responses] {
         TSocketPoller socketPoller;
         socketPoller.WaitRead(*receiveFinish, nullptr);
         socketPoller.WaitRead(*listenSocket, (void*)1);
@@ -51,8 +55,8 @@ TLdapSimpleServer::TLdapSimpleServer(ui16 port, const TLdapMockResponses& respon
                     socket->OnAccept();
 
                     SystemThreadFactory()->Run(
-                        [socket, &responses] {
-                            LdapRequestHandler(socket, responses);
+                        [socket, &useFirstSetResponses, &responses] {
+                            LdapRequestHandler(socket, useFirstSetResponses ? responses.first : responses.second);
                             socket->Close();
                         });
                 }
@@ -61,8 +65,7 @@ TLdapSimpleServer::TLdapSimpleServer(ui16 port, const TLdapMockResponses& respon
     });
 }
 
-TLdapSimpleServer::~TLdapSimpleServer()
-{
+TLdapSimpleServer::~TLdapSimpleServer() {
     try {
         if (ThreadPool) {
             Stop();
@@ -71,8 +74,7 @@ TLdapSimpleServer::~TLdapSimpleServer()
     }
 }
 
-void TLdapSimpleServer::Stop()
-{
+void TLdapSimpleServer::Stop() {
     // Just send something to indicate shutdown.
     SendFinishSocket->Send("X", 1);
     ListenerThread->Join();
@@ -80,38 +82,16 @@ void TLdapSimpleServer::Stop()
     ThreadPool.Destroy();
 }
 
-int TLdapSimpleServer::GetPort() const
-{
+int TLdapSimpleServer::GetPort() const {
     return Port;
 }
 
-TString TLdapSimpleServer::GetAddress() const
-{
+TString TLdapSimpleServer::GetAddress() const {
     return TStringBuilder() << "localhost:" << Port;
 }
 
-void TLdapSimpleServer::SetBindResponse(const std::pair<TBindRequestInfo, TBindResponseInfo>& response) {
-    auto it = std::find_if(Responses.BindResponses.begin(), Responses.BindResponses.end(), [&response](const std::pair<TBindRequestInfo, TBindResponseInfo>& expectedResponse){
-        return response.first == expectedResponse.first;
-    });
-
-    if (it != Responses.BindResponses.end()) {
-        it->second = response.second;
-    } else {
-        Responses.BindResponses.push_back(response);
-    }
+void TLdapSimpleServer::UpdateResponses() {
+    UseFirstSetResponses = !UseFirstSetResponses;
 }
 
-void TLdapSimpleServer::SetSearchReasponse(const std::pair<TSearchRequestInfo, TSearchResponseInfo>& response) {
-    auto it = std::find_if(Responses.SearchResponses.begin(), Responses.SearchResponses.end(), [&response](const std::pair<TSearchRequestInfo, TSearchResponseInfo>& expectedResponse){
-        return response.first == expectedResponse.first;
-    });
-
-    if (it != Responses.SearchResponses.end()) {
-        it->second = response.second;
-    } else {
-        Responses.SearchResponses.push_back(response);
-    }
-}
-
-}
+} // namespace LdapMock

@@ -491,7 +491,7 @@ NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const 
     }
 
     default:
-        Y_FAIL("Verify value meet unexpected type kind: %s", type->GetKindAsStr().data());
+        Y_ABORT("Verify value meet unexpected type kind: %s", type->GetKindAsStr().data());
     }
     return std::move(value);
 }

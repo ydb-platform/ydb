@@ -74,6 +74,17 @@ public:
     //! Path to directory that will contain resulting static tables with exported data.
     NYPath::TYPath ExportDirectory;
 
+    //! A format-string supporting the following specifiers:
+    //!  - %UNIX_TS: the unix timestamp corresponding to the exported table
+    //!  - %PERIOD: the length of the export period in seconds
+    //!  - %ISO: unix timestamp formatted as an ISO time string
+    //!  - all specifiers supported by the strftime function (e.g. %H, %M, %S, etc.), used to format the table's unix timestamp
+    //! NB: It is your responsibility to guarantee that these names will be unique across export iterations (given that the
+    //! unix timestamps corresponding to the output tables are guaranteed to be unique by the export algorithm).
+    //! An attempt to produce a table which already exists will lead to an error, in which case the data will be exported
+    //! on the next iteration.
+    TString OutputTableNamePattern;
+
     REGISTER_YSON_STRUCT_LITE(TQueueStaticExportConfig);
 
     static void Register(TRegistrar registrar);

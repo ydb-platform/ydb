@@ -433,7 +433,7 @@ private:
         }
 
         void NextRow() {
-            Y_VERIFY_DEBUG(!IsEmpty());
+            Y_DEBUG_ABORT_UNLESS(!IsEmpty());
             ++CurrBlockIndex_;
         }
 
@@ -470,9 +470,9 @@ private:
         }
 
         TBlockItem GetColumnItem(ui32 columnIndex, ui64 blockIndex) const {
-            Y_VERIFY_DEBUG(columnIndex < CurrentRow_.size());
+            Y_DEBUG_ABORT_UNLESS(columnIndex < CurrentRow_.size());
             auto& datum = CurrentRow_[columnIndex];
-            Y_VERIFY_DEBUG(datum.is_array());
+            Y_DEBUG_ABORT_UNLESS(datum.is_array());
             auto& reader = Readers_[columnIndex];
             return reader->GetItem(*datum.array(), blockIndex);
         }
@@ -502,11 +502,11 @@ private:
             , Data_(data)
             , BlockIndex_(blockIndex)
         {
-            Y_VERIFY_DEBUG(Data_);
+            Y_DEBUG_ABORT_UNLESS(Data_);
         }
 
         bool operator<(const TDqInputBatchIterator& other) const {
-            Y_VERIFY_DEBUG(&Data_->Parent() == &other.Data_->Parent());
+            Y_DEBUG_ABORT_UNLESS(&Data_->Parent() == &other.Data_->Parent());
             const auto& comparators = Data_->Parent().Comparators_;
             ui32 comporatorIndex = 0;
             for (auto& sortCol : Data_->Parent().SortCols_) {
@@ -660,7 +660,7 @@ private:
         }
 
         std::vector<arrow::Datum> output;
-        Y_VERIFY_DEBUG(FirstSeenInputIndex_.Defined());
+        Y_DEBUG_ABORT_UNLESS(FirstSeenInputIndex_.Defined());
         for (size_t i = 0; i < Builders_.size(); ++i) {
             if (Builders_[i]) {
                 output.emplace_back(Builders_[i]->Build(false));

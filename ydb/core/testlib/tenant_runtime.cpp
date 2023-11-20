@@ -24,6 +24,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/persqueue/pq.h>
+#include <ydb/core/statistics/aggregator/aggregator.h>
 
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
@@ -451,6 +452,8 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
                 bootstrapperActorId = Boot(ctx, type, &NReplication::CreateController, DataGroupErasure);
             } else if (type == TTabletTypes::PersQueue) {
                 bootstrapperActorId = Boot(ctx, type, &NKikimr::CreatePersQueue, DataGroupErasure);
+            } else if (type == TTabletTypes::StatisticsAggregator) {
+                bootstrapperActorId = Boot(ctx, type, &NStat::CreateStatisticsAggregator, DataGroupErasure);
             } else {
                 status = NKikimrProto::ERROR;
             }
@@ -694,7 +697,7 @@ public:
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                //Y_FAIL("TFakeHive::StateWork unexpected event type: %" PRIx32 " event: %s",
+                //Y_ABORT("TFakeHive::StateWork unexpected event type: %" PRIx32 " event: %s",
                 //       ev->GetTypeRewrite(), ev->HasEvent() ? ~ev->GetBase()->ToString() : "serialized?");
             }
         }

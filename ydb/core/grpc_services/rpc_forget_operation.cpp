@@ -50,7 +50,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
         case TOperationId::BUILD_INDEX:
             return new TEvIndexBuilder::TEvForgetRequest(TxId, DatabaseName, RawOperationId);
         default:
-            Y_FAIL("unreachable");
+            Y_ABORT("unreachable");
         }
     }
 

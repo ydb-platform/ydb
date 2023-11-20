@@ -32,7 +32,7 @@ inline TStringBuilder& operator<<(TStringBuilder& o, const TPad<3>& p) {
         if (p.I >= 0) {
             if (p.I < 10) {
                 o << '0' << '0';
-            } else if (p.I < 10) {
+            } else {
                 o << '0';
             }
         }

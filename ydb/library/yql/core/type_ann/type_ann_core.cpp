@@ -182,6 +182,10 @@ namespace NTypeAnnImpl {
         case ETypeAnnotationKind::Null:
         case ETypeAnnotationKind::EmptyList:
         case ETypeAnnotationKind::EmptyDict:
+        case ETypeAnnotationKind::Error:
+        case ETypeAnnotationKind::Pg:
+        case ETypeAnnotationKind::Block:
+        case ETypeAnnotationKind::Scalar:
             return { input, type };
 
         case ETypeAnnotationKind::Optional: {
@@ -418,7 +422,16 @@ namespace NTypeAnnImpl {
             return { ctx.NewCallable(input->Pos(), "Visit", std::move(visitArgs)), newVType };
         }
 
-        default:
+        case ETypeAnnotationKind::Unit:
+        case ETypeAnnotationKind::World:
+        case ETypeAnnotationKind::Callable:
+        case ETypeAnnotationKind::Item:
+        case ETypeAnnotationKind::Type:
+        case ETypeAnnotationKind::Generic:
+        case ETypeAnnotationKind::Stream:
+        case ETypeAnnotationKind::Flow:
+        case ETypeAnnotationKind::Multi:
+        case ETypeAnnotationKind::LastType:
             return { nullptr, nullptr };
         }
     }
@@ -11697,6 +11710,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["OrderedExtract"] = &ExtractWrapper;
         Functions["UnionAll"] = &UnionAllWrapper;
         Functions["UnionMerge"] = &UnionAllWrapper;
+        Functions["Union"] = &UnionAllWrapper;
         Functions["ListExtend"] = &ListExtendWrapper<false>;
         Functions["ListExtendStrict"] = &ListExtendWrapper<true>;
         Functions["ListUnionAll"] = &ListUnionAllWrapper;
@@ -12088,6 +12102,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WideTopSortBlocks"] = &WideTopBlocksWrapper;
         Functions["WideSortBlocks"] = &WideSortBlocksWrapper;
         Functions["BlockExtend"] = &BlockExtendWrapper;
+        Functions["BlockOrderedExtend"] = &BlockExtendWrapper;
 
         Functions["BlockCoalesce"] = &BlockCoalesceWrapper;
         Functions["BlockAnd"] = &BlockLogicalWrapper;
@@ -12151,6 +12166,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["PgResolvedOp"] = &PgOpWrapper;
         ExtFunctions["PgSelect"] = &PgSelectWrapper;
         ExtFunctions["PgSetItem"] = &PgSetItemWrapper;
+        ExtFunctions["PgValuesList"] = &PgValuesListWrapper;
         ExtFunctions["TablePath"] = &TablePathWrapper;
         ExtFunctions["TableRecord"] = &TableRecordWrapper;
         ExtFunctions["Random"] = &DataGeneratorWrapper<NKikimr::NUdf::EDataSlot::Double>;
@@ -12188,6 +12204,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["AssumeColumnOrder"] = &AssumeColumnOrderWrapper;
         ExtFunctions["AssumeColumnOrderPartial"] = &AssumeColumnOrderWrapper;
         ExtFunctions["UnionAllPositional"] = &UnionAllPositionalWrapper;
+        ExtFunctions["UnionPositional"] = &UnionAllPositionalWrapper;
         ExtFunctions["SafeCast"] = &CastWrapper<false>;
         ExtFunctions["StrictCast"] = &CastWrapper<true>;
 
@@ -12208,6 +12225,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ColumnOrderFunctions["Merge"] = ColumnOrderFunctions["Extend"] = &OrderForMergeExtend;
         ColumnOrderFunctions[RightName] = &OrderFromFirst;
         ColumnOrderFunctions["UnionAll"] = &OrderForUnionAll;
+        ColumnOrderFunctions["Union"] = &OrderForUnionAll;
         ColumnOrderFunctions["EquiJoin"] = &OrderForEquiJoin;
         ColumnOrderFunctions["CalcOverWindow"] = &OrderForCalcOverWindow;
 

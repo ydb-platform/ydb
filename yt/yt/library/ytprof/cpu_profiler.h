@@ -8,7 +8,7 @@
 #include <sys/types.h>
 #endif
 
-#include <yt/yt/library/ytprof/profile.pb.h>
+#include <yt/yt/library/ytprof/proto/profile.pb.h>
 #include <yt/yt/library/ytprof/api/api.h>
 
 #include <library/cpp/yt/memory/intrusive_ptr.h>

@@ -118,7 +118,7 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
             config.scheme = Aws::Http::Scheme::HTTPS;
             break;
         default:
-            Y_FAIL("Unknown scheme");
+            Y_ABORT("Unknown scheme");
     }
 
     if (settings.HasRegion()) {
@@ -164,7 +164,7 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
             config.scheme = Http::Scheme::HTTPS;
             break;
         default:
-            Y_FAIL("Unknown scheme");
+            Y_ABORT("Unknown scheme");
     }
 
     return config;

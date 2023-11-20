@@ -22,21 +22,22 @@ NArrow::NTransformation::ITransformer::TPtr TColumnFeatures::GetLoadTransformer(
     return transformer;
 }
 
-std::shared_ptr<NKikimr::NOlap::TColumnLoader> TColumnFeatures::GetLoader(const TIndexInfo& info) const {
+void TColumnFeatures::InitLoader(const TIndexInfo& info) {
     NArrow::NTransformation::ITransformer::TPtr transformer = GetLoadTransformer();
     auto schema = info.GetColumnSchema(ColumnId);
     if (!transformer) {
-        return std::make_shared<TColumnLoader>(transformer,
+        Loader = std::make_shared<TColumnLoader>(transformer,
             std::make_shared<NArrow::NSerialization::TBatchPayloadDeserializer>(schema),
             schema, ColumnId);
     } else {
-        return std::make_shared<TColumnLoader>(transformer,
+        Loader = std::make_shared<TColumnLoader>(transformer,
             std::make_shared<NArrow::NSerialization::TFullDataDeserializer>(),
             schema, ColumnId);
     }
 }
 
-std::optional<NKikimr::NOlap::TColumnFeatures> TColumnFeatures::BuildFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo, const ui32 columnId) {
+std::optional<NKikimr::NOlap::TColumnFeatures> TColumnFeatures::BuildFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo, const TIndexInfo& indexInfo) {
+    const ui32 columnId = columnInfo.GetId();
     TColumnFeatures result(columnId);
     if (columnInfo.HasCompression()) {
         auto settings = NArrow::TCompression::BuildFromProto(columnInfo.GetCompression());
@@ -48,6 +49,7 @@ std::optional<NKikimr::NOlap::TColumnFeatures> TColumnFeatures::BuildFromProto(c
         Y_ABORT_UNLESS(settings.IsSuccess());
         result.DictionaryEncoding = *settings;
     }
+    result.InitLoader(indexInfo);
     return result;
 }
 
@@ -57,6 +59,12 @@ std::unique_ptr<arrow::util::Codec> TColumnFeatures::GetCompressionCodec() const
     } else {
         return nullptr;
     }
+}
+
+NKikimr::NOlap::TColumnFeatures TColumnFeatures::BuildFromIndexInfo(const ui32 columnId, const TIndexInfo& indexInfo) {
+    TColumnFeatures result(columnId);
+    result.InitLoader(indexInfo);
+    return result;
 }
 
 TString TColumnLoader::DebugString() const {

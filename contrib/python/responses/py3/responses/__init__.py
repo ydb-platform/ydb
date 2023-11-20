@@ -1,6 +1,8 @@
+import http
 import inspect
 import json as json_module
 import logging
+import socket
 from collections import namedtuple
 from functools import partialmethod
 from functools import wraps
@@ -22,7 +24,6 @@ from typing import Sized
 from typing import Tuple
 from typing import Type
 from typing import Union
-from typing import overload
 from warnings import warn
 
 import yaml
@@ -41,20 +42,6 @@ try:
 except ImportError:  # pragma: no cover
     from typing import Literal  # type: ignore  # pragma: no cover
 
-try:
-    from requests.packages.urllib3.response import HTTPResponse
-except ImportError:  # pragma: no cover
-    from urllib3.response import HTTPResponse  # pragma: no cover
-
-try:
-    from requests.packages.urllib3.connection import HTTPHeaderDict
-except ImportError:  # pragma: no cover
-    from urllib3.response import HTTPHeaderDict  # type: ignore[attr-defined]
-try:
-    from requests.packages.urllib3.util.url import parse_url
-except ImportError:  # pragma: no cover
-    from urllib3.util.url import parse_url  # pragma: no cover
-
 from io import BufferedReader
 from io import BytesIO
 from unittest import mock as std_mock
@@ -63,6 +50,10 @@ from urllib.parse import quote
 from urllib.parse import urlsplit
 from urllib.parse import urlunparse
 from urllib.parse import urlunsplit
+
+from urllib3.response import HTTPHeaderDict
+from urllib3.response import HTTPResponse
+from urllib3.util.url import parse_url
 
 if TYPE_CHECKING:  # pragma: no cover
     # import only for linter run
@@ -84,14 +75,25 @@ if TYPE_CHECKING:  # pragma: no cover
         ) -> models.Response:
             ...
 
-
-# Block of type annotations
-_Body = Union[str, BaseException, "Response", BufferedReader, bytes, None]
-_F = Callable[..., Any]
-_HeaderSet = Optional[Union[Mapping[str, str], List[Tuple[str, str]]]]
-_MatcherIterable = Iterable[Callable[..., Tuple[bool, str]]]
-_HTTPMethodOrResponse = Optional[Union[str, "BaseResponse"]]
-_URLPatternType = Union["Pattern[str]", str]
+    # Block of type annotations
+    _Body = Union[str, BaseException, "Response", BufferedReader, bytes, None]
+    _F = Callable[..., Any]
+    _HeaderSet = Optional[Union[Mapping[str, str], List[Tuple[str, str]]]]
+    _MatcherIterable = Iterable[Callable[..., Tuple[bool, str]]]
+    _HTTPMethodOrResponse = Optional[Union[str, "BaseResponse"]]
+    _URLPatternType = Union["Pattern[str]", str]
+    _HTTPAdapterSend = Callable[
+        [
+            HTTPAdapter,
+            PreparedRequest,
+            bool,
+            Union[float, Tuple[float, float], Tuple[float, None], None],
+            Union[bool, str],
+            Union[bytes, str, Tuple[Union[bytes, str], Union[bytes, str]], None],
+            Optional[Mapping[str, str]],
+        ],
+        models.Response,
+    ]
 
 
 Call = namedtuple("Call", ["request", "response"])
@@ -110,8 +112,6 @@ class FalseBool:
 
     def __bool__(self) -> bool:
         return False
-
-    __nonzero__ = __bool__
 
 
 def urlencoded_params_matcher(params: Optional[Dict[str, str]]) -> Callable[..., Any]:
@@ -241,27 +241,22 @@ class CallList(Sequence[Any], Sized):
     def __len__(self) -> int:
         return len(self._calls)
 
-    @overload
-    def __getitem__(self, idx: int) -> Call:
-        """Overload when get a single item."""
-
-    @overload
-    def __getitem__(self, idx: slice) -> List[Call]:
-        """Overload when a slice is requested."""
-
     def __getitem__(self, idx: Union[int, slice]) -> Union[Call, List[Call]]:
         return self._calls[idx]
 
-    def add(self, request: "PreparedRequest", response: _Body) -> None:
+    def add(self, request: "PreparedRequest", response: "_Body") -> None:
         self._calls.append(Call(request, response))
+
+    def add_call(self, call: Call) -> None:
+        self._calls.append(call)
 
     def reset(self) -> None:
         self._calls = []
 
 
 def _ensure_url_default_path(
-    url: _URLPatternType,
-) -> _URLPatternType:
+    url: "_URLPatternType",
+) -> "_URLPatternType":
     """Add empty URL path '/' if doesn't exist.
 
     Examples
@@ -369,7 +364,7 @@ def _handle_body(
     return data
 
 
-class BaseResponse(object):
+class BaseResponse:
     passthrough: bool = False
     content_type: Optional[str] = None
     headers: Optional[Mapping[str, str]] = None
@@ -378,7 +373,7 @@ class BaseResponse(object):
     def __init__(
         self,
         method: str,
-        url: _URLPatternType,
+        url: "_URLPatternType",
         match_querystring: Union[bool, object] = None,
         match: "_MatcherIterable" = (),
         *,
@@ -386,7 +381,7 @@ class BaseResponse(object):
     ) -> None:
         self.method: str = method
         # ensure the url has a default path set if the url is a string
-        self.url: _URLPatternType = _ensure_url_default_path(url)
+        self.url: "_URLPatternType" = _ensure_url_default_path(url)
 
         if self._should_match_querystring(match_querystring):
             match = tuple(match) + (
@@ -394,7 +389,7 @@ class BaseResponse(object):
             )
 
         self.match: "_MatcherIterable" = match
-        self.call_count: int = 0
+        self._calls: CallList = CallList()
         self.passthrough = passthrough
 
     def __eq__(self, other: Any) -> bool:
@@ -436,7 +431,7 @@ class BaseResponse(object):
 
         return bool(urlsplit(self.url).query)
 
-    def _url_matches(self, url: _URLPatternType, other: str) -> bool:
+    def _url_matches(self, url: "_URLPatternType", other: str) -> bool:
         """Compares two URLs.
 
         Compares only scheme, netloc and path. If 'url' is a re.Pattern, then checks that
@@ -481,10 +476,17 @@ class BaseResponse(object):
 
     def get_headers(self) -> HTTPHeaderDict:
         headers = HTTPHeaderDict()  # Duplicate headers are legal
-        if self.content_type is not None:
+
+        # Add Content-Type if it exists and is not already in headers
+        if self.content_type and (
+            not self.headers or "Content-Type" not in self.headers
+        ):
             headers["Content-Type"] = self.content_type
+
+        # Extend headers if they exist
         if self.headers:
             headers.extend(self.headers)
+
         return headers
 
     def get_response(self, request: "PreparedRequest") -> HTTPResponse:
@@ -503,23 +505,33 @@ class BaseResponse(object):
 
         return True, ""
 
+    @property
+    def call_count(self) -> int:
+        return len(self._calls)
+
+    @property
+    def calls(self) -> CallList:
+        return self._calls
+
 
 def _form_response(
     body: Union[BufferedReader, BytesIO],
     headers: Optional[Mapping[str, str]],
     status: int,
 ) -> HTTPResponse:
-    # The requests library's cookie handling depends on the response object
-    # having an original response object with the headers as the `msg`, so
-    # we give it what it needs.
-    data = BytesIO()
-    data.close()
+    dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    orig_response = http.client.HTTPResponse(sock=dummy_socket)
+    """
+    The cookie handling functionality of the `requests` library relies on the response object
+    having an original response object with the headers stored in the `msg` attribute.
+    Instead of supplying a file-like object of type `HTTPMessage` for the headers, we provide
+    the headers directly. This approach eliminates the need to parse the headers into a file-like
+    object and then rely on the library to unparse it back. These additional conversions can
+    introduce potential errors.
+    Therefore, we intentionally ignore type checking for this assignment.
+    """
+    orig_response.msg = headers  # type: ignore[assignment]
 
-    orig_response = HTTPResponse(
-        body=data,  # required to avoid "ValueError: Unable to determine whether fp is closed."
-        msg=headers,
-        preload_content=False,
-    )
     return HTTPResponse(
         status=status,
         reason=client.responses.get(status, None),
@@ -534,8 +546,8 @@ class Response(BaseResponse):
     def __init__(
         self,
         method: str,
-        url: _URLPatternType,
-        body: _Body = "",
+        url: "_URLPatternType",
+        body: "_Body" = "",
         json: Optional[Any] = None,
         status: int = 200,
         headers: Optional[Mapping[str, str]] = None,
@@ -558,7 +570,7 @@ class Response(BaseResponse):
             else:
                 content_type = "text/plain"
 
-        self.body: _Body = body
+        self.body: "_Body" = body
         self.status: int = status
         self.headers: Optional[Mapping[str, str]] = headers
 
@@ -610,7 +622,7 @@ class CallbackResponse(BaseResponse):
     def __init__(
         self,
         method: str,
-        url: _URLPatternType,
+        url: "_URLPatternType",
         callback: Callable[[Any], Any],
         stream: Optional[bool] = None,
         content_type: Optional[str] = "text/plain",
@@ -662,7 +674,7 @@ class PassthroughResponse(BaseResponse):
         super().__init__(*args, passthrough=True, **kwargs)
 
 
-class RequestsMock(object):
+class RequestsMock:
     DELETE: Literal["DELETE"] = "DELETE"
     GET: Literal["GET"] = "GET"
     HEAD: Literal["HEAD"] = "HEAD"
@@ -680,6 +692,8 @@ class RequestsMock(object):
         passthru_prefixes: Tuple[str, ...] = (),
         target: str = "requests.adapters.HTTPAdapter.send",
         registry: Type[FirstMatchRegistry] = FirstMatchRegistry,
+        *,
+        real_adapter_send: "_HTTPAdapterSend" = _real_send,
     ) -> None:
         self._calls: CallList = CallList()
         self.reset()
@@ -690,6 +704,7 @@ class RequestsMock(object):
         self.target: str = target
         self._patcher: Optional["_mock_patcher[Any]"] = None
         self._thread_lock = _ThreadingLock()
+        self._real_send = real_adapter_send
 
     def get_registry(self) -> FirstMatchRegistry:
         """Returns current registry instance with responses.
@@ -728,10 +743,10 @@ class RequestsMock(object):
 
     def add(
         self,
-        method: _HTTPMethodOrResponse = None,
+        method: "_HTTPMethodOrResponse" = None,
         url: "Optional[_URLPatternType]" = None,
-        body: _Body = "",
-        adding_headers: _HeaderSet = None,
+        body: "_Body" = "",
+        adding_headers: "_HeaderSet" = None,
         *args: Any,
         **kwargs: Any,
     ) -> BaseResponse:
@@ -792,7 +807,7 @@ class RequestsMock(object):
     def _parse_response_file(
         self, file_path: "Union[str, bytes, os.PathLike[Any]]"
     ) -> "Dict[str, Any]":
-        with open(file_path, "r") as file:
+        with open(file_path) as file:
             data = yaml.safe_load(file)
         return data
 
@@ -810,7 +825,7 @@ class RequestsMock(object):
                 auto_calculate_content_length=rsp["auto_calculate_content_length"],
             )
 
-    def add_passthru(self, prefix: _URLPatternType) -> None:
+    def add_passthru(self, prefix: "_URLPatternType") -> None:
         """
         Register a URL prefix or regex to passthru any non-matching mock requests to.
 
@@ -831,7 +846,7 @@ class RequestsMock(object):
 
     def remove(
         self,
-        method_or_response: _HTTPMethodOrResponse = None,
+        method_or_response: "_HTTPMethodOrResponse" = None,
         url: "Optional[_URLPatternType]" = None,
     ) -> List[BaseResponse]:
         """
@@ -854,9 +869,9 @@ class RequestsMock(object):
 
     def replace(
         self,
-        method_or_response: _HTTPMethodOrResponse = None,
+        method_or_response: "_HTTPMethodOrResponse" = None,
         url: "Optional[_URLPatternType]" = None,
-        body: _Body = "",
+        body: "_Body" = "",
         *args: Any,
         **kwargs: Any,
     ) -> BaseResponse:
@@ -880,9 +895,9 @@ class RequestsMock(object):
 
     def upsert(
         self,
-        method_or_response: _HTTPMethodOrResponse = None,
+        method_or_response: "_HTTPMethodOrResponse" = None,
         url: "Optional[_URLPatternType]" = None,
-        body: _Body = "",
+        body: "_Body" = "",
         *args: Any,
         **kwargs: Any,
     ) -> BaseResponse:
@@ -903,9 +918,10 @@ class RequestsMock(object):
     def add_callback(
         self,
         method: str,
-        url: _URLPatternType,
+        url: "_URLPatternType",
         callback: Callable[
-            ["PreparedRequest"], Union[Exception, Tuple[int, Mapping[str, str], _Body]]
+            ["PreparedRequest"],
+            Union[Exception, Tuple[int, Mapping[str, str], "_Body"]],
         ],
         match_querystring: Union[bool, FalseBool] = FalseBool(),
         content_type: Optional[str] = "text/plain",
@@ -941,34 +957,17 @@ class RequestsMock(object):
             self.reset()
         return success
 
-    @overload
-    def activate(self, func: _F = ...) -> _F:
-        """Overload for scenario when 'responses.activate' is used."""
-
-    @overload
     def activate(
         self,
-        *,
-        registry: Type[Any] = ...,
-        assert_all_requests_are_fired: bool = ...,
-    ) -> Callable[["_F"], "_F"]:
-        """Overload for scenario when
-        'responses.activate(registry=, assert_all_requests_are_fired=True)' is used.
-
-        See https://github.com/getsentry/responses/pull/469 for more details
-        """
-
-    def activate(
-        self,
-        func: Optional[_F] = None,
+        func: Optional["_F"] = None,
         *,
         registry: Optional[Type[Any]] = None,
         assert_all_requests_are_fired: bool = False,
-    ) -> Union[Callable[["_F"], "_F"], _F]:
+    ) -> Union[Callable[["_F"], "_F"], "_F"]:
         if func is not None:
             return get_wrapped(func, self)
 
-        def deco_activate(function: _F) -> Callable[..., Any]:
+        def deco_activate(function: "_F") -> Callable[..., Any]:
             return get_wrapped(
                 function,
                 self,
@@ -1030,7 +1029,7 @@ class RequestsMock(object):
                 ]
             ):
                 logger.info("request.allowed-passthru", extra={"url": request_url})
-                return _real_send(adapter, request, **kwargs)
+                return self._real_send(adapter, request, **kwargs)  # type: ignore
 
             error_msg = (
                 "Connection refused by Responses - the call doesn't "
@@ -1047,7 +1046,7 @@ class RequestsMock(object):
             if self.passthru_prefixes:
                 error_msg += "Passthru prefixes:\n"
                 for p in self.passthru_prefixes:
-                    error_msg += "- {}\n".format(p)
+                    error_msg += f"- {p}\n"
 
             response = ConnectionError(error_msg)
             response.request = request
@@ -1057,25 +1056,27 @@ class RequestsMock(object):
 
         if match.passthrough:
             logger.info("request.passthrough-response", extra={"url": request_url})
-            response = _real_send(adapter, request, **kwargs)  # type: ignore[assignment]
+            response = self._real_send(adapter, request, **kwargs)  # type: ignore
         else:
             try:
                 response = adapter.build_response(  # type: ignore[no-untyped-call]
                     request, match.get_response(request)
                 )
             except BaseException as response:
-                match.call_count += 1
-                self._calls.add(request, response)
+                call = Call(request, response)
+                self._calls.add_call(call)
+                match.calls.add_call(call)
                 raise
 
         if resp_callback:
             response = resp_callback(response)  # type: ignore[misc]
-        match.call_count += 1
-        self._calls.add(request, response)  # type: ignore[misc]
+        call = Call(request, response)  # type: ignore[misc]
+        self._calls.add_call(call)
+        match.calls.add_call(call)
 
         retries = retries or adapter.max_retries
         # first validate that current request is eligible to be retried.
-        # See ``requests.packages.urllib3.util.retry.Retry`` documentation.
+        # See ``urllib3.util.retry.Retry`` documentation.
         if retries.is_retry(
             method=response.request.method, status_code=response.status_code  # type: ignore[misc]
         ):
@@ -1156,7 +1157,7 @@ class RequestsMock(object):
         not_called = [m for m in self.registered() if m.call_count == 0]
         if not_called:
             raise AssertionError(
-                "Not all requests have been executed {0!r}".format(
+                "Not all requests have been executed {!r}".format(
                     [(match.method, match.url) for match in not_called]
                 )
             )

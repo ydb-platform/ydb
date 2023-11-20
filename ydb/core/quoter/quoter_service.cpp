@@ -68,10 +68,10 @@ TRequestId TReqState::Allocate(TActorId source, ui64 eventCookie) {
     x.EventCookie = eventCookie;
     x.StartTime = TActivationContext::Now();
 
-    Y_VERIFY_DEBUG(x.PrevByOwner == TRequestId{});
-    Y_VERIFY_DEBUG(x.NextByOwner == TRequestId{});
-    Y_VERIFY_DEBUG(x.PrevDeadlineRequest == TRequestId{});
-    Y_VERIFY_DEBUG(x.NextDeadlineRequest == TRequestId{});
+    Y_DEBUG_ABORT_UNLESS(x.PrevByOwner == TRequestId{});
+    Y_DEBUG_ABORT_UNLESS(x.NextByOwner == TRequestId{});
+    Y_DEBUG_ABORT_UNLESS(x.PrevDeadlineRequest == TRequestId{});
+    Y_DEBUG_ABORT_UNLESS(x.NextDeadlineRequest == TRequestId{});
 
     auto itpair = ByOwner.emplace(source, idx);
     if (!itpair.second) {
@@ -102,7 +102,7 @@ void TReqState::Free(TRequestId idx) {
         ByOwner.erase(x.Source);
     } else {
         auto byOwnerIt = ByOwner.find(x.Source);
-        Y_VERIFY_DEBUG(byOwnerIt != ByOwner.end());
+        Y_DEBUG_ABORT_UNLESS(byOwnerIt != ByOwner.end());
         if (byOwnerIt->second == idx) {
             byOwnerIt->second = x.NextByOwner != TRequestId{} ? x.NextByOwner : x.PrevByOwner;
         }
@@ -149,15 +149,15 @@ TResourceLeafId TResState::Allocate(TResource *resource, ui64 amount, bool isUse
     x.IsUsedAmount = isUsedAmount;
     x.RequestIdx = requestIdx;
 
-    Y_VERIFY_DEBUG(x.NextInWaitQueue == TRequestId{});
-    Y_VERIFY_DEBUG(x.PrevInWaitQueue == TRequestId{});
-    Y_VERIFY_DEBUG(x.NextResourceLeaf == TRequestId{});
+    Y_DEBUG_ABORT_UNLESS(x.NextInWaitQueue == TRequestId{});
+    Y_DEBUG_ABORT_UNLESS(x.PrevInWaitQueue == TRequestId{});
+    Y_DEBUG_ABORT_UNLESS(x.NextResourceLeaf == TRequestId{});
 
-    Y_VERIFY_DEBUG(x.State == EResourceState::Unknown);
-    Y_VERIFY_DEBUG(x.QuoterId == 0);
-    Y_VERIFY_DEBUG(x.ResourceId == 0);
-    Y_VERIFY_DEBUG(x.QuoterName.empty());
-    Y_VERIFY_DEBUG(x.ResourceName.empty());
+    Y_DEBUG_ABORT_UNLESS(x.State == EResourceState::Unknown);
+    Y_DEBUG_ABORT_UNLESS(x.QuoterId == 0);
+    Y_DEBUG_ABORT_UNLESS(x.ResourceId == 0);
+    Y_DEBUG_ABORT_UNLESS(x.QuoterName.empty());
+    Y_DEBUG_ABORT_UNLESS(x.ResourceName.empty());
 
     return idx;
 }
@@ -165,9 +165,9 @@ TResourceLeafId TResState::Allocate(TResource *resource, ui64 amount, bool isUse
 void TResState::FreeChain(TResourceLeafId headIdx) {
     while (headIdx != TResourceLeafId{}) {
         auto &x = Get(headIdx);
-        Y_VERIFY_DEBUG(x.Resource == nullptr);
-        Y_VERIFY_DEBUG(x.NextInWaitQueue == TRequestId{});
-        Y_VERIFY_DEBUG(x.PrevInWaitQueue == TRequestId{});
+        Y_DEBUG_ABORT_UNLESS(x.Resource == nullptr);
+        Y_DEBUG_ABORT_UNLESS(x.NextInWaitQueue == TRequestId{});
+        Y_DEBUG_ABORT_UNLESS(x.PrevInWaitQueue == TRequestId{});
 
         Unused.push_back(headIdx);
         headIdx = x.NextResourceLeaf;
@@ -735,7 +735,7 @@ TQuoterService::EInitLeafStatus TQuoterService::TryCharge(TResource& quores, ui6
         quores.QueueTail = resLeafIdx;
         quores.QueueHead = resLeafIdx;
     } else {
-        Y_VERIFY_DEBUG(ResState.Get(quores.QueueTail).NextInWaitQueue == Max<ui32>());
+        Y_DEBUG_ABORT_UNLESS(ResState.Get(quores.QueueTail).NextInWaitQueue == Max<ui32>());
         resLeaf.PrevInWaitQueue = quores.QueueTail;
         ResState.Get(quores.QueueTail).NextInWaitQueue = resLeafIdx;
         quores.QueueTail = resLeafIdx;
@@ -779,7 +779,7 @@ void TQuoterService::InitialRequestProcessing(TEvQuota::TEvRequest::TPtr &ev, co
             canAllow = false;
             break;
         default:
-            Y_FAIL("unkown initLeafStatus");
+            Y_ABORT("unkown initLeafStatus");
         }
     }
 
@@ -1041,7 +1041,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
                     quores.QueueTail = resIdx;
                     quores.QueueHead = resIdx;
                 } else {
-                    Y_VERIFY_DEBUG(ResState.Get(quores.QueueTail).NextInWaitQueue == TResourceLeafId{});
+                    Y_DEBUG_ABORT_UNLESS(ResState.Get(quores.QueueTail).NextInWaitQueue == TResourceLeafId{});
                     leaf.PrevInWaitQueue = quores.QueueTail;
                     ResState.Get(quores.QueueTail).NextInWaitQueue = resIdx;
                     quores.QueueTail = resIdx;
@@ -1062,7 +1062,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
     case EStatUpdatePolicy::EveryActiveTick:
         break;
     default:
-        Y_FAIL("not implemented");
+        Y_ABORT("not implemented");
     }
 }
 

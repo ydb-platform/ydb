@@ -310,7 +310,7 @@ public:
                 break;
             case NKikimrSchemeOp::EPathType::EPathTypeSubDomain:
             case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
-                Y_FAIL("impossible to migrate subDomain or extSubDomain as part of the other subDomain");
+                Y_ABORT("impossible to migrate subDomain or extSubDomain as part of the other subDomain");
                 break;
             case NKikimrSchemeOp::EPathType::EPathTypeTable:
             {
@@ -359,7 +359,7 @@ public:
             case NKikimrSchemeOp::EPathType::EPathTypeSequence:
             case NKikimrSchemeOp::EPathType::EPathTypeReplication:
             case NKikimrSchemeOp::EPathType::EPathTypeBlobDepot:
-                Y_FAIL("UNIMPLEMENTED");
+                Y_ABORT("UNIMPLEMENTED");
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid:
                 Y_UNREACHABLE();
         }
@@ -1259,7 +1259,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TUpgradeSubDomain");
+        Y_ABORT("no AbortPropose for TUpgradeSubDomain");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
@@ -1464,7 +1464,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TUpgradeSubDomainDecision");
+        Y_ABORT("no AbortPropose for TUpgradeSubDomainDecision");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

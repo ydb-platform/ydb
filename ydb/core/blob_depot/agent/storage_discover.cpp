@@ -78,7 +78,7 @@ namespace NKikimr::NBlobDepot {
                         HandleResolveResult(id, std::move(context), **p);
                     }
                 } else {
-                    Y_FAIL();
+                    Y_ABORT();
                 }
             }
 
@@ -143,7 +143,7 @@ namespace NKikimr::NBlobDepot {
                         return CheckIfDone();
                     }
                 } else {
-                    Y_FAIL(); // do not expect to return single key in few messages
+                    Y_ABORT(); // do not expect to return single key in few messages
                 }
 
                 if (status == NKikimrProto::OVERRUN) { // there will be extra message with data

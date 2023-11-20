@@ -22,8 +22,7 @@ public:
     }
 
     void AppendBlob(const TString& data, const TColumnRecord& columnChunk);
-    void AppendSlice(const std::shared_ptr<arrow::RecordBatch>& data);
-    void AppendSlice(const std::shared_ptr<arrow::Array>& data);
+    void AppendSlice(const std::shared_ptr<arrow::Array>& data, const ui32 startIndex, const ui32 length);
 
     std::vector<TColumnPortionResult> BuildResult();
 };

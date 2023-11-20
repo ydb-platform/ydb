@@ -145,12 +145,15 @@ template <> struct hash<std::error_condition>;
 #include <__assert> // all public C++ headers provide the assertion handler
 #include <__config>
 #include <__errc>
+#include <__functional/hash.h>
 #include <__functional/unary_function.h>
-#include <compare>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <version>
+
+// standard-mandated includes
+#include <compare>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
@@ -435,7 +438,7 @@ operator!=(const error_condition& __x, const error_condition& __y) _NOEXCEPT
 
 template <>
 struct _LIBCPP_TEMPLATE_VIS hash<error_code>
-    : public unary_function<error_code, size_t>
+    : public __unary_function<error_code, size_t>
 {
     _LIBCPP_INLINE_VISIBILITY
     size_t operator()(const error_code& __ec) const _NOEXCEPT
@@ -446,7 +449,7 @@ struct _LIBCPP_TEMPLATE_VIS hash<error_code>
 
 template <>
 struct _LIBCPP_TEMPLATE_VIS hash<error_condition>
-    : public unary_function<error_condition, size_t>
+    : public __unary_function<error_condition, size_t>
 {
     _LIBCPP_INLINE_VISIBILITY
     size_t operator()(const error_condition& __ec) const _NOEXCEPT

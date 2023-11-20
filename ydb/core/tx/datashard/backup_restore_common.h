@@ -105,7 +105,7 @@ public:
             }
 
             SetWaiting(op);
-            Y_VERIFY_DEBUG(!HasResult(op));
+            Y_DEBUG_ABORT_UNLESS(!HasResult(op));
         }
 
         if (HasResult(op)) {
@@ -116,7 +116,7 @@ public:
             if (ProcessResult(op, ctx)) {
                 PersistResult(op, txc);
             } else {
-                Y_VERIFY_DEBUG(!HasResult(op));
+                Y_DEBUG_ABORT_UNLESS(!HasResult(op));
                 op->SetWaitingForRestartFlag();
                 ctx.Schedule(TDuration::Seconds(1), new TDataShard::TEvPrivate::TEvRestartOperation(op->GetTxId()));
             }

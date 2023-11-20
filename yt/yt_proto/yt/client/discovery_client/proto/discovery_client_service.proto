@@ -25,6 +25,11 @@ message TListMembersOptions
     repeated string attribute_keys = 2;
 }
 
+message TListGroupsOptions
+{
+    required int32 limit = 1;
+}
+
 message TReqListMembers
 {
     required string group_id = 1;
@@ -34,6 +39,18 @@ message TReqListMembers
 message TRspListMembers
 {
     repeated TMemberInfo members = 1;
+}
+
+message TReqListGroups
+{
+    required string prefix = 1;
+    required TListGroupsOptions options = 2;
+}
+
+message TRspListGroups
+{
+    repeated string group_ids = 1;
+    required bool incomplete = 2;
 }
 
 message TReqGetGroupMeta

@@ -170,7 +170,7 @@ public:
     TLockInfo::TPtr Lock;
 
     // note that will be always overwritten by values from request
-    NKikimrTxDataShard::EScanDataFormat Format = NKikimrTxDataShard::EScanDataFormat::CELLVEC;
+    NKikimrDataEvents::EDataFormat Format = NKikimrDataEvents::FORMAT_CELLVEC;
 
     // mainly for tests
     ui64 MaxRowsInResult = Max<ui64>();

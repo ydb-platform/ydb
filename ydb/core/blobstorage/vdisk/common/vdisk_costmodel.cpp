@@ -248,7 +248,7 @@ namespace NKikimr {
             cost += ReadCostBySize(size);
         }
 
-        Y_VERIFY_DEBUG(cost);
+        Y_DEBUG_ABORT_UNLESS(cost);
         return cost;
     }
 
@@ -271,7 +271,7 @@ namespace NKikimr {
                 cost += HugeWriteCost(size);
             }
         }
-        Y_VERIFY_DEBUG(cost);
+        Y_DEBUG_ABORT_UNLESS(cost);
         return cost;
     }
 

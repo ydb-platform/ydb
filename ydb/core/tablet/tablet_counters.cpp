@@ -10,13 +10,13 @@ TAutoPtr<TTabletCountersBase>
 TTabletCountersBase::MakeDiffForAggr(const TTabletCountersBase& baseLine) const {
     TAutoPtr<TTabletCountersBase> retVal = new TTabletCountersBase(*this);
     if (baseLine.HasCounters()) {
-        Y_VERIFY_DEBUG(baseLine.SimpleCounters.Size() == SimpleCounters.Size());
-        Y_VERIFY_DEBUG(baseLine.CumulativeCounters.Size() == CumulativeCounters.Size());
-        Y_VERIFY_DEBUG(baseLine.PercentileCounters.Size() == PercentileCounters.Size());
+        Y_DEBUG_ABORT_UNLESS(baseLine.SimpleCounters.Size() == SimpleCounters.Size());
+        Y_DEBUG_ABORT_UNLESS(baseLine.CumulativeCounters.Size() == CumulativeCounters.Size());
+        Y_DEBUG_ABORT_UNLESS(baseLine.PercentileCounters.Size() == PercentileCounters.Size());
 
-        Y_VERIFY_DEBUG(baseLine.SimpleCountersMetaInfo == SimpleCountersMetaInfo);
-        Y_VERIFY_DEBUG(baseLine.CumulativeCountersMetaInfo == CumulativeCountersMetaInfo);
-        Y_VERIFY_DEBUG(baseLine.PercentileCountersMetaInfo == PercentileCountersMetaInfo);
+        Y_DEBUG_ABORT_UNLESS(baseLine.SimpleCountersMetaInfo == SimpleCountersMetaInfo);
+        Y_DEBUG_ABORT_UNLESS(baseLine.CumulativeCountersMetaInfo == CumulativeCountersMetaInfo);
+        Y_DEBUG_ABORT_UNLESS(baseLine.PercentileCountersMetaInfo == PercentileCountersMetaInfo);
 
         retVal->SimpleCounters.AdjustToBaseLine(baseLine.SimpleCounters);
         retVal->CumulativeCounters.AdjustToBaseLine(baseLine.CumulativeCounters);
@@ -223,7 +223,7 @@ void TTabletLabeledCountersBase::AggregateWith(const TTabletLabeledCountersBase&
                 Ids[i].Set(0);
                 break;
             default:
-                Y_FAIL("unknown aggregate func");
+                Y_ABORT("unknown aggregate func");
         }
     }
     Drop = Drop || rp.Drop;

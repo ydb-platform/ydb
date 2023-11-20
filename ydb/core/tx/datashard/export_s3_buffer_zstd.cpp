@@ -54,6 +54,7 @@ public:
         , CompressionLevel(compressionLevel)
         , MinBytes(minBytes)
         , Context(ZSTD_createCCtx())
+        , ErrorCode(0)
         , BytesRaw(0)
     {
         Reset();
@@ -62,7 +63,9 @@ public:
     bool Collect(const NTable::IScan::TRow& row) override {
         BufferRaw.clear();
         TStringOutput out(BufferRaw);
-        TS3BufferRaw::Collect(row, out);
+        if (!TS3BufferRaw::Collect(row, out)) {
+            return false;
+        }
 
         BytesRaw += BufferRaw.size();
 

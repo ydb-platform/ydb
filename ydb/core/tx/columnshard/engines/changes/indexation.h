@@ -2,6 +2,7 @@
 #include "abstract/abstract.h"
 #include "with_appended.h"
 #include <ydb/core/tx/columnshard/engines/insert_table/data.h>
+#include <ydb/core/formats/arrow/reader/read_filter_merger.h>
 #include <util/generic/hash.h>
 
 namespace NKikimr::NOlap {
@@ -20,14 +21,19 @@ protected:
     virtual void DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) override;
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept override;
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
+    virtual ui64 DoCalcMemoryForUsage() const override {
+        ui64 result = 0;
+        for (auto& ptr : DataToIndex) {
+            result += ptr.GetMeta().GetRawBytes();
+        }
+        return result;
+    }
 public:
-    const TMark DefaultMark;
-    THashMap<ui64, std::vector<std::pair<TMark, ui64>>> PathToGranule; // pathId -> {mark, granule}
+    THashMap<ui64, std::vector<NIndexedReader::TSortableBatchPosition>> PathToGranule; // pathId -> positions (sorted by pk)
 public:
-    TInsertColumnEngineChanges(const TMark& defaultMark, std::vector<NOlap::TInsertedData>&& dataToIndex, const TSplitSettings& splitSettings, const TSaverContext& saverContext)
+    TInsertColumnEngineChanges(std::vector<NOlap::TInsertedData>&& dataToIndex, const TSplitSettings& splitSettings, const TSaverContext& saverContext)
         : TBase(splitSettings, saverContext, StaticTypeName())
         , DataToIndex(std::move(dataToIndex))
-        , DefaultMark(defaultMark)
     {
     }
 
@@ -46,7 +52,7 @@ public:
     virtual TString TypeString() const override {
         return StaticTypeName();
     }
-    bool AddPathIfNotExists(ui64 pathId);
+    std::optional<ui64> AddPathIfNotExists(ui64 pathId);
 
 };
 

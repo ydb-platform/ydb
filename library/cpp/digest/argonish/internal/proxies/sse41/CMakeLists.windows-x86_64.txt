@@ -19,5 +19,5 @@ target_sources_custom(internal-proxies-sse41
   SRCS
   ${CMAKE_SOURCE_DIR}/library/cpp/digest/argonish/internal/proxies/sse41/proxy_sse41.cpp
   CUSTOM_FLAGS
-  /D__SSE4_1__=1
+  -msse4.1
 )

@@ -183,7 +183,7 @@ TStructLiteralBuilder& TStructLiteralBuilder::Add(const TStringBuf& name, TRunti
 }
 
 TStructLiteral* TStructLiteralBuilder::Build() {
-    Y_VERIFY_DEBUG(Members.size() == Values.size());
+    Y_DEBUG_ABORT_UNLESS(Members.size() == Values.size());
     if (Members.empty())
         return Env->GetEmptyStruct();
 

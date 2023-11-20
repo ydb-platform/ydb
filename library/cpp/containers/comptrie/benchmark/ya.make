@@ -1,5 +1,7 @@
 Y_BENCHMARK()
 
+TAG(ya:not_autocheck)
+
 SRCS(
     main.cpp
 )

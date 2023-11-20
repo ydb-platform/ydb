@@ -188,7 +188,7 @@ namespace NActors {
                 task.Append<External>(data, len);
             }
             *bytesSerialized += len;
-            Y_VERIFY_DEBUG(len <= PartLenRemain);
+            Y_DEBUG_ABORT_UNLESS(len <= PartLenRemain);
             PartLenRemain -= len;
 
             event.EventActuallySerialized += len;
@@ -221,7 +221,7 @@ namespace NActors {
             }
             complete = !Iter.Valid();
         } else {
-            Y_FAIL();
+            Y_ABORT();
         }
         Y_ABORT_UNLESS(!complete || event.EventActuallySerialized == event.EventSerializedSize,
             "EventActuallySerialized# %" PRIu32 " EventSerializedSize# %" PRIu32 " Type# 0x%08" PRIx32,
@@ -275,7 +275,7 @@ namespace NActors {
         size_t bytesSerialized = 0;
         const bool complete = SerializeEvent<false>(task, event, &bytesSerialized);
 
-        Y_VERIFY_DEBUG(bytesSerialized);
+        Y_DEBUG_ABORT_UNLESS(bytesSerialized);
         Y_ABORT_UNLESS(bytesSerialized <= Max<ui16>());
 
         TChannelPart part{

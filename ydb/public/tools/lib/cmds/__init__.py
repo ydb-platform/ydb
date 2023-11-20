@@ -7,6 +7,7 @@ import json
 import random
 import string
 import typing  # noqa: F401
+import sys
 
 from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
@@ -377,13 +378,25 @@ def _stop_instances(arguments):
     recipe = Recipe(arguments)
     if not os.path.exists(recipe.metafile_path()):
         return
-    info = recipe.read_metafile()
+    try:
+        info = recipe.read_metafile()
+    except Exception:
+        sys.stderr.write("Metafile not found for ydb recipe ...")
+        return
+
     for node_id, node_meta in info['nodes'].items():
         pid = node_meta['pid']
         try:
             os.kill(pid, signal.SIGKILL)
         except OSError:
             pass
+
+        try:
+            with open(node_meta['stderr_file'], "r") as r:
+                sys.stderr.write(r.read())
+
+        except Exception as e:
+            sys.stderr.write(str(e))
 
 
 def cleanup_working_dir(arguments):

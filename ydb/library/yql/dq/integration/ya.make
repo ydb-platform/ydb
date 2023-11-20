@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     yql_dq_integration.cpp
+    yql_dq_optimization.cpp
 )
 
 PEERDIR(

@@ -1,5 +1,4 @@
 #include "indexation.h"
-#include "mark_granules.h"
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -23,20 +22,6 @@ void TInsertColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, 
     if (!DataToIndex.empty()) {
         self.UpdateInsertTableCounters();
     }
-}
-
-bool TInsertColumnEngineChanges::AddPathIfNotExists(ui64 pathId) {
-    if (PathToGranule.contains(pathId)) {
-        return false;
-    }
-
-    Y_ABORT_UNLESS(FirstGranuleId);
-    ui64 granule = FirstGranuleId;
-    ++FirstGranuleId;
-
-    NewGranules.emplace(granule, std::make_pair(pathId, DefaultMark));
-    PathToGranule[pathId].emplace_back(DefaultMark, granule);
-    return true;
 }
 
 void TInsertColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
@@ -106,22 +91,41 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         batch = AddSpecials(batch, blobSchema->GetIndexInfo(), inserted);
         batch = resultSchema->NormalizeBatch(*blobSchema, batch);
         pathBatches[inserted.PathId].push_back(batch);
-        Y_VERIFY_DEBUG(NArrow::IsSorted(pathBatches[inserted.PathId].back(), resultSchema->GetIndexInfo().GetReplaceKey()));
+        Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(pathBatches[inserted.PathId].back(), resultSchema->GetIndexInfo().GetReplaceKey()));
     }
+
     Y_ABORT_UNLESS(Blobs.empty());
-
+    const std::vector<std::string> comparableColumns = resultSchema->GetIndexInfo().GetReplaceKey()->field_names();
     for (auto& [pathId, batches] : pathBatches) {
-        AddPathIfNotExists(pathId);
+        NIndexedReader::TMergePartialStream stream(resultSchema->GetIndexInfo().GetReplaceKey(), resultSchema->GetIndexInfo().ArrowSchemaWithSpecials(), false);
+        THashMap<std::string, ui64> fieldSizes;
+        ui64 rowsCount = 0;
+        for (auto&& batch : batches) {
+            stream.AddSource(batch, nullptr);
+            for (ui32 cIdx = 0; cIdx < (ui32)batch->num_columns(); ++cIdx) {
+                fieldSizes[batch->column_name(cIdx)] += NArrow::GetArrayDataSize(batch->column(cIdx));
+            }
+            rowsCount += batch->num_rows();
+        }
 
-        // We could merge data here cause tablet limits indexing data portions
-        auto merged = NArrow::CombineSortedBatches(batches, resultSchema->GetIndexInfo().SortReplaceDescription());
-        Y_ABORT_UNLESS(merged);
-        Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(merged, resultSchema->GetIndexInfo().GetReplaceKey()));
+        NIndexedReader::TRecordBatchBuilder builder(resultSchema->GetIndexInfo().ArrowSchemaWithSpecials()->fields(), rowsCount, fieldSizes);
+        stream.SetPossibleSameVersion(true);
+        stream.DrainAll(builder);
 
-        auto granuleBatches = TMarksGranules::SliceIntoGranules(merged, PathToGranule[pathId], resultSchema->GetIndexInfo());
-        for (auto& [granule, batch] : granuleBatches) {
-            auto portions = MakeAppendedPortions(batch, granule, maxSnapshot, nullptr, context);
-            Y_ABORT_UNLESS(portions.size() > 0);
+        auto itGranule = PathToGranule.find(pathId);
+        AFL_VERIFY(itGranule != PathToGranule.end());
+        std::vector<std::shared_ptr<arrow::RecordBatch>> result = NIndexedReader::TSortableBatchPosition::SplitByBordersInSequentialContainer(builder.Finalize(), comparableColumns, itGranule->second);
+        for (auto&& b : result) {
+            if (!b) {
+                continue;
+            }
+            if (b->num_rows() < 100) {
+                SaverContext.SetExternalCompression(NArrow::TCompression(arrow::Compression::type::UNCOMPRESSED));
+            } else {
+                SaverContext.SetExternalCompression(NArrow::TCompression(arrow::Compression::type::LZ4_FRAME));
+            }
+            auto portions = MakeAppendedPortions(b, pathId, maxSnapshot, nullptr, context);
+            Y_ABORT_UNLESS(portions.size());
             for (auto& portion : portions) {
                 AppendedPortions.emplace_back(std::move(portion));
             }
@@ -133,8 +137,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 }
 
 std::shared_ptr<arrow::RecordBatch> TInsertColumnEngineChanges::AddSpecials(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-    const TIndexInfo& indexInfo, const TInsertedData& inserted) const
-{
+    const TIndexInfo& indexInfo, const TInsertedData& inserted) const {
     auto batch = TIndexInfo::AddSpecialColumns(srcBatch, inserted.GetSnapshot());
     Y_ABORT_UNLESS(batch);
 

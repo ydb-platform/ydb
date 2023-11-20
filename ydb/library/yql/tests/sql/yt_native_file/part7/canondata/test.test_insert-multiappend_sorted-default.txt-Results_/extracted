@@ -1,0 +1,40 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:7:19: Warning: At function: YtPublish!
+    	insert into plato.Output
+	                  ^
+        <tmp_path>/program.sql:<main>:7:19: Warning: Sort order of written data differs from the order of "Output" table content. Result table content will be unordered
+        	insert into plato.Output
+	                  ^
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:16:19: Warning: At function: YtPublish!
+    	insert into plato.Output
+	                  ^
+        <tmp_path>/program.sql:<main>:16:19: Warning: Sort order of written data differs from the order of "Output" table content. Result table content will be unordered
+        	insert into plato.Output
+	                  ^
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:34:19: Warning: At function: YtPublish!
+    	insert into plato.Output
+	                  ^
+        <tmp_path>/program.sql:<main>:34:19: Warning: Sort order of written data differs from the order of "Output" table content. Result table content will be unordered
+        	insert into plato.Output
+	                  ^
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:43:19: Warning: At function: YtPublish!
+    	insert into plato.Output
+	                  ^
+        <tmp_path>/program.sql:<main>:43:19: Warning: Sort order of written data differs from the order of "Output" table content. Result table content will be unordered
+        	insert into plato.Output
+	                  ^
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:61:19: Warning: At function: YtPublish!
+    	insert into plato.Output
+	                  ^
+        <tmp_path>/program.sql:<main>:61:19: Warning: Sort order of written data differs from the order of "Output" table content. Result table content will be unordered
+        	insert into plato.Output
+	                  ^

@@ -552,6 +552,10 @@ private:
     // async
     void AddAsyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
     void AddAsyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
+    // unique
+    void AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
+    void AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
+
     // default
     void AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
     void AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
@@ -766,6 +770,10 @@ public:
     TTableBuilder& AddAsyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
     TTableBuilder& AddAsyncSecondaryIndex(const TString& indexName, const TString& indexColumn);
 
+    // unique
+    TTableBuilder& AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
+    TTableBuilder& AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
+
     // default
     TTableBuilder& AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns);
     TTableBuilder& AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns);
@@ -944,9 +952,6 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     // Allow migrate requests between session during session balancing
     FLUENT_SETTING_DEFAULT(bool, AllowRequestMigration, true);
 
-    // This feature has been removed as inefficient
-    // the settings will be removed in next releases
-    FLUENT_SETTING_DEFAULT(ui32, SettlerSessionPoolTTL, 100);
     // Settings of session pool
     FLUENT_SETTING(TSessionPoolSettings, SessionPoolSettings);
 };
@@ -966,6 +971,9 @@ struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQue
 
     // Collect runtime statistics with a given detalization mode
     FLUENT_SETTING_DEFAULT(ECollectQueryStatsMode, CollectQueryStats, ECollectQueryStatsMode::None);
+
+    // Collect full query compilation diagnostics
+    FLUENT_SETTING_DEFAULT(bool, CollectFullDiagnostics, false);
 };
 
 class TSession;
@@ -1524,7 +1532,9 @@ struct TDescribeTableSettings : public TOperationRequestSettings<TDescribeTableS
     FLUENT_SETTING_DEFAULT(bool, WithPartitionStatistics, false);
 };
 
-struct TExplainDataQuerySettings : public TOperationRequestSettings<TExplainDataQuerySettings> {};
+struct TExplainDataQuerySettings : public TOperationRequestSettings<TExplainDataQuerySettings> {
+    FLUENT_SETTING_DEFAULT(bool, WithCollectFullDiagnostics, false);
+};
 
 struct TPrepareDataQuerySettings : public TOperationRequestSettings<TPrepareDataQuerySettings> {};
 
@@ -1778,14 +1788,16 @@ private:
 //! Represents result of ExplainDataQuery call
 class TExplainQueryResult : public TStatus {
 public:
-    TExplainQueryResult(TStatus&& status, TString&& plan, TString&& ast);
+    TExplainQueryResult(TStatus&& status, TString&& plan, TString&& ast, TString&& diagnostics);
 
     const TString& GetPlan() const;
     const TString& GetAst() const;
+    const TString& GetDiagnostics() const;
 
 private:
     TString Plan_;
     TString Ast_;
+    TString Diagnostics_;
 };
 
 //! Represents result of DescribeTable call
@@ -1891,24 +1903,31 @@ public:
     const TQueryStats& GetQueryStats() const { return *QueryStats_; }
     TQueryStats ExtractQueryStats() { return std::move(*QueryStats_); }
 
+    bool HasDiagnostics() const { return Diagnostics_.Defined(); }
+    const TString& GetDiagnostics() const { return *Diagnostics_; }
+    TString&& ExtractDiagnostics() { return std::move(*Diagnostics_); }
+
     TScanQueryPart(TStatus&& status)
         : TStreamPartStatus(std::move(status))
     {}
 
-    TScanQueryPart(TStatus&& status, const TMaybe<TQueryStats> &queryStats)
+    TScanQueryPart(TStatus&& status, const TMaybe<TQueryStats>& queryStats, const TMaybe<TString>& diagnostics)
         : TStreamPartStatus(std::move(status))
         , QueryStats_(queryStats)
+        , Diagnostics_(diagnostics)
     {}
 
-    TScanQueryPart(TStatus&& status, TResultSet&& resultSet, const TMaybe<TQueryStats> &queryStats)
+    TScanQueryPart(TStatus&& status, TResultSet&& resultSet, const TMaybe<TQueryStats>& queryStats, const TMaybe<TString>& diagnostics)
         : TStreamPartStatus(std::move(status))
         , ResultSet_(std::move(resultSet))
         , QueryStats_(queryStats)
+        , Diagnostics_(diagnostics)
     {}
 
 private:
     TMaybe<TResultSet> ResultSet_;
     TMaybe<TQueryStats> QueryStats_;
+    TMaybe<TString> Diagnostics_;
 };
 
 using TAsyncScanQueryPart = NThreading::TFuture<TScanQueryPart>;

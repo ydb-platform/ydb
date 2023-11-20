@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    kqp_channel_storage.cpp
     kqp_compute.cpp
     kqp_effects.cpp
     kqp_output_stream.cpp
@@ -13,7 +12,6 @@ SRCS(
     kqp_sequencer_actor.cpp
     kqp_sequencer_factory.cpp
     kqp_scan_data_meta.cpp
-    kqp_spilling_file.cpp
     kqp_stream_lookup_actor.cpp
     kqp_stream_lookup_actor.h
     kqp_stream_lookup_factory.cpp
@@ -38,14 +36,13 @@ PEERDIR(
     ydb/library/yql/minikql/comp_nodes/llvm
     ydb/library/yql/utils
     ydb/library/yql/dq/actors/protos
+    ydb/library/yql/dq/actors/spilling
     ydb/library/yql/dq/common
     ydb/library/yql/dq/runtime
     library/cpp/threading/hot_swap
 )
 
 YQL_LAST_ABI_VERSION()
-
-GENERATE_ENUM_SERIALIZATION(kqp_spilling.h)
 
 END()
 

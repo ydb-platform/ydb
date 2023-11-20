@@ -298,7 +298,7 @@ namespace NActors {
         ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) override {
             Y_UNUSED(wctx);
             Y_UNUSED(revolvingCounter);
-            Y_FAIL();
+            Y_ABORT();
         }
 
         void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingCounter) override {
@@ -458,7 +458,7 @@ namespace NActors {
 
         // generic
         TAffinity* Affinity() const override {
-            Y_FAIL();
+            Y_ABORT();
         }
 
     private:
@@ -578,8 +578,7 @@ namespace NActors {
         return UseRealThreads;
     }
 
-    TTestActorRuntimeBase::EEventAction TTestActorRuntimeBase::DefaultObserverFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-        Y_UNUSED(runtime);
+    TTestActorRuntimeBase::EEventAction TTestActorRuntimeBase::DefaultObserverFunc(TAutoPtr<IEventHandle>& event) {
         Y_UNUSED(event);
         return EEventAction::PROCESS;
     }
@@ -812,7 +811,7 @@ namespace NActors {
             TString explanation;
             auto status = node->LogSettings->SetLevel(priority, component, explanation);
             if (status) {
-                Y_FAIL("SetLogPriority failed: %s", explanation.c_str());
+                Y_ABORT("SetLogPriority failed: %s", explanation.c_str());
             }
         }
     }
@@ -956,7 +955,7 @@ namespace NActors {
             UnlockFromExecution((TMailboxTable::TTinyReadAsFilledMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter);
             break;
         default:
-            Y_FAIL("Unsupported mailbox type");
+            Y_ABORT("Unsupported mailbox type");
         }
 
         return actorId;
@@ -1202,11 +1201,20 @@ namespace NActors {
                                     isEdgeMailbox = true;
                                     TEventsList events;
                                     mbox.second->Capture(events);
+
+                                    TEventsList eventsToPush;
                                     for (auto& ev : events) {
                                         TInverseGuard<TMutex> inverseGuard(Mutex);
-                                        ObserverFunc(*this, ev);
+
+                                        for (auto observer : ObserverFuncs) {
+                                            observer(ev);
+                                            if (!ev) break;
+                                        }
+
+                                        if(ev && ObserverFunc(ev) != EEventAction::DROP && ev)
+                                            eventsToPush.push_back(ev);
                                     }
-                                    mbox.second->PushFront(events);
+                                    mbox.second->PushFront(eventsToPush);
                                 }
 
                                 if (!isEdgeMailbox) {
@@ -1229,28 +1237,37 @@ namespace NActors {
                                     }
 
                                     hasProgress = true;
-                                    EEventAction action;
+                                    EEventAction action = EEventAction::PROCESS;
                                     {
                                         TInverseGuard<TMutex> inverseGuard(Mutex);
-                                        action = ObserverFunc(*this, ev);
+
+                                        for (auto observer : ObserverFuncs) {
+                                            observer(ev);
+                                            if(!ev) break;
+                                        }
+
+                                        if (ev)
+                                            action = ObserverFunc(ev);
                                     }
 
-                                    switch (action) {
-                                        case EEventAction::PROCESS:
-                                            UpdateFinalEventsStatsForEachContext(*ev);
-                                            SendInternal(ev.Release(), mbox.first.NodeId - FirstNodeId, false);
-                                        break;
-                                        case EEventAction::DROP:
-                                            // do nothing
-                                        break;
-                                        case EEventAction::RESCHEDULE: {
-                                            TInstant deadline = TInstant::MicroSeconds(CurrentTimestamp) + ReschedulingDelay;
-                                            mbox.second->Freeze(deadline);
-                                            mbox.second->PushFront(ev);
-                                            break;
+                                    if (ev) {
+                                        switch (action) {
+                                            case EEventAction::PROCESS:
+                                                UpdateFinalEventsStatsForEachContext(*ev);
+                                                SendInternal(ev.Release(), mbox.first.NodeId - FirstNodeId, false);
+                                                break;
+                                            case EEventAction::DROP:
+                                                // do nothing
+                                                break;
+                                            case EEventAction::RESCHEDULE: {
+                                                TInstant deadline = TInstant::MicroSeconds(CurrentTimestamp) + ReschedulingDelay;
+                                                mbox.second->Freeze(deadline);
+                                                mbox.second->PushFront(ev);
+                                                break;
+                                            }
+                                            default:
+                                                Y_ABORT("Unknown action");
                                         }
-                                        default:
-                                            Y_FAIL("Unknown action");
                                     }
                                 }
                             }
@@ -1753,7 +1770,7 @@ namespace NActors {
         for (auto& x : Nodes) {
             return x.second->ActorSystem.Get();
         }
-        Y_FAIL("Don't use this method.");
+        Y_ABORT("Don't use this method.");
     }
 
     TActorSystem* TTestActorRuntimeBase::GetActorSystem(ui32 nodeId) {

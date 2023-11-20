@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/base/statestorage.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>

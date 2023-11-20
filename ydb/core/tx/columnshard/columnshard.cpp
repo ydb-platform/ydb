@@ -13,9 +13,7 @@ IActor* CreateColumnShard(const TActorId& tablet, TTabletStorageInfo* info) {
 
 namespace NKikimr::NColumnShard {
 
-void TColumnShard::CleanupActors(const TActorContext& ctx)
-{
-    ctx.Send(BlobsReadActor, new TEvents::TEvPoisonPill);
+void TColumnShard::CleanupActors(const TActorContext& ctx) {
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
     StoragesManager->Stop();
     if (Tiers) {
@@ -23,26 +21,29 @@ void TColumnShard::CleanupActors(const TActorContext& ctx)
     }
 }
 
-void TColumnShard::BecomeBroken(const TActorContext& ctx)
-{
+void TColumnShard::BecomeBroken(const TActorContext& ctx) {
     Become(&TThis::StateBroken);
     ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
     CleanupActors(ctx);
 }
 
 void TColumnShard::SwitchToWork(const TActorContext& ctx) {
-    const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SwitchToWork");
+    {
+        const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SwitchToWork");
 
-    BlobsReadActor = ctx.Register(new NOlap::NBlobOperations::NRead::TActor(TabletID(), SelfId()));
-    ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
+        for (auto&& i : TablesManager.GetTables()) {
+            ActivateTiering(i.first, i.second.GetTieringUsage());
+        }
 
-    for (auto&& i : TablesManager.GetTables()) {
-        ActivateTiering(i.first, i.second.GetTieringUsage());
+        Become(&TThis::StateWork);
+        SignalTabletActive(ctx);
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SignalTabletActive");
+        TryRegisterMediatorTimeCast();
+        EnqueueProgressTx(ctx);
     }
-
-    Become(&TThis::StateWork);
-    SignalTabletActive(ctx);
+    EnqueueBackgroundActivities();
+    ctx.Schedule(ActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
 }
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
@@ -67,6 +68,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Limits.RegisterControls(icb);
     CompactionLimits.RegisterControls(icb);
     Settings.RegisterControls(icb);
+    ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     Execute(CreateTxInitSchema(), ctx);
 }
 
@@ -206,8 +208,6 @@ void TColumnShard::UpdateIndexCounters() {
 
     auto& stats = TablesManager.MutablePrimaryIndex().GetTotalStats();
     SetCounter(COUNTER_INDEX_TABLES, stats.Tables);
-    SetCounter(COUNTER_INDEX_GRANULES, stats.Granules);
-    SetCounter(COUNTER_INDEX_EMPTY_GRANULES, stats.EmptyGranules);
     SetCounter(COUNTER_INDEX_COLUMN_RECORDS, stats.ColumnRecords);
     SetCounter(COUNTER_INDEX_COLUMN_METADATA_BYTES, stats.ColumnMetadataBytes);
     SetCounter(COUNTER_INSERTED_PORTIONS, stats.GetInsertedStats().Portions);
@@ -237,7 +237,6 @@ void TColumnShard::UpdateIndexCounters() {
     SetCounter(COUNTER_EVICTED_RAW_BYTES, stats.GetEvictedStats().RawBytes);
 
     LOG_S_DEBUG("Index: tables " << stats.Tables
-        << " granules " << stats.Granules << " (empty " << stats.EmptyGranules << ")"
         << " inserted " << stats.GetInsertedStats().DebugString()
         << " compacted " << stats.GetCompactedStats().DebugString()
         << " s-compacted " << stats.GetSplitCompactedStats().DebugString()

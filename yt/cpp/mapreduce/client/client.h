@@ -415,6 +415,10 @@ public:
         const TOperationId& operationId,
         const TGetOperationOptions& options) override;
 
+    TOperationAttributes GetOperation(
+        const TString& alias,
+        const TGetOperationOptions& options) override;
+
     TListOperationsResult ListOperations(
         const TListOperationsOptions& options) override;
 

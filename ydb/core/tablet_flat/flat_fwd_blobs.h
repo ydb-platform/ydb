@@ -59,11 +59,11 @@ namespace NFwd {
         {
             for (auto &one: loaded) {
                 if (!Pages || one.PageId < Pages.front().PageId) {
-                    Y_FAIL("Blobs fwd cache got page below queue");
+                    Y_ABORT("Blobs fwd cache got page below queue");
                 } else if (one.PageId > Pages.back().PageId) {
-                    Y_FAIL("Blobs fwd cache got page above queue");
+                    Y_ABORT("Blobs fwd cache got page above queue");
                 } else if (one.Data.size() > OnFetch) {
-                    Y_FAIL("Blobs fwd cache ahead counters is out of sync");
+                    Y_ABORT("Blobs fwd cache ahead counters is out of sync");
                 }
 
                 Stat.Saved += one.Data.size();
@@ -168,7 +168,7 @@ namespace NFwd {
             if (Pages && base <= Pages.back().PageId) {
                 return Lookup(base).Refer;
             } else if (Pages && base != Lower && base - Pages.back().PageId != 1) {
-                Y_FAIL("Cannot do so long jumps around of frames");
+                Y_ABORT("Cannot do so long jumps around of frames");
             } else {
                 const auto end = Frames->Relation(base).AbsRef(base);
 
@@ -193,7 +193,7 @@ namespace NFwd {
                 if (page.PageId >= until) {
                     break;
                 } else if (page.Size == 0) {
-                    Y_FAIL("Dropping page that hasn't been propagated");
+                    Y_ABORT("Dropping page that hasn't been propagated");
                 } else if (auto size = page.Release().size()) {
                     OnHold -= size;
 

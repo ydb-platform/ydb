@@ -29,7 +29,18 @@ namespace NActors {
     struct TActorContext;
     struct TActivationContext;
 
-    extern Y_POD_THREAD(TActivationContext*) TlsActivationContext;
+    class TActivationContextHolder {
+        static thread_local TActivationContext *Value;
+
+    public:
+        [[gnu::noinline]] operator bool() const;
+        [[gnu::noinline]] operator TActivationContext*() const;
+        [[gnu::noinline]] TActivationContext *operator ->();
+        [[gnu::noinline]] TActivationContext& operator *();
+        [[gnu::noinline]] TActivationContextHolder& operator=(TActivationContext *context);
+    };
+
+    extern TActivationContextHolder TlsActivationContext;
 
     struct TActivationContext {
     public:
@@ -640,6 +651,8 @@ namespace NActors {
     template <typename TDerived>
     class TActor: public IActorCallback {
     private:
+        using TDerivedReceiveFunc = void (TDerived::*)(TAutoPtr<IEventHandle>& ev);
+
         template <typename T, typename = const char*>
         struct HasActorName: std::false_type {};
         template <typename T>
@@ -671,21 +684,56 @@ namespace NActors {
     protected:
         // static constexpr char ActorName[] = "UNNAMED";
 
-        TActor(void (TDerived::* func)(TAutoPtr<IEventHandle>& ev))
+        TActor(TDerivedReceiveFunc func)
             : IActorCallback(static_cast<TReceiveFunc>(func), GetActivityTypeIndex()) {
         }
 
         template <class TEnum = EActivityType>
-        TActor(void (TDerived::* func)(TAutoPtr<IEventHandle>& ev), const TEnum activityEnumType = EActivityType::OTHER)
+        TActor(TDerivedReceiveFunc func, const TEnum activityEnumType = EActivityType::OTHER)
             : IActorCallback(static_cast<TReceiveFunc>(func), activityEnumType) {
         }
 
-        TActor(void (TDerived::* func)(TAutoPtr<IEventHandle>& ev), const TString& actorName)
+        TActor(TDerivedReceiveFunc func, const TString& actorName)
             : IActorCallback(static_cast<TReceiveFunc>(func), TLocalProcessKeyState<TActorActivityTag>::GetInstance().Register(actorName)) {
         }
 
     public:
         typedef TDerived TThis;
+
+        // UnsafeBecome methods don't verify the bindings of the stateFunc to the TDerived
+        template <typename T>
+        void UnsafeBecome(T stateFunc) {
+            this->IActorCallback::Become(stateFunc);
+        }
+
+        template <typename T, typename... TArgs>
+        void UnsafeBecome(T stateFunc, const TActorContext& ctx, TArgs&&... args) {
+            this->IActorCallback::Become(stateFunc, ctx, std::forward<TArgs>(args)...);
+        }
+
+        template <typename T, typename... TArgs>
+        void UnsafeBecome(T stateFunc, TArgs&&... args) {
+            this->IActorCallback::Become(stateFunc, std::forward<TArgs>(args)...);
+        }
+
+        template <typename T>
+        void Become(T stateFunc) {
+            // TODO(kruall): have to uncomment asserts after end of sync contrib/ydb
+            // static_assert(std::is_convertible_v<T, TDerivedReceiveFunc>);
+            this->IActorCallback::Become(stateFunc);
+        }
+
+        template <typename T, typename... TArgs>
+        void Become(T stateFunc, const TActorContext& ctx, TArgs&&... args) {
+            // static_assert(std::is_convertible_v<T, TDerivedReceiveFunc>);
+            this->IActorCallback::Become(stateFunc, ctx, std::forward<TArgs>(args)...);
+        }
+
+        template <typename T, typename... TArgs>
+        void Become(T stateFunc, TArgs&&... args) {
+            // static_assert(std::is_convertible_v<T, TDerivedReceiveFunc>);
+            this->IActorCallback::Become(stateFunc, std::forward<TArgs>(args)...);
+        }
     };
 
 
@@ -694,7 +742,7 @@ namespace NActors {
 #define STFUNC(funcName) void funcName(TAutoPtr<::NActors::IEventHandle>& ev)
 #define STATEFN(funcName) void funcName(TAutoPtr<::NActors::IEventHandle>& ev)
 
-#define STFUNC_STRICT_UNHANDLED_MSG_HANDLER Y_VERIFY_DEBUG(false, "%s: unexpected message type 0x%08" PRIx32, __func__, etype);
+#define STFUNC_STRICT_UNHANDLED_MSG_HANDLER Y_DEBUG_ABORT_UNLESS(false, "%s: unexpected message type 0x%08" PRIx32, __func__, etype);
 
 #define STFUNC_BODY(HANDLERS, UNHANDLED_MSG_HANDLER)                    \
     switch (const ui32 etype = ev->GetTypeRewrite()) {                  \

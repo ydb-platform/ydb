@@ -68,7 +68,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 Status = StatusOk;
                 break;
             default:
-                Y_FAIL();
+                Y_ABORT();
             }
         }
 
@@ -88,7 +88,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             case StatusMustBeIgnoredBody:
                 break;
             default:
-                Y_FAIL();
+                Y_ABORT();
             }
         }
 
@@ -139,7 +139,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 Status = StatusBody;
                 break;
             case StatusOk:
-                Y_VERIFY_DEBUG(false);
+                Y_DEBUG_ABORT_UNLESS(false);
                 break;
             case StatusBody:
                 break;
@@ -152,7 +152,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             case StatusMustBeIgnoredBody:
                 break;
             default:
-                Y_FAIL();
+                Y_ABORT();
             }
         }
 
@@ -281,6 +281,9 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             // here we could erase intermediate entries but who cares as they would be skipped?
 
             it = LogInfo.find(prevGeneration);
+
+            // Note: prevGeneration is guaranteed to exist because of GenerationInfo call above
+            Y_ABORT_UNLESS(it != LogInfo.end());
         }
 
         // cleanup front entries
@@ -579,7 +582,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         if (IntrospectionTrace) {
             IntrospectionTrace->Attach(MakeHolder<NTracing::TOnCheckRefsGetResult>(msg->ResponseSz));
         }
-        Y_VERIFY_DEBUG(msg->Status == NKikimrProto::OK);
+        Y_DEBUG_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
 
         for (ui32 i = 0, e = msg->ResponseSz; i != e; ++i) {
             const TEvBlobStorage::TEvGetResult::TResponse &response = msg->Responses[i];
@@ -639,7 +642,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                     case TLogEntry::StatusUnknown:
                         break;
                     case TLogEntry::StatusOk:
-                        Y_FAIL();
+                        Y_ABORT();
                     case TLogEntry::StatusBody:
                         {
                             bool dependsOk = true;
@@ -705,7 +708,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                         }
                         break;
                     default:
-                        Y_FAIL();
+                        Y_ABORT();
                     }
                 } else {
                     if (step <= gx.Cutoff) {

@@ -1,0 +1,10 @@
+RECURSE(
+    bmi
+    debug
+    encoding
+    encryption
+    gen-go
+    testutils
+    thrift
+    utils
+)

@@ -34,8 +34,7 @@
 # include <__support/newlib/xlocale.h>
 #elif defined(__OpenBSD__)
 # include <__support/openbsd/xlocale.h>
-#elif (defined(__APPLE__)      || defined(__FreeBSD__) \
-    || defined(__EMSCRIPTEN__) || defined(__IBMCPP__))
+#elif (defined(__APPLE__) || defined(__FreeBSD__) || defined(__IBMCPP__))
 # include <xlocale.h>
 #elif defined(__Fuchsia__)
 # include <__support/fuchsia/xlocale.h>
@@ -272,11 +271,6 @@ public:
         return do_compare(__lo1, __hi1, __lo2, __hi2);
     }
 
-// Disable double inline warning.
-#ifdef _LIBCPP_COMPILER_MSVC
-#pragma warning ( push )
-#pragma warning ( disable : 4141 )
-#endif
     // FIXME(EricWF): The _LIBCPP_ALWAYS_INLINE is needed on Windows to work
     // around a dllimport bug that expects an external instantiation.
     _LIBCPP_INLINE_VISIBILITY
@@ -285,9 +279,6 @@ public:
     {
         return do_transform(__lo, __hi);
     }
-#ifdef _LIBCPP_COMPILER_MSVC
-#pragma warning ( pop )
-#endif
 
     _LIBCPP_INLINE_VISIBILITY
     long hash(const char_type* __lo, const char_type* __hi) const
@@ -344,9 +335,9 @@ collate<_CharT>::do_hash(const char_type* __lo, const char_type* __hi) const
     return static_cast<long>(__h);
 }
 
-_LIBCPP_EXTERN_TEMPLATE_EVEN_IN_DEBUG_MODE(class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS collate<char>)
+extern template class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS collate<char>;
 #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
-_LIBCPP_EXTERN_TEMPLATE_EVEN_IN_DEBUG_MODE(class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS collate<wchar_t>)
+extern template class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS collate<wchar_t>;
 #endif
 
 // template <class CharT> class collate_byname;
@@ -1504,15 +1495,15 @@ codecvt_byname<_InternT, _ExternT, _StateT>::~codecvt_byname()
 }
 _LIBCPP_SUPPRESS_DEPRECATED_POP
 
-_LIBCPP_EXTERN_TEMPLATE_EVEN_IN_DEBUG_MODE(class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS codecvt_byname<char, char, mbstate_t>)
+extern template class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS codecvt_byname<char, char, mbstate_t>;
 #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
-_LIBCPP_EXTERN_TEMPLATE_EVEN_IN_DEBUG_MODE(class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS codecvt_byname<wchar_t, char, mbstate_t>)
+extern template class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS codecvt_byname<wchar_t, char, mbstate_t>;
 #endif
-_LIBCPP_EXTERN_TEMPLATE_EVEN_IN_DEBUG_MODE(class _LIBCPP_DEPRECATED_IN_CXX20 _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS codecvt_byname<char16_t, char, mbstate_t>) // deprecated in C++20
-_LIBCPP_EXTERN_TEMPLATE_EVEN_IN_DEBUG_MODE(class _LIBCPP_DEPRECATED_IN_CXX20 _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS codecvt_byname<char32_t, char, mbstate_t>) // deprecated in C++20
+extern template class _LIBCPP_DEPRECATED_IN_CXX20 _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS codecvt_byname<char16_t, char, mbstate_t>; // deprecated in C++20
+extern template class _LIBCPP_DEPRECATED_IN_CXX20 _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS codecvt_byname<char32_t, char, mbstate_t>; // deprecated in C++20
 #ifndef _LIBCPP_HAS_NO_CHAR8_T
-_LIBCPP_EXTERN_TEMPLATE_EVEN_IN_DEBUG_MODE(class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS codecvt_byname<char16_t, char8_t, mbstate_t>) // C++20
-_LIBCPP_EXTERN_TEMPLATE_EVEN_IN_DEBUG_MODE(class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS codecvt_byname<char32_t, char8_t, mbstate_t>) // C++20
+extern template class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS codecvt_byname<char16_t, char8_t, mbstate_t>; // C++20
+extern template class _LIBCPP_EXTERN_TEMPLATE_TYPE_VIS codecvt_byname<char32_t, char8_t, mbstate_t>; // C++20
 #endif
 
 template <size_t _Np>

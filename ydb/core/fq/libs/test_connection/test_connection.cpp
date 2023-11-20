@@ -132,7 +132,7 @@ public:
         , Counters(counters)
         , Signer(signer)
         , HttpGateway(httpGateway)
-        , MdbEndpointGenerator(NFq::MakeMdbEndpointGeneratorGeneric(commonConfig.GetMdbTransformHost()))
+        , MdbEndpointGenerator(NFq::MakeMdbEndpointGeneratorGeneric(commonConfig.GetMdbTransformHost(), commonConfig.GetUseNativeProtocolForClickHouse()))
     {}
 
     static constexpr char ActorName[] = "YQ_TEST_CONNECTION";

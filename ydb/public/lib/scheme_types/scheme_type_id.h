@@ -79,6 +79,7 @@ static constexpr TTypeId YqlIds[] = {
     Interval,
     JsonDocument,
     DyNumber,
+    Uuid,
 };
 
 // types must be defined in GetValueHash and CompareTypedCells
@@ -126,6 +127,7 @@ const char *TypeName(TTypeId typeId) {
         case NTypeIds::JsonDocument:    return "JsonDocument";
         case NTypeIds::Decimal:         return "Decimal";
         case NTypeIds::DyNumber:        return "DyNumber";
+        case NTypeIds::Uuid:            return "Uuid";
         default:                        return "Unknown";
     }
 }

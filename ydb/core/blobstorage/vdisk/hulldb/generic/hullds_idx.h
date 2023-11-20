@@ -203,7 +203,7 @@ namespace NKikimr {
         // optimization applies;
         // This function is private and must not be called directly
         TLevelIndexSnapshot PrivateGetSnapshot(TActorSystem *actorSystemToNotifyLevelIndex) {
-            Y_VERIFY_DEBUG(Loaded);
+            Y_DEBUG_ABORT_UNLESS(Loaded);
             return TLevelIndexSnapshot(CurSlice, Fresh.GetSnapshot(), CurSlice->Level0CurSstsNum(),
                     actorSystemToNotifyLevelIndex, DelayedCompactionDeleterInfo);
         }
@@ -267,23 +267,23 @@ namespace NKikimr {
         // Operations with Fresh
         //////////////////////////////////////////////////////////////////////////////////////
         void PutToFresh(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer) {
-            Y_VERIFY_DEBUG(Loaded);
+            Y_DEBUG_ABORT_UNLESS(Loaded);
             Fresh.PutLogoBlobWithData(lsn, key, partId, ingress, std::move(buffer));
         }
 
         void PutToFresh(ui64 lsn, const TKey &key, const TMemRec &memRec) {
-            Y_VERIFY_DEBUG(Loaded);
+            Y_DEBUG_ABORT_UNLESS(Loaded);
             Fresh.Put(lsn, key, memRec);
         }
 
         void PutToFresh(std::shared_ptr<TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn) {
-            Y_VERIFY_DEBUG(Loaded);
+            Y_DEBUG_ABORT_UNLESS(Loaded);
             Fresh.PutAppendix(std::move(a), firstLsn, lastLsn);
         }
 
         // Fresh Compaction
         bool NeedsFreshCompaction(ui64 yardFreeUpToLsn, bool force) const {
-            Y_VERIFY_DEBUG(Loaded);
+            Y_DEBUG_ABORT_UNLESS(Loaded);
             return Fresh.NeedsCompaction(yardFreeUpToLsn, force);
         }
 
@@ -309,12 +309,12 @@ namespace NKikimr {
         //////////////////////////////////////////////////////////////////////////////////////
 
         ui64 GetFirstLsnToKeep() const {
-            Y_VERIFY_DEBUG(Loaded);
+            Y_DEBUG_ABORT_UNLESS(Loaded);
             return Min(Min(CurEntryPointLsn, PrevEntryPointLsn), Fresh.GetFirstLsnToKeep());
         }
 
         virtual void LoadCompleted() {
-            Y_VERIFY_DEBUG(!Loaded);
+            Y_DEBUG_ABORT_UNLESS(!Loaded);
             Loaded = true;
 
             // NOTE: compatibility issue, see comment for UpdateWithObsoleteLastCompactedLsn method
@@ -356,7 +356,7 @@ namespace NKikimr {
             switch (s) {
                 case ESatisfactionRankType::Fresh: return Fresh.GetSatisfactionRank();
                 case ESatisfactionRankType::Level: return CurSlice->GetSatisfactionRank();
-                default: Y_FAIL("Unexpected rank type");
+                default: Y_ABORT("Unexpected rank type");
             }
         }
 

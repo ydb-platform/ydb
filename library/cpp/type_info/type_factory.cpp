@@ -336,7 +336,7 @@ namespace NTi {
 
             void DecRef() noexcept override {
                 if (Counter_.Dec() == 0) {
-                    Y_FAIL("DecRef is not supposed to drop");
+                    Y_ABORT("DecRef is not supposed to drop");
                 }
             }
 
@@ -453,22 +453,22 @@ namespace NTi {
 
             void RefType(NTi::TType* type) noexcept override {
                 Y_UNUSED(type);
-                Y_FAIL("not supposed to be called");
+                Y_ABORT("not supposed to be called");
             }
 
             void UnRefType(NTi::TType* type) noexcept override {
                 Y_UNUSED(type);
-                Y_FAIL("not supposed to be called");
+                Y_ABORT("not supposed to be called");
             }
 
             void DecRefType(NTi::TType* type) noexcept override {
                 Y_UNUSED(type);
-                Y_FAIL("not supposed to be called");
+                Y_ABORT("not supposed to be called");
             }
 
             long RefCountType(const NTi::TType* type) const noexcept override {
                 Y_UNUSED(type);
-                Y_FAIL("not supposed to be called");
+                Y_ABORT("not supposed to be called");
             }
         };
 

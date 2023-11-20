@@ -13,7 +13,7 @@ class TInsertTableAccessor;
 struct TColumnRecord;
 struct TGranuleRecord;
 class IColumnEngine;
-struct TPortionInfo;
+class TPortionInfo;
 
 class IDbWrapper {
 public:
@@ -28,10 +28,6 @@ public:
 
     virtual bool Load(TInsertTableAccessor& insertTable,
                       const TInstant& loadTime) = 0;
-
-    virtual void WriteGranule(ui32 index, const IColumnEngine& engine, const TGranuleRecord& row) = 0;
-    virtual void EraseGranule(ui32 index, const IColumnEngine& engine, const TGranuleRecord& row) = 0;
-    virtual bool LoadGranules(ui32 index, const IColumnEngine& engine, const std::function<void(const TGranuleRecord&)>& callback) = 0;
 
     virtual void WriteColumn(ui32 index, const TPortionInfo& portion, const TColumnRecord& row) = 0;
     virtual void EraseColumn(ui32 index, const TPortionInfo& portion, const TColumnRecord& row) = 0;
@@ -57,10 +53,6 @@ public:
 
     bool Load(TInsertTableAccessor& insertTable,
               const TInstant& loadTime) override;
-
-    void WriteGranule(ui32 index, const IColumnEngine& engine, const TGranuleRecord& row) override;
-    void EraseGranule(ui32 index, const IColumnEngine& engine, const TGranuleRecord& row) override;
-    bool LoadGranules(ui32 index, const IColumnEngine& engine, const std::function<void(const TGranuleRecord&)>& callback) override;
 
     void WriteColumn(ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) override;
     void EraseColumn(ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) override;

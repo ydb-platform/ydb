@@ -9,6 +9,36 @@
 
 namespace NKikimr::NPDisk {
 
+class TLogFlushCompletionAction : public TCompletionAction {
+    const ui32 EndChunkIdx;
+    const ui32 EndSectorIdx;
+    THolder<TLogWriter> &CommonLogger;
+public:
+    TLogFlushCompletionAction(ui32 endChunkIdx, ui32 endSectorIdx, THolder<TLogWriter> &commonLogger, TCompletionAction* completionLogWrite)
+        : EndChunkIdx(endChunkIdx)
+        , EndSectorIdx(endSectorIdx)
+        , CommonLogger(commonLogger) {
+            this->FlushAction = completionLogWrite;
+        }
+
+    void Exec(TActorSystem *actorSystem) override {
+        CommonLogger->FirstUncommitted = TFirstUncommitted(EndChunkIdx, EndSectorIdx);
+
+        Y_DEBUG_ABORT_UNLESS(FlushAction);
+
+        // FlushAction here is a TCompletionLogWrite which will decrease owner's inflight count.
+        FlushAction->Exec(actorSystem);
+
+        delete this;
+    }
+
+    void Release(TActorSystem *actorSystem) override {
+        FlushAction->Release(actorSystem);
+
+        delete this;
+    }
+};
+
 void TPDisk::InitSysLogger() {
     ui64 writeSectorIdx = (ui64) ((InitialSysLogWritePosition + Format.SectorSize - 1) / Format.SectorSize);
     ui64 beginSectorIdx = (ui64)((FormatSectorSize * ReplicationFactor + Format.SectorSize - 1) /
@@ -148,7 +178,13 @@ bool TPDisk::LogNonceJump(ui64 previousNonce) {
     OnNonceChange(NonceLog, TReqId(TReqId::NonceChangeForNonceJump, 0), {});
     auto write = MakeHolder<TCompletionLogWrite>(this, TVector<TLogWrite*>(), TVector<TLogWrite*>(),
             std::move(logChunksToCommit));
-    CommonLogger->Flush(TReqId(TReqId::LogNonceJumpFlush, 0), {}, write.Release());
+
+    ui32 curChunkIdx = CommonLogger->ChunkIdx;
+    ui64 curSectorIdx = CommonLogger->SectorIdx;
+
+    TLogFlushCompletionAction* flushCompletion = new TLogFlushCompletionAction(curChunkIdx, curSectorIdx, CommonLogger, write.Release());
+
+    CommonLogger->Flush(TReqId(TReqId::LogNonceJumpFlush, 0), {}, flushCompletion);
 
     return true;
 }
@@ -241,7 +277,7 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
     // Set initial chunk owners
     // Use actual format info to set busy chunks mask
     ui32 chunkCount = (ui32)(Format.DiskSize / (ui64)Format.ChunkSize);
-    Y_VERIFY_DEBUG(ChunkState.size() == 0);
+    Y_DEBUG_ABORT_UNLESS(ChunkState.size() == 0);
     ChunkState = TVector<TChunkState>(chunkCount);
     Y_ABORT_UNLESS(ChunkState.size() >= Format.SystemChunkCount);
     for (ui32 i = 0; i < Format.SystemChunkCount; ++i) {
@@ -527,8 +563,20 @@ void TPDisk::ProcessLogReadQueue() {
                         " FirstLsnToKeep: %" PRIu64 " FirstNonceToKeep: %" PRIu64,
                         (ui32)PDiskId, (ui32)logRead.Owner, (ui64)firstLsnToKeep, (ui64)firstNonceToKeep);
             }
-            ui32 endLogChunkIdx = CommonLogger->ChunkIdx;
-            ui64 endLogSectorIdx = CommonLogger->SectorIdx;
+
+            ui32 endLogChunkIdx;
+            ui64 endLogSectorIdx;
+
+            TOwnerData::TLogEndPosition &logEndPos = ownerData.LogEndPosition;
+            if (logEndPos.ChunkIdx == 0 && logEndPos.SectorIdx == 0) {
+                TFirstUncommitted firstUncommitted = CommonLogger->FirstUncommitted.load();
+                endLogChunkIdx = firstUncommitted.ChunkIdx;
+                endLogSectorIdx = firstUncommitted.SectorIdx;
+            } else {
+                endLogChunkIdx = logEndPos.ChunkIdx;
+                endLogSectorIdx = logEndPos.SectorIdx;
+            }
+     
             ownerData.LogReader = new TLogReader(false,
                         this, ActorSystem, logRead.Sender, logRead.Owner, logStartPosition,
                         logRead.OwnerGroupType,logRead.Position,
@@ -562,7 +610,7 @@ void TPDisk::ProcessLogReadQueue() {
             break;
         }
         default:
-            Y_FAIL();
+            Y_ABORT();
             break;
         }
         delete req;
@@ -678,7 +726,7 @@ void TPDisk::ProcessLogWriteQueueAndCommits() {
     size_t logOperationSizeBytes = 0;
     TVector<ui32> logChunksToCommit;
     for (TLogWrite *logWrite : JointLogWrites) {
-        Y_VERIFY_DEBUG(logWrite);
+        Y_DEBUG_ABORT_UNLESS(logWrite);
         logOperationSizeBytes += logWrite->Data.size();
         TStringStream errorReason;
         NKikimrProto::EReplyStatus status = ValidateRequest(logWrite, errorReason);
@@ -803,7 +851,7 @@ bool TPDisk::AllocateLogChunks(ui32 chunksNeeded, ui32 chunksContainingPayload, 
 }
 
 void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
-    Y_VERIFY_DEBUG(!evLog.Result);
+    Y_DEBUG_ABORT_UNLESS(!evLog.Result);
     OwnerData[evLog.Owner].Status = TOwnerData::VDISK_STATUS_LOGGED;
 
     bool isCommitRecord = evLog.Signature.HasCommitRecord();
@@ -903,7 +951,7 @@ void TPDisk::LogFlush(TCompletionAction *action, TVector<ui32> *logChunksToCommi
     if (!CommonLogger->IsEmptySector()) {
         size_t prevPreallocatedSize = CommonLogger->NextChunks.size();
         if (!PreallocateLogChunks(CommonLogger->SectorBytesFree, OwnerSystem, 0, EOwnerGroupType::Static, true)) {
-            Y_FAIL("Last chunk is over, how did you do that?!");
+            Y_ABORT("Last chunk is over, how did you do that?!");
         }
         size_t nextPreallocatedSize = CommonLogger->NextChunks.size();
         if (nextPreallocatedSize != prevPreallocatedSize && logChunksToCommit) {
@@ -918,7 +966,13 @@ void TPDisk::LogFlush(TCompletionAction *action, TVector<ui32> *logChunksToCommi
     }
 
     CommonLogger->TerminateLog(reqId, traceId);
-    CommonLogger->Flush(reqId, traceId, action);
+
+    ui32 curChunkIdx = CommonLogger->ChunkIdx;
+    ui32 curSectorIdx = CommonLogger->SectorIdx;
+
+    TLogFlushCompletionAction* flushCompletion = new TLogFlushCompletionAction(curChunkIdx, curSectorIdx, CommonLogger, action);
+
+    CommonLogger->Flush(reqId, traceId, flushCompletion);
 
     OnNonceChange(NonceLog, reqId, traceId);
 }
@@ -1399,9 +1453,10 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 }
 
                 TString errorReason;
-                bool isOk = Keeper.Reset(params, errorReason);
-
-                if (!isOk) {
+                if (
+                    !Keeper.Reset(params, TColorLimits::MakeLogLimits(), errorReason) &&
+                    !Keeper.Reset(params, TColorLimits::MakeExtendedLogLimits(), errorReason)
+                ) {
                     *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::ChunkQuotaError;
                     *Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
                     *Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorCalculatingChunkQuotas;

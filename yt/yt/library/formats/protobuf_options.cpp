@@ -68,7 +68,7 @@ TFieldOption FieldFlagToOption(EWrapperFieldFlag::Enum flag)
         case EFlag::ENUM_CHECK_VALUES:
             return EProtobufEnumWritingMode::CheckValues;
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 TMessageOption MessageFlagToOption(EWrapperMessageFlag::Enum flag)
@@ -80,7 +80,7 @@ TMessageOption MessageFlagToOption(EWrapperMessageFlag::Enum flag)
         case EFlag::SORT_FIELDS_BY_FIELD_NUMBER:
             return EProtobufFieldSortOrder::ByFieldNumber;
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 TOneofOption OneofFlagToOption(EWrapperOneofFlag::Enum flag)
@@ -92,7 +92,7 @@ TOneofOption OneofFlagToOption(EWrapperOneofFlag::Enum flag)
         case EFlag::VARIANT:
             return EProtobufOneofMode::Variant;
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 TString OptionToFieldFlagName(TFieldOption option)
@@ -112,7 +112,7 @@ TString OptionToFieldFlagName(TFieldOption option)
                 case ESpecialProtobufType::EnumString:
                     return EFlag::ENUM_STRING;
             }
-            Y_FAIL();
+            Y_ABORT();
         }
         EFlag::Enum operator() (EProtobufSerializationMode serializationMode)
         {
@@ -124,7 +124,7 @@ TString OptionToFieldFlagName(TFieldOption option)
                 case EProtobufSerializationMode::Embedded:
                     return EFlag::EMBEDDED;
             }
-            Y_FAIL();
+            Y_ABORT();
         }
         EFlag::Enum operator() (EProtobufListMode listMode)
         {
@@ -134,7 +134,7 @@ TString OptionToFieldFlagName(TFieldOption option)
                 case EProtobufListMode::Required:
                     return EFlag::REQUIRED_LIST;
             }
-            Y_FAIL();
+            Y_ABORT();
         }
         EFlag::Enum operator() (EProtobufMapMode mapMode)
         {
@@ -148,7 +148,7 @@ TString OptionToFieldFlagName(TFieldOption option)
                 case EProtobufMapMode::OptionalDict:
                     return EFlag::MAP_AS_OPTIONAL_DICT;
             }
-            Y_FAIL();
+            Y_ABORT();
         }
         EFlag::Enum operator() (EProtobufEnumWritingMode enumWritingMode)
         {
@@ -158,7 +158,7 @@ TString OptionToFieldFlagName(TFieldOption option)
                 case EProtobufEnumWritingMode::CheckValues:
                     return EFlag::ENUM_CHECK_VALUES;
             }
-            Y_FAIL();
+            Y_ABORT();
         }
     };
 
@@ -178,7 +178,7 @@ TString OptionToMessageFlagName(TMessageOption option)
                 case EProtobufFieldSortOrder::ByFieldNumber:
                     return EFlag::SORT_FIELDS_BY_FIELD_NUMBER;
             }
-            Y_FAIL();
+            Y_ABORT();
         }
     };
 
@@ -198,7 +198,7 @@ TString OptionToOneofFlagName(TOneofOption option)
                 case EProtobufOneofMode::Variant:
                     return EFlag::VARIANT;
             }
-            Y_FAIL();
+            Y_ABORT();
         }
     };
 
@@ -389,12 +389,12 @@ TProtobufOneofOptions GetDefaultOneofOptions(const Descriptor* descriptor)
                 case EProtobufSerializationMode::Embedded:
                     return defaultOneofOptions;
             }
-            Y_FAIL();
+            Y_ABORT();
         }
         case EProtobufOneofMode::SeparateFields:
             return defaultOneofOptions;
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 TProtobufFieldOptions GetFieldOptions(
@@ -495,7 +495,7 @@ void ValidateProtobufType(const FieldDescriptor* fieldDescriptor, ESpecialProtob
             ensureType(FieldDescriptor::TYPE_ENUM);
             return;
     }
-    Y_FAIL();
+    Y_ABORT();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

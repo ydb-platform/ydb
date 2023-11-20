@@ -67,8 +67,8 @@ public:
 
     template<class TPoint>
     bool PointLessThanLeftBorder(const TPoint& a, const TKeyRangeEntry& b) const noexcept {
-        Y_VERIFY_DEBUG(a.Key.size() == KeyTypes.size());
-        Y_VERIFY_DEBUG(b.FromKey.size() == KeyTypes.size());
+        Y_DEBUG_ABORT_UNLESS(a.Key.size() == KeyTypes.size());
+        Y_DEBUG_ABORT_UNLESS(b.FromKey.size() == KeyTypes.size());
         if (int cmp = CompareTypedCellVectors(a.Key.data(), b.FromKey.data(), KeyTypes.data(), KeyTypes.size())) {
             return cmp < 0;
         }
@@ -77,12 +77,12 @@ public:
 
     template<class TPoint>
     bool RightBorderLessThanPoint(const TKeyRangeEntry& a, const TPoint& b) const noexcept {
-        Y_VERIFY_DEBUG(b.Key.size() == KeyTypes.size());
+        Y_DEBUG_ABORT_UNLESS(b.Key.size() == KeyTypes.size());
         if (!a.ToKey) {
             // the left ends at +inf
             return false;
         }
-        Y_VERIFY_DEBUG(a.ToKey.size() == KeyTypes.size());
+        Y_DEBUG_ABORT_UNLESS(a.ToKey.size() == KeyTypes.size());
         if (int cmp = CompareTypedCellVectors(a.ToKey.data(), b.Key.data(), KeyTypes.data(), KeyTypes.size())) {
             return cmp < 0;
         }
@@ -106,12 +106,12 @@ public:
     }
 
     bool operator()(const TKeyRangeEntry& a, const TKeyRangeEntry& b) const noexcept {
-        Y_VERIFY_DEBUG(b.FromKey.size() == KeyTypes.size());
+        Y_DEBUG_ABORT_UNLESS(b.FromKey.size() == KeyTypes.size());
         if (!a.ToKey) {
             // the left ends at +inf
             return false;
         }
-        Y_VERIFY_DEBUG(a.ToKey.size() == KeyTypes.size());
+        Y_DEBUG_ABORT_UNLESS(a.ToKey.size() == KeyTypes.size());
         if (int cmp = CompareTypedCellVectors(a.ToKey.data(), b.FromKey.data(), KeyTypes.data(), KeyTypes.size())) {
             return cmp < 0;
         }
@@ -141,12 +141,12 @@ private:
             : Next_(Data())
             , Left_(size)
         {
-            Y_VERIFY_DEBUG(AlignUp(Next_) == Next_, "Chunk data is not properly aligned");
-            Y_VERIFY_DEBUG(AlignUp(Left_) == Left_, "Chunk size is not properly aligned");
+            Y_DEBUG_ABORT_UNLESS(AlignUp(Next_) == Next_, "Chunk data is not properly aligned");
+            Y_DEBUG_ABORT_UNLESS(AlignUp(Left_) == Left_, "Chunk size is not properly aligned");
         }
 
         void* Allocate(size_t len) noexcept {
-            Y_VERIFY_DEBUG(AlignUp(len) == len, "Chunk allocation is not aligned");
+            Y_DEBUG_ABORT_UNLESS(AlignUp(len) == len, "Chunk allocation is not aligned");
 
             if (len > Left_) {
                 return nullptr;
@@ -159,7 +159,7 @@ private:
         }
 
         bool Deallocate(void* ptr, size_t len) noexcept {
-            Y_VERIFY_DEBUG(AlignUp(len) == len, "Chunk allocation is not aligned");
+            Y_DEBUG_ABORT_UNLESS(AlignUp(len) == len, "Chunk allocation is not aligned");
 
             if (Used() < len) {
                 return false;
@@ -221,7 +221,7 @@ public:
                 // Looks like we want some large allocation
                 // Make a new chunk before other chunks
                 TChunk* newChunk = AllocateChunk(len);
-                Y_VERIFY_DEBUG(newChunk->Left() >= len);
+                Y_DEBUG_ABORT_UNLESS(newChunk->Left() >= len);
                 newChunk->LinkBefore(Current);
                 Current = newChunk;
                 break;
@@ -232,7 +232,7 @@ public:
                 break;
             }
             Current = Current->Next()->Node();
-            Y_VERIFY_DEBUG(Current->Used() == 0);
+            Y_DEBUG_ABORT_UNLESS(Current->Used() == 0);
         }
         if (!Current) {
             Current = AllocateChunk(len);
@@ -244,15 +244,15 @@ public:
         len = AlignUp(len);
         Reserve(len);
         void* ptr = Current->Allocate(len);
-        Y_VERIFY_DEBUG(ptr, "Unexpected allocation failure");
+        Y_DEBUG_ABORT_UNLESS(ptr, "Unexpected allocation failure");
         TotalUsed_ += len;
         return ptr;
     }
 
     void Deallocate(void* ptr, size_t len) noexcept {
         len = AlignUp(len);
-        Y_VERIFY_DEBUG(Current, "Deallocate from an empty pool, possible bug");
-        Y_VERIFY_DEBUG(TotalUsed_ >= len, "Used memory underflow, possible bug");
+        Y_DEBUG_ABORT_UNLESS(Current, "Deallocate from an empty pool, possible bug");
+        Y_DEBUG_ABORT_UNLESS(TotalUsed_ >= len, "Used memory underflow, possible bug");
         TotalUsed_ -= len;
         if (!Current->Deallocate(ptr, len)) {
             // This does not match the last allocation, mark as garbage
@@ -262,7 +262,7 @@ public:
         while (Current != Chunks.Front() && Current->Used() == 0) {
             // Rewind back to the earliest non-free chunk
             Current = Current->Prev()->Node();
-            Y_VERIFY_DEBUG(TotalGarbage_ >= Current->Left());
+            Y_DEBUG_ABORT_UNLESS(TotalGarbage_ >= Current->Left());
             TotalGarbage_ -= Current->Left();
         }
     }
@@ -343,7 +343,7 @@ private:
 
         void deallocate(T* ptr, size_t n) noexcept {
             auto size = sizeof(T) * n;
-            Y_VERIFY_DEBUG(*UsedMemory >= size);
+            Y_DEBUG_ABORT_UNLESS(*UsedMemory >= size);
             *UsedMemory -= size;
             NActors::NMemory::TLabel<MemoryLabelKeyRangeCache>::Sub(size);
             return TBase::deallocate(ptr, n);
@@ -459,7 +459,7 @@ public:
      * Returns true if key is inside the left boundary of the specified entry
      */
     bool InsideLeft(const_iterator it, TArrayRef<const TCell> key) const {
-        Y_VERIFY_DEBUG(it != end());
+        Y_DEBUG_ABORT_UNLESS(it != end());
         return !Entries.key_comp()(TSearchPoint{ key }, *it);
     }
 
@@ -485,7 +485,7 @@ public:
      * Returns true if key is inside the right boundary of the specified entry
      */
     bool InsideRight(const_iterator it, TArrayRef<const TCell> key) const {
-        Y_VERIFY_DEBUG(it != end());
+        Y_DEBUG_ABORT_UNLESS(it != end());
         return !Entries.key_comp()(*it, TSearchPoint{ key });
     }
 

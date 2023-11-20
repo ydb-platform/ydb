@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    dq_task_runner_exec_ctx.cpp
     dq_async_compute_actor.cpp
     dq_compute_actor_async_io_factory.cpp
     dq_compute_actor_channels.cpp
@@ -24,6 +25,7 @@ PEERDIR(
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/tasks
+    ydb/library/yql/dq/actors/spilling
     ydb/library/yql/minikql/comp_nodes/llvm
     ydb/library/yql/public/issue
     ydb/core/quoter/public

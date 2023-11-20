@@ -32,14 +32,16 @@ namespace NKikimr {
                     const TSelectorParams &params,
                     TLevelIndexSnapshot &&levelSnap,
                     TBarriersSnapshot &&barriersSnap,
-                    TTask *task)
+                    TTask *task,
+                    bool allowGarbageCollection)
                 : HullCtx(hullCtx)
                 , LevelSnap(std::move(levelSnap))
                 , BarriersSnap(std::move(barriersSnap))
                 , Task(task)
                 , Params(params)
+                , AllowGarbageCollection(allowGarbageCollection)
             {
-                Y_VERIFY_DEBUG(Task);
+                Y_DEBUG_ABORT_UNLESS(Task);
                 Task->Clear();
                 Task->FullCompactionInfo.first = Params.FullCompactionAttrs;
             }
@@ -53,6 +55,7 @@ namespace NKikimr {
             TBarriersSnapshot BarriersSnap;
             TTask *Task;
             TSelectorParams Params;
+            const bool AllowGarbageCollection;
         };
 
         ////////////////////////////////////////////////////////////////////////////
@@ -95,11 +98,12 @@ namespace NKikimr {
             TBarriersSnapshot BarriersSnap;
             const TActorId RecipientID;
             std::unique_ptr<TCompactionTask> CompactionTask;
+            const bool AllowGarbageCollection;
 
             void Bootstrap(const TActorContext &ctx) {
                 TInstant startTime(TAppData::TimeProvider->Now());
                 TStrategy strategy(HullCtx, Params, std::move(LevelSnap), std::move(BarriersSnap),
-                        CompactionTask.get());
+                        CompactionTask.get(), AllowGarbageCollection);
 
                 NHullComp::EAction action = strategy.Select();
                 ctx.Send(RecipientID, new TSelected(action, std::move(CompactionTask)));
@@ -124,7 +128,8 @@ namespace NKikimr {
                     TLevelIndexSnapshot &&levelSnap,
                     TBarriersSnapshot &&barriersSnap,
                     const TActorId &recipientID,
-                    std::unique_ptr<TCompactionTask> compactionTask)
+                    std::unique_ptr<TCompactionTask> compactionTask,
+                    bool allowGarbageCollection)
                 : TActorBootstrapped<TThis>()
                 , HullCtx(hullCtx)
                 , Params(params)
@@ -132,6 +137,7 @@ namespace NKikimr {
                 , BarriersSnap(std::move(barriersSnap))
                 , RecipientID(recipientID)
                 , CompactionTask(std::move(compactionTask))
+                , AllowGarbageCollection(allowGarbageCollection)
             {}
         };
 

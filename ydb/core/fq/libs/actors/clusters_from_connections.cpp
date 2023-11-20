@@ -90,14 +90,15 @@ void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
 }
 
 template <typename TConnection>
-void FillGenericClusterConfig(
+void FillGenericClusterConfigBase(
+    const NConfig::TCommonConfig& common,
     TGenericClusterConfig& clusterCfg,
     const TConnection& connection,
     const TString& connectionName,
     NConnector::NApi::EDataSourceKind dataSourceKind,
     const TString& authToken,
     const THashMap<TString, TString>& accountIdSignatures
-){
+) {
     clusterCfg.SetKind(dataSourceKind);
     clusterCfg.SetName(connectionName);
     clusterCfg.SetDatabaseId(connection.database_id());
@@ -115,7 +116,7 @@ void FillGenericClusterConfig(
     // In YQv2 protocol can be configured via `CREATE EXTERNAL DATA SOURCE` params.
     switch (dataSourceKind) {
         case NYql::NConnector::NApi::CLICKHOUSE:
-            clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::HTTP);
+            clusterCfg.SetProtocol(common.GetUseNativeProtocolForClickHouse() ? NYql::NConnector::NApi::EProtocol::NATIVE : NYql::NConnector::NApi::EProtocol::HTTP);
             break;
         case NYql::NConnector::NApi::POSTGRESQL:
             clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
@@ -126,6 +127,33 @@ void FillGenericClusterConfig(
     }
 
     ValidateGenericClusterConfig(clusterCfg, "NFq::FillGenericClusterFromConfig");
+}
+
+template <typename TConnection>
+void FillGenericClusterConfig(
+    const NConfig::TCommonConfig& common,
+    TGenericClusterConfig& clusterCfg,
+    const TConnection& connection,
+    const TString& connectionName,
+    NConnector::NApi::EDataSourceKind dataSourceKind,
+    const TString& authToken,
+    const THashMap<TString, TString>& accountIdSignatures
+) {
+    FillGenericClusterConfigBase(common, clusterCfg, connection, connectionName, dataSourceKind, authToken, accountIdSignatures);
+}
+
+template<>
+void FillGenericClusterConfig<FederatedQuery::PostgreSQLCluster>(
+    const NConfig::TCommonConfig& common,
+    TGenericClusterConfig& clusterCfg,
+    const FederatedQuery::PostgreSQLCluster& connection,
+    const TString& connectionName,
+    NConnector::NApi::EDataSourceKind dataSourceKind,
+    const TString& authToken,
+    const THashMap<TString, TString>& accountIdSignatures
+){
+    FillGenericClusterConfigBase(common, clusterCfg, connection, connectionName, dataSourceKind, authToken, accountIdSignatures);
+    clusterCfg.mutable_datasourceoptions()->insert({TString("schema"), TString(connection.schema())});
 }
 
 } //namespace
@@ -165,9 +193,8 @@ NYql::TSolomonClusterConfig CreateSolomonClusterConfig(const TString& name,
 }
 
 void AddClustersFromConnections(
+    const NConfig::TCommonConfig& common,
     const THashMap<TString, FederatedQuery::Connection>& connections,
-    bool useBearerForYdb,
-    const TString& objectStorageEndpoint,
     const TString& monitoringEndpoint,
     const TString& authToken,
     const THashMap<TString, TString>& accountIdSignatures,
@@ -187,13 +214,14 @@ void AddClustersFromConnections(
             if (db.endpoint())
                 clusterCfg->SetEndpoint(db.endpoint());
             clusterCfg->SetSecure(db.secure());
-            clusterCfg->SetAddBearerToToken(useBearerForYdb);
+            clusterCfg->SetAddBearerToToken(common.GetUseBearerForYdb());
             FillClusterAuth(*clusterCfg, db.auth(), authToken, accountIdSignatures);
             clusters.emplace(connectionName, YdbProviderName);
             break;
         }
         case FederatedQuery::ConnectionSetting::kClickhouseCluster: {
             FillGenericClusterConfig(
+                common,
                 *gatewaysConfig.MutableGeneric()->AddClusterMapping(),
                 conn.content().setting().clickhouse_cluster(),
                 connectionName,
@@ -206,14 +234,14 @@ void AddClustersFromConnections(
         case FederatedQuery::ConnectionSetting::kObjectStorage: {
             const auto& s3 = conn.content().setting().object_storage();
             auto* clusterCfg = gatewaysConfig.MutableS3()->AddClusterMapping();
-            FillS3ClusterConfig(*clusterCfg, connectionName, authToken, objectStorageEndpoint, accountIdSignatures, s3);
+            FillS3ClusterConfig(*clusterCfg, connectionName, authToken, common.GetObjectStorageEndpoint(), accountIdSignatures, s3);
             clusters.emplace(connectionName, S3ProviderName);
             break;
         }
         case FederatedQuery::ConnectionSetting::kDataStreams: {
             const auto& ds = conn.content().setting().data_streams();
             auto* clusterCfg = gatewaysConfig.MutablePq()->AddClusterMapping();
-            FillPqClusterConfig(*clusterCfg, connectionName, useBearerForYdb, authToken, accountIdSignatures, ds);
+            FillPqClusterConfig(*clusterCfg, connectionName, common.GetUseBearerForYdb(), authToken, accountIdSignatures, ds);
             clusters.emplace(connectionName, PqProviderName);
             break;
         }
@@ -226,6 +254,7 @@ void AddClustersFromConnections(
         }
         case FederatedQuery::ConnectionSetting::kPostgresqlCluster: {
             FillGenericClusterConfig(
+                common,
                 *gatewaysConfig.MutableGeneric()->AddClusterMapping(),
                 conn.content().setting().postgresql_cluster(),
                 connectionName,

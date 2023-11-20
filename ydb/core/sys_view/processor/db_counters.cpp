@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/grpc_services/counters/counters.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
@@ -169,7 +170,7 @@ static void ResetLabeledCounters(NKikimrLabeledCounters::TTabletLabeledCounters*
                 counter.SetValue(0);
                 break;
             default:
-                Y_FAIL("bad aggrFunc value");
+                Y_ABORT("bad aggrFunc value");
         }
     }
 }

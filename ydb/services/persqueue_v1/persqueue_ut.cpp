@@ -4805,7 +4805,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Cerr << response.DebugString() << "\n" << res.DebugString() << "\n";
 
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(res.topic_stats().store_size_bytes(), 800);
+            UNIT_ASSERT_VALUES_EQUAL(res.topic_stats().store_size_bytes(), 0);
             UNIT_ASSERT_GE(res.partitions(0).partition_stats().partition_offsets().end(), 1);
         }
 

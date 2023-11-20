@@ -60,10 +60,10 @@ struct is_defined {
     typedef char no[2];
 
     template<class U>
-    static yes &test(char (*)[sizeof(U)]) { throw 0; };
+    static yes &test(char (*)[sizeof(U)]) { throw 0; }
 
     template<class U>
-    static no &test(...) { throw 0; };
+    static no &test(...) { throw 0; }
 
     static const bool value = sizeof(test<T>(0)) == sizeof(yes);
 };
@@ -82,10 +82,10 @@ struct is_not_defined {
     typedef char no[2];
 
     template<class U>
-    static yes &test(char (*)[sizeof(U)]) { throw 0; };
+    static yes &test(char (*)[sizeof(U)]) { throw 0; }
 
     template<class U>
-    static no &test(...) { throw 0; };
+    static no &test(...) { throw 0; }
 
     static const bool value = sizeof(test<T>(0)) == sizeof(no);
 };

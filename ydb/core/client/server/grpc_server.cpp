@@ -174,7 +174,7 @@ public:
         try {
             Finish(dynamic_cast<const TOut&>(resp), 0);
         } catch (const std::bad_cast&) {
-            Y_FAIL("unexpected response type generated");
+            Y_ABORT("unexpected response type generated");
         }
     }
 
@@ -182,7 +182,7 @@ public:
         try {
             Finish(dynamic_cast<const TOut&>(resp), 0);
         } catch (const std::bad_cast&) {
-            Y_FAIL("unexpected response type generated");
+            Y_ABORT("unexpected response type generated");
         }
     }
 
@@ -190,7 +190,7 @@ public:
         try {
             Finish(dynamic_cast<const TOut&>(resp), 0);
         } catch (const std::bad_cast&) {
-            Y_FAIL("unexpected response type generated");
+            Y_ABORT("unexpected response type generated");
         }
     }
 
@@ -198,7 +198,7 @@ public:
         try {
             Finish(dynamic_cast<const TOut&>(resp), 0);
         } catch (const std::bad_cast&) {
-            Y_FAIL("unexpected response type generated");
+            Y_ABORT("unexpected response type generated");
         }
     }
 
@@ -206,7 +206,7 @@ public:
         try {
             Finish(dynamic_cast<const TOut&>(resp), 0);
         } catch (const std::bad_cast&) {
-            Y_FAIL("unexpected response type generated");
+            Y_ABORT("unexpected response type generated");
         }
     }
 

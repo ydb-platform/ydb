@@ -1,5 +1,6 @@
 #include "dq_compute_actor.h"
 #include "dq_async_compute_actor.h"
+#include "dq_task_runner_exec_ctx.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
@@ -82,12 +83,13 @@ public:
 
         Become(&TDqAsyncComputeActor::StateFuncWrapper<&TDqAsyncComputeActor::StateFuncBody>);
 
-        // TODO:
-        std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::shared_ptr<IDqTaskRunnerExecutionContext>(new TDqTaskRunnerExecutionContext());
+        auto wakeup = [this]{ ContinueExecute(EResumeSource::CABootstrapWakeup); };
+        std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(
+            TxId, RuntimeSettings.UseSpilling, std::move(wakeup));
 
         Send(TaskRunnerActorId,
             new NTaskRunnerActor::TEvTaskRunnerCreate(
-                Task.GetSerializedTask(), limits, execCtx));
+                Task.GetSerializedTask(), limits, RuntimeSettings.StatsMode, execCtx));
 
         CA_LOG_D("Use CPU quota: " << UseCpuQuota() << ". Rate limiter resource: { \"" << Task.GetRateLimiter() << "\", \"" << Task.GetRateLimiterResource() << "\" }");
     }
@@ -184,14 +186,12 @@ private:
         WaitingForStateResponse.clear();
     }
 
-    const TDqAsyncOutputBufferStats* GetSinkStats(ui64 outputIdx, const TAsyncOutputInfoBase& sinkInfo) const override {
-        Y_UNUSED(sinkInfo);
-        return TaskRunnerStats.GetSinkStats(outputIdx);
+    const IDqAsyncOutputBuffer* GetSink(ui64 outputIdx, const TAsyncOutputInfoBase&) const override {
+        return TaskRunnerStats.GetSink(outputIdx);
     }
 
-    const TDqAsyncInputBufferStats* GetInputTransformStats(ui64 inputIdx, const TAsyncInputTransformInfo& inputTransformInfo) const override {
-        Y_UNUSED(inputTransformInfo);
-        return TaskRunnerStats.GetInputTransformStats(inputIdx);
+    const IDqAsyncInputBuffer* GetInputTransform(ui64 inputIdx, const TAsyncInputTransformInfo&) const override {
+        return TaskRunnerStats.GetInputTransform(inputIdx);
     }
 
     void DrainOutputChannel(TOutputChannelInfo& outputChannel) override {
@@ -454,7 +454,7 @@ private:
             ForwardToCheckpoints(std::move(DeferredRestoreFromCheckpointEvent));
         }
 
-        ContinueExecute();
+        ContinueExecute(EResumeSource::CATaskRunnerCreated);
     }
 
     bool ReadyToCheckpoint() const override {
@@ -574,11 +574,11 @@ private:
         // If the channel has finished, then the data received after drain is no longer needed
         const bool shouldSkipData = Channels->ShouldSkipData(outputChannel.ChannelId);
         if (!shouldSkipData && !Channels->CanSendChannelData(outputChannel.ChannelId)) { // When channel will be connected, they will call resume execution.
-            CA_LOG_D("TrySendAsyncChannelData return false because Channel can't send channel data");
+            CA_LOG_T("TrySendAsyncChannelData return false because Channel can't send channel data");
             return false;
         }
         if (!shouldSkipData && !Channels->HasFreeMemoryInChannel(outputChannel.ChannelId)) {
-            CA_LOG_D("TrySendAsyncChannelData return false because No free memory in channel");
+            CA_LOG_T("TrySendAsyncChannelData return false because No free memory in channel");
             return false;
         }
 
@@ -690,7 +690,7 @@ private:
 
         TakeInputChannelDataRequests.erase(it);
 
-        ResumeExecution();
+        ResumeExecution(EResumeSource::AsyncPopFinished);
     }
 
     void SinkSend(ui64 index,
@@ -746,7 +746,7 @@ private:
         return MkqlMemoryLimit;
     }
 
-    const TDqMemoryQuota::TProfileStats* GetProfileStats() const override {
+    const TDqMemoryQuota::TProfileStats* GetMemoryProfileStats() const override {
         return &ProfileStats;
     }
 

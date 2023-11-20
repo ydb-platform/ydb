@@ -94,6 +94,28 @@ def alter_database_audit_settings(cluster, database_path, enable_dml_audit=None,
     ydbcli_db_schema_exec(cluster, alter_proto)
 
 
+def alter_user_attrs(cluster, path, **kwargs):
+    if not kwargs:
+        return
+
+    user_attrs = ['''UserAttributes { Key: "%s" Value: "%s" }''' % (k, v) for k, v in kwargs.items()]
+
+    alter_proto = r'''ModifyScheme {
+        OperationType: ESchemeOpAlterUserAttributes
+        WorkingDir: "%s"
+        AlterUserAttributes {
+            PathName: "%s"
+            %s
+        }
+    }''' % (
+        os.path.dirname(path),
+        os.path.basename(path),
+        '\n'.join(user_attrs),
+    )
+
+    ydbcli_db_schema_exec(cluster, alter_proto)
+
+
 class CaptureFileOutput:
     def __init__(self, filename):
         self.filename = filename
@@ -189,9 +211,9 @@ def execute_data_query(pool, text):
 
 QUERIES = [
     r'''insert into `{table_path}` (id, value) values (100, 100), (101, 101)''',
+    r'''delete from `{table_path}` where id = 100 or id = 101''',
     r'''select id from `{table_path}`''',
     r'''update `{table_path}` set value = 0 where id = 1''',
-    r'''delete from `{table_path}` where id = 2''',
     r'''replace into `{table_path}` (id, value) values (2, 3), (3, 3)''',
     r'''upsert into `{table_path}` (id, value) values (4, 4), (5, 5)''',
 ]
@@ -209,6 +231,19 @@ def test_single_dml_query_logged(query_template, prepared_test_env, _client_sess
 
     print(capture_audit.captured, file=sys.stderr)
     assert query_text in capture_audit.captured
+
+    assert '"query_text"' in capture_audit.captured
+    assert '"remote_address"' in capture_audit.captured
+    assert '"subject"' in capture_audit.captured
+    assert '"database"' in capture_audit.captured
+    assert '"operation"' in capture_audit.captured
+    assert '"start_time"' in capture_audit.captured
+    assert '"end_time"' in capture_audit.captured
+
+    # absent cloud-ids are not logged
+    assert '"cloud_id"' not in capture_audit.captured
+    assert '"folder_id"' not in capture_audit.captured
+    assert '"resource_id"' not in capture_audit.captured
 
 
 def test_dml_begin_commit_logged(prepared_test_env, _client_session_pool_with_auth_root):
@@ -310,3 +345,23 @@ def test_dml_requests_logged_when_sid_is_unexpected(ydb_cluster, _database, prep
             execute_data_query(pool, query_text)
         print(capture_audit.captured, file=sys.stderr)
         assert query_text in capture_audit.captured
+
+
+@pytest.mark.parametrize('attrs', [
+    dict(cloud_id='cloud-id-A', folder_id='folder-id-B', database_id='database-id-C'),
+    dict(folder_id='folder-id-B'),
+])
+def test_cloud_ids_are_logged(ydb_cluster, _database, prepared_test_env, _client_session_pool_with_auth_root, attrs):
+    database_path = _database
+    table_path, capture_audit = prepared_test_env
+
+    alter_user_attrs(ydb_cluster, database_path, **attrs)
+
+    pool = _client_session_pool_with_auth_root
+    with capture_audit:
+        execute_data_query(pool, fr'''update `{table_path}` set value = 0 where id = 1''')
+    print(capture_audit.captured, file=sys.stderr)
+
+    for k, v in attrs.items():
+        name = k if k != 'database_id' else 'resource_id'
+        assert fr'''"{name}":"{v}"''' in capture_audit.captured

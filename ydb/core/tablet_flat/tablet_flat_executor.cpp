@@ -12,7 +12,7 @@ namespace NFlatExecutorSetup {
     void ITablet::SnapshotComplete(TIntrusivePtr<TTableSnapshotContext> snapContext, const TActorContext &ctx) {
         Y_UNUSED(snapContext);
         Y_UNUSED(ctx);
-        Y_FAIL("must be overriden if plan to use table snapshot completion");
+        Y_ABORT("must be overriden if plan to use table snapshot completion");
     }
 
     void ITablet::CompactionComplete(ui32 tableId, const TActorContext &ctx) {
@@ -62,6 +62,10 @@ namespace NFlatExecutorSetup {
     }
 
     void ITablet::ReadOnlyLeaseDropped() {
+        // nothing by default
+    }
+
+    void ITablet::OnFollowersCountChanged() {
         // nothing by default
     }
 }

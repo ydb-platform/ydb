@@ -105,7 +105,7 @@ TUploadRequest GenerateRequest(
         break;
     default:
         // should not happen, just for compiler
-        Y_FAIL("Unsupported request type");
+        Y_ABORT("Unsupported request type");
     }
 }
 

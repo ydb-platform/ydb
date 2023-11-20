@@ -24,6 +24,7 @@
 
 #include <util/stream/file.h>
 #include <util/system/env.h>
+#include <util/system/fs.h>
 
 namespace NYql::NDqs {
     using namespace NActors;
@@ -192,6 +193,7 @@ namespace NYql::NDqs {
 
         SET_VALUE(MessagePendingSize);
         SET_VALUE(MaxSerializedEventSize);
+        SET_VALUE(EnableExternalDataChannel);
 
 #undef SET_DURATION
 #undef SET_VALUE
@@ -232,7 +234,7 @@ namespace NYql::NDqs {
         return std::make_tuple(std::move(setup), logSettings);
     }
 
-    std::tuple<TString, TString> GetLocalAddress(const TString* overrideHostname) {
+    std::tuple<TString, TString> GetLocalAddress(const TString* overrideHostname, int family) {
         constexpr auto MaxLocalHostNameLength = 4096;
         std::array<char, MaxLocalHostNameLength> buffer;
         buffer.fill(0);
@@ -255,7 +257,7 @@ namespace NYql::NDqs {
 
         addrinfo request;
         memset(&request, 0, sizeof(request));
-        request.ai_family = AF_INET6;
+        request.ai_family = family;
         request.ai_socktype = SOCK_STREAM;
 
         addrinfo* response = nullptr;
@@ -273,9 +275,20 @@ namespace NYql::NDqs {
         }
 
         auto* sa = response->ai_addr;
-        Y_ABORT_UNLESS(sa->sa_family == AF_INET6);
-        inet_ntop(AF_INET6, &(((struct sockaddr_in6*)sa)->sin6_addr),
+        Y_ABORT_UNLESS(sa->sa_family == family);
+        switch (family) {
+        case AF_INET6: 
+            inet_ntop(AF_INET6, &(((struct sockaddr_in6*)sa)->sin6_addr),
                     &buffer[0], buffer.size() - 1);
+            break;
+        case AF_INET: 
+            inet_ntop(AF_INET, &(((struct sockaddr_in*)sa)->sin_addr),
+                    &buffer[0], buffer.size() - 1);
+            break;
+        default:
+            Y_ABORT_UNLESS(false);
+            break;
+        }
 
         localAddress = &buffer[0];
 
@@ -295,7 +308,9 @@ namespace NYql::NDqs {
             ? *maybeTokenFile
             : home + "/.yt/token";
 
-        TString token = TFileInput(tokenFile).ReadLine();
+        TString token = NFs::Exists(tokenFile) 
+            ? TFileInput(tokenFile).ReadLine()
+            : "";
 
         return std::make_tuple(userName, token);
     }

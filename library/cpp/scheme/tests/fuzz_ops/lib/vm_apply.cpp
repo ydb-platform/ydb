@@ -17,7 +17,7 @@ namespace NSc::NUt {
         op(st.RRef(act.GetSrc(arg).Pos)); \
         break; \
     default: \
-        Y_FAIL(); \
+        Y_ABORT(); \
     }
 
 
@@ -58,7 +58,7 @@ namespace NSc::NUt {
         st.LRef(act.GetDst(arg).Pos) = std::move(op); \
         break; \
     default: \
-        Y_FAIL(); \
+        Y_ABORT(); \
     }
 
 
@@ -74,7 +74,7 @@ namespace NSc::NUt {
         st.LRef(act.GetRef(arg).Pos) = op; \
         break; \
     default: \
-        Y_FAIL(); \
+        Y_ABORT(); \
     }
 
 #define Y_GEN_PTR_OP(op, arg, st, act) \
@@ -90,7 +90,7 @@ namespace NSc::NUt {
             st.LRef(act.GetRef(arg).Pos) = *r; \
             break; \
         default: \
-            Y_FAIL(); \
+            Y_ABORT(); \
         } \
     }
 
@@ -116,7 +116,7 @@ namespace NSc::NUt {
                 Y_GEN_TRY_OP(st.TryPushBack(st.RRef(act.GetSrc(0).Pos)))
                 break;
             default:
-                Y_FAIL();
+                Y_ABORT();
             }
 
             return true;
@@ -137,7 +137,7 @@ namespace NSc::NUt {
                 Y_GEN_TRY_OP(st.TryPushFront(st.RRef(act.GetSrc(0).Pos)))
                 break;
             default:
-                Y_FAIL();
+                Y_ABORT();
             }
             return true;
 
@@ -296,7 +296,7 @@ namespace NSc::NUt {
             return true;
 
         default:
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 }

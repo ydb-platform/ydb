@@ -57,6 +57,11 @@ void TGCTask::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
     Y_ABORT_UNLESS(itGroup != ListsByGroupId.end());
     const auto& keepList = itGroup->second.KeepList;
     const auto& dontKeepList = itGroup->second.DontKeepList;
+
+    for (auto&& i : dontKeepList) {
+        Counters->OnReply(i.BlobSize());
+    }
+
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("actor", "OnGCResult")("keep_list", keepList.size())("dont_keep_list", dontKeepList.size());
 
     for (const auto& blobId : keepList) {
@@ -83,7 +88,9 @@ THashMap<ui32, std::unique_ptr<NKikimr::TEvBlobStorage::TEvCollectGarbage>> TGCT
             new TVector<TLogoBlobID>(gl.second.KeepList.begin(), gl.second.KeepList.end()),
             new TVector<TLogoBlobID>(gl.second.DontKeepList.begin(), gl.second.DontKeepList.end()),
             TInstant::Max(), true);
-
+        for (auto&& i : gl.second.DontKeepList) {
+            Counters->OnRequest(i.BlobSize());
+        }
         Y_ABORT_UNLESS(CounterToGroupInFlight.emplace(perGenerationCounter, group).second);
         perGenerationCounter += requests[group]->PerGenerationCounterStepSize();
     }

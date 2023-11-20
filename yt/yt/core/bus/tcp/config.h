@@ -103,6 +103,7 @@ public:
     NCrypto::TPemBlobConfigPtr PrivateKey;
     std::optional<TString> CipherList;
     bool LoadCertsFromBusCertsDirectory;
+    std::optional<TString> PeerAlternativeHostName;
 
     REGISTER_YSON_STRUCT(TBusConfig);
 

@@ -13,6 +13,14 @@ BUILTIN_PROTO = 'builtin_proto'
 DEFAULT_FLAKE8_FILE_PROCESSING_TIME = "1.5"  # in seconds
 
 
+def _split_macro_call(macro_call, data, item_size, chunk_size=1024):
+    index = 0
+    length = len(data)
+    offset = item_size*chunk_size
+    while index + 1 < length:
+        macro_call(data[index:index+offset])
+        index += offset
+
 def is_arc_src(src, unit):
     return (
         src.startswith('${ARCADIA_ROOT}/')
@@ -88,7 +96,7 @@ def parse_pyx_includes(filename, path, source_root, seen=None):
 
     with open(abs_path, 'rb') as f:
         # Don't parse cimports and etc - irrelevant for cython, it's linker work
-        includes = ymake.parse_cython_includes(f.read())
+        includes = [six.ensure_str(x) for x in ymake.parse_cython_includes(f.read())]
 
     abs_dirname = os.path.dirname(abs_path)
     # All includes are relative to the file which include
@@ -299,10 +307,10 @@ def onpy_srcs(unit, *args):
     dump_dir = unit.get('PYTHON_BUILD_DUMP_DIR')
     dump_output = None
     if dump_dir:
-        import thread
+        import threading
 
         pid = os.getpid()
-        tid = thread.get_ident()
+        tid = threading.current_thread().ident
         dump_name = '{}-{}.dump'.format(pid, tid)
         dump_output = open(os.path.join(dump_dir, dump_name), 'a')
 
@@ -511,7 +519,7 @@ def onpy_srcs(unit, *args):
             prefix = 'resfs/cython/include'
             for line in sorted(
                 '{}/{}={}'.format(prefix, filename, ':'.join(sorted(files)))
-                for filename, files in include_map.iteritems()
+                for filename, files in six.iteritems(include_map)
             ):
                 data += ['-', line]
             unit.onresource(data)
@@ -559,7 +567,7 @@ def onpy_srcs(unit, *args):
                     ns_res += ['-', '{}="{}"'.format(key, namespaces)]
                 unit.onresource(ns_res)
 
-            unit.onresource_files(res)
+            _split_macro_call(unit.onresource_files, res, (3 if with_py else 0) + (3 if with_pyc else 0))
             add_python_lint_checks(
                 unit, 3, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split()
             )
@@ -580,7 +588,7 @@ def onpy_srcs(unit, *args):
                     unit.on_py_compile_bytecode([root_rel_path + '-', src, dst])
                     res += [dst + '.yapyc', '/py_code/' + mod]
 
-            unit.onresource(res)
+            _split_macro_call(unit.onresource, res, (4 if with_py else 0) + (2 if with_pyc else 0))
             add_python_lint_checks(
                 unit, 2, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split()
             )

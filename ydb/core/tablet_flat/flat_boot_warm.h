@@ -33,7 +33,7 @@ namespace NBoot {
                         state.Pages.resize(size);
                         ui32 page = 0;
                         for (auto it = state.Blobs->Iterator(); it.IsValid(); it.Next()) {
-                            Y_VERIFY_DEBUG(page < state.Pages.size(),
+                            Y_DEBUG_ABORT_UNLESS(page < state.Pages.size(),
                                 "Unexpected memtable blobs instability during boot");
                             ui64 cookie = base | page++;
                             Pending += Spawn<TLoadBlobs>(TLargeGlobId(it->GId.Group, it->GId.Logo), cookie);

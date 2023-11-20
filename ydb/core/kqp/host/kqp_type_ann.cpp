@@ -554,21 +554,37 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
         }
     }
 
-    for (auto& [name, meta] : table.second->Metadata->Columns) {
-        if (meta.NotNull && !rowType->FindItem(name)) {
-            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
-                << "Missing not null column in input: " << name
-                << ". All not null columns should be initialized"));
-            return TStatus::Error;
-        }
-
-
-        if (meta.NotNull && rowType->FindItemType(name)->HasOptionalOrNull()) {
-            if (rowType->FindItemType(name)->GetKind() != ETypeAnnotationKind::Pg) {
-                ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                    << "Can't set optional or NULL value to not null column: " << name
+    TMaybeNode<TCoNameValueTupleList> settings;
+    TKqpUpsertRowsSettings upsertSettings;
+    if (TKqlUpsertRows::Match(node.Get()) && node->ChildrenSize() > TKqlUpsertRows::idx_Settings) {
+        settings = node->ChildPtr(TKqlUpsertRows::idx_Settings);
+    }
+    if (TKqlUpsertRowsIndex::Match(node.Get()) && node->ChildrenSize() > TKqlUpsertRowsIndex::idx_Settings) {
+        settings = node->ChildPtr(TKqlUpsertRowsIndex::idx_Settings);
+    }
+    if (TKqpUpsertRows::Match(node.Get())) /* here settings are not optional*/ {
+        settings = node->ChildPtr(TKqpUpsertRows::idx_Settings);
+    }
+    if (settings) {
+       upsertSettings = TKqpUpsertRowsSettings::Parse(settings.Cast());
+    }
+    if (!upsertSettings.IsUpdate) {
+        for (auto& [name, meta] : table.second->Metadata->Columns) {
+            if (meta.NotNull && !rowType->FindItem(name)) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
+                    << "Missing not null column in input: " << name
                     << ". All not null columns should be initialized"));
                 return TStatus::Error;
+            }
+
+
+            if (meta.NotNull && rowType->FindItemType(name)->HasOptionalOrNull()) {
+                if (rowType->FindItemType(name)->GetKind() != ETypeAnnotationKind::Pg) {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                        << "Can't set optional or NULL value to not null column: " << name
+                        << ". All not null columns should be initialized"));
+                    return TStatus::Error;
+                }
             }
         }
     }
@@ -666,7 +682,11 @@ TStatus AnnotateInsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
 TStatus AnnotateUpdateRows(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData)
 {
-    if (!EnsureArgsCount(*node, 3, ctx)) {
+    if (!EnsureMinArgsCount(*node, 3, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureMaxArgsCount(*node, 4, ctx)) {
         return TStatus::Error;
     }
 

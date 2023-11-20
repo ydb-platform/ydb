@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"database/sql"
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -21,22 +20,46 @@ type Connection struct {
 	logger utils.QueryLogger
 }
 
+type rows struct {
+	*sql.Rows
+}
+
+func (r rows) MakeAcceptors() ([]any, error) {
+	columns, err := r.ColumnTypes()
+	if err != nil {
+		return nil, fmt.Errorf("column types: %w", err)
+	}
+
+	typeNames := make([]string, 0, len(columns))
+	for _, column := range columns {
+		typeNames = append(typeNames, column.DatabaseTypeName())
+	}
+
+	return acceptorsFromSQLTypes(typeNames)
+}
+
 func (c Connection) Query(ctx context.Context, query string, args ...any) (utils.Rows, error) {
 	c.logger.Dump(query, args...)
 
-	rows, err := c.DB.QueryContext(ctx, query, args...)
+	out, err := c.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query context: %w", err)
 	}
 
-	if err := rows.Err(); err != nil {
+	if err := out.Err(); err != nil {
+		defer func() {
+			if err := out.Close(); err != nil {
+				c.logger.Error("close rows", log.Error(err))
+			}
+		}()
+
 		return nil, fmt.Errorf("rows err: %w", err)
 	}
 
-	return rows, nil
+	return rows{Rows: out}, nil
 }
 
-var _ utils.ConnectionManager[*Connection] = (*connectionManager)(nil)
+var _ utils.ConnectionManager = (*connectionManager)(nil)
 
 type connectionManager struct {
 	utils.ConnectionManagerBase
@@ -47,13 +70,19 @@ func (c *connectionManager) Make(
 	ctx context.Context,
 	logger log.Logger,
 	dsi *api_common.TDataSourceInstance,
-) (*Connection, error) {
+) (utils.Connection, error) {
 	if dsi.GetCredentials().GetBasic() == nil {
 		return nil, fmt.Errorf("currently only basic auth is supported")
 	}
 
-	if dsi.Protocol != api_common.EProtocol_HTTP {
-		// FIXME: fix NATIVE protocol in https://st.yandex-team.ru/YQ-2286
+	var protocol clickhouse.Protocol
+
+	switch dsi.Protocol {
+	case api_common.EProtocol_NATIVE:
+		protocol = clickhouse.Native
+	case api_common.EProtocol_HTTP:
+		protocol = clickhouse.HTTP
+	default:
 		return nil, fmt.Errorf("can not run ClickHouse connection with protocol '%v'", dsi.Protocol)
 	}
 
@@ -64,11 +93,6 @@ func (c *connectionManager) Make(
 			Username: dsi.Credentials.GetBasic().Username,
 			Password: dsi.Credentials.GetBasic().Password,
 		},
-		DialContext: func(ctx context.Context, addr string) (net.Conn, error) {
-			var d net.Dialer
-
-			return d.DialContext(ctx, "tcp", addr)
-		},
 		Debug: true,
 		Debugf: func(format string, v ...any) {
 			logger.Debugf(format, v...)
@@ -76,7 +100,7 @@ func (c *connectionManager) Make(
 		Compression: &clickhouse.Compression{
 			Method: clickhouse.CompressionLZ4,
 		},
-		Protocol: clickhouse.HTTP,
+		Protocol: protocol,
 	}
 
 	if dsi.UseTls {
@@ -85,36 +109,30 @@ func (c *connectionManager) Make(
 		}
 	}
 
-	// FIXME: uncomment after YQ-2286
-	// conn, err := clickhouse.Open(opts)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("open connection: %w", err)
-	// }
-
 	conn := clickhouse.OpenDB(opts)
-
 	if err := conn.Ping(); err != nil {
 		return nil, fmt.Errorf("conn ping: %w", err)
 	}
 
 	const (
-		maxIdleConns = 5
-		maxOpenConns = 10
+		maxIdleConns    = 5
+		maxOpenConns    = 10
+		connMaxLifetime = time.Hour
 	)
 
 	conn.SetMaxIdleConns(maxIdleConns)
 	conn.SetMaxOpenConns(maxOpenConns)
-	conn.SetConnMaxLifetime(time.Hour)
+	conn.SetConnMaxLifetime(connMaxLifetime)
 
 	queryLogger := c.QueryLoggerFactory.Make(logger)
 
 	return &Connection{DB: conn, logger: queryLogger}, nil
 }
 
-func (c *connectionManager) Release(logger log.Logger, conn *Connection) {
+func (c *connectionManager) Release(logger log.Logger, conn utils.Connection) {
 	utils.LogCloserError(logger, conn, "close clickhouse connection")
 }
 
-func NewConnectionManager(cfg utils.ConnectionManagerBase) utils.ConnectionManager[*Connection] {
+func NewConnectionManager(cfg utils.ConnectionManagerBase) utils.ConnectionManager {
 	return &connectionManager{ConnectionManagerBase: cfg}
 }

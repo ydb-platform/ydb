@@ -215,7 +215,7 @@ public:
         return Tx.GetKqpTransaction().GetUseGenericReadSets();
     }
 
-    inline const ::NKikimrTxDataShard::TKqpLocks& GetKqpLocks() const {
+    inline const ::NKikimrDataEvents::TKqpLocks& GetKqpLocks() const {
         Y_ABORT_UNLESS(IsKqpDataTx());
         return Tx.GetKqpTransaction().GetLocks();
     }
@@ -463,21 +463,21 @@ public:
     TSchemaOperation::EType GetSchemeTxType() const { return SchemeTxType; }
 
     const NKikimrTxDataShard::TSnapshotTransaction& GetSnapshotTx() const {
-        Y_VERIFY_DEBUG(SnapshotTx);
+        Y_DEBUG_ABORT_UNLESS(SnapshotTx);
         return *SnapshotTx;
     }
     bool BuildSnapshotTx();
     void ClearSnapshotTx() { SnapshotTx = nullptr; }
 
     const TDistributedEraseTx::TPtr& GetDistributedEraseTx() const {
-        Y_VERIFY_DEBUG(DistributedEraseTx);
+        Y_DEBUG_ABORT_UNLESS(DistributedEraseTx);
         return DistributedEraseTx;
     }
     bool BuildDistributedEraseTx();
     void ClearDistributedEraseTx() { DistributedEraseTx = nullptr; }
 
     const TCommitWritesTx::TPtr& GetCommitWritesTx() const {
-        Y_VERIFY_DEBUG(CommitWritesTx);
+        Y_DEBUG_ABORT_UNLESS(CommitWritesTx);
         return CommitWritesTx;
     }
     bool BuildCommitWritesTx();
@@ -566,7 +566,7 @@ public:
             Y_ABORT_UNLESS(DataTx->TxInfo().Loaded);
             return DataTx->TxInfo();
         }
-        Y_VERIFY_DEBUG(IsSchemeTx() || IsSnapshotTx() || IsDistributedEraseTx() || IsCommitWritesTx(),
+        Y_DEBUG_ABORT_UNLESS(IsSchemeTx() || IsSnapshotTx() || IsDistributedEraseTx() || IsCommitWritesTx(),
             "Unexpected access to invalidated keys: non-scheme tx %" PRIu64, GetTxId());
         // For scheme tx global reader and writer flags should
         // result in all required dependencies.

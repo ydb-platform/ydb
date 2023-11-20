@@ -96,7 +96,7 @@ public:
                     break;
 
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
         }
         return resp->Release();
@@ -207,7 +207,7 @@ public:
     }
 
     void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) {
-        Y_FAIL("unexpected event received: Type# %08" PRIx32, ev->GetTypeRewrite());
+        Y_ABORT("unexpected event received: Type# %08" PRIx32, ev->GetTypeRewrite());
     }
 };
 

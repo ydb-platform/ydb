@@ -3150,11 +3150,17 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         auto extraSortKeys = GetSetting(setItem->Tail(), "final_extra_sort_keys");
         auto targetColumns = GetSetting(setItem->Tail(), "target_columns");
         bool emitPgStar = (GetSetting(setItem->Tail(), "emit_pg_star") != nullptr);
+        bool unknownsAllowed = (GetSetting(setItem->Tail(), "unknowns_allowed") != nullptr);
         bool oneRow = !from;
         TExprNode::TPtr list;
         if (values) {
             YQL_ENSURE(!result);
-            list = ctx.NewCallable(node->Pos(), "PgReplaceUnknown", { BuildValues(node->Pos(), values, targetColumns, ctx) });
+            list = BuildValues(node->Pos(), values, targetColumns, ctx);
+
+            if (!unknownsAllowed) {
+                auto pos = node->Pos();
+                list = ctx.NewCallable(pos, "PgReplaceUnknown", { std::move(list), });
+            }
         } else {
             YQL_ENSURE(result);
             YQL_ENSURE(!targetColumns, "target columns for projection are not supported yet");
@@ -3275,7 +3281,10 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
                 .Seal()
                 .Build();
 
-            list = ctx.NewCallable(node->Pos(), "PgReplaceUnknown", { list });
+            if (!unknownsAllowed) {
+                auto pos = node->Pos();
+                list = ctx.NewCallable(pos, "PgReplaceUnknown", { std::move(list), });
+            }
 
             if (distinctAll) {
                 YQL_ENSURE(!extraSortColumns);

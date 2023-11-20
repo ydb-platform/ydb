@@ -61,6 +61,8 @@ public:
 
     void LockNode(ui32 nodeId) override;
     void UnlockNode(ui32 nodeId) override;
+
+    const THashMap<ui32, ENodeState>& GetNodeToState() const;
 };
 
 /**
@@ -130,7 +132,7 @@ public:
  */
 class TSysTabletsNodesCounter : public TNodesCounterBase {
 private:
-    NKikimrConfig::TBootstrap::ETabletType TabletType;
+    const NKikimrConfig::TBootstrap::ETabletType TabletType;
 
 public:
     explicit TSysTabletsNodesCounter(NKikimrConfig::TBootstrap::ETabletType tabletType)

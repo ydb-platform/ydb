@@ -71,7 +71,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
     } else if (CurrentStateFunc() == &TThis::StateWrite) {
         str = "State is StateWrite";
     } else {
-        Y_FAIL("");
+        Y_ABORT("");
     }
     TStringStream out;
     out << "Partition " << i32(Partition) << ": " << str;  res.push_back(out.Str()); out.Clear();

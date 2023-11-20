@@ -10,6 +10,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/interconnect.h>
+#include <library/cpp/random_provider/random_provider.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>
@@ -212,7 +213,7 @@ class TReplicaGuardian : public TActorBootstrapped<TReplicaGuardian> {
         } else if (status == NKikimrProto::ERROR) {
             return UpdateInfo();
         } else {
-            Y_FAIL();
+            Y_ABORT();
         }
     }
 
@@ -472,7 +473,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
 
     void Handle(TEvents::TEvUndelivered::TPtr &ev) {
         Y_UNUSED(ev);
-        Y_FAIL("must not happens, guardian must be created over active tablet");
+        Y_ABORT("must not happens, guardian must be created over active tablet");
     }
 
     ui32 CountOnlineReplicas() const {

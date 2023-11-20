@@ -8,52 +8,43 @@ class TColumnsSet {
 private:
     YDB_READONLY_DEF(std::set<ui32>, ColumnIds);
     YDB_READONLY_DEF(std::set<TString>, ColumnNames);
-    mutable std::optional<std::vector<TString>> ColumnNamesVector;
+    std::vector<TString> ColumnNamesVector;
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, Schema);
+
+    void Rebuild() {
+        ColumnNamesVector.clear();
+        ColumnNames.clear();
+        for (auto&& i : Schema->field_names()) {
+            ColumnNamesVector.emplace_back(i);
+            ColumnNames.emplace(i);
+        }
+    }
+
 public:
     TColumnsSet() = default;
 
     const std::vector<TString>& GetColumnNamesVector() const {
-        if (!ColumnNamesVector) {
-            ColumnNamesVector = std::vector<TString>(ColumnNames.begin(), ColumnNames.end());
-        }
-        return *ColumnNamesVector;
+        return ColumnNamesVector;
     }
 
     ui32 GetSize() const {
         return ColumnIds.size();
     }
 
-    bool ColumnsOnly(const std::vector<std::string>& fieldNames) const {
-        if (fieldNames.size() != GetSize()) {
-            return false;
-        }
-        std::set<std::string> fieldNamesSet;
-        for (auto&& i : fieldNames) {
-            if (!fieldNamesSet.emplace(i).second) {
-                return false;
-            }
-            if (!ColumnNames.contains(TString(i.data(), i.size()))) {
-                return false;
-            }
-        }
-        return true;
+    bool ColumnsOnly(const std::vector<std::string>& fieldNames) const;
+
+    TColumnsSet(const std::set<ui32>& columnIds, const TIndexInfo& indexInfo)
+        : ColumnIds(columnIds)
+    {
+        Schema = indexInfo.GetColumnsSchema(ColumnIds);
+        Rebuild();
     }
 
-    TColumnsSet(const std::set<ui32>& columnIds, const TIndexInfo& indexInfo) {
-        ColumnIds = columnIds;
+    TColumnsSet(const std::vector<ui32>& columnIds, const TIndexInfo& indexInfo)
+        : ColumnIds(columnIds.begin(), columnIds.end())
+    {
         Schema = indexInfo.GetColumnsSchema(ColumnIds);
-        for (auto&& i : ColumnIds) {
-            ColumnNames.emplace(indexInfo.GetColumnName(i));
-        }
-    }
-
-    TColumnsSet(const std::vector<ui32>& columnIds, const TIndexInfo& indexInfo) {
-        for (auto&& i : columnIds) {
-            Y_ABORT_UNLESS(ColumnIds.emplace(i).second);
-            ColumnNames.emplace(indexInfo.GetColumnName(i));
-        }
-        Schema = indexInfo.GetColumnsSchema(ColumnIds);
+        Rebuild();
     }
 
     bool Contains(const std::shared_ptr<TColumnsSet>& columnsSet) const {
@@ -74,36 +65,31 @@ public:
 
     TString DebugString() const;
 
-    TColumnsSet operator+(const TColumnsSet& external) const {
-        TColumnsSet result = *this;
-        result.ColumnIds.insert(external.ColumnIds.begin(), external.ColumnIds.end());
-        result.ColumnNames.insert(external.ColumnNames.begin(), external.ColumnNames.end());
-        auto fields = result.Schema->fields();
-        for (auto&& i : external.Schema->fields()) {
-            if (!result.Schema->GetFieldByName(i->name())) {
-                fields.emplace_back(i);
-            }
-        }
-        result.Schema = std::make_shared<arrow::Schema>(fields);
-        return result;
+    TColumnsSet operator+(const TColumnsSet& external) const;
+
+    TColumnsSet operator-(const TColumnsSet& external) const;
+};
+
+class TFetchingPlan {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FilterStage);
+    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FetchingStage);
+    bool CanUseEarlyFilterImmediatelyFlag = false;
+public:
+    TFetchingPlan(const std::shared_ptr<TColumnsSet>& filterStage, const std::shared_ptr<TColumnsSet>& fetchingStage, const bool canUseEarlyFilterImmediately)
+        : FilterStage(filterStage)
+        , FetchingStage(fetchingStage)
+        , CanUseEarlyFilterImmediatelyFlag(canUseEarlyFilterImmediately) {
+
     }
 
-    TColumnsSet operator-(const TColumnsSet& external) const {
-        TColumnsSet result = *this;
-        for (auto&& i : external.ColumnIds) {
-            result.ColumnIds.erase(i);
-        }
-        for (auto&& i : external.ColumnNames) {
-            result.ColumnNames.erase(i);
-        }
-        arrow::FieldVector fields;
-        for (auto&& i : Schema->fields()) {
-            if (!external.Schema->GetFieldByName(i->name())) {
-                fields.emplace_back(i);
-            }
-        }
-        result.Schema = std::make_shared<arrow::Schema>(fields);
-        return result;
+    TString DebugString() const {
+        return TStringBuilder() << "{filter=" << (FilterStage ? FilterStage->DebugString() : "NO") << ";fetching=" <<
+            (FetchingStage ? FetchingStage->DebugString() : "NO") << ";use_filter=" << CanUseEarlyFilterImmediatelyFlag << "}";
+    }
+
+    bool CanUseEarlyFilterImmediately() const {
+        return CanUseEarlyFilterImmediatelyFlag;
     }
 };
 

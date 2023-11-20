@@ -8,6 +8,8 @@
 #include <ydb/library/yql/sql/sql.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
+#include <util/generic/scope.h>
+
 namespace NYql {
 
 namespace {
@@ -148,7 +150,8 @@ TExprNode::TPtr BuildIgnoreTypeV3Remapper(const TStructExprType* rowType, TExprC
 }
 
 TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, const TString& sql, ui16 syntaxVersion,
-    TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider)
+    TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager,
+    IRandomProvider& randomProvider, bool enableViewIsolation, IUdfResolver::TPtr udfResolver)
 {
     NSQLTranslation::TTranslationSettings settings;
     settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
@@ -157,15 +160,28 @@ TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, 
     settings.SyntaxVersion = syntaxVersion;
     settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
     settings.FileAliasPrefix = "view_" + randomProvider.GenUuid4().AsGuidString() + "/";
+    if (!enableViewIsolation) {
+        settings.FileAliasPrefix.clear(); // disable FileAliasPrefix while preserving number of randomProvider calls
+    }
+
     NYql::TAstParseResult sqlRes = NSQLTranslation::SqlToYql(sql, settings);
     ctx.IssueManager.RaiseIssues(sqlRes.Issues);
     if (!sqlRes.IsOk()) {
         return {};
     }
 
+    TString oldAliasPrefix = moduleResolver->GetFileAliasPrefix();
+    moduleResolver->SetFileAliasPrefix(TString{settings.FileAliasPrefix});
+    Y_DEFER {
+        moduleResolver->SetFileAliasPrefix(std::move(oldAliasPrefix));
+    };
     TExprNode::TPtr exprRoot;
     if (!CompileExpr(*sqlRes.Root, exprRoot, ctx, moduleResolver, urlListerManager, false, Max<ui32>(), syntaxVersion)) {
         return {};
+    }
+
+    if (!enableViewIsolation) {
+        return exprRoot;
     }
 
     constexpr TStringBuf OuterFuncs[] = {
@@ -181,50 +197,70 @@ TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, 
         "FolderPath",
         "Files",
         "Configure!",
+        "Udf",
+        "ScriptUdf",
+        "SqlCall",
     };
 
-    bool hasError = false;
-    VisitExpr(*exprRoot, [&](const TExprNode& node) {
+    TOptimizeExprSettings optSettings(nullptr);
+    optSettings.VisitChanges = true;
+    auto status = OptimizeExpr(exprRoot, exprRoot, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         for (const auto& name : OuterFuncs) {
-            if (node.IsCallable(name)) {
-                hasError = true;
-                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << name << " function can't be used in views"));
-                return false;
+            if (node->IsCallable(name)) {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << name << " function can't be used in views"));
+                return nullptr;
             }
         }
 
-        if (node.IsCallable("FuncCode") && node.ChildrenSize() > 0) {
-            if (!node.Head().IsCallable("String")) {
-                hasError = true;
-                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "FuncCode should have constant function name in views"));
-                return false;
+        if (node->IsCallable("FuncCode") && node->ChildrenSize() > 0) {
+            if (!node->Head().IsCallable("String")) {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "FuncCode should have constant function name in views"));
+                return nullptr;
             }
 
-            if (node.Head().Head().IsAtom()) {
+            if (node->Head().Head().IsAtom()) {
                 for (const auto& name : OuterFuncs) {
-                    if (node.Head().Head().Content() == name) {
-                        hasError = true;
-                        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << name << " function can't be used in views"));
-                        return false;
+                    if (node->Head().Head().Content() == name) {
+                        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << name << " function can't be used in views"));
+                        return nullptr;
                     }
                 }
 
                 for (const auto& name : CodegenFuncs) {
-                    if (node.Head().Head().Content() == name) {
-                        hasError = true;
-                        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << name << " function can't be used inside generated code in views"));
-                        return false;
+                    if (node->Head().Head().Content() == name) {
+                        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << name << " function can't be used inside generated code in views"));
+                        return nullptr;
                     }
                 }
             }
         }
 
-        return true;
-    });
+        if (node->IsCallable("ScriptUdf") && node->ChildrenSize() > 0 && node->Head().Content().StartsWith("CustomPython")) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "CustomPython module can't be used in views"));
+            return nullptr;
+        }
 
-    if (hasError) {
-        return {};
-    }
+        if (node->IsCallable({"Udf","SqlCall"}) && node->Head().IsAtom()) {
+            auto origFunc = node->Head().Content();
+            TStringBuf moduleName, funcName;
+            if (!SplitUdfName(origFunc, moduleName, funcName)) {
+                return node;
+            }
+
+            if (udfResolver->ContainsModule(TString(moduleName))) {
+                return node;
+            }
+
+            return ctx.ChangeChild(*node, 0, 
+                ctx.NewAtom(node->Head().Pos(), settings.FileAliasPrefix + origFunc));
+        }
+
+        return node;
+    }, ctx, optSettings);
+
+    if (status == IGraphTransformer::TStatus::Error) {
+        return nullptr;
+    };
 
     return exprRoot;
 }
@@ -233,10 +269,11 @@ TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, 
 
 
 bool TYtViewDescription::Fill(const TString& provider, const TString& cluster, const TString& sql, ui16 syntaxVersion, TExprContext& ctx,
-    IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider)
+    IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider, bool enableViewIsolation,
+    IUdfResolver::TPtr udfResolver)
 {
     Sql = sql;
-    CompiledSql = CompileViewSql(provider, cluster, sql, syntaxVersion, ctx, moduleResolver, urlListerManager, randomProvider);
+    CompiledSql = CompileViewSql(provider, cluster, sql, syntaxVersion, ctx, moduleResolver, urlListerManager, randomProvider, enableViewIsolation, udfResolver);
     return bool(CompiledSql);
 }
 
@@ -247,7 +284,8 @@ void TYtViewDescription::CleanupCompiledSQL()
 
 bool TYtTableDescriptionBase::Fill(const TString& provider, const TString& cluster, const TString& table,
     const TStructExprType* type, const TString& viewSql, ui16 syntaxVersion, const THashMap<TString, TString>& metaAttrs,
-    TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider)
+    TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider, bool enableViewIsolation,
+    IUdfResolver::TPtr udfResolver)
 {
     // (1) row type
     RawRowType = type;
@@ -326,13 +364,13 @@ bool TYtTableDescriptionBase::Fill(const TString& provider, const TString& clust
     }
 
     // (3) views
-    if (!FillViews(provider, cluster, table, metaAttrs, ctx, moduleResolver, urlListerManager, randomProvider)) {
+    if (!FillViews(provider, cluster, table, metaAttrs, ctx, moduleResolver, urlListerManager, randomProvider, enableViewIsolation, udfResolver)) {
         return false;
     }
 
     if (viewSql) {
         if (!View) {
-            if (!View.ConstructInPlace().Fill(provider, cluster, viewSql, syntaxVersion, ctx, moduleResolver, urlListerManager, randomProvider)) {
+            if (!View.ConstructInPlace().Fill(provider, cluster, viewSql, syntaxVersion, ctx, moduleResolver, urlListerManager, randomProvider, enableViewIsolation, udfResolver)) {
                 ctx.AddError(TIssue(TPosition(),
                     TStringBuilder() << "Can't load sql view, table: " << cluster << '.' << table));
                 return false;
@@ -345,17 +383,16 @@ bool TYtTableDescriptionBase::Fill(const TString& provider, const TString& clust
 
 bool TYtTableDescriptionBase::FillViews(const TString& provider, const TString& cluster, const TString& table,
     const THashMap<TString, TString>& metaAttrs, TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager,
-    IRandomProvider& randomProvider)
+    IRandomProvider& randomProvider, bool allowViewIsolation, IUdfResolver::TPtr udfResolver)
 {
     for (auto& view: Views) {
         TYtViewDescription& viewDesc = view.second;
 
         if (!viewDesc.CompiledSql) {
             TString viewSql;
-            ui16 syntaxVersion = 0;
+            ui16 syntaxVersion = 1;
             if (view.first == "raw") {
                 viewSql = RAW_VIEW_SQL;
-                syntaxVersion = 1;
             } else {
                 auto sql = metaAttrs.FindPtr(YqlViewPrefixAttribute + view.first);
                 if (!sql) {
@@ -373,7 +410,7 @@ bool TYtTableDescriptionBase::FillViews(const TString& provider, const TString& 
                 }
             }
 
-            if (!viewDesc.Fill(provider, cluster, viewSql, syntaxVersion, ctx, moduleResolver, urlListerManager, randomProvider)) {
+            if (!viewDesc.Fill(provider, cluster, viewSql, syntaxVersion, ctx, moduleResolver, urlListerManager, randomProvider, allowViewIsolation, udfResolver)) {
                 ctx.AddError(TIssue(TPosition(),
                     TStringBuilder() << "Can't load sql view " << viewSql.Quote()
                     << ", table: " << cluster << '.' << table

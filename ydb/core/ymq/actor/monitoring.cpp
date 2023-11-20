@@ -63,8 +63,4 @@ namespace NKikimr::NSQS {
         RequestMetrics(RetryPeriod, ctx);
     }
 
-    void TMonitoringActor::HandleProcessResponse(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
-        HandleError(ev->Get()->Record.DebugString(), ctx);
-    }
-
 } // namespace NKikimr::NSQS

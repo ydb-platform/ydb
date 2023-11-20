@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -55,6 +55,7 @@ struct GlobalConfig;
 struct OperationConfig;
 
 ParameterError getparameter(const char *flag, char *nextarg,
+                            argv_item_t cleararg,
                             bool *usedarg,
                             struct GlobalConfig *global,
                             struct OperationConfig *operation);

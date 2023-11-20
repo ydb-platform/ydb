@@ -1,0 +1,23 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:16:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	SELECT t.*, $linear(cast(key as uint64), cast(subkey as uint64)) as linear FROM Input as t;
+	^
+        <tmp_path>/program.sql:<main>:11:16: Warning: At function: SqlCall, At function: PositionalArgs
+        	  $res = Math::Floor(Math::Pi() * $shift($v));
+	               ^
+            <tmp_path>/program.sql:<main>:11:33: Warning: At function: *
+            	  $res = Math::Floor(Math::Pi() * $shift($v));
+	                                ^
+                <tmp_path>/program.sql:<main>:9:20: Warning: At function: ShiftLeft
+                	      return $item << $shiftSteps
+	                   ^
+                    <tmp_path>/program.sql:<main>:7:16: Warning: At function: +
+                    	  $v = 10 * $z + $x;
+	               ^
+                        <tmp_path>/program.sql:<main>:7:11: Warning: At function: *
+                        	  $v = 10 * $z + $x;
+	          ^
+                            <tmp_path>/program.sql:<main>:7:11: Warning: Integral type implicit bitcast: Int32 and Optional<Uint64>
+                            	  $v = 10 * $z + $x;
+	          ^

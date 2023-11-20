@@ -25,7 +25,6 @@ PEERDIR(
     ydb/tests/oss/ydb_sdk_import
 )
 
-FORK_SUBTESTS()
 FORK_TEST_FILES()
 
 END()

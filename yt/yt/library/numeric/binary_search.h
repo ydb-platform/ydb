@@ -28,7 +28,7 @@ constexpr TInt IntegerLowerBound(TInt lo, TInt hi, TPredicate&& predicate);
 
 // Return the highest integer value in [|lo|, |hi|] satisfying the predicate.
 // |lo| must not be greater than |hi|.
-// |predicate| must be monotonous and determenistic, and |predicate(lo)| must be satisfied.
+// |predicate| must be monotonous and deterministic, and |predicate(lo)| must be satisfied.
 // |predicate(IntegerInverseLowerBound(lo, hi, predicate))| is guaranteed to be satisfied.
 // Note that if |predicate(hi)| is satisfied, |hi| is returned.
 // The behaviour is undefined if |predicate| is not monotonous or not deterministic.

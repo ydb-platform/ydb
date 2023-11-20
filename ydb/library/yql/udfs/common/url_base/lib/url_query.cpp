@@ -177,7 +177,7 @@ namespace NUrlUdf {
             break;
         }
         default:
-            Y_FAIL("Current first parameter type is not yet implemented");
+            Y_ABORT("Current first parameter type is not yet implemented");
         }
         return valueBuilder->NewString(ret);
     }

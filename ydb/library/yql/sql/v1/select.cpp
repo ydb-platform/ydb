@@ -67,7 +67,7 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         return Node->Translate(ctx);
     }
 
@@ -141,7 +141,7 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         return Node->Translate(ctx);
     }
 
@@ -346,12 +346,12 @@ protected:
     {}
 
     void AllColumns() override {
-        Y_VERIFY_DEBUG(Source);
+        Y_DEBUG_ABORT_UNLESS(Source);
         return Source->AllColumns();
     }
 
     const TColumns* GetColumns() const override {
-        Y_VERIFY_DEBUG(Source);
+        Y_DEBUG_ABORT_UNLESS(Source);
         return Source->GetColumns();
     }
 
@@ -361,7 +361,7 @@ protected:
     }
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override {
-        Y_VERIFY_DEBUG(Source);
+        Y_DEBUG_ABORT_UNLESS(Source);
         const TString label(Source->GetLabel());
         Source->SetLabel(Label);
         const auto ret = Source->AddColumn(ctx, column);
@@ -374,17 +374,17 @@ protected:
     }
 
     bool IsStream() const override {
-        Y_VERIFY_DEBUG(Source);
+        Y_DEBUG_ABORT_UNLESS(Source);
         return Source->IsStream();
     }
 
     EOrderKind GetOrderKind() const override {
-        Y_VERIFY_DEBUG(Source);
+        Y_DEBUG_ABORT_UNLESS(Source);
         return Source->GetOrderKind();
     }
 
     TWriteSettings GetWriteSettings() const override {
-        Y_VERIFY_DEBUG(Source);
+        Y_DEBUG_ABORT_UNLESS(Source);
         return Source->GetWriteSettings();
     }
 
@@ -628,7 +628,7 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_VERIFY_DEBUG(Node);
+        Y_DEBUG_ABORT_UNLESS(Node);
         return Node->Translate(ctx);
     }
 
@@ -1247,7 +1247,7 @@ public:
         Subselects = std::move(subselects);
         Grouping = std::move(grouping);
         GroupByExpr = std::move(groupByExpr);
-        Y_VERIFY_DEBUG(Subselects.size() > 1);
+        Y_DEBUG_ABORT_UNLESS(Subselects.size() > 1);
     }
 
     void GetInputTables(TTableList& tableList) const override {
@@ -2265,7 +2265,7 @@ public:
         }
 
         auto processSource = fakeSource != nullptr ? fakeSource.Get() : src;
-        Y_VERIFY_DEBUG(processSource != nullptr);
+        Y_DEBUG_ABORT_UNLESS(processSource != nullptr);
         if (!With->Init(ctx, processSource)) {
             return false;
         }
@@ -2432,11 +2432,11 @@ private:
     TNodePtr BuildColumnsTerms(TContext& ctx) {
         Y_UNUSED(ctx);
         TNodePtr terms;
-        Y_VERIFY_DEBUG(Terms.size() == 1);
+        Y_DEBUG_ABORT_UNLESS(Terms.size() == 1);
         if (Columns.All) {
             terms = Y(Y("let", "res", Y("ToSequence", Terms.front())));
         } else {
-            Y_VERIFY_DEBUG(Columns.List.size() == Terms.size());
+            Y_DEBUG_ABORT_UNLESS(Columns.List.size() == Terms.size());
             terms = L(Y(), Y("let", "res",
                 L(Y("AsStructUnordered"), Q(Y(BuildQuotedAtom(Pos, Columns.List.front()), Terms.front())))));
             terms = L(terms, Y("let", "res", Y("Just", "res")));
@@ -2656,11 +2656,12 @@ TSourcePtr BuildSelectCore(
         having, std::move(winSpecs), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
 }
 
-class TUnionAll: public IRealSource {
+class TUnion: public IRealSource {
 public:
-    TUnionAll(TPosition pos, TVector<TSourcePtr>&& sources, const TWriteSettings& settings)
+    TUnion(TPosition pos, TVector<TSourcePtr>&& sources, bool quantifierAll, const TWriteSettings& settings)
         : IRealSource(pos)
         , Sources(std::move(sources))
+        , QuantifierAll(quantifierAll)
         , Settings(settings)
     {
     }
@@ -2686,7 +2687,7 @@ public:
             }
             if (!ctx.PositionalUnionAll || first) {
                 auto c = s->GetColumns();
-                Y_VERIFY_DEBUG(c);
+                Y_DEBUG_ABORT_UNLESS(c);
                 Columns.Merge(*c);
                 first = false;
             }
@@ -2695,7 +2696,13 @@ public:
     }
 
     TNodePtr Build(TContext& ctx) override {
-        auto res = ctx.PositionalUnionAll ? Y("UnionAllPositional") : Y("UnionAll");
+        TPtr res;
+        if (QuantifierAll) {
+            res = ctx.PositionalUnionAll ? Y("UnionAllPositional") : Y("UnionAll");
+        } else {
+            res = ctx.PositionalUnionAll ? Y("UnionPositional") : Y("Union");
+        }
+
         for (auto& s: Sources) {
             auto input = s->Build(ctx);
             if (!input) {
@@ -2717,7 +2724,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return MakeIntrusive<TUnionAll>(Pos, CloneContainer(Sources), Settings);
+        return MakeIntrusive<TUnion>(Pos, CloneContainer(Sources), QuantifierAll, Settings);
     }
 
     bool IsSelect() const override {
@@ -2734,11 +2741,17 @@ public:
 
 private:
     TVector<TSourcePtr> Sources;
+    bool QuantifierAll;
     const TWriteSettings Settings;
 };
 
-TSourcePtr BuildUnionAll(TPosition pos, TVector<TSourcePtr>&& sources, const TWriteSettings& settings) {
-    return new TUnionAll(pos, std::move(sources), settings);
+TSourcePtr BuildUnion(
+    TPosition pos, 
+    TVector<TSourcePtr>&& sources, 
+    bool quantifierAll,
+    const TWriteSettings& settings
+) {
+    return new TUnion(pos, std::move(sources), quantifierAll, settings);
 }
 
 class TOverWindowSource: public IProxySource {
@@ -2779,7 +2792,7 @@ public:
 
     TNodePtr Build(TContext& ctx) override {
         Y_UNUSED(ctx);
-        Y_FAIL("Unexpected call");
+        Y_ABORT("Unexpected call");
     }
 
     const TString* GetWindowName() const override {

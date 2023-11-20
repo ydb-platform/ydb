@@ -12,6 +12,7 @@
 #include <ydb/core/tx/tx_proxy/mon.h>
 
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
+#include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 
 #include <util/system/spinlock.h>
 
@@ -57,7 +58,8 @@ protected:
     void ReportResultsBytes(ui64 resultsSize);
 
     static TString GetIssueName(ui32 issueCode);
-    void ReportIssues(const Ydb::Issue::IssueMessage& issue);
+    void ReportIssues(THashMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr>& issueCounters,
+        const Ydb::Issue::IssueMessage& issue);
 
     void ReportQueryLatency(NKikimrKqp::EQueryAction action, const TDuration& duration);
 
@@ -152,8 +154,6 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr YdbResponseBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueryResultsBytes;
 
-    THashMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr> IssueCounters;
-
     // Workers
     NMonitoring::THistogramPtr WorkerLifeSpan;
     NMonitoring::THistogramPtr QueriesPerWorker;
@@ -247,8 +247,7 @@ private:
 
 using TKqpDbCountersPtr = TIntrusivePtr<TKqpDbCounters>;
 
-
-class TKqpCounters : public TThrRefBase, public TKqpCountersBase {
+class TKqpCounters : public TKqpCountersBase, public NYql::NDq::TSpillingCounters {
 private:
     struct TTxByKindCounters {
         NMonitoring::THistogramPtr TotalDuration;
@@ -278,7 +277,9 @@ public:
 
     void ReportResponseStatus(TKqpDbCountersPtr dbCounters, ui64 responseSize, Ydb::StatusIds::StatusCode ydbStatus);
     void ReportResultsBytes(TKqpDbCountersPtr dbCounters, ui64 resultsSize);
-    void ReportIssues(TKqpDbCountersPtr dbCounters, const Ydb::Issue::IssueMessage& issue);
+    void ReportIssues(TKqpDbCountersPtr dbCounters,
+        THashMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr>& issueCounters,
+        const Ydb::Issue::IssueMessage& issue);
 
     void ReportQueryWithRangeScan(TKqpDbCountersPtr dbCounters);
     void ReportQueryWithFullScan(TKqpDbCountersPtr dbCounters);
@@ -377,15 +378,6 @@ public:
     NMonitoring::THistogramPtr NodeServiceProcessCancelTime;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmMaxSnapshotLatency;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmNodeNumberInSnapshot;
-
-    // Spilling counters
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingWriteBlobs;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingReadBlobs;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingStoredBlobs;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingTotalSpaceUsed;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingTooBigFileErrors;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingNoSpaceErrors;
-    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingIoErrors;
 
     // Scan queries counters
     ::NMonitoring::TDynamicCounters::TCounterPtr ScanQueryShardDisconnect;

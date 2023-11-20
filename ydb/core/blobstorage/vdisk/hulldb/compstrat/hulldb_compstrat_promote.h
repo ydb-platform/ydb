@@ -110,7 +110,7 @@ namespace NKikimr {
                 } else {
                     // we stay behind all elems in segs
                     it.SeekToLast();
-                    Y_VERIFY_DEBUG(it.Valid());
+                    Y_DEBUG_ABORT_UNLESS(it.Valid());
                     // compare
                     return sst->FirstKey() <= it.Get()->LastKey();
                 }

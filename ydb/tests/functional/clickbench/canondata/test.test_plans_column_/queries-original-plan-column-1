@@ -92,14 +92,30 @@
                                                                                     "Id": 106
                                                                                 }
                                                                             ],
-                                                                            "Id": 2
+                                                                            "FunctionType": 2,
+                                                                            "KernelIdx": 0
+                                                                        }
+                                                                    }
+                                                                },
+                                                                {
+                                                                    "Assign": {
+                                                                        "Column": {
+                                                                            "Id": 108
+                                                                        },
+                                                                        "Function": {
+                                                                            "Arguments": [
+                                                                                {
+                                                                                    "Id": 107
+                                                                                }
+                                                                            ],
+                                                                            "Id": 18
                                                                         }
                                                                     }
                                                                 },
                                                                 {
                                                                     "Filter": {
                                                                         "Predicate": {
-                                                                            "Id": 107
+                                                                            "Id": 108
                                                                         }
                                                                     }
                                                                 },
@@ -108,7 +124,7 @@
                                                                         "Aggregates": [
                                                                             {
                                                                                 "Column": {
-                                                                                    "Id": 108
+                                                                                    "Id": 109
                                                                                 },
                                                                                 "Function": {
                                                                                     "Id": 2
@@ -121,13 +137,13 @@
                                                                     "Projection": {
                                                                         "Columns": [
                                                                             {
-                                                                                "Id": 108
+                                                                                "Id": 109
                                                                             }
                                                                         ]
                                                                     }
                                                                 }
                                                             ],
-                                                            "Version": 3
+                                                            "Version": 4
                                                         },
                                                         "Table": "clickbench/plans/column/hits"
                                                     }

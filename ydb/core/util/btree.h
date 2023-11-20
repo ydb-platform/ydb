@@ -47,7 +47,7 @@ namespace NKikimr {
             TTag(TInnerPage* page)
                 : Value(uintptr_t(page) | uintptr_t(1))
             {
-                Y_VERIFY_DEBUG(page, "Inner page cannot be null");
+                Y_DEBUG_ABORT_UNLESS(page, "Inner page cannot be null");
             }
 
             explicit operator bool() const {
@@ -83,12 +83,12 @@ namespace NKikimr {
             }
 
             TLeafPage* ToLeafPage() const {
-                Y_VERIFY_DEBUG(!Value || IsLeafPage());
+                Y_DEBUG_ABORT_UNLESS(!Value || IsLeafPage());
                 return (TLeafPage*)(Value & ~uintptr_t(1));
             }
 
             TInnerPage* ToInnerPage() const {
-                Y_VERIFY_DEBUG(!Value || IsInnerPage());
+                Y_DEBUG_ABORT_UNLESS(!Value || IsInnerPage());
                 return (TInnerPage*)(Value & ~uintptr_t(1));
             }
 
@@ -250,10 +250,10 @@ namespace NKikimr {
                 void* raw = Allocator.Allocate(PageSize);
                 FreeRawPage(raw);
                 ++TotalPagesCount;
-                Y_VERIFY_DEBUG(FreePages);
+                Y_DEBUG_ABORT_UNLESS(FreePages);
             }
 
-            Y_VERIFY_DEBUG(FreePagesCount > 0);
+            Y_DEBUG_ABORT_UNLESS(FreePagesCount > 0);
             --FreePagesCount;
             TFreePage* page = FreePages;
             FreePages = page->Next;
@@ -267,7 +267,7 @@ namespace NKikimr {
         }
 
         void FreeLeafPage(TLeafPage* leaf) noexcept {
-            Y_VERIFY_DEBUG(leaf->RefCount == 0);
+            Y_DEBUG_ABORT_UNLESS(leaf->RefCount == 0);
             auto count = leaf->UnsafeCount();
             if (!TTypeTraits<TKey>::IsPod) {
                 auto* keys = leaf->Keys();
@@ -293,7 +293,7 @@ namespace NKikimr {
         }
 
         void FreeInnerPage(TInnerPage* inner) noexcept {
-            Y_VERIFY_DEBUG(inner->RefCount == 0);
+            Y_DEBUG_ABORT_UNLESS(inner->RefCount == 0);
             auto count = inner->Count;
             if (!TTypeTraits<TKey>::IsPod) {
                 auto* keys = inner->Keys();
@@ -322,7 +322,7 @@ namespace NKikimr {
         void UnRefTag(TTag tag) {
             if (tag) {
                 auto* page = tag.ToPage();
-                Y_VERIFY_DEBUG(page->RefCount > 0);
+                Y_DEBUG_ABORT_UNLESS(page->RefCount > 0);
                 if (--page->RefCount == 0) {
                     RetireList.push_back(tag);
                     MoreGarbage = true;
@@ -379,14 +379,14 @@ namespace NKikimr {
 
                 // N.B. by the MaxGarbage invariant we should have freed at least 25% of the retire list
                 if (MoreGarbage) {
-                    Y_VERIFY_DEBUG(RetireList.size() > endPos);
+                    Y_DEBUG_ABORT_UNLESS(RetireList.size() > endPos);
                     if (Y_LIKELY(writePos != readPos)) {
                         while (readPos != RetireList.size()) {
                             RetireList[writePos++] = RetireList[readPos++];
                         }
                     }
                 } else {
-                    Y_VERIFY_DEBUG(RetireList.size() == endPos);
+                    Y_DEBUG_ABORT_UNLESS(RetireList.size() == endPos);
                 }
 
                 RetireList.resize(writePos);
@@ -546,7 +546,7 @@ namespace NKikimr {
                 Y_ABORT_UNLESS(Tree, "Uninitialized iterator");
 
                 auto* page = Tree->First.Follow(CurrentPointer).ToLeafPage();
-                Y_VERIFY_DEBUG(page, "Tree is missing the first page");
+                Y_DEBUG_ABORT_UNLESS(page, "Tree is missing the first page");
                 auto count = page->SafeCount();
                 if (count == 0) {
                     // The tree is empty
@@ -565,7 +565,7 @@ namespace NKikimr {
                 Y_ABORT_UNLESS(Tree, "Uninitialized iterator");
 
                 auto* page = Tree->Last.Follow(CurrentPointer).ToLeafPage();
-                Y_VERIFY_DEBUG(page, "Tree is missing the last page");
+                Y_DEBUG_ABORT_UNLESS(page, "Tree is missing the last page");
                 auto count = page->SafeCount();
                 if (count == 0) {
                     // The tree is empty
@@ -701,7 +701,7 @@ namespace NKikimr {
             }
 
             bool Prev() {
-                Y_VERIFY_DEBUG(IsValid());
+                Y_DEBUG_ABORT_UNLESS(IsValid());
 
                 if (CurrentIndex > 0) {
                     // We have more keys on the current page
@@ -713,7 +713,7 @@ namespace NKikimr {
             }
 
             bool Next() {
-                Y_VERIFY_DEBUG(IsValid());
+                Y_DEBUG_ABORT_UNLESS(IsValid());
 
                 if (++CurrentIndex < CurrentCount) {
                     // We have more keys on the current page
@@ -728,13 +728,13 @@ namespace NKikimr {
             }
 
             const TKey& GetKey() const {
-                Y_VERIFY_DEBUG(IsValid());
+                Y_DEBUG_ABORT_UNLESS(IsValid());
 
                 return CurrentPage->Keys()[CurrentIndex];
             }
 
             const TValue& GetValue() const {
-                Y_VERIFY_DEBUG(IsValid());
+                Y_DEBUG_ABORT_UNLESS(IsValid());
 
                 return CurrentPage->Values()[CurrentIndex];
             }
@@ -752,7 +752,7 @@ namespace NKikimr {
                         return false;
                     }
                     index = count = page->SafeCount();
-                    Y_VERIFY_DEBUG(count > 0, "Unexpected empty prev page");
+                    Y_DEBUG_ABORT_UNLESS(count > 0, "Unexpected empty prev page");
                     CurrentPointer = std::move(prevPointer);
                 }
                 CurrentPage = page;
@@ -774,7 +774,7 @@ namespace NKikimr {
                     }
                     index = 0;
                     count = page->SafeCount();
-                    Y_VERIFY_DEBUG(count > 0, "Unexpected empty next page");
+                    Y_DEBUG_ABORT_UNLESS(count > 0, "Unexpected empty next page");
                     CurrentPointer = std::move(nextPointer);
                 }
                 CurrentPage = page;
@@ -838,11 +838,11 @@ namespace NKikimr {
         TValue* FindPtr(TKeyArg&& key) {
             InsertPath.clear();
             auto current = Root.GetUnsafe();
-            Y_VERIFY_DEBUG(current);
+            Y_DEBUG_ABORT_UNLESS(current);
             while (current.IsInnerPage()) {
                 auto* inner = current.ToInnerPage();
                 auto count = inner->Count;
-                Y_VERIFY_DEBUG(count > 0);
+                Y_DEBUG_ABORT_UNLESS(count > 0);
                 auto* keysBegin = inner->Keys();
                 auto* keysEnd = keysBegin + count;
                 size_t index = std::upper_bound(keysBegin, keysEnd, key, key_comp()) - keysBegin;
@@ -887,7 +887,7 @@ namespace NKikimr {
                 // in the future without adjusting inner keys accordingly, then
                 // this code path should produce correct results.
                 count = leaf->UnsafeCount();
-                Y_VERIFY_DEBUG(count > 0);
+                Y_DEBUG_ABORT_UNLESS(count > 0);
                 index = count - 1;
             }
 
@@ -953,7 +953,7 @@ namespace NKikimr {
                     if (!newInner.Left) {
                         // Insert has been performed inplace, that means we have no readers
                         // Publish new leaf nodes, which is safe to do out of order
-                        Y_VERIFY_DEBUG(!threadSafe);
+                        Y_DEBUG_ABORT_UNLESS(!threadSafe);
                         ReplaceLeafNode(leaf, newLeaf.Left, newLeaf.Right);
                         InsertPath.clear();
                         CollectGarbage();
@@ -966,7 +966,7 @@ namespace NKikimr {
                 }
             }
 
-            Y_VERIFY_DEBUG(currentLeft == currentRight);
+            Y_DEBUG_ABORT_UNLESS(currentLeft == currentRight);
 
             // Publish new leaf nodes first, so it becomes available in sequential iteration
             ReplaceLeafNode(leaf, newLeaf.Left, newLeaf.Right);
@@ -1012,7 +1012,7 @@ namespace NKikimr {
             auto current = Root.GetUnsafe();
             while (current.IsInnerPage()) {
                 auto* page = current.ToInnerPage();
-                Y_VERIFY_DEBUG(page->Count > 0);
+                Y_DEBUG_ABORT_UNLESS(page->Count > 0);
                 current = page->Edges()[0].GetUnsafe();
                 ++height;
             }
@@ -1033,7 +1033,7 @@ namespace NKikimr {
                 bool threadSafe)
         {
             const size_t count = leaf->UnsafeCount();
-            Y_VERIFY_DEBUG(index <= count);
+            Y_DEBUG_ABORT_UNLESS(index <= count);
             const size_t newCount = count + 1;
 
             // We don't expect any split
@@ -1103,7 +1103,7 @@ namespace NKikimr {
 
             const size_t rightCount = newCount / 2; // we want less on the right leaf
             const size_t leftCount = newCount - rightCount; // we want more on the left leaf
-            Y_VERIFY_DEBUG(leftCount > 0 && rightCount > 0);
+            Y_DEBUG_ABORT_UNLESS(leftCount > 0 && rightCount > 0);
 
             auto* newLeft = AllocateLeafPage();
             auto* newRight = AllocateLeafPage();
@@ -1184,7 +1184,7 @@ namespace NKikimr {
                             return Middle;
                         }
                     }
-                    Y_VERIFY_DEBUG(Current != End);
+                    Y_DEBUG_ABORT_UNLESS(Current != End);
                     return Current++;
                 }
 
@@ -1205,7 +1205,7 @@ namespace NKikimr {
                     , Replacements{ left, right }
                     , NextReplacement(0)
                 {
-                    Y_VERIFY_DEBUG(Skipped != End);
+                    Y_DEBUG_ABORT_UNLESS(Skipped != End);
                 }
 
                 TTag Read() {
@@ -1215,7 +1215,7 @@ namespace NKikimr {
                         }
                         ++Current;
                     }
-                    Y_VERIFY_DEBUG(Current != End);
+                    Y_DEBUG_ABORT_UNLESS(Current != End);
                     return (Current++)->GetUnsafe();
                 }
 
@@ -1228,7 +1228,7 @@ namespace NKikimr {
             };
 
             const size_t count = inner->Count;
-            Y_VERIFY_DEBUG(index <= count);
+            Y_DEBUG_ABORT_UNLESS(index <= count);
             const size_t newCount = count + 1;
 
             if (newCount <= InnerPageCapacity && !threadSafe) {
@@ -1350,7 +1350,7 @@ namespace NKikimr {
             UnRefTag(Last.SwapUnsafe({ }));
             CollectGarbage(true);
 
-            Y_VERIFY_DEBUG(FreePagesCount == TotalPagesCount,
+            Y_DEBUG_ABORT_UNLESS(FreePagesCount == TotalPagesCount,
                 "BTree has %" PRISZT " out of %" PRISZT " pages leaked",
                 TotalPagesCount - FreePagesCount, TotalPagesCount);
         }

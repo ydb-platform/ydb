@@ -177,33 +177,33 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            if (rule.HasBlock8()) {
-                Context().Error(GetPos(rule.GetBlock8().GetRule_table_inherits1().GetToken1()))
+            if (rule.HasBlock9()) {
+                Context().Error(GetPos(rule.GetBlock9().GetRule_table_inherits1().GetToken1()))
                     << "INHERITS clause is not supported yet";
                 return false;
             }
 
-            if (rule.HasBlock9()) {
+            if (rule.HasBlock10()) {
                 if (tableType == ETableType::TableStore) {
-                    Context().Error(GetPos(rule.GetBlock9().GetRule_table_partition_by1().GetToken1()))
+                    Context().Error(GetPos(rule.GetBlock10().GetRule_table_partition_by1().GetToken1()))
                         << "PARTITION BY is not supported for TABLESTORE";
                     return false;
                 }
-                const auto list = rule.GetBlock9().GetRule_table_partition_by1().GetRule_pure_column_list4();
+                const auto list = rule.GetBlock10().GetRule_table_partition_by1().GetRule_pure_column_list4();
                 params.PartitionByColumns.push_back(IdEx(list.GetRule_an_id2(), *this));
                 for (auto& node : list.GetBlock3()) {
                     params.PartitionByColumns.push_back(IdEx(node.GetRule_an_id2(), *this));
                 }
             }
 
-            if (rule.HasBlock10()) {
-                if (!CreateTableSettings(rule.GetBlock10().GetRule_with_table_settings1(), params)) {
+            if (rule.HasBlock11()) {
+                if (!CreateTableSettings(rule.GetBlock11().GetRule_with_table_settings1(), params)) {
                     return false;
                 }
             }
 
-            if (rule.HasBlock11()) {
-                Context().Error(GetPos(rule.GetBlock11().GetRule_table_tablestore1().GetToken1()))
+            if (rule.HasBlock12()) {
+                Context().Error(GetPos(rule.GetBlock12().GetRule_table_tablestore1().GetToken1()))
                     << "TABLESTORE clause is not supported yet";
                 return false;
             }
@@ -458,7 +458,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     break;
                 }
                 case TRule_alter_user_stmt_TBlock4::ALT_NOT_SET:
-                    Y_FAIL("You should change implementation according to grammar changes");
+                    Y_ABORT("You should change implementation according to grammar changes");
             }
 
             AddStatementToBlocks(blocks, stmt);
@@ -543,7 +543,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     break;
                 }
                 case TRule_alter_group_stmt_TBlock4::ALT_NOT_SET:
-                    Y_FAIL("You should change implementation according to grammar changes");
+                    Y_ABORT("You should change implementation according to grammar changes");
             }
 
             AddStatementToBlocks(blocks, stmt);
@@ -1429,6 +1429,21 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                 return {};
             }
 
+            if (Ctx.Settings.FileAliasPrefix) {
+                if (values.size() == 1) {
+                    values.emplace_back(TDeferredAtom(Ctx.Pos(), ""));
+                }
+
+                TString prefix;
+                if (!values[1].GetLiteral(prefix, Ctx)) {
+                    Error() << "Expected literal UDF module prefix in views";
+                    Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                    return {};
+                }
+
+                values[1] = TDeferredAtom(Ctx.Pos(), Ctx.Settings.FileAliasPrefix + prefix);
+            }
+
             Ctx.IncrementMonCounter("sql_pragma", "udf");
             success = true;
             return BuildPragma(Ctx.Pos(), TString(ConfigProviderName), "ImportUdfs", values, false);
@@ -2216,7 +2231,7 @@ TSourcePtr TSqlQuery::Build(const TRule_set_clause_list& stmt) {
             return nullptr;
         }
     }
-    Y_VERIFY_DEBUG(targetList.size() == values.size());
+    Y_DEBUG_ABORT_UNLESS(targetList.size() == values.size());
     return BuildUpdateValues(pos, targetList, values);
 }
 
@@ -2357,7 +2372,7 @@ namespace {
             case TRule_type_name_or_bind::kAltTypeNameOrBind2:
                 return false;
             case TRule_type_name_or_bind::ALT_NOT_SET:
-                Y_FAIL("You should change implementation according to grammar changes");
+                Y_ABORT("You should change implementation according to grammar changes");
         }
 
         result["NAME"] = TDeferredAtom(pos, columnName);
@@ -2393,7 +2408,7 @@ bool TSqlQuery::ParseTableStoreFeatures(std::map<TString, TDeferredAtom> & resul
             break;
         }
         case TRule_alter_table_store_action::ALT_NOT_SET:
-            Y_FAIL("You should change implementation according to grammar changes");
+            Y_ABORT("You should change implementation according to grammar changes");
     }
     return true;
 }

@@ -198,7 +198,7 @@ TExecutorGCLogic::TChannelInfo::TChannelInfo()
 void TExecutorGCLogic::TChannelInfo::ApplyDelta(TGCTime time, TGCBlobDelta& delta) {
     TGCBlobDelta& committedDelta = CommittedDelta[time];
     DoSwap(committedDelta, delta);
-    Y_VERIFY_DEBUG(delta.Created.empty() && delta.Deleted.empty());
+    Y_DEBUG_ABORT_UNLESS(delta.Created.empty() && delta.Deleted.empty());
 }
 
 void TExecutorGCLogic::MergeVectors(TVector<TLogoBlobID>& destination, const TVector<TLogoBlobID>& source) {

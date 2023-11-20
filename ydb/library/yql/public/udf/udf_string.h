@@ -43,7 +43,7 @@ class TStringValue
             if (Refs_ < 0)
                 return;
 #endif
-            Y_VERIFY_DEBUG(Refs_ > 0);
+            Y_DEBUG_ABORT_UNLESS(Refs_ > 0);
             if (!--Refs_) {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
                 UdfFreeWithSize(this, sizeof(*this) + Capacity_);
@@ -57,7 +57,7 @@ class TStringValue
             if (Refs_ < 0)
                 return;
 #endif
-            Y_VERIFY_DEBUG(Refs_ > 0);
+            Y_DEBUG_ABORT_UNLESS(Refs_ > 0);
             --Refs_;
         }
         inline void DeleteUnreferenced() {
@@ -80,15 +80,15 @@ class TStringValue
         inline ui64 Capacity() const { return Capacity_; }
 
         inline i32 LockRef() noexcept {
-            Y_VERIFY_DEBUG(Refs_ != -1);
+            Y_DEBUG_ABORT_UNLESS(Refs_ != -1);
             auto ret = Refs_;
             Refs_ = -1;
             return ret;
         }
 
         inline void UnlockRef(i32 prev) noexcept {
-            Y_VERIFY_DEBUG(Refs_ == -1);
-            Y_VERIFY_DEBUG(prev != -1);
+            Y_DEBUG_ABORT_UNLESS(Refs_ == -1);
+            Y_DEBUG_ABORT_UNLESS(prev != -1);
             Refs_ = prev;
         }
 

@@ -121,8 +121,9 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
                 if (op.PartitionBoundariesSize()) {
                     TVector<TCell> cells;
                     TString error;
+                    TVector<TString> memoryOwner;
                     if (!NMiniKQL::CellsFromTuple(nullptr, op.GetPartitionBoundaries(i), pqGroupInfo->KeySchema, false,
-                                                  cells, error)) {
+                                                  cells, error, memoryOwner)) {
                         status = NKikimrScheme::StatusSchemeError;
                         errStr = Sprintf("Invalid partition boundary at position: %u, error: %s", i, error.data());
                         return nullptr;
@@ -557,7 +558,7 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TCreatePQ");
+        Y_ABORT("no AbortPropose for TCreatePQ");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

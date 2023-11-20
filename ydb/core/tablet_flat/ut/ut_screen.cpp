@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(TScreen) {
                     iter.Seek(*it, ESeek::Lower).Is(EReady::Gone);
                     iter.Seek(*it, ESeek::Upper).Is(EReady::Gone);
                 } else {
-                    Y_FAIL("Got AnyOff row within the range");
+                    Y_ABORT("Got AnyOff row within the range");
                 }
             }
         }

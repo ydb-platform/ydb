@@ -218,5 +218,41 @@ TEST(TSolomonExporter, ReadSensorsStripSensorsOption)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TSummaryPolicyTest
+    : public ::testing::TestWithParam<ESummaryPolicy>
+{ };
+
+INSTANTIATE_TEST_SUITE_P(
+    TSolomonExporter,
+    TSummaryPolicyTest,
+    testing::Values(
+        ESummaryPolicy::All | ESummaryPolicy::Sum,
+        ESummaryPolicy::All | ESummaryPolicy::Max,
+        ESummaryPolicy::All | ESummaryPolicy::Min,
+        ESummaryPolicy::All | ESummaryPolicy::Avg,
+        ESummaryPolicy::All | ESummaryPolicy::OmitNameLabelSuffix,
+        ESummaryPolicy::Max | ESummaryPolicy::Avg | ESummaryPolicy::OmitNameLabelSuffix));
+
+TEST_P(TSummaryPolicyTest, InvalidReadOptions)
+{
+    auto registry = New<TSolomonRegistry>();
+    TProfiler profiler(registry, "yt");
+
+    auto config = New<TSolomonExporterConfig>();
+    config->ExportSummaryAsMax = false;
+    config->EnableSelfProfiling = false;
+    config->Shards.emplace("yt", New<TShardConfig>());
+
+    auto exporter = New<TSolomonExporter>(config, registry);
+    exporter->Start();
+
+    Sleep(TDuration::Seconds(5));
+
+    ASSERT_THROW(exporter->ReadJson({.SummaryPolicy = GetParam()}, "yt"), TErrorException);
+    exporter->Stop();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT::NProfiling

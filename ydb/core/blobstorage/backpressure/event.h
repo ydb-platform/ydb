@@ -115,7 +115,7 @@ public:
             CASE(TEvVGetBlock);
             CASE(TEvVCollectGarbage);
             CASE(TEvVGetBarrier);
-            default: Y_FAIL();
+            default: Y_ABORT();
 #undef CASE
         }
     }

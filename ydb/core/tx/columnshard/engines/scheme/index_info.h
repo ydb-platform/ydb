@@ -53,7 +53,6 @@ public:
             << "id=" << Id << ";"
             << "version=" << Version << ";"
             << "name=" << Name << ";"
-            << "composite=" << CompositeIndexKey << "/" << CompositeMarks << ";"
             << ")";
     }
 
@@ -83,7 +82,6 @@ public:
         return true;
     }
 
-    bool CheckAlterScheme(const NKikimrSchemeOp::TColumnTableSchema& scheme) const;
 public:
 
     static TIndexInfo BuildDefault() {
@@ -178,10 +176,6 @@ public:
      /// Returns whether the replace keys defined.
     bool IsReplacing() const { return ReplaceKey.get(); }
 
-    bool IsCompositeIndexKey() const {
-        return CompositeIndexKey;
-    }
-
     std::shared_ptr<NArrow::TSortDescription> SortDescription() const;
     std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription() const;
 
@@ -191,7 +185,12 @@ public:
     }
 
     static const std::vector<ui32>& GetSpecialColumnIds() {
-        static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID };
+        static const std::vector<ui32> result = {(ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID};
+        return result;
+    }
+
+    static const std::set<ui32>& GetSpecialColumnIdsSet() {
+        static const std::set<ui32> result(GetSpecialColumnIds().begin(), GetSpecialColumnIds().end());
         return result;
     }
 
@@ -203,7 +202,6 @@ private:
     ui32 Id;
     ui64 Version = 0;
     TString Name;
-    bool CompositeIndexKey = false;
     mutable std::shared_ptr<arrow::Schema> Schema;
     mutable std::shared_ptr<arrow::Schema> SchemaWithSpecials;
     std::shared_ptr<arrow::Schema> SortingKey;
@@ -213,7 +211,6 @@ private:
     THashSet<TString> RequiredColumns;
     THashSet<ui32> MinMaxIdxColumnsIds;
     std::optional<NArrow::TCompression> DefaultCompression;
-    bool CompositeMarks = false;
 };
 
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, bool withSpecials = false);

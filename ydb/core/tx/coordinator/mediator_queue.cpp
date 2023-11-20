@@ -179,7 +179,7 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
                         std::make_pair(
                             std::make_pair(tx.TxId, shardId),
                             it));
-                    Y_VERIFY_DEBUG(res.second);
+                    Y_DEBUG_ABORT_UNLESS(res.second);
                     if (res.second) {
                         it->References++;
                     }

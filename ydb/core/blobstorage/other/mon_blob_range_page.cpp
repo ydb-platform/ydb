@@ -52,6 +52,7 @@ namespace {
             }
 
             ui32 json = 0;
+            ui32 mustRestoreFirst = 0;
             TLogoBlobID from, to;
             TString errorExplanation;
             if (!params.Has("from")) {
@@ -73,9 +74,12 @@ namespace {
                     return generateError("Failed to parse json parameter -- must be an integer");
                 }
             }
+            if (params.Has("mustRestoreFirst") && !TryFromString(params.Get("mustRestoreFirst"), mustRestoreFirst)) {
+                return generateError("Failed to parse mustRestoreFirst parameter -- must be an integer");
+            }
 
             const ui64 cookie = ++LastCookie;
-            auto query = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, from, to, false, TInstant::Max(), true);
+            auto query = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, from, to, mustRestoreFirst, TInstant::Max(), true);
             SendToBSProxy(SelfId(), groupId, query.release(), cookie);
             RequestsInFlight[cookie] = {ev->Sender, ev->Cookie, ev->Get()->SubRequestId, json};
         }
@@ -113,9 +117,9 @@ namespace {
                     HTML_TAG() {
                         HEAD() {
                             out << "<title>Blob Range Index Query</title>\n";
-                            out << "<link rel='stylesheet' href='https://yastatic.net/bootstrap/3.3.1/css/bootstrap.min.css'>\n";
-                            out << "<script language='javascript' type='text/javascript' src='https://yastatic.net/jquery/2.1.3/jquery.min.js'></script>\n";
-                            out << "<script language='javascript' type='text/javascript' src='https://yastatic.net/bootstrap/3.3.1/js/bootstrap.min.js'></script>\n";
+                            out << "<link rel='stylesheet' href='../static/css/bootstrap.min.css'>\n";
+                            out << "<script language='javascript' type='text/javascript' src='../static/js/jquery.min.js'></script>\n";
+                            out << "<script language='javascript' type='text/javascript' src='../static/js/bootstrap.min.js'></script>\n";
                             out << "<style type=\"text/css\">\n";
                             out << ".table-nonfluid { width: auto; }\n";
                             out << ".narrow-line50 {line-height: 50%}\n";

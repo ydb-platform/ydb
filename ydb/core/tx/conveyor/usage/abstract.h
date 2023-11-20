@@ -40,6 +40,7 @@ private:
     YDB_READONLY_DEF(TString, ErrorMessage);
     YDB_ACCESSOR(EPriority, Priority, EPriority::Normal);
     YDB_READONLY_DEF(std::optional<NActors::TActorId>, OwnerId);
+    bool ExecutedFlag = false;
 protected:
     ITask& SetErrorMessage(const TString& message) {
         ErrorMessage = message;

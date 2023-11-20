@@ -456,10 +456,12 @@ message TPostgresqlClusterConfig {
     optional string Cluster = 2;
     optional string PGtoken = 3;
     optional string TargetServerType = 4;
+    optional uint64 MaxResultBufferSize = 5 [default = 1000000]; // Zero value disables adaptiveFetch
 }
 
 message TPostgresqlGatewayConfig {
     repeated TPostgresqlClusterConfig ClusterMapping = 1;
+    optional uint64 MaxResultBufferSize = 2 [default = 1000000]; // Zero value disables adaptiveFetch by default
 }
 
 /////////////////////////////// Mysql /////////////////////////////
@@ -581,6 +583,9 @@ message TGenericClusterConfig {
     // Transport protocol used to establish a network connection with database
     optional NYql.NConnector.NApi.EProtocol Protocol = 14;
 
+    // Data source options specific to various data sources
+    map<string, string> DataSourceOptions = 15;
+
     reserved 2, 3, 5;
 }
 
@@ -605,7 +610,16 @@ message TGenericGatewayConfig {
     // MDB API endpoint (do not fill in case of on-prem deployment)
     optional string MdbGateway = 4;
 
+    repeated TAttr DefaultSettings = 6;
+
     reserved 1, 2;
+}
+
+/////////////////////////////// Db Resolver ///////////////////////////////////
+
+message TDbResolverConfig {
+    // Ydb / Yds mvp endpoint
+    optional string YdbMvpEndpoint = 2;
 }
 
 /////////////////////////////// Revision filter ///////////////////////////////
@@ -645,4 +659,5 @@ message TGatewaysConfig {
     optional TDbToolConfig DbTool = 20;
     optional TGenericGatewayConfig Generic = 21;
     optional TRevisionFilterConfig RevisionFilter = 22;
+    optional TDbResolverConfig DbResolver = 23;
 }

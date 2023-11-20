@@ -148,6 +148,7 @@ TString LongToShortTabletName(const TString& longTabletName);
 TString GetLocationString(const NActors::TNodeLocation& location);
 void MakeTabletTypeSet(std::vector<TTabletTypes::EType>& list);
 bool IsValidTabletType(TTabletTypes::EType type);
+bool IsValidObjectId(const TFullObjectId& objectId);
 TString GetRunningTabletsText(ui64 runningTablets, ui64 totalTablets, bool warmUp);
 
 class THive : public TActor<THive>, public TTabletExecutedFlat, public THiveSharedSettings {
@@ -351,7 +352,7 @@ protected:
         }
     };
 
-    std::unordered_map<TObjectId, TAggregateMetrics> ObjectToTabletMetrics;
+    std::unordered_map<TFullObjectId, TAggregateMetrics> ObjectToTabletMetrics;
     std::unordered_map<TTabletTypes::EType, TAggregateMetrics> TabletTypeToTabletMetrics;
 
     TBootQueue BootQueue;
@@ -381,6 +382,7 @@ protected:
     bool ProcessTabletBalancerScheduled = false;
     bool ProcessTabletBalancerPostponed = false;
     bool ProcessPendingOperationsScheduled = false;
+    bool LogTabletMovesScheduled = false;
     TResourceRawValues TotalRawResourceValues = {};
     TResourceNormalizedValues TotalNormalizedResourceValues = {};
     TInstant LastResourceChangeReaction;
@@ -435,16 +437,23 @@ protected:
         TFullTabletId Tablet;
         TNodeId From;
         TNodeId To;
+        double Priority;
+        TTabletTypes::EType TabletType;
 
-        TString ToHTML() {
-            TStringBuilder str;
-            str << "<tr><td>" << Timestamp << "</td><td>" << Tablet
-                << "</td><td>" << From << "&rarr;" << To << "</td><tr>";
-            return str;
-        }
+
+        TTabletMoveInfo(TInstant timestamp, const TTabletInfo& tablet, TNodeId from, TNodeId to);
+
+        TString ToHTML() const;
+
+        std::weak_ordering operator<=>(const TTabletMoveInfo& other) const;
     };
 
     TStaticRingBuffer<TTabletMoveInfo, 5> TabletMoveHistory;
+    std::vector<TTabletMoveInfo> TabletMoveSamplesForLog; // stores (at most) MOVE_SAMPLES_PER_LOG_ENTRY highest priority moves in a heap
+    static constexpr size_t MOVE_SAMPLES_PER_LOG_ENTRY = 10;
+    std::unordered_map<TTabletTypes::EType, ui64> TabletMovesByTypeForLog;
+    TInstant LogTabletMovesSchedulingTime;
+
 
     // to be removed later
     bool TabletOwnersSynced = false;
@@ -536,6 +545,7 @@ protected:
     void Handle(TEvHive::TEvTabletOwnersReply::TPtr& ev);
     void Handle(TEvHive::TEvUpdateTabletsObject::TPtr& ev);
     void Handle(TEvPrivate::TEvRefreshStorageInfo::TPtr& ev);
+    void Handle(TEvPrivate::TEvLogTabletMoves::TPtr& ev);
     void Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr& ev);
 
 protected:
@@ -658,8 +668,8 @@ public:
     void ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffects);
     void UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db, TSideEffects& sideEffects);
     TDuration GetBalancerCooldown() const;
-    void UpdateObjectCount(TObjectId object, TNodeId node, i64 diff);
-    ui64 GetObjectImbalance(TObjectId object);
+    void UpdateObjectCount(const TLeaderTabletInfo& tablet, const TNodeInfo& node, i64 diff);
+    ui64 GetObjectImbalance(TFullObjectId object);
 
     ui32 GetEventPriority(IEventHandle* ev);
     void PushProcessIncomingEvent();
@@ -753,16 +763,12 @@ public:
     TResourceNormalizedValues GetMinNodeUsageToBalance() const {
         // MinNodeUsageToBalance is needed so that small fluctuations in metrics do not cause scatter
         // when cluster load is low. Counter does not fluctuate, so it does not need it.
-        // However, we still do not want a difference of 1 in Counter to be able to cause scatter.
         double minUsageToBalance = CurrentConfig.GetMinNodeUsageToBalance();
         TResourceNormalizedValues minValuesToBalance;
         std::get<NMetrics::EResource::CPU>(minValuesToBalance) = minUsageToBalance;
         std::get<NMetrics::EResource::Memory>(minValuesToBalance) = minUsageToBalance;
         std::get<NMetrics::EResource::Network>(minValuesToBalance) = minUsageToBalance;
-        auto counterScatterThreshold = std::get<NMetrics::EResource::Counter>(GetMinScatterToBalance());
-        if (counterScatterThreshold != 0 && CurrentConfig.GetMaxResourceCounter() != 0) {
-            std::get<NMetrics::EResource::Counter>(minValuesToBalance) = 1.0 / (counterScatterThreshold * CurrentConfig.GetMaxResourceCounter());
-        }
+        std::get<NMetrics::EResource::Counter>(minValuesToBalance) = 0;
         return minValuesToBalance;
     }
 
@@ -929,7 +935,7 @@ protected:
     THiveStats GetStats() const;
     void RemoveSubActor(ISubActor* subActor);
     const NKikimrLocal::TLocalConfig &GetLocalConfig() const { return LocalConfig; }
-    NKikimrTabletBase::TMetrics GetDefaultResourceValuesForObject(TObjectId objectId);
+    NKikimrTabletBase::TMetrics GetDefaultResourceValuesForObject(TFullObjectId objectId);
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForTabletType(TTabletTypes::EType type);
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForProfile(TTabletTypes::EType type, const TString& resourceProfile);
     static void AggregateMetricsMax(NKikimrTabletBase::TMetrics& aggregate, const NKikimrTabletBase::TMetrics& value);

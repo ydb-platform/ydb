@@ -31,6 +31,27 @@ TCreateSessionSettings::TCreateSessionSettings() {
     ClientTimeout_ = TDuration::Seconds(5);
 };
 
+static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::TransactionSettings* proto)
+{
+    switch (txSettings.Mode_) {
+        case TTxSettings::TS_SERIALIZABLE_RW:
+            proto->mutable_serializable_read_write();
+            break;
+        case TTxSettings::TS_ONLINE_RO:
+            proto->mutable_online_read_only()->set_allow_inconsistent_reads(
+                txSettings.OnlineSettings_.AllowInconsistentReads_);
+            break;
+        case TTxSettings::TS_STALE_RO:
+            proto->mutable_stale_read_only();
+            break;
+        case TTxSettings::TS_SNAPSHOT_RO:
+            proto->mutable_snapshot_read_only();
+            break;
+        default:
+            throw TContractViolation("Unexpected transaction mode.");
+    }
+}
+
 class TQueryClient::TImpl: public TClientImplCommon<TQueryClient::TImpl>, public ISessionClient {
     friend class ::NYdb::NQuery::TSession;
 public:
@@ -46,18 +67,18 @@ public:
     }
 
     TAsyncExecuteQueryIterator StreamExecuteQuery(const TString& query, const TTxControl& txControl,
-        const TMaybe<TParams>& params, const TExecuteQuerySettings& settings, const TString& sessionId = {})
+        const TMaybe<TParams>& params, const TExecuteQuerySettings& settings, const TMaybe<TSession>& session = {})
     {
         return TExecQueryImpl::StreamExecuteQuery(
-            Connections_, DbDriverState_, query, txControl, params, settings, sessionId);
+            Connections_, DbDriverState_, query, txControl, params, settings, session);
     }
 
     TAsyncExecuteQueryResult ExecuteQuery(const TString& query, const TTxControl& txControl,
         const TMaybe<TParams>& params, const TExecuteQuerySettings& settings,
-        const TString& sessionId = {})
+        const TMaybe<TSession>& session = {})
     {
         return TExecQueryImpl::ExecuteQuery(
-            Connections_, DbDriverState_, query, txControl, params, settings, sessionId);
+            Connections_, DbDriverState_, query, txControl, params, settings, session);
     }
 
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script, const TExecuteScriptSettings& settings) {
@@ -102,6 +123,120 @@ public:
         request.set_operation_id(NKikimr::NOperationId::ProtoToString(operationId));
         request.set_result_set_index(resultSetIndex);
         return FetchScriptResultsImpl(std::move(request), settings);
+    }
+
+    TAsyncStatus RollbackTransaction(const TString& txId, const NYdb::NQuery::TRollbackTxSettings& settings, const TSession& session) {
+        using namespace Ydb::Query;
+        auto request = MakeRequest<Ydb::Query::RollbackTransactionRequest>();
+        request.set_session_id(session.GetId());
+        request.set_tx_id(txId);
+
+        auto promise = NThreading::NewPromise<TStatus>();
+
+        auto responseCb = [promise, session]
+            (Ydb::Query::RollbackTransactionResponse* response, TPlainStatus status) mutable {
+                try {
+                    if (response) {
+                        NYql::TIssues opIssues;
+                        NYql::IssuesFromMessage(response->issues(), opIssues);
+                        TStatus rollbackTxStatus(TPlainStatus{static_cast<EStatus>(response->status()), std::move(opIssues),
+                            status.Endpoint, std::move(status.Metadata)});
+
+                        promise.SetValue(std::move(rollbackTxStatus));
+                    } else {
+                        promise.SetValue(TStatus(std::move(status)));
+                    }
+                } catch (...) {
+                    promise.SetException(std::current_exception());
+                }
+            };
+
+        Connections_->Run<V1::QueryService, RollbackTransactionRequest, RollbackTransactionResponse>(
+            std::move(request),
+            responseCb,
+            &V1::QueryService::Stub::AsyncRollbackTransaction,
+            DbDriverState_,
+            TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey()));
+
+        return promise.GetFuture();
+    }
+
+    TAsyncCommitTransactionResult CommitTransaction(const TString& txId, const NYdb::NQuery::TCommitTxSettings& settings, const TSession& session) {
+        using namespace Ydb::Query;
+        auto request = MakeRequest<Ydb::Query::CommitTransactionRequest>();
+        request.set_session_id(session.GetId());
+        request.set_tx_id(txId);
+
+        auto promise = NThreading::NewPromise<TCommitTransactionResult>();
+
+        auto responseCb = [promise, session]
+            (Ydb::Query::CommitTransactionResponse* response, TPlainStatus status) mutable {
+                try {
+                    if (response) {
+                        NYql::TIssues opIssues;
+                        NYql::IssuesFromMessage(response->issues(), opIssues);
+                        TStatus commitTxStatus(TPlainStatus{static_cast<EStatus>(response->status()), std::move(opIssues),
+                            status.Endpoint, std::move(status.Metadata)});
+
+                        TCommitTransactionResult commitTxResult(std::move(commitTxStatus));
+                        promise.SetValue(std::move(commitTxResult));
+                    } else {
+                        promise.SetValue(TCommitTransactionResult(TStatus(std::move(status))));
+                    }
+                } catch (...) {
+                    promise.SetException(std::current_exception());
+                }
+            };
+
+        Connections_->Run<V1::QueryService, CommitTransactionRequest, CommitTransactionResponse>(
+            std::move(request),
+            responseCb,
+            &V1::QueryService::Stub::AsyncCommitTransaction,
+            DbDriverState_,
+            TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey()));
+
+        return promise.GetFuture();
+    }
+
+    TAsyncBeginTransactionResult BeginTransaction(const TTxSettings& txSettings,
+        const TBeginTxSettings& settings, const TSession& session)
+    {
+        using namespace Ydb::Query;
+        auto request = MakeRequest<Ydb::Query::BeginTransactionRequest>();
+        request.set_session_id(session.GetId());
+        SetTxSettings(txSettings, request.mutable_tx_settings());
+
+        auto promise = NThreading::NewPromise<TBeginTransactionResult>();
+
+        auto responseCb = [promise, session]
+            (Ydb::Query::BeginTransactionResponse* response, TPlainStatus status) mutable {
+                try {
+                    if (response) {
+                        NYql::TIssues opIssues;
+                        NYql::IssuesFromMessage(response->issues(), opIssues);
+                        TStatus beginTxStatus(TPlainStatus{static_cast<EStatus>(response->status()), std::move(opIssues),
+                            status.Endpoint, std::move(status.Metadata)});
+
+                        TBeginTransactionResult beginTxResult(std::move(beginTxStatus),
+                            TTransaction(session, response->tx_meta().id()));
+                        promise.SetValue(std::move(beginTxResult));
+                    } else {
+                        promise.SetValue(TBeginTransactionResult(
+                            TStatus(std::move(status)), TTransaction(session, "")));
+                    }
+                } catch (...) {
+                    promise.SetException(std::current_exception());
+                }
+            };
+
+        Connections_->Run<V1::QueryService, BeginTransactionRequest, BeginTransactionResponse>(
+            std::move(request),
+            responseCb,
+            &V1::QueryService::Stub::AsyncBeginTransaction,
+            DbDriverState_,
+            TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey()));
+
+        return promise.GetFuture();
     }
 
     TAsyncFetchScriptResultsResult FetchScriptResultsImpl(Ydb::Query::FetchScriptResultsRequest&& request, const TFetchScriptResultsSettings& settings) {
@@ -475,7 +610,7 @@ TAsyncExecuteQueryResult TSession::ExecuteQuery(const TString& query, const TTxC
 {
     return NSessionPool::InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->ExecuteQuery(query, txControl, {}, settings, SessionImpl_->GetId()),
+        Client_->ExecuteQuery(query, txControl, {}, settings, *this),
         true,
         Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
 }
@@ -485,7 +620,7 @@ TAsyncExecuteQueryResult TSession::ExecuteQuery(const TString& query, const TTxC
 {
     return NSessionPool::InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->ExecuteQuery(query, txControl, params, settings, SessionImpl_->GetId()),
+        Client_->ExecuteQuery(query, txControl, params, settings, *this),
         true,
         Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
 }
@@ -495,7 +630,7 @@ TAsyncExecuteQueryIterator TSession::StreamExecuteQuery(const TString& query, co
 {
     return NSessionPool::InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->StreamExecuteQuery(query, txControl, {}, settings, SessionImpl_->GetId()),
+        Client_->StreamExecuteQuery(query, txControl, {}, settings, *this),
         true,
         Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
 }
@@ -505,9 +640,58 @@ TAsyncExecuteQueryIterator TSession::StreamExecuteQuery(const TString& query, co
 {
     return NSessionPool::InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->StreamExecuteQuery(query, txControl, params, settings, SessionImpl_->GetId()),
+        Client_->StreamExecuteQuery(query, txControl, params, settings, *this),
         true,
         Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
+}
+
+TAsyncBeginTransactionResult TSession::BeginTransaction(const TTxSettings& txSettings,
+        const TBeginTxSettings& settings)
+{
+    return NSessionPool::InjectSessionStatusInterception(
+        SessionImpl_,
+        Client_->BeginTransaction(txSettings, settings, *this),
+        true,
+        Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
+}
+
+TTransaction::TTransaction(const TSession& session, const TString& txId)
+    : Session_(session)
+    , TxId_(txId)
+{}
+
+TAsyncCommitTransactionResult TTransaction::Commit(const NYdb::NQuery::TCommitTxSettings& settings) {
+    return Session_.Client_->CommitTransaction(TxId_, settings, Session_);
+}
+
+TAsyncStatus TTransaction::Rollback(const TRollbackTxSettings& settings) {
+    return Session_.Client_->RollbackTransaction(TxId_, settings, Session_);
+}
+
+TBeginTransactionResult::TBeginTransactionResult(TStatus&& status, TTransaction transaction)
+    : TStatus(std::move(status))
+    , Transaction_(transaction)
+{}
+
+const TTransaction& TBeginTransactionResult::GetTransaction() const {
+    CheckStatusOk("TBeginTransactionResult::GetTransaction");
+    return Transaction_;
+}
+
+const TVector<TResultSet>& TExecuteQueryResult::GetResultSets() const {
+    return ResultSets_;
+}
+
+TResultSet TExecuteQueryResult::GetResultSet(size_t resultIndex) const {
+    if (resultIndex >= ResultSets_.size()) {
+        RaiseError(TString("Requested index out of range\n"));
+    }
+
+    return ResultSets_[resultIndex];
+}
+
+TResultSetParser TExecuteQueryResult::GetResultSetParser(size_t resultIndex) const {
+    return TResultSetParser(GetResultSet(resultIndex));
 }
 
 } // namespace NYdb::NQuery

@@ -14,6 +14,7 @@ RECURSE(
     proto
     proto/python
     provider
+    pushdown
     schema
     structured_token
     token_accessor

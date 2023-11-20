@@ -1,0 +1,37 @@
+<tmp_path>/program.sql:<main>: Error: Expression evaluation
+
+    <tmp_path>/program.sql:/lib/yql/core.yql:xxx:yyy: Error: At function: EvaluateCode
+    	
+	                    ^
+        <tmp_path>/program.sql:<main>: Error: Post type annotation
+        
+            <tmp_path>/program.sql:/lib/yql/core.yql:xxx:yyy: Error: At function: SerializeCode
+            	
+	                                  ^
+                <tmp_path>/program.sql:/lib/yql/core.yql:xxx:yyy: Error: At function: LambdaCode
+                	
+	                                              ^
+                    <tmp_path>/program.sql:/lib/yql/core.yql:xxx:yyy: Error: At function: FuncCode
+                    	
+	                 ^
+                        <tmp_path>/program.sql:/lib/yql/core.yql:xxx:yyy: Error: At function: OrderedMap
+                        	
+	                    ^
+                            <tmp_path>/program.sql:<main>:15:42: Error: At function: Unwrap
+                            	select ForceSpreadMembers([("key", key)],Unwrap($whitelist)) from Input;
+	                                         ^
+                                <tmp_path>/program.sql:<main>:12:36: Error: At function: Member, At function: Lookup, At function: ToIndexDict, At function: Take
+                                	$whitelist = select aggregate_list(field)
+	                                   ^
+                                    <tmp_path>/program.sql:<main>:12:14: Error: At function: SqlProject
+                                    	$whitelist = select aggregate_list(field)
+	             ^
+                                        <tmp_path>/program.sql:<main>:13:6: Error: At function: Aggregate
+                                        	from Output;
+	     ^
+                                            <tmp_path>/program.sql:<main>:12:14: Error: At function: YtSection, At function: YtPath, At function: YtTable
+                                            	$whitelist = select aggregate_list(field)
+	             ^
+                                                <tmp_path>/program.sql:<main>:12:14: Error: Table  "Output" is used before commit
+                                                	$whitelist = select aggregate_list(field)
+	             ^

@@ -27,37 +27,37 @@ struct TDomainsInfo : public TThrRefBase {
     // but we do it with hiveUid == domain, and collision with dynamic tablets occurs
     // use AvoidBrokenUniqPartsBySystemTablets to avoid this mistake
     static ui64 MakeTxCoordinatorID(ui32 domain, ui32 uid) {
-        Y_VERIFY_DEBUG(domain < 32 && uid < 256);
+        Y_DEBUG_ABORT_UNLESS(domain < 32 && uid < 256);
         const ui64 uniqPart = 0x800000 | (ui64)uid;
         return MakeTabletID(domain, domain, uniqPart);
     }
 
     static ui64 MakeTxCoordinatorIDFixed(ui32 domain, ui32 uid) {
-        Y_VERIFY_DEBUG(domain < 32 && uid < 256);
+        Y_DEBUG_ABORT_UNLESS(domain < 32 && uid < 256);
         const ui64 uniqPart = 0x800000 | (ui64)uid;
         return MakeTabletID(domain, 0, uniqPart);
     }
 
     static ui64 MakeTxMediatorID(ui32 domain, ui32 uid) {
-        Y_VERIFY_DEBUG(domain < 32 && uid < 256);
+        Y_DEBUG_ABORT_UNLESS(domain < 32 && uid < 256);
         const ui64 uniqPart = 0x810000 | (ui64)uid;
         return MakeTabletID(domain, domain, uniqPart);
     }
 
     static ui64 MakeTxMediatorIDFixed(ui32 domain, ui32 uid) {
-        Y_VERIFY_DEBUG(domain < 32 && uid < 256);
+        Y_DEBUG_ABORT_UNLESS(domain < 32 && uid < 256);
         const ui64 uniqPart = 0x810000 | (ui64)uid;
         return MakeTabletID(domain, 0, uniqPart);
     }
 
     static ui64 MakeTxAllocatorID(ui32 domain, ui32 uid) {
-        Y_VERIFY_DEBUG(domain < 32 && uid > 0 && uid < 4096);
+        Y_DEBUG_ABORT_UNLESS(domain < 32 && uid > 0 && uid < 4096);
         const ui64 uniqPart = 0x820000 | (ui64)uid;
         return MakeTabletID(domain, domain, uniqPart);
     }
 
     static ui64 MakeTxAllocatorIDFixed(ui32 domain, ui32 uid) {
-        Y_VERIFY_DEBUG(domain < 32 && uid > 0 && uid < 4096);
+        Y_DEBUG_ABORT_UNLESS(domain < 32 && uid > 0 && uid < 4096);
         const ui64 uniqPart = 0x820000 | (ui64)uid;
         return MakeTabletID(domain, 0, uniqPart);
     }

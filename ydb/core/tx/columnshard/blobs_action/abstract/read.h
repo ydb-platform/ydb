@@ -21,6 +21,7 @@ private:
     THashMap<TBlobRange, TErrorStatus> Fails;
     std::shared_ptr<NBlobOperations::TReadCounters> Counters;
     bool Started = false;
+    YDB_ACCESSOR(bool, IsBackgroundProcess, true);
 protected:
     virtual void DoStartReading(const THashMap<TUnifiedBlobId, THashSet<TBlobRange>>& range) = 0;
     void StartReading(THashMap<TUnifiedBlobId, THashSet<TBlobRange>>&& ranges);

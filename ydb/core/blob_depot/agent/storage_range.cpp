@@ -60,7 +60,7 @@ namespace NKikimr::NBlobDepot {
                 } else if (std::holds_alternative<TTabletDisconnected>(response)) {
                     EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
                 } else {
-                    Y_FAIL();
+                    Y_ABORT();
                 }
             }
 

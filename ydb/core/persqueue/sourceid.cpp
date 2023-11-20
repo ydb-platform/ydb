@@ -116,6 +116,15 @@ TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs)
 {
 }
 
+TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartbeat& heartbeat)
+    : SeqNo(seqNo)
+    , Offset(offset)
+    , WriteTimestamp(createTs)
+    , CreateTimestamp(createTs)
+    , LastHeartbeat(heartbeat)
+{
+}
+
 TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit)
     : SeqNo(seqNo)
     , Offset(offset)
@@ -231,7 +240,7 @@ void TSourceIdInfo::Out(IOutputStream& out) const {
 }
 
 bool TSourceIdInfo::IsExpired(TDuration ttl, TInstant now) const {
-    Y_VERIFY_DEBUG(!Explicit);
+    Y_DEBUG_ABORT_UNLESS(!Explicit);
     return !Explicit && ((WriteTimestamp + ttl) <= now);
 }
 

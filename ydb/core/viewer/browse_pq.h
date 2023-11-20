@@ -275,7 +275,7 @@ public:
         ctx.Send(TxProxy, request.Release());
         ++Requests;
         ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestSent(TxProxy, TEvTxUserProxy::EvNavigate));
-        Become(&TThis::StateWork);
+        UnsafeBecome(&TThis::StateWork);
     }
 
     void ReplyAndDie(const TActorContext &ctx) override = 0;

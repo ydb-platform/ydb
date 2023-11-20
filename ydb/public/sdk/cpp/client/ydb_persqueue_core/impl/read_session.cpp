@@ -206,20 +206,20 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions<true>& deferred) {
             AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred);
             return;
         }
-        clusterSessionInfo.Session =
-            std::make_shared<TSingleClusterReadSessionImpl<true>>(
-                sessionSettings,
-                DbDriverState->Database,
-                SessionId,
-                clusterName,
-                Log,
-                subclient->CreateReadSessionConnectionProcessorFactory(),
-                EventsQueue,
-                context,
-                partitionStreamIdStart++,
-                clusterSessionsCount);
+        CbContexts.push_back(MakeWithCallbackContext<TSingleClusterReadSessionImpl<true>>(
+            sessionSettings,
+            DbDriverState->Database,
+            SessionId,
+            clusterName,
+            Log,
+            subclient->CreateReadSessionConnectionProcessorFactory(),
+            EventsQueue,
+            context,
+            partitionStreamIdStart++,
+            clusterSessionsCount
+        ));
 
-        CbContexts.push_back(clusterSessionInfo.Session->MakeCallbackContext());
+        clusterSessionInfo.Session = CbContexts.back()->TryGet();
         deferred.DeferStartSession(CbContexts.back());
     }
 }
@@ -351,8 +351,13 @@ void TReadSession::RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions
 
 bool TReadSession::Close(TDuration timeout) {
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Closing read session. Close timeout: " << timeout);
-    // Log final counters.
-    CountersLogger->Stop();
+
+
+    // the program may not have reached SetupCountersLogger
+    if (CountersLogger) {
+        // Log final counters.
+        CountersLogger->Stop();
+    }
 
     std::vector<TSingleClusterReadSessionImpl<true>::TPtr> sessions;
     NThreading::TPromise<bool> promise = NThreading::NewPromise<bool>();

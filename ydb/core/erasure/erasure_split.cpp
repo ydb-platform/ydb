@@ -43,7 +43,7 @@ namespace NKikimr {
             auto nextIter = iter + partLen;
             if (auto& r = parts[part]; !r) {
                 r = {iter, nextIter};
-                Y_VERIFY_DEBUG(r.size() == partLen);
+                Y_DEBUG_ABORT_UNLESS(r.size() == partLen);
                 if (const ui32 padding = partSize - r.size()) {
                     TRcBuf buffer(MakeIntrusive<TZeroBuffer>());
                     r.Insert(r.End(), TRcBuf(TRcBuf::Piece, buffer.data(), padding, buffer));
@@ -64,15 +64,15 @@ namespace NKikimr {
     size_t ErasureSplitBlock42(std::span<TRope> parts, size_t offset, size_t size) {
         const ui32 blockSize = 32;
 
-        Y_VERIFY_DEBUG(parts[0].size() == parts[1].size());
-        Y_VERIFY_DEBUG(parts[1].size() == parts[2].size());
-        Y_VERIFY_DEBUG(parts[2].size() == parts[3].size());
+        Y_DEBUG_ABORT_UNLESS(parts[0].size() == parts[1].size());
+        Y_DEBUG_ABORT_UNLESS(parts[1].size() == parts[2].size());
+        Y_DEBUG_ABORT_UNLESS(parts[2].size() == parts[3].size());
 
         auto ptrSpan = parts[4].GetContiguousSpanMut();
-        Y_VERIFY_DEBUG(ptrSpan.size() == parts[0].size());
+        Y_DEBUG_ABORT_UNLESS(ptrSpan.size() == parts[0].size());
         ui64 *ptr = reinterpret_cast<ui64*>(ptrSpan.data() + offset);
         auto diagSpan = parts[5].GetContiguousSpanMut();
-        Y_VERIFY_DEBUG(diagSpan.size() == parts[0].size());
+        Y_DEBUG_ABORT_UNLESS(diagSpan.size() == parts[0].size());
         ui64 *diag = reinterpret_cast<ui64*>(diagSpan.data() + offset);
 
         auto iter0 = parts[0].begin() + offset;
@@ -99,7 +99,7 @@ namespace NKikimr {
             if (size##I < blockSize) { \
                 a##I = temp##I; \
                 iter##I.ExtractPlainDataAndAdvance(temp##I, blockSize); \
-                Y_VERIFY_DEBUG(numBytes == blockSize && numBlocks == 1); \
+                Y_DEBUG_ABORT_UNLESS(numBytes == blockSize && numBlocks == 1); \
             } else { \
                 a##I = reinterpret_cast<const ui64*>(iter##I.ContiguousData()); \
                 iter##I += numBytes; \

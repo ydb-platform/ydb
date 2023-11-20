@@ -82,7 +82,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
 
-        this->Become(&TRateLimiterControlRequest::StateFunc);
+        this->UnsafeBecome(&TRateLimiterControlRequest::StateFunc);
 
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         NYql::TIssues issues;
@@ -243,7 +243,7 @@ public:
     }
 
     void SendRequest() override {
-        Become(&TCreateRateLimiterResourceRPC::StateFunc);
+        UnsafeBecome(&TCreateRateLimiterResourceRPC::StateFunc);
 
         THolder<TEvKesus::TEvAddQuoterResource> req = MakeHolder<TEvKesus::TEvAddQuoterResource>();
         CopyProps(GetProtoRequest()->resource(), *req->Record.MutableResource());
@@ -274,7 +274,7 @@ public:
     }
 
     void SendRequest() override {
-        Become(&TAlterRateLimiterResourceRPC::StateFunc);
+        UnsafeBecome(&TAlterRateLimiterResourceRPC::StateFunc);
 
         THolder<TEvKesus::TEvUpdateQuoterResource> req = MakeHolder<TEvKesus::TEvUpdateQuoterResource>();
         CopyProps(GetProtoRequest()->resource(), *req->Record.MutableResource());
@@ -305,7 +305,7 @@ public:
     }
 
     void SendRequest() override {
-        Become(&TDropRateLimiterResourceRPC::StateFunc);
+        UnsafeBecome(&TDropRateLimiterResourceRPC::StateFunc);
 
         THolder<TEvKesus::TEvDeleteQuoterResource> req = MakeHolder<TEvKesus::TEvDeleteQuoterResource>();
         req->Record.SetResourcePath(GetProtoRequest()->resource_path());
@@ -339,7 +339,7 @@ public:
     }
 
     void SendRequest() override {
-        Become(&TListRateLimiterResourcesRPC::StateFunc);
+        UnsafeBecome(&TListRateLimiterResourcesRPC::StateFunc);
 
         THolder<TEvKesus::TEvDescribeQuoterResources> req = MakeHolder<TEvKesus::TEvDescribeQuoterResources>();
         if (const TString& path = GetProtoRequest()->resource_path()) {
@@ -383,7 +383,7 @@ public:
     }
 
     void SendRequest() override {
-        Become(&TDescribeRateLimiterResourceRPC::StateFunc);
+        UnsafeBecome(&TDescribeRateLimiterResourceRPC::StateFunc);
 
         THolder<TEvKesus::TEvDescribeQuoterResources> req = MakeHolder<TEvKesus::TEvDescribeQuoterResources>();
         req->Record.AddResourcePaths(GetProtoRequest()->resource_path());
@@ -415,7 +415,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
 
-        Become(&TAcquireRateLimiterResourceRPC::StateFunc);
+        UnsafeBecome(&TAcquireRateLimiterResourceRPC::StateFunc);
 
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         NYql::TIssues issues;
@@ -459,7 +459,7 @@ public:
     }
 
     void SendRequest() {
-        Become(&TAcquireRateLimiterResourceRPC::StateFunc);
+        UnsafeBecome(&TAcquireRateLimiterResourceRPC::StateFunc);
 
         if (GetProtoRequest()->units_case() == Ydb::RateLimiter::AcquireResourceRequest::UnitsCase::kRequired) {
             SendLeaf(

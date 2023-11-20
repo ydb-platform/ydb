@@ -1,0 +1,26 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:4:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: SqlProject
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:7:21: Warning: At function: AssumeColumnOrderPartial, At function: Aggregate, At function: OrderedMap
+        	FROM plato.Input as i1 JOIN plato.Input AS i2 on cast(i1.key as uint32) / 100 == cast(i2.subkey as uint32) / 100
+	                    ^
+            <tmp_path>/program.sql:<main>:7:21: Warning: At function: EquiJoin, At function: RemoveSystemMembers, At function: OrderedMap, At function: AddMember
+            	FROM plato.Input as i1 JOIN plato.Input AS i2 on cast(i1.key as uint32) / 100 == cast(i2.subkey as uint32) / 100
+	                    ^
+                <tmp_path>/program.sql:<main>:7:73: Warning: At function: /
+                	FROM plato.Input as i1 JOIN plato.Input AS i2 on cast(i1.key as uint32) / 100 == cast(i2.subkey as uint32) / 100
+	                                                                        ^
+                    <tmp_path>/program.sql:<main>:7:73: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                    	FROM plato.Input as i1 JOIN plato.Input AS i2 on cast(i1.key as uint32) / 100 == cast(i2.subkey as uint32) / 100
+	                                                                        ^
+            <tmp_path>/program.sql:<main>:7:21: Warning: At function: RemoveSystemMembers, At function: OrderedMap, At function: AddMember
+            	FROM plato.Input as i1 JOIN plato.Input AS i2 on cast(i1.key as uint32) / 100 == cast(i2.subkey as uint32) / 100
+	                    ^
+                <tmp_path>/program.sql:<main>:7:108: Warning: At function: /
+                	FROM plato.Input as i1 JOIN plato.Input AS i2 on cast(i1.key as uint32) / 100 == cast(i2.subkey as uint32) / 100
+	                                                                                                           ^
+                    <tmp_path>/program.sql:<main>:7:108: Warning: Integral type implicit bitcast: Optional<Uint32> and Int32
+                    	FROM plato.Input as i1 JOIN plato.Input AS i2 on cast(i1.key as uint32) / 100 == cast(i2.subkey as uint32) / 100
+	                                                                                                           ^

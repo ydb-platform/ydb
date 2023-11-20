@@ -54,7 +54,7 @@ namespace NActors {
                 } else if (auto *value = std::any_cast<T>(&arg)) {
                     return std::move(*value);
                 } else {
-                    Y_FAIL("unspported return type for TEvInvokeResult: actual# %s != expected# %s",
+                    Y_ABORT("unspported return type for TEvInvokeResult: actual# %s != expected# %s",
                         TypeName(arg.type()).data(), TypeName<T>().data());
                 }
             }, Result);

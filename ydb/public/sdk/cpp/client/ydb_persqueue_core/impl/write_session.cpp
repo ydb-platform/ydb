@@ -17,49 +17,45 @@ TWriteSession::TWriteSession(
          std::shared_ptr<TPersQueueClient::TImpl> client,
          std::shared_ptr<TGRpcConnectionsImpl> connections,
          TDbDriverStatePtr dbDriverState)
-    : Impl(std::make_shared<TWriteSessionImpl>(settings, std::move(client), std::move(connections), std::move(dbDriverState)))
-{
-    CbContext = std::make_shared<TCallbackContext<TWriteSessionImpl>>(Impl);
-    Impl->SetCallbackContext(CbContext);
+    : TContextOwner(settings, std::move(client), std::move(connections), std::move(dbDriverState)) {
 }
 
 void TWriteSession::Start(const TDuration& delay) {
-    Impl->Start(delay);
+    TryGetImpl()->Start(delay);
 }
 
 NThreading::TFuture<ui64> TWriteSession::GetInitSeqNo() {
-    return Impl->GetInitSeqNo();
+    return TryGetImpl()->GetInitSeqNo();
 }
 
 TMaybe<TWriteSessionEvent::TEvent> TWriteSession::GetEvent(bool block) {
-    return Impl->EventsQueue->GetEvent(block);
+    return TryGetImpl()->EventsQueue->GetEvent(block);
 }
 
 TVector<TWriteSessionEvent::TEvent> TWriteSession::GetEvents(bool block, TMaybe<size_t> maxEventsCount) {
-    return Impl->EventsQueue->GetEvents(block, maxEventsCount);
+    return TryGetImpl()->EventsQueue->GetEvents(block, maxEventsCount);
 }
 
 NThreading::TFuture<void> TWriteSession::WaitEvent() {
-    return Impl->EventsQueue->WaitEvent();
+    return TryGetImpl()->EventsQueue->WaitEvent();
 }
 
 void TWriteSession::WriteEncoded(TContinuationToken&& token, TStringBuf data, ECodec codec, ui32 originalSize,
                                  TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp) {
-    Impl->WriteInternal(std::move(token), data, codec, originalSize, seqNo, createTimestamp);
+    TryGetImpl()->WriteInternal(std::move(token), data, codec, originalSize, seqNo, createTimestamp);
 }
 
 void TWriteSession::Write(TContinuationToken&& token, TStringBuf data, TMaybe<ui64> seqNo,
                           TMaybe<TInstant> createTimestamp) {
-    Impl->WriteInternal(std::move(token), data, {}, 0, seqNo, createTimestamp);
+    TryGetImpl()->WriteInternal(std::move(token), data, {}, 0, seqNo, createTimestamp);
 }
 
 bool TWriteSession::Close(TDuration closeTimeout) {
-    return Impl->Close(closeTimeout);
+    return TryGetImpl()->Close(closeTimeout);
 }
 
 TWriteSession::~TWriteSession() {
-    Impl->Close(TDuration::Zero());
-    CbContext->Cancel();
+    TryGetImpl()->Close(TDuration::Zero());
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

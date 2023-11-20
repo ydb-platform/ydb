@@ -51,7 +51,7 @@ public:
         , IsNull_(ptr == nullptr)
         , Ptr(ptr)
     {
-        Y_VERIFY_DEBUG(ptr || size == 0);
+        Y_DEBUG_ABORT_UNLESS(ptr || size == 0);
 
         if (CanInline(size)) {
             IsInline_ = 1;
@@ -96,14 +96,34 @@ public:
     template<typename T, typename = TStdLayout<T>>
     T AsValue() const noexcept
     {
-        Y_ABORT_UNLESS(sizeof(T) == Size(), "AsValue<T>() type doesn't match TCell");
+        Y_ABORT_UNLESS(sizeof(T) == Size(), "AsValue<T>() type size %" PRISZT " doesn't match TCell size %" PRIu32, sizeof(T), Size());
 
         return ReadUnaligned<T>(Data());
     }
 
-    template<typename T, typename = TStdLayout<T>>
-    static inline TCell Make(const T &val) noexcept
-    {
+    template <typename T, typename = TStdLayout<T>>
+    bool ToValue(T& value, TString& err) const noexcept {
+        if (sizeof(T) != Size()) {
+            err = Sprintf("ToValue<T>() type size %" PRISZT " doesn't match TCell size %" PRIu32, sizeof(T), Size());
+            return false;
+        }
+
+        value = ReadUnaligned<T>(Data());
+        return true;
+    }
+
+    template <typename T, typename = TStdLayout<T>>
+    bool ToStream(IOutputStream& out, TString& err) const noexcept {
+        T value;
+        if (!ToValue(value, err))
+            return false;
+
+        out << value;
+        return true;
+    }
+
+    template <typename T, typename = TStdLayout<T>>
+    static inline TCell Make(const T& val) noexcept {
         auto *ptr = static_cast<const char*>(static_cast<const void*>(&val));
 
         return TCell{ ptr, sizeof(val) };
@@ -113,13 +133,13 @@ public:
     // Optimization to store small values (<= 8 bytes) inplace
     static constexpr bool CanInline(ui32 sz) { return sz <= 8; }
     static constexpr size_t MaxInlineSize() { return 8; }
-    const char* InlineData() const                  { Y_VERIFY_DEBUG(IsInline_); return IsNull_ ? nullptr : (char*)&IntVal; }
+    const char* InlineData() const                  { Y_DEBUG_ABORT_UNLESS(IsInline_); return IsNull_ ? nullptr : (char*)&IntVal; }
     const char* Data() const                        { return IsNull_ ? nullptr : (IsInline_ ? (char*)&IntVal : Ptr); }
 #else
     // Non-inlinable version for perf comparisons
     static bool CanInline(ui32)                     { return false; }
-    const char* InlineData() const                  { Y_VERIFY_DEBUG(!IsInline_); return Ptr; }
-    const char* Data() const                        { Y_VERIFY_DEBUG(!IsInline_); return Ptr; }
+    const char* InlineData() const                  { Y_DEBUG_ABORT_UNLESS(!IsInline_); return Ptr; }
+    const char* Data() const                        { Y_DEBUG_ABORT_UNLESS(!IsInline_); return Ptr; }
 #endif
 
     void CopyDataInto(char * dst) const {
@@ -148,6 +168,16 @@ public:
 static_assert(sizeof(TCell) == 12, "TCell must be 12 bytes");
 using TCellsRef = TConstArrayRef<const TCell>;
 
+inline int CompareCellsAsByteString(const TCell& a, const TCell& b, bool isDescending) {
+    const char* pa = (const char*)a.Data();
+    const char* pb = (const char*)b.Data();
+    size_t sza = a.Size();
+    size_t szb = b.Size();
+    int cmp = memcmp(pa, pb, sza < szb ? sza : szb);
+    if (cmp != 0)
+        return isDescending ? (cmp > 0 ? -1 : +1) : cmp; // N.B. cannot multiply, may overflow
+    return sza == szb ? 0 : ((sza < szb) != isDescending ? -1 : 1);
+}
 
 // NULL is considered equal to another NULL and less than non-NULL
 // ATTENTION!!! return value is int!! (NOT just -1,0,1)
@@ -163,8 +193,8 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
 #define SIMPLE_TYPE_SWITCH(typeEnum, castType)      \
     case NKikimr::NScheme::NTypeIds::typeEnum:      \
     {                                               \
-        Y_VERIFY_DEBUG(a.IsInline());                      \
-        Y_VERIFY_DEBUG(b.IsInline());                      \
+        Y_DEBUG_ABORT_UNLESS(a.IsInline());                      \
+        Y_DEBUG_ABORT_UNLESS(b.IsInline());                      \
         castType va = ReadUnaligned<castType>((const castType*)a.InlineData()); \
         castType vb = ReadUnaligned<castType>((const castType*)b.InlineData()); \
         return va == vb ? 0 : ((va < vb) != type.IsDescending() ? -1 : 1);   \
@@ -199,20 +229,20 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
     case NKikimr::NScheme::NTypeIds::JsonDocument:
     case NKikimr::NScheme::NTypeIds::DyNumber:
     {
-        const char* pa = (const char*)a.Data();
-        const char* pb = (const char*)b.Data();
-        size_t sza = a.Size();
-        size_t szb = b.Size();
-        int cmp = memcmp(pa, pb, sza < szb ? sza : szb);
-        if (cmp != 0)
-            return type.IsDescending() ? (cmp > 0 ? -1 : +1) : cmp; // N.B. cannot multiply, may overflow
-        return sza == szb ? 0 : ((sza < szb) != type.IsDescending() ? -1 : 1);
+        return CompareCellsAsByteString(a, b, type.IsDescending());
+    }
+
+    case NKikimr::NScheme::NTypeIds::Uuid:
+    {
+        Y_DEBUG_ABORT_UNLESS(a.Size() == 16);
+        Y_DEBUG_ABORT_UNLESS(b.Size() == 16);
+        return CompareCellsAsByteString(a, b, type.IsDescending());
     }
 
     case NKikimr::NScheme::NTypeIds::Decimal:
     {
-        Y_VERIFY_DEBUG(a.Size() == sizeof(std::pair<ui64, i64>));
-        Y_VERIFY_DEBUG(b.Size() == sizeof(std::pair<ui64, i64>));
+        Y_DEBUG_ABORT_UNLESS(a.Size() == sizeof(std::pair<ui64, i64>));
+        Y_DEBUG_ABORT_UNLESS(b.Size() == sizeof(std::pair<ui64, i64>));
         std::pair<ui64, i64> va = ReadUnaligned<std::pair<ui64, i64>>((const std::pair<ui64, i64>*)a.Data());
         std::pair<ui64, i64> vb = ReadUnaligned<std::pair<ui64, i64>>((const std::pair<ui64, i64>*)b.Data());
         if (va.second == vb.second)
@@ -229,7 +259,7 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeInfoO
     }
 
     default:
-        Y_VERIFY_DEBUG(false, "Unknown type");
+        Y_DEBUG_ABORT_UNLESS(false, "Unknown type");
     };
 
     return 0;
@@ -250,7 +280,7 @@ inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeCl
 // ATTENTION!!! return value is int!! (NOT just -1,0,1)
 template<class TTypeClass>
 inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeClass* type, const ui32 cnt_a, const ui32 cnt_b) {
-    Y_VERIFY_DEBUG(cnt_b <= cnt_a);
+    Y_DEBUG_ABORT_UNLESS(cnt_b <= cnt_a);
     ui32 i = 0;
     for (; i < cnt_b; ++i) {
         int cmpRes = CompareTypedCells(a[i], b[i], type[i]);
@@ -311,6 +341,7 @@ inline ui64 GetValueHash(NScheme::TTypeInfo info, const TCell& cell) {
     case NYql::NProto::TypeIds::Decimal:
     case NYql::NProto::TypeIds::JsonDocument:
     case NYql::NProto::TypeIds::DyNumber:
+    case NYql::NProto::TypeIds::Uuid:
         return ComputeHash(TStringBuf{cell.Data(), cell.Size()});
 
     default:
@@ -323,7 +354,7 @@ inline ui64 GetValueHash(NScheme::TTypeInfo info, const TCell& cell) {
         return NPg::PgNativeBinaryHash(cell.Data(), cell.Size(), typeDesc);
     }
 
-    Y_VERIFY_DEBUG(false, "Type not supported for user columns: %d", typeId);
+    Y_DEBUG_ABORT_UNLESS(false, "Type not supported for user columns: %d", typeId);
     return 0;
 }
 
@@ -518,6 +549,22 @@ private:
 private:
     TString Buf;
     TVector<TCell> Cells;
+};
+
+class TCellsStorage
+{
+public:
+    TCellsStorage() = default;
+
+    inline TConstArrayRef<TCell> GetCells() const {
+        return Cells;
+    }
+
+    void Reset(TArrayRef<const TCell> cells);
+
+private:
+    TArrayRef<TCell> Cells;
+    std::vector<char> CellsData;
 };
 
 class TOwnedCellVecBatch {

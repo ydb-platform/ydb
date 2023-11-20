@@ -138,6 +138,8 @@ struct TEvPQ {
         EvQuotaCountersUpdated,
         EvConsumerRemoved,
         EvFetchResponse,
+        EvSourceIdRequest,
+        EvSourceIdResponse,
         EvEnd
     };
 
@@ -498,6 +500,12 @@ struct TEvPQ {
         : MaxSize(maxSize)
         {}
 
+        TEvChangeCacheConfig(const TString& topicName, ui32 maxSize)
+        : TopicName(topicName)
+        , MaxSize(maxSize)
+        {}
+
+        TString TopicName;
         ui32 MaxSize;
     };
 
@@ -853,6 +861,12 @@ struct TEvPQ {
         Ydb::StatusIds::StatusCode Status;
         TString Message;
         NKikimrClient::TPersQueueFetchResponse Response;
+    };
+
+    struct TEvSourceIdRequest : public TEventPB<TEvSourceIdRequest, NKikimrPQ::TEvSourceIdRequest, EvSourceIdRequest> {
+    };
+
+    struct TEvSourceIdResponse : public TEventPB<TEvSourceIdResponse, NKikimrPQ::TEvSourceIdResponse, EvSourceIdResponse> {
     };
 };
 

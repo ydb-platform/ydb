@@ -166,6 +166,22 @@ TShardConfigPtr TSolomonExporterConfig::MatchShard(const TString& sensorName)
     return matchedShard;
 }
 
+ESummaryPolicy TSolomonExporterConfig::GetSummaryPolicy() const
+{
+    auto policy = ESummaryPolicy::Default;
+    if (ExportSummary) {
+        policy |= ESummaryPolicy::All;
+    }
+    if (ExportSummaryAsMax) {
+        policy |= ESummaryPolicy::Max;
+    }
+    if (ExportSummaryAsAvg) {
+        policy |= ESummaryPolicy::Avg;
+    }
+
+    return policy;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TSolomonExporter::TSolomonExporter(
@@ -385,11 +401,11 @@ constexpr auto IndexPage = R"EOF(
 <!DOCTYPE html>
 <html>
 <body>
-<a href="sensors">sensors top</a>
+<a href="%vsensors">sensors top</a>
 <br/>
-<a href="tags">tags top</a>
+<a href="%vtags">tags top</a>
 <br/>
-<a href="status">status</a>
+<a href="%vstatus">status</a>
 </body>
 </html>
 )EOF";
@@ -406,7 +422,10 @@ void TSolomonExporter::HandleIndex(const TString& prefix, const IRequestPtr& req
     rsp->SetStatus(EStatusCode::OK);
     rsp->GetHeaders()->Add("Content-Type", "text/html; charset=UTF-8");
 
-    WaitFor(rsp->WriteBody(TSharedRef::FromString(IndexPage)))
+    auto prefixWithSlash = !prefix.empty() ? prefix + "/" : prefix;
+    auto indexPageFormatted = Format(IndexPage, prefixWithSlash, prefixWithSlash, prefixWithSlash);
+
+    WaitFor(rsp->WriteBody(TSharedRef::FromString(indexPageFormatted)))
         .ThrowOnError();
 }
 
@@ -540,9 +559,10 @@ bool TSolomonExporter::ReadSensors(
     readOptions.Times.emplace_back(std::vector<int>{Registry_->IndexOf(Window_.back().first)}, TInstant::Zero());
     readOptions.ConvertCountersToRateGauge = false;
     readOptions.EnableHistogramCompat = true;
-    readOptions.ExportSummary |= Config_->ExportSummary;
-    readOptions.ExportSummaryAsMax |= Config_->ExportSummaryAsMax;
-    readOptions.ExportSummaryAsAvg |= Config_->ExportSummaryAsAvg;
+
+    readOptions.SummaryPolicy |= Config_->GetSummaryPolicy();
+    ValidateSummaryPolicy(readOptions.SummaryPolicy);
+
     readOptions.MarkAggregates |= Config_->MarkAggregates;
     if (!readOptions.Host && Config_->Host) {
         readOptions.Host = Config_->Host;
@@ -786,9 +806,7 @@ void TSolomonExporter::DoHandleShard(
 
         options.EnableSolomonAggregationWorkaround = isSolomon;
         options.Times = readWindow;
-        options.ExportSummary = Config_->ExportSummary;
-        options.ExportSummaryAsMax = Config_->ExportSummaryAsMax;
-        options.ExportSummaryAsAvg = Config_->ExportSummaryAsAvg;
+        options.SummaryPolicy = Config_->GetSummaryPolicy();
         options.MarkAggregates = Config_->MarkAggregates;
         options.StripSensorsNamePrefix = Config_->StripSensorsNamePrefix;
         options.LingerWindowSize = Config_->LingerTimeout / gridStep;
@@ -970,6 +988,23 @@ void TSolomonExporter::CleanResponseCache()
 
     for (const auto& removedKey : toRemove) {
         ResponseCache_.erase(removedKey);
+    }
+}
+
+void TSolomonExporter::ValidateSummaryPolicy(ESummaryPolicy policy)
+{
+    static const TError SummaryPolicyError("Invalid summary policy in read options");
+
+    auto summaryPolicyConflicts = GetSummaryPolicyConflicts(policy);
+    if (summaryPolicyConflicts.AllPolicyWithSpecifiedAggregates) {
+        THROW_ERROR SummaryPolicyError
+            << TError("%Qlv policy can be used only without specified policies", ESummaryPolicy::All)
+            << TErrorAttribute("policy", policy);
+    }
+    if (summaryPolicyConflicts.OmitNameLabelSuffixWithSeveralAggregates) {
+        THROW_ERROR SummaryPolicyError
+            << TError("%Qlv option can be used only with single specified policy", ESummaryPolicy::OmitNameLabelSuffix)
+            << TErrorAttribute("policy", policy);
     }
 }
 

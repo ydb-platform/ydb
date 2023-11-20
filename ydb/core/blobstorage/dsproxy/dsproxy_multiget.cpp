@@ -58,7 +58,7 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
         Y_ABORT_UNLESS(res.ResponseSz == info.EndIdx - info.BeginIdx);
 
         for (ui64 offset = 0; offset < res.ResponseSz; ++offset) {
-            Y_VERIFY_DEBUG(!PhantomCheck || res.Responses[offset].LooksLikePhantom.has_value());
+            Y_DEBUG_ABORT_UNLESS(!PhantomCheck || res.Responses[offset].LooksLikePhantom.has_value());
             Responses[info.BeginIdx + offset] = res.Responses[offset];
         }
 
@@ -83,7 +83,7 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
     }
 
     std::unique_ptr<IEventBase> RestartQuery(ui32) {
-        Y_FAIL();
+        Y_ABORT();
     }
 
 public:
@@ -140,7 +140,7 @@ public:
         }
         if (!RequestsInFlight && PendingGets.empty()) {
             for (size_t i = 0; PhantomCheck && i < QuerySize; ++i) {
-                Y_VERIFY_DEBUG(Responses[i].LooksLikePhantom.has_value());
+                Y_DEBUG_ABORT_UNLESS(Responses[i].LooksLikePhantom.has_value());
             }
             auto ev = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, 0, Info->GroupID);
             ev->ResponseSz = QuerySize;

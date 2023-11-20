@@ -2,6 +2,7 @@
 
 #include <yt/yt/core/yson/unittests/proto/protobuf_yson_ut.pb.h>
 #include <yt/yt/core/yson/unittests/proto/protobuf_yson_casing_ut.pb.h>
+#include <yt/yt/core/yson/unittests/proto/protobuf_yson_casing_ext_ut.pb.h>
 
 #include <yt/yt/core/yson/protobuf_interop.h>
 #include <yt/yt/core/yson/null_consumer.h>
@@ -1017,30 +1018,38 @@ TEST(TYsonToProtobufTest, Entities)
 
 TEST(TYsonToProtobufTest, ValidUtf8StringCheck)
 {
-    TProtobufWriterOptions options{
-        .CheckUtf8 = true,
-    };
+    for (auto option: {EUtf8Check::None, EUtf8Check::Log, EUtf8Check::Throw}) {
+        TProtobufWriterOptions options{
+            .CheckUtf8 = option,
+        };
 
-    TString invalidUtf8 = "\xc3\x28";
+        TString invalidUtf8 = "\xc3\x28";
 
-    auto check = [&] {
-        TEST_PROLOGUE_WITH_OPTIONS(TMessage, options)
-            .BeginMap()
-                .Item("string_field").Value(invalidUtf8)
-            .EndMap();
-    };
+        auto check = [&] {
+            TEST_PROLOGUE_WITH_OPTIONS(TMessage, options)
+                .BeginMap()
+                    .Item("string_field").Value(invalidUtf8)
+                .EndMap();
+        };
+        if (option == EUtf8Check::Throw) {
+            EXPECT_THROW_WITH_SUBSTRING(check(), "valid UTF-8");
+        } else {
+            EXPECT_NO_THROW(check());
+        }
 
-    EXPECT_THROW_WITH_SUBSTRING(check(), "valid UTF-8");
-
-    NProto::TMessage message;
-    message.set_string_field(invalidUtf8);
-    TString newYsonString;
-    TStringOutput newYsonOutputStream(newYsonString);
-    TYsonWriter ysonWriter(&newYsonOutputStream, EYsonFormat::Pretty);
-
-    EXPECT_THROW_WITH_SUBSTRING(
-        WriteProtobufMessage(&ysonWriter, message, TProtobufParserOptions{.CheckUtf8 = true}),
-        "valid UTF-8");
+        NProto::TMessage message;
+        message.set_string_field(invalidUtf8);
+        TString newYsonString;
+        TStringOutput newYsonOutputStream(newYsonString);
+        TYsonWriter ysonWriter(&newYsonOutputStream, EYsonFormat::Pretty);
+        if (option == EUtf8Check::Throw) {
+            EXPECT_THROW_WITH_SUBSTRING(
+                WriteProtobufMessage(&ysonWriter, message, TProtobufParserOptions{.CheckUtf8 = option}),
+                "valid UTF-8");
+        } else {
+            EXPECT_NO_THROW(WriteProtobufMessage(&ysonWriter, message, TProtobufParserOptions{.CheckUtf8 = option}));
+        }
+    }
 }
 
 TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
@@ -2211,6 +2220,7 @@ TEST(TProtobufEnums, FindLiteralByValueWithAlias)
     static const auto* type = ReflectProtobufEnumType(NYT::NYson::NProto::EFlag_descriptor());
     ASSERT_EQ("true", FindProtobufEnumLiteralByValue(type, NYT::NYson::NProto::Flag_True));
     ASSERT_EQ("true", FindProtobufEnumLiteralByValue(type, NYT::NYson::NProto::Flag_Yes));
+    ASSERT_EQ("true", FindProtobufEnumLiteralByValue(type, NYT::NYson::NProto::Flag_AnotherYes));
 }
 
 TEST(TProtobufEnums, ConvertToProtobufEnumValueUntyped)
@@ -2687,6 +2697,28 @@ TEST(TEnumYsonStorageTypeTest, TestDeserializeSerialize)
 
     // Check that original message is equal to its deserialized + serialized version
     EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(message, resultedMessage));
+}
+
+TEST(TYsonToProtobufTest, Casing)
+{
+    auto ysonNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("some_field").Value(1)
+            .Item("another_field123").Value(2)
+        .EndMap();
+    auto ysonString = ConvertToYsonString(ysonNode);
+
+    NYson::TProtobufWriterOptions protobufWriterOptions;
+    protobufWriterOptions.ConvertSnakeToCamelCase = true;
+
+    NProto::TExternalProtobuf message;
+    message.ParseFromStringOrThrow(NYson::YsonStringToProto(
+        ysonString,
+        NYson::ReflectProtobufMessageType<NProto::TExternalProtobuf>(),
+        protobufWriterOptions));
+
+    EXPECT_EQ(message.somefield(), 1);
+    EXPECT_EQ(message.anotherfield123(), 2);
 }
 
 } // namespace

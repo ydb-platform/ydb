@@ -231,11 +231,7 @@ void TIndexInfo::SetAllKeys() {
         SortingKey = ArrowSchema(primaryKeyNames);
         ReplaceKey = SortingKey;
         fields = ReplaceKey->fields();
-        if (CompositeIndexKey) {
-            IndexKey = ReplaceKey;
-        } else {
-            IndexKey = std::make_shared<arrow::Schema>(arrow::FieldVector({ fields[0] }));
-        }
+        IndexKey = ReplaceKey;
     }
 
     fields.push_back(arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()));
@@ -318,14 +314,14 @@ TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId, const TSaverContext
 TColumnFeatures& TIndexInfo::GetOrCreateColumnFeatures(const ui32 columnId) const {
     auto it = ColumnFeatures.find(columnId);
     if (it == ColumnFeatures.end()) {
-        it = ColumnFeatures.emplace(columnId, TColumnFeatures(columnId)).first;
+        it = ColumnFeatures.emplace(columnId, TColumnFeatures::BuildFromIndexInfo(columnId, *this)).first;
     }
     return it->second;
 }
 
 std::shared_ptr<TColumnLoader> TIndexInfo::GetColumnLoader(const ui32 columnId) const {
     TColumnFeatures& features = GetOrCreateColumnFeatures(columnId);
-    return features.GetLoader(*this);
+    return features.GetLoader();
 }
 
 std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchema(const std::set<ui32>& columnIds) const {
@@ -336,7 +332,7 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchema(const std::set<ui32>
         if (IsSpecialColumn(i)) {
             schema = ArrowSchemaSnapshot();
         } else {
-            schema = Schema;
+            schema = ArrowSchema();
         }
         auto field = schema->GetFieldByName(GetColumnName(i));
         Y_ABORT_UNLESS(field);
@@ -363,12 +359,14 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
             col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
         Columns[id] = NTable::TColumn(name, id, typeInfoMod.TypeInfo, typeInfoMod.TypeMod, notNull);
         ColumnNames[name] = id;
-        std::optional<TColumnFeatures> cFeatures = TColumnFeatures::BuildFromProto(col, id);
+    }
+    for (const auto& col : schema.GetColumns()) {
+        std::optional<TColumnFeatures> cFeatures = TColumnFeatures::BuildFromProto(col, *this);
         if (!cFeatures) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_column_feature");
             return false;
         }
-        ColumnFeatures.emplace(id, *cFeatures);
+        ColumnFeatures.emplace(col.GetId(), *cFeatures);
     }
 
     for (const auto& keyName : schema.GetKeyColumnNames()) {
@@ -386,13 +384,7 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     }
 
     Version = schema.GetVersion();
-    CompositeMarks = schema.GetCompositeMarks();
-    CompositeIndexKey = AppData()->FeatureFlags.GetForceColumnTablesCompositeMarks() ? true : CompositeMarks;
     return true;
-}
-
-bool TIndexInfo::CheckAlterScheme(const NKikimrSchemeOp::TColumnTableSchema& scheme) const {
-    return CompositeMarks == scheme.GetCompositeMarks();
 }
 
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, bool withSpecials) {
@@ -407,9 +399,7 @@ std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSche
 
     for (const ui32 id: ids) {
         auto it = columns.find(id);
-        if (it == columns.end()) {
-            continue;
-        }
+        AFL_VERIFY(it != columns.end());
 
         const auto& column = it->second;
         std::string colName(column.Name.data(), column.Name.size());

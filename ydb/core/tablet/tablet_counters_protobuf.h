@@ -81,7 +81,7 @@ public:
             if (!AppGlobalRanges.empty())
                 return AppGlobalRanges;
         }
-        Y_FAIL("Ranges for percentile counter '%s' are not defined", AppCountersDesc()->value(idx)->full_name().c_str());
+        Y_ABORT("Ranges for percentile counter '%s' are not defined", AppCountersDesc()->value(idx)->full_name().c_str());
     }
 
     virtual bool GetIntegral(size_t idx) const {
@@ -193,10 +193,10 @@ public:
             }
         }
         if (idx < TxOffset) {
-            Y_FAIL("Ranges for percentile counter '%s' are not defined", AppCountersDesc()->value(idx)->full_name().c_str());
+            Y_ABORT("Ranges for percentile counter '%s' are not defined", AppCountersDesc()->value(idx)->full_name().c_str());
         } else {
             size_t idx2 = (idx - TxOffset) % TxCountersSize;
-            Y_FAIL("Ranges for percentile counter '%s' are not defined", TxCountersDesc()->value(idx2)->full_name().c_str());
+            Y_ABORT("Ranges for percentile counter '%s' are not defined", TxCountersDesc()->value(idx2)->full_name().c_str());
         }
     }
 };

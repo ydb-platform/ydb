@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:1:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select a + b + c from plato.Input;
+	^
+        <tmp_path>/program.sql:<main>:1:14: Warning: At function: +
+        	select a + b + c from plato.Input;
+	             ^
+            <tmp_path>/program.sql:<main>:1:10: Warning: At function: +
+            	select a + b + c from plato.Input;
+	         ^
+                <tmp_path>/program.sql:<main>:1:10: Warning: Integral type implicit bitcast: Optional<Int64> and Optional<Uint64>
+                	select a + b + c from plato.Input;
+	         ^

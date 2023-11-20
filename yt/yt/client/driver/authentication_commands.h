@@ -8,7 +8,9 @@ class TSetUserPasswordCommand
     : public TTypedCommand<NApi::TSetUserPasswordOptions>
 {
 public:
-    TSetUserPasswordCommand();
+    REGISTER_YSON_STRUCT_LITE(TSetUserPasswordCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     TString User_;
@@ -25,7 +27,9 @@ class TIssueTokenCommand
     : public TTypedCommand<NApi::TIssueTokenOptions>
 {
 public:
-    TIssueTokenCommand();
+    REGISTER_YSON_STRUCT_LITE(TIssueTokenCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     TString User_;
@@ -41,7 +45,9 @@ class TRevokeTokenCommand
     : public TTypedCommand<NApi::TRevokeTokenOptions>
 {
 public:
-    TRevokeTokenCommand();
+    REGISTER_YSON_STRUCT_LITE(TRevokeTokenCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     TString User_;
@@ -58,7 +64,9 @@ class TListUserTokensCommand
     : public TTypedCommand<NApi::TListUserTokensOptions>
 {
 public:
-    TListUserTokensCommand();
+    REGISTER_YSON_STRUCT_LITE(TListUserTokensCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     TString User_;

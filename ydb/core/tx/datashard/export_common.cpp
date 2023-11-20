@@ -4,6 +4,7 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/dynumber/dynumber.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
@@ -77,9 +78,43 @@ TString DecimalToString(const std::pair<ui64, i64>& loHi) {
 }
 
 TString DyNumberToString(TStringBuf data) {
+    TString result;
+    TStringOutput out(result);
+    TStringBuilder err;
+
+    bool success = DyNumberToStream(data, out, err);
+    Y_ABORT_UNLESS(success);
+
+    return result;
+}
+
+bool DecimalToStream(const std::pair<ui64, i64>& loHi, IOutputStream& out, TString& err) {
+    Y_UNUSED(err);
+    using namespace NYql::NDecimal;
+
+    TInt128 val = FromHalfs(loHi.first, loHi.second);
+    out << ToString(val, NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
+    return true;
+}
+
+bool DyNumberToStream(TStringBuf data, IOutputStream& out, TString& err) {
     auto result = NDyNumber::DyNumberToString(data);
-    Y_ABORT_UNLESS(result.Defined(), "Invalid DyNumber binary representation");
-    return *result;
+    if (!result.Defined()) {
+        err = "Invalid DyNumber binary representation";
+        return false;
+    }
+    out << *result;
+    return true;
+}
+
+bool PgToStream(TStringBuf data, void* typeDesc, IOutputStream& out, TString& err) {
+    const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(data, typeDesc);
+    if (pgResult.Error) {
+        err = *pgResult.Error;
+        return false;
+    }
+    out << '"' << CGIEscapeRet(pgResult.Str) << '"';
+    return true;
 }
 
 } // NDataShard

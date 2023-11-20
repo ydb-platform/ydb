@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:3:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:4:3: Error: At function: WeakField
+        	  WeakField(first_num, "int32", 42) -- first_num column have another type
+	  ^
+            <tmp_path>/program.sql:<main>:4:3: Error: incompatible WeakField types: Optional<Int32!=Uint32>
+            	  WeakField(first_num, "int32", 42) -- first_num column have another type
+	  ^

@@ -147,7 +147,7 @@ namespace NKikimr {
         {}
 
         void TMemView::TTreeWithLog::RollUp(bool gcOnlySynced){
-            Y_VERIFY_DEBUG(!Shared());
+            Y_DEBUG_ABORT_UNLESS(!Shared());
             for (const auto &x : Log) {
                 Tree->Update(gcOnlySynced, x.first, x.second);
             }

@@ -75,7 +75,7 @@ public:
 private:
     void FreePage(void* addr) {
         auto res = T::Munmap(addr, PageSize);
-        Y_VERIFY_DEBUG(0 == res, "Munmap failed: %s", LastSystemErrorText());
+        Y_DEBUG_ABORT_UNLESS(0 == res, "Munmap failed: %s", LastSystemErrorText());
     }
 
 private:
@@ -140,8 +140,8 @@ inline void* TSystemMmap::Mmap(size_t size)
 
 inline int TSystemMmap::Munmap(void* addr, size_t size)
 {
-    Y_VERIFY_DEBUG(AlignUp(addr, SYS_PAGE_SIZE) == addr, "Got unaligned address");
-    Y_VERIFY_DEBUG(AlignUp(size, SYS_PAGE_SIZE) == size, "Got unaligned size");
+    Y_DEBUG_ABORT_UNLESS(AlignUp(addr, SYS_PAGE_SIZE) == addr, "Got unaligned address");
+    Y_DEBUG_ABORT_UNLESS(AlignUp(size, SYS_PAGE_SIZE) == size, "Got unaligned size");
     return ::munmap(addr, size);
 }
 #endif
@@ -197,11 +197,11 @@ TAlignedPagePoolCounters::TAlignedPagePoolCounters(::NMonitoring::TDynamicCounte
 template<typename T>
 TAlignedPagePoolImpl<T>::~TAlignedPagePoolImpl() {
     if (CheckLostMem && !UncaughtException()) {
-        Y_VERIFY_DEBUG(TotalAllocated == FreePages.size() * POOL_PAGE_SIZE,
+        Y_DEBUG_ABORT_UNLESS(TotalAllocated == FreePages.size() * POOL_PAGE_SIZE,
                        "memory leak; Expected %ld, actual %ld (%ld page(s), %ld offloaded); allocator created at: %s",
                        TotalAllocated, FreePages.size() * POOL_PAGE_SIZE,
                        FreePages.size(), OffloadedActiveBytes, GetInfo().data());
-        Y_VERIFY_DEBUG(OffloadedActiveBytes == 0, "offloaded: %ld", OffloadedActiveBytes);
+        Y_DEBUG_ABORT_UNLESS(OffloadedActiveBytes == 0, "offloaded: %ld", OffloadedActiveBytes);
     }
 
     size_t activeBlocksSize = 0;
@@ -220,7 +220,7 @@ TAlignedPagePoolImpl<T>::~TAlignedPagePoolImpl() {
         }
     }
 
-    Y_VERIFY_DEBUG(TotalAllocated == AllPages.size() * POOL_PAGE_SIZE + OffloadedActiveBytes,
+    Y_DEBUG_ABORT_UNLESS(TotalAllocated == AllPages.size() * POOL_PAGE_SIZE + OffloadedActiveBytes,
                    "Expected %ld, actual %ld (%ld page(s))", TotalAllocated,
                    AllPages.size() * POOL_PAGE_SIZE + OffloadedActiveBytes, AllPages.size());
 
@@ -333,7 +333,7 @@ void* TAlignedPagePoolImpl<T>::GetPage() {
 
 template<typename T>
 void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
-    Y_VERIFY_DEBUG(AllPages.find(addr) != AllPages.end());
+    Y_DEBUG_ABORT_UNLESS(AllPages.find(addr) != AllPages.end());
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     ReturnBlock(addr, POOL_PAGE_SIZE);
 #else
@@ -343,7 +343,7 @@ void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
 
 template<typename T>
 void* TAlignedPagePoolImpl<T>::GetBlock(size_t size) {
-    Y_VERIFY_DEBUG(size >= POOL_PAGE_SIZE);
+    Y_DEBUG_ABORT_UNLESS(size >= POOL_PAGE_SIZE);
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     OffloadAlloc(size);
@@ -358,7 +358,7 @@ void* TAlignedPagePoolImpl<T>::GetBlock(size_t size) {
         return GetPage();
     } else {
         const auto ptr = Alloc(size);
-        Y_VERIFY_DEBUG(ActiveBlocks.emplace(ptr, size).second);
+        Y_DEBUG_ABORT_UNLESS(ActiveBlocks.emplace(ptr, size).second);
         return ptr;
     }
 #endif
@@ -366,7 +366,7 @@ void* TAlignedPagePoolImpl<T>::GetBlock(size_t size) {
 
 template<typename T>
 void TAlignedPagePoolImpl<T>::ReturnBlock(void* ptr, size_t size) noexcept {
-    Y_VERIFY_DEBUG(size >= POOL_PAGE_SIZE);
+    Y_DEBUG_ABORT_UNLESS(size >= POOL_PAGE_SIZE);
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     OffloadFree(size);
@@ -376,7 +376,7 @@ void TAlignedPagePoolImpl<T>::ReturnBlock(void* ptr, size_t size) noexcept {
         ReturnPage(ptr);
     } else {
         Free(ptr, size);
-        Y_VERIFY_DEBUG(ActiveBlocks.erase(ptr));
+        Y_DEBUG_ABORT_UNLESS(ActiveBlocks.erase(ptr));
     }
 #endif
 }
@@ -400,7 +400,7 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
     if (size > POOL_PAGE_SIZE && size <= MaxMidSize) {
         size = FastClp2(size);
         auto level = LeastSignificantBit(size) - LeastSignificantBit(POOL_PAGE_SIZE);
-        Y_VERIFY_DEBUG(level >= 1 && level <= MidLevels);
+        Y_DEBUG_ABORT_UNLESS(level >= 1 && level <= MidLevels);
         if (res = TGlobalPools<T>::Instance().Get(level).GetPage()) {
             TotalAllocated += size;
             if (AllocNotifyCallback) {
@@ -453,7 +453,7 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
         }
         if (tail) {
             // unmap suffix
-            Y_VERIFY_DEBUG(extraPage+tail <= reinterpret_cast<ui8*>(mem) + size + ALLOC_AHEAD_PAGES * POOL_PAGE_SIZE);
+            Y_DEBUG_ABORT_UNLESS(extraPage+tail <= reinterpret_cast<ui8*>(mem) + size + ALLOC_AHEAD_PAGES * POOL_PAGE_SIZE);
             if (Y_UNLIKELY(0 != T::Munmap(extraPage, tail))) {
                 ythrow yexception() << "Munmap(0x"
                     << IntToString<16>(reinterpret_cast<uintptr_t>(extraPage))
@@ -487,13 +487,13 @@ void TAlignedPagePoolImpl<T>::Free(void* ptr, size_t size) noexcept {
         size = FastClp2(size);
     if (size <= MaxMidSize) {
         auto level = LeastSignificantBit(size) - LeastSignificantBit(POOL_PAGE_SIZE);
-        Y_VERIFY_DEBUG(level >= 1 && level <= MidLevels);
+        Y_DEBUG_ABORT_UNLESS(level >= 1 && level <= MidLevels);
         TGlobalPools<T>::Instance().Get(level).PushPage(ptr);
     } else {
         Y_ABORT_UNLESS(!T::Munmap(ptr, size));
     }
 
-    Y_VERIFY_DEBUG(TotalAllocated >= size);
+    Y_DEBUG_ABORT_UNLESS(TotalAllocated >= size);
     TotalAllocated -= size;
     if (Counters.TotalBytesAllocatedCntr) {
         (*Counters.TotalBytesAllocatedCntr) -= size;

@@ -340,7 +340,7 @@ void SendVGetResult(ui32 blobIdx, ui32 vDiskIdx, NKikimrProto::EReplyStatus stat
         runtime.Send(new IEventHandle(request.Sender, request.ActorId, result.release(), 0, request.Cookie));
         return;
     } else {
-        Y_FAIL();
+        Y_ABORT();
     }
 }
 

@@ -3,6 +3,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/vector.h>
 
+#include <ydb/library/yql/minikql/mkql_type_ops.h>
+
 using namespace NActors;
 
 Y_UNIT_TEST_SUITE(Scheme) {
@@ -357,6 +359,10 @@ Y_UNIT_TEST_SUITE(Scheme) {
                 GetValueHash(typeInfo, TCell(charArr, 30));
                 CompareTypedCells(TCell(charArr, 30), TCell(charArr, 30), typeInfo);
                 break;
+            case NScheme::NTypeIds::Uuid:
+                GetValueHash(typeInfo, TCell(charArr, 16));
+                CompareTypedCells(TCell(charArr, 16), TCell(charArr, 16), typeInfo);
+                break;
             case NScheme::NTypeIds::Decimal:
                 GetValueHash(typeInfo, TCell(charArr, sizeof(ui64) * 2));
                 CompareTypedCells(TCell(charArr, sizeof(ui64) * 2), TCell(charArr, sizeof(ui64) * 2), typeInfo);
@@ -379,6 +385,37 @@ Y_UNIT_TEST_SUITE(Scheme) {
                 break;
             default:
                 UNIT_FAIL("undefined YQL type");
+            }
+        }
+    }
+
+
+    Y_UNIT_TEST(CompareUuidCells) {
+        const int uuidByteSize = 16;
+        const TTypeInfo uuidTypeInfo(NTypeIds::Uuid);
+
+        struct UuidTestCell {
+            TCell cell;
+            char data[16];
+        };
+
+        TVector<TString> uuidStrs = {
+            "5b99a330-04ef-4f1a-9b64-ba6d5f44eafe", // [30, a3, ...]
+            "afcbef30-9ac3-481a-aa6a-8d9b785dbb0a", // [30, ef, ...]
+            "b91cd23b-861c-4cc1-9119-801a4dac1cb9", // [3b, d2, ...]
+            "65df9ecc-a97d-47b2-ae56-3c023da6ee8c", // [cc, 9e, ...]
+        };
+
+        TVector<UuidTestCell> uuids(uuidStrs.size());
+        for (size_t i = 0; i < uuidStrs.size(); ++i) {
+            NKikimr::NMiniKQL::ParseUuid(uuidStrs[i], uuids[i].data);
+            uuids[i].cell = TCell(uuids[i].data, uuidByteSize);
+        }
+
+        for (size_t i = 0; i < uuidStrs.size(); ++i) {
+            for (size_t j = 0; j < uuidStrs.size(); ++j) {
+                int cmp = CompareTypedCells(uuids[i].cell, uuids[j].cell, uuidTypeInfo);
+                UNIT_ASSERT_EQUAL(std::clamp(cmp, -1, 1), (i == j ? 0 : (i < j ? -1 : +1)));
             }
         }
     }

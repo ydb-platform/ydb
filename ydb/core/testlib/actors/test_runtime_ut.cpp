@@ -446,8 +446,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             auto producerActor = new TProducerActor(count, consumerIds);
             TActorId producerId = runtime.Register(producerActor);
             runtime.Send(new IEventHandle(producerId, sender, new TEvents::TEvPing));
-            runtime.SetObserverFunc([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-                Y_UNUSED(runtime);
+            runtime.SetObserverFunc([](TAutoPtr<IEventHandle>& event) {
                 Y_UNUSED(event);
                 return TTestActorRuntime::EEventAction::PROCESS;
             });
@@ -485,7 +484,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
                     HFunc(TEvents::TEvPing, Handle);
                     HFunc(TEvents::TEvPong, Handle);
                     default:
-                        Y_FAIL("unexpected event");
+                        Y_ABORT("unexpected event");
                 }
             }
 
@@ -564,7 +563,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
                 switch (ev->GetTypeRewrite()) {
                     HFunc(TEvents::TEvWakeup, Handle);
                     default:
-                        Y_FAIL("unexpected event");
+                        Y_ABORT("unexpected event");
                 }
             }
         };

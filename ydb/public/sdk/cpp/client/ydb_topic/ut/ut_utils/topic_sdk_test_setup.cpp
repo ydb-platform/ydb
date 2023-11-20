@@ -22,11 +22,14 @@ TTopicSdkTestSetup::TTopicSdkTestSetup(const TString& testCaseName, const NKikim
     }
 }
 
-void TTopicSdkTestSetup::CreateTopic(const TString& path, const TString& consumer)
+void TTopicSdkTestSetup::CreateTopic(const TString& path, const TString& consumer, size_t partitionCount)
 {
     TTopicClient client(MakeDriver());
 
     TCreateTopicSettings topics;
+    TPartitioningSettings partitions(partitionCount, partitionCount);
+
+    topics.PartitioningSettings(partitions);
     TConsumerSettings<TCreateTopicSettings> consumers(topics, consumer);
     topics.AppendConsumers(consumers);
 

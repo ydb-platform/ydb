@@ -7,7 +7,6 @@ SRCS(
     yql_job_infer_schema.cpp
     yql_job_registry.h
     yql_job_stats_writer.cpp
-    yql_job_table_content.cpp
     yql_job_user.cpp
 )
 

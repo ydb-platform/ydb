@@ -1,6 +1,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
@@ -181,11 +182,12 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         return writtenToMainTable;
     }
 
+    template <typename T>
     void SplitWithReboots(
-            const std::function<void(TTestWithReboots&, TTestActorRuntime&)>& init,
-            const std::function<void(TTestWithReboots&, TTestActorRuntime&, const TVector<ui64>& tablets)>& split)
+            const std::function<void(T&, TTestActorRuntime&)>& init,
+            const std::function<void(T&, TTestActorRuntime&, const TVector<ui64>& tablets)>& split)
     {
-        TTestWithReboots t;
+        T t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TVector<ui64> mainTabletIds;
             {
@@ -215,8 +217,9 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    void SplitWithReboots(const std::function<void(TTestWithReboots&, TTestActorRuntime&)>& init) {
-        SplitWithReboots(init, [](TTestWithReboots& t, TTestActorRuntime& runtime, const TVector<ui64>& tablets) {
+    template <typename T>
+    void SplitWithReboots(const std::function<void(T&, TTestActorRuntime&)>& init) {
+        SplitWithReboots<T>(init, [](T& t, TTestActorRuntime& runtime, const TVector<ui64>& tablets) {
             UNIT_ASSERT_VALUES_EQUAL(tablets.size(), 1);
             TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(
                 SourceTabletId: %lu
@@ -230,8 +233,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST(SplitWithReboots) {
-        SplitWithReboots([](TTestWithReboots& t, TTestActorRuntime& runtime) {
+    Y_UNIT_TEST_WITH_REBOOTS(SplitWithReboots) {
+        SplitWithReboots<T>([](T& t, TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"
@@ -249,8 +252,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST(CdcAndSplitWithReboots) {
-        SplitWithReboots([](TTestWithReboots& t, TTestActorRuntime& runtime) {
+    Y_UNIT_TEST_WITH_REBOOTS(CdcAndSplitWithReboots) {
+        SplitWithReboots<T>([](T& t, TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"
@@ -278,8 +281,9 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    void MergeWithReboots(const std::function<void(TTestWithReboots&, TTestActorRuntime&)>& init) {
-        SplitWithReboots(init, [](TTestWithReboots& t, TTestActorRuntime& runtime, const TVector<ui64>& tablets) {
+    template <typename T>
+    void MergeWithReboots(const std::function<void(T&, TTestActorRuntime&)>& init) {
+        SplitWithReboots<T>(init, [](T& t, TTestActorRuntime& runtime, const TVector<ui64>& tablets) {
             UNIT_ASSERT_VALUES_EQUAL(tablets.size(), 2);
             TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(
                 SourceTabletId: %lu
@@ -289,8 +293,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST(MergeWithReboots) {
-        MergeWithReboots([](TTestWithReboots& t, TTestActorRuntime& runtime) {
+    Y_UNIT_TEST_WITH_REBOOTS(MergeWithReboots) {
+        MergeWithReboots<T>([](T& t, TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"
@@ -318,8 +322,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST(CdcAndMergeWithReboots) {
-        MergeWithReboots([](TTestWithReboots& t, TTestActorRuntime& runtime) {
+    Y_UNIT_TEST_WITH_REBOOTS(CdcAndMergeWithReboots) {
+        MergeWithReboots<T>([](T& t, TTestActorRuntime& runtime) {
             TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
                 TableDescription {
                   Name: "Table"

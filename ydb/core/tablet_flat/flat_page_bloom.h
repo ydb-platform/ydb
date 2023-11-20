@@ -34,7 +34,7 @@ namespace NPage {
             auto *header = TDeref<THeader>::At(got.Page.data(), 0);
 
             if (sizeof(THeader) > got.Page.size())
-                Y_FAIL("NPage::TBloom header is out of its blob");
+                Y_ABORT("NPage::TBloom header is out of its blob");
 
             auto *ptr = TDeref<ui64>::At(got.Page.data(), sizeof(THeader));
 
@@ -43,13 +43,13 @@ namespace NPage {
             Array = { ptr, (got.Page.size() - sizeof(THeader)) / sizeof(ui64) };
 
             if (Items == 0) {
-                Y_FAIL("NPage::TBloom page has zero items in index");
+                Y_ABORT("NPage::TBloom page has zero items in index");
             } else if (Hashes == 0) {
-                Y_FAIL("NPage::TBloom page has zero hash count");
+                Y_ABORT("NPage::TBloom page has zero hash count");
             } else if (ui64(Array.size()) << 6 != header->Items) {
-                Y_FAIL("Items in TBloom header isn't match with array");
+                Y_ABORT("Items in TBloom header isn't match with array");
             } else if (header->Type != 0) {
-                Y_FAIL("NPage::TBloom page made with unknown hash type");
+                Y_ABORT("NPage::TBloom page made with unknown hash type");
             }
         }
 

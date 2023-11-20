@@ -57,6 +57,7 @@ target_sources(ydb-core-viewer PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_handlers_viewer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/viewer/viewer_request.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/viewer/viewer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/viewer_probes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/viewer/wb_aggregate.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/viewer/wb_filter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/viewer/wb_merge.cpp

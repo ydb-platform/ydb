@@ -95,6 +95,7 @@ RECURSE(
     invoke_builtins
     jsonpath
     perf
+    protobuf_udf
 )
 
 RECURSE_FOR_TESTS(

@@ -37,7 +37,7 @@ namespace NKikimr {
 
         bool WaitQueueIsEmpty() const {
             bool empty = WaitQueue.Empty();
-            Y_VERIFY_DEBUG(empty && State.WaitQueueSize == 0 || !empty && State.WaitQueueSize != 0);
+            Y_DEBUG_ABORT_UNLESS(empty && State.WaitQueueSize == 0 || !empty && State.WaitQueueSize != 0);
             return empty;
         }
 
@@ -51,7 +51,7 @@ namespace NKikimr {
 
         bool InFlightQueueIsEmpty() const {
             bool empty = InFlightQueue.Empty();
-            Y_VERIFY_DEBUG(empty && State.InFlightQueueSize == 0 || !empty && State.InFlightQueueSize != 0);
+            Y_DEBUG_ABORT_UNLESS(empty && State.InFlightQueueSize == 0 || !empty && State.InFlightQueueSize != 0);
             return empty;
         }
 
@@ -125,7 +125,7 @@ namespace NKikimr {
             SendQueuedMessagesUntilAllowed(ctx);
 
             if (!InFlightQueueIsFull(byteSize)) {
-                //Y_VERIFY_DEBUG(WaitQueueIsEmpty()); // FIXME: it seems that assert is invalid
+                //Y_DEBUG_ABORT_UNLESS(WaitQueueIsEmpty()); // FIXME: it seems that assert is invalid
                 item->Cookie = GenerateCookie();
                 SendItem(ctx, std::move(item));
                 Counters.LocalHandoffSendRightAway++;
@@ -214,7 +214,7 @@ namespace NKikimr {
             if (record.GetStatus() == NKikimrProto::OK) {
                 if (State.InFlightQueueSize == 0) {
                     // in flight queue is empty (we have restarted?)
-                    Y_VERIFY_DEBUG(InFlightQueue.Empty());
+                    Y_DEBUG_ABORT_UNLESS(InFlightQueue.Empty());
                     // just ignore this message (update counters and log)
                     LOG_ERROR(ctx, BS_HANDOFF,
                               VDISKP(VDiskLogPrefix,
@@ -248,7 +248,7 @@ namespace NKikimr {
                 return;
             }
 
-            Y_FAIL("Unexpected case");
+            Y_ABORT("Unexpected case");
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
@@ -261,7 +261,7 @@ namespace NKikimr {
                 Counters.ReplyUndelivered++;
                 SwitchToBadState(ctx);
             } else
-                Y_FAIL("Unknown undelivered");
+                Y_ABORT("Unknown undelivered");
         }
 
         void HandleWakeup(const TActorContext &ctx) {

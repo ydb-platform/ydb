@@ -1,4 +1,6 @@
 #include "distconf.h"
+#include <google/protobuf/util/json_util.h>
+
 
 namespace NKikimr::NStorage {
 
@@ -7,7 +9,7 @@ namespace NKikimr::NStorage {
         auto ev = std::make_unique<TEvPrivate::TEvStorageConfigLoaded>();
         for (const TString& path : drives) {
             TRcBuf metadata;
-            switch (ReadPDiskMetadata(path, cfg->CreatePDiskKey(), metadata)) {
+            switch (ReadPDiskMetadata(path, cfg->PDiskKey, metadata)) {
                 case NPDisk::EPDiskMetadataOutcome::OK:
                     if (NKikimrBlobStorage::TPDiskMetadataRecord m; m.ParseFromString(metadata.ExtractUnderlyingContainerOrCopy<TString>())) {
                         auto& [p, config] = ev->MetadataPerPath.emplace_back();
@@ -32,7 +34,7 @@ namespace NKikimr::NStorage {
             TString data;
             const bool success = record.SerializeToString(&data);
             Y_ABORT_UNLESS(success);
-            switch (WritePDiskMetadata(path, cfg->CreatePDiskKey(), TRcBuf(std::move(data)))) {
+            switch (WritePDiskMetadata(path, cfg->PDiskKey, TRcBuf(std::move(data)))) {
                 case NPDisk::EPDiskMetadataOutcome::OK:
                     ev->StatusPerPath.emplace_back(path, true);
                     break;
@@ -272,7 +274,7 @@ namespace NKikimr {
         }
 
         if (it && it->GetPDiskGuid() == info.DiskGuid && it->GetTimestamp() == info.Timestamp.GetValue() &&
-                std::find(key.begin(), key.end(), it->GetKey()) != key.end()) {
+                std::find(key.Keys.begin(), key.Keys.end(), it->GetKey()) != key.Keys.end()) {
             TString s;
             const bool success = it->GetMeta().SerializeToString(&s);
             Y_ABORT_UNLESS(success);
@@ -317,7 +319,7 @@ namespace NKikimr {
 
         it->SetPDiskGuid(info.DiskGuid);
         it->SetTimestamp(info.Timestamp.GetValue());
-        it->SetKey(key.back());
+        it->SetKey(key.Keys.back());
         bool success = it->MutableMeta()->ParseFromString(metadata.ExtractUnderlyingContainerOrCopy<TString>());
         Y_ABORT_UNLESS(success);
 

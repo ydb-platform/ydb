@@ -34,7 +34,7 @@ std::set<std::string> TPKRangeFilter::GetColumnNames() const {
     return result;
 }
 
-NKikimr::NArrow::TColumnFilter TPKRangeFilter::BuildFilter(std::shared_ptr<arrow::RecordBatch> data) const {
+NKikimr::NArrow::TColumnFilter TPKRangeFilter::BuildFilter(const arrow::Datum& data) const {
     NArrow::TColumnFilter result = PredicateTo.BuildFilter(data);
     return result.And(PredicateFrom.BuildFilter(data));
 }

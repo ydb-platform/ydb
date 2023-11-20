@@ -87,13 +87,13 @@ protected:
     void Handle(TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
         Y_UNUSED(event);
         Y_UNUSED(ctx);
-        Y_FAIL("This event shouldn't be there, it should go to the http connection owner directly");
+        Y_ABORT("This event shouldn't be there, it should go to the http connection owner directly");
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingResponse::TPtr event, const NActors::TActorContext& ctx) {
         Y_UNUSED(event);
         Y_UNUSED(ctx);
-        Y_FAIL("This event shouldn't be there, it should go to the http connection directly");
+        Y_ABORT("This event shouldn't be there, it should go to the http connection directly");
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event, const NActors::TActorContext& ctx) {

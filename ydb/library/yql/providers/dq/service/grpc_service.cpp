@@ -11,7 +11,7 @@
 #include <ydb/library/yql/providers/dq/actors/task_controller.h>
 #include <ydb/library/yql/providers/dq/actors/graph_execution_events_actor.h>
 
-#include <ydb/library/yql/providers/dq/counters/counters.h>
+#include <ydb/library/yql/providers/dq/counters/task_counters.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 
@@ -258,7 +258,7 @@ namespace NYql::NDqs {
             int MaxRetries = 10;
             TDuration RetryBackoff = TDuration::MilliSeconds(1000);
 
-            NYql::TCounters QueryStat;
+            NYql::TTaskCounters QueryStat;
             THashMap<ui64, ui64> Task2Stage;
 
             void RestoreRequest() {

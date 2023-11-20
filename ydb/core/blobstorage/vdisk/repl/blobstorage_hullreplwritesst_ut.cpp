@@ -141,7 +141,7 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
                             writeMsgs.emplace_back(static_cast<NPDisk::TEvChunkWrite*>(msg.release()));
                         }
                     } else {
-                        Y_FAIL();
+                        Y_ABORT();
                     }
                     break;
                 }
@@ -199,7 +199,7 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
                 }
 
                 default:
-                    Y_FAIL();
+                    Y_ABORT();
             }
         }
     }

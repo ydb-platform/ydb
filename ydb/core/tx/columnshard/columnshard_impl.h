@@ -13,13 +13,14 @@
 #include "counters/columnshard.h"
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
+#include "normalizer/abstract/abstract.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
-#include <ydb/core/tx/ev_write/events.h>
+#include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/tiering/common.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
@@ -67,6 +68,8 @@ struct TSettings {
     static constexpr ui32 MAX_ACTIVE_COMPACTIONS = 1;
 
     static constexpr ui32 MAX_INDEXATIONS_TO_SKIP = 16;
+    static constexpr TDuration GuaranteeIndexationInterval = TDuration::Seconds(10);
+    static constexpr i64 GuaranteeIndexationStartBytesLimit = (i64)5 * 1024 * 1024 * 1024;
 
     TControlWrapper BlobWriteGrouppingEnabled;
     TControlWrapper CacheDataAfterIndexing;
@@ -113,6 +116,8 @@ class TColumnShard
     friend class TTxRunGC;
     friend class TTxProcessGCResult;
     friend class TTxReadBlobRanges;
+    friend class TTxApplyNormalizer;
+
     friend class NOlap::TCleanupColumnEngineChanges;
     friend class NOlap::TTTLColumnEngineChanges;
     friend class NOlap::TChangesWithAppend;
@@ -157,6 +162,7 @@ class TColumnShard
     void Handle(TEvPrivate::TEvWriteDraft::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
+    void Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext&);
 
     ITransaction* CreateTxInitSchema();
 
@@ -233,7 +239,7 @@ protected:
             LOG_S_WARN("TColumnShard.StateBroken at " << TabletID()
                        << " unhandled event type: " << ev->GetTypeRewrite()
                        << " event: " << ev->ToString());
-            Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
+            Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown));
             break;
         }
     }
@@ -376,7 +382,6 @@ private:
     ui64 OwnerPathId = 0;
     ui64 TabletTxCounter = 0;
     ui64 StatsReportRound = 0;
-    ui32 SkippedIndexations = TSettings::MAX_INDEXATIONS_TO_SKIP; // Force indexation on tablet init
     TString OwnerPath;
 
     TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
@@ -389,7 +394,6 @@ private:
     TInstant LastAccessTime;
     TInstant LastStatsReport;
 
-    TActorId BlobsReadActor;
     TActorId ResourceSubscribeActor;
     TActorId StatsReportPipe;
 
@@ -403,6 +407,7 @@ private:
     std::unique_ptr<NOlap::TInsertTable> InsertTable;
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters> SubscribeCounters;
     NOlap::NResourceBroker::NSubscribe::TTaskContext InsertTaskSubscription;
+    NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     const TScanCounters ReadCounters;
     const TScanCounters ScanCounters;
     const TIndexationCounters CompactionCounters = TIndexationCounters("GeneralCompaction");
@@ -425,6 +430,7 @@ private:
     TSettings Settings;
     TLimits Limits;
     TCompactionLimits CompactionLimits;
+    NOlap::TNormalizationController NormalizerController;
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();
@@ -476,10 +482,6 @@ private:
     ui64 MemoryUsage() const;
     void SendPeriodicStats();
 public:
-    const TActorId& GetBlobsReadActorId() const {
-        return BlobsReadActor;
-    }
-
     const std::shared_ptr<NOlap::IStoragesManager>& GetStoragesManager() const {
         return StoragesManager;
     }

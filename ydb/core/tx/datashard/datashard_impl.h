@@ -1487,6 +1487,12 @@ public:
                 State == TShardState::Frozen;
     }
 
+    bool IsStateNewReadAllowed() const {
+        return State == TShardState::Ready ||
+                State == TShardState::Readonly ||
+                State == TShardState::Frozen;
+    }
+
     bool IsStateFrozen() const {
         return State == TShardState::Frozen;
     }
@@ -1540,7 +1546,7 @@ public:
                            NKikimrTxDataShard::TEvProposeTransactionResult::EStatus& rejectStatus,
                            ERejectReasons& rejectReasons,
                            TString& rejectDescription);
-    bool CheckDataTxRejectAndReply(TEvDataShard::TEvProposeTransaction* msg, const TActorContext& ctx);
+    bool CheckDataTxRejectAndReply(const TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
 
     TSysLocks& SysLocksTable() { return SysLocks; }
 
@@ -1696,6 +1702,7 @@ public:
     bool ReassignChannelsEnabled() const override;
     void OnYellowChannelsChanged() override;
     void OnRejectProbabilityRelaxed() override;
+    void OnFollowersCountChanged() override;
     ui64 GetMemoryUsage() const override;
 
     bool HasPipeServer(const TActorId& pipeServerId);
@@ -1828,6 +1835,7 @@ public:
     void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 lockId, ui64 lockOffset, const TPathId& pathId);
     void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order);
     void EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records);
+    void UpdateChangeExchangeLag(TInstant now);
     void CreateChangeSender(const TActorContext& ctx);
     void KillChangeSender(const TActorContext& ctx);
     void MaybeActivateChangeSender(const TActorContext& ctx);
@@ -1887,6 +1895,9 @@ public:
     // Promotes current follower read edge
     bool PromoteFollowerReadEdge(TTransactionContext& txc);
     bool PromoteFollowerReadEdge();
+
+    // Returns true when this shard has potential followers
+    bool HasFollowers() const;
 
     // Returns a suitable row version for performing a transaction
     TRowVersion GetMvccTxVersion(EMvccTxMode mode, TOperation* op = nullptr) const;
@@ -1993,6 +2004,22 @@ public:
      * Either adds txId to volatile dependencies or breaks a known write lock.
      */
     void BreakWriteConflict(ui64 txId, absl::flat_hash_set<ui64>& volatileDependencies);
+
+    enum ELogThrottlerType {
+        CheckDataTxUnit_Execute = 0,
+        TxProposeTransactionBase_Execute,
+        FinishProposeUnit_CompleteRequest,
+        FinishProposeUnit_UpdateCounters,
+        UploadRows_Reject,
+        EraseRows_Reject,
+
+        LAST
+    };
+
+    TTrivialLogThrottler& GetLogThrottler(ELogThrottlerType type) {
+        Y_ABORT_UNLESS(type != ELogThrottlerType::LAST);
+        return LogThrottlers[type];
+    };
 
 private:
     ///
@@ -2669,28 +2696,33 @@ private:
         }
     };
 
-    struct TEnqueuedRecord {
+    struct TEnqueuedRecordTag {};
+    struct TEnqueuedRecord: public TIntrusiveListItem<TEnqueuedRecord, TEnqueuedRecordTag> {
         ui64 BodySize;
         TPathId TableId;
         ui64 SchemaVersion;
         bool SchemaSnapshotAcquired;
+        TInstant CreatedAt;
+        TInstant EnqueuedAt;
         ui64 LockId;
         ui64 LockOffset;
 
         explicit TEnqueuedRecord(ui64 bodySize, const TPathId& tableId,
-                ui64 schemaVersion, ui64 lockId = 0, ui64 lockOffset = 0)
+                ui64 schemaVersion, TInstant created, TInstant enqueued, ui64 lockId = 0, ui64 lockOffset = 0)
             : BodySize(bodySize)
             , TableId(tableId)
             , SchemaVersion(schemaVersion)
             , SchemaSnapshotAcquired(false)
+            , CreatedAt(created)
+            , EnqueuedAt(enqueued)
             , LockId(lockId)
             , LockOffset(lockOffset)
         {
         }
 
-        explicit TEnqueuedRecord(const IDataShardChangeCollector::TChange& record)
-            : TEnqueuedRecord(record.BodySize, record.TableId,
-                    record.SchemaVersion, record.LockId, record.LockOffset)
+        explicit TEnqueuedRecord(const IDataShardChangeCollector::TChange& record, TInstant now)
+            : TEnqueuedRecord(record.BodySize, record.TableId, record.SchemaVersion, record.CreatedAt(), now,
+                record.LockId, record.LockOffset)
         {
         }
     };
@@ -2708,6 +2740,7 @@ private:
     bool RequestChangeRecordsInFly = false;
     bool RemoveChangeRecordsInFly = false;
     THashMap<ui64, TEnqueuedRecord> ChangesQueue; // ui64 is order
+    TIntrusiveList<TEnqueuedRecord, TEnqueuedRecordTag> ChangesList;
     ui64 ChangesQueueBytes = 0;
     TActorId OutChangeSender;
     bool OutChangeSenderSuspended = false;
@@ -2784,6 +2817,7 @@ private:
 
     bool ScheduledPlanPredictedTxs = false;
 
+    std::vector<TTrivialLogThrottler> LogThrottlers = {ELogThrottlerType::LAST, TDuration::Seconds(1)};
 public:
     auto& GetLockChangeRecords() {
         return LockChangeRecords;

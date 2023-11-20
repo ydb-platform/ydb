@@ -98,12 +98,12 @@ namespace NSchemeShardUT_Private {
         void TestWaitNotification(TTestActorRuntime& runtime, ui64 txId, ui64 schemeshardId = TTestTxConfig::SchemeShard);
 
         template <class TContainer>
-        void TestWaitTabletDeletion(TTestActorRuntime& runtime, TContainer tabletIds) {
+        void TestWaitTabletDeletion(TTestActorRuntime& runtime, const TContainer& tabletIds, ui64 hive = TTestTxConfig::Hive) {
             TSet<ui64> set(tabletIds.begin(), tabletIds.end());
-            TestWaitTabletDeletion(runtime, std::move(set));
+            TestWaitTabletDeletion(runtime, std::move(set), hive);
         }
-        void TestWaitTabletDeletion(TTestActorRuntime& runtime, TSet<ui64> tabletIds);
-        void TestWaitTabletDeletion(TTestActorRuntime& runtime, ui64 tabletId);
+        void TestWaitTabletDeletion(TTestActorRuntime& runtime, TSet<ui64> tabletIds, ui64 hive = TTestTxConfig::Hive);
+        void TestWaitTabletDeletion(TTestActorRuntime& runtime, ui64 tabletId, ui64 hive = TTestTxConfig::Hive);
 
         void TestWaitShardDeletion(TTestActorRuntime& runtime, TSet<ui64> localIds);
         void TestWaitShardDeletion(TTestActorRuntime& runtime, ui64 schemeShard, TSet<ui64> localIds);
@@ -127,6 +127,14 @@ namespace NSchemeShardUT_Private {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // A wrapper to run test scenarios with reboots of schemeshard, hive and coordinator
     class TTestWithReboots {
+    protected:
+        struct TDatashardLogBatchingSwitch {
+            explicit TDatashardLogBatchingSwitch(bool newVal);
+            ~TDatashardLogBatchingSwitch();
+        private:
+            bool PrevVal;
+        };
+
     public:
         TVector<ui64> TabletIds;
         THolder<TTestActorRuntime> Runtime;

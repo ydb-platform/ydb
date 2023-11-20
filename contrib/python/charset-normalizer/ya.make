@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.2.0)
+VERSION(3.3.0)
 
 LICENSE(MIT)
 
@@ -11,11 +11,11 @@ NO_LINT()
 PY_SRCS(
     TOP_LEVEL
     charset_normalizer/__init__.py
+    charset_normalizer/__main__.py
     charset_normalizer/api.py
-    charset_normalizer/assets/__init__.py
     charset_normalizer/cd.py
     charset_normalizer/cli/__init__.py
-    charset_normalizer/cli/normalizer.py
+    charset_normalizer/cli/__main__.py
     charset_normalizer/constant.py
     charset_normalizer/legacy.py
     charset_normalizer/md.py

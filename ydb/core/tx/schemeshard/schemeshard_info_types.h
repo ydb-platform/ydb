@@ -10,7 +10,9 @@
 
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/control/immediate_control_board_impl.h>
 
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/flat_table_column.h>
@@ -31,6 +33,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/queue.h>
 #include <util/generic/vector.h>
+#include <util/generic/guid.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -1565,6 +1568,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return TTabletId(ProcessingParams.GetSysViewProcessor());
     }
 
+    TTabletId GetTenantStatisticsAggregatorID() const {
+        if (!ProcessingParams.HasStatisticsAggregator()) {
+            return InvalidTabletId;
+        }
+        return TTabletId(ProcessingParams.GetStatisticsAggregator());
+    }
+
     ui64 GetPathsInside() const {
         return PathsInsideCount;
     }
@@ -1934,6 +1944,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         Y_VERIFY_S(sysViewProcessors.size() <= 1, "size was: " << sysViewProcessors.size());
         if (sysViewProcessors.size()) {
             ProcessingParams.SetSysViewProcessor(ui64(sysViewProcessors.front()));
+        }
+
+        ProcessingParams.ClearStatisticsAggregator();
+        TVector<TTabletId> statisticsAggregators = FilterPrivateTablets(ETabletType::StatisticsAggregator, allShards);
+        Y_VERIFY_S(statisticsAggregators.size() <= 1, "size was: " << statisticsAggregators.size());
+        if (statisticsAggregators.size()) {
+            ProcessingParams.SetStatisticsAggregator(ui64(statisticsAggregators.front()));
         }
     }
 

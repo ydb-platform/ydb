@@ -7,3 +7,5 @@
 
 
 add_subdirectory(idx_test)
+add_subdirectory(kqprun)
+add_subdirectory(pq_read)

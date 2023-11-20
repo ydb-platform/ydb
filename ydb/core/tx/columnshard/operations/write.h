@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/tx/ev_write/write_data.h>
+#include <ydb/core/tx/data_events/write_data.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>

@@ -145,6 +145,15 @@ TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::BaseClassParameter(
 }
 
 template <class TStruct>
+template <class TValue>
+TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ParameterWithUniversalAccessor(const TString& key, std::function<TValue&(TStruct*)> accessor)
+{
+    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TUniversalYsonParameterAccessor<TStruct, TValue>>(std::move(accessor)));
+    Meta_->RegisterParameter(key, parameter);
+    return *parameter;
+}
+
+template <class TStruct>
 void TYsonStructRegistrar<TStruct>::Preprocessor(std::function<void(TStruct*)> preprocessor)
 {
     Meta_->RegisterPreprocessor([preprocessor = std::move(preprocessor)] (TYsonStructBase* target) {
@@ -311,8 +320,8 @@ private: \
 
 #define YSON_STRUCT_LITE_IMPL__CTOR_BODY(TStruct) \
     YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
-    if (std::type_index(typeid(TStruct)) == FinalType_ && !::NYT::NYTree::TYsonStructRegistry::Get()->InitializationInProgress()) { \
-        SetDefaults(); \
+    if (std::type_index(typeid(TStruct)) == this->FinalType_ && !::NYT::NYTree::TYsonStructRegistry::Get()->InitializationInProgress()) { \
+        this->SetDefaults(); \
     } \
 
 

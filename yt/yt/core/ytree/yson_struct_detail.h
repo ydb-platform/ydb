@@ -186,6 +186,20 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TStruct, class TValue>
+class TUniversalYsonParameterAccessor
+    : public IYsonFieldAccessor<TValue>
+{
+public:
+    explicit TUniversalYsonParameterAccessor(std::function<TValue&(TStruct*)> field);
+    TValue& GetValue(const TYsonStructBase* source) override;
+
+private:
+    std::function<TValue&(TStruct*)> Accessor_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class TValue>
 class TYsonStructParameter
     : public IYsonStructParameter
@@ -228,8 +242,8 @@ public:
     const std::vector<TString>& GetAliases() const override;
     IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* self) const override;
 
-    // Mark as optional.
-    TYsonStructParameter& Optional();
+    // Mark as optional. Field will be default-initialized if `init` is true, initialization is skipped otherwise.
+    TYsonStructParameter& Optional(bool init = true);
     // Set default value. It will be copied during instance initialization.
     TYsonStructParameter& Default(TValue defaultValue);
     // Set empty value as default value. It will be created during instance initialization.
@@ -272,6 +286,7 @@ private:
     std::vector<TString> Aliases_;
     EMergeStrategy MergeStrategy_ = EMergeStrategy::Default;
     bool TriviallyInitializedIntrusivePtr_ = false;
+    bool Optional_ = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

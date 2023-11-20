@@ -12,8 +12,7 @@ struct TFollowerGroup {
     bool AllowLeaderPromotion = false;
     bool AllowClientRead = false;
     bool RequireAllDataCenters = true;
-    TVector<TNodeId> AllowedNodes;
-    TVector<TDataCenterId> AllowedDataCenters;
+    TNodeFilter NodeFilter;
     bool LocalNodeOnly = true; // run follower on the same node as leader
     bool RequireDifferentNodes = false; // do not run followers on same nodes as another followers of the same leader
     bool FollowerCountPerDataCenter = false; // PER_AZ KIKIMR-10443
@@ -35,14 +34,14 @@ struct TFollowerGroup {
         RequireAllDataCenters = followerGroup.GetRequireAllDataCenters();
         {
             const auto& allowedNodes(followerGroup.GetAllowedNodeIDs());
-            std::copy(allowedNodes.begin(), allowedNodes.end(), std::back_inserter(AllowedNodes));
+            std::copy(allowedNodes.begin(), allowedNodes.end(), std::back_inserter(NodeFilter.AllowedNodes));
         }
         {
             if (const auto& x = followerGroup.GetAllowedDataCenters(); !x.empty()) {
-                AllowedDataCenters.insert(AllowedDataCenters.end(), x.begin(), x.end());
+                NodeFilter.AllowedDataCenters.insert(NodeFilter.AllowedDataCenters.end(), x.begin(), x.end());
             } else {
                 for (const auto& dataCenterId : followerGroup.GetAllowedDataCenterNumIDs()) {
-                    AllowedDataCenters.push_back(DataCenterToString(dataCenterId));
+                    NodeFilter.AllowedDataCenters.push_back(DataCenterToString(dataCenterId));
                 }
             }
         }

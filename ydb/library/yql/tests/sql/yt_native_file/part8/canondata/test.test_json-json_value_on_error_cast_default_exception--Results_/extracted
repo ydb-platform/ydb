@@ -1,0 +1,12 @@
+<tmp_path>/program.sql:<main>: Fatal: Execution
+
+    <tmp_path>/program.sql:<main>:8:1: Fatal: Execution of node: Result
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:9:63: Fatal: Condition violated:
+
+Failed to cast default value from ON ERROR clause to target type Optional<Uint16>
+
+
+        	    JSON_VALUE($json, "strict $.key" RETURNING Uint16 DEFAULT -123 ON ERROR);
+	                                                              ^

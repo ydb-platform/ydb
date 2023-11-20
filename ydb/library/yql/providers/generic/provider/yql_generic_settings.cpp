@@ -3,21 +3,29 @@
 
 #include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <util/system/env.h>
 
 namespace NYql {
+
+    const TString TGenericSettings::TDefault::DateTimeFormat = "string";
+
+    TGenericConfiguration::TGenericConfiguration() {
+        REGISTER_SETTING(*this, UsePredicatePushdown);
+        REGISTER_SETTING(*this, DateTimeFormat);
+    }
 
     void TGenericConfiguration::Init(const NYql::TGenericGatewayConfig& gatewayConfig,
                                      const std::shared_ptr<NYql::IDatabaseAsyncResolver> databaseResolver,
                                      NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth,
                                      const TCredentials::TPtr& credentials)
     {
+        Dispatch(gatewayConfig.GetDefaultSettings());
+
         for (const auto& cluster : gatewayConfig.GetClusterMapping()) {
             AddCluster(cluster, databaseResolver, databaseAuth, credentials);
         }
 
         // TODO: check if it's necessary
-        this->FreezeDefaults();
+        FreezeDefaults();
     }
 
     void TGenericConfiguration::AddCluster(const TGenericClusterConfig& clusterConfig,
@@ -30,8 +38,8 @@ namespace NYql {
         const auto& databaseId = clusterConfig.GetDatabaseId();
         const auto& endpoint = clusterConfig.GetEndpoint();
 
-        YQL_CLOG(DEBUG, ProviderGeneric)
-            << "add cluster"
+        YQL_CLOG(INFO, ProviderGeneric)
+            << "generic provider add cluster"
             << ": name = " << clusterName
             << ", database id = " << databaseId
             << ", endpoint = " << endpoint;
@@ -72,7 +80,10 @@ namespace NYql {
     TString TGenericConfiguration::MakeStructuredToken(const TGenericClusterConfig& cluster, const TCredentials::TPtr& credentials) const {
         TStructuredTokenBuilder b;
 
-        const auto iamToken = credentials->FindCredentialContent("default_" + cluster.name(), "default_generic", cluster.GetToken());
+        const auto iamToken = credentials->FindCredentialContent(
+            "default_" + cluster.name(),
+            "default_generic",
+            cluster.GetToken());
         if (iamToken) {
             return b.SetIAMToken(iamToken).ToJson();
         }

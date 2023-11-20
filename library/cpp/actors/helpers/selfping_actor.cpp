@@ -153,7 +153,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPing, HandlePing);
         default:
-            Y_FAIL("TSelfPingActor::RunningState: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+            Y_ABORT("TSelfPingActor::RunningState: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
     }
 

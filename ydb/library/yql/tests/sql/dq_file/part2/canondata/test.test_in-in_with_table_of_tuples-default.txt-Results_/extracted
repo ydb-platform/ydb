@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:15:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: RemoveSystemMembers, At function: PersistableRepr, At function: OrderedSqlProject
+    	select * from Input
+	^
+        <tmp_path>/program.sql:<main>:15:15: Warning: At function: OrderedFilter, At function: Coalesce
+        	select * from Input
+	              ^
+            <tmp_path>/program.sql:<main>:16:51: Warning: At function: SqlIn
+            	where AsTuple(cast(key as uint64), cast(subkey as uint64)) in $tuples
+	                                                  ^
+                <tmp_path>/program.sql:<main>:16:51: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                	where AsTuple(cast(key as uint64), cast(subkey as uint64)) in $tuples
+	                                                  ^

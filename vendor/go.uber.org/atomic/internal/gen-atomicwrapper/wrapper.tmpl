@@ -1,0 +1,120 @@
+// Copyright (c) 2020-{{.ToYear}} Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package atomic
+
+{{ with .Imports }}
+import (
+	{{ range . -}}
+		{{ printf "%q" . }}
+	{{ end }}
+)
+{{ end }}
+
+// {{ .Name }} is an atomic type-safe wrapper for {{ .Type }} values.
+type {{ .Name }} struct{
+	_ nocmp // disallow non-atomic comparison
+
+	v {{ .Wrapped }}
+}
+
+var _zero{{ .Name }} {{ .Type }}
+
+
+// New{{ .Name }} creates a new {{ .Name }}.
+func New{{ .Name }}(val {{ .Type }}) *{{ .Name }} {
+	x := &{{ .Name }}{}
+	if val != _zero{{ .Name }} {
+		x.Store(val)
+	}
+	return x
+}
+
+// Load atomically loads the wrapped {{ .Type }}.
+func (x *{{ .Name }}) Load() {{ .Type }} {
+	{{ if .Unpack -}}
+		return {{ .Unpack }}(x.v.Load())
+	{{- else -}}
+		if v := x.v.Load(); v != nil {
+			return v.({{ .Type }})
+		}
+		return _zero{{ .Name }}
+	{{- end }}
+}
+
+// Store atomically stores the passed {{ .Type }}.
+func (x *{{ .Name }}) Store(val {{ .Type }}) {
+	x.v.Store({{ .Pack }}(val))
+}
+
+{{ if .CAS -}}
+	// CAS is an atomic compare-and-swap for {{ .Type }} values.
+	//
+	// Deprecated: Use CompareAndSwap.
+	func (x *{{ .Name }}) CAS(old, new {{ .Type }}) (swapped bool) {
+		return x.CompareAndSwap(old, new)
+	}
+{{- end }}
+
+{{ if .CompareAndSwap -}}
+	// CompareAndSwap is an atomic compare-and-swap for {{ .Type }} values.
+	func (x *{{ .Name }}) CompareAndSwap(old, new {{ .Type }}) (swapped bool) {
+	 	{{ if eq .Wrapped "Value" -}}
+			if x.v.CompareAndSwap({{ .Pack }}(old), {{ .Pack }}(new)) {
+				return true
+			}
+
+			if old == _zero{{ .Name }} {
+				// If the old value is the empty value, then it's possible the 
+				// underlying Value hasn't been set and is nil, so retry with nil.
+				return x.v.CompareAndSwap(nil, {{ .Pack }}(new))
+			}
+
+			return false
+		{{- else -}}
+			return x.v.CompareAndSwap({{ .Pack }}(old), {{ .Pack }}(new))
+		{{- end }}
+	}
+{{- end }}
+
+{{ if .Swap -}}
+	// Swap atomically stores the given {{ .Type }} and returns the old
+	// value.
+	func (x *{{ .Name }}) Swap(val {{ .Type }}) (old {{ .Type }}) {
+		return {{ .Unpack }}(x.v.Swap({{ .Pack }}(val)))
+	}
+{{- end }}
+
+{{ if .JSON -}}
+	// MarshalJSON encodes the wrapped {{ .Type }} into JSON.
+	func (x *{{ .Name }}) MarshalJSON() ([]byte, error) {
+		return json.Marshal(x.Load())
+	}
+
+	// UnmarshalJSON decodes a {{ .Type }} from JSON.
+	func (x *{{ .Name }}) UnmarshalJSON(b []byte) error {
+		var v {{ .Type }}
+		if err := json.Unmarshal(b, &v); err != nil {
+			return err
+		}
+		x.Store(v)
+		return nil
+	}
+{{- end }}

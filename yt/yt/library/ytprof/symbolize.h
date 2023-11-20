@@ -5,7 +5,7 @@
 
 #include <util/generic/string.h>
 
-#include <yt/yt/library/ytprof/profile.pb.h>
+#include <yt/yt/library/ytprof/proto/profile.pb.h>
 
 #include "build_info.h"
 

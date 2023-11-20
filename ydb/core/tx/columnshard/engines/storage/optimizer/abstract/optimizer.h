@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/formats/arrow/reader/read_filter_merger.h>
 #include <library/cpp/object_factory/object_factory.h>
 
 namespace NKikimr::NOlap {
@@ -49,18 +50,24 @@ public:
 
 class IOptimizerPlanner {
 private:
-    const ui64 GranuleId;
+    const ui64 PathId;
+    YDB_READONLY(TInstant, ActualizationInstant, TInstant::Zero());
 protected:
     virtual void DoModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const = 0;
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
+    virtual void DoActualize(const TInstant currentInstant) = 0;
     virtual TString DoDebugString() const {
         return "";
     }
+    virtual NJson::TJsonValue DoSerializeToJsonVisual() const {
+        return NJson::JSON_NULL;
+    }
+    
 public:
     using TFactory = NObjectFactory::TObjectFactory<IOptimizerPlanner, TString>;
-    IOptimizerPlanner(const ui64 granuleId)
-        : GranuleId(granuleId)
+    IOptimizerPlanner(const ui64 pathId)
+        : PathId(pathId)
     {
 
     }
@@ -99,14 +106,24 @@ public:
         return DoDebugString();
     }
 
+    virtual std::vector<NIndexedReader::TSortableBatchPosition> GetBucketPositions() const = 0;
+
+    NJson::TJsonValue SerializeToJsonVisual() const {
+        return DoSerializeToJsonVisual();
+    }
+
     void ModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) {
-        NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("granule_id", GranuleId));
+        NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
         DoModifyPortions(add, remove);
     }
 
     std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const;
     TOptimizationPriority GetUsefulMetric() const {
         return DoGetUsefulMetric();
+    }
+    void Actualize(const TInstant currentInstant) {
+        ActualizationInstant = currentInstant;
+        return DoActualize(currentInstant);
     }
 };
 

@@ -921,7 +921,7 @@ namespace NYdb::NPersQueue {
 // It is parametrized with output queue for client events
 // and connection factory interface to separate logic from transport.
 template <bool UseMigrationProtocol>
-class TSingleClusterReadSessionImpl : public std::enable_shared_from_this<TSingleClusterReadSessionImpl<UseMigrationProtocol>>,
+class TSingleClusterReadSessionImpl : public NPersQueue::TEnableSelfContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>,
                                       public IUserRetrievedEventCallback<UseMigrationProtocol> {
 public:
     using TSelf = TSingleClusterReadSessionImpl<UseMigrationProtocol>;
@@ -1008,8 +1008,6 @@ public:
     const TLog& GetLog() const {
         return Log;
     }
-
-    TCallbackContextPtr<UseMigrationProtocol> MakeCallbackContext();
 
 private:
     void BreakConnectionAndReconnectImpl(TPlainStatus&& status, TDeferredActions<UseMigrationProtocol>& deferred);
@@ -1192,8 +1190,6 @@ private:
     std::atomic<int> DecompressionTasksInflight = 0;
     i64 ReadSizeBudget;
     i64 ReadSizeServerDelta = 0;
-
-    TCallbackContextPtr<UseMigrationProtocol> CbContext;
 };
 
 // High level class that manages several read session impls.

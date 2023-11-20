@@ -279,7 +279,7 @@ public:
     virtual bool Execute(TTransactionContext &txc, const TActorContext &ctx) = 0;
     virtual void Complete(const TActorContext &ctx) = 0;
     virtual void Terminate(ETerminationReason reason, const TActorContext &/*ctx*/) {
-        Y_FAIL("Unexpected transaction termination (reason %" PRIu32 ")", (ui32)reason);
+        Y_ABORT("Unexpected transaction termination (reason %" PRIu32 ")", (ui32)reason);
     }
     virtual void ReleaseTxData(TTxMemoryProvider &/*provider*/, const TActorContext &/*ctx*/) {}
     virtual TTxType GetTxType() const { return UnknownTxType; }
@@ -323,6 +323,8 @@ struct TExecutorStats {
 
     TVector<ui32> YellowMoveChannels;
     TVector<ui32> YellowStopChannels;
+
+    ui32 FollowersCount = 0;
 
     bool IsYellowMoveChannel(ui32 channel) const {
         auto it = std::lower_bound(YellowMoveChannels.begin(), YellowMoveChannels.end(), channel);
@@ -467,6 +469,8 @@ namespace NFlatExecutorSetup {
         virtual TDuration ReadOnlyLeaseDuration();
         virtual void ReadOnlyLeaseDropped();
 
+        virtual void OnFollowersCountChanged();
+
         // create transaction?
     protected:
         ITablet(TTabletStorageInfo *info, const TActorId &tablet)
@@ -503,7 +507,8 @@ namespace NFlatExecutorSetup {
         // next follower incremental update
         virtual void FollowerUpdate(THolder<TEvTablet::TFUpdateBody> upd) = 0;
         virtual void FollowerAuxUpdate(TString upd) = 0;
-        virtual void FollowerAttached() = 0;
+        virtual void FollowerAttached(ui32 totalFollowers) = 0;
+        virtual void FollowerDetached(ui32 totalFollowers) = 0;
         // all known followers are synced to us (called once)
         virtual void FollowerSyncComplete() = 0;
         // all followers had completed log with requested gc-barrier

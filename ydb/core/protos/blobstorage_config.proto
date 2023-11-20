@@ -259,6 +259,7 @@ message TReassignGroupDisk {
     uint32 VDiskIdx = 5;
     TPDiskId TargetPDiskId = 6; // optional; when not specified, selected automatically
     bool SuppressDonorMode = 7; // when set, donor mode is not used even if it is enabled through BSC
+    reserved 8;
 }
 
 message TSanitizeGroup {
@@ -446,6 +447,8 @@ message TUpdateSettings {
     // TODO
     // repeated TSerialManagementStage.E SerialManagementStage = 11;
     repeated bool AllowMultipleRealmsOccupation = 12;
+    repeated bool UseSelfHealLocalPolicy = 13;
+    repeated bool TryToRelocateBrokenDisksLocallyFirst = 14;
 }
 
 message TBoxStoragePoolId {

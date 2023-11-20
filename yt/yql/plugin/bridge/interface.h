@@ -9,34 +9,34 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// NB(mpereskokova): don't forget to update min_required_abi_version at yt/yql/agent/config.cpp and abi_version in yt/yql/plugin/dynamic/impl.cpp during breaking changes
+using TFuncBridgeGetABIVersion = ssize_t();
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TBridgeYqlPluginOptions
 {
-    const char* MRJobBinary;
-    const char* UdfDirectory;
+    ssize_t RequiredABIVersion;
 
-    struct TBridgeCluster
-    {
-        const char* Cluster;
-        const char* Proxy;
-    };
-    ssize_t ClusterCount;
-    TBridgeCluster* Clusters;
-    const char* DefaultCluster;
+    const char* SingletonsConfig = nullptr;
+    ssize_t SingletonsConfigLength = 0;
 
-    const char* OperationAttributes;
-    ssize_t OperationAttributesLength = 0;
+    const char* GatewayConfig = nullptr;
+    size_t GatewayConfigLength = 0;
 
-    ssize_t MaxFilesSizeMb;
-    ssize_t MaxFileCount;
-    ssize_t DownloadFileRetryCount;
+    const char* FileStorageConfig = nullptr;
+    size_t FileStorageConfigLength = 0;
 
-    const char* YTTokenPath;
+    const char* OperationAttributes = nullptr;
+    size_t OperationAttributesLength = 0;
+
+    const char* YTTokenPath = nullptr;
 
     // TODO(max42): passing C++ objects across shared libraries is incredibly
     // fragile. This is a temporary mean until we come up with something more
     // convenient; get rid of this ASAP.
     using TLogBackendHolder = void;
-    TLogBackendHolder* LogBackend;
+    TLogBackendHolder* LogBackend = nullptr;
 };
 
 // Opaque type representing a YQL plugin.
@@ -67,17 +67,18 @@ struct TBridgeQueryResult
     ssize_t YsonErrorLength = 0;
 };
 
-enum EQueryFileContentType {
+enum EQueryFileContentType
+{
     RawInlineData,
     Url,
 };
 
 struct TBridgeQueryFile
 {
-    const char* Name;
+    const char* Name = nullptr;
     size_t NameLength = 0;
 
-    const char* Content;
+    const char* Content = nullptr;
     size_t ContentLength = 0;
 
     EQueryFileContentType Type;
@@ -94,6 +95,7 @@ using TFuncBridgeGetProgress = TBridgeQueryResult*(TBridgeYqlPlugin* plugin, con
     XX(BridgeFreeYqlPlugin) \
     XX(BridgeFreeQueryResult) \
     XX(BridgeRun) \
-    XX(BridgeGetProgress)
+    XX(BridgeGetProgress) \
+    XX(BridgeGetABIVersion)
 
 ////////////////////////////////////////////////////////////////////////////////

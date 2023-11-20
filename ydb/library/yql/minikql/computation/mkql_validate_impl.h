@@ -24,7 +24,7 @@ struct TValidateErrorPolicyThrow {
 
 struct TValidateErrorPolicyFail {
     static void Generate(const TString& message) {
-        Y_FAIL("value verify failed: %s", message.c_str());
+        Y_ABORT("value verify failed: %s", message.c_str());
     }
 
     template<class TException>

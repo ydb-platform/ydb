@@ -152,6 +152,7 @@ namespace NKikimr::NBsController {
             request->SetIgnoreGroupReserve(true);
             request->SetSettleOnlyOnOperationalDisks(true);
             request->SetIsSelfHealReasonDecommit(IsSelfHealReasonDecommit);
+            request->SetAllowUnusableDisks(true);
             if (VDiskToReplace) {
                 ev->SelfHeal = true;
                 auto *cmd = request->AddCommand()->MutableReassignGroupDisk();
@@ -177,7 +178,7 @@ namespace NKikimr::NBsController {
                 Finish(false, 0, record.GetResponse().GetErrorDescription());
             } else {
                 ui64 configTxSeqNo = record.GetResponse().GetConfigTxSeqNo();
-                Y_VERIFY_DEBUG(configTxSeqNo != 0);
+                Y_DEBUG_ABORT_UNLESS(configTxSeqNo != 0);
                 TString items = "none";
                 for (const auto& item : record.GetResponse().GetStatus(0).GetReassignedItem()) {
                     items = TStringBuilder() << VDiskIDFromVDiskID(item.GetVDiskId()) << ": "

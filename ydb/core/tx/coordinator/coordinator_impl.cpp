@@ -1,5 +1,6 @@
 #include "coordinator_impl.h"
 #include "coordinator_state.h"
+#include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
@@ -9,6 +10,8 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tx/tx.h>
 
+#include <library/cpp/time_provider/time_provider.h>
+#include <library/cpp/actors/core/monotonic_provider.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 
 namespace NKikimr {
@@ -437,7 +440,7 @@ void TTxCoordinator::DoConfiguration(const TEvSubDomain::TEvConfigure &ev, const
                      , "tablet# " << TabletID()
                     << " HANDLE EvCoordinatorConfiguration Version# " << record.GetVersion()
                     << " recive empty mediators set");
-        Y_FAIL("empty mediators set");
+        Y_ABORT("empty mediators set");
         return;
     }
 

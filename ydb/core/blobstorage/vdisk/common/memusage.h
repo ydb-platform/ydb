@@ -65,7 +65,7 @@ namespace NKikimr {
         void Delta(ssize_t bytes) {
             TMemoryConsumer::Delta(bytes);
             MemConsumed += bytes;
-            Y_VERIFY_DEBUG(MemConsumed >= 0);
+            Y_DEBUG_ABORT_UNLESS(MemConsumed >= 0);
         }
 
         using TMemoryConsumer::GetCounter;

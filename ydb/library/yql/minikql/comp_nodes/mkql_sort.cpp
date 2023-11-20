@@ -498,7 +498,7 @@ public:
         Y_UNUSED(keys);
         Y_UNUSED(items);
         Y_UNUSED(comparator);
-        Y_FAIL("Not supported");
+        Y_ABORT("Not supported");
     }
 
 private:

@@ -94,6 +94,7 @@ public:
 
     TDqPqReadActor(
         ui64 inputIndex,
+        TCollectStatsLevel statsLevel,
         const TTxId& txId,
         ui64 taskId,
         const THolderFactory& holderFactory,
@@ -125,6 +126,7 @@ public:
         }
 
         InitWatermarkTracker();
+        IngressStats.Level = statsLevel;
     }
 
     NYdb::NPersQueue::TPersQueueClientSettings GetPersQueueClientSettings() const {
@@ -159,7 +161,7 @@ public:
         }
 
         stateProto.SetStartingMessageTimestampMs(StartingMessageTimestamp.MilliSeconds());
-        stateProto.SetIngressBytes(IngressBytes);
+        stateProto.SetIngressBytes(IngressStats.Bytes);
 
         TString stateBlob;
         YQL_ENSURE(stateProto.SerializeToString(&stateBlob));
@@ -197,7 +199,8 @@ public:
             }
         }
         StartingMessageTimestamp = minStartingMessageTs;
-        IngressBytes = ingressBytes;
+        IngressStats.Bytes += ingressBytes;
+        IngressStats.Chunks++;
         InitWatermarkTracker();
 
         if (ReadSession) {
@@ -214,13 +217,13 @@ public:
         }
     }
 
-    ui64 GetIngressBytes() override {
-        return IngressBytes;
-    }
-
     ui64 GetInputIndex() const override {
         return InputIndex;
-    };
+    }
+
+    const TDqAsyncStats& GetIngressStats() const override {
+        return IngressStats;
+    }
 
     NYdb::NPersQueue::TPersQueueClient& GetPersQueueClient() {
         if (!PersQueueClient) {
@@ -451,7 +454,7 @@ private:
             const auto partitionKey = MakePartitionKey(event.GetPartitionStream());
             for (const auto& message : event.GetMessages()) {
                 const TString& data = message.GetData();
-                Self.IngressBytes += data.size();
+                Self.IngressStats.Bytes += data.size();
                 LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), data);
                 SRC_LOG_T("Data received: " << message.DebugString(true));
 
@@ -555,6 +558,7 @@ private:
 
 private:
     const ui64 InputIndex;
+    TDqAsyncStats IngressStats;
     const TTxId TxId;
     const i64 BufferSize;
     const bool RangesMode;
@@ -569,7 +573,6 @@ private:
     NThreading::TFuture<void> EventFuture;
     THashMap<TPartitionKey, ui64> PartitionToOffset; // {cluster, partition} -> offset of next event.
     TInstant StartingMessageTimestamp;
-    ui64 IngressBytes = 0;
     const NActors::TActorId ComputeActorId;
     std::queue<std::pair<ui64, NYdb::NPersQueue::TDeferredCommit>> DeferredCommits;
     NYdb::NPersQueue::TDeferredCommit CurrentDeferredCommit;
@@ -583,6 +586,7 @@ private:
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     NPq::NProto::TDqPqTopicSource&& settings,
     ui64 inputIndex,
+    TCollectStatsLevel statsLevel,
     TTxId txId,
     ui64 taskId,
     const THashMap<TString, TString>& secureParams,
@@ -607,6 +611,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
 
     TDqPqReadActor* actor = new TDqPqReadActor(
         inputIndex,
+        statsLevel,
         txId,
         taskId,
         holderFactory,
@@ -632,6 +637,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
         return CreateDqPqReadActor(
             std::move(settings),
             args.InputIndex,
+            args.StatsLevel,
             args.TxId,
             args.TaskId,
             args.SecureParams,

@@ -11,6 +11,29 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TJobWriterStream {
+public:
+    explicit TJobWriterStream(int fd);
+    explicit TJobWriterStream(const TFile& file);
+    ~TJobWriterStream();
+
+public:
+    static constexpr size_t BufferSize = 1 << 20;
+    TFile FdFile;
+    TUnbufferedFileOutput FdOutput;
+    TBufferedOutput BufferedOutput;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TJobWriter
     : public IProxyOutput
 {
@@ -24,19 +47,25 @@ public:
     void OnRowFinished(size_t tableIndex) override;
 
 private:
-    struct TStream {
-        TFile FdFile;
-        TUnbufferedFileOutput FdOutput;
-        TBufferedOutput BufferedOutput;
+    TVector<THolder<NDetail::TJobWriterStream>> Streams_;
+};
 
-        explicit TStream(int fd);
-        explicit TStream(const TFile& file);
-        ~TStream();
+////////////////////////////////////////////////////////////////////////////////
 
-        static const size_t BUFFER_SIZE = 1 << 20;
-    };
+class TSingleStreamJobWriter
+    : public IProxyOutput
+{
+public:
+    explicit TSingleStreamJobWriter(size_t tableIndex);
 
-    TVector<THolder<TStream>> Streams_;
+    size_t GetBufferMemoryUsage() const override;
+    size_t GetStreamCount() const override;
+    IOutputStream* GetStream(size_t tableIndex) const override;
+    void OnRowFinished(size_t tableIndex) override;
+
+private:
+    const size_t TableIndex_;
+    THolder<NDetail::TJobWriterStream> Stream_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

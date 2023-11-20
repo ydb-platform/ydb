@@ -179,6 +179,8 @@ int TCube<T>::ReadSensors(
     TTagWriter* tagWriter,
     ::NMonitoring::IMetricConsumer* consumer) const
 {
+    YT_VERIFY(CheckSummaryPolicy(options.SummaryPolicy));
+
     int sensorsEmitted = 0;
 
     auto prepareNameLabel = [&] (std::optional<TStringBuf> suffix) {
@@ -217,6 +219,8 @@ int TCube<T>::ReadSensors(
     };
 
     auto nameLabel = prepareNameLabel({});
+    auto sumNameLabel = prepareNameLabel(".sum");
+    auto minNameLabel = prepareNameLabel(".min");
     auto maxNameLabel = prepareNameLabel(".max");
     auto avgNameLabel = prepareNameLabel(".avg");
     auto rateNameLabel = prepareNameLabel(".rate");
@@ -224,6 +228,8 @@ int TCube<T>::ReadSensors(
     auto hostLabel = consumer->PrepareLabel("host", options.Host.value_or(""));
     auto ytAggrLabel = consumer->PrepareLabel("yt_aggr", "1");
 
+    // Set allowAggregate to true to aggregate by host.
+    // Currently Monitoring supports only sum aggregation.
     auto writeLabels = [&] (const auto& tagIds, std::pair<ui32, ui32> nameLabel, bool allowAggregate) {
         consumer->OnLabelsBegin();
 
@@ -338,34 +344,74 @@ int TCube<T>::ReadSensors(
         };
 
         auto writeSummary = [&, tagIds=tagIds] (auto makeSummary) {
-            if (options.ExportSummary) {
-                consumer->OnMetricBegin(NMonitoring::EMetricType::DSUMMARY);
-                writeLabels(tagIds, nameLabel, true);
+            bool omitSuffix = Any(options.SummaryPolicy & ESummaryPolicy::OmitNameLabelSuffix);
 
-                rangeValues([&] (auto value, auto time, const auto& /* indices */) {
+            auto writeMetric = [&] (
+                ESummaryPolicy policyBit,
+                std::pair<ui32, ui32> specificNameLabel,
+                bool aggregate,
+                NMonitoring::EMetricType type,
+                auto cb)
+            {
+                if (Any(options.SummaryPolicy & policyBit)) {
+                    consumer->OnMetricBegin(type);
+                    writeLabels(tagIds, omitSuffix ? nameLabel : specificNameLabel, aggregate);
+
+                    rangeValues(cb);
+
+                    consumer->OnMetricEnd();
+                }
+            };
+
+            auto writeGaugeSummaryMetric = [&] (
+                ESummaryPolicy policyBit,
+                std::pair<ui32, ui32> specificNameLabel,
+                bool aggregate,
+                double (NMonitoring::TSummaryDoubleSnapshot::*valueGetter)() const)
+            {
+                writeMetric(
+                    policyBit,
+                    specificNameLabel,
+                    aggregate,
+                    NMonitoring::EMetricType::GAUGE,
+                    [&] (auto value, auto time, const auto& /*indices*/) {
+                        sensorCount += 1;
+                        consumer->OnDouble(time, (makeSummary(value).Get()->*valueGetter)());
+                    });
+            };
+
+            writeMetric(
+                ESummaryPolicy::All,
+                nameLabel,
+                /*aggregate*/ true,
+                NMonitoring::EMetricType::DSUMMARY,
+                [&] (auto value, auto time, const auto& /*indices*/) {
                     sensorCount += 5;
                     consumer->OnSummaryDouble(time, makeSummary(value));
                 });
 
-                consumer->OnMetricEnd();
-            }
+            writeGaugeSummaryMetric(
+                ESummaryPolicy::Sum,
+                sumNameLabel,
+                /*aggregate*/ true,
+                &NMonitoring::TSummaryDoubleSnapshot::GetSum);
 
-            if (options.ExportSummaryAsMax) {
-                consumer->OnMetricBegin(NMonitoring::EMetricType::GAUGE);
-                writeLabels(tagIds, maxNameLabel, false);
+            writeGaugeSummaryMetric(
+                ESummaryPolicy::Min,
+                minNameLabel,
+                /*aggregate*/ false,
+                &NMonitoring::TSummaryDoubleSnapshot::GetMin);
 
-                rangeValues([&] (auto value, auto time, const auto& /* indices */) {
-                    sensorCount += 1;
-                    consumer->OnDouble(time, makeSummary(value)->GetMax());
-                });
+            writeGaugeSummaryMetric(
+                ESummaryPolicy::Max,
+                maxNameLabel,
+                /*aggregate*/ false,
+                &NMonitoring::TSummaryDoubleSnapshot::GetMax);
 
-                consumer->OnMetricEnd();
-            }
-
-            if (options.ExportSummaryAsAvg) {
+            if (Any(options.SummaryPolicy & ESummaryPolicy::Avg)) {
                 bool empty = true;
 
-                rangeValues([&] (auto value, auto time, const auto& /* indices */) {
+                rangeValues([&] (auto value, auto time, const auto& /*indices*/) {
                     auto snapshot = makeSummary(value);
                     if (snapshot->GetCount() == 0) {
                         return;
@@ -374,7 +420,7 @@ int TCube<T>::ReadSensors(
                     if (empty) {
                         empty = false;
                         consumer->OnMetricBegin(NMonitoring::EMetricType::GAUGE);
-                        writeLabels(tagIds, avgNameLabel, false);
+                        writeLabels(tagIds, omitSuffix ? nameLabel : avgNameLabel, false);
                     }
 
                     sensorCount += 1;
@@ -575,15 +621,7 @@ int TCube<T>::ReadSensorValues(
             fluent.Value(value);
             ++valuesRead;
         } else if constexpr (std::is_same_v<T, TSummarySnapshot<double>>) {
-            if (options.ExportSummaryAsMax && options.SummaryAsMaxForAllTime) {
-                fluent
-                    .BeginMap()
-                        .Item("max").Value(value.Max())
-                        .Item("all_time_max").Value(Rollup(projection, index).Max())
-                    .EndMap();
-            } else if (options.ExportSummaryAsMax) {
-                fluent.Value(value.Max());
-            } else {
+            if (Any(options.SummaryPolicy & ESummaryPolicy::All)) {
                 fluent
                     .BeginMap()
                         .Item("sum").Value(value.Sum())
@@ -592,16 +630,32 @@ int TCube<T>::ReadSensorValues(
                         .Item("last").Value(value.Last())
                         .Item("count").Value(static_cast<ui64>(value.Count()))
                     .EndMap();
+            } else if (Any(options.SummaryPolicy & ESummaryPolicy::Sum)) {
+                fluent.Value(value.Sum());
+            } else if (Any(options.SummaryPolicy & ESummaryPolicy::Min)) {
+                fluent.Value(value.Min());
+            } else if (Any(options.SummaryPolicy & ESummaryPolicy::Max)) {
+                if (options.SummaryAsMaxForAllTime) {
+                    fluent
+                        .BeginMap()
+                            .Item("max").Value(value.Max())
+                            .Item("all_time_max").Value(Rollup(projection, index).Max())
+                        .EndMap();
+                } else {
+                    fluent.Value(value.Max());
+                }
+            } else if (Any(options.SummaryPolicy & ESummaryPolicy::Avg)) {
+                fluent.Value(value.Count() > 0 ? value.Sum() / value.Count() : NAN);
             }
             ++valuesRead;
         } else if constexpr (std::is_same_v<T, TSummarySnapshot<TDuration>>) {
-            if (options.ExportSummaryAsMax && options.SummaryAsMaxForAllTime) {
+            if (Any(options.SummaryPolicy & ESummaryPolicy::Max) && options.SummaryAsMaxForAllTime) {
                 fluent
                     .BeginMap()
                         .Item("max").Value(value.Max().SecondsFloat())
                         .Item("all_time_max").Value(Rollup(projection, index).Max().SecondsFloat())
                     .EndMap();
-            } else if (options.ExportSummaryAsMax) {
+            } else if (Any(options.SummaryPolicy & ESummaryPolicy::Max)) {
                 fluent.Value(value.Max().SecondsFloat());
             } else {
                 fluent

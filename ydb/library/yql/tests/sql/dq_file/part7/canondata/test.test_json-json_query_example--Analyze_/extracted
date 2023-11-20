@@ -1,0 +1,119 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:6:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	SELECT T.K,
+	^
+        <tmp_path>/program.sql:<main>:9:4: Warning: At function: JsonQuery
+        	    JSON_QUERY (T.J, 'lax $.friends') AS Friends
+	   ^
+            <tmp_path>/program.sql:<main>:9:4: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+            	    JSON_QUERY (T.J, 'lax $.friends') AS Friends
+	   ^
+    <tmp_path>/program.sql:<main>:13:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	SELECT T.K,
+	^
+        <tmp_path>/program.sql:<main>:16:4: Warning: At function: JsonQuery
+        	    JSON_QUERY (T.J, 'lax $.friends' NULL ON EMPTY) AS Friends
+	   ^
+            <tmp_path>/program.sql:<main>:16:4: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+            	    JSON_QUERY (T.J, 'lax $.friends' NULL ON EMPTY) AS Friends
+	   ^
+    <tmp_path>/program.sql:<main>:19:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	SELECT T.K,
+	^
+        <tmp_path>/program.sql:<main>:22:4: Warning: At function: JsonQuery
+        	    JSON_QUERY (T.J, 'lax $.friends.name' WITH ARRAY WRAPPER) AS FriendsNames
+	   ^
+            <tmp_path>/program.sql:<main>:22:4: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+            	    JSON_QUERY (T.J, 'lax $.friends.name' WITH ARRAY WRAPPER) AS FriendsNames
+	   ^
+    <tmp_path>/program.sql:<main>:34:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:34:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:35:4: Warning: At function: JsonQuery
+            	    JSON_QUERY($J2, "strict $.a" WITHOUT ARRAY WRAPPER NULL ON ERROR),
+	   ^
+                <tmp_path>/program.sql:<main>:35:4: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+                	    JSON_QUERY($J2, "strict $.a" WITHOUT ARRAY WRAPPER NULL ON ERROR),
+	   ^
+        <tmp_path>/program.sql:<main>:34:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:36:4: Warning: At function: JsonQuery
+            	    JSON_QUERY($J2, "strict $.b" WITHOUT ARRAY WRAPPER),
+	   ^
+                <tmp_path>/program.sql:<main>:36:4: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+                	    JSON_QUERY($J2, "strict $.b" WITHOUT ARRAY WRAPPER),
+	   ^
+        <tmp_path>/program.sql:<main>:34:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:37:4: Warning: At function: JsonQuery
+            	    JSON_QUERY($J2, "strict $.c" WITHOUT ARRAY WRAPPER NULL ON ERROR);
+	   ^
+                <tmp_path>/program.sql:<main>:37:4: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+                	    JSON_QUERY($J2, "strict $.c" WITHOUT ARRAY WRAPPER NULL ON ERROR);
+	   ^
+    <tmp_path>/program.sql:<main>:39:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:39:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:40:4: Warning: At function: JsonQuery
+            	    JSON_QUERY($J2, "strict $.a" WITH UNCONDITIONAL ARRAY WRAPPER),
+	   ^
+                <tmp_path>/program.sql:<main>:40:4: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+                	    JSON_QUERY($J2, "strict $.a" WITH UNCONDITIONAL ARRAY WRAPPER),
+	   ^
+        <tmp_path>/program.sql:<main>:39:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:41:4: Warning: At function: JsonQuery
+            	    JSON_QUERY($J2, "strict $.b" WITH UNCONDITIONAL ARRAY WRAPPER),
+	   ^
+                <tmp_path>/program.sql:<main>:41:4: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+                	    JSON_QUERY($J2, "strict $.b" WITH UNCONDITIONAL ARRAY WRAPPER),
+	   ^
+        <tmp_path>/program.sql:<main>:39:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:42:4: Warning: At function: JsonQuery
+            	    JSON_QUERY($J2, "strict $.c" WITH UNCONDITIONAL ARRAY WRAPPER);
+	   ^
+                <tmp_path>/program.sql:<main>:42:4: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+                	    JSON_QUERY($J2, "strict $.c" WITH UNCONDITIONAL ARRAY WRAPPER);
+	   ^
+    <tmp_path>/program.sql:<main>:44:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:44:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:45:4: Warning: At function: JsonQuery
+            	    JSON_QUERY($J2, "strict $.a" WITH CONDITIONAL ARRAY WRAPPER),
+	   ^
+                <tmp_path>/program.sql:<main>:45:4: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+                	    JSON_QUERY($J2, "strict $.a" WITH CONDITIONAL ARRAY WRAPPER),
+	   ^
+        <tmp_path>/program.sql:<main>:44:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:46:4: Warning: At function: JsonQuery
+            	    JSON_QUERY($J2, "strict $.b" WITH CONDITIONAL ARRAY WRAPPER),
+	   ^
+                <tmp_path>/program.sql:<main>:46:4: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+                	    JSON_QUERY($J2, "strict $.b" WITH CONDITIONAL ARRAY WRAPPER),
+	   ^
+        <tmp_path>/program.sql:<main>:44:1: Warning: At function: SqlProjectItem
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:47:4: Warning: At function: JsonQuery
+            	    JSON_QUERY($J2, "strict $.c" WITH CONDITIONAL ARRAY WRAPPER);
+	   ^
+                <tmp_path>/program.sql:<main>:47:4: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+                	    JSON_QUERY($J2, "strict $.c" WITH CONDITIONAL ARRAY WRAPPER);
+	   ^

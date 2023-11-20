@@ -15,6 +15,15 @@ std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnId(const ui32 col
     return GetFieldByIndex(GetFieldIndex(columnId));
 }
 
+std::set<ui32> ISnapshotSchema::GetPkColumnsIds() const {
+    std::set<ui32> result;
+    for (auto&& field : GetSchema()->fields()) {
+        result.emplace(GetColumnId(field->name()));
+    }
+    return result;
+
+}
+
 std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::NormalizeBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const {
     if (dataSchema.GetSnapshot() == GetSnapshot()) {
         return batch;
@@ -90,7 +99,7 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::PrepareForInsert(const TStr
         return nullptr;
     }
     batch = NArrow::SortBatch(batch, sortingKey, true);
-    Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, sortingKey));
+    Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, sortingKey));
     return batch;
 }
 

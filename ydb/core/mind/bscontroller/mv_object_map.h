@@ -37,12 +37,12 @@ namespace NKikimr::NBsController {
 
             template<typename... TArgs>
             void Construct(TArgs&&... args) {
-                Y_VERIFY_DEBUG(!Value);
+                Y_DEBUG_ABORT_UNLESS(!Value);
                 Value.emplace(std::forward<TArgs>(args)...);
             }
 
             void Destruct() {
-                Y_VERIFY_DEBUG(Value);
+                Y_DEBUG_ABORT_UNLESS(Value);
                 Value.reset();
             }
         };
@@ -78,44 +78,44 @@ namespace NKikimr::NBsController {
 
         // start new transaction -- within this transaction any changes may be made
         void BeginTx(ui64 version) {
-            Y_VERIFY_DEBUG(!CurrentVersion);
-            Y_VERIFY_DEBUG(version);
+            Y_DEBUG_ABORT_UNLESS(!CurrentVersion);
+            Y_DEBUG_ABORT_UNLESS(version);
             CurrentVersion = version;
-            Y_VERIFY_DEBUG(PerVersionInfo.empty() || PerVersionInfo.rbegin()->first < version);
+            Y_DEBUG_ABORT_UNLESS(PerVersionInfo.empty() || PerVersionInfo.rbegin()->first < version);
             PerVersionInfo.emplace_hint(PerVersionInfo.end(), version, TPerVersionInfo());
         }
 
         // finish transaction -- it is not yet committed, but no more changes are made after this point
         void FinishTx() {
-            Y_VERIFY_DEBUG(CurrentVersion != 0);
-            Y_VERIFY_DEBUG(!PerVersionInfo.empty() && std::prev(PerVersionInfo.end())->first == CurrentVersion);
+            Y_DEBUG_ABORT_UNLESS(CurrentVersion != 0);
+            Y_DEBUG_ABORT_UNLESS(!PerVersionInfo.empty() && std::prev(PerVersionInfo.end())->first == CurrentVersion);
             CurrentVersion = 0;
         }
 
         // commit version in front of transaction queue
         void Commit(ui64 version) {
             const auto pvIter = PerVersionInfo.begin();
-            Y_VERIFY_DEBUG(pvIter != PerVersionInfo.end() && pvIter->first == version);
+            Y_DEBUG_ABORT_UNLESS(pvIter != PerVersionInfo.end() && pvIter->first == version);
             // the main logic of commit is to remove obsolete versions of items to ensure at most one item with Version
             // <= CommittedVersion exists
             for (typename TItems::iterator it : pvIter->second.Touched) {
                 // ensure the correctness of item's version
-                Y_VERIFY_DEBUG(it->second.Version == version);
+                Y_DEBUG_ABORT_UNLESS(it->second.Version == version);
 
                 // this item was either newly added in this version, deleted, or replaced; let's figure out what happened
                 if (const auto pred = Predecessor(it); pred != Items.end()) {
                     // item has a predecessor, so it may be either added or replaced; predecessor must have correct version
                     // and value in either way
-                    Y_VERIFY_DEBUG(pred->second.Version < version); // check version ordering
-                    Y_VERIFY_DEBUG(pred->second); // check that predecessor has value
+                    Y_DEBUG_ABORT_UNLESS(pred->second.Version < version); // check version ordering
+                    Y_DEBUG_ABORT_UNLESS(pred->second); // check that predecessor has value
                     Items.erase(pred); // terminate the predecessor as we don't need it anymore
-                    Y_VERIFY_DEBUG(Predecessor(it) == Items.end()); // ensure that there are no more predecessors
+                    Y_DEBUG_ABORT_UNLESS(Predecessor(it) == Items.end()); // ensure that there are no more predecessors
                     if (!it->second) {
                         Items.erase(it); // item was deleted itself in this version, so we delete it from the map
                     }
                 } else {
                     // item does not have a predecessor, so it means that it is newly added, so it must have a value
-                    Y_VERIFY_DEBUG(it->second);
+                    Y_DEBUG_ABORT_UNLESS(it->second);
                 }
             }
             PerVersionInfo.erase(pvIter);
@@ -125,13 +125,13 @@ namespace NKikimr::NBsController {
 
         // drop version in back of transaction queue
         void Drop(ui64 version) {
-            Y_VERIFY_DEBUG(!PerVersionInfo.empty());
+            Y_DEBUG_ABORT_UNLESS(!PerVersionInfo.empty());
             const auto pvIter = std::prev(PerVersionInfo.end());
-            Y_VERIFY_DEBUG(pvIter->first == version);
+            Y_DEBUG_ABORT_UNLESS(pvIter->first == version);
             // the logic of drop is to delete all entries with the specified version; actually it is simple delete
             // touched items from the map
             for (const typename TItems::iterator it : pvIter->second.Touched) {
-                Y_VERIFY_DEBUG(it->second.Version == version);
+                Y_DEBUG_ABORT_UNLESS(it->second.Version == version);
                 Items.erase(it);
             }
             PerVersionInfo.erase(pvIter);
@@ -148,7 +148,7 @@ namespace NKikimr::NBsController {
         }
 
         const TValue *FindLatest(const TKey& key) {
-            Y_VERIFY_DEBUG(CurrentVersion);
+            Y_DEBUG_ABORT_UNLESS(CurrentVersion);
             // find the item with the most version for this key; should be called only from inside the transaction code
             auto it = Items.upper_bound(key);
             if (it != Items.begin()) {
@@ -164,7 +164,7 @@ namespace NKikimr::NBsController {
             while (it != Items.end() && (!max || it->first <= *max)) {
                 const TKey& key = it->first;
                 if (it->second.Version <= CommittedVersion) {
-                    Y_VERIFY_DEBUG(it->second);
+                    Y_DEBUG_ABORT_UNLESS(it->second);
                     if (!callback(key, *it->second)) {
                         break;
                     }
@@ -178,7 +178,7 @@ namespace NKikimr::NBsController {
         template<typename T>
         void ScanRangeLatest(T&& callback, const std::optional<TKey>& min = std::nullopt,
                 const std::optional<TKey>& max = std::nullopt) {
-            Y_VERIFY_DEBUG(CurrentVersion);
+            Y_DEBUG_ABORT_UNLESS(CurrentVersion);
             for (auto it = min ? Items.lower_bound(*min) : Items.begin(); it != Items.end() && (!max || it->first <= *max); ++it) {
                 const TKey& key = it->first;
 
@@ -192,9 +192,9 @@ namespace NKikimr::NBsController {
                 if (it->second) {
                     auto getMutPtr = [&] {
                         if (it->second.Version != CurrentVersion) {
-                            Y_VERIFY_DEBUG(it->second.Version < CurrentVersion);
+                            Y_DEBUG_ABORT_UNLESS(it->second.Version < CurrentVersion);
                             const TValue *value = it->second;
-                            Y_VERIFY_DEBUG(value);
+                            Y_DEBUG_ABORT_UNLESS(value);
                             it = Items.emplace_hint(std::next(it), CurrentVersion, *value);
                             MarkTouched(it);
                         }
@@ -213,7 +213,7 @@ namespace NKikimr::NBsController {
 
         template<typename... TArgs>
         TValue *CreateNewEntry(TKey key, TArgs&&... args) {
-            Y_VERIFY_DEBUG(CurrentVersion);
+            Y_DEBUG_ABORT_UNLESS(CurrentVersion);
             // here we have to possible cases:
             // 1. this is the new entry for this version, so we just place it into the map and update touched keys
             // 2. this is re-creation of alreay deleted item inside this version, so we just have to construct item again
@@ -233,7 +233,7 @@ namespace NKikimr::NBsController {
         }
 
         void DeleteExistingEntry(const TKey& key) {
-            Y_VERIFY_DEBUG(CurrentVersion);
+            Y_DEBUG_ABORT_UNLESS(CurrentVersion);
             // we also have two possible cases as with insertion:
             // 1. item was inserted in previous version (and it must exist, so last value must be non-nullopt)
             // 2. item was constructed in this version and is going to be deleted
@@ -260,7 +260,7 @@ namespace NKikimr::NBsController {
         }
 
         TValue *FindForUpdate(const TKey& key) {
-            Y_VERIFY_DEBUG(CurrentVersion);
+            Y_DEBUG_ABORT_UNLESS(CurrentVersion);
             // the code is same as before, but with some minor differences
             const auto upperIt = Items.upper_bound(key);
             auto it = upperIt != Items.begin() ? std::prev(upperIt) : Items.end();
@@ -269,14 +269,14 @@ namespace NKikimr::NBsController {
                 return nullptr;
             }
             if (it->second.Version != CurrentVersion) {
-                Y_VERIFY_DEBUG(it->second.Version < CurrentVersion);
+                Y_DEBUG_ABORT_UNLESS(it->second.Version < CurrentVersion);
                 // here we found something from previous version; this may be an item, but can be a deletion marker
                 if (!it->second) {
                     return nullptr; // item was deleted, so in this version we have no item at all by this key
                 }
                 // item was not deleted, we have to clone it in current version
                 const TValue *value = it->second;
-                Y_VERIFY_DEBUG(value);
+                Y_DEBUG_ABORT_UNLESS(value);
                 it = Items.emplace_hint(upperIt, std::piecewise_construct, std::forward_as_tuple(key),
                     std::forward_as_tuple(CurrentVersion, *value));
                 MarkTouched(it);
@@ -286,19 +286,19 @@ namespace NKikimr::NBsController {
 
     private:
         void MarkTouched(typename TItems::iterator it) {
-            Y_VERIFY_DEBUG(!PerVersionInfo.empty());
+            Y_DEBUG_ABORT_UNLESS(!PerVersionInfo.empty());
             const auto pvIter = std::prev(PerVersionInfo.end());
-            Y_VERIFY_DEBUG(pvIter->first == CurrentVersion);
+            Y_DEBUG_ABORT_UNLESS(pvIter->first == CurrentVersion);
             const bool inserted = pvIter->second.Touched.insert(it).second;
-            Y_VERIFY_DEBUG(inserted);
+            Y_DEBUG_ABORT_UNLESS(inserted);
         }
 
         void MarkUntouched(typename TItems::iterator it) {
-            Y_VERIFY_DEBUG(!PerVersionInfo.empty());
+            Y_DEBUG_ABORT_UNLESS(!PerVersionInfo.empty());
             const auto pvIter = std::prev(PerVersionInfo.end());
-            Y_VERIFY_DEBUG(pvIter->first == CurrentVersion);
+            Y_DEBUG_ABORT_UNLESS(pvIter->first == CurrentVersion);
             const ui32 erased = pvIter->second.Touched.erase(it);
-            Y_VERIFY_DEBUG(erased);
+            Y_DEBUG_ABORT_UNLESS(erased);
         }
 
         typename TItems::iterator Predecessor(const typename TItems::iterator& it) {

@@ -354,7 +354,7 @@ IComputationNode* WrapDecimalMul(TCallable& callable, const TComputationNodeFact
         INTEGRAL_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_MUL)
 #undef MAKE_PRIMITIVE_TYPE_MUL
         default:
-            Y_FAIL("Unupported type.");
+            Y_ABORT("Unupported type.");
     }
 }
 

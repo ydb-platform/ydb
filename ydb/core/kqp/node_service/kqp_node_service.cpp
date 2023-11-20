@@ -2,6 +2,7 @@
 #include "kqp_node_state.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
@@ -185,7 +186,7 @@ private:
             hFunc(TEvents::TEvPoison, HandleWork);
             hFunc(NMon::TEvHttpInfo, HandleWork);
             default: {
-                Y_FAIL("Unexpected event 0x%x for TKqpResourceManagerService", ev->GetTypeRewrite());
+                Y_ABORT("Unexpected event 0x%x for TKqpResourceManagerService", ev->GetTypeRewrite());
             }
         }
     }

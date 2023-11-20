@@ -519,6 +519,23 @@
       ],
       "documentation":"<p>Returns a map of OpenSearch or Elasticsearch versions and the versions you can upgrade them to.</p>"
     },
+    "GetDomainMaintenanceStatus":{
+      "name":"GetDomainMaintenanceStatus",
+      "http":{
+        "method":"GET",
+        "requestUri":"/2021-01-01/opensearch/domain/{DomainName}/domainMaintenance"
+      },
+      "input":{"shape":"GetDomainMaintenanceStatusRequest"},
+      "output":{"shape":"GetDomainMaintenanceStatusResponse"},
+      "errors":[
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ValidationException"},
+        {"shape":"DisabledOperationException"}
+      ],
+      "documentation":"<p>The status of the maintenance action.</p>"
+    },
     "GetPackageVersionHistory":{
       "name":"GetPackageVersionHistory",
       "http":{
@@ -569,6 +586,23 @@
         {"shape":"InternalException"}
       ],
       "documentation":"<p>Returns the most recent status of the last upgrade or upgrade eligibility check performed on an Amazon OpenSearch Service domain.</p>"
+    },
+    "ListDomainMaintenances":{
+      "name":"ListDomainMaintenances",
+      "http":{
+        "method":"GET",
+        "requestUri":"/2021-01-01/opensearch/domain/{DomainName}/domainMaintenances"
+      },
+      "input":{"shape":"ListDomainMaintenancesRequest"},
+      "output":{"shape":"ListDomainMaintenancesResponse"},
+      "errors":[
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ValidationException"},
+        {"shape":"DisabledOperationException"}
+      ],
+      "documentation":"<p>A list of maintenance actions for the domain.</p>"
     },
     "ListDomainNames":{
       "name":"ListDomainNames",
@@ -793,6 +827,23 @@
       ],
       "documentation":"<p>Revokes access to an Amazon OpenSearch Service domain that was provided through an interface VPC endpoint.</p>"
     },
+    "StartDomainMaintenance":{
+      "name":"StartDomainMaintenance",
+      "http":{
+        "method":"POST",
+        "requestUri":"/2021-01-01/opensearch/domain/{DomainName}/domainMaintenance"
+      },
+      "input":{"shape":"StartDomainMaintenanceRequest"},
+      "output":{"shape":"StartDomainMaintenanceResponse"},
+      "errors":[
+        {"shape":"BaseException"},
+        {"shape":"InternalException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ValidationException"},
+        {"shape":"DisabledOperationException"}
+      ],
+      "documentation":"<p>Starts the node maintenance process on the data node. These processes can include a node reboot, an Opensearch or Elasticsearch process restart, or a Dashboard or Kibana restart.</p>"
+    },
     "StartServiceSoftwareUpdate":{
       "name":"StartServiceSoftwareUpdate",
       "http":{
@@ -825,7 +876,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ValidationException"}
       ],
-      "documentation":"<p>Modifies the cluster configuration of the specified Amazon OpenSearch Service domain.sl</p>"
+      "documentation":"<p>Modifies the cluster configuration of the specified Amazon OpenSearch Service domain.</p>"
     },
     "UpdatePackage":{
       "name":"UpdatePackage",
@@ -1594,7 +1645,7 @@
         },
         "InstanceCount":{
           "shape":"IntegerClass",
-          "documentation":"<p>Number of dedicated master nodes in the cluster. This number must be greater than 1, otherwise you receive a validation exception.</p>"
+          "documentation":"<p>Number of data nodes in the cluster. This number must be greater than 1, otherwise you receive a validation exception.</p>"
         },
         "DedicatedMasterEnabled":{
           "shape":"Boolean",
@@ -1796,6 +1847,10 @@
         "AccessPolicies":{
           "shape":"PolicyDocument",
           "documentation":"<p>Identity and Access Management (IAM) policy document specifying the access policies for the new domain.</p>"
+        },
+        "IPAddressType":{
+          "shape":"IPAddressType",
+          "documentation":"<p>The type of IP addresses supported by the endpoint for the domain.</p>"
         },
         "SnapshotOptions":{
           "shape":"SnapshotOptions",
@@ -2000,10 +2055,10 @@
       "members":{
         "SkipUnavailable":{
           "shape":"SkipUnavailableStatus",
-          "documentation":"<p>Status of SkipUnavailable param for outbound connection.</p>"
+          "documentation":"<p>The status of the <code>SkipUnavailable</code> setting for the outbound connection. This feature allows you to specify some clusters as optional and ensure that your cross-cluster queries return partial results despite failures on one or more remote clusters.</p>"
         }
       },
-      "documentation":"<p>Cross cluster search specific connection properties.</p>"
+      "documentation":"<p>Cross-cluster search specific connection properties.</p>"
     },
     "DeleteDomainRequest":{
       "type":"structure",
@@ -2355,7 +2410,7 @@
       "members":{
         "DomainNames":{
           "shape":"DomainNameList",
-          "documentation":"<p>Array of OpenSearch Service domain names that you want information about. If you don't specify any domains, OpenSearch Service returns information about all domains owned by the account.</p>"
+          "documentation":"<p>Array of OpenSearch Service domain names that you want information about. You must specify at least one domain name.</p>"
         }
       },
       "documentation":"<p>Container for the parameters to the <code>DescribeDomains</code> operation.</p>"
@@ -2538,16 +2593,19 @@
       "enum":[
         "PackageID",
         "PackageName",
-        "PackageStatus"
+        "PackageStatus",
+        "PackageType",
+        "EngineVersion"
       ]
     },
     "DescribePackagesFilterValue":{
       "type":"string",
-      "pattern":"^[0-9a-zA-Z\\*\\.\\\\/\\?-]*$"
+      "pattern":"^[0-9a-zA-Z\\*\\.\\_\\\\\\/\\?-]+$"
     },
     "DescribePackagesFilterValues":{
       "type":"list",
-      "member":{"shape":"DescribePackagesFilterValue"}
+      "member":{"shape":"DescribePackagesFilterValue"},
+      "min":1
     },
     "DescribePackagesRequest":{
       "type":"structure",
@@ -2751,6 +2809,10 @@
           "shape":"AccessPoliciesStatus",
           "documentation":"<p>Specifies the access policies for the domain.</p>"
         },
+        "IPAddressType":{
+          "shape":"IPAddressTypeStatus",
+          "documentation":"<p>The type of IP addresses supported by the endpoint for the domain.</p>"
+        },
         "SnapshotOptions":{
           "shape":"SnapshotOptionsStatus",
           "documentation":"<p>DEPRECATED. Container for parameters required to configure automated snapshots of domain indexes.</p>"
@@ -2893,6 +2955,48 @@
         }
       },
       "documentation":"<p>Container for information about an OpenSearch Service domain.</p>"
+    },
+    "DomainMaintenanceDetails":{
+      "type":"structure",
+      "members":{
+        "MaintenanceId":{
+          "shape":"RequestId",
+          "documentation":"<p>The ID of the requested action.</p>"
+        },
+        "DomainName":{
+          "shape":"DomainName",
+          "documentation":"<p>The name of the domain.</p>"
+        },
+        "Action":{
+          "shape":"MaintenanceType",
+          "documentation":"<p>The name of the action.</p>"
+        },
+        "NodeId":{
+          "shape":"NodeId",
+          "documentation":"<p>The ID of the data node.</p>"
+        },
+        "Status":{
+          "shape":"MaintenanceStatus",
+          "documentation":"<p>The status of the action.</p>"
+        },
+        "StatusMessage":{
+          "shape":"MaintenanceStatusMessage",
+          "documentation":"<p>The status message for the action.</p>"
+        },
+        "CreatedAt":{
+          "shape":"UpdateTimestamp",
+          "documentation":"<p>The time at which the action was created.</p>"
+        },
+        "UpdatedAt":{
+          "shape":"UpdateTimestamp",
+          "documentation":"<p>The time at which the action was updated.</p>"
+        }
+      },
+      "documentation":"<p>Container for the domain maintenance details.</p>"
+    },
+    "DomainMaintenanceList":{
+      "type":"list",
+      "member":{"shape":"DomainMaintenanceDetails"}
     },
     "DomainName":{
       "type":"string",
@@ -3052,6 +3156,7 @@
           "shape":"ServiceUrl",
           "documentation":"<p>Domain-specific endpoint used to submit index, search, and data upload requests to the domain.</p>"
         },
+        "EndpointV2":{"shape":"ServiceUrl"},
         "Endpoints":{
           "shape":"EndpointsMap",
           "documentation":"<p>The key-value pair that exists if the OpenSearch Service domain uses VPC endpoints.. Example <code>key, value</code>: <code>'vpc','vpc-endpoint-h2dsd34efgyghrtguk5gt6j2foh4.us-east-1.es.amazonaws.com'</code>.</p>"
@@ -3079,6 +3184,10 @@
         "AccessPolicies":{
           "shape":"PolicyDocument",
           "documentation":"<p>Identity and Access Management (IAM) policy document specifying the access policies for the domain.</p>"
+        },
+        "IPAddressType":{
+          "shape":"IPAddressType",
+          "documentation":"<p>The type of IP addresses supported by the endpoint for the domain.</p>"
         },
         "SnapshotOptions":{
           "shape":"SnapshotOptions",
@@ -3311,6 +3420,10 @@
         "Elasticsearch"
       ]
     },
+    "EngineVersion":{
+      "type":"string",
+      "pattern":"^Elasticsearch_[0-9]{1}\\.[0-9]{1,2}$|^OpenSearch_[0-9]{1,2}\\.[0-9]{1,2}$"
+    },
     "EnvironmentInfo":{
       "type":"structure",
       "members":{
@@ -3386,6 +3499,58 @@
         }
       },
       "documentation":"<p>Container for the response returned by the <code>GetCompatibleVersions</code> operation.</p>"
+    },
+    "GetDomainMaintenanceStatusRequest":{
+      "type":"structure",
+      "required":[
+        "DomainName",
+        "MaintenanceId"
+      ],
+      "members":{
+        "DomainName":{
+          "shape":"DomainName",
+          "documentation":"<p>The name of the domain.</p>",
+          "location":"uri",
+          "locationName":"DomainName"
+        },
+        "MaintenanceId":{
+          "shape":"RequestId",
+          "documentation":"<p>The request ID of the maintenance action.</p>",
+          "location":"querystring",
+          "locationName":"maintenanceId"
+        }
+      },
+      "documentation":"<p>Container for the parameters to the <code>GetDomainMaintenanceStatus</code> operation.</p>"
+    },
+    "GetDomainMaintenanceStatusResponse":{
+      "type":"structure",
+      "members":{
+        "Status":{
+          "shape":"MaintenanceStatus",
+          "documentation":"<p>The status of the maintenance action.</p>"
+        },
+        "StatusMessage":{
+          "shape":"MaintenanceStatusMessage",
+          "documentation":"<p>The status message of the maintenance action.</p>"
+        },
+        "NodeId":{
+          "shape":"NodeId",
+          "documentation":"<p>The node ID of the maintenance action.</p>"
+        },
+        "Action":{
+          "shape":"MaintenanceType",
+          "documentation":"<p>The action name.</p>"
+        },
+        "CreatedAt":{
+          "shape":"UpdateTimestamp",
+          "documentation":"<p>The time at which the action was created.</p>"
+        },
+        "UpdatedAt":{
+          "shape":"UpdateTimestamp",
+          "documentation":"<p>The time at which the action was updated.</p>"
+        }
+      },
+      "documentation":"<p>The result of a <code>GetDomainMaintenanceStatus</code> request that information about the requested action.</p>"
     },
     "GetPackageVersionHistoryRequest":{
       "type":"structure",
@@ -3499,6 +3664,28 @@
         }
       },
       "documentation":"<p>Container for the response returned by the <code>GetUpgradeStatus</code> operation.</p>"
+    },
+    "IPAddressType":{
+      "type":"string",
+      "enum":[
+        "ipv4",
+        "dualstack"
+      ]
+    },
+    "IPAddressTypeStatus":{
+      "type":"structure",
+      "required":[
+        "Options",
+        "Status"
+      ],
+      "members":{
+        "Options":{
+          "shape":"IPAddressType",
+          "documentation":"<p>The IP address options for the domain.</p>"
+        },
+        "Status":{"shape":"OptionStatus"}
+      },
+      "documentation":"<p>The IP address type status for the domain.</p>"
     },
     "IdentityPoolId":{
       "type":"string",
@@ -3720,6 +3907,57 @@
       "key":{"shape":"InstanceRole"},
       "value":{"shape":"Limits"},
       "documentation":"<p> The role of a given instance and all applicable limits. The role performed by a given OpenSearch instance can be one of the following: </p> <ul> <li> <p> <b>data</b> - A data node.</p> </li> <li> <p> <b>master</b> - A dedicated master node.</p> </li> <li> <p> <b>ultra_warm</b> - An UltraWarm node.</p> </li> </ul>"
+    },
+    "ListDomainMaintenancesRequest":{
+      "type":"structure",
+      "required":["DomainName"],
+      "members":{
+        "DomainName":{
+          "shape":"DomainName",
+          "documentation":"<p>The name of the domain.</p>",
+          "location":"uri",
+          "locationName":"DomainName"
+        },
+        "Action":{
+          "shape":"MaintenanceType",
+          "documentation":"<p>The name of the action.</p>",
+          "location":"querystring",
+          "locationName":"action"
+        },
+        "Status":{
+          "shape":"MaintenanceStatus",
+          "documentation":"<p>The status of the action.</p>",
+          "location":"querystring",
+          "locationName":"status"
+        },
+        "MaxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>An optional parameter that specifies the maximum number of results to return. You can use <code>nextToken</code> to get the next page of results.</p>",
+          "location":"querystring",
+          "locationName":"maxResults"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>If your initial <code>ListDomainMaintenances</code> operation returns a <code>nextToken</code>, include the returned <code>nextToken</code> in subsequent <code>ListDomainMaintenances</code> operations, which returns results in the next page.</p>",
+          "location":"querystring",
+          "locationName":"nextToken"
+        }
+      },
+      "documentation":"<p>Container for the parameters to the <code>ListDomainMaintenances</code> operation.</p>"
+    },
+    "ListDomainMaintenancesResponse":{
+      "type":"structure",
+      "members":{
+        "DomainMaintenances":{
+          "shape":"DomainMaintenanceList",
+          "documentation":"<p>A list of the submitted maintenance actions.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>When <code>nextToken</code> is returned, there are more results available. The value of <code>nextToken</code> is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page.</p>"
+        }
+      },
+      "documentation":"<p>The result of a <code>ListDomainMaintenances</code> request that contains information about the requested actions. </p>"
     },
     "ListDomainNamesRequest":{
       "type":"structure",
@@ -4110,6 +4348,30 @@
       ]
     },
     "Long":{"type":"long"},
+    "MaintenanceStatus":{
+      "type":"string",
+      "enum":[
+        "PENDING",
+        "IN_PROGRESS",
+        "COMPLETED",
+        "FAILED",
+        "TIMED_OUT"
+      ]
+    },
+    "MaintenanceStatusMessage":{
+      "type":"string",
+      "max":1000,
+      "min":0,
+      "pattern":"^([\\s\\S]*)$"
+    },
+    "MaintenanceType":{
+      "type":"string",
+      "enum":[
+        "REBOOT_NODE",
+        "RESTART_SEARCH_PROCESS",
+        "RESTART_DASHBOARD"
+      ]
+    },
     "MasterNodeStatus":{
       "type":"string",
       "enum":[
@@ -4535,6 +4797,14 @@
         "ErrorDetails":{
           "shape":"ErrorDetails",
           "documentation":"<p>Additional information if the package is in an error state. Null otherwise.</p>"
+        },
+        "EngineVersion":{
+          "shape":"EngineVersion",
+          "documentation":"<p>Version of OpenSearch or Elasticsearch, in the format Elasticsearch_X.Y or OpenSearch_X.Y. Defaults to the latest version of OpenSearch.</p>"
+        },
+        "AvailablePluginProperties":{
+          "shape":"PluginProperties",
+          "documentation":"<p>If the package is a <code>ZIP-PLUGIN</code> package, additional information about plugin properties.</p>"
         }
       },
       "documentation":"<p>Basic information about a package.</p>"
@@ -4543,10 +4813,13 @@
       "type":"list",
       "member":{"shape":"PackageDetails"}
     },
-    "PackageID":{"type":"string"},
+    "PackageID":{
+      "type":"string",
+      "pattern":"^([FG][0-9]+)$"
+    },
     "PackageName":{
       "type":"string",
-      "max":28,
+      "max":256,
       "min":3,
       "pattern":"[a-z][a-z0-9\\-]+"
     },
@@ -4579,7 +4852,10 @@
     },
     "PackageType":{
       "type":"string",
-      "enum":["TXT-DICTIONARY"]
+      "enum":[
+        "TXT-DICTIONARY",
+        "ZIP-PLUGIN"
+      ]
     },
     "PackageVersion":{"type":"string"},
     "PackageVersionHistory":{
@@ -4596,6 +4872,10 @@
         "CreatedAt":{
           "shape":"CreatedAt",
           "documentation":"<p>The date and time when the package was created.</p>"
+        },
+        "PluginProperties":{
+          "shape":"PluginProperties",
+          "documentation":"<p>Additional information about plugin properties if the package is a <code>ZIP-PLUGIN</code> package.</p>"
         }
       },
       "documentation":"<p>Details about a package version.</p>"
@@ -4610,6 +4890,48 @@
       "min":8,
       "pattern":".*",
       "sensitive":true
+    },
+    "PluginClassName":{
+      "type":"string",
+      "max":1024
+    },
+    "PluginDescription":{
+      "type":"string",
+      "max":1024
+    },
+    "PluginName":{
+      "type":"string",
+      "max":1024
+    },
+    "PluginProperties":{
+      "type":"structure",
+      "members":{
+        "Name":{
+          "shape":"PluginName",
+          "documentation":"<p>The name of the plugin.</p>"
+        },
+        "Description":{
+          "shape":"PluginDescription",
+          "documentation":"<p>The description of the plugin.</p>"
+        },
+        "Version":{
+          "shape":"PluginVersion",
+          "documentation":"<p>The version of the plugin.</p>"
+        },
+        "ClassName":{
+          "shape":"PluginClassName",
+          "documentation":"<p>The name of the class to load.</p>"
+        },
+        "UncompressedSizeInBytes":{
+          "shape":"UncompressedPluginSizeInBytes",
+          "documentation":"<p>The uncompressed size of the plugin.</p>"
+        }
+      },
+      "documentation":"<p>Basic information about the plugin.</p>"
+    },
+    "PluginVersion":{
+      "type":"string",
+      "max":1024
     },
     "PolicyDocument":{
       "type":"string",
@@ -4726,6 +5048,12 @@
         }
       },
       "documentation":"<p>Container for the request parameters to the <code>RemoveTags</code> operation.</p>"
+    },
+    "RequestId":{
+      "type":"string",
+      "max":100,
+      "min":1,
+      "pattern":"^([\\s\\S]*)$"
     },
     "ReservationToken":{
       "type":"string",
@@ -5155,7 +5483,7 @@
     },
     "SkipUnavailableStatus":{
       "type":"string",
-      "documentation":"<p>Status of SkipUnavailable param for outbound connection.</p> <ul> <li> <p> <b>ENABLED</b> - The SkipUnavailable param is enabled for the connection.</p> </li> <li> <p> <b>DISABLED</b> - The SkipUnavailable param is disabled for the connection.</p> </li> </ul>",
+      "documentation":"<p>The status of <code>SkipUnavailable</code> setting for the outbound connection.</p> <ul> <li> <p> <b>ENABLED</b> - The <code>SkipUnavailable</code> setting is enabled for the connection.</p> </li> <li> <p> <b>DISABLED</b> - The <code>SkipUnavailable</code> setting is disabled for the connection.</p> </li> </ul>",
       "enum":[
         "ENABLED",
         "DISABLED"
@@ -5230,6 +5558,40 @@
       "documentation":"<p>The status of the service software options for a domain.</p>"
     },
     "StartAt":{"type":"timestamp"},
+    "StartDomainMaintenanceRequest":{
+      "type":"structure",
+      "required":[
+        "DomainName",
+        "Action"
+      ],
+      "members":{
+        "DomainName":{
+          "shape":"DomainName",
+          "documentation":"<p>The name of the domain.</p>",
+          "location":"uri",
+          "locationName":"DomainName"
+        },
+        "Action":{
+          "shape":"MaintenanceType",
+          "documentation":"<p>The name of the action.</p>"
+        },
+        "NodeId":{
+          "shape":"NodeId",
+          "documentation":"<p>The ID of the data node.</p>"
+        }
+      },
+      "documentation":"<p>Container for the parameters to the <code>StartDomainMaintenance</code> operation.</p>"
+    },
+    "StartDomainMaintenanceResponse":{
+      "type":"structure",
+      "members":{
+        "MaintenanceId":{
+          "shape":"RequestId",
+          "documentation":"<p>The request ID of requested action.</p>"
+        }
+      },
+      "documentation":"<p>The result of a <code>StartDomainMaintenance</code> request that information about the requested action. </p>"
+    },
     "StartServiceSoftwareUpdateRequest":{
       "type":"structure",
       "required":["DomainName"],
@@ -5377,6 +5739,7 @@
       "type":"integer",
       "min":0
     },
+    "UncompressedPluginSizeInBytes":{"type":"long"},
     "UpdateDomainConfigRequest":{
       "type":"structure",
       "required":["DomainName"],
@@ -5414,6 +5777,10 @@
         "AccessPolicies":{
           "shape":"PolicyDocument",
           "documentation":"<p>Identity and Access Management (IAM) access policy as a JSON-formatted string.</p>"
+        },
+        "IPAddressType":{
+          "shape":"IPAddressType",
+          "documentation":"<p>The type of IP addresses supported by the endpoint for the domain.</p>"
         },
         "LogPublishingOptions":{
           "shape":"LogPublishingOptions",

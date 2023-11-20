@@ -5,6 +5,8 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
+#include <library/cpp/time_provider/time_provider.h>
+
 
 namespace NKikimr {
 
@@ -31,7 +33,7 @@ namespace NKikimr {
             , LastKeepLsn(lastKeepLsn)
             , GenerationTime(TAppData::TimeProvider->Now())
         {
-            Y_VERIFY_DEBUG(Start <= component && component < Max);
+            Y_DEBUG_ABORT_UNLESS(Start <= component && component < Max);
         }
     };
 

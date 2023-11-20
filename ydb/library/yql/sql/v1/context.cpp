@@ -428,7 +428,7 @@ TNodePtr TScopedState::LookupNode(const TString& name) {
     if (mapIt == NamedNodes.end()) {
         return nullptr;
     }
-    Y_VERIFY_DEBUG(!mapIt->second.empty());
+    Y_DEBUG_ABORT_UNLESS(!mapIt->second.empty());
     mapIt->second.front()->IsUsed = true;
     return mapIt->second.front()->Node->Clone();
 }
@@ -497,11 +497,6 @@ TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString&
         { {"ensuretype", 2},          EColumnRefState::Deny },
         { {"ensureconvertibleto", 1}, EColumnRefState::Deny },
         { {"ensureconvertibleto", 2}, EColumnRefState::Deny },
-
-        // TODO: switch to Deny here
-        { {"evaluateexpr", 0},        EColumnRefState::AsStringLiteral },
-        { {"evaluateatom", 0},        EColumnRefState::AsStringLiteral },
-        { {"evaluatetype", 0},        EColumnRefState::AsStringLiteral },
 
         { {"nothing", 0},             EColumnRefState::Deny },
         { {"formattype", 0},          EColumnRefState::Deny },
@@ -580,11 +575,11 @@ TString TTranslation::PushNamedNode(TPosition namePos, const TString& name, cons
         YQL_ENSURE(Ctx.Scoped->NamedNodes.find(resultName) == Ctx.Scoped->NamedNodes.end());
     }
     auto node = builder(resultName);
-    Y_VERIFY_DEBUG(node);
+    Y_DEBUG_ABORT_UNLESS(node);
     auto mapIt = Ctx.Scoped->NamedNodes.find(resultName);
     if (mapIt == Ctx.Scoped->NamedNodes.end()) {
         auto result = Ctx.Scoped->NamedNodes.insert(std::make_pair(resultName, TDeque<TNodeWithUsageInfoPtr>()));
-        Y_VERIFY_DEBUG(result.second);
+        Y_DEBUG_ABORT_UNLESS(result.second);
         mapIt = result.first;
     }
 
@@ -605,8 +600,8 @@ TString TTranslation::PushNamedAtom(TPosition namePos, const TString& name) {
 
 void TTranslation::PopNamedNode(const TString& name) {
     auto mapIt = Ctx.Scoped->NamedNodes.find(name);
-    Y_VERIFY_DEBUG(mapIt != Ctx.Scoped->NamedNodes.end());
-    Y_VERIFY_DEBUG(mapIt->second.size() > 0);
+    Y_DEBUG_ABORT_UNLESS(mapIt != Ctx.Scoped->NamedNodes.end());
+    Y_DEBUG_ABORT_UNLESS(mapIt->second.size() > 0);
     auto& top = mapIt->second.front();
     if (!top->IsUsed && !Ctx.HasPendingErrors && !name.StartsWith("$_")) {
         Ctx.Warning(top->NamePos, TIssuesIds::YQL_UNUSED_SYMBOL) << "Symbol " << name << " is not used";

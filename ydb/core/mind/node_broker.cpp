@@ -3,6 +3,8 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/protos/node_broker.pb.h>
@@ -347,7 +349,7 @@ void TNodeBroker::ApplyStateDiff(const TStateDiff &diff)
                     "Remove node " << it->second.IdString());
 
         ExpiredNodes.erase(it);
-        if (!IsBannedId(id) && NodeIdDomain(id) == DomainId)
+        if (!IsBannedId(id) && NodeIdDomain(id) == DomainId && id >= MinDynamicId && id <= MaxDynamicId)
             FreeIds.Set(id);
     }
 
@@ -839,7 +841,11 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 << ": response# " << response.ToString(*AppData()->TypeRegistry));
 
             if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok && response.DomainInfo) {
-                ScopeId = {response.DomainInfo->DomainKey.OwnerId, response.DomainInfo->DomainKey.LocalPathId};
+                if (response.DomainInfo->IsServerless()) {
+                    ScopeId = {response.DomainInfo->ResourcesDomainKey.OwnerId, response.DomainInfo->ResourcesDomainKey.LocalPathId};
+                } else {
+                    ScopeId = {response.DomainInfo->DomainKey.OwnerId, response.DomainInfo->DomainKey.LocalPathId};
+                }
             } else {
                 LOG_WARN_S(ctx, NKikimrServices::NODE_BROKER, "Cannot resolve scope id"
                     << ": request# " << Ev->Get()->Record.ShortDebugString()

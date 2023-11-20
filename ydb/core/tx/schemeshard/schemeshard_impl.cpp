@@ -14,6 +14,8 @@
 #include <ydb/core/statistics/stat_service.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <util/system/byteorder.h>
+#include <util/system/unaligned_mem.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -374,7 +376,7 @@ void TSchemeShard::IncrementPathDbRefCount(const TPathId& pathId, const TStringB
     if (it != PathsById.end()) {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, "IncrementPathDbRefCount reason " << debug << " for pathId " << pathId << " was " << it->second->DbRefCount);
         size_t newRefCount = ++it->second->DbRefCount;
-        Y_VERIFY_DEBUG(newRefCount > 0);
+        Y_DEBUG_ABORT_UNLESS(newRefCount > 0);
     }
 }
 
@@ -384,7 +386,7 @@ void TSchemeShard::DecrementPathDbRefCount(const TPathId& pathId, const TStringB
     if (it != PathsById.end()) {
         // FIXME: not all references are accounted right now
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, "DecrementPathDbRefCount reason " << debug << " for pathId " << pathId << " was " << it->second->DbRefCount);
-        Y_VERIFY_DEBUG(it->second->DbRefCount > 0);
+        Y_DEBUG_ABORT_UNLESS(it->second->DbRefCount > 0);
         if (it->second->DbRefCount > 0) {
             size_t newRefCount = --it->second->DbRefCount;
             if (newRefCount == 0 && it->second->Dropped()) {
@@ -886,7 +888,7 @@ bool TSchemeShard::ResolveChannelsByPoolKinds(
         return false;
     }
 
-    Y_VERIFY_DEBUG(!channelsBinding.empty());
+    Y_DEBUG_ABORT_UNLESS(!channelsBinding.empty());
     return !channelsBinding.empty();
 }
 
@@ -1434,7 +1436,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxMergeTablePartition:
         break;
     case TTxState::TxFillIndex:
-        Y_FAIL("deprecated");
+        Y_ABORT("deprecated");
     case TTxState::TxModifyACL:
     case TTxState::TxInvalid:
     case TTxState::TxAssignBlockStoreVolume:
@@ -1785,7 +1787,7 @@ void TSchemeShard::PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TP
     PathsById.erase(path->PathId);
 
     auto itParent = PathsById.find(path->ParentPathId);
-    Y_VERIFY_DEBUG(itParent != PathsById.end());
+    Y_DEBUG_ABORT_UNLESS(itParent != PathsById.end());
     if (itParent != PathsById.end()) {
         itParent->second->RemoveChild(path->Name, path->PathId);
         Y_ABORT_UNLESS(itParent->second->AllChildrenCount > 0);
@@ -4177,6 +4179,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableMoveIndex = appData->FeatureFlags.GetEnableMoveIndex();
     EnableAlterDatabaseCreateHiveFirst = appData->FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst();
     EnablePQConfigTransactionsAtSchemeShard = appData->FeatureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
+    EnableStatistics = appData->FeatureFlags.GetEnableStatistics();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -4448,6 +4451,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPersQueue::TEvProposeTransactionAttachResult, Handle);
 
         HFuncTraced(TEvPrivate::TEvProcessStatistics, Handle);
+        HFuncTraced(TEvPrivate::TEvStatFastBroadcastCheck, Handle);
         HFuncTraced(NStat::TEvStatistics::TEvRegisterNode, Handle);
 
     default:
@@ -4741,7 +4745,7 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
         TabletCounters->Simple()[COUNTER_EXTERNAL_DATA_SOURCE_COUNT].Sub(1);
         break;
     case TPathElement::EPathType::EPathTypeInvalid:
-        Y_FAIL("impossible path type");
+        Y_ABORT("impossible path type");
     }
 }
 
@@ -4834,7 +4838,7 @@ void TSchemeShard::DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, N
             // and all operations have been completed.
             break;
         case TPathElement::EPathType::EPathTypeBlobDepot:
-            Y_FAIL("not implemented");
+            Y_ABORT("not implemented");
         default:
             // not all path types support removal
             break;
@@ -6227,10 +6231,11 @@ bool TSchemeShard::FillSplitPartitioning(TVector<TString>& rangeEnds, const TCon
         auto& boundary = boundaries.Get(i);
         TVector<TCell> rangeEnd;
         TSerializedCellVec prefix;
+        TVector<TString> memoryOwner;
         if (boundary.HasSerializedKeyPrefix()) {
             prefix.Parse(boundary.GetSerializedKeyPrefix());
             rangeEnd = TVector<TCell>(prefix.GetCells().begin(), prefix.GetCells().end());
-        } else if (!NMiniKQL::CellsFromTuple(nullptr, boundary.GetKeyPrefix(), keyColTypes, false, rangeEnd, errStr)) {
+        } else if (!NMiniKQL::CellsFromTuple(nullptr, boundary.GetKeyPrefix(), keyColTypes, false, rangeEnd, errStr, memoryOwner)) {
             errStr = Sprintf("Error at split boundary %d: %s", i, errStr.data());
             return false;
         }
@@ -6403,6 +6408,22 @@ bool TSchemeShard::FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 key
             maxVal = Max<ui64>();
             valSz = 8;
             break;
+        case NScheme::NTypeIds::Uuid: {
+            maxVal = Max<ui64>();
+            valSz = 16;
+            char buffer[16] = {};
+
+            for (ui32 i = 1; i < partitionCount; ++i) {
+                ui64 val = maxVal * (double(i) / partitionCount);
+                // Make sure most significant byte is at the start of the byte buffer for UUID comparison.
+                val = HostToInet(val);
+                WriteUnaligned<ui64>(buffer, val);
+                rangeEnd[0] = TCell(buffer, valSz);
+                rangeEnds.push_back(TSerializedCellVec::Serialize(rangeEnd));
+            }
+
+            return true;
+        }
         default:
             errStr = TStringBuilder() << "Unsupported first key column type " << NScheme::TypeName(firstKeyColType) << ", only Uint32 and Uint64 are supported";
             return false;
@@ -6605,6 +6626,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableMoveIndex = featureFlags.GetEnableMoveIndex();
     EnableAlterDatabaseCreateHiveFirst = featureFlags.GetEnableAlterDatabaseCreateHiveFirst();
     EnablePQConfigTransactionsAtSchemeShard = featureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
+    EnableStatistics = featureFlags.GetEnableStatistics();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {
@@ -6826,17 +6848,19 @@ void TSchemeShard::GenerateStatisticsMap() {
     auto broadcast = std::make_unique<NStat::TEvStatistics::TEvBroadcastStatistics>();
     auto* record = broadcast->MutableRecord();
 
-    for (const auto& [pathId, tableInfo] : Tables) {
-        const auto& aggregated = tableInfo->GetStats().Aggregated;
-        auto* entry = record->AddEntries();
-        auto* entryPathId = entry->MutablePathId();
-        entryPathId->SetOwnerId(pathId.OwnerId);
-        entryPathId->SetLocalId(pathId.LocalPathId);
-        entry->SetRowCount(aggregated.RowCount);
-        entry->SetBytesSize(aggregated.DataSize);
-        ++count;
+    if (EnableStatistics) {
+        for (const auto& [pathId, tableInfo] : Tables) {
+            const auto& aggregated = tableInfo->GetStats().Aggregated;
+            auto* entry = record->AddEntries();
+            auto* entryPathId = entry->MutablePathId();
+            entryPathId->SetOwnerId(pathId.OwnerId);
+            entryPathId->SetLocalId(pathId.LocalPathId);
+            entry->SetRowCount(aggregated.RowCount);
+            entry->SetBytesSize(aggregated.DataSize);
+            ++count;
+        }
+        // TODO: column tables
     }
-    // TODO: column tables
 
     PreSerializedStatisticsMapData.clear();
     Y_PROTOBUF_SUPPRESS_NODISCARD record->SerializeToString(&PreSerializedStatisticsMapData);
@@ -6861,6 +6885,7 @@ void TSchemeShard::BroadcastStatistics() {
 
     auto broadcast = std::make_unique<NStat::TEvStatistics::TEvBroadcastStatistics>();
     auto* record = broadcast->MutableRecord();
+    record->MutableNodeIds()->Reserve(StatNodes.size());
     for (const auto& [nodeId, _] : StatNodes) {
         if (nodeId == leadingNodeId) {
             continue;
@@ -6887,6 +6912,7 @@ void TSchemeShard::BroadcastStatisticsFast() {
 
     auto broadcast = std::make_unique<NStat::TEvStatistics::TEvBroadcastStatistics>();
     auto* record = broadcast->MutableRecord();
+    record->MutableNodeIds()->Reserve(StatFastBroadcastNodes.size());
     for (const auto& nodeId : StatFastBroadcastNodes) {
         if (nodeId == leadingNodeId) {
             continue;

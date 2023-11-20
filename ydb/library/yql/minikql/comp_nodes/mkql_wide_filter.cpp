@@ -18,7 +18,7 @@ protected:
         : Flow(flow)
         , Items(std::move(items))
         , Predicate(predicate)
-        , FilterByField(GetPasstroughtMap({Predicate}, Items).front())
+        , FilterByField(GetPasstroughtMap(TComputationNodePtrVector{Predicate}, Items).front())
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {}
 

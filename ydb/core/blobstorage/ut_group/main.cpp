@@ -161,7 +161,7 @@ public:
     };
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
-    const NPDisk::TMainKey MainKey = { NPDisk::YdbDefaultPDiskSequence };
+    const NPDisk::TMainKey MainKey{ .Keys = { NPDisk::YdbDefaultPDiskSequence } };
     const ui32 NodeCount;
     const ui32 GroupId = 0;
     std::vector<TDiskRecord> Disks;
@@ -342,7 +342,7 @@ public:
             Y_VERIFY_S(ev->Status == NKikimrProto::OK || ev->Status == NKikimrProto::ALREADY, "TEvSlayResult# " << ev->ToString());
             LOG_INFO_S(runtime, NActorsServices::TEST, "Slayed VDiskId# " << disk.VDiskId);
         } else {
-            Y_FAIL("unexpected event to edge actor");
+            Y_ABORT("unexpected event to edge actor");
         }
     }
 
@@ -457,7 +457,7 @@ public:
     }
 
     void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) {
-        Y_FAIL("unexpected event Type# 0x%08" PRIx32, ev->GetTypeRewrite());
+        Y_ABORT("unexpected event Type# 0x%08" PRIx32, ev->GetTypeRewrite());
     }
 
     template<typename TEvent, typename... TArgs>

@@ -58,13 +58,13 @@ namespace NFwd {
             const auto was = std::exchange(Fetch, EFetch::Done);
 
             if (PageId != page.PageId) {
-                Y_FAIL("Settling page with different reference number");
+                Y_ABORT("Settling page with different reference number");
             } else if (Size != page.Data.size()) {
-                Y_FAIL("Requested and obtained page sizes are not the same");
+                Y_ABORT("Requested and obtained page sizes are not the same");
             } else if (was == EFetch::Drop) {
                 std::exchange(page.Data, { });
             } else if (was != EFetch::Wait) {
-                Y_FAIL("Settling page that is not waiting for any data");
+                Y_ABORT("Settling page that is not waiting for any data");
             } else {
                 Data = std::move(page.Data);
             }
@@ -75,7 +75,7 @@ namespace NFwd {
         const TSharedData* Touch(TPageId pageId, TStat &stat) noexcept
         {
             if (PageId != pageId || (!Data && Fetch == EFetch::Done)) {
-                Y_FAIL("Touching page thatd doesn't fits to this action");
+                Y_ABORT("Touching page thatd doesn't fits to this action");
             } else {
                 auto to = Fetch == EFetch::None ? EUsage::Seen : EUsage::Keep;
 

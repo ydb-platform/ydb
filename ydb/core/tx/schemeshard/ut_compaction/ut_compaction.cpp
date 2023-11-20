@@ -686,11 +686,11 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
         SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, false);
 
         // capture original observer func by setting dummy one
-        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+        auto originalObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>&) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
         // now set our observer backed up by original
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvCompactBorrowed:
                 // we should not compact borrowed to check that background compaction
@@ -698,7 +698,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
                 ev.Reset();
                 return TTestActorRuntime::EEventAction::DROP;
             default:
-                return originalObserver(runtime, ev);
+                return originalObserver(ev);
             }
         });
 
@@ -737,11 +737,11 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
         size_t compactionResultCount = 0;
 
         // capture original observer func by setting dummy one
-        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+        auto originalObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>&) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
         // now set our observer backed up by original
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvCompactTableResult: {
                 ev.Reset();
@@ -749,7 +749,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
                 return TTestActorRuntime::EEventAction::DROP;
             }
             default:
-                return originalObserver(runtime, ev);
+                return originalObserver(ev);
             }
         });
         ui64 txId = 1000;
@@ -1063,11 +1063,11 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
         size_t borrowedRequests = 0;
 
         // capture original observer func by setting dummy one
-        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+        auto originalObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>&) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
         // now set our observer backed up by original
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvCompactBorrowed: {
                 ev.Reset();
@@ -1075,7 +1075,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
                 return TTestActorRuntime::EEventAction::DROP;
             }
             default:
-                return originalObserver(runtime, ev);
+                return originalObserver(ev);
             }
         });
 
@@ -1132,11 +1132,11 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
         size_t borrowedRequests = 0;
 
         // capture original observer func by setting dummy one
-        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+        auto originalObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>&) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
         // now set our observer backed up by original
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvCompactBorrowed: {
                 ev.Reset();
@@ -1144,7 +1144,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
                 return TTestActorRuntime::EEventAction::DROP;
             }
             default:
-                return originalObserver(runtime, ev);
+                return originalObserver(ev);
             }
         });
         ui64 txId = 1000;
@@ -1215,11 +1215,11 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
         size_t borrowedRequests = 0;
 
         // capture original observer func by setting dummy one
-        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+        auto originalObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>&) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
         // now set our observer backed up by original
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
             case TEvDataShard::EvCompactBorrowed: {
                 ev.Reset();
@@ -1227,7 +1227,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
                 return TTestActorRuntime::EEventAction::DROP;
             }
             default:
-                return originalObserver(runtime, ev);
+                return originalObserver(ev);
             }
         });
         ui64 txId = 1000;

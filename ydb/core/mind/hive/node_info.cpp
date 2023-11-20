@@ -69,8 +69,8 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
         TabletsRunningByType[tablet->GetTabletType()].erase(tablet);
         TabletsOfObject[tablet->GetObjectId()].erase(tablet);
         Hive.UpdateCounterTabletsAlive(-1);
-        if (tablet->HasCounter()) {
-            Hive.UpdateObjectCount(tablet->GetObjectId(), Id, -1);
+        if (tablet->HasCounter() && tablet->IsLeader()) {
+            Hive.UpdateObjectCount(tablet->AsLeader(), *this, -1);
         }
     }
     if (IsResourceDrainingState(newState)) {
@@ -84,8 +84,8 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
         TabletsRunningByType[tablet->GetTabletType()].emplace(tablet);
         TabletsOfObject[tablet->GetObjectId()].emplace(tablet);
         Hive.UpdateCounterTabletsAlive(+1);
-        if (tablet->HasCounter()) {
-            Hive.UpdateObjectCount(tablet->GetObjectId(), Id, +1);
+        if (tablet->HasCounter() && tablet->IsLeader()) {
+            Hive.UpdateObjectCount(tablet->AsLeader(), *this, +1);
         }
     }
     return true;
@@ -99,6 +99,53 @@ void TNodeInfo::UpdateResourceValues(const TTabletInfo* tablet, const NKikimrTab
     auto normalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
     BLOG_TRACE("Node(" << Id << ", " << oldResourceValues << "->" << ResourceValues << ")");
     Hive.UpdateTotalResourceValues(this, tablet, before, after, ResourceValues - oldResourceValues, normalizedValues - oldNormalizedValues);
+}
+
+bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debugState) const {
+    const auto& allowedDomains = filter.AllowedDomains;
+    bool result = false;
+
+    for (const auto& candidate : allowedDomains) {
+        if (Hive.DomainHasNodes(candidate)) {
+            result = std::find(ServicedDomains.begin(),
+                               ServicedDomains.end(),
+                               candidate) != ServicedDomains.end();
+            if (result) {
+                break;
+            }
+        }
+    }
+    if (!result) {
+        if (debugState) {
+            debugState->NodesWithoutDomain++;
+        }
+        return false;
+    }
+
+    const auto& allowedNodes = filter.AllowedNodes;
+
+    if (!allowedNodes.empty()
+            && std::find(allowedNodes.begin(), allowedNodes.end(), Id) == allowedNodes.end()) {
+        if (debugState) {
+            debugState->NodesNotAllowed++;
+        }
+        return false;
+    }
+
+    const TVector<TDataCenterId>& allowedDataCenters = filter.AllowedDataCenters;
+
+    if (!allowedDataCenters.empty()
+            && std::find(
+                allowedDataCenters.begin(),
+                allowedDataCenters.end(),
+                GetDataCenter()) == allowedDataCenters.end()) {
+        if (debugState) {
+            debugState->NodesInDatacentersNotAllowed++;
+        }
+        return false;
+    }
+
+    return true;
 }
 
 bool TNodeInfo::IsAllowedToRunTablet(TTabletDebugState* debugState) const {
@@ -123,33 +170,7 @@ bool TNodeInfo::IsAllowedToRunTablet(const TTabletInfo& tablet, TTabletDebugStat
         return false;
     }
 
-    const TVector<TSubDomainKey>& allowedDomains = tablet.GetLeader().EffectiveAllowedDomains;
-    bool result = false;
-
-    for (const auto& candidate : allowedDomains) {
-        if (Hive.DomainHasNodes(candidate)) {
-            result = std::find(ServicedDomains.begin(),
-                               ServicedDomains.end(),
-                               candidate) != ServicedDomains.end();
-            if (result) {
-                break;
-            }
-        }
-    }
-    if (!result) {
-        if (debugState) {
-            debugState->NodesWithoutDomain++;
-        }
-        return false;
-    }
-
-    const TVector<TNodeId>& allowedNodes = tablet.GetAllowedNodes();
-
-    if (!allowedNodes.empty()
-            && std::find(allowedNodes.begin(), allowedNodes.end(), Id) == allowedNodes.end()) {
-        if (debugState) {
-            debugState->NodesNotAllowed++;
-        }
+    if (!MatchesFilter(tablet.GetNodeFilter(), debugState)) {
         return false;
     }
 
@@ -167,19 +188,6 @@ bool TNodeInfo::IsAllowedToRunTablet(const TTabletInfo& tablet, TTabletDebugStat
             }
             return false;
         }
-    }
-
-    const TVector<TDataCenterId>& allowedDataCenters = tablet.GetAllowedDataCenters();
-
-    if (!allowedDataCenters.empty()
-            && std::find(
-                allowedDataCenters.begin(),
-                allowedDataCenters.end(),
-                GetDataCenter()) == allowedDataCenters.end()) {
-        if (debugState) {
-            debugState->NodesInDatacentersNotAllowed++;
-        }
-        return false;
     }
 
     return true;
@@ -336,7 +344,10 @@ void TNodeInfo::SendReconnect(const TActorId& local) {
 
 void TNodeInfo::SetDown(bool down) {
     Down = down;
-    if (!Down) {
+    if (Down) {
+        Hive.ObjectDistributions.RemoveNode(*this);
+    } else {
+        Hive.ObjectDistributions.AddNode(*this);
         Hive.ProcessWaitQueue();
     }
 }

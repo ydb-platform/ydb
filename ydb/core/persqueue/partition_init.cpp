@@ -179,6 +179,8 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
 
     case NKikimrProto::NODATA:
         Partition()->Config = Partition()->TabletConfig;
+        Partition()->PartitionConfig = GetPartitionConfig(Partition()->Config, Partition()->Partition);
+        Partition()->PartitionGraph.Rebuild(Partition()->Config);
         break;
 
     case NKikimrProto::ERROR:
@@ -189,7 +191,7 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
 
     default:
         Cerr << "ERROR " << response.GetStatus() << "\n";
-        Y_FAIL("bad status");
+        Y_ABORT("bad status");
     };
 
     Done(ctx);
@@ -292,7 +294,7 @@ void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
             break;
         default:
             Cerr << "ERROR " << response.GetStatus() << "\n";
-            Y_FAIL("bad status");
+            Y_ABORT("bad status");
         };
     };
 
@@ -413,7 +415,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             break;
         default:
             Cerr << "ERROR " << range.GetStatus() << "\n";
-            Y_FAIL("bad status");
+            Y_ABORT("bad status");
     };
 }
 
@@ -462,7 +464,7 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             break;
         default:
             Cerr << "ERROR " << range.GetStatus() << "\n";
-            Y_FAIL("bad status");
+            Y_ABORT("bad status");
     };
 }
 
@@ -622,10 +624,10 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 break;
                 }
             case NKikimrProto::OVERRUN:
-                Y_FAIL("implement overrun in readresult!!");
+                Y_ABORT("implement overrun in readresult!!");
                 return;
             case NKikimrProto::NODATA:
-                Y_FAIL("NODATA can't be here");
+                Y_ABORT("NODATA can't be here");
                 return;
             case NKikimrProto::ERROR:
                 LOG_ERROR_S(
@@ -639,7 +641,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 return;
             default:
                 Cerr << "ERROR " << read.GetStatus() << " message: \"" << read.GetMessage() << "\"\n";
-                Y_FAIL("bad status");
+                Y_ABORT("bad status");
 
         };
     }
@@ -983,7 +985,7 @@ bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev) {
     for (ui32 i = 0; i < response.GetStatusResultSize(); ++i) {
         auto& res = response.GetGetStatusResult(i);
         TStorageStatusFlags status = res.GetStatusFlags();
-        diskIsOk = diskIsOk && !status.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove);
+        diskIsOk = diskIsOk && !status.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop);
     }
     return !diskIsOk;
 }

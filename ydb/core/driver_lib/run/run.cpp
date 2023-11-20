@@ -11,6 +11,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/mon.h>
 #include <library/cpp/actors/core/mon_stats.h>
+#include <library/cpp/actors/core/monotonic_provider.h>
 #include <library/cpp/actors/core/process_stats.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/log_settings.h>
@@ -45,6 +46,13 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/tabletid.h>
+#include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/base/domain.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/nameservice.h>
+#include <ydb/core/base/tablet_types.h>
+#include <ydb/core/base/resource_profile.h>
+#include <ydb/core/base/event_filter.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -94,6 +102,7 @@
 #include <ydb/services/maintenance/grpc_service.h>
 #include <ydb/services/monitoring/grpc_service.h>
 #include <ydb/services/persqueue_cluster_discovery/grpc_service.h>
+#include <ydb/services/deprecated/persqueue_v0/persqueue.h>
 #include <ydb/services/persqueue_v1/persqueue.h>
 #include <ydb/services/persqueue_v1/topic.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
@@ -690,7 +699,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                         result.GetValue();
                     }
                     catch (const std::exception& ex) {
-                        Y_FAIL("Unable to prepare GRpc service: %s", ex.what());
+                        Y_ABORT("Unable to prepare GRpc service: %s", ex.what());
                     }
                 }
                 else {
@@ -747,6 +756,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasKesus) {
             server.AddService(new NKesus::TKesusGRpcService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasKesus.IsRlAllowed()));
+        }
+
+        if (hasPQ) {
+            server.AddService(new NKikimr::NGRpcService::TGRpcPersQueueService(ActorSystem.Get(), Counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id()));
         }
 
         if (hasPQv1) {
@@ -1072,7 +1085,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     }
 
     if (runConfig.AppConfig.HasSharedCacheConfig()) {
-        AppData->SharedCacheConfig = runConfig.AppConfig.GetSharedCacheConfig();
+        AppData->SharedCacheConfigPtr = std::make_unique<NKikimrSharedCache::TSharedCacheConfig>();
+        AppData->SharedCacheConfigPtr->CopyFrom(runConfig.AppConfig.GetSharedCacheConfig());
     }
 
     if (runConfig.AppConfig.HasAwsCompatibilityConfig()) {
@@ -1144,7 +1158,7 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
     } else if (logConfig.GetFormat() == "json") {
         LogSettings->Format = NLog::TSettings::JSON_FORMAT;
     } else {
-        Y_FAIL("Unknown log format: \"%s\"", logConfig.GetFormat().data());
+        Y_ABORT("Unknown log format: \"%s\"", logConfig.GetFormat().data());
     }
 
     if (logConfig.HasAllowDropEntries()) {

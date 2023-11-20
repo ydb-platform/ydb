@@ -140,7 +140,7 @@ namespace NKikimr {
                 } else if (MaybeCellPtr) {
                     return *(row.*MaybeCellPtr);
                 } else {
-                    Y_FAIL();
+                    Y_ABORT();
                 }
             }
 
@@ -150,7 +150,7 @@ namespace NKikimr {
                 } else if (MaybeCellPtr) {
                     return x.*MaybeCellPtr == y.*MaybeCellPtr;
                 } else {
-                    Y_FAIL();
+                    Y_ABORT();
                 }
             }
 
@@ -163,7 +163,7 @@ namespace NKikimr {
                         row.*MaybeCellPtr = rowset.template GetValue<TColumn>();
                     }
                 } else {
-                    Y_FAIL();
+                    Y_ABORT();
                 }
             }
 
@@ -182,7 +182,7 @@ namespace NKikimr {
                         value = Nothing();
                     }
                 } else {
-                    Y_FAIL();
+                    Y_ABORT();
                 }
 
                 return std::tuple_cat(tuple, std::make_tuple(std::move(value)));
@@ -444,7 +444,7 @@ namespace NKikimr {
             }
 
             TConstructFromRowset(...) {
-                Y_FAIL("table mismatch");
+                Y_ABORT("table mismatch");
             }
         };
 

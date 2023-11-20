@@ -132,7 +132,8 @@ poking around in the code itself.
     is the same as ``httpserver`` only with SSL encryption.
 
 ``smtpserver``
-    provides a threaded instance of ``smtpd.SMTPServer`` running on localhost.
+    provides a threaded SMTP server, with an API similar to ``smtpd.SMTPServer``,
+    (the deprecated class from the Python standard library) running on localhost.
     It has the following attributes:
 
     * ``addr`` - server address as tuple (host as str, port as int)

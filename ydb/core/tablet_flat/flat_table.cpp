@@ -544,7 +544,7 @@ void TTable::Merge(TPartView partView) noexcept
 
         AddSafe(std::move(partView));
     } else if (it->second->Epoch != partView->Epoch) {
-        Y_FAIL("Got the same labeled parts with different epoch");
+        Y_ABORT("Got the same labeled parts with different epoch");
     } else {
         Levels.Reset();
         it->second.Screen = TScreen::Join(it->second.Screen, partView.Screen);
@@ -716,7 +716,7 @@ TEpoch TTable::Snapshot() noexcept
         Mutable = nullptr; /* have to make new TMemTable on next update */
 
         if (++Epoch == TEpoch::Max()) {
-            Y_FAIL("Table epoch counter has reached infinity value");
+            Y_ABORT("Table epoch counter has reached infinity value");
         }
     }
 
@@ -858,10 +858,10 @@ void TTable::UpdateTx(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMe
     MemTable().Update(rop, key, ops, apart, rowVersion, CommittedTransactions);
 
     if (!hadTxRef) {
-        Y_VERIFY_DEBUG(memTable.GetTxIdStats().contains(txId));
+        Y_DEBUG_ABORT_UNLESS(memTable.GetTxIdStats().contains(txId));
         AddTxRef(txId);
     } else {
-        Y_VERIFY_DEBUG(TxRefs[txId] > 0);
+        Y_DEBUG_ABORT_UNLESS(TxRefs[txId] > 0);
     }
 }
 
@@ -1167,7 +1167,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
         }
     }
 
-    Y_VERIFY_DEBUG(!snapshot.IsMax() || (stats.InvisibleRowSkips - prevInvisibleRowSkips) == 0);
+    Y_DEBUG_ABORT_UNLESS(!snapshot.IsMax() || (stats.InvisibleRowSkips - prevInvisibleRowSkips) == 0);
 
     if (!ready || row.Need()) {
         return EReady::Page;

@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:5:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: SqlProject
+    	SELECT COUNT(*) FROM Input
+	^
+        <tmp_path>/program.sql:<main>:5:22: Error: At function: AssumeColumnOrderPartial, At function: Aggregate
+        	SELECT COUNT(*) FROM Input
+	                     ^
+            <tmp_path>/program.sql:<main>:5:22: Error: Expected hashable and equatable type for key column: key, but got: Resource<'MTRand'>
+            	SELECT COUNT(*) FROM Input
+	                     ^

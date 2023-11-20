@@ -196,19 +196,19 @@ void TStrategyBase::AddGetRequest(TLogContext &logCtx, TGroupDiskRequests &group
 bool TStrategyBase::VerifyTheWholeSituation(TBlobState &state) {
     switch (state.WholeSituation) {
         case TBlobState::ESituation::Unknown:
-            Y_FAIL("Blob Id# %s whole situation Unknown", state.Id.ToString().c_str());
+            Y_ABORT("Blob Id# %s whole situation Unknown", state.Id.ToString().c_str());
         case TBlobState::ESituation::Lost:
-            Y_FAIL("Blob Id# %s whole situation Lost", state.Id.ToString().c_str());
+            Y_ABORT("Blob Id# %s whole situation Lost", state.Id.ToString().c_str());
         case TBlobState::ESituation::Error:
-            Y_FAIL("Blob Id# %s whole situation Error", state.Id.ToString().c_str());
+            Y_ABORT("Blob Id# %s whole situation Error", state.Id.ToString().c_str());
         case TBlobState::ESituation::Sent:
-            Y_FAIL("Blob Id# %s whole situation Sent", state.Id.ToString().c_str());
+            Y_ABORT("Blob Id# %s whole situation Sent", state.Id.ToString().c_str());
         case TBlobState::ESituation::Absent:
             return true;
         case TBlobState::ESituation::Present:
             return false;
     }
-    Y_FAIL("Blob Id# %s unexpected WholeSituation# %" PRIu32, state.Id.ToString().c_str(), (ui32)state.WholeSituation);
+    Y_ABORT("Blob Id# %s unexpected WholeSituation# %" PRIu32, state.Id.ToString().c_str(), (ui32)state.WholeSituation);
 }
 
 void TStrategyBase::PreparePartLayout(const TBlobState &state, const TBlobStorageGroupInfo &info,
@@ -245,7 +245,7 @@ void TStrategyBase::PreparePartLayout(const TBlobState &state, const TBlobStorag
     if (slowDiskIdx == InvalidVDiskIdx) {
         layout->SlowVDiskMask = 0;
     } else {
-        Y_VERIFY_DEBUG(slowDiskIdx < sizeof(layout->SlowVDiskMask) * 8);
+        Y_DEBUG_ABORT_UNLESS(slowDiskIdx < sizeof(layout->SlowVDiskMask) * 8);
         layout->SlowVDiskMask = (1ull << slowDiskIdx);
     }
 }
@@ -263,7 +263,7 @@ bool TStrategyBase::IsPutNeeded(const TBlobState &state, const TBlobStorageGroup
                 isNeeded = true;
                 break;
             case TBlobState::ESituation::Error:
-                Y_FAIL("unexpected Situation");
+                Y_ABORT("unexpected Situation");
             case TBlobState::ESituation::Present:
             case TBlobState::ESituation::Sent:
                 break;
@@ -276,10 +276,10 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
         const TBlobStorageGroupInfo &info, TGroupDiskRequests &groupDiskRequests,
         TBlobStorageGroupType::TPartPlacement &partPlacement) {
     bool isPartsAvailable = true;
-    Y_VERIFY_DEBUG(state.Parts.size() == info.Type.TotalPartCount());
+    Y_DEBUG_ABORT_UNLESS(state.Parts.size() == info.Type.TotalPartCount());
     for (auto& record : partPlacement.Records) {
         const ui32 partIdx = record.PartIdx;
-        Y_VERIFY_DEBUG(partIdx < state.Parts.size());
+        Y_DEBUG_ABORT_UNLESS(partIdx < state.Parts.size());
         auto& part = state.Parts[partIdx];
         if (!part.Data.IsMonolith() || part.Data.GetMonolith().size() != info.Type.PartSize(TLogoBlobID(state.Id, partIdx + 1))) {
             isPartsAvailable = false;

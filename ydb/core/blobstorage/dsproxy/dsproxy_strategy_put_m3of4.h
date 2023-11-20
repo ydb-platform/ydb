@@ -34,7 +34,7 @@ public:
                 return Process(state, info, groupDiskRequests, true);
 
             default:
-                Y_FAIL("unexpected Tactic");
+                Y_ABORT("unexpected Tactic");
         }
     }
 

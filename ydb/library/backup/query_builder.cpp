@@ -237,7 +237,6 @@ void TQueryBuilder::Begin() {
 }
 
 void TQueryBuilder::AddLine(TStringBuf line) {
-    Cerr << line << Endl;
     Value.AddListItem();
     Value.BeginStruct();
     for (const auto& col : Columns) {

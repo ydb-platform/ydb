@@ -34,9 +34,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                               "Mediators: 1 "
                               "TimeCastBucketsPerMediator: 2 "
                               "ExternalSchemeShard: true "
-                              "ExternalHive: false " // ExternalHive is impossible in that environment yet
+                              "ExternalHive: true "
                               "Name: \"SharedDB\"");
         env.TestWaitNotification(runtime, txId);
+
+        ui64 sharedHive = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/SharedDB"),
+                           {NLs::PathExist,
+                            NLs::IsExternalSubDomain("SharedDB"),
+                            NLs::ExtractDomainHive(&sharedHive)});
+        UNIT_ASSERT(sharedHive != 0
+                    && sharedHive != (ui64)-1
+                    && sharedHive != TTestTxConfig::Hive);
 
         TString createData = TStringBuilder()
                 << "ResourcesDomainKey { SchemeShard: " << TTestTxConfig::SchemeShard <<  " PathId: " << 2 << " } "
@@ -63,6 +72,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerLess0"),
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("ServerLess0"),
+                            NLs::SharedHive(sharedHive),
                             NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
 
         UNIT_ASSERT(tenantSchemeShard != 0
@@ -94,7 +104,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(0)});
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets + 3, TTestTxConfig::FakeHiveTablets + 10));
+        ui64 sharedHiveTablets = TTestTxConfig::FakeHiveTablets + NKikimr::TFakeHiveState::TABLETS_PER_CHILD_HIVE;
+        env.TestWaitTabletDeletion(runtime, xrange(sharedHiveTablets, sharedHiveTablets + 4), sharedHive);
     }
 
     Y_UNIT_TEST(StorageBilling) {
@@ -197,7 +208,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                             NLs::PathVersionEqual(3)});
 
         TStringBuilder meteringMessages;
-        auto grabMeteringMessage = [&meteringMessages](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+        auto grabMeteringMessage = [&meteringMessages](TAutoPtr<IEventHandle>& ev) -> auto {
             if (ev->Type == NMetering::TEvMetering::TEvWriteMeteringJson::EventType) {
                 auto *msg = ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>();
                 Cerr << "grabMeteringMessage has happened" << Endl;

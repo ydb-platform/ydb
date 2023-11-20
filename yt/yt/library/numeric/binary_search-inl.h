@@ -4,10 +4,9 @@
 #include "binary_search.h"
 #endif
 
-namespace NYT {
+#include <library/cpp/yt/assert/assert.h>
 
-using std::uint32_t;
-using std::uint64_t;
+namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -59,9 +58,9 @@ constexpr TInt IntegerLowerBound(TInt lo, TInt hi, TPredicate&& predicate)
 
     using TUInt = std::make_unsigned_t<TInt>;
 
-    Y_ABORT_UNLESS(lo <= hi);
+    YT_VERIFY(lo <= hi);
 
-    Y_ABORT_UNLESS(predicate(hi));
+    YT_VERIFY(predicate(hi));
     if (predicate(lo)) {
         return lo;
     }
@@ -88,9 +87,9 @@ constexpr TInt IntegerInverseLowerBound(TInt lo, TInt hi, TPredicate&& predicate
 
     using TUInt = std::make_unsigned_t<TInt>;
 
-    Y_ABORT_UNLESS(lo <= hi);
+    YT_VERIFY(lo <= hi);
 
-    Y_ABORT_UNLESS(predicate(lo));
+    YT_VERIFY(predicate(lo));
     if (predicate(hi)) {
         return hi;
     }
@@ -113,13 +112,13 @@ constexpr TInt IntegerInverseLowerBound(TInt lo, TInt hi, TPredicate&& predicate
 template <class TPredicate>
 double FloatingPointLowerBound(double lo, double hi, TPredicate&& predicate)
 {
-    Y_ABORT_UNLESS(!std::isnan(lo));
-    Y_ABORT_UNLESS(!std::isnan(hi));
-    Y_ABORT_UNLESS(lo <= hi);
+    YT_VERIFY(!std::isnan(lo));
+    YT_VERIFY(!std::isnan(hi));
+    YT_VERIFY(lo <= hi);
 
     // NB(antonkikh): Note that this handles the case when |hi == -0.0| and |lo == 0.0|.
     if (lo == hi) {
-        Y_ABORT_UNLESS(predicate(hi));
+        YT_VERIFY(predicate(hi));
         return hi;
     }
 
@@ -133,13 +132,13 @@ double FloatingPointLowerBound(double lo, double hi, TPredicate&& predicate)
 template <class TPredicate>
 double FloatingPointInverseLowerBound(double lo, double hi, TPredicate&& predicate)
 {
-    Y_ABORT_UNLESS(!std::isnan(lo));
-    Y_ABORT_UNLESS(!std::isnan(hi));
-    Y_ABORT_UNLESS(lo <= hi);
+    YT_VERIFY(!std::isnan(lo));
+    YT_VERIFY(!std::isnan(hi));
+    YT_VERIFY(lo <= hi);
 
     // NB(antonkikh): Note that this handles the case when |hi == -0.0| and |lo == 0.0|.
     if (lo == hi) {
-        Y_ABORT_UNLESS(predicate(lo));
+        YT_VERIFY(predicate(lo));
         return lo;
     }
 

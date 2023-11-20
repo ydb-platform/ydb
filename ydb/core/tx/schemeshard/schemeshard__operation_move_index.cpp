@@ -97,7 +97,7 @@ public:
                     TStringStream msg;
                     msg << "txState for opId: " << opId
                         << " has not been found, cur opId: " << OperationId;
-                    Y_FAIL("%s", msg.Str().data());
+                    Y_ABORT("%s", msg.Str().data());
                 }
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             DebugHint() << " Trying to find txState with TxMoveTableIndex type"

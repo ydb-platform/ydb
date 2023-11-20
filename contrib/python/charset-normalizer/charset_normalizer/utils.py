@@ -70,15 +70,6 @@ def is_latin(character: str) -> bool:
 
 
 @lru_cache(maxsize=UTF8_MAXIMAL_ALLOCATION)
-def is_ascii(character: str) -> bool:
-    try:
-        character.encode("ascii")
-    except UnicodeEncodeError:
-        return False
-    return True
-
-
-@lru_cache(maxsize=UTF8_MAXIMAL_ALLOCATION)
 def is_punctuation(character: str) -> bool:
     character_category: str = unicodedata.category(character)
 
@@ -131,12 +122,6 @@ def is_separator(character: str) -> bool:
 @lru_cache(maxsize=UTF8_MAXIMAL_ALLOCATION)
 def is_case_variable(character: str) -> bool:
     return character.islower() != character.isupper()
-
-
-def is_private_use_only(character: str) -> bool:
-    character_category: str = unicodedata.category(character)
-
-    return character_category == "Co"
 
 
 @lru_cache(maxsize=UTF8_MAXIMAL_ALLOCATION)
@@ -205,7 +190,7 @@ def is_unprintable(character: str) -> bool:
     )
 
 
-def any_specified_encoding(sequence: bytes, search_zone: int = 4096) -> Optional[str]:
+def any_specified_encoding(sequence: bytes, search_zone: int = 8192) -> Optional[str]:
     """
     Extract using ASCII-only decoder any specified encoding in the first n-bytes.
     """

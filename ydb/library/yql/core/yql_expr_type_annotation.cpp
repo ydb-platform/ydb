@@ -1,4 +1,5 @@
 #include "yql_expr_type_annotation.h"
+#include "ydb/library/yql/core/type_ann/type_ann_pg.h"
 #include "yql_opt_proposed_by_data.h"
 #include "yql_opt_rewrite_io.h"
 #include "yql_opt_utils.h"
@@ -9,6 +10,7 @@
 #include <ydb/library/yql/minikql/dom/json.h>
 #include <ydb/library/yql/minikql/dom/yson.h>
 #include <ydb/library/yql/core/sql_types/simple_types.h>
+#include "ydb/library/yql/parser/pg_catalog/catalog.h"
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -97,7 +99,8 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             case ETypeAnnotationKind::List:
             case ETypeAnnotationKind::Flow:
             if (const auto itemType = expectedType.Cast<TStreamExprType>()->GetItemType(); IsSameAnnotation(*itemType, *GetSeqItemType(&sourceType))) {
-                node = ctx.NewCallable(node->Pos(), "ToStream", {std::move(node)});
+                auto pos = node->Pos();
+                node = ctx.NewCallable(pos, "ToStream", {std::move(node)});
                 return IGraphTransformer::TStatus::Repeat;
             }
             break;
@@ -112,8 +115,13 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         }
 
         if (sourceType.GetKind() == ETypeAnnotationKind::Pg) {
-            if (sourceType.Cast<TPgExprType>()->GetName() == "unknown") {
-                node = ctx.NewCallable(node->Pos(), "PgCast", { node, ExpandType(node->Pos(), expectedType, ctx) });
+            const auto fromTypeId = sourceType.Cast<TPgExprType>()->GetId();
+            const auto toTypeId = expectedType.Cast<TPgExprType>()->GetId();
+
+            // https://www.postgresql.org/docs/14/typeconv-query.html, step 2.
+            if (fromTypeId == NPg::UnknownOid || NPg::IsCoercible(fromTypeId, toTypeId, NPg::ECoercionCode::Assignment)) {
+                auto pos = node->Pos();
+                node = ctx.NewCallable(pos, "PgCast", { std::move(node), ExpandType(pos, expectedType, ctx) });
                 return IGraphTransformer::TStatus::Repeat;
             }
         }
@@ -277,7 +285,8 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         const auto from = sourceType.Cast<TDataExprType>()->GetSlot();
         const auto to = expectedType.Cast<TDataExprType>()->GetSlot();
         if (from == EDataSlot::Utf8 && to == EDataSlot::String) {
-            node = ctx.NewCallable(node->Pos(), "ToString", { std::move(node) });
+            auto pos = node->Pos();
+            node = ctx.NewCallable(pos, "ToString", { std::move(node) });
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -323,6 +332,17 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         } else if (from == EDataSlot::Timestamp && to == EDataSlot::TzTimestamp) {
             allow = true;
             useCast = true;
+        } else if (from == EDataSlot::Json && to == EDataSlot::Utf8) {
+            allow = true;
+            useCast = true;
+        } else if ((from == EDataSlot::Yson || from == EDataSlot::Json) && to == EDataSlot::String) {
+            node =  ctx.Builder(node->Pos())
+                .Callable("ToBytes")
+                    .Add(0, node)
+                .Seal()
+                .Build();
+
+            return IGraphTransformer::TStatus::Repeat;
         } else if (IsDataTypeIntegral(from) && to == EDataSlot::Timestamp) {
             node =  ctx.Builder(node->Pos())
                 .Callable("UnsafeTimestampCast")
@@ -947,10 +967,6 @@ NUdf::TCastResultOptions CastResult(const TDataExprType* source, const TDataExpr
 
 template <bool Strong>
 NUdf::TCastResultOptions CastResult(const TPgExprType* source, const TPgExprType* target) {
-    if (source->GetName() == "unknown") {
-        return NUdf::ECastOptions::Complete;
-    }
-
     if (source->GetId() != target->GetId()) {
         return NUdf::ECastOptions::Impossible;
     }
@@ -3016,6 +3032,18 @@ bool IsWideBlockType(const TTypeAnnotationNode& type) {
     return blockLenType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Uint64;
 }
 
+bool IsWideSequenceBlockType(const TTypeAnnotationNode& type) {
+    const TTypeAnnotationNode* itemType = nullptr;
+    if (type.GetKind() == ETypeAnnotationKind::Stream) {
+        itemType = type.Cast<TStreamExprType>()->GetItemType();
+    } else if (type.GetKind() == ETypeAnnotationKind::Flow) {
+        itemType = type.Cast<TFlowExprType>()->GetItemType();
+    } else {
+        return false;
+    }
+    return IsWideBlockType(*itemType);
+}
+
 bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (!types.ArrowResolver) {
         return false;
@@ -4031,15 +4059,26 @@ IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnota
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
     TExprContext& ctx, TConvertFlags flags) {
     if (node->Type() == TExprNode::Lambda) {
-        if (expectedType.GetKind() == ETypeAnnotationKind::Callable) {
-            auto callableType = expectedType.Cast<TCallableExprType>();
+        auto currentType = &expectedType;
+        ui32 optLevel = 0;
+        while (currentType->GetKind() == ETypeAnnotationKind::Optional) {
+            currentType = RemoveOptionalType(currentType);
+            ++optLevel;
+        }
+
+        if (currentType->GetKind() == ETypeAnnotationKind::Callable) {
+            auto callableType = currentType->Cast<TCallableExprType>();
             auto lambdaArgsCount = node->Head().ChildrenSize();
             if (lambdaArgsCount != callableType->GetArgumentsSize()) {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            auto typeNode = ExpandType(node->Pos(), expectedType, ctx);
+            auto typeNode = ExpandType(node->Pos(), *currentType, ctx);
             node = ctx.NewCallable(node->Pos(), "Callable", { typeNode, node });
+            for (ui32 i = 0; i < optLevel; ++i) {
+                node = ctx.NewCallable(node->Pos(), "Just", { node });
+            }
+
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -4164,6 +4203,11 @@ TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2) {
     }
 
     if (IsDataTypeString(dataSlot1) && IsDataTypeString(dataSlot2)) {
+        if (dataSlot1 == EDataSlot::Json && dataSlot2 == EDataSlot::Utf8 ||
+            dataSlot1 == EDataSlot::Utf8 && dataSlot2 == EDataSlot::Json)
+        {
+            return EDataSlot::Utf8;
+        }
         return EDataSlot::String;
     }
 

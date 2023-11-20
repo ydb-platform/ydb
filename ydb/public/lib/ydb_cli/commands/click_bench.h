@@ -39,6 +39,7 @@ protected:
     TString ExternalQueriesDir;
     TString ExternalResultsDir;
     TString ExternalVariablesString;
+    TString QueryExecutorType;
 
     TMap<ui32, TString> LoadExternalResults() const;
 public:
@@ -47,6 +48,8 @@ public:
     int Run(TConfig& config);
     TString PatchQuery(const TStringBuf& original) const;
     bool NeedRun(const ui32 queryIdx) const;
+
+    template <typename TClient>
     bool RunBench(TConfig& config);
 
     class TQueryFullInfo {

@@ -1,4 +1,5 @@
 /* syntax version 1 */
+/* skip double format */
 use plato;
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 

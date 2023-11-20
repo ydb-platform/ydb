@@ -615,6 +615,29 @@ TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx) {
     return ret;
 }
 
+TPgObjectSettings ParsePgObjectSettings(NNodes::TExprList node, TExprContext&) {
+    TMaybeNode<TCoAtom> mode;
+    TMaybeNode<TCoAtom> ifExists;
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+
+            if (name == "mode") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                mode = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "ifExists") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                ifExists = tuple.Value().Cast<TCoAtom>();
+            }
+        }
+    }
+
+    TPgObjectSettings ret(std::move(mode), std::move(ifExists));
+    return ret;
+}
+
+
 TVector<TString> GetStructFields(const TTypeAnnotationNode* type) {
     TVector<TString> fields;
     if (type->GetKind() == ETypeAnnotationKind::List) {

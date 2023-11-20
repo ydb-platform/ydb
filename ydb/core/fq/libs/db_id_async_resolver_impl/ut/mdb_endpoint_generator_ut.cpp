@@ -39,4 +39,16 @@ Y_UNIT_TEST_SUITE(MdbEndpoingGenerator) {
             transformer->ToEndpoint(NYql::EDatabaseType::PostgreSQL, "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net", true),
             TEndpoint("rc1b-eyt6dtobu96rwydq.db.yandex.net", 6432));
     }
+
+    Y_UNIT_TEST(Generic_ClickhouseNative) {
+        auto transformer = NFq::MakeMdbEndpointGeneratorGeneric(false, true);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net", true),
+            TEndpoint("rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net", 9440));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net", false),
+            TEndpoint("rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net", 9000));
+    }
 }

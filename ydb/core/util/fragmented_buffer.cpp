@@ -51,7 +51,7 @@ void TFragmentedBuffer::Write(ui32 begin, TRope&& data) {
     auto& [prevOffset, prevRope] = *it++;
     const ui32 end = prevOffset + prevRope.size();
     auto endIt = BufferForOffset.upper_bound(end);
-    Y_VERIFY_DEBUG(endIt != BufferForOffset.begin());
+    Y_DEBUG_ABORT_UNLESS(endIt != BufferForOffset.begin());
     auto& [lastOffset, lastRope] = *std::prev(endIt);
     const ui32 bytesToCut = end - lastOffset;
     if (bytesToCut < lastRope.size()) {
@@ -98,7 +98,7 @@ void TFragmentedBuffer::CopyFrom(const TFragmentedBuffer& from, const TIntervalS
 TIntervalSet<i32> TFragmentedBuffer::GetIntervalSet() const {
     TIntervalSet<i32> res;
     for (auto& [offset, buffer] : BufferForOffset) {
-        Y_VERIFY_DEBUG(buffer);
+        Y_DEBUG_ABORT_UNLESS(buffer);
         res.Add(offset, offset + buffer.size());
     }
     return res;

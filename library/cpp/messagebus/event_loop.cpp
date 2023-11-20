@@ -262,7 +262,7 @@ TEventLoop::TImpl::TImpl(const char* name)
     SOCKET wakeupSockets[2];
 
     if (SocketPair(wakeupSockets) < 0) {
-        Y_FAIL("failed to create socket pair for wakeup sockets: %s", LastSystemErrorText());
+        Y_ABORT("failed to create socket pair for wakeup sockets: %s", LastSystemErrorText());
     }
 
     TSocketHolder wakeupReadSocket(wakeupSockets[0]);
@@ -297,7 +297,7 @@ void TEventLoop::TImpl::Run() {
             if (*c == this) {
                 char buf[0x1000];
                 if (NBus::NPrivate::SocketRecv(WakeupReadSocket, buf) < 0) {
-                    Y_FAIL("failed to recv from wakeup socket: %s", LastSystemErrorText());
+                    Y_ABORT("failed to recv from wakeup socket: %s", LastSystemErrorText());
                 }
                 continue;
             }
@@ -354,7 +354,7 @@ TChannelPtr TEventLoop::TImpl::Register(TSocket socket, TEventHandlerPtr eventHa
 void TEventLoop::TImpl::Wakeup() {
     if (NBus::NPrivate::SocketSend(WakeupWriteSocket, TArrayRef<const char>("", 1)) < 0) {
         if (LastSystemError() != EAGAIN) {
-            Y_FAIL("failed to send to wakeup socket: %s", LastSystemErrorText());
+            Y_ABORT("failed to send to wakeup socket: %s", LastSystemErrorText());
         }
     }
 }
@@ -367,6 +367,6 @@ void TEventLoop::TImpl::AddToPoller(SOCKET socket, void* cookie, int flags) {
     } else if (flags == OP_READ_WRITE) {
         Poller.WaitReadWriteOneShot(socket, cookie);
     } else {
-        Y_FAIL("Wrong flags: %d", int(flags));
+        Y_ABORT("Wrong flags: %d", int(flags));
     }
 }

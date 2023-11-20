@@ -43,7 +43,7 @@ public:
 
     STFUNC(FakeState) {
         Y_UNUSED(ev);
-        Y_FAIL("This class cannot be used directly. For tests inherit from it");
+        Y_ABORT("This class cannot be used directly. For tests inherit from it");
     }
 
 protected:
@@ -358,7 +358,7 @@ public:
     TBaseTest(const TIntrusivePtr<TTestConfig> &cfg)
         : TCommonBaseTest(cfg)
     {
-        Become(&TBaseTest::StateRegister);
+        this->UnsafeBecome(&TBaseTest::StateRegister);
     }
 
 

@@ -54,14 +54,14 @@ namespace NKikimr {
 
         void Replace(const TLatencyHistogram& current, const TLatencyHistogram& previous) {
             for (size_t i = 0; i < NumGroupStatBuckets; ++i) {
-                Y_VERIFY_DEBUG(Buckets[i] + current.Buckets[i] >= previous.Buckets[i]);
+                Y_DEBUG_ABORT_UNLESS(Buckets[i] + current.Buckets[i] >= previous.Buckets[i]);
                 Buckets[i] += current.Buckets[i] - previous.Buckets[i];
             }
         }
 
         void Subtract(const TLatencyHistogram& other) {
             for (size_t i = 0; i < NumGroupStatBuckets; ++i) {
-                Y_VERIFY_DEBUG(Buckets[i] >= other.Buckets[i]);
+                Y_DEBUG_ABORT_UNLESS(Buckets[i] >= other.Buckets[i]);
                 Buckets[i] -= other.Buckets[i];
             }
         }
@@ -258,7 +258,7 @@ namespace NKikimr {
                 case EKind::GET_FAST:
                     return GetFast;
             }
-            Y_FAIL("unexpected TGroupStat::EKind value");
+            Y_ABORT("unexpected TGroupStat::EKind value");
         }
     };
 

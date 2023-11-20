@@ -305,8 +305,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         TMap<TActorId, TByActorRequest> Requests;
 
-        i64 Limit = 0;
-        i64 InFly = 0;
+        ui64 Limit = 0;
+        ui64 InFly = 0;
 
         TActorId NextToRequest;
     };
@@ -673,7 +673,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     RequestFromQueue(*queue);
                 } else {
                     AddInFlyPages(pagesToRequest.size(), pagesToRequestBytes);
-                    auto *fetch = new NPageCollection::TFetch(0, waitingRequest->PageCollection, std::move(pagesToRequest));
+                    // fetch cookie -> requested size
+                    auto *fetch = new NPageCollection::TFetch(pagesToRequestBytes, waitingRequest->PageCollection, std::move(pagesToRequest));
                     NBlockIO::Start(this, waitingRequest->Owner, 0, waitingRequest->Priority, fetch);
                 }
             }
@@ -927,14 +928,16 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         auto *msg = ev->Get();
 
+        RemoveInFlyPages(msg->Fetch->Pages.size(), msg->Fetch->Cookie);
+
         if (TRequestQueue *queue = (TRequestQueue *)ev->Cookie) {
             Y_ABORT_UNLESS(queue == &ScanRequests || queue == &AsyncRequests);
-            Y_ABORT_UNLESS(queue->InFly >= (i64)msg->Cookie);
-            queue->InFly -= msg->Cookie;
+            Y_ABORT_UNLESS(queue->InFly >= msg->Fetch->Cookie);
+            queue->InFly -= msg->Fetch->Cookie;
             RequestFromQueue(*queue);
         }
 
-        auto collectionIt = Collections.find(msg->Origin->Label());
+        auto collectionIt = Collections.find(msg->Fetch->PageCollection->Label());
         if (collectionIt == Collections.end())
             return;
 
@@ -950,10 +953,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 auto* page = collection.PageMap[paged.PageId].Get();
                 if (!page || !page->HasMissingBody())
                     continue;
-
-                if (IsInFlyPage(page)) {
-                    RemoveInFlyPage(page);
-                }
 
                 page->Initialize(std::move(paged.Data));
                 BodyProvided(collection, paged.PageId, page);
@@ -1137,12 +1136,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 continue;
             }
 
-            if (IsInFlyPage(page)) {
-                // Request is technically inflight, but response will be ignored
-                // Pretend request is cancelled for simplicity
-                RemoveInFlyPage(page);
-            }
-
             page->Collection = nullptr;
             ++droppedPagesCount;
         }
@@ -1288,10 +1281,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     inline void AddInFlyPages(ui64 count, ui64 size) {
-        StatLoadInFlyBytes += sizeof(TPage) * count + size;
+        StatLoadInFlyBytes += size;
         if (Config->Counters) {
             *Config->Counters->LoadInFlyPages += count;
-            *Config->Counters->LoadInFlyBytes += sizeof(TPage) * count + size;
+            *Config->Counters->LoadInFlyBytes += size;
         }
     }
 
@@ -1313,21 +1306,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    inline void RemoveInFlyPage(const TPage* page) {
-        if (StatLoadInFlyBytes < sizeof(TPage) + page->Size) {
-            Y_DEBUG_ABORT_UNLESS(false, "Some race has happened");
-            return;
-        }
-
-        StatLoadInFlyBytes -= sizeof(TPage) + page->Size;
+    inline void RemoveInFlyPages(ui64 count, ui64 size) {
+        Y_ABORT_UNLESS(StatLoadInFlyBytes >= size);
+        StatLoadInFlyBytes -= size;
         if (Config->Counters) {
-            --*Config->Counters->LoadInFlyPages;
-            *Config->Counters->LoadInFlyBytes -= sizeof(TPage) + page->Size;
+            *Config->Counters->LoadInFlyPages -= count;
+            *Config->Counters->LoadInFlyBytes -= size;
         }
-    }
-
-    inline bool IsInFlyPage(const TPage* page) const {
-        return page->State == PageStateRequested || page->State == PageStateRequestedAsync;
     }
 
 public:

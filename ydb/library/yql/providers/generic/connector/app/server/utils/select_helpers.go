@@ -23,7 +23,7 @@ func SelectWhatToYDBTypes(selectWhat *api_service_protos.TSelect_TWhat) ([]*Ydb.
 	return ydbTypes, nil
 }
 
-func SelectWhatToYDBColumns(selectWhat *api_service_protos.TSelect_TWhat) ([]*Ydb.Column, error) {
+func selectWhatToYDBColumns(selectWhat *api_service_protos.TSelect_TWhat) ([]*Ydb.Column, error) {
 	var columns []*Ydb.Column
 
 	for i, item := range selectWhat.Items {
@@ -38,7 +38,7 @@ func SelectWhatToYDBColumns(selectWhat *api_service_protos.TSelect_TWhat) ([]*Yd
 	return columns, nil
 }
 
-func FormatSelectColumns(selectWhat *api_service_protos.TSelect_TWhat, tableName string, fakeZeroOnEmptyColumnsSet bool) (string, error) {
+func formatSelectColumns(formatter SQLFormatter, selectWhat *api_service_protos.TSelect_TWhat, tableName string, fakeZeroOnEmptyColumnsSet bool) (string, error) {
 	// SELECT $columns FROM $from
 	if tableName == "" {
 		return "", ErrEmptyTableName
@@ -48,7 +48,7 @@ func FormatSelectColumns(selectWhat *api_service_protos.TSelect_TWhat, tableName
 
 	sb.WriteString("SELECT ")
 
-	columns, err := SelectWhatToYDBColumns(selectWhat)
+	columns, err := selectWhatToYDBColumns(selectWhat)
 	if err != nil {
 		return "", fmt.Errorf("convert Select.What.Items to Ydb.Columns: %w", err)
 	}

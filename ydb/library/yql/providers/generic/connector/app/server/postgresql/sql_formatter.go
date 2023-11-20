@@ -2,21 +2,18 @@ package postgresql
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
-	"github.com/ydb-platform/ydb/library/go/core/log"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
+var _ utils.SQLFormatter = (*sqlFormatter)(nil)
+
 type sqlFormatter struct {
 }
 
-type predicateBuilderFeatures struct {
-}
-
-func (f predicateBuilderFeatures) SupportsType(typeID Ydb.Type_PrimitiveTypeId) bool {
+func (f *sqlFormatter) supportsType(typeID Ydb.Type_PrimitiveTypeId) bool {
 	switch typeID {
 	case Ydb.Type_BOOL:
 		return true
@@ -45,23 +42,23 @@ func (f predicateBuilderFeatures) SupportsType(typeID Ydb.Type_PrimitiveTypeId) 
 	}
 }
 
-func (f predicateBuilderFeatures) SupportsConstantValueExpression(t *Ydb.Type) bool {
+func (f *sqlFormatter) supportsConstantValueExpression(t *Ydb.Type) bool {
 	switch v := t.Type.(type) {
 	case *Ydb.Type_TypeId:
-		return f.SupportsType(v.TypeId)
+		return f.supportsType(v.TypeId)
 	case *Ydb.Type_OptionalType:
-		return f.SupportsConstantValueExpression(v.OptionalType.Item)
+		return f.supportsConstantValueExpression(v.OptionalType.Item)
 	default:
 		return false
 	}
 }
 
-func (f predicateBuilderFeatures) SupportsExpression(expression *api_service_protos.TExpression) bool {
+func (f sqlFormatter) SupportsPushdownExpression(expression *api_service_protos.TExpression) bool {
 	switch e := expression.Payload.(type) {
 	case *api_service_protos.TExpression_Column:
 		return true
 	case *api_service_protos.TExpression_TypedValue:
-		return f.SupportsConstantValueExpression(e.TypedValue.Type)
+		return f.supportsConstantValueExpression(e.TypedValue.Type)
 	case *api_service_protos.TExpression_ArithmeticalExpression:
 		return false
 	case *api_service_protos.TExpression_Null:
@@ -71,31 +68,21 @@ func (f predicateBuilderFeatures) SupportsExpression(expression *api_service_pro
 	}
 }
 
-func (formatter sqlFormatter) FormatRead(logger log.Logger, selectReq *api_service_protos.TSelect) (string, error) {
-	var sb strings.Builder
+func (f sqlFormatter) GetDescribeTableQuery(request *api_service_protos.TDescribeTableRequest) (string, []any) {
+	schema := request.GetDataSourceInstance().GetPgOptions().GetSchema()
+	query := "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = $1 AND table_schema = $2"
+	args := []any{request.Table, schema}
 
-	selectPart, err := utils.FormatSelectColumns(selectReq.What, selectReq.GetFrom().GetTable(), true)
-	if err != nil {
-		return "", fmt.Errorf("failed to format select statement: %w", err)
-	}
+	return query, args
+}
 
-	sb.WriteString(selectPart)
+func (f sqlFormatter) GetPlaceholder(n int) string {
+	return fmt.Sprintf("$%d", n)
+}
 
-	if selectReq.Where != nil {
-		var features predicateBuilderFeatures
-
-		clause, err := utils.FormatWhereClause(selectReq.Where, features)
-		if err != nil {
-			logger.Error("Failed to format WHERE clause", log.Error(err), log.String("where", selectReq.Where.String()))
-		} else {
-			sb.WriteString(" ")
-			sb.WriteString(clause)
-		}
-	}
-
-	query := sb.String()
-
-	return query, nil
+func (f sqlFormatter) SanitiseIdentifier(ident string) string {
+	// TODO: sanitise
+	return ident
 }
 
 func NewSQLFormatter() utils.SQLFormatter {

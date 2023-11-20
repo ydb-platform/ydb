@@ -13,7 +13,6 @@ import (
 type handlerImpl struct {
 	typeMapper        utils.TypeMapper
 	sqlFormatter      utils.SQLFormatter
-	queryBuilder      utils.QueryExecutor
 	connectionManager utils.ConnectionManager
 	logger            log.Logger
 }
@@ -23,6 +22,8 @@ func (h *handlerImpl) DescribeTable(
 	logger log.Logger,
 	request *api_service_protos.TDescribeTableRequest,
 ) (*api_service_protos.TDescribeTableResponse, error) {
+	query, args := utils.MakeDescribeTableQuery(logger, h.sqlFormatter, request)
+
 	conn, err := h.connectionManager.Make(ctx, logger, request.DataSourceInstance)
 	if err != nil {
 		return nil, fmt.Errorf("make connection: %w", err)
@@ -30,7 +31,7 @@ func (h *handlerImpl) DescribeTable(
 
 	defer h.connectionManager.Release(logger, conn)
 
-	rows, err := h.queryBuilder.DescribeTable(ctx, conn, request)
+	rows, err := conn.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query builder error: %w", err)
 	}
@@ -72,7 +73,7 @@ func (h *handlerImpl) doReadSplit(
 	split *api_service_protos.TSplit,
 	sink paging.Sink,
 ) error {
-	query, err := h.sqlFormatter.FormatRead(logger, split.Select)
+	query, args, err := utils.MakeReadSplitQuery(logger, h.sqlFormatter, split.Select)
 	if err != nil {
 		return fmt.Errorf("make read split query: %w", err)
 	}
@@ -84,7 +85,7 @@ func (h *handlerImpl) doReadSplit(
 
 	defer h.connectionManager.Release(logger, conn)
 
-	rows, err := conn.Query(ctx, query)
+	rows, err := conn.Query(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("query '%s' error: %w", query, err)
 	}
@@ -136,7 +137,6 @@ func newHandler(
 	return &handlerImpl{
 		logger:            logger,
 		sqlFormatter:      preset.sqlFormatter,
-		queryBuilder:      preset.queryExecutor,
 		connectionManager: preset.connectionManager,
 		typeMapper:        preset.typeMapper,
 	}

@@ -8,12 +8,7 @@ import (
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
-type PredicateBuilderFeatures interface {
-	// Support for high level expression (without subexpressions, they are checked separately)
-	SupportsExpression(expression *api_service_protos.TExpression) bool
-}
-
-func FormatValue(value *Ydb.TypedValue) (string, error) {
+func formatValue(value *Ydb.TypedValue) (string, error) {
 	switch v := value.Value.Value.(type) {
 	case *Ydb.Value_BoolValue:
 		return fmt.Sprintf("%t", v.BoolValue), nil
@@ -34,15 +29,15 @@ func FormatValue(value *Ydb.TypedValue) (string, error) {
 	}
 }
 
-func FormatColumn(col string) (string, error) {
+func formatColumn(col string) (string, error) {
 	return col, nil
 }
 
-func FormatNull(n *api_service_protos.TExpression_TNull) (string, error) {
+func formatNull(n *api_service_protos.TExpression_TNull) (string, error) {
 	return "NULL", nil
 }
 
-func FormatArithmeticalExpression(expression *api_service_protos.TExpression_TArithmeticalExpression, features PredicateBuilderFeatures) (string, error) {
+func formatArithmeticalExpression(formatter SQLFormatter, expression *api_service_protos.TExpression_TArithmeticalExpression) (string, error) {
 	var operation string
 
 	switch op := expression.Operation; op {
@@ -68,12 +63,12 @@ func FormatArithmeticalExpression(expression *api_service_protos.TExpression_TAr
 		err   error
 	)
 
-	left, err = FormatExpression(expression.LeftValue, features)
+	left, err = formatExpression(formatter, expression.LeftValue)
 	if err != nil {
 		return "", fmt.Errorf("failed to format left argument: %w", err)
 	}
 
-	right, err = FormatExpression(expression.RightValue, features)
+	right, err = formatExpression(formatter, expression.RightValue)
 	if err != nil {
 		return "", fmt.Errorf("failed to format right argument: %w", err)
 	}
@@ -81,26 +76,26 @@ func FormatArithmeticalExpression(expression *api_service_protos.TExpression_TAr
 	return fmt.Sprintf("(%s%s%s)", left, operation, right), nil
 }
 
-func FormatExpression(expression *api_service_protos.TExpression, features PredicateBuilderFeatures) (string, error) {
-	if !features.SupportsExpression(expression) {
+func formatExpression(formatter SQLFormatter, expression *api_service_protos.TExpression) (string, error) {
+	if !formatter.SupportsPushdownExpression(expression) {
 		return "", ErrUnsupportedExpression
 	}
 
 	switch e := expression.Payload.(type) {
 	case *api_service_protos.TExpression_Column:
-		return FormatColumn(e.Column)
+		return formatColumn(e.Column)
 	case *api_service_protos.TExpression_TypedValue:
-		return FormatValue(e.TypedValue)
+		return formatValue(e.TypedValue)
 	case *api_service_protos.TExpression_ArithmeticalExpression:
-		return FormatArithmeticalExpression(e.ArithmeticalExpression, features)
+		return formatArithmeticalExpression(formatter, e.ArithmeticalExpression)
 	case *api_service_protos.TExpression_Null:
-		return FormatNull(e.Null)
+		return formatNull(e.Null)
 	default:
 		return "", fmt.Errorf("%w, type: %T", ErrUnimplementedExpression, e)
 	}
 }
 
-func FormatComparison(comparison *api_service_protos.TPredicate_TComparison, features PredicateBuilderFeatures) (string, error) {
+func formatComparison(formatter SQLFormatter, comparison *api_service_protos.TPredicate_TComparison) (string, error) {
 	var operation string
 
 	switch op := comparison.Operation; op {
@@ -126,12 +121,12 @@ func FormatComparison(comparison *api_service_protos.TPredicate_TComparison, fea
 		err   error
 	)
 
-	left, err = FormatExpression(comparison.LeftValue, features)
+	left, err = formatExpression(formatter, comparison.LeftValue)
 	if err != nil {
 		return "", fmt.Errorf("failed to format left argument: %w", err)
 	}
 
-	right, err = FormatExpression(comparison.RightValue, features)
+	right, err = formatExpression(formatter, comparison.RightValue)
 	if err != nil {
 		return "", fmt.Errorf("failed to format right argument: %w", err)
 	}
@@ -139,8 +134,8 @@ func FormatComparison(comparison *api_service_protos.TPredicate_TComparison, fea
 	return fmt.Sprintf("(%s%s%s)", left, operation, right), nil
 }
 
-func FormatNegation(negation *api_service_protos.TPredicate_TNegation, features PredicateBuilderFeatures) (string, error) {
-	pred, err := FormatPredicate(negation.Operand, features, false)
+func formatNegation(formatter SQLFormatter, negation *api_service_protos.TPredicate_TNegation) (string, error) {
+	pred, err := formatPredicate(formatter, negation.Operand, false)
 	if err != nil {
 		return "", fmt.Errorf("failed to format NOT statement: %w", err)
 	}
@@ -148,7 +143,7 @@ func FormatNegation(negation *api_service_protos.TPredicate_TNegation, features 
 	return fmt.Sprintf("(NOT %s)", pred), nil
 }
 
-func FormatConjunction(conjunction *api_service_protos.TPredicate_TConjunction, features PredicateBuilderFeatures, topLevel bool) (string, error) {
+func formatConjunction(formatter SQLFormatter, conjunction *api_service_protos.TPredicate_TConjunction, topLevel bool) (string, error) {
 	var (
 		sb        strings.Builder
 		succeeded int32 = 0
@@ -158,7 +153,7 @@ func FormatConjunction(conjunction *api_service_protos.TPredicate_TConjunction, 
 	)
 
 	for _, predicate := range conjunction.Operands {
-		statement, err = FormatPredicate(predicate, features, false)
+		statement, err = formatPredicate(formatter, predicate, false)
 		if err != nil {
 			if !topLevel {
 				return "", fmt.Errorf("failed to format AND statement: %w", err)
@@ -193,7 +188,7 @@ func FormatConjunction(conjunction *api_service_protos.TPredicate_TConjunction, 
 	return sb.String(), nil
 }
 
-func FormatDisjunction(disjunction *api_service_protos.TPredicate_TDisjunction, features PredicateBuilderFeatures) (string, error) {
+func formatDisjunction(formatter SQLFormatter, disjunction *api_service_protos.TPredicate_TDisjunction) (string, error) {
 	var (
 		sb        strings.Builder
 		cnt       int32 = 0
@@ -203,7 +198,7 @@ func FormatDisjunction(disjunction *api_service_protos.TPredicate_TDisjunction, 
 	)
 
 	for _, predicate := range disjunction.Operands {
-		statement, err = FormatPredicate(predicate, features, false)
+		statement, err = formatPredicate(formatter, predicate, false)
 		if err != nil {
 			return "", fmt.Errorf("failed to format OR statement: %w", err)
 		} else {
@@ -236,8 +231,8 @@ func FormatDisjunction(disjunction *api_service_protos.TPredicate_TDisjunction, 
 	return sb.String(), nil
 }
 
-func FormatIsNull(isNull *api_service_protos.TPredicate_TIsNull, features PredicateBuilderFeatures) (string, error) {
-	statement, err := FormatExpression(isNull.Value, features)
+func formatIsNull(formatter SQLFormatter, isNull *api_service_protos.TPredicate_TIsNull) (string, error) {
+	statement, err := formatExpression(formatter, isNull.Value)
 	if err != nil {
 		return "", fmt.Errorf("failed to format IS NULL statement: %w", err)
 	}
@@ -245,8 +240,8 @@ func FormatIsNull(isNull *api_service_protos.TPredicate_TIsNull, features Predic
 	return fmt.Sprintf("(%s IS NULL)", statement), nil
 }
 
-func FormatIsNotNull(isNotNull *api_service_protos.TPredicate_TIsNotNull, features PredicateBuilderFeatures) (string, error) {
-	statement, err := FormatExpression(isNotNull.Value, features)
+func formatIsNotNull(formatter SQLFormatter, isNotNull *api_service_protos.TPredicate_TIsNotNull) (string, error) {
+	statement, err := formatExpression(formatter, isNotNull.Value)
 	if err != nil {
 		return "", fmt.Errorf("failed to format IS NOT NULL statement: %w", err)
 	}
@@ -254,33 +249,33 @@ func FormatIsNotNull(isNotNull *api_service_protos.TPredicate_TIsNotNull, featur
 	return fmt.Sprintf("(%s IS NOT NULL)", statement), nil
 }
 
-func FormatPredicate(predicate *api_service_protos.TPredicate, features PredicateBuilderFeatures, topLevel bool) (string, error) {
+func formatPredicate(formatter SQLFormatter, predicate *api_service_protos.TPredicate, topLevel bool) (string, error) {
 	switch p := predicate.Payload.(type) {
 	case *api_service_protos.TPredicate_Negation:
-		return FormatNegation(p.Negation, features)
+		return formatNegation(formatter, p.Negation)
 	case *api_service_protos.TPredicate_Conjunction:
-		return FormatConjunction(p.Conjunction, features, topLevel)
+		return formatConjunction(formatter, p.Conjunction, topLevel)
 	case *api_service_protos.TPredicate_Disjunction:
-		return FormatDisjunction(p.Disjunction, features)
+		return formatDisjunction(formatter, p.Disjunction)
 	case *api_service_protos.TPredicate_IsNull:
-		return FormatIsNull(p.IsNull, features)
+		return formatIsNull(formatter, p.IsNull)
 	case *api_service_protos.TPredicate_IsNotNull:
-		return FormatIsNotNull(p.IsNotNull, features)
+		return formatIsNotNull(formatter, p.IsNotNull)
 	case *api_service_protos.TPredicate_Comparison:
-		return FormatComparison(p.Comparison, features)
+		return formatComparison(formatter, p.Comparison)
 	case *api_service_protos.TPredicate_BoolExpression:
-		return FormatExpression(p.BoolExpression.Value, features)
+		return formatExpression(formatter, p.BoolExpression.Value)
 	default:
 		return "", fmt.Errorf("%w, type: %T", ErrUnimplementedPredicateType, p)
 	}
 }
 
-func FormatWhereClause(where *api_service_protos.TSelect_TWhere, features PredicateBuilderFeatures) (string, error) {
+func formatWhereClause(formatter SQLFormatter, where *api_service_protos.TSelect_TWhere) (string, error) {
 	if where.FilterTyped == nil {
 		return "", ErrUnimplemented
 	}
 
-	formatted, err := FormatPredicate(where.FilterTyped, features, true)
+	formatted, err := formatPredicate(formatter, where.FilterTyped, true)
 	if err != nil {
 		return "", err
 	}

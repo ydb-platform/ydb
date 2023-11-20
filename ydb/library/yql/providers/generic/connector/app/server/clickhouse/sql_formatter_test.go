@@ -330,7 +330,7 @@ func TestSQLFormatter(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.testName, func(t *testing.T) {
-			output, err := formatter.FormatRead(logger, tc.selectReq)
+			output, _, err := utils.MakeReadSplitQuery(logger, formatter, tc.selectReq)
 			require.Equal(t, tc.output, output)
 
 			if tc.err != nil {

@@ -42,7 +42,6 @@ var _ HandlerFactory = (*HandlerFactoryMock)(nil)
 
 type HandlerFactoryMock struct {
 	SQLFormatter      utils.SQLFormatter
-	QueryExecutor     utils.QueryExecutor
 	ConnectionManager utils.ConnectionManager
 	TypeMapper        utils.TypeMapper
 }
@@ -52,7 +51,6 @@ func (m *HandlerFactoryMock) Make(logger log.Logger, dataSourceType api_common.E
 		logger,
 		&handlerPreset{
 			sqlFormatter:      m.SQLFormatter,
-			queryExecutor:     m.QueryExecutor,
 			connectionManager: m.ConnectionManager,
 			typeMapper:        m.TypeMapper,
 		},

@@ -30,10 +30,11 @@ type ConnectionManagerBase struct {
 	QueryLoggerFactory QueryLoggerFactory
 }
 
-type QueryExecutor interface {
-	DescribeTable(ctx context.Context, conn Connection, request *api_service_protos.TDescribeTableRequest) (Rows, error)
-}
-
 type SQLFormatter interface {
-	FormatRead(logger log.Logger, selectReq *api_service_protos.TSelect) (string, error)
+	GetDescribeTableQuery(request *api_service_protos.TDescribeTableRequest) (string, []any)
+	GetPlaceholder(n int) string
+	SanitiseIdentifier(ident string) string
+
+	// Support for high level expression (without subexpressions, they are checked separately)
+	SupportsPushdownExpression(expression *api_service_protos.TExpression) bool
 }

@@ -10,6 +10,7 @@ SRCS(
     logger.go
     predicate_builder.go
     protobuf.go
+    query_builder.go
     select_helpers.go
     sql.go
     sql_mock.go

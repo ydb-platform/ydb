@@ -118,7 +118,7 @@ void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
                 responsePartition.Offset = responseFromPQPartition.EndOffset;
                 responsePartition.ErrorCode = NONE_ERROR;
             } else {
-                responsePartition.ErrorCode = INVALID_REQUEST; //TODO savnik: handle it
+                responsePartition.ErrorCode = INVALID_REQUEST; // FIXME(savnik): handle it
                 ErrorCode = INVALID_REQUEST;
             }
         } else {

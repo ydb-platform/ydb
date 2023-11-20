@@ -1010,5 +1010,6 @@ message TActivity {
         NODEWARDEN_DISTRIBUTED_CONFIG = 620;
         PQ_FETCH_REQUEST = 621;
         STATISTICS_AGGREGATOR = 622;
+        KAFKA_READ_SESSION_ACTOR = 623;
     };
 };

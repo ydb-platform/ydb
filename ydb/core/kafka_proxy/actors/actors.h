@@ -4,6 +4,7 @@
 #include <ydb/core/persqueue/pq_rl_helpers.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 
 #include "../kafka_messages.h"
 
@@ -26,6 +27,7 @@ struct TContext {
     const NKikimrConfig::TKafkaProxyConfig& Config;
 
     TActorId ConnectionId;
+    TString ClientId;
 
 
     EAuthSteps AuthenticationStep = EAuthSteps::WAIT_HANDSHAKE;
@@ -109,8 +111,23 @@ inline EKafkaErrors ConvertErrorCode(NPersQueue::NErrorCode::EErrorCode code) {
             return EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
         case NPersQueue::NErrorCode::EErrorCode::READ_TIMEOUT:
             return EKafkaErrors::REQUEST_TIMED_OUT;
-        //case NPersQueue::NErrorCode::EErrorCode::OVERLOAD: savnik
-        //    return ???;
+        default:
+            return EKafkaErrors::UNKNOWN_SERVER_ERROR;
+    }
+}
+
+inline EKafkaErrors ConvertErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode code) {
+    switch (code) {
+        case Ydb::PersQueue::ErrorCode::ErrorCode::OK:
+            return EKafkaErrors::NONE_ERROR;
+        case Ydb::PersQueue::ErrorCode::ErrorCode::BAD_REQUEST:
+            return EKafkaErrors::INVALID_REQUEST;
+        case Ydb::PersQueue::ErrorCode::ErrorCode::ERROR:
+            return EKafkaErrors::UNKNOWN_SERVER_ERROR;
+        case Ydb::PersQueue::ErrorCode::ErrorCode::UNKNOWN_TOPIC:
+            return EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
+        case Ydb::PersQueue::ErrorCode::ErrorCode::ACCESS_DENIED:
+            return EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
         default:
             return EKafkaErrors::UNKNOWN_SERVER_ERROR;
     }
@@ -133,10 +150,13 @@ NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const
 NActors::IActor* CreateKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TInitProducerIdRequestData>& message);
 NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TMetadataRequestData>& message);
 NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context);
+NActors::IActor* CreateKafkaReadSessionActor(const TContext::TPtr context, ui64 cookie);
 NActors::IActor* CreateKafkaSaslHandshakeActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TSaslHandshakeRequestData>& message);
 NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TMessagePtr<TSaslAuthenticateRequestData>& message);
 NActors::IActor* CreateKafkaListOffsetsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TListOffsetsRequestData>& message);
 NActors::IActor* CreateKafkaFetchActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TFetchRequestData>& message);
+NActors::IActor* CreateKafkaFindCoordinatorActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TFindCoordinatorRequestData>& message);
+NActors::IActor* CreateKafkaOffsetCommitActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TOffsetCommitRequestData>& message);
 NActors::IActor* CreateKafkaOffsetFetchActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TOffsetFetchRequestData>& message);
 
 } // namespace NKafka

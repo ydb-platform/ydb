@@ -115,7 +115,7 @@ public:
             TopicInfo[path].FetchInfo[p.Partition] = fetchInfo;
         }
     }
-    //savnik хендлить таймаут запроса
+    // FIXME(savnik) handle request timeout
 
     void Bootstrap(const TActorContext& ctx) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "Fetch request actor boostrapped. Request is valid: " << (!Response));

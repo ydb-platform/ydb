@@ -514,13 +514,7 @@ namespace NActors {
             return *this;
         }
 
-        ~TFormattedRecordWriter() {
-            if (ActorContext) {
-                ::NActors::MemLogAdapter(*ActorContext, Priority, Component, TBase::GetResult());
-            } else {
-                Cerr << "FALLBACK_ACTOR_LOGGING;priority=" << Priority << ";component=" << Component << ";" << TBase::GetResult() << Endl;
-            }
-        }
+        ~TFormattedRecordWriter();
     };
 
     class TVerifyFormattedRecordWriter: public TFormatedStreamWriter {
@@ -539,9 +533,27 @@ namespace NActors {
 
         ~TVerifyFormattedRecordWriter();
     };
+
+    class TEnsureFormattedRecordWriter: public TFormatedStreamWriter {
+    private:
+        using TBase = TFormatedStreamWriter;
+        const TString ConditionText;
+    public:
+
+        TEnsureFormattedRecordWriter(const TString& conditionText);
+
+        template <class TKey, class TValue>
+        TEnsureFormattedRecordWriter& operator()(const TKey& pName, const TValue& pValue) {
+            TBase::Write(pName, pValue);
+            return *this;
+        }
+
+        ~TEnsureFormattedRecordWriter() noexcept(false);
+    };
 }
 
 #define AFL_VERIFY(condition) if (condition); else NActors::TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
+#define AFL_ENSURE(condition) if (condition); else NActors::TEnsureFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
 
 #ifndef NDEBUG
 /// Assert that depend on NDEBUG macro and outputs message like printf

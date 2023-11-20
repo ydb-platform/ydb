@@ -724,6 +724,13 @@ namespace NActors {
         TBase::WriteDirectly(TlsLogContext.Get().GetCurrentHeader());
     }
 
+    TFormattedRecordWriter::~TFormattedRecordWriter() {
+        if (ActorContext) {
+            ::NActors::MemLogAdapter(*ActorContext, Priority, Component, TBase::GetResult());
+        } else {
+            Cerr << "FALLBACK_ACTOR_LOGGING;priority=" << Priority << ";component=" << Component << ";" << TBase::GetResult() << Endl;
+        }
+    }
 
     TVerifyFormattedRecordWriter::TVerifyFormattedRecordWriter(const TString& conditionText)
         : ConditionText(conditionText) {
@@ -735,6 +742,27 @@ namespace NActors {
     TVerifyFormattedRecordWriter::~TVerifyFormattedRecordWriter() {
         const TString data = TBase::GetResult();
         Y_ABORT("%s", data.data());
+    }
+
+    TEnsureFormattedRecordWriter::TEnsureFormattedRecordWriter(const TString& conditionText)
+        : ConditionText(conditionText) {
+        TBase::WriteDirectly(TlsLogContext.Get().GetCurrentHeader());
+        TBase::Write("verification", ConditionText);
+
+    }
+
+    TEnsureFormattedRecordWriter::~TEnsureFormattedRecordWriter() noexcept(false) {
+        const TString data = TBase::GetResult();
+        if (NActors::TlsActivationContext) {
+            ::NActors::MemLogAdapter(NActors::TlsActivationContext->AsActorContext(), NLog::EPriority::PRI_ERROR, 0, data);
+        } else {
+            Cerr << "FALLBACK_EXCEPTION_LOGGING;component=EXCEPTION;" << data << Endl;
+        }
+        if (!std::uncaught_exceptions()) {
+            Y_ENSURE(false, data.data());
+        } else {
+            Y_ABORT("%s", data.data());
+        }
     }
 
 }

@@ -143,11 +143,3 @@ message TSourcePushRequest {
     int64 Space = 2;
 }
 
-message TSourcePushChunk {
-    int64 Parts = 1;
-    bytes String = 2;
-}
-
-message TSourcePushPart {
-    bytes String = 1;
-}

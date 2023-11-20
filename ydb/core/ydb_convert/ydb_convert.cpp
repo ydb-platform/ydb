@@ -1190,8 +1190,7 @@ bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
         if (!text.empty()) {
             isText = true;
             auto desc = type.GetTypeDesc();
-            auto id = NPg::PgTypeIdFromTypeDesc(desc);
-            auto res = NPg::PgNativeBinaryFromNativeText(text, id);
+            auto res = NPg::PgNativeBinaryFromNativeText(text, desc);
             if (res.Error) {
                 err = TStringBuilder() << "Invalid text value for "
                     << NPg::PgTypeNameFromTypeDesc(desc) << ": " << *res.Error;

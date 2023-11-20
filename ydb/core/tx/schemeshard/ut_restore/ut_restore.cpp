@@ -729,6 +729,54 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         TestGetImport(runtime, txId, "/MyRoot");
     }
 
+    Y_UNIT_TEST(ExportImportPg) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "pgint4" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRows(runtime, "/MyRoot/Table", 0, {1}, {2}, {55555});
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: "Backup1"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        TestImport(runtime, txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "Backup1"
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+    }
+
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldCountWrittenBytesAndRows) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

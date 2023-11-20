@@ -291,7 +291,7 @@ bool CellToValue(NScheme::TTypeInfo type, const TCell& c, NKikimrMiniKQL::TValue
         break;
 
     case NScheme::NTypeIds::Pg: {
-        auto convert = NPg::PgNativeTextFromNativeBinary(TString(c.Data(), c.Size()), NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()));
+        auto convert = NPg::PgNativeTextFromNativeBinary(c.AsBuf(), type.GetTypeDesc());
         if (convert.Error) {
             errStr = *convert.Error;
             return false;

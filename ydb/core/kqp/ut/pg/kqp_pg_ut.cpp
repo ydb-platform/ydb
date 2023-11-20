@@ -750,6 +750,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         rows.BeginList();
         for (size_t i = 0; i < rowCount; ++i) {
             auto str = isText ? textIn(i) : NPg::PgNativeBinaryFromNativeText(textIn(i), typeId).Str;
+            UNIT_ASSERT(!str.empty());
             auto mode = isText ? TPgValue::VK_TEXT : TPgValue::VK_BINARY;
             if (isKey) {
                 rows.AddListItem()
@@ -759,6 +760,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                     .EndStruct();
             } else {
                 auto int2Str = NPg::PgNativeBinaryFromNativeText(Sprintf("%u", i), INT2OID).Str;
+                UNIT_ASSERT(!int2Str.empty());
                 rows.AddListItem()
                     .BeginStruct()
                     .AddMember(colNames[0]).Pg(TPgValue(TPgValue::VK_BINARY, int2Str,  TPgType("pgint2")))
@@ -823,6 +825,8 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         for (size_t i = 0; i < rowCount; ++i) {
             auto str = NPg::PgNativeBinaryFromNativeText(textIn(), typeId).Str;
             auto int2Str = NPg::PgNativeBinaryFromNativeText(Sprintf("%u", i), INT2OID).Str;
+            UNIT_ASSERT(!str.empty());
+            UNIT_ASSERT(!int2Str.empty());
             rows.AddListItem()
                 .BeginStruct()
                 .AddMember("key").Pg(TPgValue(TPgValue::VK_BINARY, int2Str, TPgType("pgint2")))

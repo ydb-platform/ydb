@@ -1177,7 +1177,7 @@ namespace NSchemeShardUT_Private {
         }
 
         if (!found) {
-            UNIT_ASSERT_C(found, "Unexpected status: " << Ydb::StatusIds::StatusCode_Name(result));
+            UNIT_ASSERT_C(found, "Unexpected status: " << Ydb::StatusIds::StatusCode_Name(result) << " issues: " << ev->Record.GetResponse().GetEntry().GetIssues());
         }
 
         return ev->Record;

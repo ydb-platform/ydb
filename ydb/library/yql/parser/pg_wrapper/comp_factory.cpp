@@ -3743,7 +3743,7 @@ public:
             callInfo->nargs = 3;
             callInfo->fncollation = DEFAULT_COLLATION_OID;
             callInfo->isnull = false;
-            callInfo->args[0] = { (Datum)str.c_str(), false };
+            callInfo->args[0] = { (Datum)str.Data(), false };
             callInfo->args[1] = { ObjectIdGetDatum(NMiniKQL::MakeTypeIOParam(*this)), false };
             callInfo->args[2] = { Int32GetDatum(-1), false };
 
@@ -3776,7 +3776,7 @@ public:
         PG_END_TRY();
     }
 
-    TConvertResult NativeTextFromNativeBinary(const TString& binary) const {
+    TConvertResult NativeTextFromNativeBinary(const TStringBuf binary) const {
         NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         NMiniKQL::TPAllocScope scope;
         Datum datum = 0;
@@ -4257,16 +4257,26 @@ TCoerceResult PgNativeBinaryCoerce(const TStringBuf binary, void* typeDesc, i32 
     return static_cast<TPgTypeDescriptor*>(typeDesc)->Coerce(binary, typmod);
 }
 
-TConvertResult PgNativeBinaryFromNativeText(const TString& str, ui32 pgTypeId) {
-    auto* typeDesc = TypeDescFromPgTypeId(pgTypeId);
-    Y_ABORT_UNLESS(typeDesc);
+TConvertResult PgNativeBinaryFromNativeText(const TString& str, void* typeDesc) {
+    if (!typeDesc) {
+        return {{}, "invalid type descriptor"};
+    }
     return static_cast<TPgTypeDescriptor*>(typeDesc)->NativeBinaryFromNativeText(str);
 }
 
-TConvertResult PgNativeTextFromNativeBinary(const TString& binary, ui32 pgTypeId) {
-    auto* typeDesc = TypeDescFromPgTypeId(pgTypeId);
-    Y_ABORT_UNLESS(typeDesc);
+TConvertResult PgNativeBinaryFromNativeText(const TString& str, ui32 pgTypeId) {
+    return PgNativeBinaryFromNativeText(str, TypeDescFromPgTypeId(pgTypeId));
+}
+
+TConvertResult PgNativeTextFromNativeBinary(const TStringBuf binary, void* typeDesc) {
+    if (!typeDesc) {
+        return {{}, "invalid type descriptor"};
+    }
     return static_cast<TPgTypeDescriptor*>(typeDesc)->NativeTextFromNativeBinary(binary);
+}
+
+TConvertResult PgNativeTextFromNativeBinary(const TStringBuf binary, ui32 pgTypeId) {
+    return PgNativeTextFromNativeBinary(binary, TypeDescFromPgTypeId(pgTypeId));
 }
 
 } // namespace NKikimr::NPg

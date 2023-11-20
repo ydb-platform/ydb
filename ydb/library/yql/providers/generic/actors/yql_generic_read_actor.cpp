@@ -278,9 +278,7 @@ namespace NYql::NDq {
 
             // Preserve stream message to return it to ComputeActor later
             LastReadSplitsResponse_ = std::move(ev->Get()->Response);
-            IngressStats_.Bytes += LastReadSplitsResponse_->ByteSizeLong();
-            IngressStats_.Chunks++;
-            IngressStats_.Resume();
+            UpdateIngressStats();
             NotifyComputeActorWithData();
 
             YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsPart :: event handling finished";
@@ -347,6 +345,18 @@ namespace NYql::NDq {
                     inputIndex,
                     NConnector::ErrorFromGRPCStatus(result.Status));
             }
+        }
+
+        void UpdateIngressStats() {
+            if (LastReadSplitsResponse_->has_stats()) {
+                IngressStats_.Bytes += LastReadSplitsResponse_->stats().bytes();
+                IngressStats_.Rows += LastReadSplitsResponse_->stats().rows();
+            } else {
+                // Delete this branch with fallback behavior after YQ-2347 is deployed
+                IngressStats_.Bytes += LastReadSplitsResponse_->ByteSizeLong();
+            }
+            IngressStats_.Chunks++;
+            IngressStats_.Resume();
         }
 
         void NotifyComputeActorWithData() {
@@ -444,6 +454,10 @@ namespace NYql::NDq {
 
         // IActor & IDqComputeActorAsyncInput
         void PassAway() override { // Is called from Compute Actor
+            YQL_CLOG(INFO, ProviderGeneric) << "PassAway :: final ingress stats"
+                                            << ": bytes " << IngressStats_.Bytes
+                                            << ", rows " << IngressStats_.Rows
+                                            << ", chunks " << IngressStats_.Chunks;
             TActorBootstrapped<TGenericReadActor>::PassAway();
         }
 

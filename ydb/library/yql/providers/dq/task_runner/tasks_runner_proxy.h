@@ -14,6 +14,7 @@ extern const TString UseMetaParamName; // COMPAT(aozeritsky)
 
 void SaveRopeToPipe(IOutputStream& output, const TRope& rope);
 void LoadRopeFromPipe(IInputStream& input, TRope& rope);
+NDq::TDqTaskRunnerMemoryLimits DefaultMemoryLimits();
 
 class IInputChannel : public TThrRefBase, private TNonCopyable {
 public:
@@ -48,7 +49,7 @@ public:
 
     virtual ui64 GetTaskId() const = 0;
 
-    virtual NYql::NDqProto::TPrepareResponse Prepare() = 0;
+    virtual NYql::NDqProto::TPrepareResponse Prepare(const NDq::TDqTaskRunnerMemoryLimits& limits = DefaultMemoryLimits()) = 0;
     virtual NYql::NDqProto::TRunResponse Run() = 0;
 
     virtual IInputChannel::TPtr GetInputChannel(ui64 channelId) = 0;
@@ -86,8 +87,5 @@ public:
 
     virtual TIntrusivePtr<NDq::IDqTaskRunner> Get(const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TString& traceId = "TODO") = 0;
 };
-
-
-NDq::TDqTaskRunnerMemoryLimits DefaultMemoryLimits();
 
 } // namespace NYql::NTaskRunnerProxy

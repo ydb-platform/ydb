@@ -1284,7 +1284,8 @@ public:
         return ProtocolVersion;
     }
 
-    NYql::NDqProto::TPrepareResponse Prepare() override {
+    NYql::NDqProto::TPrepareResponse Prepare(const NDq::TDqTaskRunnerMemoryLimits& limits) override {
+        Y_UNUSED(limits);
         NDqProto::TCommandHeader header;
         header.SetVersion(1);
         header.SetCommand(NDqProto::TCommandHeader::PREPARE);
@@ -1538,11 +1539,10 @@ public:
     void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
         const IDqTaskRunnerExecutionContext& execCtx) override
     {
-        Y_UNUSED(memoryLimits);
         Y_UNUSED(execCtx);
         Y_ABORT_UNLESS(Task.GetId() == task.GetId());
         try {
-            auto result = Delegate->Prepare();
+            auto result = Delegate->Prepare(memoryLimits);
             Y_UNUSED(result);
         } catch (...) {
             Delegate->RaiseException();

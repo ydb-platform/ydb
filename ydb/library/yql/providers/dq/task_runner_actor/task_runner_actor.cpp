@@ -471,7 +471,11 @@ private:
         Invoker->Invoke([taskRunner=TaskRunner, replyTo, selfId, cookie, actorSystem, settings=Settings, stageId=StageId, startTime, clusterName = ClusterName](){
             try {
                 //auto guard = taskRunner->BindAllocator(); // only for local mode
-                auto result = taskRunner->Prepare();
+                NDq::TDqTaskRunnerMemoryLimits limits;
+                limits.ChannelBufferSize = settings->ChannelBufferSize.Get().GetOrElse(TDqSettings::TDefault::ChannelBufferSize);
+                limits.OutputChunkMaxSize = settings->OutputChunkMaxSize.Get().GetOrElse(TDqSettings::TDefault::OutputChunkMaxSize);
+                limits.ChunkSizeLimit = settings->ChunkSizeLimit.Get().GetOrElse(TDqSettings::TDefault::ChunkSizeLimit);
+                auto result = taskRunner->Prepare(limits);
                 auto sensors = GetSensors(result);
                 auto sensorName = TCounters::GetCounterName(
                     "Actor",

@@ -114,10 +114,10 @@ public:
         return Task.GetId();
     }
 
-    NYql::NDqProto::TPrepareResponse Prepare() override {
+    NYql::NDqProto::TPrepareResponse Prepare(const NDq::TDqTaskRunnerMemoryLimits& limits) override {
         NYql::NDqProto::TPrepareResponse ret;
         TDqTaskRunnerExecutionContextDefault ctx;
-        Runner->Prepare(Task, DefaultMemoryLimits(), ctx);
+        Runner->Prepare(Task, limits, ctx);
         return ret;
     }
 

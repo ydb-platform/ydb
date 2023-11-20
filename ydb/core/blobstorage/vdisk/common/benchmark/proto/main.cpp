@@ -106,9 +106,9 @@ struct TTestStats {
     }
 };
 
-// using TEvVPut = NKikimr::TEvBlobStorage::TEvVPut;
-using TEvVPut = NKikimrBlobStorage::TEvVPut;
-// using NActors::TChunkSerializer;
+using TEvVPut = NKikimr::TEvBlobStorage::TEvVPut;
+// using TEvVPut = NKikimrBlobStorage::TEvVPut;
+using NActors::TChunkSerializer;
 
 template <typename InitFunc>
 ui128 InitializeEvents(std::span<TEvVPut> evs, InitFunc& initFunc) {
@@ -119,19 +119,21 @@ ui128 InitializeEvents(std::span<TEvVPut> evs, InitFunc& initFunc) {
     return bytesWritten;
 }
 
-void SerializeEvents(std::span<TEvVPut> evs, std::span<IOutputStream*> streams) {
+void SerializeEvents(std::span<TEvVPut> evs, std::span<TChunkSerializer*> streams) {
     for (size_t i = 0; i < evs.size(); ++i) {
         auto& ev = evs[i];
         auto* stream = streams[i];
-        ev.Save(stream);
+        ev.SerializeToArcadiaStream(stream);
     }
 }
 
-void DeserializeEvents(std::span<TEvVPut> evs, std::span<IInputStream*> streams) {
+void DeserializeEvents(std::span<TEvVPut> evs, std::span<NActors::TEventSerializationInfo> infos, std::vector<NActors::IEventBase*>& trash, std::span<NActors::TAllocChunkSerializer> streams) {
     for (size_t i = 0; i < evs.size(); ++i) {
-        auto& ev = evs[i];
-        auto* stream = streams[i];
-        ev.Load(stream);
+        auto& stream = streams[i];
+        auto& info = infos[i];
+        auto data = stream.Release(std::move(info));
+        auto ev = TEvVPut::Load(data.Get());
+        trash[i] = ev;
     }
 }
 
@@ -141,30 +143,37 @@ TTestStats DoTest(size_t evCount, InitFunc&& initFunc) {
     stats.EvCount = evCount;
 
     std::vector<TEvVPut> evs(evCount);
-    std::vector<Buffer<max_bytes>> streams(evCount);
-    std::vector<IInputStream*> inputs;
-    std::vector<IOutputStream*> outputs;
-    inputs.reserve(streams.size());
-    outputs.reserve(streams.size());
+    std::vector<NActors::TEventSerializationInfo> infos;
+    infos.reserve(evs.size());
+    for (auto& ev : evs) {
+        infos.emplace_back(ev.CreateSerializationInfo());
+    }
+    std::vector<NActors::IEventBase*> trash(evCount);
+    std::vector<NActors::TAllocChunkSerializer> streams(evCount);
+    std::vector<TChunkSerializer*> serializers;
+    serializers.reserve(streams.size());
     for (auto& s : streams) {
-        inputs.push_back(&s);
-        outputs.push_back(&s);
+        serializers.push_back(&s);
     }
 
     stats.BytesWritten = InitializeEvents(evs, initFunc);
 
     {
         auto start = TInstant::Now();
-        SerializeEvents(evs, outputs);
+        SerializeEvents(evs, serializers);
         auto end = TInstant::Now();
         stats.SerializeDuration = end - start;
     }
 
     {
         auto start = TInstant::Now();
-        DeserializeEvents(evs, inputs);
+        DeserializeEvents(evs, infos, trash, streams);
         auto end = TInstant::Now();
         stats.DeserializeDuration = end - start;
+    }
+
+    for (auto it : trash) {
+        delete it;
     }
 
     return stats;

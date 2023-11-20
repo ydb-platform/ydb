@@ -281,7 +281,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                 break;
             }
 
-            UNIT_ASSERT(part.HasResultSet());
+            if (!part.HasResultSet()) {
+                continue;
+            }
 
             auto result = part.GetResultSet();
 

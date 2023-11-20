@@ -252,12 +252,14 @@ TConnection::TConnection(TConnectionConfigPtr config, TConnectionOptions options
         ConnectionInvoker_ = ActionQueue_->GetInvoker();
     }
 
-    UpdateProxyListExecutor_ = New<TPeriodicExecutor>(
-        GetInvoker(),
-        BIND(&TConnection::OnProxyListUpdate, MakeWeak(this)),
-        TPeriodicExecutorOptions::WithJitter(Config_->ProxyListUpdatePeriod));
+    if (Config_->EnableProxyDiscovery) {
+        UpdateProxyListExecutor_ = New<TPeriodicExecutor>(
+            GetInvoker(),
+            BIND(&TConnection::OnProxyListUpdate, MakeWeak(this)),
+            TPeriodicExecutorOptions::WithJitter(Config_->ProxyListUpdatePeriod));
+    }
 
-    if (Config_->ProxyEndpoints) {
+    if (Config_->EnableProxyDiscovery && Config_->ProxyEndpoints) {
         ServiceDiscovery_ = NRpc::TDispatcher::Get()->GetServiceDiscovery();
         if (!ServiceDiscovery_) {
             ChannelPool_->SetPeerDiscoveryError(TError("No Service Discovery is configured"));

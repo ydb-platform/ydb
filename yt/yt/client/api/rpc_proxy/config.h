@@ -31,6 +31,7 @@ public:
     std::optional<std::vector<TString>> ProxyAddresses;
     NRpc::TServiceDiscoveryEndpointsConfigPtr ProxyEndpoints;
     std::optional<TString> ProxyUnixDomainSocket;
+    bool EnableProxyDiscovery;
 
     NRpc::TDynamicChannelPoolConfigPtr DynamicChannelPool;
 

@@ -34,9 +34,6 @@ message TConfig
     optional uint32 RetryBackoffTime = 14;
     optional uint32 RetryAttempts = 15;
     optional uint32 RetryTimeout = 16;
-
-    repeated string ProxyAddresses = 17;
-    optional bool EnableProxyDiscovery = 18;
 }
 
 message TClustersConfig

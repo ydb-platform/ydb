@@ -37,8 +37,6 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("proxy_unix_domain_socket", &TThis::ProxyUnixDomainSocket)
         .Optional();
-    registrar.Parameter("enable_proxy_discovery", &TThis::EnableProxyDiscovery)
-        .Default(true);
 
     registrar.Parameter("dynamic_channel_pool", &TThis::DynamicChannelPool)
         .DefaultNew();
@@ -121,9 +119,6 @@ void TConnectionConfig::Register(TRegistrar registrar)
         }
         if (config->ProxyAddresses && config->ProxyAddresses->empty()) {
             THROW_ERROR_EXCEPTION("\"proxy_addresses\" must not be empty");
-        }
-        if (!config->EnableProxyDiscovery && !config->ProxyAddresses) {
-            THROW_ERROR_EXCEPTION("If proxy discovery is disabled, \"proxy_addresses\" should be specified");
         }
 
         if (!config->ClusterName && config->ClusterUrl) {

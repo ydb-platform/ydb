@@ -45,12 +45,6 @@ NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TConfig& config)
     if (config.GetModifyRowsBatchCapacity() != 0) {
         connectionConfig->ModifyRowsBatchCapacity = config.GetModifyRowsBatchCapacity();
     }
-    if (config.HasEnableProxyDiscovery()) {
-        connectionConfig->EnableProxyDiscovery = config.GetEnableProxyDiscovery();
-    }
-    if (!config.GetProxyAddresses().empty()) {
-        connectionConfig->ProxyAddresses = std::vector<TString>(config.GetProxyAddresses().begin(), config.GetProxyAddresses().end());
-    }
 
 #define SET_TIMEOUT_OPTION(name) \
     if (config.Get##name() != 0) connectionConfig->name = TDuration::MilliSeconds(config.Get ## name())

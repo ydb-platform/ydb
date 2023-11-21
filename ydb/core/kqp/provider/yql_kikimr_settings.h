@@ -161,6 +161,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode IndexAutoChooserMode;
     bool EnableAstCache = false;
     bool EnablePgConstsToParams = false;
+    ui64 ExtractPredicateRangesLimit = 0;
 };
 
 }

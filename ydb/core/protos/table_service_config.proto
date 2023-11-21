@@ -270,4 +270,6 @@ message TTableServiceConfig {
 
     optional bool EnableAstCache = 52 [default = false];
     optional bool EnablePgConstsToParams = 53 [default = false];
+
+    optional uint64 ExtractPredicateRangesLimit = 54 [default = 10000];
 };

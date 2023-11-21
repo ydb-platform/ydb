@@ -237,6 +237,12 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     settings.HaveNextValueCallable = true;
     settings.BuildLiteralRange = true;
 
+    if (kqpCtx.Config->ExtractPredicateRangesLimit != 0) {
+        settings.MaxRanges = kqpCtx.Config->ExtractPredicateRangesLimit;
+    } else {
+        settings.MaxRanges = Nothing();
+    }
+
     if (!kqpCtx.Config->PredicateExtract20) {
         // test for trivial cases (explicit literals or parameters)
         auto& tableDesc = indexName

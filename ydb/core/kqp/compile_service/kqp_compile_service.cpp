@@ -473,6 +473,8 @@ private:
 
         auto indexAutoChooser = TableServiceConfig.GetIndexAutoChooseMode();
 
+        ui64 rangesLimit = TableServiceConfig.GetExtractPredicateRangesLimit();
+
         bool enableSequences = TableServiceConfig.GetEnableSequences();
         bool enableColumnsWithDefault = TableServiceConfig.GetEnableColumnsWithDefault();
 
@@ -496,7 +498,8 @@ private:
             TableServiceConfig.GetEnableKqpImmediateEffects() != enableKqpImmediateEffects ||
             TableServiceConfig.GetIndexAutoChooseMode() != indexAutoChooser ||
             TableServiceConfig.GetEnableSequences() != enableSequences ||
-            TableServiceConfig.GetEnableColumnsWithDefault() != enableColumnsWithDefault) {
+            TableServiceConfig.GetEnableColumnsWithDefault() != enableColumnsWithDefault ||
+            TableServiceConfig.GetExtractPredicateRangesLimit() != rangesLimit) {
 
             QueryCache.Clear();
 
@@ -748,7 +751,7 @@ private:
                 if (ev->Get()->ReplayMessage) {
                     QueryReplayBackend->Collect(*ev->Get()->ReplayMessage);
                 }
-                
+
                 auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query);
                 for (auto& request : requests) {
                     LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());

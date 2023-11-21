@@ -503,6 +503,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.PredicateExtract20 = serviceConfig.GetPredicateExtract20();
     kqpConfig.IndexAutoChooserMode = serviceConfig.GetIndexAutoChooseMode();
     kqpConfig.EnablePgConstsToParams = serviceConfig.GetEnablePgConstsToParams();
+    kqpConfig.ExtractPredicateRangesLimit = serviceConfig.GetExtractPredicateRangesLimit();
 }
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
@@ -513,7 +514,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     const TString& uid, const TKqpQueryId& query, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     TKqpDbCountersPtr dbCounters, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-    NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState, 
+    NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState,
     ECompileActorAction compileAction, TMaybe<TQueryAst> astResult, bool collectFullDiagnostics)
 {
     return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, queryServiceConfig, metadataProviderConfig,

@@ -1422,6 +1422,7 @@ message TColumnShardConfig {
     }
     optional TTablesStorageLayoutPolicy TablesStorageLayoutPolicy = 1;
     optional bool DisabledOnSchemeShard = 2 [default = true];
+    optional bool SkipOldGranules = 3 [default = true];
 }
 
 message TSchemeShardConfig {

@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/formats/arrow/reader/read_filter_merger.h>
 #include <library/cpp/object_factory/object_factory.h>
+#include <ydb/core/base/appdata.h>
 
 namespace NKikimr::NOlap {
 struct TCompactionLimits;
@@ -79,11 +80,19 @@ public:
         std::vector<std::shared_ptr<TPortionInfo>> RemovePortions;
     public:
         TModificationGuard& AddPortion(const std::shared_ptr<TPortionInfo>& portion) {
+            if (AppData()->ColumnShardConfig.GetSkipOldGranules() && portion->GetDeprecatedGranuleId() > 0) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_granule")("granule_id", portion->GetDeprecatedGranuleId());
+                return *this;
+            }
             AddPortions.emplace_back(portion);
             return*this;
         }
 
         TModificationGuard& RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
+            if (AppData()->ColumnShardConfig.GetSkipOldGranules() && portion->GetDeprecatedGranuleId() > 0) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_granule")("granule_id", portion->GetDeprecatedGranuleId());
+                return *this;
+            }
             RemovePortions.emplace_back(portion);
             return*this;
         }

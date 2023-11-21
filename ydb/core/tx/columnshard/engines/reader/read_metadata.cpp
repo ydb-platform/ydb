@@ -14,7 +14,7 @@ TDataStorageAccessor::TDataStorageAccessor(const std::unique_ptr<NOlap::TInsertT
     , Index(index)
 {}
 
-std::shared_ptr<NOlap::TSelectInfo> TDataStorageAccessor::Select(const NOlap::TReadDescription& readDescription, const THashSet<ui32>& /*columnIds*/) const {
+std::shared_ptr<NOlap::TSelectInfo> TDataStorageAccessor::Select(const NOlap::TReadDescription& readDescription) const {
     if (readDescription.ReadNothing) {
         return std::make_shared<NOlap::TSelectInfo>();
     }
@@ -31,30 +31,7 @@ std::unique_ptr<NColumnShard::TScanIteratorBase> TReadMetadata::StartScan(const 
     return std::make_unique<NColumnShard::TColumnShardScanIterator>(readContext, this->shared_from_this());
 }
 
-bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor, std::string& error) {
-    auto& indexInfo = ResultIndexSchema->GetIndexInfo();
-    {
-        std::vector<ui32> resultColumnsIds;
-        if (readDescription.ColumnIds.size()) {
-            resultColumnsIds = readDescription.ColumnIds;
-        } else if (readDescription.ColumnNames.size()) {
-            resultColumnsIds = indexInfo.GetColumnIds(readDescription.ColumnNames);
-        } else {
-            error = "Empty column list requested";
-            return false;
-        }
-        ResultColumnsIds.swap(resultColumnsIds);
-    }
-
-    for (auto&& i : GetProgram().GetSourceColumns()) {
-        RequestColumns.emplace_back(i.first);
-    }
-
-    if (!GetResultSchema()) {
-        error = "Could not get ResultSchema.";
-        return false;
-    }
-
+bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor, std::string& /*error*/) {
     SetPKRangesFilter(readDescription.PKRangesFilter);
 
     /// @note We could have column name changes between schema versions:
@@ -62,43 +39,9 @@ bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataSto
     /// It's expected that we have only one version on 'foo' in blob and could split them by schema {planStep:txId}.
     /// So '1:foo' would be omitted in blob records for the column in new snapshots. And '2:foo' - in old ones.
     /// It's not possible for blobs with several columns. There should be a special logic for them.
-    {
-        AFL_VERIFY(ResultColumnsIds.size())("event", "Empty column list");
-        THashSet<TString> requiredColumns = indexInfo.GetRequiredColumns();
-
-        // Snapshot columns
-        requiredColumns.insert(NOlap::TIndexInfo::GetSpecialColumnNames().begin(), NOlap::TIndexInfo::GetSpecialColumnNames().end());
-
-        for (auto&& i : readDescription.PKRangesFilter.GetColumnNames()) {
-            requiredColumns.emplace(i);
-        }
-
-        for (auto& col : ResultColumnsIds) {
-            requiredColumns.erase(indexInfo.GetColumnName(col));
-        }
-
-        std::vector<ui32> auxiliaryColumns;
-        auxiliaryColumns.reserve(requiredColumns.size());
-        for (auto& reqCol : requiredColumns) {
-            auxiliaryColumns.push_back(indexInfo.GetColumnId(reqCol));
-        }
-        AllColumns.reserve(AllColumns.size() + ResultColumnsIds.size() + auxiliaryColumns.size());
-        AllColumns.insert(AllColumns.end(), ResultColumnsIds.begin(), ResultColumnsIds.end());
-        AllColumns.insert(AllColumns.end(), auxiliaryColumns.begin(), auxiliaryColumns.end());
-    }
-
     CommittedBlobs = dataAccessor.GetCommitedBlobs(readDescription, ResultIndexSchema->GetIndexInfo().GetReplaceKey());
 
-    THashSet<ui32> columnIds;
-    for (auto& columnId : AllColumns) {
-        columnIds.insert(columnId);
-    }
-
-    for (auto& [id, name] : GetProgram().GetSourceColumns()) {
-        columnIds.insert(id);
-    }
-
-    SelectInfo = dataAccessor.Select(readDescription, columnIds);
+    SelectInfo = dataAccessor.Select(readDescription);
     return true;
 }
 

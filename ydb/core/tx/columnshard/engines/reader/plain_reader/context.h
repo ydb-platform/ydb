@@ -16,7 +16,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, EFColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, PKColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FFColumns);
-    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, ResultColumns);
+    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, ProgramInputColumns);
 
     TReadMetadata::TConstPtr ReadMetadata;
     std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
@@ -39,7 +39,7 @@ public:
             "ef=" << EFColumns->DebugString() << ";" <<
             "pk=" << PKColumns->DebugString() << ";" <<
             "ff=" << FFColumns->DebugString() << ";" <<
-            "result_schema=" << ResultColumns->DebugString()
+            "program_input=" << ProgramInputColumns->DebugString()
             ;
     }
 
@@ -53,16 +53,14 @@ public:
         SpecColumns = std::make_shared<TColumnsSet>(TIndexInfo::GetSpecialColumnIdsSet(), ReadMetadata->GetIndexInfo());
         EFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetEarlyFilterColumnIds(), ReadMetadata->GetIndexInfo());
         *EFColumns = *EFColumns + *SpecColumns;
-        if (ReadMetadata->GetProgram().HasProgram()) {
+        if (ReadMetadata->HasProcessingColumnIds()) {
             FFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetProcessingColumnIds(), ReadMetadata->GetIndexInfo());
             AFL_VERIFY(!FFColumns->Contains(*SpecColumns))("info", FFColumns->DebugString());
             *FFColumns = *FFColumns + *EFColumns;
         } else {
             FFColumns = std::make_shared<TColumnsSet>(*EFColumns);
         }
-        ResultColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetResultColumnIds(), ReadMetadata->GetIndexInfo());
-//        AFL_VERIFY(FFColumns->Contains(*ResultColumns))("info", FFColumns->DebugString())("res", ResultColumns->DebugString());
-        *FFColumns = *FFColumns + *ResultColumns;
+        ProgramInputColumns = FFColumns;
 
         PKColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetPKColumnIds(), ReadMetadata->GetIndexInfo());
         MergeColumns = std::make_shared<TColumnsSet>(*PKColumns + *SpecColumns);

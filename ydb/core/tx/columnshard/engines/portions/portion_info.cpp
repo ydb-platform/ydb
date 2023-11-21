@@ -225,7 +225,18 @@ std::shared_ptr<arrow::Table> TPortionInfo::TPreparedBatchData::AssembleTable(co
         if (!options.IsAcceptedColumn(i.GetColumnId())) {
             continue;
         }
-        columns.emplace_back(i.Assemble());
+        std::shared_ptr<arrow::Scalar> scalar;
+        if (options.IsConstantColumn(i.GetColumnId(), scalar)) {
+            if (scalar) {
+                auto arr = NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*scalar, RowsCount));
+                columns.emplace_back(std::make_shared<arrow::ChunkedArray>(arr));
+            } else {
+                auto arr = NArrow::TStatusValidator::GetValid(arrow::MakeArrayOfNull(i.GetField()->type(), RowsCount));
+                columns.emplace_back(std::make_shared<arrow::ChunkedArray>(arr));
+            }
+        } else {
+            columns.emplace_back(i.Assemble());
+        }
         fields.emplace_back(i.GetField());
     }
 

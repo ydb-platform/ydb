@@ -466,6 +466,19 @@ public:
         struct TAssembleOptions {
             std::optional<std::set<ui32>> IncludedColumnIds;
             std::optional<std::set<ui32>> ExcludedColumnIds;
+            std::map<ui32, std::shared_ptr<arrow::Scalar>> ConstantColumnIds;
+
+            bool IsConstantColumn(const ui32 columnId, std::shared_ptr<arrow::Scalar>& scalar) const {
+                if (ConstantColumnIds.empty()) {
+                    return false;
+                }
+                auto it = ConstantColumnIds.find(columnId);
+                if (it == ConstantColumnIds.end()) {
+                    return false;
+                }
+                scalar = it->second;
+                return true;
+            }
 
             bool IsAcceptedColumn(const ui32 columnId) const {
                 if (IncludedColumnIds && !IncludedColumnIds->contains(columnId)) {
@@ -477,6 +490,16 @@ public:
                 return true;
             }
         };
+
+        std::shared_ptr<arrow::Field> GetFieldVerified(const ui32 columnId) const {
+            for (auto&& i : Columns) {
+                if (i.GetColumnId() == columnId) {
+                    return i.GetField();
+                }
+            }
+            AFL_VERIFY(false);
+            return nullptr;
+        }
 
         std::vector<std::string> GetSchemaColumnNames() const {
             return Schema->field_names();

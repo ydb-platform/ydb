@@ -27,7 +27,7 @@ public:
         return *OriginalCount;
     }
 
-    std::shared_ptr<arrow::Table> AppendToResult(const std::set<ui32>& columnIds) {
+    std::shared_ptr<arrow::Table> AppendToResult(const std::set<ui32>& columnIds, const std::optional<std::shared_ptr<arrow::Scalar>> constantFill = {}) {
         TPortionInfo::TPreparedBatchData::TAssembleOptions options;
         options.IncludedColumnIds = columnIds;
         for (auto it = options.IncludedColumnIds->begin(); it != options.IncludedColumnIds->end();) {
@@ -41,7 +41,12 @@ public:
             AFL_VERIFY(ResultTable);
             return ResultTable;
         }
-        auto table = BatchAssembler.AssembleTable(options);
+        if (constantFill) {
+            for (auto&& i : *options.IncludedColumnIds) {
+                options.ConstantColumnIds.emplace(i, *constantFill);
+            }
+        }
+        std::shared_ptr<arrow::Table> table = BatchAssembler.AssembleTable(options);
         AFL_VERIFY(table);
         if (!OriginalCount) {
             OriginalCount = table->num_rows();
@@ -70,11 +75,13 @@ public:
 class IFilterConstructor {
 private:
     const std::set<ui32> ColumnIds;
+    const std::optional<std::shared_ptr<arrow::Scalar>> ConstantFill;
 protected:
     virtual std::shared_ptr<NArrow::TColumnFilter> BuildFilter(const TFilterContext& filterContext, const std::shared_ptr<arrow::Table>& data) const = 0;
 public:
-    IFilterConstructor(const std::set<ui32>& columnIds)
+    IFilterConstructor(const std::set<ui32>& columnIds, const std::optional<std::shared_ptr<arrow::Scalar>> constantFill = {})
         : ColumnIds(columnIds)
+        , ConstantFill(constantFill)
     {
         AFL_VERIFY(ColumnIds.size());
     }
@@ -82,7 +89,7 @@ public:
     virtual ~IFilterConstructor() = default;
 
     void Execute(TFilterContext& filterContext, const bool useFilter) {
-        auto result = filterContext.AppendToResult(ColumnIds);
+        auto result = filterContext.AppendToResult(ColumnIds, ConstantFill);
         auto localFilter = BuildFilter(filterContext, result);
         AFL_VERIFY(!!localFilter);
         filterContext.ApplyFilter(localFilter, useFilter);
@@ -117,7 +124,7 @@ public:
     }
 };
 
-class TRestoreSnapshotData: public IFilterConstructor {
+class TFakeSnapshotData: public IFilterConstructor {
 private:
     using TBase = IFilterConstructor;
 protected:
@@ -125,8 +132,8 @@ protected:
         return std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter());
     }
 public:
-    TRestoreSnapshotData(const std::shared_ptr<TSpecialReadContext>& ctx)
-        : TBase(ctx->GetSpecColumns()->GetColumnIds()) {
+    TFakeSnapshotData(const std::shared_ptr<TSpecialReadContext>& ctx)
+        : TBase(ctx->GetSpecColumns()->GetColumnIds(), std::make_shared<arrow::UInt64Scalar>(0)) {
 
     }
 };
@@ -166,11 +173,13 @@ bool TAssembleFilter::DoExecute() {
     if (!UseFilter) {
         filters.emplace_back(std::make_shared<TRestoreMergeData>(Context));
     }
-    const bool needSnapshotsFilter = ReadMetadata->GetSnapshot() < RecordsMaxSnapshot;
-    if (needSnapshotsFilter) {
-        filters.emplace_back(std::make_shared<TSnapshotFilter>(Context));
-    } else {
-        filters.emplace_back(std::make_shared<TRestoreSnapshotData>(Context));
+    if (FilterColumnIds.contains((ui32)TIndexInfo::ESpecialColumn::PLAN_STEP)) {
+        const bool needSnapshotsFilter = ReadMetadata->GetSnapshot() < RecordsMaxSnapshot;
+        if (needSnapshotsFilter) {
+            filters.emplace_back(std::make_shared<TSnapshotFilter>(Context));
+        } else {
+            filters.emplace_back(std::make_shared<TFakeSnapshotData>(Context));
+        }
     }
     if (!ReadMetadata->GetPKRangesFilter().IsEmpty()) {
         filters.emplace_back(std::make_shared<TPredicateFilter>(Context));

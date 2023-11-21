@@ -45,7 +45,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<NOlap::TReadContext>& conte
     stats->IndexPortions = GetReadMetadata()->SelectInfo->PortionsOrderedPK.size();
     stats->IndexBatches = GetReadMetadata()->NumIndexedBlobs();
     stats->CommittedBatches = GetReadMetadata()->CommittedBlobs.size();
-    stats->SchemaColumns = GetReadMetadata()->GetSchemaColumnsCount();
+    stats->SchemaColumns = (*SpecialReadContext->GetProgramInputColumns() - *SpecialReadContext->GetSpecColumns()).GetSize();
     stats->PortionsBytes = portionsBytes;
 
 }

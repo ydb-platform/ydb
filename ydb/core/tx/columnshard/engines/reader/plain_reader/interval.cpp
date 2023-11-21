@@ -24,9 +24,9 @@ private:
             return;
         }
         {
-            ResultBatch = NArrow::ExtractColumns(ResultBatch, Context->GetReadMetadata()->GetResultSchema());
+            ResultBatch = NArrow::ExtractColumns(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
             AFL_VERIFY(ResultBatch);
-            AFL_VERIFY(ResultBatch->num_columns() == Context->GetReadMetadata()->GetResultSchema()->num_fields());
+            AFL_VERIFY((ui32)ResultBatch->num_columns() == Context->GetProgramInputColumns()->GetColumnNamesVector().size());
             NArrow::TStatusValidator::Validate(Context->GetReadMetadata()->GetProgram().ApplyProgram(ResultBatch));
         }
         if (ResultBatch->num_rows()) {
@@ -54,8 +54,8 @@ protected:
             ResultBatch = Sources.begin()->second->GetBatch();
             if (ResultBatch && ResultBatch->num_rows()) {
                 LastPK = Sources.begin()->second->GetLastPK();
-                ResultBatch = NArrow::ExtractColumnsValidate(ResultBatch, Context->GetResultColumns()->GetColumnNamesVector());
-                AFL_VERIFY(ResultBatch)("info", Context->GetResultColumns()->GetSchema()->ToString());
+                ResultBatch = NArrow::ExtractColumnsValidate(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
+                AFL_VERIFY(ResultBatch)("info", Context->GetProgramInputColumns()->GetSchema()->ToString());
                 Context->GetCommonContext()->GetCounters().OnNoScanInterval(ResultBatch->num_rows());
                 if (Context->GetCommonContext()->IsReverse()) {
                     ResultBatch = NArrow::ReverseRecords(ResultBatch);
@@ -88,13 +88,13 @@ protected:
             ResultBatch = merger->SingleSourceDrain(MergingContext->GetFinish(), MergingContext->GetIncludeFinish(), &lastResultPosition);
             if (ResultBatch) {
                 Context->GetCommonContext()->GetCounters().OnLogScanInterval(ResultBatch->num_rows());
-                AFL_VERIFY(ResultBatch->schema()->Equals(Context->GetResultColumns()->GetSchema()))("res", ResultBatch->schema()->ToString())("ctx", Context->GetResultColumns()->GetSchema()->ToString());
+                AFL_VERIFY(ResultBatch->schema()->Equals(Context->GetProgramInputColumns()->GetSchema()))("res", ResultBatch->schema()->ToString())("ctx", Context->GetProgramInputColumns()->GetSchema()->ToString());
             }
             if (MergingContext->GetIncludeFinish() && originalSourcesCount == 1) {
                 AFL_VERIFY(merger->IsEmpty())("merging_context_finish", MergingContext->GetFinish().DebugJson().GetStringRobust())("merger", merger->DebugString());
             }
         } else {
-            auto rbBuilder = std::make_shared<NIndexedReader::TRecordBatchBuilder>(Context->GetResultColumns()->GetSchema()->fields());
+            auto rbBuilder = std::make_shared<NIndexedReader::TRecordBatchBuilder>(Context->GetProgramInputColumns()->GetSchema()->fields());
             merger->DrainCurrentTo(*rbBuilder, MergingContext->GetFinish(), MergingContext->GetIncludeFinish(), &lastResultPosition);
             Context->GetCommonContext()->GetCounters().OnLinearScanInterval(rbBuilder->GetRecordsCount());
             ResultBatch = rbBuilder->Finalize();

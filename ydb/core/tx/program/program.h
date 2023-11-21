@@ -15,6 +15,7 @@ public:
     virtual ~IColumnResolver() = default;
     virtual TString GetColumnName(ui32 id, bool required = true) const = 0;
     virtual const NTable::TScheme::TTableSchema& GetSchema() const = 0;
+    virtual NSsa::TColumnInfo GetDefaultColumn() const = 0;
 };
 
 class TProgramContainer {
@@ -22,7 +23,25 @@ private:
     std::shared_ptr<NSsa::TProgram> Program;
     std::shared_ptr<arrow::RecordBatch> ProgramParameters; // TODO
     TKernelsRegistry KernelsRegistry;
+    std::optional<std::set<std::string>> OverrideProcessingColumnsSet;
+    std::optional<std::vector<TString>> OverrideProcessingColumnsVector;
 public:
+    bool HasOverridenProcessingColumnIds() const {
+        return !!OverrideProcessingColumnsVector;
+    }
+
+    bool HasProcessingColumnIds() const {
+        return !!Program || !!OverrideProcessingColumnsVector;
+    }
+    void OverrideProcessingColumns(const std::vector<TString>& data) {
+        if (data.empty()) {
+            return;
+        }
+        Y_ABORT_UNLESS(!Program);
+        OverrideProcessingColumnsVector = data;
+        OverrideProcessingColumnsSet = std::set<std::string>(data.begin(), data.end());
+    }
+
     bool Init(const IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram, TString& error);
 
     const std::vector<std::shared_ptr<NSsa::TProgramStep>>& GetSteps() const {
@@ -44,6 +63,8 @@ public:
     inline arrow::Status ApplyProgram(std::shared_ptr<arrow::RecordBatch>& batch) const {
         if (Program) {
             return Program->ApplyTo(batch, NArrow::GetCustomExecContext());
+        } else if (OverrideProcessingColumnsVector) {
+            batch = NArrow::ExtractColumnsValidate(batch, *OverrideProcessingColumnsVector);
         }
         return arrow::Status::OK();
     }

@@ -431,6 +431,7 @@ std::set<std::string> TProgramContainer::GetEarlyFilterColumns() const {
 
 bool TProgramContainer::Init(const IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram, TString& error) {
     Y_ABORT_UNLESS(serializedProgram);
+    Y_ABORT_UNLESS(!OverrideProcessingColumnsVector);
 
     NKikimrSSA::TProgram programProto;
     NKikimrSSA::TOlapProgram olapProgramProto;
@@ -529,15 +530,8 @@ bool TProgramContainer::ParseProgram(const IColumnResolver& columnResolver, cons
 
     // Query 'SELECT count(*) FROM table' needs a column
     if (ssaProgram->SourceColumns.empty()) {
-        auto& ydbSchema = columnResolver.GetSchema();
-
-        Y_ABORT_UNLESS(!ydbSchema.KeyColumns.empty());
-        ui32 key = ydbSchema.KeyColumns[0];
-
-        auto it = ydbSchema.Columns.find(key);
-        Y_ABORT_UNLESS(it != ydbSchema.Columns.end());
-
-        ssaProgram->SourceColumns.emplace(key, NSsa::TColumnInfo::Original(key, it->second.Name));
+        const auto uselessColumn = columnResolver.GetDefaultColumn();
+        ssaProgram->SourceColumns.emplace(uselessColumn.GetColumnId(), uselessColumn);
     }
 
     if (!ssaProgram->Steps.empty()) {
@@ -549,6 +543,9 @@ bool TProgramContainer::ParseProgram(const IColumnResolver& columnResolver, cons
 
 std::set<std::string> TProgramContainer::GetProcessingColumns() const {
     if (!Program) {
+        if (OverrideProcessingColumnsSet) {
+            return *OverrideProcessingColumnsSet;
+        }
         return {};
     }
     return Program->GetProcessingColumns();

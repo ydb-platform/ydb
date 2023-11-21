@@ -702,17 +702,6 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
         indexInfo = &(Self->TablesManager.GetIndexInfo(NOlap::TSnapshot(snapshot.GetStep(), snapshot.GetTxId())));
     }
 
-    // TODO: move this to CreateReadMetadata?
-    if (read.ColumnIds.empty()) {
-        // "SELECT COUNT(*)" requests empty column list but we need non-empty list for PrepareReadMetadata.
-        // So we add first PK column to the request.
-        if (!isIndexStats) {
-            read.ColumnIds.push_back(indexInfo->GetPKFirstColumnId());
-        } else {
-            read.ColumnIds.push_back(PrimaryIndexStatsSchema.KeyColumns.front());
-        }
-    }
-
     bool parseResult;
 
     if (!isIndexStats) {

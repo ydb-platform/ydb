@@ -60,7 +60,7 @@ private:
 public:
     TDataStorageAccessor(const std::unique_ptr<NOlap::TInsertTable>& insertTable,
                                  const std::unique_ptr<NOlap::IColumnEngine>& index);
-    std::shared_ptr<NOlap::TSelectInfo> Select(const NOlap::TReadDescription& readDescription, const THashSet<ui32>& columnIds) const;
+    std::shared_ptr<NOlap::TSelectInfo> Select(const NOlap::TReadDescription& readDescription) const;
     std::vector<NOlap::TCommittedBlob> GetCommitedBlobs(const NOlap::TReadDescription& readDescription, const std::shared_ptr<arrow::Schema>& pkSchema) const;
 };
 
@@ -129,9 +129,6 @@ private:
     TVersionedIndex IndexVersions;
     TSnapshot Snapshot;
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
-    std::vector<ui32> AllColumns;
-    std::vector<ui32> ResultColumnsIds;
-    std::vector<ui32> RequestColumns;
     mutable std::map<TSnapshot, ISnapshotSchema::TPtr> SchemasByVersionCache;
     mutable ISnapshotSchema::TPtr EmptyVersionSchemaCache;
 public:
@@ -140,12 +137,8 @@ public:
     NIndexedReader::TSortableBatchPosition BuildSortedPosition(const NArrow::TReplaceKey& key) const;
     std::shared_ptr<IDataReader> BuildReader(const std::shared_ptr<NOlap::TReadContext>& context) const;
 
-    const std::vector<ui32>& GetResultColumnIds() const {
-        return ResultColumnsIds;
-    }
-
-    const std::vector<ui32>& GetAllColumns() const {
-        return AllColumns;
+    bool HasProcessingColumnIds() const {
+        return GetProgram().HasProcessingColumnIds();
     }
 
     std::set<ui32> GetProcessingColumnIds() const {
@@ -174,10 +167,6 @@ public:
 
     bool Init(const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor, std::string& error);
 
-    ui64 GetSchemaColumnsCount() const {
-        return AllColumns.size();
-    }
-
     ISnapshotSchema::TPtr GetSnapshotSchema(const TSnapshot& version) const {
         if (version >= Snapshot){
             return ResultIndexSchema;
@@ -188,24 +177,20 @@ public:
     ISnapshotSchema::TPtr GetLoadSchema(const std::optional<TSnapshot>& version = {}) const {
         if (!version) {
             if (!EmptyVersionSchemaCache) {
-                EmptyVersionSchemaCache = make_shared<TFilteredSnapshotSchema>(ResultIndexSchema, AllColumns);
+                EmptyVersionSchemaCache = ResultIndexSchema;
             }
             return EmptyVersionSchemaCache;
         }
         auto schemaOriginal = IndexVersions.GetSchema(*version);
         auto it = SchemasByVersionCache.find(schemaOriginal->GetSnapshot());
         if (it == SchemasByVersionCache.end()) {
-            it = SchemasByVersionCache.emplace(schemaOriginal->GetSnapshot(), make_shared<TFilteredSnapshotSchema>(schemaOriginal, AllColumns)).first;
+            it = SchemasByVersionCache.emplace(schemaOriginal->GetSnapshot(), schemaOriginal).first;
         }
         return it->second;
     }
 
     std::shared_ptr<arrow::Schema> GetBlobSchema(const ui64 version) const {
         return IndexVersions.GetSchema(version)->GetIndexInfo().ArrowSchema();
-    }
-
-    std::shared_ptr<arrow::Schema> GetResultSchema() const {
-        return ResultIndexSchema->GetIndexInfo().ArrowSchema(ResultColumnsIds);
     }
 
     const TIndexInfo& GetIndexInfo(const std::optional<TSnapshot>& version = {}) const {
@@ -257,8 +242,7 @@ public:
     std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const std::shared_ptr<NOlap::TReadContext>& readContext) const override;
 
     void Dump(IOutputStream& out) const override {
-        out << "columns: " << GetSchemaColumnsCount()
-            << " index chunks: " << NumIndexedChunks()
+        out << " index chunks: " << NumIndexedChunks()
             << " index blobs: " << NumIndexedBlobs()
             << " committed blobs: " << CommittedBlobs.size()
       //      << " with program steps: " << (Program ? Program->Steps.size() : 0)

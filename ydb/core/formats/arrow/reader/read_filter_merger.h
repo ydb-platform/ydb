@@ -268,7 +268,7 @@ public:
         return Sorting->IsSameSchema(schema);
     }
 
-    TSortableBatchPosition(std::shared_ptr<arrow::RecordBatch> batch, const ui32 position, const std::vector<std::string>& sortingColumns, const std::vector<std::string>& dataColumns, const bool reverseSort)
+    TSortableBatchPosition(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 position, const std::vector<std::string>& sortingColumns, const std::vector<std::string>& dataColumns, const bool reverseSort)
         : Position(position)
         , ReverseSort(reverseSort)
     {

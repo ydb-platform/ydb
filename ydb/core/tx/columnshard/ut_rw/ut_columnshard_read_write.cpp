@@ -1210,7 +1210,7 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
 //        UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 1);
         UNIT_ASSERT(readStats.GetIndexBatches() > 0);
         UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
+        UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 2); // planStep, txId + 4 PK columns + "message"
         UNIT_ASSERT(readStats.GetIndexPortions() > 0); // got compaction
         UNIT_ASSERT(readStats.GetIndexPortions() <= 5); // got compaction
 
@@ -2293,6 +2293,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 const ui64 metaShard = TTestTxConfig::TxTablet1;
                 const ui64 tableId = 1;
                 const TActorId sender = Owner.Runtime.AllocateEdgeActor();
+                std::set<TString> useFields = {"timestamp", "message"};
                 { // read with predicate (FROM)
                     auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, Owner.PlanStep, Owner.TxId, tableId);
                     Proto(read.get()).AddColumnNames("timestamp");
@@ -2306,6 +2307,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                         auto* greater = Proto(read.get()).MutableGreaterPredicate();
                         for (auto& name : prGreater.ColumnNames()) {
                             greater->AddColumnNames(name);
+                            useFields.emplace(name);
                         }
                         greater->SetRow(NArrow::SerializeBatchNoCompression(prGreater.Batch));
                         greater->SetInclusive(From->GetInclude());
@@ -2314,6 +2316,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                         auto* less = Proto(read.get()).MutableLessPredicate();
                         for (auto& name : prLess.ColumnNames()) {
                             less->AddColumnNames(name);
+                            useFields.emplace(name);
                         }
                         less->SetRow(NArrow::SerializeBatchNoCompression(prLess.Batch));
                         less->SetInclusive(To->GetInclude());
@@ -2361,7 +2364,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                             UNIT_ASSERT_VALUES_EQUAL(readStats.GetSelectedIndex(), 0);
                             UNIT_ASSERT(readStats.GetIndexBatches());
                             //UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0); // TODO
-                            UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
+                            UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), useFields.size()); // planStep, txId + 4 PK columns + "message"
                             //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 1);
                             //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexPortions(), 0); // TODO: min-max index optimization?
                         }
@@ -2482,7 +2485,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     UNIT_ASSERT_VALUES_EQUAL(readStats.GetSelectedIndex(), 0);
                     UNIT_ASSERT(readStats.GetIndexBatches() > 0);
                     //UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0); // TODO
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
+                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 2); // planStep, txId + 4 PK columns + "message"
 //                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 3); // got 2 split compactions
                     //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexPortions(), x);
                 }

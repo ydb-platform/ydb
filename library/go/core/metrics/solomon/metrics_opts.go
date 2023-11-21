@@ -8,7 +8,7 @@ type MetricsOpts struct {
 	timestamp  *time.Time
 }
 
-type metricOpts func(*MetricsOpts)
+type MetricOpt func(*MetricsOpts)
 
 func WithTags(tags map[string]string) func(*MetricsOpts) {
 	return func(m *MetricsOpts) {

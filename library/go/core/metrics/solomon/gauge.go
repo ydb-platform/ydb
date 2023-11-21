@@ -24,7 +24,7 @@ type Gauge struct {
 	useNameTag bool
 }
 
-func NewGauge(name string, value float64, opts ...metricOpts) Gauge {
+func NewGauge(name string, value float64, opts ...MetricOpt) Gauge {
 	mOpts := MetricsOpts{}
 	for _, op := range opts {
 		op(&mOpts)

@@ -495,6 +495,7 @@ private:
             s3Object = Build<TS3Object>(ctx, object.Pos())
                     .Paths(ctx.NewList(object.Pos(), std::move(pathNodes)))
                     .Format(std::move(format))
+                    .RowsLimitHint(ctx.NewAtom(object.Pos(), ""))
                     .Settings(ctx.NewList(object.Pos(), std::move(settings)))
                 .Done().Ptr();
 

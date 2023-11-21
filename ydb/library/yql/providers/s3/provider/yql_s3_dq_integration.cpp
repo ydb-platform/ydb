@@ -228,6 +228,7 @@ public:
                         .Token<TCoSecureParam>()
                             .Name().Build(token)
                         .Build()
+                        .RowsLimitHint(s3ReadObject.Object().RowsLimitHint())
                         .Format(s3ReadObject.Object().Format())
                         .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
                         .Settings(s3ReadObject.Object().Settings())
@@ -270,6 +271,7 @@ public:
                         .Token<TCoSecureParam>()
                             .Name().Build(token)
                             .Build()
+                        .RowsLimitHint(s3ReadObject.Object().RowsLimitHint())
                         .SizeLimit(
                             sizeLimitIndex != -1 ? readSettings->Child(sizeLimitIndex)->TailPtr()
                                                  : emptyNode)
@@ -304,6 +306,10 @@ public:
             const auto& paths = settings.Paths();
             YQL_ENSURE(paths.Size() > 0);
             const TStructExprType* extraColumnsType = paths.Item(0).ExtraColumns().Ref().GetTypeAnn()->Cast<TStructExprType>();
+
+            if (auto hintStr = settings.RowsLimitHint().Ref().Content(); !hintStr.empty()) {
+                srcDesc.SetRowsLimitHint(FromString<i64>(hintStr));
+            }
 
             if (const auto mayParseSettings = settings.Maybe<TS3ParseSettings>()) {
                 const auto parseSettings = mayParseSettings.Cast();

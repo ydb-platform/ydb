@@ -182,7 +182,7 @@ private:
             return TStatus::Repeat;
         }
 
-        const auto format = input->Child(TS3Object::idx_Format)->Content();
+        const auto format = input->Child(TS3Target::idx_Format)->Content();
         if (!EnsureAtom(*input->Child(TS3Target::idx_Format), ctx) || !NCommon::ValidateFormatForOutput(format, ctx)) {
             return TStatus::Error;
         }
@@ -292,17 +292,17 @@ private:
                 return true;
             };
 
-            if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings), {"compression", "partitionedby", "mode", "userschema", "data.datetime.formatname", "data.datetime.format", "data.timestamp.formatname", "data.timestamp.format", "csvdelimiter", "filepattern"}, validator, ctx)) {
+            if (!EnsureValidSettings(*input->Child(TS3Target::idx_Settings), {"compression", "partitionedby", "mode", "userschema", "data.datetime.formatname", "data.datetime.format", "data.timestamp.formatname", "data.timestamp.format", "csvdelimiter", "filepattern"}, validator, ctx)) {
                 return TStatus::Error;
             }
 
             if (hasDateTimeFormat && hasDateTimeFormatName) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Object::idx_Settings)->Pos()), "Don't use data.datetime.format_name and data.datetime.format together"));
+                ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Target::idx_Settings)->Pos()), "Don't use data.datetime.format_name and data.datetime.format together"));
                 return TStatus::Error;
             }
 
             if (hasTimestampFormat && hasTimestampFormatName) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Object::idx_Settings)->Pos()), "Don't use data.timestamp.format_name and data.timestamp.format together"));
+                ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Target::idx_Settings)->Pos()), "Don't use data.timestamp.format_name and data.timestamp.format together"));
                 return TStatus::Error;
             }
         }

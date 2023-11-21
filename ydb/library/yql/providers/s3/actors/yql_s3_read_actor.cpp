@@ -2941,6 +2941,12 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         intervalUnit = NYql::NSerialization::TSerializationInterval::ToUnit(it->second);
     }
 
+    // For later use
+    std::optional<ui64> rowsLimitHint;
+    if (params.GetRowsLimitHint() != 0) {
+        rowsLimitHint = params.GetRowsLimitHint();
+    }
+
     if (params.HasFormat() && params.HasRowType()) {
         const auto pb = std::make_unique<TProgramBuilder>(typeEnv, functionRegistry);
         const auto outputItemType = NCommon::ParseTypeFromYson(TStringBuf(params.GetRowType()), *pb, Cerr);

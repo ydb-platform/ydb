@@ -1,3 +1,5 @@
+#include "library/cpp/packedtypes/packedfloat.h"
+#include "util/datetime/cputimer.h"
 #include <cstring>
 #include <vector>
 
@@ -94,12 +96,16 @@ const char* storeString256 =
 struct TTestStats {
     ui128 BytesWritten{0};
     size_t EvCount{0};
+    ui128 SerializeCycles{0};
+    ui128 DeserializeCycles{0};
     TDuration SerializeDuration{TDuration::MilliSeconds(0)};
     TDuration DeserializeDuration{TDuration::MilliSeconds(0)};
 
     TTestStats& operator+=(const TTestStats& that) {
         BytesWritten += that.BytesWritten;
         EvCount += that.EvCount;
+        SerializeCycles += that.SerializeCycles;
+        DeserializeCycles += that.DeserializeCycles;
         SerializeDuration += that.SerializeDuration;
         DeserializeDuration += that.DeserializeDuration;
         return *this;
@@ -159,17 +165,17 @@ TTestStats DoTest(size_t evCount, InitFunc&& initFunc) {
     stats.BytesWritten = InitializeEvents(evs, initFunc);
 
     {
-        auto start = TInstant::Now();
+        TPrecisionTimer timer;
         SerializeEvents(evs, serializers);
-        auto end = TInstant::Now();
-        stats.SerializeDuration = end - start;
+        stats.SerializeCycles = timer.GetCycleCount();
+        stats.SerializeDuration = CyclesToDuration(static_cast<ui64>(stats.SerializeCycles));
     }
 
     {
-        auto start = TInstant::Now();
+        TPrecisionTimer timer;
         DeserializeEvents(evs, infos, trash, streams);
-        auto end = TInstant::Now();
-        stats.DeserializeDuration = end - start;
+        stats.DeserializeCycles = timer.GetCycleCount();
+        stats.DeserializeDuration = CyclesToDuration(static_cast<ui64>(stats.DeserializeCycles));
     }
 
     for (auto it : trash) {
@@ -193,14 +199,30 @@ void SerDeLoopIteration(Event& ev, size_t iterations) {
 
 int main() {
     constexpr static size_t kLogMin = 10;
-    constexpr static size_t kLogMax = 18;
-    constexpr static size_t kIterations = 80;
+    constexpr static size_t kLogMax = 14;
+    constexpr static size_t kIterations = 120;
 
     TTestStats stats;
     for (size_t k = kLogMin; k < kLogMax; ++k) {
         for (size_t i = 0; i < kIterations; ++i) {
-            stats += DoTest<128>(1U << k, [](TEvVPut& ev) {
-                Y_UNUSED(ev);
+            stats += DoTest<128>(1U << k, [position = 0](TEvVPut& ev) mutable {
+                ++position;
+                if (position & 3 == 0) {
+                    ev.Record.SetBuffer(storeString32);
+                    return 32;
+                }
+                if (position & 3 == 1) {
+                    ev.Record.SetBuffer(storeString64);
+                    return 64;
+                }
+                if (position & 3 == 2) {
+                    ev.Record.SetBuffer(storeString128);
+                    return 128;
+                }
+                if (position & 3 == 3) {
+                    ev.Record.SetBuffer(storeString256);
+                    return 256;
+                }
                 return 0;
             });
         }
@@ -211,9 +233,16 @@ int main() {
     << stats.SerializeDuration << " SerializeDuration" << Endl
     << stats.DeserializeDuration << " DeserializeDuration" << Endl
     << Endl
+    << stats.DeserializeDuration.MillisecondsFloat() / stats.SerializeDuration.MillisecondsFloat() << " (Speed serialize) / (Speed deserialize)" << Endl
+    << Endl
     << stats.EvCount / stats.SerializeDuration.MilliSeconds() << " Ev/ms write" << Endl
     << stats.BytesWritten / stats.SerializeDuration.MilliSeconds() << " B/ms write" << Endl
     << stats.EvCount / stats.DeserializeDuration.MilliSeconds() << " Ev/ms read" << Endl
     << stats.BytesWritten / stats.DeserializeDuration.MilliSeconds() << " B/ms read" << Endl
+    << Endl
+    << stats.SerializeCycles / stats.EvCount << " cycles/Ev write" << Endl
+    << stats.SerializeCycles / stats.BytesWritten << " cycles/B write" << Endl
+    << stats.DeserializeCycles / stats.EvCount << " cycles/Ev read" << Endl
+    << stats.DeserializeCycles / stats.BytesWritten << " cycles/B read" << Endl
     ;
 }

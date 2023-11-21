@@ -1,0 +1,10 @@
+{
+    "bottles": {},
+    "resources": {
+        "678806418": "http://ydb-tech-ci.storage.yandexcloud.net/ydb-platform/resources/678806418"
+    },
+    "resources_descriptions": {
+        "678806418": "Pg Linux pack"
+    },
+    "tasks": {}
+}

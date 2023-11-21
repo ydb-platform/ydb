@@ -59,6 +59,7 @@
   "README.md":"ydb/github_toplevel/README.md",
   "ROADMAP.md":"ydb/github_toplevel/ROADMAP.md",
   "SECURITY.md":"ydb/github_toplevel/SECURITY.md",
+  "build/ext_mapping.conf.json":"ydb/github_toplevel/build/ext_mapping.conf.json",
   "build/internal/conf/internal.conf":"ydb/github_toplevel/build/internal/conf/internal.conf",
   "build/internal/ya.conf":"ydb/github_toplevel/build/internal/ya.conf",
   "build/mapping.conf.json":"devtools/ya/opensource/mapping.conf.json",

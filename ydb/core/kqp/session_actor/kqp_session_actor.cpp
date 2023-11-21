@@ -533,7 +533,7 @@ public:
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
         auto snapMgrActorId = RegisterWithSameMailbox(snapMgr);
 
-        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(QueryState->PreparedQuery->GetQueryTables(), std::move(QueryState->Orbit));
+        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(QueryState->PreparedQuery->GetQueryTables(), QueryId, std::move(QueryState->Orbit));
         Send(snapMgrActorId, ev.release());
 
         QueryState->TxCtx->SnapshotHandle.ManagingActor = snapMgrActorId;
@@ -552,7 +552,7 @@ public:
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
         auto snapMgrActorId = RegisterWithSameMailbox(snapMgr);
 
-        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(std::move(QueryState->Orbit));
+        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(QueryId, std::move(QueryState->Orbit));
         Send(snapMgrActorId, ev.release());
     }
 
@@ -570,8 +570,13 @@ public:
         }
     }
 
-    void HandleExecute(TEvKqpSnapshot::TEvCreateSnapshotResponse::TPtr& ev) {
+    void Handle(TEvKqpSnapshot::TEvCreateSnapshotResponse::TPtr& ev) {
+        if (ev->Cookie < QueryId || CurrentStateFunc() != &TThis::ExecuteState) {
+            return;
+        }
+
         TTimerGuard timer(this);
+
         auto *response = ev->Get();
 
         if (QueryState) {
@@ -2018,6 +2023,7 @@ public:
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvKqp::TEvQueryRequest, HandleReady);
 
+                hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleReady);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
@@ -2046,6 +2052,7 @@ public:
                 hFunc(TEvKqp::TEvQueryRequest, HandleCompile);
                 hFunc(TEvKqp::TEvCompileResponse, Handle);
 
+                hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleCompile);
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleCompile);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
@@ -2077,7 +2084,7 @@ public:
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleExecute);
 
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleExecute);
-                hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, HandleExecute);
+                hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
 
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleExecute);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
@@ -2109,6 +2116,7 @@ public:
                 hFunc(TEvKqp::TEvQueryRequest, HandleCleanup);
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleCleanup);
 
+                hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleCleanup);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
@@ -2136,6 +2144,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvGone, HandleFinalCleanup);
             hFunc(TEvents::TEvUndelivered, HandleNoop);
+            hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
         }
     }
 
@@ -2143,6 +2152,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvUndelivered, HandleWaitStats)
             hFunc(TEvKqpExecuter::TEvTxResponse, HandleWaitStats);
+            hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
         }
     }
 
@@ -2151,6 +2161,7 @@ public:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqp::TEvQueryRequest, HandleTopicOps);
 
+                hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTopicOps);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleTopicOps);
 

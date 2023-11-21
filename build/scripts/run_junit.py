@@ -20,7 +20,7 @@ def main():
 
     jar_binary = args[args.index('--jar-binary') + 1]
     java_bin_dir = os.path.dirname(jar_binary)
-    jstack_binary = os.path.join(java_bin_dir, 'jstack')
+    jstack_binary = os.path.join(java_bin_dir, 'jstack.exe' if sys.platform == 'win32' else 'jstack')
 
     if not os.path.exists(jstack_binary):
         sys.stderr.write("jstack is missing: {}\n".format(jstack_binary))

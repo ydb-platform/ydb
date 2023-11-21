@@ -88,6 +88,7 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 {% endif %}
 * `VIRTUAL_TIMESTAMPS` — включение-выключение [виртуальных меток времени](../../../../concepts/cdc#virtual-timestamps). По умолчанию выключено.
 * `RETENTION_PERIOD` — [время хранения записей](../../../../concepts/cdc#retention-period). Тип значения — `Interval`, значение по умолчанию — 24 часа (`Interval('PT24H')`).
+* `TOPIC_MIN_ACTIVE_PARTITIONS` — [количество партиций топика](../../../../concepts/cdc#topic-partitions). По умолчанию количество партиций топика равно количеству партиций таблицы.
 * `INITIAL_SCAN` — включение-выключение [первоначального сканирования](../../../../concepts/cdc#initial-scan) таблицы. По умолчанию выключено.
 {% if audience == "tech" %}
 * `AWS_REGION` — значение, которое будет записано в поле `awsRegion`. Применимо только совместно с форматом `DYNAMODB_STREAMS_JSON`.

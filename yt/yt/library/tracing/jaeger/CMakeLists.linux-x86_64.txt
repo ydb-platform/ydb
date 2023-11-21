@@ -28,6 +28,7 @@ target_link_libraries(library-tracing-jaeger PUBLIC
   contrib-libs-cxxsupp
   yutil
   yt-library-tracing
+  library-tvm-service
   core-rpc-grpc
   contrib-libs-protobuf
 )
@@ -61,6 +62,7 @@ target_link_libraries(library-tracing-jaeger.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   yt-library-tracing
+  library-tvm-service
   core-rpc-grpc
   contrib-libs-protobuf
 )

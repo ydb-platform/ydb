@@ -6,6 +6,8 @@
 
 #include <yt/yt/library/tracing/jaeger/tracer.h>
 
+#include <util/system/env.h>
+
 using namespace NYT;
 using namespace NYT::NTracing;
 
@@ -53,21 +55,52 @@ void DelayedSamplingExample(std::optional<TString> endpoint)
     traceContext->Finish();
 }
 
+NAuth::TTvmServiceConfigPtr GetTvmMockConfig() {
+    auto config = New<NAuth::TTvmServiceConfig>();
+    config->EnableMock = true;
+    config->ClientSelfSecret = "TestSecret-0";
+    config->ClientDstMap["tracing"] = 10;
+    config->ClientEnableServiceTicketFetching = true;
+
+    return config;
+}
+
+NAuth::TTvmServiceConfigPtr GetTvmConfig() {
+    auto config = New<NAuth::TTvmServiceConfig>();
+    config->ClientSelfId = FromString<NAuth::TTvmId>(GetEnv("TVM_ID"));
+    config->ClientSelfSecretEnv = "TVM_SECRET";
+    config->ClientDstMap["tracing"] = FromString<NAuth::TTvmId>(GetEnv("TRACING_TVM_ID"));
+    config->ClientEnableServiceTicketFetching = true;
+
+    return config;
+}
+
 int main(int argc, char* argv[])
 {
     try {
+
+        bool test = false;
+        auto usage = Format("usage: %v [--test] COLLECTOR_ENDPOINTS", argv[0]);
+
+        if (argc >= 2 && argv[1] == TString("--test")) {
+            test = true;
+            argv++;
+            argc--;
+        }
+
         if (argc < 2) {
-            throw yexception() << "usage: " << argv[0] << " COLLECTOR_ENDPOINTS";
+            throw yexception() << usage;
         }
 
         auto config = New<NTracing::TJaegerTracerConfig>();
         config->CollectorChannelConfig = New<NRpc::NGrpc::TChannelConfig>();
         config->CollectorChannelConfig->Address = argv[1];
 
-        config->FlushPeriod = TDuration::MilliSeconds(100);
+        config->FlushPeriod = TDuration::MilliSeconds(test ? 100 : 1000);
 
         config->ServiceName = "example";
         config->ProcessTags["host"] = "prime-dev.qyp.yandex-team.ru";
+        config->TvmService = test ? GetTvmMockConfig() : GetTvmConfig();
 
         auto jaeger = New<NTracing::TJaegerTracer>(config);
         SetGlobalTracer(jaeger);

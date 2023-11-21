@@ -91,4 +91,54 @@ namespace NKikimr::NBlobDepot {
             confirmedGenStep));
     }
 
+    class TData::TTxHardGC : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+        const ui8 Channel;
+        const ui32 GroupId;
+        const TGenStep HardGenStep;
+        bool MoreToGo = false;
+        std::vector<TLogoBlobID> TrashDeleted;
+
+        static constexpr ui32 MaxKeysToProcessAtOnce = 10'000;
+
+    public:
+        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_HARD_GC; }
+
+        TTxHardGC(TBlobDepot *self, ui8 channel, ui32 groupId, TGenStep hardGenStep)
+            : TTransactionBase(self)
+            , Channel(channel)
+            , GroupId(groupId)
+            , HardGenStep(hardGenStep)
+        {}
+
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            NIceDb::TNiceDb db(txc.DB);
+
+            std::function<bool(TLogoBlobID)> callback = [&](TLogoBlobID id) -> bool {
+                if (TrashDeleted.size() == MaxKeysToProcessAtOnce) {
+                    MoreToGo = true;
+                    return false;
+                }
+                db.Table<Schema::Trash>().Key(TKey(id).MakeBinaryKey()).Delete();
+                TrashDeleted.push_back(id);
+                return true;
+            };
+            Self->Data->CollectTrashByHardBarrier(Channel, GroupId, HardGenStep, callback);
+
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {
+            Self->Data->TrimChannelHistory(Channel, GroupId, std::move(TrashDeleted));
+            if (MoreToGo) {
+                Self->Data->ExecuteHardGC(Channel, GroupId, HardGenStep);
+            } else {
+                Self->Data->OnCommitHardGC(Channel, GroupId, HardGenStep);
+            }
+        }
+    };
+
+    void TData::ExecuteHardGC(ui8 channel, ui32 groupId, TGenStep hardGenStep) {
+        Self->Execute(std::make_unique<TTxHardGC>(Self, channel, groupId, hardGenStep));
+    }
+
 } // NKikimr::NBlobDepot

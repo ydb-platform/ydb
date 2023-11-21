@@ -397,7 +397,8 @@ namespace NKikimr::NBlobDepot {
             ui32 PerGenerationCounter = 1;
             TGenStep IssuedGenStep; // currently in flight or already confirmed
             TGenStep LastConfirmedGenStep;
-            bool CollectGarbageRequestInFlight = false;
+            TGenStep HardGenStep; // last sucessfully confirmed (non-persistent value)
+            ui32 CollectGarbageRequestsInFlight = 0;
 
             TRecordsPerChannelGroup(ui8 channel, ui32 groupId)
                 : Channel(channel)
@@ -406,9 +407,12 @@ namespace NKikimr::NBlobDepot {
 
             void MoveToTrash(TData *self, TLogoBlobID id);
             void OnSuccessfulCollect(TData *self);
+            void DeleteTrashRecord(TData *self, std::set<TLogoBlobID>::iterator& it);
             void OnLeastExpectedBlobIdChange(TData *self);
             void ClearInFlight(TData *self);
             void CollectIfPossible(TData *self);
+            bool Collectible(TData *self) const;
+            TGenStep GetHardGenStep(TData *self) const;
         };
 
         bool Loaded = false;
@@ -428,6 +432,7 @@ namespace NKikimr::NBlobDepot {
 
         class TTxIssueGC;
         class TTxConfirmGC;
+        class TTxHardGC;
 
         class TTxDataLoad;
 
@@ -444,6 +449,8 @@ namespace NKikimr::NBlobDepot {
         struct TCollectCmd {
             ui64 QueryId;
             ui32 GroupId;
+            bool Hard;
+            TGenStep GenStep;
         };
         ui64 LastCollectCmdId = 0;
         std::unordered_map<ui64, TCollectCmd> CollectCmds;
@@ -647,6 +654,10 @@ namespace NKikimr::NBlobDepot {
         void OnCommitConfirmedGC(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted);
         bool OnBarrierShift(ui64 tabletId, ui8 channel, bool hard, TGenStep previous, TGenStep current, ui32& maxItems,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
+        void CollectTrashByHardBarrier(ui8 channel, ui32 groupId, TGenStep hardGenStep,
+            const std::function<bool(TLogoBlobID)>& callback);
+        void OnCommitHardGC(ui8 channel, ui32 groupId, TGenStep hardGenStep);
+        void TrimChannelHistory(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted);
 
         void AddFirstMentionedBlob(TLogoBlobID id);
         void AccountBlob(TLogoBlobID id, bool add);
@@ -719,6 +730,8 @@ namespace NKikimr::NBlobDepot {
 
         void ExecuteConfirmGC(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted, size_t index,
             TGenStep confirmedGenStep);
+
+        void ExecuteHardGC(ui8 channel, ui32 groupId, TGenStep hardGenStep);
     };
 
     Y_DECLARE_OPERATORS_FOR_FLAGS(TBlobDepot::TData::TScanFlags);

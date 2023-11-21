@@ -591,7 +591,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 9u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
         }
 
         {
@@ -815,7 +815,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 9u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
         }
 
         {
@@ -1014,7 +1014,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TString group = "consumer-0";
         TString notExistsGroup = "consumer-not-exists";
 
-
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
         {
             auto result =
@@ -1188,7 +1187,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 9u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
         }
 
         {

@@ -1512,7 +1512,8 @@ void ValidateColumnSchema(
         "min",
         "max",
         "first",
-        "xdelta"
+        "xdelta",
+        "_yt_replica_set",
     };
 
     const auto& stableName = columnSchema.StableName();

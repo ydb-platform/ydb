@@ -103,8 +103,9 @@ int RecursiveFunction(size_t maxDepth, size_t currentDepth)
         array[i] = rand();
     }
 
-    return std::accumulate(array.begin(), array.end(), 0)
-        + RecursiveFunction(maxDepth, currentDepth + 1);
+    int result = RecursiveFunction(maxDepth, currentDepth + 1);
+
+    return std::accumulate(array.begin(), array.end(), 0) + result;
 }
 
 // Fiber stack base address is unavailable on Windows (and always returns nullptr).

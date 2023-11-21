@@ -103,7 +103,7 @@ namespace {
         for (TRecIdx i : xrange(node.GetKeysCount())) {
             Cerr << intend << " | > ";
 
-            auto cells = node.GetKeyCells(i, groupInfo.ColsKeyIdx);
+            auto cells = node.GetKeyCellsIter(i, groupInfo.ColsKeyIdx);
             for (TPos pos : xrange(cells.Count())) {
                 TString str;
                 DbgPrintValue(str, cells.Next(), groupInfo.KeyTypes[pos]);
@@ -131,7 +131,7 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(node.GetKeysCount(), keys.size());
         for (TRecIdx i : xrange(node.GetKeysCount())) {
             TVector<TCell> actualCells;
-            auto cells = node.GetKeyCells(i, groupInfo.ColsKeyIdx);
+            auto cells = node.GetKeyCellsIter(i, groupInfo.ColsKeyIdx);
             UNIT_ASSERT_VALUES_EQUAL(cells.Count(), groupInfo.ColsKeyIdx.size());
             
             for (TPos pos : xrange(cells.Count())) {
@@ -179,6 +179,41 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
             UNIT_ASSERT(!bitmap->IsNull(pos));
             bitmap->SetNull(pos);
             UNIT_ASSERT(bitmap->IsNull(pos));
+        }
+    }
+
+    Y_UNIT_TEST(CompareTo) {
+        auto compareTo = [] (TString a, TString b) {
+            TLayoutCook lay = MakeLayout();
+            TPartScheme scheme(lay.RowScheme()->Cols);
+
+            TBtreeIndexNodeWriter writer(new TPartScheme(lay.RowScheme()->Cols), { });
+
+            writer.AddChild(MakeChild(0));
+            TSerializedCellVec aa(a);
+            writer.AddKey(aa.GetCells());
+            writer.AddChild(MakeChild(1));
+
+            auto node = TBtreeIndexNode(writer.Finish());
+            TSerializedCellVec bb(b);
+            return node.GetKeyCellsIter(0, scheme.GetLayout({}).ColsKeyIdx)
+                .CompareTo(bb.GetCells(), lay.RowScheme()->Keys.Get());
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(compareTo(MakeKey(100), MakeKey(101)), -1);
+        UNIT_ASSERT_VALUES_EQUAL(compareTo(MakeKey(100), MakeKey(100)), 0);
+        UNIT_ASSERT_VALUES_EQUAL(compareTo(MakeKey(101), MakeKey(100)), 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(compareTo(MakeKey(100, "a"), MakeKey(100, "b")), -1);
+        UNIT_ASSERT_VALUES_EQUAL(compareTo(MakeKey(100, "a"), MakeKey(100, "a")), 0);
+        UNIT_ASSERT_VALUES_EQUAL(compareTo(MakeKey(100, "b"), MakeKey(100, "a")), 1);
+        
+        UNIT_ASSERT_VALUES_EQUAL(compareTo(MakeKey(100), MakeKey(100, "a")), -1);
+        UNIT_ASSERT_VALUES_EQUAL(compareTo(MakeKey(100, "a"), MakeKey(100)), 1);
+
+        { // key shorter than defaults extends with +inf cells
+            TVector<TCell> cells = {TCell::Make(1u), TCell(), TCell::Make(true)};
+            UNIT_ASSERT_VALUES_EQUAL(compareTo(MakeKey(1u, { }, true, 2u), TSerializedCellVec::Serialize(cells)), -1);
         }
     }
 
@@ -834,7 +869,15 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
 }
 
 Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
-    void AssertEqual(const TPartBtreeIndexIt& bTree, const TPartIndexIt& flat, const TString& message) {
+    void AssertEqual(const TPartBtreeIndexIt& bTree, EReady bTreeReady, const TPartIndexIt& flat, EReady flatReady, const TString& message, bool allowFirstLastPageDifference = false) {
+        // Note: it's possible that B-Tree index don't return Gone status for keys before the first page or keys after the last page
+        if (allowFirstLastPageDifference && flatReady == EReady::Gone && bTreeReady == EReady::Data && 
+                (bTree.GetRowId() == 0 || bTree.GetNextRowId() == bTree.GetEndRowId())) {
+            UNIT_ASSERT_C(bTree.IsValid(), message);
+            return;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(bTreeReady, flatReady, message);
         UNIT_ASSERT_VALUES_EQUAL_C(bTree.IsValid(), flat.IsValid(), message);
         if (flat.IsValid()) {
             UNIT_ASSERT_VALUES_EQUAL_C(bTree.GetPageId(), flat.GetPageId(), message);
@@ -844,14 +887,32 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     }
 
     template<typename TIter>
-    EReady SeekRowId(TIter& iter, TRowId rowId) {
-        for (ui32 attempt : xrange(10)) {
-            Y_UNUSED(attempt);
+    EReady SeekRowId(TIter& iter, TRowId rowId, const TString& message, ui32 failsAllowed = 10) {
+        while (true) {
             if (auto ready = iter.Seek(rowId); ready != EReady::Page) {
                 return ready;
             }
+            UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
         }
-        UNIT_ASSERT_C(false, "Too many attempts");
+        return EReady::Page;
+    }
+
+    template<typename TIter>
+    EReady SeekKey(TIter& iter, ESeek seek, bool reverse, TCells key, const TKeyCellDefaults *keyDefaults, const TString& message, ui32 failsAllowed = 10) {
+        const auto doSeek = [&] () {
+            if (reverse) {
+                return iter.SeekReverse(seek, key, keyDefaults);
+            } else {
+                return iter.Seek(seek, key, keyDefaults);
+            }
+        };
+
+        while (true) {
+            if (auto ready = doSeek(); ready != EReady::Page) {
+                return ready;
+            }
+            UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
+        }
         return EReady::Page;
     }
 
@@ -866,15 +927,51 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
                 // checking initial seek:
                 {
                     TString message = TStringBuilder() << "SeekRowId<" << typeid(TEnv).name() << "> " << rowId1;
-                    UNIT_ASSERT_VALUES_EQUAL_C(SeekRowId(bTree, rowId1), SeekRowId(flat, rowId1), message);
-                    AssertEqual(bTree, flat, message);
+                    EReady bTreeReady = SeekRowId(bTree, rowId1, message);
+                    EReady flatReady = SeekRowId(flat, rowId1, message);
+                    UNIT_ASSERT_VALUES_EQUAL(bTreeReady, rowId1 < part.Stat.Rows ? EReady::Data : EReady::Gone);
+                    AssertEqual(bTree, bTreeReady, flat, flatReady, message);
                 }
 
                 // checking repositioning:
                 {
                     TString message = TStringBuilder() << "SeekRowId<" << typeid(TEnv).name() << "> " << rowId1 << " -> " << rowId2;
-                    UNIT_ASSERT_VALUES_EQUAL_C(SeekRowId(bTree, rowId2), SeekRowId(flat, rowId2), message);
-                    AssertEqual(bTree, flat, message);
+                    EReady bTreeReady = SeekRowId(bTree, rowId2, message);
+                    EReady flatReady = SeekRowId(flat, rowId2, message);
+                    UNIT_ASSERT_VALUES_EQUAL(bTreeReady, rowId2 < part.Stat.Rows ? EReady::Data : EReady::Gone);
+                    AssertEqual(bTree, bTreeReady, flat, flatReady, message);
+                }
+            }
+        }
+    }
+
+    template<typename TEnv>
+    void CheckSeekKey(const TPartStore& part, ui32 rows, const TKeyCellDefaults *keyDefaults) {
+        for (bool reverse : {false, true}) {
+            for (ESeek seek : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
+                for (ui32 keyId : xrange(0u, rows + 2)) {
+                    TVector<TCell> key{TCell::Make(keyId / 7), TCell::Make(keyId % 7)};
+
+                    while (true) {
+                        TEnv env;
+                        TPartBtreeIndexIt bTree(&part, &env, { });
+                        TPartIndexIt flat(&part, &env, { });
+
+                        TStringBuilder message = TStringBuilder() << (reverse ?  "SeekKeyReverse<" : "SeekKey<") << typeid(TEnv).name() << ">(" << seek << ") ";
+                        for (auto c : key) {
+                            message << c.AsValue<ui32>() << " ";
+                        }
+                        
+                        EReady bTreeReady = SeekKey(bTree, seek, reverse, key, keyDefaults, message);
+                        EReady flatReady = SeekKey(flat, seek, reverse, key, keyDefaults, message);
+                        UNIT_ASSERT_VALUES_EQUAL_C(bTreeReady, key.empty() ? flatReady : EReady::Data, "Can't be exhausted");
+                        AssertEqual(bTree, bTreeReady, flat, flatReady, message, !key.empty());
+
+                        if (!key) {
+                            break;
+                        }
+                        key.pop_back();
+                    }
                 }
             }
         }
@@ -891,7 +988,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
         conf.WriteBTreeIndex = true;
         TPartCook cook(lay, conf);
         
-        for (ui32 i : xrange(rows)) {
+        for (ui32 i : xrange(1u, rows + 1)) {
             cook.Add(*TSchemedCookRow(*lay).Col(i / 7, i % 7));
         }
 
@@ -905,6 +1002,8 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
 
         CheckSeekRowId<TTestEnv>(part);
         CheckSeekRowId<TTouchEnv>(part);
+        CheckSeekKey<TTestEnv>(part, rows, eggs.Scheme->Keys.Get());
+        CheckSeekKey<TTouchEnv>(part, rows, eggs.Scheme->Keys.Get());
     }
 
     Y_UNIT_TEST(NoNodes) {

@@ -13,27 +13,88 @@ class TPartBtreeIndexIt {
     using TGroupId = NPage::TGroupId;
     using TRecIdx = NPage::TRecIdx;
     using TChild = TBtreeIndexNode::TChild;
+    using TColumns = TBtreeIndexNode::TColumns;
+    using TCellsIterable = TBtreeIndexNode::TCellsIterable;
+    using TCellsIter = TBtreeIndexNode::TCellsIter;
     using TBtreeIndexMeta = NPage::TBtreeIndexMeta;
 
     struct TNodeState {
         TChild Meta;
         TRowId BeginRowId;
         TRowId EndRowId;
-        // TCells BeginKey;
-        // TCells EndKey;
+        TCellsIterable BeginKey;
+        TCellsIterable EndKey;
         std::optional<TBtreeIndexNode> Node;
         std::optional<TRecIdx> Pos;
 
-        TNodeState(TChild meta, TRowId beginRowId, TRowId endRowId)
+        TNodeState(TChild meta, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, TCellsIterable endKey)
             : Meta(meta)
             , BeginRowId(beginRowId)
             , EndRowId(endRowId)
+            , BeginKey(beginKey)
+            , EndKey(endKey)
         { 
         }
+    };
 
-        bool HasRow(TRowId rowId) const {
-            return BeginRowId <= rowId && rowId < EndRowId;
+    struct TSeekRowId {
+        TSeekRowId(TRowId rowId)
+            : RowId(rowId)
+        {}
+
+        bool BelongsTo(const TNodeState& state) const noexcept {
+            return TBtreeIndexNode::Has(RowId, state.BeginRowId, state.EndRowId);
         }
+
+        TRecIdx Do(const TNodeState& state) const noexcept {
+            return state.Node->Seek(RowId, state.Pos);
+        }
+
+        const TRowId RowId;
+    };
+
+    struct TSeekKey {
+        TSeekKey(ESeek seek, TCells key, TColumns columns, const TKeyCellDefaults *keyDefaults)
+            : Seek(seek)
+            , Key(key)
+            , Columns(columns)
+            , KeyDefaults(keyDefaults)
+        {}
+
+        bool BelongsTo(const TNodeState& state) const noexcept {
+            return TBtreeIndexNode::Has(Seek, Key, state.BeginKey, state.EndKey, KeyDefaults);
+        }
+
+        TRecIdx Do(const TNodeState& state) const noexcept {
+            return state.Node->Seek(Seek, Key, Columns, KeyDefaults);
+        }
+
+        const ESeek Seek;
+        const TCells Key;
+        const TColumns Columns;
+        const TKeyCellDefaults* const KeyDefaults;
+    };
+
+    struct TSeekKeyReverse {
+        TSeekKeyReverse(ESeek seek, TCells key, TColumns columns, const TKeyCellDefaults *keyDefaults)
+            : Seek(seek)
+            , Key(key)
+            , Columns(columns)
+            , KeyDefaults(keyDefaults)
+        {}
+
+        bool BelongsTo(const TNodeState& state) const noexcept {
+            return TBtreeIndexNode::HasReverse(Seek, Key, state.BeginKey, state.EndKey, KeyDefaults);
+        }
+
+        TRecIdx Do(const TNodeState& state) const noexcept {
+            return state.Node->SeekReverse(Seek, Key, Columns, KeyDefaults);
+        }
+
+        const ESeek Seek;
+        const TCells Key;
+        const TColumns Columns;
+        const TKeyCellDefaults* const KeyDefaults;
     };
 
 public:
@@ -41,46 +102,59 @@ public:
         : Part(part)
         , Env(env)
         , GroupId(groupId)
+        , GroupInfo(part->Scheme->GetLayout(groupId))
         , Meta(groupId.IsMain() ? part->IndexPages.BTreeGroups[groupId.Index] : part->IndexPages.BTreeHistoric[groupId.Index])
     {
-        State.emplace_back(Meta, 0, Meta.Count);
+        const static TCellsIterable EmptyKey(static_cast<const char*>(nullptr), TColumns());
+        State.emplace_back(Meta, 0, GetEndRowId(), EmptyKey, EmptyKey);
     }
     
     EReady Seek(TRowId rowId) {
-        if (rowId >= Meta.Count) {
+        if (rowId >= GetEndRowId()) {
             return Exhaust();
         }
 
-        while (State.size() > 1 && !State.back().HasRow(rowId)) {
-            State.pop_back();
-        }
+        return DoSeek<TSeekRowId>({rowId});
+    }
 
-        if (IsExhausted()) {
-            // don't use exhausted state as an initial one
-            State[0].Pos = { };
-        }
-
-        for (size_t level : xrange(State.size() - 1, Meta.LevelsCount)) {
-            auto &state = State[level];
-            Y_ABORT_UNLESS(state.HasRow(rowId));
-            if (!TryLoad(state)) {
-                // exiting with an intermediate state
-                Y_DEBUG_ABORT_UNLESS(!IsLeaf() && !IsExhausted());
-                return EReady::Page;
+    /**
+     * Searches for the first page that may contain given key with specified seek mode
+     *
+     * Result is approximate and may be off by one page
+     */
+    EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) {
+        if (!key) {
+            // Special treatment for an empty key
+            switch (seek) {
+                case ESeek::Lower:
+                    return Seek(0);
+                case ESeek::Exact:
+                case ESeek::Upper:
+                    return Seek(GetEndRowId());
             }
-            auto pos = state.Node->Seek(rowId, state.Pos);
-            state.Pos.emplace(pos);
-            
-            auto child = state.Node->GetChild(pos);
-            TRowId firstRowId = pos ? state.Node->GetChild(pos - 1).Count : state.BeginRowId;
-            TRowId lastRowId = child.Count;
-            State.emplace_back(child, firstRowId, lastRowId);
         }
 
-        // State.back() points to the target data page
-        Y_ABORT_UNLESS(IsLeaf());
-        Y_ABORT_UNLESS(State.back().HasRow(rowId));
-        return EReady::Data;
+        return DoSeek<TSeekKey>({seek, key, GroupInfo.ColsKeyIdx, keyDefaults});
+    }
+
+    /**
+     * Searches for the first page (in reverse) that may contain given key with specified seek mode
+     *
+     * Result is approximate and may be off by one page
+     */
+    EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) {
+        if (!key) {
+            // Special treatment for an empty key
+            switch (seek) {
+                case ESeek::Lower:
+                    return Seek(GetEndRowId() - 1);
+                case ESeek::Exact:
+                case ESeek::Upper:
+                    return Seek(GetEndRowId());
+            }
+        }
+
+        return DoSeek<TSeekKeyReverse>({seek, key, GroupInfo.ColsKeyIdx, keyDefaults});
     }
 
     // EReady Next() {
@@ -114,7 +188,41 @@ public:
         return State.back().EndRowId;
     }
 
+    TRowId GetEndRowId() const {
+        return Meta.Count;
+    }
+
 private:
+    template<typename TSeek>
+    EReady DoSeek(TSeek seek) {
+        while (State.size() > 1 && !seek.BelongsTo(State.back())) {
+            State.pop_back();
+        }
+
+        if (IsExhausted()) {
+            // don't use exhausted state as an initial one
+            State[0].Pos = { };
+        }
+
+        for (size_t level : xrange(State.size() - 1, Meta.LevelsCount)) {
+            auto &state = State[level];
+            Y_DEBUG_ABORT_UNLESS(seek.BelongsTo(state));
+            if (!TryLoad(state)) {
+                // exiting with an intermediate state
+                Y_DEBUG_ABORT_UNLESS(!IsLeaf() && !IsExhausted());
+                return EReady::Page;
+            }
+            auto pos = seek.Do(state);
+            
+            PushNextState(state, pos);
+        }
+
+        // State.back() points to the target data page
+        Y_ABORT_UNLESS(IsLeaf());
+        Y_DEBUG_ABORT_UNLESS(seek.BelongsTo(State.back()));
+        return EReady::Data;
+    }
+
     bool IsRoot() const noexcept {
         return State.size() == 1;
     }
@@ -137,6 +245,21 @@ private:
         return EReady::Gone;
     }
 
+    void PushNextState(TNodeState& current, TRecIdx pos) {
+        Y_ABORT_UNLESS(pos < current.Node->GetChildrenCount(), "Should point to some child");
+        current.Pos.emplace(pos);
+
+        auto child = current.Node->GetChild(pos);
+
+        TRowId beginRowId = pos ? current.Node->GetChild(pos - 1).Count : current.BeginRowId;
+        TRowId endRowId = child.Count;
+        
+        TCellsIterable beginKey = pos ? current.Node->GetKeyCellsIterable(pos - 1, GroupInfo.ColsKeyIdx) : current.BeginKey;
+        TCellsIterable endKey = pos < current.Node->GetKeysCount() ? current.Node->GetKeyCellsIterable(pos, GroupInfo.ColsKeyIdx) : current.EndKey;
+        
+        State.emplace_back(child, beginRowId, endRowId, beginKey, endKey);
+    }
+
     bool TryLoad(TNodeState& state) {
         if (state.Node) {
             return true;
@@ -154,6 +277,7 @@ private:
     const TPart* const Part;
     IPages* const Env;
     const TGroupId GroupId;
+    const TPartScheme::TGroupInfo& GroupInfo;
     const TBtreeIndexMeta Meta;
     TVector<TNodeState> State;
 };

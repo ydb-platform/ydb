@@ -47,6 +47,7 @@ namespace NKikimr::NTable::NPage {
     class TBtreeIndexNode {
     public:
         using TColumns = TArrayRef<const TPartScheme::TColumn>;
+        using TCells = TArrayRef<const TCell>;
 
 #pragma pack(push,1)
         struct THeader {
@@ -113,7 +114,14 @@ namespace NKikimr::NTable::NPage {
             {
             }
 
-            TPos Count()
+            TCellsIter(const TIsNullBitmap* isNullBitmap, TColumns columns, const char* ptr)
+                : IsNullBitmap(isNullBitmap)
+                , Columns(columns)
+                , Ptr(ptr)
+            {
+            }
+
+            TPos Count() const noexcept
             {
                 return Columns.size();
             }
@@ -142,11 +150,61 @@ namespace NKikimr::NTable::NPage {
                 return result;
             }
 
+            int CompareTo(const TCells key, const TKeyCellDefaults *keyDefaults) noexcept
+            {
+                Y_ABORT_UNLESS(Pos == 0, "Shouldn't be used");
+
+                for (TPos it = 0; it < Min(key.size(), keyDefaults->Size()); it++) {
+                    const TCell left = it < Columns.size() ? Next() : keyDefaults->Defs[it];
+
+                    if (int cmp = CompareTypedCells(left, key[it], keyDefaults->Types[it]))
+                        return cmp;
+                }
+
+                return key.size() < keyDefaults->Size() ? -1 : 0;
+            }
+
         private:
             const TIsNullBitmap* const IsNullBitmap;
             const TColumns Columns;
             const char* Ptr;
             TPos Pos = 0;
+        };
+
+        struct TCellsIterable {
+            TCellsIterable(const char* ptr, TColumns columns)
+                : IsNullBitmap(nullptr)
+                , Columns(columns)
+                , Ptr(ptr)
+            {
+            }
+
+            TCellsIterable(const TIsNullBitmap* isNullBitmap, TColumns columns)
+                : IsNullBitmap(isNullBitmap)
+                , Columns(columns)
+                , Ptr(reinterpret_cast<const char*>(IsNullBitmap) + IsNullBitmap->Length(columns.size()))
+            {
+            }
+
+            TPos Count() const noexcept
+            {
+                return Columns.size();
+            }
+
+            TCellsIter Iter() const noexcept
+            {
+                return {IsNullBitmap, Columns, Ptr};
+            }
+
+            int CompareTo(const TCells key, const TKeyCellDefaults *keyDefaults) const noexcept
+            {
+                return Iter().CompareTo(key, keyDefaults);
+            }
+
+        private:
+            const TIsNullBitmap* const IsNullBitmap;
+            const TColumns Columns;
+            const char* Ptr;
         };
 
     public:
@@ -195,26 +253,29 @@ namespace NKikimr::NTable::NPage {
             return GetKeysCount() + 1;
         }
 
-        TCellsIter GetKeyCells(TRecIdx pos, TColumns columns) const noexcept
+        TCellsIterable GetKeyCellsIterable(TRecIdx pos, TColumns columns) const noexcept
         {
-            if (IsFixedFormat()) {
-                const char* ptr = TDeref<const char>::At(Keys, pos * Header->FixedKeySize);
-                return TCellsIter(ptr, columns);
-            } else {
-                const TIsNullBitmap* isNullBitmap = TDeref<const TIsNullBitmap>::At(Keys, Offsets[pos].Offset);
-                return TCellsIter(isNullBitmap, columns);
-            }
+            return GetCells<TCellsIterable>(pos, columns);
         }
 
-        const TChild& GetChild(TPos pos) const noexcept
+        TCellsIter GetKeyCellsIter(TRecIdx pos, TColumns columns) const noexcept
+        {
+            return GetCells<TCellsIter>(pos, columns);
+        }
+
+        const TChild& GetChild(TRecIdx pos) const noexcept
         {
             return Children[pos];
         }
 
-        TRecIdx Seek(TRowId rowId, std::optional<TRecIdx> on = { }) const noexcept
+        static bool Has(TRowId rowId, TRowId beginRowId, TRowId endRowId) noexcept {
+            return beginRowId <= rowId && rowId < endRowId;
+        }
+
+        TRecIdx Seek(TRowId rowId, std::optional<TRecIdx> on) const noexcept
         {
             const TRecIdx childrenCount = GetChildrenCount();
-            if (on >= childrenCount) {
+            if (on && on >= childrenCount) {
                 Y_DEBUG_ABORT_UNLESS(false, "Should point to some child");
                 on = { };
             }
@@ -259,6 +320,93 @@ namespace NKikimr::NTable::NPage {
 
             Y_ABORT_UNLESS(result < childrenCount, "Should always seek some child");
             return result;
+        }
+
+        static bool Has(ESeek seek, TCells key, TCellsIterable beginKey, TCellsIterable endKey, const TKeyCellDefaults *keyDefaults) noexcept
+        {
+            Y_ABORT_UNLESS(key);
+            Y_UNUSED(seek);
+
+            return (!beginKey.Count() || beginKey.CompareTo(key, keyDefaults) <= 0)
+                && (!endKey.Count() || endKey.CompareTo(key, keyDefaults) > 0);
+        }
+
+        /**
+        * Searches for the first child that may contain given key with specified seek mode
+        *
+        * Result is approximate and may be off by one page
+        */
+        TRecIdx Seek(ESeek seek, TCells key, TColumns columns, const TKeyCellDefaults *keyDefaults) const noexcept
+        {
+            Y_ABORT_UNLESS(key);
+            Y_UNUSED(seek);
+
+            const auto range = xrange(0u, GetKeysCount());
+
+            const auto cmp = [this, columns, keyDefaults](TCells key, TPos pos) {
+                return GetKeyCellsIter(pos, columns).CompareTo(key, keyDefaults) > 0;
+            };
+
+            // find a first key greater than the given key and then go to its left child
+            // if such a key doesn't exist, go to the last child
+            return *std::upper_bound(range.begin(), range.end(), key, cmp);
+        }
+
+        static bool HasReverse(ESeek seek, TCells key, TCellsIterable beginKey, TCellsIterable endKey, const TKeyCellDefaults *keyDefaults) noexcept
+        {
+            Y_ABORT_UNLESS(key);
+
+            // ESeek::Upper can skip a page with given key
+            const bool endKeyExclusive = seek != ESeek::Upper;
+            return (!beginKey.Count() || beginKey.CompareTo(key, keyDefaults) <= 0)
+                && (!endKey.Count() || endKey.CompareTo(key, keyDefaults) >= endKeyExclusive);
+        }
+
+        /**
+        * Searches for the first child (in reverse) that may contain given key with specified seek mode
+        *
+        * Result is approximate and may be off by one page
+        */
+        TRecIdx SeekReverse(ESeek seek, TCells key, TColumns columns, const TKeyCellDefaults *keyDefaults) const noexcept
+        {
+            Y_ABORT_UNLESS(key);
+
+            const auto range = xrange(0u, GetKeysCount());
+
+            switch (seek) {
+                case ESeek::Exact:
+                case ESeek::Lower: {
+                    const auto cmp = [this, columns, keyDefaults](TCells key, TPos pos) {
+                        return GetKeyCellsIter(pos, columns).CompareTo(key, keyDefaults) > 0;
+                    };
+                    // find a first key greater than the given key and then go to its left child
+                    // if such a key doesn't exist, go to the last child
+                    return *std::upper_bound(range.begin(), range.end(), key, cmp);
+                };
+                case ESeek::Upper: {
+                    const auto cmp = [this, columns, keyDefaults](TPos pos, TCells key) {
+                        return GetKeyCellsIter(pos, columns).CompareTo(key, keyDefaults) < 0;
+                    };
+                    // find a first key equal or greater than the given key and then go to its left child
+                    // if such a key doesn't exist, go to the last child
+                    return *std::lower_bound(range.begin(), range.end(), key, cmp);
+                };
+                default:
+                    Y_ABORT("Unsupported seek mode");
+            }
+        }
+
+    private:
+        template <typename TCellsType>
+        TCellsType GetCells(TRecIdx pos, TColumns columns) const noexcept
+        {
+            if (IsFixedFormat()) {
+                const char* ptr = TDeref<const char>::At(Keys, pos * Header->FixedKeySize);
+                return TCellsType(ptr, columns);
+            } else {
+                const TIsNullBitmap* isNullBitmap = TDeref<const TIsNullBitmap>::At(Keys, Offsets[pos].Offset);
+                return TCellsType(isNullBitmap, columns);
+            }
         }
 
     private:

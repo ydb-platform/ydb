@@ -5097,12 +5097,20 @@ private:
 
                 TSet<TStringBuf> memberSet;
                 if (HaveFieldsSubset(visitLambda->TailPtr(), visitLambda->Head().Head(), memberSet, *parentsMap)) {
-                    auto reduceBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::ReduceBy);
-                    memberSet.insert(reduceBy.cbegin(), reduceBy.cend());
-                    auto sortBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::SortBy);
-                    memberSet.insert(sortBy.cbegin(), sortBy.cend());
-
                     auto itemType = visitLambda->Head().Head().GetTypeAnn()->Cast<TStructExprType>();
+                    auto reduceBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::ReduceBy);
+                    for (auto& col: reduceBy) {
+                        if (auto type = itemType->FindItemType(col)) {
+                            memberSet.insert(type->Cast<TItemExprType>()->GetName());
+                        }
+                    }
+                    auto sortBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::SortBy);
+                    for (auto& col: sortBy) {
+                        if (auto type = itemType->FindItemType(col)) {
+                            memberSet.insert(type->Cast<TItemExprType>()->GetName());
+                        }
+                    }
+
                     if (memberSet.size() < itemType->GetSize()) {
                         sectionFields.emplace_back(inputNum, std::move(memberSet));
                     }

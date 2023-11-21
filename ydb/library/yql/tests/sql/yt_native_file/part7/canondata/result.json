@@ -2146,16 +2146,16 @@
     ],
     "test.test[join-premap_common_multiparents--Debug]": [
         {
-            "checksum": "e92588219273fede443ec074330680dd",
-            "size": 6908,
-            "uri": "https://{canondata_backend}/1937424/844c51c227824880c7225d0ff864a8ccce1a32b7/resource.tar.gz#test.test_join-premap_common_multiparents--Debug_/opt.yql"
+            "checksum": "0ddf1a636c00f3595c4bd73658b5ff54",
+            "size": 6943,
+            "uri": "https://{canondata_backend}/1923547/a6eaafd5fa014257fb2d94430d6589d0826d46c5/resource.tar.gz#test.test_join-premap_common_multiparents--Debug_/opt.yql"
         }
     ],
     "test.test[join-premap_common_multiparents--Plan]": [
         {
-            "checksum": "6e44c3d0c321c4b2445171a8c8a6ec93",
-            "size": 11408,
-            "uri": "https://{canondata_backend}/1936273/871343d6dc76e9a4ae1fb66c0ef95119935a3b0e/resource.tar.gz#test.test_join-premap_common_multiparents--Plan_/plan.txt"
+            "checksum": "e56138a8837cd55a7d1f1553aafbac87",
+            "size": 12109,
+            "uri": "https://{canondata_backend}/1923547/a6eaafd5fa014257fb2d94430d6589d0826d46c5/resource.tar.gz#test.test_join-premap_common_multiparents--Plan_/plan.txt"
         }
     ],
     "test.test[join-premap_common_multiparents--Results]": [

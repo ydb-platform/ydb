@@ -41,8 +41,9 @@ public:
         , ReadMetadata(Context->GetReadMetadata())
         , Blobs(blobs)
     {
-
+        AFL_VERIFY(Blobs.size());
     }
+
 };
 
 class TAssembleFilter: public TAssemblerCommon, public NColumnShard::TMonitoringObjectsCounter<TAssembleFilter, true, true> {
@@ -57,7 +58,6 @@ private:
     std::set<ui32> FilterColumnIds;
     const bool UseFilter = true;
     const NColumnShard::TCounterGuard TaskGuard;
-    THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> Blobs;
 protected:
     virtual bool DoApply(IDataReader& owner) const override;
     virtual bool DoExecute() override;

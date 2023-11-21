@@ -5,71 +5,211 @@
 
 namespace NKikimr::NOlap::NPlainReader {
 
+class TFilterContext {
+private:
+    TPortionInfo::TPreparedBatchData BatchAssembler;
+    YDB_ACCESSOR_DEF(std::shared_ptr<TSpecialReadContext>, Context);
+    YDB_ACCESSOR_DEF(std::set<ui32>, ReadyColumnIds);
+    std::optional<ui32> OriginalCount;
+    YDB_READONLY(std::shared_ptr<NArrow::TColumnFilter>, AppliedFilter, std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter()));
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, EarlyFilter);
+    YDB_READONLY_DEF(std::shared_ptr<arrow::Table>, ResultTable);
+public:
+    TFilterContext(TPortionInfo::TPreparedBatchData&& batchAssembler, const std::shared_ptr<TSpecialReadContext>& context)
+        : BatchAssembler(std::move(batchAssembler))
+        , Context(context)
+    {
+
+    }
+
+    ui32 GetOriginalCountVerified() const {
+        AFL_VERIFY(OriginalCount);
+        return *OriginalCount;
+    }
+
+    std::shared_ptr<arrow::Table> AppendToResult(const std::set<ui32>& columnIds) {
+        TPortionInfo::TPreparedBatchData::TAssembleOptions options;
+        options.IncludedColumnIds = columnIds;
+        for (auto it = options.IncludedColumnIds->begin(); it != options.IncludedColumnIds->end();) {
+            if (!ReadyColumnIds.emplace(*it).second) {
+                it = options.IncludedColumnIds->erase(it);
+            } else {
+                ++it;
+            }
+        }
+        if (options.IncludedColumnIds->empty()) {
+            AFL_VERIFY(ResultTable);
+            return ResultTable;
+        }
+        auto table = BatchAssembler.AssembleTable(options);
+        AFL_VERIFY(table);
+        if (!OriginalCount) {
+            OriginalCount = table->num_rows();
+        }
+        AFL_VERIFY(AppliedFilter->Apply(table));
+        if (!ResultTable) {
+            ResultTable = table;
+        } else {
+            AFL_VERIFY(NArrow::MergeBatchColumns({ResultTable, table}, ResultTable));
+        }
+        return ResultTable;
+    }
+
+    void ApplyFilter(const std::shared_ptr<NArrow::TColumnFilter>& filter, const bool useFilter) {
+        if (useFilter) {
+            filter->Apply(ResultTable);
+            *AppliedFilter = AppliedFilter->CombineSequentialAnd(*filter);
+        } else if (EarlyFilter) {
+            *EarlyFilter = EarlyFilter->And(*filter);
+        } else {
+            EarlyFilter = filter;
+        }
+    }
+};
+
+class IFilterConstructor {
+private:
+    const std::set<ui32> ColumnIds;
+protected:
+    virtual std::shared_ptr<NArrow::TColumnFilter> BuildFilter(const TFilterContext& filterContext, const std::shared_ptr<arrow::Table>& data) const = 0;
+public:
+    IFilterConstructor(const std::set<ui32>& columnIds)
+        : ColumnIds(columnIds)
+    {
+        AFL_VERIFY(ColumnIds.size());
+    }
+
+    virtual ~IFilterConstructor() = default;
+
+    void Execute(TFilterContext& filterContext, const bool useFilter) {
+        auto result = filterContext.AppendToResult(ColumnIds);
+        auto localFilter = BuildFilter(filterContext, result);
+        AFL_VERIFY(!!localFilter);
+        filterContext.ApplyFilter(localFilter, useFilter);
+    }
+};
+
+class TPredicateFilter: public IFilterConstructor {
+private:
+    using TBase = IFilterConstructor;
+protected:
+    virtual std::shared_ptr<NArrow::TColumnFilter> BuildFilter(const TFilterContext& filterContext, const std::shared_ptr<arrow::Table>& data) const override {
+        return std::make_shared<NArrow::TColumnFilter>(filterContext.GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(data));
+    }
+public:
+    TPredicateFilter(const std::shared_ptr<TSpecialReadContext>& ctx)
+        : TBase(ctx->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(ctx->GetReadMetadata()->GetIndexInfo())) {
+
+    }
+};
+
+class TRestoreMergeData: public IFilterConstructor {
+private:
+    using TBase = IFilterConstructor;
+protected:
+    virtual std::shared_ptr<NArrow::TColumnFilter> BuildFilter(const TFilterContext& /*filterContext*/, const std::shared_ptr<arrow::Table>& /*data*/) const override {
+        return std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter());
+    }
+public:
+    TRestoreMergeData(const std::shared_ptr<TSpecialReadContext>& ctx)
+        : TBase(ctx->GetMergeColumns()->GetColumnIds()) {
+
+    }
+};
+
+class TRestoreSnapshotData: public IFilterConstructor {
+private:
+    using TBase = IFilterConstructor;
+protected:
+    virtual std::shared_ptr<NArrow::TColumnFilter> BuildFilter(const TFilterContext& /*filterContext*/, const std::shared_ptr<arrow::Table>& /*data*/) const override {
+        return std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter());
+    }
+public:
+    TRestoreSnapshotData(const std::shared_ptr<TSpecialReadContext>& ctx)
+        : TBase(ctx->GetSpecColumns()->GetColumnIds()) {
+
+    }
+};
+
+class TSnapshotFilter: public IFilterConstructor {
+private:
+    using TBase = IFilterConstructor;
+protected:
+    virtual std::shared_ptr<NArrow::TColumnFilter> BuildFilter(const TFilterContext& filterContext, const std::shared_ptr<arrow::Table>& data) const override {
+        return std::make_shared<NArrow::TColumnFilter>(MakeSnapshotFilter(data, filterContext.GetContext()->GetReadMetadata()->GetSnapshot()));
+    }
+public:
+    TSnapshotFilter(const std::shared_ptr<TSpecialReadContext>& ctx)
+        : TBase(ctx->GetSpecColumns()->GetColumnIds()) {
+
+    }
+};
+
+class TProgramStepFilter: public IFilterConstructor {
+private:
+    using TBase = IFilterConstructor;
+    std::shared_ptr<NSsa::TProgramStep> Step;
+protected:
+    virtual std::shared_ptr<NArrow::TColumnFilter> BuildFilter(const TFilterContext& /*filterContext*/, const std::shared_ptr<arrow::Table>& data) const override {
+        return Step->BuildFilter(data);
+    }
+public:
+    TProgramStepFilter(const std::shared_ptr<NSsa::TProgramStep>& step)
+        : TBase(step->GetFilterOriginalColumnIds())
+        , Step(step)
+    {
+    }
+};
+
 bool TAssembleFilter::DoExecute() {
-    /// @warning The replace logic is correct only in assumption that predicate is applied over a part of ReplaceKey.
-    /// It's not OK to apply predicate before replacing key duplicates otherwise.
-    /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
-
-    TPortionInfo::TPreparedBatchData::TAssembleOptions options;
-    options.IncludedColumnIds = FilterColumnIds;
-    ui32 needSnapshotColumnsRestore = 0;
-    const bool needSnapshotsFilter = true;// ReadMetadata->GetSnapshot() <= RecordsMaxSnapshot;
-    if (!needSnapshotsFilter && UseFilter) {
-        for (auto&& i : TIndexInfo::GetSpecialColumnIds()) {
-            needSnapshotColumnsRestore += options.IncludedColumnIds->erase(i) ? 1 : 0;
-        }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_special_columns");
+    std::vector<std::shared_ptr<IFilterConstructor>> filters;
+    if (!UseFilter) {
+        filters.emplace_back(std::make_shared<TRestoreMergeData>(Context));
     }
-    AFL_VERIFY(needSnapshotColumnsRestore == 0 || needSnapshotColumnsRestore == TIndexInfo::GetSpecialColumnIds().size());
-
-    auto batchConstructor = BuildBatchConstructor(FilterColumnIds);
-
-    auto batch = batchConstructor.AssembleTable(options);
-    Y_ABORT_UNLESS(batch);
-    Y_ABORT_UNLESS(batch->num_rows());
-    if (!needSnapshotsFilter && UseFilter && needSnapshotColumnsRestore) {
-        for (auto&& f : TIndexInfo::ArrowSchemaSnapshot()->fields()) {
-            auto c = NArrow::TStatusValidator::GetValid(arrow::MakeArrayOfNull(f->type(), batch->num_rows()));
-            batch = NArrow::TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), f, std::make_shared<arrow::ChunkedArray>(c)));
-        }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "restore_fake_special_columns");
+    const bool needSnapshotsFilter = ReadMetadata->GetSnapshot() < RecordsMaxSnapshot;
+    if (needSnapshotsFilter) {
+        filters.emplace_back(std::make_shared<TSnapshotFilter>(Context));
+    } else {
+        filters.emplace_back(std::make_shared<TRestoreSnapshotData>(Context));
+    }
+    if (!ReadMetadata->GetPKRangesFilter().IsEmpty()) {
+        filters.emplace_back(std::make_shared<TPredicateFilter>(Context));
     }
 
-    OriginalCount = batch->num_rows();
-    AppliedFilter = std::make_shared<NArrow::TColumnFilter>(NOlap::FilterPortion(batch, *ReadMetadata, needSnapshotsFilter));
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "first_filter_using");
-    if (!AppliedFilter->Apply(batch)) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_data")("original_count", OriginalCount)("columns_count", FilterColumnIds.size());
+    for (auto&& i : ReadMetadata->GetProgram().GetSteps()) {
+        if (!i->IsFilterOnly()) {
+            break;
+        }
+
+        filters.emplace_back(std::make_shared<TProgramStepFilter>(i));
+    }
+
+    TFilterContext filterContext(BuildBatchConstructor(FilterColumnIds), Context);
+
+    for (auto&& f : filters) {
+        f->Execute(filterContext, UseFilter);
+        AFL_VERIFY(filterContext.GetResultTable());
+        if (filterContext.GetResultTable()->num_rows() == 0 || (filterContext.GetEarlyFilter() && filterContext.GetEarlyFilter()->IsTotalDenyFilter())) {
+            break;
+        }
+    }
+
+    AppliedFilter = filterContext.GetAppliedFilter();
+    EarlyFilter = filterContext.GetEarlyFilter();
+
+    auto batch = filterContext.GetResultTable();
+    if (!batch || batch->num_rows() == 0) {
         return true;
     }
 
-    auto earlyFilter = ReadMetadata->GetProgram().ApplyEarlyFilter(batch, UseFilter);
-    if (earlyFilter) {
-        if (UseFilter) {
-            AppliedFilter = std::make_shared<NArrow::TColumnFilter>(AppliedFilter->CombineSequentialAnd(*earlyFilter));
-            if (!batch || !batch->num_rows()) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_data")("original_count", OriginalCount)("columns_count", FilterColumnIds.size());;
-                return true;
-            }
-        } else {
-            EarlyFilter = earlyFilter;
-        }
-    }
-
-    if ((size_t)batch->schema()->num_fields() < batchConstructor.GetColumnsCount()) {
-        TPortionInfo::TPreparedBatchData::TAssembleOptions options;
-        options.ExcludedColumnIds = FilterColumnIds;
-        auto addBatch = batchConstructor.AssembleTable(options);
-        Y_ABORT_UNLESS(addBatch);
-        Y_ABORT_UNLESS(AppliedFilter->Apply(addBatch));
-        Y_ABORT_UNLESS(NArrow::MergeBatchColumns({batch, addBatch}, batch, batchConstructor.GetSchemaColumnNames(), true));
-    }
+    OriginalCount = filterContext.GetOriginalCountVerified();
+    auto fullTable = filterContext.AppendToResult(FilterColumnIds);
     AFL_VERIFY(AppliedFilter->IsTotalAllowFilter() || AppliedFilter->Size() == OriginalCount)("original", OriginalCount)("af_count", AppliedFilter->Size());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "not_skip_data")
-        ("original_count", OriginalCount)("filtered_count", batch->num_rows())("columns_count", batchConstructor.GetColumnsCount())("use_filter", UseFilter)
-        ("filter_columns", FilterColumnIds.size())("af_count", AppliedFilter->Size())("ef_count", earlyFilter ? earlyFilter->Size() : 0);
+        ("original_count", OriginalCount)("filtered_count", batch->num_rows())("use_filter", UseFilter)
+        ("filter_columns", FilterColumnIds.size())("af_count", AppliedFilter->Size())("ef_count", EarlyFilter ? EarlyFilter->Size() : 0);
 
-    FilteredBatch = NArrow::ToBatch(batch, true);
+    FilteredBatch = NArrow::ToBatch(fullTable, true);
     return true;
 }
 

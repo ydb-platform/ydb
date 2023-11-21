@@ -25,6 +25,7 @@ private:
         }
         {
             ResultBatch = NArrow::ExtractColumns(ResultBatch, Context->GetReadMetadata()->GetResultSchema());
+            AFL_VERIFY(ResultBatch);
             AFL_VERIFY(ResultBatch->num_columns() == Context->GetReadMetadata()->GetResultSchema()->num_fields());
             NArrow::TStatusValidator::Validate(Context->GetReadMetadata()->GetProgram().ApplyProgram(ResultBatch));
         }

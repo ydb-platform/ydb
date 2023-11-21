@@ -105,18 +105,6 @@ bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataSto
 std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
     auto& indexInfo = ResultIndexSchema->GetIndexInfo();
     std::set<ui32> result = GetPKRangesFilter().GetColumnIds(indexInfo);
-    if (LessPredicate) {
-        for (auto&& i : LessPredicate->ColumnNames()) {
-            result.emplace(indexInfo.GetColumnId(i));
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i);
-        }
-    }
-    if (GreaterPredicate) {
-        for (auto&& i : GreaterPredicate->ColumnNames()) {
-            result.emplace(indexInfo.GetColumnId(i));
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i);
-        }
-    }
     for (auto&& i : GetProgram().GetEarlyFilterColumns()) {
         auto id = indexInfo.GetColumnIdOptional(i);
         if (id) {

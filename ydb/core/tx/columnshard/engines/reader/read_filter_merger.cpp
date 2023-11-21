@@ -115,16 +115,28 @@ std::shared_ptr<arrow::RecordBatch> TMergePartialStream::SingleSourceDrain(const
             auto keys = SortHeap.Current().GetKeyColumns().SliceKeys(pos.GetPosition() + (include ? 0 : 1), resultSize);
             *lastResultPosition = TSortableBatchPosition(keys, 0, SortSchema->field_names(), {}, true);
         }
+        if (SortHeap.Current().GetFilter()) {
+            SortHeap.Current().GetFilter()->Apply(result, pos.GetPosition() + (include ? 0 : 1), resultSize);
+        }
     } else {
         result = SortHeap.Current().GetKeyColumns().SliceData(startPos, resultSize);
         if (lastResultPosition && resultSize) {
             auto keys = SortHeap.Current().GetKeyColumns().SliceKeys(startPos, resultSize);
-            *lastResultPosition = TSortableBatchPosition(keys, keys->num_rows() - 1, SortSchema->field_names(), {}, true);
+            *lastResultPosition = TSortableBatchPosition(keys, keys->num_rows() - 1, SortSchema->field_names(), {}, false);
+        }
+        if (SortHeap.Current().GetFilter()) {
+            SortHeap.Current().GetFilter()->Apply(result, startPos, resultSize);
+        }
+    }
+    if (!result || !result->num_rows()) {
+        if (lastResultPosition) {
+            *lastResultPosition = {};
         }
     }
 #ifndef NDEBUG
     NArrow::TStatusValidator::Validate(result->ValidateFull());
 #endif
+
     if (Reverse) {
         result = NArrow::ReverseRecords(result);
     }

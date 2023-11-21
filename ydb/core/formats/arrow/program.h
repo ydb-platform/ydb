@@ -292,6 +292,11 @@ public:
         if (!a.GetColumn().IsGenerated()) {
             FilterOriginalColumnIds.emplace(a.GetColumn().GetColumnId());
         }
+        for (auto&& i : a.GetArguments()) {
+            if (!i.IsGenerated()) {
+                FilterOriginalColumnIds.emplace(i.GetColumnId());
+            }
+        }
         Assignes.emplace_back(a);
     }
     void AddFilter(const TColumnInfo& f) {

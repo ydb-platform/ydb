@@ -12,11 +12,12 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TReadContext>, CommonContext);
 
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, SpecColumns);
+    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, MergeColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, EFColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, PKColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FFColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, ResultColumns);
-    
+
     TReadMetadata::TConstPtr ReadMetadata;
     std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
     std::shared_ptr<TColumnsSet> PKFFColumns;
@@ -64,6 +65,7 @@ public:
         *FFColumns = *FFColumns + *ResultColumns;
 
         PKColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetPKColumnIds(), ReadMetadata->GetIndexInfo());
+        MergeColumns = std::make_shared<TColumnsSet>(*PKColumns + *SpecColumns);
 
         TrivialEFFlag = EFColumns->ColumnsOnly(ReadMetadata->GetIndexInfo().ArrowSchemaSnapshot()->field_names());
 

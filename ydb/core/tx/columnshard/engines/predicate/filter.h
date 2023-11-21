@@ -12,6 +12,10 @@ private:
 public:
     TPKRangesFilter(const bool reverse);
 
+    bool IsEmpty() const {
+        return SortedRanges.empty() || FakeRanges;
+    }
+
     bool IsReverse() const {
         return ReverseFlag;
     }

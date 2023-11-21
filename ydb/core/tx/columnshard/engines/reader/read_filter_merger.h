@@ -158,6 +158,10 @@ private:
     public:
         NJson::TJsonValue DebugJson() const;
 
+        const std::shared_ptr<NArrow::TColumnFilter>& GetFilter() const {
+            return Filter;
+        }
+
         bool IsControlPoint() const {
             return ControlPointFlag;
         }

@@ -97,8 +97,6 @@ public:
     }
     virtual ~TReadMetadataBase() = default;
 
-    std::shared_ptr<NOlap::TPredicate> LessPredicate;
-    std::shared_ptr<NOlap::TPredicate> GreaterPredicate;
     ui64 Limit{0}; // TODO
 
     virtual void Dump(IOutputStream& out) const {

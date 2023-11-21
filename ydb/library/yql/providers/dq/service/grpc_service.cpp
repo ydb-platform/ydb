@@ -404,7 +404,7 @@ namespace NYql::NDqs {
                     Request->GetDiscard(),
                     GraphExecutionEventsActorId).Release());
                 auto controlId = Settings->EnableComputeActor.Get().GetOrElse(false) == false ? resultId
-                    :  RegisterChild(NYql::MakeTaskController(TraceId, executerId, resultId, Settings, NYql::NCommon::TServiceCounters(Counters, nullptr, "")).Release());
+                    :  RegisterChild(NYql::MakeTaskController(TraceId, executerId, resultId, Settings, NYql::NCommon::TServiceCounters(Counters, nullptr, ""), TDuration::Seconds(5)).Release());
                 Send(executerId, MakeHolder<TEvGraphRequest>(
                     *Request,
                     controlId,

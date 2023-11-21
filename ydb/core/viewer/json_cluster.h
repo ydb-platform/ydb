@@ -138,7 +138,7 @@ public:
             if (ni.NodeId <= dynamicNameserviceConfig->MaxStaticNodeId) {
                 SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvVDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
                 SendRequest(whiteboardServiceId,new TEvWhiteboard::TEvPDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
-                SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvBSGroupStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId); 
+                SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvBSGroupStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
             }
         }
         if (Tablets) {
@@ -148,6 +148,8 @@ public:
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
         EventLog.StartHandleNodesInfoTime = TActivationContext::Now();
+        NodesInfo = ev->Release();
+        // before making requests to Whiteboard with the Tablets parameter, we need to review the TEvDescribeSchemeResult information
         if (Tablets) {
             THolder<TEvTxUserProxy::TEvNavigate> request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
             if (!Event->Get()->UserToken.empty()) {
@@ -164,9 +166,10 @@ public:
             record->MutableOptions()->SetReturnPartitionConfig(false);
             record->MutableOptions()->SetReturnChildren(false);
             SendRequest(MakeTxProxyID(), request.Release());
+        } else {
+            SendWhiteboardRequests();
         }
 
-        NodesInfo = ev->Release();
         RequestDone();
     }
 

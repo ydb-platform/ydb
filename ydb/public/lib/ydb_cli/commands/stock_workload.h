@@ -23,6 +23,7 @@ private:
     size_t OrderCount;
     unsigned int MinPartitions;
     bool PartitionsByLoad;
+    bool EnableCdc;
 };
 
 class TCommandStockClean : public TWorkloadCommand {

@@ -3,6 +3,7 @@
 #include <util/datetime/base.h>
 
 #include <cmath>
+#include <format>
 #include <iomanip>
 #include <string>
 #include <thread>
@@ -36,36 +37,43 @@ TStockWorkloadParams* TStockWorkloadGenerator::GetParams() {
 }
 
 std::string TStockWorkloadGenerator::GetDDLQueries() const {
-    std::string StockPartitionsDdl = "";
-    std::string OrdersPartitionsDdl = "WITH (READ_REPLICAS_SETTINGS = \"per_az:1\")";
-    std::string OrderLinesPartitionsDdl = "";
-
+    std::string stockPartitionsDdl = "";
+    std::string ordersPartitionsDdl = "WITH (READ_REPLICAS_SETTINGS = \"per_az:1\")";
+    std::string orderLinesPartitionsDdl = "";
     if (Params.PartitionsByLoad) {
-        std::string partsNum = std::to_string(Params.MinPartitions);
-
-        StockPartitionsDdl = "WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " + partsNum + ")";
-        OrdersPartitionsDdl = "WITH (READ_REPLICAS_SETTINGS = \"per_az:1\", AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = "
-            + partsNum + ", UNIFORM_PARTITIONS = " + partsNum + ", AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000)";
-        OrderLinesPartitionsDdl = "WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = "
-            + partsNum + ", UNIFORM_PARTITIONS = " + partsNum + ", AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000)";
+        stockPartitionsDdl = std::format(R"(WITH (
+              AUTO_PARTITIONING_BY_LOAD = ENABLED
+            , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {0}
+        ))", Params.MinPartitions);
+        ordersPartitionsDdl = std::format(R"(WITH (
+              READ_REPLICAS_SETTINGS = "per_az:1"
+            , AUTO_PARTITIONING_BY_LOAD = ENABLED
+            , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {0}
+            , AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
+            , UNIFORM_PARTITIONS = {0}
+        ))", Params.MinPartitions);
+        orderLinesPartitionsDdl = std::format(R"(WITH (
+              AUTO_PARTITIONING_BY_LOAD = ENABLED
+            , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {0}
+            , AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
+            , UNIFORM_PARTITIONS = {0}
+        ))", Params.MinPartitions);
     }
 
-    static const char TablesDdl[] = R"(--!syntax_v1
-        CREATE TABLE `%s/stock`(product Utf8, quantity Int64, PRIMARY KEY(product)) %s;
-        CREATE TABLE `%s/orders`(id Uint64, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id), INDEX ix_cust GLOBAL ON (customer, created) COVER (processed)) %s;
-        CREATE TABLE `%s/orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY KEY(id_order, product)) %s;
-        )";
-    char buf[sizeof(TablesDdl) + sizeof(OrdersPartitionsDdl) + 8192*3]; // 32*256 for DbPath
-
-    int res = std::sprintf(buf, TablesDdl,
-        DbPath.c_str(), StockPartitionsDdl.c_str(),
-        DbPath.c_str(), OrdersPartitionsDdl.c_str(),
-        DbPath.c_str(), OrderLinesPartitionsDdl.c_str()
-    );
-    if (res < 0) {
-        return "";
+    std::string changefeeds = "";
+    if (Params.EnableCdc) {
+        changefeeds = std::format(R"(ALTER TABLE `{0}/orders` ADD CHANGEFEED `updates` WITH (
+              FORMAT = 'JSON'
+            , MODE = 'UPDATES'
+        );)", DbPath);
     }
-    return buf;
+
+    return std::format(R"(--!syntax_v1
+        CREATE TABLE `{0}/stock`(product Utf8, quantity Int64, PRIMARY KEY(product)) {1};
+        CREATE TABLE `{0}/orders`(id Uint64, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id), INDEX ix_cust GLOBAL ON (customer, created) COVER (processed)) {2};
+        CREATE TABLE `{0}/orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY KEY(id_order, product)) {3};
+        {4}
+    )", DbPath, stockPartitionsDdl, ordersPartitionsDdl, orderLinesPartitionsDdl, changefeeds);
 }
 
 TQueryInfoList TStockWorkloadGenerator::GetInitialData() {

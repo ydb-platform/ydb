@@ -1071,7 +1071,7 @@ private:
 
     void ExtractDatashardErrors(const NKikimrTxDataShard::TEvProposeTransactionResult& record) {
         for (const auto &er : record.GetError()) {
-            DatashardErrors << "[" << NKikimrTxDataShard::TError_EKind_Name(er.GetKind()) << "] " << er.GetReason() << Endl;
+            DatashardErrors << "[" << er.GetKind() << "] " << er.GetReason() << Endl;
         }
 
         ComplainingDatashards.push_back(record.GetOrigin());

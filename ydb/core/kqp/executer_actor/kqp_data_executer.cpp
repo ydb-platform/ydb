@@ -661,7 +661,7 @@ private:
                 if (err.GetKind() == NKikimrTxDataShard::TError::REPLY_SIZE_EXCEEDED) {
                     Counters->Counters->DataShardTxReplySizeExceededError->Inc();
                 }
-                message << "[" << NKikimrTxDataShard::TError_EKind_Name(err.GetKind()) << "] " << err.GetReason() << "; ";
+                message << "[" << err.GetKind() << "] " << err.GetReason() << "; ";
             }
             LOG_E(message);
         }
@@ -2404,7 +2404,7 @@ private:
     static void AddDataShardErrors(const NKikimrTxDataShard::TEvProposeTransactionResult& result, TIssue& issue) {
         for (const auto& err : result.GetError()) {
             issue.AddSubIssue(new TIssue(TStringBuilder()
-                << "[" << NKikimrTxDataShard::TError_EKind_Name(err.GetKind()) << "] " << err.GetReason()));
+                << "[" << err.GetKind() << "] " << err.GetReason()));
         }
     }
 

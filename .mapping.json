@@ -60,6 +60,7 @@
   "ROADMAP.md":"ydb/github_toplevel/ROADMAP.md",
   "SECURITY.md":"ydb/github_toplevel/SECURITY.md",
   "build/internal/conf/internal.conf":"ydb/github_toplevel/build/internal/conf/internal.conf",
+  "build/internal/ya.conf":"ydb/github_toplevel/build/internal/ya.conf",
   "build/mapping.conf.json":"devtools/ya/opensource/mapping.conf.json",
   "build/scripts/export_script_gen.py":"",
   "build/scripts/generate_vcs_info.py":"",

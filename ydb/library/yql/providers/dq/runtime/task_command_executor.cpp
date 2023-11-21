@@ -39,7 +39,8 @@ namespace NTaskRunnerProxy {
 // static const int CurrentProtocolVersion = 2; // GetFreeSpace
 // static const int CurrentProtocolVersion = 3; // Calls for ComputeActor
 // static const int CurrentProtocolVersion = 4; // Calls for Sources
-static const int CurrentProtocolVersion = 5; // Calls for Sinks
+// static const int CurrentProtocolVersion = 5; // Calls for Sinks
+static const int CurrentProtocolVersion = 6; // Respond free space after run
 
 template<typename T>
 void ToProto(T& proto, const NDq::TDqAsyncStats& stats)
@@ -482,6 +483,17 @@ public:
                     if (status == NDq::ERunStatus::Finished) {
                         UpdateStats(response);
                     }
+                    for (auto id : InputChannels) {
+                        auto* space = response.AddChannelFreeSpace();
+                        space->SetId(id);
+                        space->SetSpace(Runner->GetInputChannel(id)->GetFreeSpace());
+                    }
+
+                    for (auto id : Sources) {
+                        auto* space = response.AddSourceFreeSpace();
+                        space->SetId(id);
+                        space->SetSpace(Runner->GetSource(id)->GetFreeSpace());
+                    }
                     response.Save(&output);
                 } catch (const NKikimr::TMemoryLimitExceededException& ex) {
                     throw yexception() << "DQ computation exceeds the memory limit " << DqConfiguration->MemoryLimit.Get().GetOrElse(0) << ". Try to increase the limit using PRAGMA dq.MemoryLimit";
@@ -725,6 +737,18 @@ public:
 
             NDq::TDqTaskRunnerExecutionContextDefault execCtx;
             Runner->Prepare(task, limits, execCtx);
+
+            for (ui32 i = 0; i < task.InputsSize(); ++i) {
+                auto& inputDesc = task.GetInputs(i);
+                if (inputDesc.HasSource()) {
+                    Sources.emplace(i);
+                } else {
+                    for (auto& inputChannelDesc : inputDesc.GetChannels()) {
+                        ui64 channelId = inputChannelDesc.GetId();
+                        InputChannels.emplace(channelId);
+                    }
+                }
+            }
         });
 
         result.Save(&output);
@@ -736,6 +760,8 @@ public:
     NKikimr::NMiniKQL::IStatsRegistry* JobStats;
     bool TerminateOnError;
     TIntrusivePtr<NDq::IDqTaskRunner> Runner;
+    THashSet<ui64> Sources;
+    THashSet<ui64> InputChannels;
     ui32 StageId = 0;
     TTaskCounters QueryStat;
     TTaskCounters PrevStat;

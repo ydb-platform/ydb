@@ -12,7 +12,7 @@ extern const TString WorkingDirectoryParamName;
 extern const TString WorkingDirectoryDontInitParamName; // COMPAT(aozeritsky)
 extern const TString UseMetaParamName; // COMPAT(aozeritsky)
 
-void SaveRopeToPipe(IOutputStream& output, const TRope& rope);
+i64 SaveRopeToPipe(IOutputStream& output, const TRope& rope);
 void LoadRopeFromPipe(IInputStream& input, TRope& rope);
 NDq::TDqTaskRunnerMemoryLimits DefaultMemoryLimits();
 

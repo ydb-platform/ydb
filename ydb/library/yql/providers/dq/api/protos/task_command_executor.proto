@@ -87,10 +87,17 @@ message TIsFinishedResponse {
     bool Result = 1;
 }
 
+message TFreeSpace {
+    uint64 Id = 1;
+    int64 Space = 2;
+}
+
 message TRunResponse {
     int32 Result = 1;
     repeated TMetric Metric = 2;
     TRusage Rusage = 3;
+    repeated TFreeSpace ChannelFreeSpace = 4;
+    repeated TFreeSpace SourceFreeSpace = 5;
 }
 
 message TPrepareResponse {

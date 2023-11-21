@@ -25,6 +25,7 @@
 #include <util/system/fs.h>
 #include <util/stream/file.h>
 #include <util/stream/pipe.h>
+#include <util/stream/length.h>
 #include <util/generic/size_literals.h>
 #include <util/generic/maybe.h>
 #include <util/string/cast.h>
@@ -51,16 +52,6 @@ extern "C" int kill(int pid, int sig);
 extern "C" int waitpid(int pid, int* status, int options);
 #endif
 
-void SaveRopeToPipe(IOutputStream& output, const TRope& rope) {
-    for (const auto& [data, size] : rope) {
-        output.Write(&size, sizeof(size_t));
-        YQL_ENSURE(size != 0);
-        output.Write(data, size);
-    }
-    size_t zero = 0;
-    output.Write(&zero, sizeof(size_t));
-}
-
 namespace {
 
 void Load(IInputStream& input, void* buf, size_t size) {
@@ -73,6 +64,19 @@ void Load(IInputStream& input, void* buf, size_t size) {
     }
 }
 
+} // namespace {
+
+i64 SaveRopeToPipe(IOutputStream& output, const TRope& rope) {
+    i64 total = 0;
+    for (const auto& [data, size] : rope) {
+        output.Write(&size, sizeof(size_t));
+        YQL_ENSURE(size != 0);
+        output.Write(data, size);
+        total += size;
+    }
+    size_t zero = 0;
+    output.Write(&zero, sizeof(size_t));
+    return total;
 }
 
 void LoadRopeFromPipe(IInputStream& input, TRope& rope) {
@@ -529,29 +533,38 @@ public:
 
 class TInputChannel : public IInputChannel {
 public:
-    TInputChannel(const ITaskRunner::TPtr& taskRunner, ui64 taskId, ui64 channelId, IInputStream& input, IOutputStream& output)
+    TInputChannel(const ITaskRunner::TPtr& taskRunner, ui64 taskId, ui64 channelId, IInputStream& input, IOutputStream& output, i64 channelBufferSize)
         : TaskId(taskId)
         , ChannelId(channelId)
         , Input(input)
         , Output(output)
         , ProtocolVersion(taskRunner->GetProtocolVersion())
+        , FreeSpace(channelBufferSize)
     { }
 
     i64 GetFreeSpace() override {
         if (ProtocolVersion <= 1) {
             return std::numeric_limits<i64>::max();
         }
+        
+        if (ProtocolVersion < 6) {
+            NDqProto::TCommandHeader header;
+            header.SetVersion(2);
+            header.SetCommand(NDqProto::TCommandHeader::GET_FREE_SPACE);
+            header.SetTaskId(TaskId);
+            header.SetChannelId(ChannelId);
+            header.Save(&Output);
 
-        NDqProto::TCommandHeader header;
-        header.SetVersion(2);
-        header.SetCommand(NDqProto::TCommandHeader::GET_FREE_SPACE);
-        header.SetTaskId(TaskId);
-        header.SetChannelId(ChannelId);
-        header.Save(&Output);
+            NDqProto::TGetFreeSpaceResponse response;
+            response.Load(&Input);
+            return response.GetFreeSpace();
+        }
 
-        NDqProto::TGetFreeSpaceResponse response;
-        response.Load(&Input);
-        return response.GetFreeSpace();
+        return FreeSpace;
+    }
+
+    void SetFreeSpace(i64 space) {
+        FreeSpace = space;
     }
 
     void Push(TDqSerializedBatch&& data) override {
@@ -562,9 +575,18 @@ public:
         header.SetChannelId(ChannelId);
         header.Save(&Output);
 
-        data.Proto.Save(&Output);
+        i64 written = 0; 
+        TCountingOutput countingOutput(&Output);
+        data.Proto.Save(&countingOutput);
         if (data.IsOOB()) {
-            SaveRopeToPipe(Output, data.Payload);
+            written = SaveRopeToPipe(Output, data.Payload);
+        } else {
+            written = countingOutput.Counter();
+        }
+
+        if (ProtocolVersion >= 6) {
+            // estimate free space
+            FreeSpace -= written;
         }
     }
 
@@ -584,9 +606,8 @@ private:
     IInputStream& Input;
     IOutputStream& Output;
 
-    TString SerializedInputType;
-
     i32 ProtocolVersion;
+    i64 FreeSpace;
 };
 
 class TDqInputChannel: public IDqInputChannel {
@@ -711,41 +732,56 @@ private:
 
 class TDqSource: public IDqAsyncInputBuffer {
 public:
-    TDqSource(ui64 taskId, ui64 inputIndex, TType* inputType, IPipeTaskRunner* taskRunner)
+    TDqSource(ui64 taskId, ui64 inputIndex, TType* inputType, i64 channelBufferSize, IPipeTaskRunner* taskRunner)
         : TaskId(taskId)
         , TaskRunner(taskRunner)
         , Input(TaskRunner->GetInput())
         , Output(TaskRunner->GetOutput())
         , InputType(inputType)
+        , BufferSize(channelBufferSize)
+        , FreeSpace(channelBufferSize)
+        , ProtocolVersion(TaskRunner->GetProtocolVersion())
     {
         PushStats.InputIndex = inputIndex;
     }
 
     i64 GetFreeSpace() const override {
-        NDqProto::TCommandHeader header;
-        header.SetVersion(4);
-        header.SetCommand(NDqProto::TCommandHeader::GET_FREE_SPACE_SOURCE);
-        header.SetTaskId(TaskId);
-        header.SetChannelId(PushStats.InputIndex);
-        header.Save(&Output);
+        if (ProtocolVersion < 6) {
+            NDqProto::TCommandHeader header;
+            header.SetVersion(4);
+            header.SetCommand(NDqProto::TCommandHeader::GET_FREE_SPACE_SOURCE);
+            header.SetTaskId(TaskId);
+            header.SetChannelId(PushStats.InputIndex);
+            header.Save(&Output);
 
-        NDqProto::TGetFreeSpaceResponse response;
-        response.Load(&Input);
-        return response.GetFreeSpace();
+            NDqProto::TGetFreeSpaceResponse response;
+            response.Load(&Input);
+            return response.GetFreeSpace();
+        }
+
+        return FreeSpace;
+    }
+
+    void SetFreeSpace(i64 space) {
+        FreeSpace = space;
     }
 
     ui64 GetStoredBytes() const override {
-        NDqProto::TCommandHeader header;
-        header.SetVersion(4);
-        header.SetCommand(NDqProto::TCommandHeader::GET_STORED_BYTES_SOURCE);
-        header.SetTaskId(TaskId);
-        header.SetChannelId(PushStats.InputIndex);
-        header.Save(&Output);
+        if (ProtocolVersion < 6) {
+            NDqProto::TCommandHeader header;
+            header.SetVersion(4);
+            header.SetCommand(NDqProto::TCommandHeader::GET_STORED_BYTES_SOURCE);
+            header.SetTaskId(TaskId);
+            header.SetChannelId(PushStats.InputIndex);
+            header.Save(&Output);
 
-        NDqProto::TGetStoredBytesResponse response;
-        response.Load(&Input);
+            NDqProto::TGetStoredBytesResponse response;
+            response.Load(&Input);
 
-        return response.GetResult();
+            return response.GetResult();
+        }
+
+        return BufferSize - FreeSpace;
     }
 
     const TDqAsyncInputBufferStats& GetPushStats() const override {
@@ -775,6 +811,10 @@ public:
         data.Save(&Output);
         if (isOOB) {
             SaveRopeToPipe(Output, serialized.Payload);
+        }
+
+        if (ProtocolVersion >= 6) {
+            FreeSpace -= space;
         }
     }
 
@@ -842,6 +882,9 @@ private:
     mutable NKikimr::NMiniKQL::TType* InputType = nullptr;
     TDqAsyncInputBufferStats PushStats;
     TDqInputStats PopStats;
+    i64 BufferSize;
+    i64 FreeSpace;
+    i32 ProtocolVersion;
 };
 
 /*______________________________________________________________________________________________*/
@@ -1285,7 +1328,7 @@ public:
     }
 
     NYql::NDqProto::TPrepareResponse Prepare(const NDq::TDqTaskRunnerMemoryLimits& limits) override {
-        Y_UNUSED(limits);
+        ChannelBufferSize = limits.ChannelBufferSize;
         NDqProto::TCommandHeader header;
         header.SetVersion(1);
         header.SetCommand(NDqProto::TCommandHeader::PREPARE);
@@ -1302,18 +1345,32 @@ public:
 
     NYql::NDqProto::TRunResponse Run() override {
         NDqProto::TCommandHeader header;
-        header.SetVersion(1);
+        header.SetVersion(GetProtocolVersion() >= 6 ? 6 : 1);
         header.SetCommand(NDqProto::TCommandHeader::RUN);
         header.SetTaskId(Task.GetId());
         header.Save(&Output);
 
         NDqProto::TRunResponse response;
         response.Load(&Input);
+        if (GetProtocolVersion() >= 6) {
+            for (auto& space : response.GetChannelFreeSpace()) {
+                auto* channel = static_cast<TInputChannel*>(GetInputChannel(space.GetId()).Get());
+                channel->SetFreeSpace(space.GetSpace());
+            }
+            for (auto& space : response.GetSourceFreeSpace()) {
+                auto* source = static_cast<TDqSource*>(GetSource(space.GetId()).Get());
+                source->SetFreeSpace(space.GetSpace());
+            }
+        }
         return response;
     }
 
     IInputChannel::TPtr GetInputChannel(ui64 channelId) override {
-        return new TInputChannel(this, Task.GetId(), channelId, Input, Output);
+        auto& channel = InputChannels[channelId];
+        if (channel == nullptr) {
+            channel = new TInputChannel(this, Task.GetId(), channelId, Input, Output, ChannelBufferSize);
+        }
+        return channel;
     }
 
     IOutputChannel::TPtr GetOutputChannel(ui64 channelId) override {
@@ -1321,7 +1378,11 @@ public:
     }
 
     IDqAsyncInputBuffer::TPtr GetSource(ui64 index) override {
-        return new TDqSource(Task.GetId(), index, InputTypes.at(index), this);
+        auto& source = Sources[index];
+        if (source == nullptr) {
+            source = new TDqSource(Task.GetId(), index, InputTypes.at(index), ChannelBufferSize, this);
+        }
+        return source;
     }
 
     TDqSink::TPtr GetSink(ui64 index) override {
@@ -1488,6 +1549,9 @@ private:
     THashMap<TString, TString> SecureParams;
     THashMap<TString, TString> TaskParams;
     TVector<TString> ReadRanges;
+    THashMap<ui64, IInputChannel::TPtr> InputChannels;
+    THashMap<ui64, IDqAsyncInputBuffer::TPtr> Sources;
+    i64 ChannelBufferSize = 0;
 
     std::shared_ptr <NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 

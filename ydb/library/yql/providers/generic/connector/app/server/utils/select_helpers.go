@@ -62,7 +62,7 @@ func formatSelectColumns(formatter SQLFormatter, selectWhat *api_service_protos.
 		}
 	} else {
 		for i, column := range columns {
-			sb.WriteString(column.GetName())
+			sb.WriteString(formatter.SanitiseIdentifier(column.GetName()))
 
 			if i != len(columns)-1 {
 				sb.WriteString(", ")
@@ -71,7 +71,7 @@ func formatSelectColumns(formatter SQLFormatter, selectWhat *api_service_protos.
 	}
 
 	sb.WriteString(" FROM ")
-	sb.WriteString(tableName)
+	sb.WriteString(formatter.SanitiseIdentifier(tableName))
 
 	return sb.String(), nil
 }

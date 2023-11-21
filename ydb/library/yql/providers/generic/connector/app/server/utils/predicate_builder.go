@@ -8,7 +8,7 @@ import (
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
-func formatValue(value *Ydb.TypedValue) (string, error) {
+func formatValue(formatter SQLFormatter, value *Ydb.TypedValue) (string, error) {
 	switch v := value.Value.Value.(type) {
 	case *Ydb.Value_BoolValue:
 		return fmt.Sprintf("%t", v.BoolValue), nil
@@ -29,11 +29,11 @@ func formatValue(value *Ydb.TypedValue) (string, error) {
 	}
 }
 
-func formatColumn(col string) (string, error) {
-	return col, nil
+func formatColumn(formatter SQLFormatter, col string) (string, error) {
+	return formatter.SanitiseIdentifier(col), nil
 }
 
-func formatNull(n *api_service_protos.TExpression_TNull) (string, error) {
+func formatNull(formatter SQLFormatter, n *api_service_protos.TExpression_TNull) (string, error) {
 	return "NULL", nil
 }
 
@@ -83,13 +83,13 @@ func formatExpression(formatter SQLFormatter, expression *api_service_protos.TEx
 
 	switch e := expression.Payload.(type) {
 	case *api_service_protos.TExpression_Column:
-		return formatColumn(e.Column)
+		return formatColumn(formatter, e.Column)
 	case *api_service_protos.TExpression_TypedValue:
-		return formatValue(e.TypedValue)
+		return formatValue(formatter, e.TypedValue)
 	case *api_service_protos.TExpression_ArithmeticalExpression:
 		return formatArithmeticalExpression(formatter, e.ArithmeticalExpression)
 	case *api_service_protos.TExpression_Null:
-		return formatNull(e.Null)
+		return formatNull(formatter, e.Null)
 	default:
 		return "", fmt.Errorf("%w, type: %T", ErrUnimplementedExpression, e)
 	}

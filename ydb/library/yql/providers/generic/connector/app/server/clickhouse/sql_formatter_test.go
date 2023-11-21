@@ -6,11 +6,22 @@ import (
 
 	"github.com/stretchr/testify/require"
 	ydb "github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
+	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
-func TestSQLFormatter(t *testing.T) {
+func TestMakeDescribeTableQuery(t *testing.T) {
+	logger := utils.NewTestLogger(t)
+	formatter := NewSQLFormatter()
+	request := &api.TDescribeTableRequest{Table: "table", DataSourceInstance: &common.TDataSourceInstance{Database: "db"}}
+
+	output, args := utils.MakeDescribeTableQuery(logger, formatter, request)
+	require.Equal(t, "SELECT name, type FROM system.columns WHERE table = ? and database = ?", output)
+	require.Equal(t, args, []any{"table", "db"})
+}
+
+func TestMakeSQLFormatterQuery(t *testing.T) {
 	type testCase struct {
 		testName  string
 		selectReq *api.TSelect
@@ -41,7 +52,7 @@ func TestSQLFormatter(t *testing.T) {
 				},
 				What: &api.TSelect_TWhat{},
 			},
-			output: "SELECT 0 FROM tab",
+			output: `SELECT 0 FROM "tab"`,
 			err:    nil,
 		},
 		{
@@ -63,7 +74,7 @@ func TestSQLFormatter(t *testing.T) {
 					},
 				},
 			},
-			output: "SELECT col FROM tab",
+			output: `SELECT "col" FROM "tab"`,
 			err:    nil,
 		},
 		{
@@ -83,7 +94,7 @@ func TestSQLFormatter(t *testing.T) {
 					},
 				},
 			},
-			output: "SELECT col0, col1 FROM tab WHERE (col1 IS NULL)",
+			output: `SELECT "col0", "col1" FROM "tab" WHERE ("col1" IS NULL)`,
 			err:    nil,
 		},
 		{
@@ -103,7 +114,7 @@ func TestSQLFormatter(t *testing.T) {
 					},
 				},
 			},
-			output: "SELECT col0, col1 FROM tab WHERE (col2 IS NOT NULL)",
+			output: `SELECT "col0", "col1" FROM "tab" WHERE ("col2" IS NOT NULL)`,
 			err:    nil,
 		},
 		{
@@ -123,7 +134,7 @@ func TestSQLFormatter(t *testing.T) {
 					},
 				},
 			},
-			output: "SELECT col0, col1 FROM tab WHERE col2",
+			output: `SELECT "col0", "col1" FROM "tab" WHERE "col2"`,
 			err:    nil,
 		},
 		{
@@ -183,7 +194,7 @@ func TestSQLFormatter(t *testing.T) {
 					},
 				},
 			},
-			output: "SELECT col0, col1 FROM tab WHERE ((NOT (col2 <= 42)) OR ((col1 <> 0) AND (col3 IS NULL)))",
+			output: `SELECT "col0", "col1" FROM "tab" WHERE ((NOT ("col2" <= 42)) OR (("col1" <> 0) AND ("col3" IS NULL)))`,
 			err:    nil,
 		},
 		{
@@ -205,7 +216,7 @@ func TestSQLFormatter(t *testing.T) {
 					},
 				},
 			},
-			output: "SELECT col0, col1 FROM tab",
+			output: `SELECT "col0", "col1" FROM "tab"`,
 			err:    nil,
 		},
 		{
@@ -227,7 +238,7 @@ func TestSQLFormatter(t *testing.T) {
 					},
 				},
 			},
-			output: "SELECT col0, col1 FROM tab",
+			output: `SELECT "col0", "col1" FROM "tab"`,
 			err:    nil,
 		},
 		{
@@ -267,7 +278,7 @@ func TestSQLFormatter(t *testing.T) {
 					},
 				},
 			},
-			output: "SELECT col0, col1 FROM tab WHERE (col1 = 32)",
+			output: `SELECT "col0", "col1" FROM "tab" WHERE ("col1" = 32)`,
 			err:    nil,
 		},
 		{
@@ -321,7 +332,62 @@ func TestSQLFormatter(t *testing.T) {
 					},
 				},
 			},
-			output: "SELECT col0, col1 FROM tab WHERE ((col1 = 32) AND (col3 IS NULL) AND (col4 IS NOT NULL))",
+			output: `SELECT "col0", "col1" FROM "tab" WHERE (("col1" = 32) AND ("col3" IS NULL) AND ("col4" IS NOT NULL))`,
+			err:    nil,
+		},
+		{
+			testName: "negative_sql_injection_by_table",
+			selectReq: &api.TSelect{
+				From: &api.TSelect_TFrom{
+					Table: `system.columns; DROP DATABASE system`,
+				},
+				What: &api.TSelect_TWhat{},
+			},
+			output: `SELECT 0 FROM "system.columns; DROP DATABASE system"`,
+			err:    nil,
+		},
+		{
+			testName: "negative_sql_injection_by_col",
+			selectReq: &api.TSelect{
+				From: &api.TSelect_TFrom{
+					Table: "tab",
+				},
+				What: &api.TSelect_TWhat{
+					Items: []*api.TSelect_TWhat_TItem{
+						&api.TSelect_TWhat_TItem{
+							Payload: &api.TSelect_TWhat_TItem_Column{
+								Column: &ydb.Column{
+									Name: `0; DROP DATABASE system`,
+									Type: utils.NewPrimitiveType(ydb.Type_INT32),
+								},
+							},
+						},
+					},
+				},
+			},
+			output: `SELECT "0; DROP DATABASE system" FROM "tab"`,
+			err:    nil,
+		},
+		{
+			testName: "negative_sql_injection_fake_quotes",
+			selectReq: &api.TSelect{
+				From: &api.TSelect_TFrom{
+					Table: "tab",
+				},
+				What: &api.TSelect_TWhat{
+					Items: []*api.TSelect_TWhat_TItem{
+						&api.TSelect_TWhat_TItem{
+							Payload: &api.TSelect_TWhat_TItem_Column{
+								Column: &ydb.Column{
+									Name: `0"; DROP DATABASE system;`,
+									Type: utils.NewPrimitiveType(ydb.Type_INT32),
+								},
+							},
+						},
+					},
+				},
+			},
+			output: `SELECT "0""; DROP DATABASE system;" FROM "tab"`,
 			err:    nil,
 		},
 	}

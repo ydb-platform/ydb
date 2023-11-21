@@ -109,7 +109,7 @@ func (c *connectionManager) Make(
 	}
 
 	// set schema (public by default)
-	if _, err = conn.Exec(ctx, fmt.Sprintf("set search_path='%s'", dsi.GetPgOptions().GetSchema())); err != nil {
+	if _, err = conn.Exec(ctx, fmt.Sprintf("set search_path=%s", NewSQLFormatter().SanitiseIdentifier(dsi.GetPgOptions().GetSchema()))); err != nil {
 		return nil, fmt.Errorf("exec: %w", err)
 	}
 

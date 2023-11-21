@@ -2,6 +2,7 @@ package postgresql
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
@@ -81,8 +82,12 @@ func (f sqlFormatter) GetPlaceholder(n int) string {
 }
 
 func (f sqlFormatter) SanitiseIdentifier(ident string) string {
-	// TODO: sanitise
-	return ident
+	// https://github.com/jackc/pgx/blob/v5.4.3/conn.go#L93
+	// https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
+	sanitizedIdent := strings.ReplaceAll(ident, string([]byte{0}), "")
+	sanitizedIdent = `"` + strings.ReplaceAll(sanitizedIdent, `"`, `""`) + `"`
+
+	return sanitizedIdent
 }
 
 func NewSQLFormatter() utils.SQLFormatter {

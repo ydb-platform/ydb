@@ -159,7 +159,7 @@ func (tc testCaseStreaming) execute(t *testing.T) {
 	rows := &utils.RowsMock{
 		PredefinedData: tc.src,
 	}
-	connection.On("Query", "SELECT col0, col1 FROM example_1").Return(rows, nil).Once()
+	connection.On("Query", `SELECT "col0", "col1" FROM "example_1"`).Return(rows, nil).Once()
 
 	col0Acceptor := new(*int32)
 	*col0Acceptor = new(int32)

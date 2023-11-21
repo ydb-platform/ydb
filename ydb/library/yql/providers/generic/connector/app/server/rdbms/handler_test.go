@@ -66,7 +66,7 @@ func TestReadSplit(t *testing.T) {
 				{int32(2), "b"},
 			},
 		}
-		connection.On("Query", "SELECT col1, col2 FROM example_1").Return(rows, nil).Once()
+		connection.On("Query", `SELECT "col1", "col2" FROM "example_1"`).Return(rows, nil).Once()
 
 		col1 := new(int32)
 		col2 := new(string)
@@ -108,7 +108,7 @@ func TestReadSplit(t *testing.T) {
 				{int32(2), "b"},
 			},
 		}
-		connection.On("Query", "SELECT col1, col2 FROM example_1").Return(rows, nil).Once()
+		connection.On("Query", `SELECT "col1", "col2" FROM "example_1"`).Return(rows, nil).Once()
 
 		col1 := new(int32)
 		col2 := new(string)

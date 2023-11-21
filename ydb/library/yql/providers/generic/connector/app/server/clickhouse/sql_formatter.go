@@ -1,6 +1,8 @@
 package clickhouse
 
 import (
+	"strings"
+
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
@@ -78,8 +80,11 @@ func (f sqlFormatter) GetPlaceholder(_ int) string {
 }
 
 func (f sqlFormatter) SanitiseIdentifier(ident string) string {
-	// TODO: sanitise
-	return ident
+	// https: //clickhouse.com/docs/en/sql-reference/syntax#identifiers
+	sanitizedIdent := strings.ReplaceAll(ident, string([]byte{0}), "")
+	sanitizedIdent = `"` + strings.ReplaceAll(sanitizedIdent, `"`, `""`) + `"`
+
+	return sanitizedIdent
 }
 
 func NewSQLFormatter() utils.SQLFormatter {

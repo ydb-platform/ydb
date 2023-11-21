@@ -169,6 +169,25 @@ Y_UNIT_TEST_SUITE(MatchRecognizeNfa) {
             UNIT_ASSERT_GT(nonEpsIns[node] + nonEpsOuts[node], 0);
         }
     }
+    Y_UNIT_TEST(SingleEpsilonsEliminated) {
+        TScopedAlloc alloc(__LOCATION__);
+        const TRowPattern pattern{{
+            TRowPatternFactor{"A", 1, 1, false, false},
+            TRowPatternFactor{"B", 1, 1, false, false},
+        }};
+        const auto graph = TNfaTransitionGraphBuilder::Create(pattern, TNfaSetup::BuildVarLookup(pattern));
+        for (size_t node = 0; node != graph->Transitions.size(); node++) {
+            if (std::holds_alternative<TEpsilonTransitions>(graph->Transitions[node])) {
+                continue;
+            }
+            std::visit(TNfaTransitionDestinationVisitor([&](size_t toNode) -> size_t {
+                if (auto *tr = std::get_if<TEpsilonTransitions>(&graph->Transitions[toNode])) {
+                    UNIT_ASSERT_UNEQUAL(tr->size(), 1);
+                }
+                return toNode;
+            }), graph->Transitions[node]);
+        }
+    }
 
 
     //Tests for NFA-based engine for MATCH_RECOGNIZE

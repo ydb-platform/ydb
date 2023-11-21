@@ -75,6 +75,7 @@ public:
 
     void DoOptimizations() {
         EliminateEpsilonChains();
+        EliminateSingleEpsilons();
         CollectGarbage();
     }
 private:
@@ -96,6 +97,21 @@ private:
                 }
                 *ts = optimizedTs;
             }
+        }
+    }
+    void EliminateSingleEpsilons() {
+        for (size_t node = 0; node != Graph->Transitions.size(); node++) {
+            if (std::holds_alternative<TEpsilonTransitions>(Graph->Transitions[node])) {
+                continue;
+            }
+            Graph->Transitions[node] = std::visit(TNfaTransitionDestinationVisitor([&](size_t toNode) -> size_t {
+                if (auto *tr = std::get_if<TEpsilonTransitions>(&Graph->Transitions[toNode])) {
+                    if (tr->size() == 1) {
+                        return (*tr)[0];
+                    }
+                }
+                return toNode;
+            }), Graph->Transitions[node]);
         }
     }
     void CollectGarbage() {

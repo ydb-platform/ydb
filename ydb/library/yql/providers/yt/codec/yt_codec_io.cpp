@@ -1689,17 +1689,32 @@ protected:
         bool Optional;
     };
 
-    static TVector<TField> GetFields(TStructType* type) {
+    static TVector<TField> GetFields(TStructType* type, const TVector<TString>& columns = {}) {
         TVector<TField> res;
-        res.reserve(type->GetMembersCount());
+
+        THashMap<TString, ui32> columnsOrder;
+        if (columns.size() > 0) {
+            for (ui32 index = 0; index < columns.size(); index++) {
+                columnsOrder[columns[index]] = index;
+            }
+            res.resize(columns.size());
+        } else {
+            res.reserve(type->GetMembersCount());
+        }
+
         for (ui32 index = 0; index < type->GetMembersCount(); ++index) {
+            auto name = type->GetMemberName(index);
             auto fieldType = type->GetMemberType(index);
             const bool isOptional = fieldType->IsOptional();
             if (isOptional) {
                 fieldType = static_cast<TOptionalType*>(fieldType)->GetItemType();
             }
-            auto name = type->GetMemberName(index);
-            res.push_back(TField{name, fieldType, isOptional});
+
+            if (!columnsOrder.empty() && columnsOrder.contains(name)) {
+                res[columnsOrder[name]] = TField{name, fieldType, isOptional};
+            } else {
+                res.push_back(TField{name, fieldType, isOptional});
+            }
         }
         return res;
     }
@@ -1802,10 +1817,10 @@ protected:
 
 class TSkiffEncoder: public TSkiffEncoderBase {
 public:
-    TSkiffEncoder(TOutputBuf& buf, const TMkqlIOSpecs& specs, size_t tableIndex)
+    TSkiffEncoder(TOutputBuf& buf, const TMkqlIOSpecs& specs, size_t tableIndex, const TVector<TString>& columns)
         : TSkiffEncoderBase(buf, specs)
     {
-        Fields_ = GetFields(Specs_.Outputs[tableIndex].RowType);
+        Fields_ = GetFields(Specs_.Outputs[tableIndex].RowType, columns);
         NativeYtTypeFlags_ = Specs_.Outputs[tableIndex].NativeYtTypeFlags;
     }
 
@@ -1952,7 +1967,10 @@ TMkqlWriterImpl::TMkqlWriterImpl(NYT::TRawTableWriterPtr stream, size_t blockSiz
 TMkqlWriterImpl::~TMkqlWriterImpl() {
 }
 
-void TMkqlWriterImpl::SetSpecs(const TMkqlIOSpecs& specs) {
+void TMkqlWriterImpl::SetSpecs(const TMkqlIOSpecs& specs, const TVector<TString>& columns) {
+    // In the case of the "skiff" format, the ordering of columns in data and in spec are assumed to be identical during encoding
+    // To provide this, a "columns" field is used to change the alphabetical order of columns in spec
+
     Specs_ = &specs;
     JobStats_ = specs.JobStats_;
 
@@ -1969,8 +1987,14 @@ void TMkqlWriterImpl::SetSpecs(const TMkqlIOSpecs& specs) {
 
                 const auto writer1 = MakeYtCodecCgWriter<false>(Codegen_, rowType);
                 const auto writer2 = MakeYtCodecCgWriter<true>(Codegen_, rowType);
+
                 for (ui32 index = 0; index < rowType->GetMembersCount(); ++index) {
-                    auto fieldType = rowType->GetMemberType(index);
+                    ui32 column = index;
+                    if (columns) {
+                        column = rowType->GetMemberIndex(columns[index]);
+                    }
+
+                    auto fieldType = rowType->GetMemberType(column);
                     writer1->AddField(fieldType, Specs_->Outputs[i].NativeYtTypeFlags);
                     writer2->AddField(fieldType, Specs_->Outputs[i].NativeYtTypeFlags);
                 }
@@ -1994,6 +2018,7 @@ void TMkqlWriterImpl::SetSpecs(const TMkqlIOSpecs& specs) {
         out->Buf_.SetStats(JobStats_);
         if (Specs_->UseSkiff_) {
             if (Specs_->Outputs[i].RowType->GetMembersCount() == 0) {
+                YQL_ENSURE(columns.empty());
                 Encoders_.emplace_back(new TSkiffEmptySchemaEncoder(out->Buf_, *Specs_));
             }
 #ifndef MKQL_DISABLE_CODEGEN
@@ -2005,9 +2030,10 @@ void TMkqlWriterImpl::SetSpecs(const TMkqlIOSpecs& specs) {
             }
 #endif
             else {
-                Encoders_.emplace_back(new TSkiffEncoder(out->Buf_, *Specs_, i));
+                Encoders_.emplace_back(new TSkiffEncoder(out->Buf_, *Specs_, i, columns));
             }
         } else {
+            YQL_ENSURE(columns.empty());
             Encoders_.emplace_back(new TYsonEncoder(out->Buf_, *Specs_, i));
         }
     }

@@ -18,6 +18,7 @@
 #include <ydb/library/yql/providers/yt/lib/infer_schema/infer_schema.h>
 #include <ydb/library/yql/providers/yt/lib/infer_schema/infer_schema_rpc.h>
 #include <ydb/library/yql/providers/yt/lib/schema/schema.h>
+#include <ydb/library/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
 #include <ydb/library/yql/providers/yt/job/yql_job_base.h>
@@ -1245,32 +1246,23 @@ private:
             return false;
         }
 
-        THolder<TNodeResultBuilder> operator()() const {
+        THolder<TNodeResultBuilder> Create(const TCodecContext& codecCtx, const NKikimr::NMiniKQL::THolderFactory& holderFactory) const {
+            Y_UNUSED(codecCtx);
+            Y_UNUSED(holderFactory);
+
+            return Create();
+        }
+
+        THolder<TNodeResultBuilder> Create() const {
             return MakeHolder<TNodeResultBuilder>();
         }
     };
 
-    class TExprResultBuilder: public TExecuteResOrPull {
-    public:
-        TExprResultBuilder(TMaybe<ui64> rowLimit, TMaybe<ui64> byteLimit, const TVector<TString>& columns)
-            : TExecuteResOrPull(rowLimit, byteLimit, MakeMaybe(columns))
-        {
-        }
-
-        bool WriteNext(const NYT::TNode& item) {
-            return TExecuteResOrPull::WriteNext(NYT::NodeToYsonString(item, NYT::NYson::EYsonFormat::Binary));
-        }
-
-        std::pair<TString, bool> Make() {
-            return {Finish(), IsTruncated()};
-        }
-    };
-
-    class TExprResultFactory {
+    class TYsonExprResultFactory {
     public:
         using TResult = std::pair<TString, bool>;
 
-        TExprResultFactory(TMaybe<ui64> rowLimit, TMaybe<ui64> byteLimit, const TVector<TString>& columns, bool hasListResult)
+        TYsonExprResultFactory(TMaybe<ui64> rowLimit, TMaybe<ui64> byteLimit, const TVector<TString>& columns, bool hasListResult)
             : RowLimit_(rowLimit)
             , ByteLimit_(byteLimit)
             , Columns_(columns)
@@ -1282,18 +1274,67 @@ private:
             return true;
         }
 
-        THolder<TExprResultBuilder> operator()() const {
-            auto res = MakeHolder<TExprResultBuilder>(RowLimit_, ByteLimit_, Columns_);
+        THolder<TYsonExecuteResOrPull> Create(TCodecContext& codecCtx, const NKikimr::NMiniKQL::THolderFactory& holderFactory) const {
+            Y_UNUSED(codecCtx);
+            Y_UNUSED(holderFactory);
+
+            return Create();
+        }
+
+        THolder<TYsonExecuteResOrPull> Create() const {
+            THolder<TYsonExecuteResOrPull> res;
+
+            res = MakeHolder<TYsonExecuteResOrPull>(RowLimit_, ByteLimit_, Columns_);
             if (HasListResult_) {
                 res->SetListResult();
             }
             return res;
         }
+
     private:
         const TMaybe<ui64> RowLimit_;
         const TMaybe<ui64> ByteLimit_;
         const TVector<TString> Columns_;
         const bool HasListResult_;
+    };
+
+    class TSkiffExprResultFactory {
+    public:
+        using TResult = std::pair<TString, bool>;
+
+        TSkiffExprResultFactory(TMaybe<ui64> rowLimit, TMaybe<ui64> byteLimit, bool hasListResult, const NYT::TNode& attrs, const TString& optLLVM)
+            : RowLimit_(rowLimit)
+            , ByteLimit_(byteLimit)
+            , HasListResult_(hasListResult)
+            , Attrs_(attrs)
+            , OptLLVM_(optLLVM)
+        {
+        }
+
+        bool UseResultYson() const {
+            return true;
+        }
+
+        THolder<TSkiffExecuteResOrPull> Create(TCodecContext& codecCtx, const NKikimr::NMiniKQL::THolderFactory& holderFactory) const {
+            THolder<TSkiffExecuteResOrPull> res;
+
+            res = MakeHolder<TSkiffExecuteResOrPull>(RowLimit_, ByteLimit_, codecCtx, holderFactory, Attrs_, OptLLVM_);
+            if (HasListResult_) {
+                res->SetListResult();
+            }
+
+            return res;
+        }
+
+        THolder<TSkiffExecuteResOrPull> Create() const {
+            YQL_ENSURE(false, "Unexpected skiff result builder creation");
+        }
+    private:
+        const TMaybe<ui64> RowLimit_;
+        const TMaybe<ui64> ByteLimit_;
+        const bool HasListResult_;
+        const NYT::TNode Attrs_;
+        const TString OptLLVM_;
     };
 
     static TFinalizeResult ExecFinalize(const TSession::TPtr& session, bool abort) {
@@ -2595,6 +2636,26 @@ private:
         return result;
     }
 
+    static std::pair<TString, NYT::TNode> ParseYTType(const TExprNode& node,
+        TExprContext& ctx,
+        const TExecContext<TResOrPullOptions>::TPtr& execCtx,
+        const TMaybe<NYql::TColumnOrder>& columns = Nothing())
+    {
+        const auto sequenceItemType = GetSequenceItemType(node.Pos(), node.GetTypeAnn(), false, ctx);
+
+        auto rowSpecInfo = MakeIntrusive<TYqlRowSpecInfo>();
+        rowSpecInfo->SetType(sequenceItemType->Cast<TStructExprType>(), execCtx->Options_.Config()->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+        if (columns) {
+            rowSpecInfo->SetColumnOrder(columns);
+        }
+
+        NYT::TNode tableSpec = NYT::TNode::CreateMap();
+        rowSpecInfo->FillCodecNode(tableSpec[YqlRowSpecAttribute]);
+
+        auto resultYTType = NodeToYsonString(RowSpecToYTSchema(tableSpec[YqlRowSpecAttribute], execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY)).ToNode());
+        auto resultRowSpec = NYT::TNode::CreateMap()(TString{YqlIOSpecTables}, NYT::TNode::CreateList().Add(tableSpec));
+        return {resultYTType, resultRowSpec};
+    }
 
     TFuture<TResOrPullResult> DoPull(const TSession::TPtr& session, NNodes::TPull pull, TExprContext& ctx, TResOrPullOptions&& options) {
         if (options.FillSettings().Discard) {
@@ -2628,7 +2689,13 @@ private:
         }
 
         TString type;
-        if (NCommon::HasResOrPullOption(pull.Ref(), "type")) {
+        NYT::TNode rowSpec; 
+        if (execCtx->Options_.FillSettings().Format == IDataProvider::EResultFormat::Skiff) {
+            auto ytType =  ParseYTType(pull.Input().Ref(), ctx, execCtx, columns);
+
+            type = ytType.first;
+            rowSpec = ytType.second;
+        } else if (NCommon::HasResOrPullOption(pull.Ref(), "type")) {
             TStringStream typeYson;
             ::NYson::TYsonWriter typeWriter(&typeYson);
             NCommon::WriteResOrPullType(typeWriter, pull.Input().Ref().GetTypeAnn(), columns);
@@ -2637,14 +2704,19 @@ private:
 
         auto pos = ctx.GetPosition(pull.Pos());
 
-        return session->Queue_->Async([type, ref, range, autoRef, execCtx, columns, pos] () {
+        return session->Queue_->Async([rowSpec, type, ref, range, autoRef, execCtx, columns, pos] () {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
             try {
                 TResOrPullResult res;
                 TStringStream out;
-                ::NYson::TYsonWriter writer(&out, NCommon::GetYsonFormat(execCtx->Options_.FillSettings()), ::NYson::EYsonType::Node, false);
+
+                auto fillSettings = execCtx->Options_.FillSettings();
+                fillSettings.Format = IDataProvider::EResultFormat::Yson;
+
+                ::NYson::TYsonWriter writer(&out, NCommon::GetYsonFormat(fillSettings), ::NYson::EYsonType::Node, false);
                 writer.OnBeginMap();
+
                 if (type) {
                     writer.OnKeyedItem("Type");
                     writer.OnRaw(type);
@@ -2652,8 +2724,9 @@ private:
 
                 bool truncated = false;
                 if (!ref) {
-                    truncated = ExecPull(execCtx, writer, range, columns);
+                    truncated = ExecPull(execCtx, writer, range, rowSpec, columns);
                 }
+
                 if (ref || (truncated && autoRef)) {
                     writer.OnKeyedItem("Ref");
                     writer.OnBeginList();
@@ -2692,6 +2765,7 @@ private:
     static bool ExecPull(const TExecContext<TResOrPullOptions>::TPtr& execCtx,
         ::NYson::TYsonWriter& writer,
         const TRecordsRange& range,
+        const NYT::TNode& rowSpec,
         const TVector<TString>& columns)
     {
         TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
@@ -2719,67 +2793,109 @@ private:
         const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
         specs.Init(codecCtx, execCtx->GetInputSpec(!useSkiff, nativeTypeCompat, false), tables, columns);
 
-        TExecuteResOrPull pullData(execCtx->Options_.FillSettings().RowsLimitPerWrite,
-            execCtx->Options_.FillSettings().AllResultsBytesLimit, MakeMaybe(columns));
-        TMkqlIOCache specsCache(specs, holderFactory);
+        auto run = [&] (IExecuteResOrPull& pullData)  {
+            TMkqlIOCache specsCache(specs, holderFactory);
 
-        if (testRun) {
-            YQL_ENSURE(execCtx->InputTables_.size() == 1U, "Support single input only.");
-            const auto itI = TestTables.find(execCtx->InputTables_.front().Path.Path_);
-            YQL_ENSURE(TestTables.cend() != itI);
+            if (testRun) {
+                YQL_ENSURE(execCtx->InputTables_.size() == 1U, "Support single input only.");
+                const auto itI = TestTables.find(execCtx->InputTables_.front().Path.Path_);
+                YQL_ENSURE(TestTables.cend() != itI);
 
-            TMkqlInput input(MakeStringInput(std::move(itI->second.second), false));
-            TMkqlReaderImpl reader(input, 0, 4 << 10, 0);
-            reader.SetSpecs(specs, holderFactory);
-            for (reader.Next(); reader.IsValid(); reader.Next()) {
-                if (!pullData.WriteNext(specsCache, reader.GetRow(), 0)) {
+                TMkqlInput input(MakeStringInput(std::move(itI->second.second), false));
+                TMkqlReaderImpl reader(input, 0, 4 << 10, 0);
+                reader.SetSpecs(specs, holderFactory);
+                for (reader.Next(); reader.IsValid(); reader.Next()) {
+                    if (!pullData.WriteNext(specsCache, reader.GetRow(), 0)) {
+                        return true;
+                    }
+                }
+            } else  if (auto limiter = TTableLimiter(range)) {
+                auto entry = execCtx->GetEntry();
+                bool stop = false;
+                for (size_t i = 0; i < execCtx->InputTables_.size(); ++i) {
+                    TString srcTableName = execCtx->InputTables_[i].Name;
+                    NYT::TRichYPath srcTable = execCtx->InputTables_[i].Path;
+                    bool isDynamic = execCtx->InputTables_[i].Dynamic;
+                    ui64 recordsCount = execCtx->InputTables_[i].Records;
+                    if (!isDynamic) {
+                        if (!limiter.NextTable(recordsCount)) {
+                            continue;
+                        }
+                    } else {
+                        limiter.NextDynamicTable();
+                    }
+
+                    if (isDynamic) {
+                        YQL_ENSURE(srcTable.GetRanges().Empty());
+                        stop = NYql::SelectRows(entry->Client, srcTableName, i, specsCache, pullData, limiter);
+                    } else {
+                        auto readTx = entry->Tx;
+                        if (srcTable.TransactionId_) {
+                            readTx = entry->GetSnapshotTx(*srcTable.TransactionId_);
+                            srcTable.TransactionId_.Clear();
+                        }
+                        if (execCtx->YamrInput) {
+                            stop = NYql::IterateYamredRows(readTx, srcTable, i, specsCache, pullData, limiter, execCtx->Sampling);
+                        } else {
+                            stop = NYql::IterateYsonRows(readTx, srcTable, i, specsCache, pullData, limiter, execCtx->Sampling);
+                        }
+                    }
+                    if (stop || limiter.Exceed()) {
+                        break;
+                    }
+                }
+            }
+            return false;
+        };
+
+        switch (execCtx->Options_.FillSettings().Format) {
+            case IDataProvider::EResultFormat::Yson: {
+                TYsonExecuteResOrPull pullData(execCtx->Options_.FillSettings().RowsLimitPerWrite,
+                    execCtx->Options_.FillSettings().AllResultsBytesLimit, MakeMaybe(columns));
+
+                if (run(pullData)) {
                     return true;
                 }
+                specs.Clear();
+
+                writer.OnKeyedItem("Data");
+                writer.OnBeginList();
+                writer.OnRaw(pullData.Finish(), ::NYson::EYsonType::ListFragment);
+                writer.OnEndList();
+                return pullData.IsTruncated();
             }
-        } else  if (auto limiter = TTableLimiter(range)) {
-            auto entry = execCtx->GetEntry();
-            bool stop = false;
-            for (size_t i = 0; i < execCtx->InputTables_.size(); ++i) {
-                TString srcTableName = execCtx->InputTables_[i].Name;
-                NYT::TRichYPath srcTable = execCtx->InputTables_[i].Path;
-                bool isDynamic = execCtx->InputTables_[i].Dynamic;
-                ui64 recordsCount = execCtx->InputTables_[i].Records;
-                if (!isDynamic) {
-                    if (!limiter.NextTable(recordsCount)) {
-                        continue;
-                    }
-                } else {
-                    limiter.NextDynamicTable();
+            case IDataProvider::EResultFormat::Skiff: {
+                THashMap<TString, ui32> structColumns;
+                for (size_t index = 0; index < columns.size(); index++) {
+                    structColumns.emplace(columns[index], index);
                 }
 
-                if (isDynamic) {
-                    YQL_ENSURE(srcTable.GetRanges().Empty());
-                    stop = NYql::SelectRows(entry->Client, srcTableName, i, specsCache, pullData, limiter);
-                } else {
-                    auto readTx = entry->Tx;
-                    if (srcTable.TransactionId_) {
-                        readTx = entry->GetSnapshotTx(*srcTable.TransactionId_);
-                        srcTable.TransactionId_.Clear();
-                    }
-                    if (execCtx->YamrInput) {
-                        stop = NYql::IterateYamredRows(readTx, srcTable, i, specsCache, pullData, limiter, execCtx->Sampling);
-                    } else {
-                        stop = NYql::IterateYsonRows(readTx, srcTable, i, specsCache, pullData, limiter, execCtx->Sampling);
-                    }
+                auto skiffNode = SingleTableSpecToInputSkiff(rowSpec[YqlIOSpecTables][0], structColumns, false, false, false);
+
+                writer.OnKeyedItem("SkiffType");
+                writer.OnRaw(NodeToYsonString(skiffNode), ::NYson::EYsonType::Node);
+
+                TSkiffExecuteResOrPull pullData(execCtx->Options_.FillSettings().RowsLimitPerWrite,
+                    execCtx->Options_.FillSettings().AllResultsBytesLimit,
+                    codecCtx,
+                    holderFactory,
+                    rowSpec,
+                    execCtx->Options_.OptLLVM(),
+                    columns);
+
+                if (run(pullData)) {
+                    return true;
                 }
-                if (stop || limiter.Exceed()) {
-                    break;
-                }
+                specs.Clear();
+
+                writer.OnKeyedItem("Data");
+                writer.OnStringScalar(pullData.Finish());
+
+                return pullData.IsTruncated();
             }
-        }
-
-        specs.Clear();
-        writer.OnKeyedItem("Data");
-        writer.OnBeginList(); // Pull returns list fragment
-        writer.OnRaw(pullData.Finish(), ::NYson::EYsonType::ListFragment);
-        writer.OnEndList();
-
-        return pullData.IsTruncated();
+            default:
+                YQL_LOG_CTX_THROW yexception() << "Invalid result type: " << execCtx->Options_.FillSettings().Format;
+            }
     }
 
     TFuture<TResOrPullResult> DoResult(const TSession::TPtr& session, NNodes::TResult result, TExprContext& ctx, TResOrPullOptions&& options) {
@@ -2799,15 +2915,8 @@ private:
             hasListResult = rootNode.GetStaticType()->IsList();
             lambda = SerializeRuntimeNode(rootNode, builder.GetTypeEnvironment());
         }
-        auto extraUsage = ScanExtraResourceUsage(result.Input().Ref(), *options.Config());
 
-        TString type;
-        if (NCommon::HasResOrPullOption(result.Ref(), "type")) {
-            TStringStream typeYson;
-            ::NYson::TYsonWriter typeWriter(&typeYson);
-            NCommon::WriteResOrPullType(typeWriter, result.Input().Ref().GetTypeAnn(), columns);
-            type = typeYson.Str();
-        }
+        auto extraUsage = ScanExtraResourceUsage(result.Input().Ref(), *options.Config());
 
         TString cluster = options.UsedCluster();
         if (cluster.empty()) {
@@ -2823,30 +2932,92 @@ private:
         auto execCtx = MakeExecCtx(std::move(options), session, cluster, result.Input().Raw(), &ctx);
         auto pos = ctx.GetPosition(result.Pos());
 
-        return session->Queue_->Async([lambda, hasListResult, extraUsage, tmpTablePath, execCtx, columns] () {
+        TString type, skiffType;
+        NYT::TNode rowSpec;
+        if (execCtx->Options_.FillSettings().Format == IDataProvider::EResultFormat::Skiff) {
+            auto ytType =  ParseYTType(result.Input().Ref(), ctx, execCtx);
+
+            type = ytType.first;
+            rowSpec = ytType.second;
+            skiffType = NodeToYsonString(TablesSpecToOutputSkiff(rowSpec));
+        } else if (NCommon::HasResOrPullOption(result.Ref(), "type")) {
+            TStringStream typeYson;
+            ::NYson::TYsonWriter typeWriter(&typeYson);
+            NCommon::WriteResOrPullType(typeWriter, result.Input().Ref().GetTypeAnn(), columns);
+            type = typeYson.Str();
+        }
+
+        return session->Queue_->Async([lambda, hasListResult, extraUsage, tmpTablePath, execCtx, columns, rowSpec] () {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
-            return ExecCalc(lambda, extraUsage, tmpTablePath, execCtx, {},
-                TExprResultFactory(execCtx->Options_.FillSettings().RowsLimitPerWrite,
-                    execCtx->Options_.FillSettings().AllResultsBytesLimit, columns, hasListResult),
-                &columns);
+
+            switch (execCtx->Options_.FillSettings().Format) {
+                case IDataProvider::EResultFormat::Yson:
+                    return ExecCalc(lambda, extraUsage, tmpTablePath, execCtx, {},
+                        TYsonExprResultFactory(execCtx->Options_.FillSettings().RowsLimitPerWrite,
+                            execCtx->Options_.FillSettings().AllResultsBytesLimit,
+                            columns,
+                            hasListResult),
+                        &columns,
+                        execCtx->Options_.FillSettings().Format);
+                case IDataProvider::EResultFormat::Skiff:
+                    return ExecCalc(lambda, extraUsage, tmpTablePath, execCtx, {},
+                        TSkiffExprResultFactory(execCtx->Options_.FillSettings().RowsLimitPerWrite,
+                            execCtx->Options_.FillSettings().AllResultsBytesLimit,
+                            hasListResult, 
+                            rowSpec,
+                            execCtx->Options_.OptLLVM()),
+                        &columns,
+                        execCtx->Options_.FillSettings().Format);
+                    break;
+                default:
+                    YQL_LOG_CTX_THROW yexception() << "Invalid result type: " << execCtx->Options_.FillSettings().Format;
+            }
         })
-        .Apply([type, execCtx, discard, pos] (const TFuture<std::pair<TString, bool>>& f) {
+        .Apply([skiffType, type, execCtx, discard, pos, columns] (const TFuture<std::pair<TString, bool>>& f) {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             try {
                 const std::pair<TString, bool>& value = f.GetValue();
 
                 TResOrPullResult res;
                 TStringStream out;
-                ::NYson::TYsonWriter writer(discard ? (IOutputStream*)&Cnull : (IOutputStream*)&out, NCommon::GetYsonFormat(execCtx->Options_.FillSettings()), ::NYson::EYsonType::Node, true);
+
+                auto fillSettings = execCtx->Options_.FillSettings();
+                fillSettings.Format = IDataProvider::EResultFormat::Yson;
+
+                ::NYson::TYsonWriter writer(discard ? (IOutputStream*)&Cnull : (IOutputStream*)&out, NCommon::GetYsonFormat(fillSettings), ::NYson::EYsonType::Node, true);
                 writer.OnBeginMap();
+
+                if (skiffType) {
+                    writer.OnKeyedItem("SkiffType");
+                    writer.OnRaw(skiffType, ::NYson::EYsonType::Node);
+
+
+                    writer.OnKeyedItem("Columns");
+                    writer.OnBeginList();
+                    for (auto& column: columns) {
+                        writer.OnListItem();
+                        writer.OnStringScalar(column);
+                    }
+                    writer.OnEndList();
+                }
+
                 if (type) {
                     writer.OnKeyedItem("Type");
                     writer.OnRaw(type);
                 }
 
                 writer.OnKeyedItem("Data");
-                writer.OnRaw(value.first);
+                switch (execCtx->Options_.FillSettings().Format) {
+                    case IDataProvider::EResultFormat::Yson:
+                        writer.OnRaw(value.first);
+                        break;
+                    case IDataProvider::EResultFormat::Skiff:
+                        writer.OnStringScalar(value.first);
+                        break;
+                    default:
+                        YQL_LOG_CTX_THROW yexception() << "Invalid result type: " << execCtx->Options_.FillSettings().Format;
+                }
 
                 if (value.second) {
                     writer.OnKeyedItem("Truncated");
@@ -4504,7 +4675,7 @@ private:
 
         LocalRawMapReduce(spec, mapper, &in, &out);
 
-        const auto& builder = factory();
+        const auto& builder = factory.Create();
         for (const auto& reader = NYT::CreateTableReader<NYT::TNode>(&out, NYT::TTableReaderOptions()); reader->IsValid(); reader->Next()) {
             auto& row = reader->GetRow();
             if (!builder->WriteNext(row["output"])) {
@@ -4534,7 +4705,8 @@ private:
         const TExecParamsPtr& execCtx,
         TTransactionCache::TEntry::TPtr entry,
         TResultFactory&& factory,
-        const TVector<TString>* columns = nullptr
+        const TVector<TString>* columns = nullptr,
+        IDataProvider::EResultFormat format = IDataProvider::EResultFormat::Yson
     )
     {
         TRawMapOperationSpec mapOpSpec;
@@ -4574,9 +4746,25 @@ private:
                 const TBindTerminator bind(graph->GetTerminator());
                 graph->Prepare();
                 auto value = graph->GetValue();
-                auto builder = factory();
-                builder->WriteValue(value, root.GetStaticType());
-                return MakeFuture(builder->Make());
+
+                switch (format) {
+                    case IDataProvider::EResultFormat::Skiff: {
+                        TMemoryUsageInfo memInfo("Calc");
+                        THolderFactory holderFactory(alloc.Ref(), memInfo, execCtx->FunctionRegistry_);
+                        TCodecContext codecCtx(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_, &holderFactory);
+
+                        auto skiffBuilder = factory.Create(codecCtx, holderFactory);
+                        skiffBuilder->WriteValue(value, root.GetStaticType());
+                        return MakeFuture(skiffBuilder->Make());
+                    }
+                    case IDataProvider::EResultFormat::Yson: {
+                        auto ysonBuilder = factory.Create();
+                        ysonBuilder->WriteValue(value, root.GetStaticType());
+                        return MakeFuture(ysonBuilder->Make());
+                    }
+                    default:
+                        YQL_LOG_CTX_THROW yexception() << "Invalid result type: " << format;
+                }
             }
             localRun = localRun && transform.CanExecuteLocally();
             {
@@ -4645,17 +4833,44 @@ private:
                     return entry->Tx->RawMap(mapOpSpec, job, opOpts);
                 });
             })
-            .Apply([tmpTable, entry, factory = std::move(factory)](const auto& f) {
+            .Apply([execCtx, tmpTable, entry, factory = std::move(factory), format](const auto& f) {
                 f.GetValue();
-                auto builder = factory();
+
                 auto reader = entry->Tx->CreateTableReader<NYT::TNode>(tmpTable);
-                for (; reader->IsValid(); reader->Next()) {
-                    auto& row = reader->GetRow();
-                    if (!builder->WriteNext(row["output"])) {
-                        break;
+
+                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
+                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
+                TMemoryUsageInfo memInfo("Calc");
+                TTypeEnvironment env(alloc);
+                THolderFactory holderFactory(alloc.Ref(), memInfo, execCtx->FunctionRegistry_);
+
+                switch (format) {
+                    case IDataProvider::EResultFormat::Skiff: {
+                        TCodecContext codecCtx(env, *execCtx->FunctionRegistry_, &holderFactory);
+
+                        auto skiffBuilder = factory.Create(codecCtx, holderFactory);
+                        for (; reader->IsValid(); reader->Next()) {
+                            auto& row = reader->GetRow();
+                            if (!skiffBuilder->WriteNext(row["output"])) {
+                                break;
+                            }
+                        }
+                        return skiffBuilder->Make();
                     }
+                    case IDataProvider::EResultFormat::Yson: {
+                        auto ysonBuilder = factory.Create();
+                        for (; reader->IsValid(); reader->Next()) {
+                            auto& row = reader->GetRow();
+                            if (!ysonBuilder->WriteNext(row["output"])) {
+                                break;
+                            }
+                        }
+                        return ysonBuilder->Make();
+                    }
+                    default:
+                        YQL_LOG_CTX_THROW yexception() << "Unexpected result type: " << format;
                 }
-                return builder->Make();
             })
             .Apply([tmpTable, execCtx, entry](const TFuture<typename TResultFactory::TResult>& f) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);

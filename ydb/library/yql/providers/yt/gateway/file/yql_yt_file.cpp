@@ -1190,7 +1190,7 @@ private:
         const TBindTerminator bind(compGraph->GetTerminator());
         compGraph->Prepare();
 
-        TExecuteResOrPull resultData(options.FillSettings().RowsLimitPerWrite,
+        TYsonExecuteResOrPull resultData(options.FillSettings().RowsLimitPerWrite,
             options.FillSettings().AllResultsBytesLimit, MakeMaybe(columns));
 
         resultData.WriteValue(compGraph->GetValue(), data.GetStaticType());

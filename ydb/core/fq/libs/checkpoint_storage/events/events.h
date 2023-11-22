@@ -92,13 +92,15 @@ struct TEvCheckpointStorage {
 
     struct TEvSetCheckpointPendingCommitStatusRequest
         : NActors::TEventLocal<TEvSetCheckpointPendingCommitStatusRequest, EvSetCheckpointStatusPendingCommitRequest> {
-        TEvSetCheckpointPendingCommitStatusRequest(TCoordinatorId coordinatorId, TCheckpointId checkpointId)
+        TEvSetCheckpointPendingCommitStatusRequest(TCoordinatorId coordinatorId, TCheckpointId checkpointId, ui64 stateSizeBytes)
             : CoordinatorId(std::move(coordinatorId))
-            , CheckpointId(std::move(checkpointId)) {
+            , CheckpointId(std::move(checkpointId))
+            , StateSizeBytes(stateSizeBytes) {
         }
 
         TCoordinatorId CoordinatorId;
         TCheckpointId CheckpointId;
+        ui64 StateSizeBytes;
     };
 
     struct TEvSetCheckpointPendingCommitStatusResponse
@@ -114,13 +116,15 @@ struct TEvCheckpointStorage {
 
     struct TEvCompleteCheckpointRequest
         : NActors::TEventLocal<TEvCompleteCheckpointRequest, EvCompleteCheckpointRequest> {
-        TEvCompleteCheckpointRequest(TCoordinatorId coordinatorId, TCheckpointId checkpointId)
+        TEvCompleteCheckpointRequest(TCoordinatorId coordinatorId, TCheckpointId checkpointId, ui64 stateSizeBytes)
             : CoordinatorId(std::move(coordinatorId))
-            , CheckpointId(std::move(checkpointId)) {
+            , CheckpointId(std::move(checkpointId))
+            , StateSizeBytes(stateSizeBytes) {
         }
 
         TCoordinatorId CoordinatorId;
         TCheckpointId CheckpointId;
+        ui64 StateSizeBytes;
     };
 
     struct TEvCompleteCheckpointResponse

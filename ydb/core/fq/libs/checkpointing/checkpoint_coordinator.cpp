@@ -441,7 +441,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvSaveTaskSt
         CC_LOG_D("[" << checkpointId << "] Task state saved, need " << checkpoint.NotYetAcknowledgedCount() << " more acks");
         if (checkpoint.GotAllAcknowledges()) {
             CC_LOG_I("[" << checkpointId << "] Got all acks, changing checkpoint status to 'PendingCommit'");
-            Send(StorageProxy, new TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest(CoordinatorId, checkpointId), IEventHandle::FlagTrackDelivery);
+            Send(StorageProxy, new TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest(CoordinatorId, checkpointId, checkpoint.GetStats().StateSize), IEventHandle::FlagTrackDelivery);
             if (InitingZeroCheckpoint) {
                 Send(RunActorId, new TEvCheckpointCoordinator::TEvZeroCheckpointDone());
             }
@@ -501,7 +501,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvStateCommi
         auto durationMs = (TInstant::Now() - stats.CreatedAt).MilliSeconds();
         Metrics.LastCheckpointBarrierDeliveryTimeMillis->Set(durationMs);
         Metrics.CheckpointBarrierDeliveryTimeMillis->Collect(durationMs);
-        Send(StorageProxy, new TEvCheckpointStorage::TEvCompleteCheckpointRequest(CoordinatorId, checkpointId), IEventHandle::FlagTrackDelivery);
+        Send(StorageProxy, new TEvCheckpointStorage::TEvCompleteCheckpointRequest(CoordinatorId, checkpointId, stats.StateSize), IEventHandle::FlagTrackDelivery);
     }
 }
 

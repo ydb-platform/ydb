@@ -165,7 +165,8 @@ TNodeId Create(
     return ParseGuidFromResponse(RetryRequestWithPolicy(retryPolicy, context, header).Response);
 }
 
-TNodeId CopyWithoutRetries(
+TNodeId Copy(
+    const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,
     const TTransactionId& transactionId,
     const TYPath& sourcePath,
@@ -175,41 +176,10 @@ TNodeId CopyWithoutRetries(
     THttpHeader header("POST", "copy");
     header.AddMutationId();
     header.MergeParameters(SerializeParamsForCopy(transactionId, context.Config->Prefix, sourcePath, destinationPath, options));
-    return ParseGuidFromResponse(RequestWithoutRetry(context, header).Response);
-}
-
-TNodeId CopyInsideMasterCell(
-    const IRequestRetryPolicyPtr& retryPolicy,
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& sourcePath,
-    const TYPath& destinationPath,
-    const TCopyOptions& options)
-{
-    THttpHeader header("POST", "copy");
-    header.AddMutationId();
-    auto params = SerializeParamsForCopy(transactionId, context.Config->Prefix, sourcePath, destinationPath, options);
-
-    // Make cross cell copying disable.
-    params["enable_cross_cell_copying"] = false;
-    header.MergeParameters(params);
     return ParseGuidFromResponse(RetryRequestWithPolicy(retryPolicy, context, header).Response);
 }
 
-TNodeId MoveWithoutRetries(
-    const TClientContext& context,
-    const TTransactionId& transactionId,
-    const TYPath& sourcePath,
-    const TYPath& destinationPath,
-    const TMoveOptions& options)
-{
-    THttpHeader header("POST", "move");
-    header.AddMutationId();
-    header.MergeParameters(SerializeParamsForMove(transactionId, context.Config->Prefix, sourcePath, destinationPath, options));
-    return ParseGuidFromResponse(RequestWithoutRetry( context, header).Response);
-}
-
-TNodeId MoveInsideMasterCell(
+TNodeId Move(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,
     const TTransactionId& transactionId,
@@ -219,11 +189,7 @@ TNodeId MoveInsideMasterCell(
 {
     THttpHeader header("POST", "move");
     header.AddMutationId();
-    auto params = SerializeParamsForMove(transactionId, context.Config->Prefix, sourcePath, destinationPath, options);
-
-    // Make cross cell copying disable.
-    params["enable_cross_cell_copying"] = false;
-    header.MergeParameters(params);
+    header.MergeParameters(NRawClient::SerializeParamsForMove(transactionId, context.Config->Prefix, sourcePath, destinationPath, options));
     return ParseGuidFromResponse(RetryRequestWithPolicy(retryPolicy, context, header).Response);
 }
 

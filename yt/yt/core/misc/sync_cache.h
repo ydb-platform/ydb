@@ -49,6 +49,8 @@ public:
     bool TryInsert(const TValuePtr& value, TValuePtr* existingValue = nullptr);
     bool TryRemove(const TKey& key);
     bool TryRemove(const TValuePtr& value);
+    void UpdateWeight(const TKey& key);
+    void UpdateWeight(const TValuePtr& value);
     void Clear();
 
     virtual void Reconfigure(const TSlruCacheDynamicConfigPtr& config);
@@ -66,6 +68,7 @@ protected:
     virtual i64 GetWeight(const TValuePtr& value) const;
     virtual void OnAdded(const TValuePtr& value);
     virtual void OnRemoved(const TValuePtr& value);
+    virtual void OnWeightUpdated(i64 weightDelta);
 
 private:
     struct TItem
@@ -74,6 +77,7 @@ private:
         explicit TItem(TValuePtr value);
 
         TValuePtr Value;
+        i64 CachedWeight;
         bool Younger;
     };
 
@@ -137,6 +141,7 @@ protected:
 
     void OnAdded(const TValuePtr& value) override;
     void OnRemoved(const TValuePtr& value) override;
+    void OnWeightUpdated(i64 weightChanged) override;
 
 private:
     const IMemoryUsageTrackerPtr MemoryTracker_;

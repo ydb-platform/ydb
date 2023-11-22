@@ -157,6 +157,57 @@ TSyncSlruCacheBase<TKey, TValue, THash>::GetAll() const
 }
 
 template <class TKey, class TValue, class THash>
+void TSyncSlruCacheBase<TKey, TValue, THash>::UpdateWeight(const TValuePtr& value)
+{
+    UpdateWeight(value->GetKey());
+}
+
+template <class TKey, class TValue, class THash>
+void TSyncSlruCacheBase<TKey, TValue, THash>::UpdateWeight(const TKey& key)
+{
+    auto* shard = GetShardByKey(key);
+
+    auto guard = WriterGuard(shard->SpinLock);
+
+    DrainTouchBuffer(shard);
+
+    auto itemIt = shard->ItemMap.find(key);
+    if (itemIt == shard->ItemMap.end()) {
+        return;
+    }
+
+    auto item = itemIt->second;
+    if (!item->Value) {
+        return;
+    }
+
+    i64 newWeight = GetWeight(item->Value);
+    i64 weightDelta = newWeight - item->CachedWeight;
+
+    YT_VERIFY(!item->Empty());
+
+    if (item->Younger) {
+        shard->YoungerWeightCounter += weightDelta;
+        YoungerWeightCounter_.fetch_add(weightDelta, std::memory_order::relaxed);
+    } else {
+        shard->OlderWeightCounter += weightDelta;
+        OlderWeightCounter_.fetch_add(weightDelta, std::memory_order::relaxed);
+    }
+
+    item->CachedWeight += weightDelta;
+
+    // If item weight increases, it means that some parts of the item were missing in cache,
+    // so add delta to missed weight.
+    if (weightDelta > 0) {
+        MissedWeightCounter_.Increment(weightDelta);
+    }
+
+    Trim(shard, guard);
+
+    OnWeightUpdated(weightDelta);
+}
+
+template <class TKey, class TValue, class THash>
 bool TSyncSlruCacheBase<TKey, TValue, THash>::TryInsert(const TValuePtr& value, TValuePtr* existingValue)
 {
     const auto& key = value->GetKey();
@@ -345,6 +396,10 @@ void TSyncSlruCacheBase<TKey, TValue, THash>::OnRemoved(const TValuePtr& /*value
 { }
 
 template <class TKey, class TValue, class THash>
+void TSyncSlruCacheBase<TKey, TValue, THash>::OnWeightUpdated(i64/*weightDelta*/)
+{ }
+
+template <class TKey, class TValue, class THash>
 int TSyncSlruCacheBase<TKey, TValue, THash>::GetSize() const
 {
     return Size_.load(std::memory_order::relaxed);
@@ -356,6 +411,7 @@ void TSyncSlruCacheBase<TKey, TValue, THash>::PushToYounger(TShard* shard, TItem
     YT_ASSERT(item->Empty());
     shard->YoungerLruList.PushFront(item);
     auto weight = GetWeight(item->Value);
+    item->CachedWeight = weight;
     shard->YoungerWeightCounter += weight;
     YoungerWeightCounter_.fetch_add(weight, std::memory_order::relaxed);
     item->Younger = true;
@@ -429,6 +485,16 @@ template <class TKey, class TValue, class THash>
 TMemoryTrackingSyncSlruCacheBase<TKey, TValue, THash>::~TMemoryTrackingSyncSlruCacheBase()
 {
     MemoryTracker_->SetLimit(0);
+}
+
+template <class TKey, class TValue, class THash>
+void TMemoryTrackingSyncSlruCacheBase<TKey, TValue, THash>::OnWeightUpdated(i64 weightDelta)
+{
+    if (weightDelta > 0) {
+        MemoryTracker_->Acquire(weightDelta);
+    } else {
+        MemoryTracker_->Release(-weightDelta);
+    }
 }
 
 template <class TKey, class TValue, class THash>

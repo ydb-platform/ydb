@@ -130,13 +130,13 @@ def parse_columns(expr: str):
     named = False
     level = 0
     label = ''
-    in_str = False
+    quote = None
     while True:
         char = expr[pos]
         pos += 1
-        if in_str:
-            if "'" == char:
-                in_str = False
+        if quote:
+            if char == quote:
+                quote = None
             elif char == '\\' and expr[pos] == "'" and expr[pos:pos + 4] != "' = " and expr[pos:pos + 2] != "')":
                 label += expr[pos]
                 pos += 1
@@ -156,8 +156,8 @@ def parse_columns(expr: str):
                 elif char == ')':
                     columns.append(label)
                     break
-            if char == "'" and (not label or 'Enum' in label):
-                in_str = True
+            if char in ("'", '`') and (not label or 'Enum' in label):
+                quote = char
             elif char == '(':
                 level += 1
             elif char == ')':

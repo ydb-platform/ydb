@@ -45,9 +45,9 @@ class String(ClickHouseType):
     # pylint: disable=duplicate-code,too-many-nested-blocks,too-many-branches
     def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
         encoding = None
-        if isinstance(self._first_value(column), str):
+        if not isinstance(self._first_value(column), bytes):
             encoding = ctx.encoding or self.encoding
-        data_conv.write_str_col(column, encoding, dest)
+        data_conv.write_str_col(column, self.nullable, encoding, dest)
 
     def _active_null(self, ctx):
         if ctx.use_none:

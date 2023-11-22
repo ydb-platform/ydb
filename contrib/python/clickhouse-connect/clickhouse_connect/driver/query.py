@@ -341,7 +341,7 @@ class QueryResult(Closable):
 
 
 BS = '\\'
-must_escape = (BS, '\'')
+must_escape = (BS, '\'', '`')
 
 
 def quote_identifier(identifier: str):
@@ -349,7 +349,7 @@ def quote_identifier(identifier: str):
     if first_char in ('`', '"') and identifier[-1] == first_char:
         # Identifier is already quoted, assume that it's valid
         return identifier
-    return f'`{identifier}`'
+    return f'`{escape_str(identifier)}`'
 
 
 def finalize_query(query: str, parameters: Optional[Union[Sequence, Dict[str, Any]]],

@@ -5,6 +5,7 @@ from typing import Sequence, Optional, Any
 from uuid import UUID, SafeUUID
 
 from clickhouse_connect.driver.common import int_size
+from clickhouse_connect.driver.exceptions import DataError
 from clickhouse_connect.driver.types import ByteSource
 from clickhouse_connect.driver.options import np
 
@@ -110,14 +111,18 @@ def pivot(data: Sequence[Sequence], start_row: int, end_row: int) -> Sequence[Se
     return tuple(zip(*data[start_row: end_row]))
 
 
-def write_str_col(column: Sequence, encoding: Optional[str], dest: bytearray):
+def write_str_col(column: Sequence, nullable: bool, encoding: Optional[str], dest: bytearray):
     app = dest.append
     for x in column:
         if not x:
+            if not nullable and x is None:
+                raise DataError('Invalid None value in non-Nullable column')
             app(0)
         else:
             if encoding:
                 x = x.encode(encoding)
+            else:
+                x = b''
             sz = len(x)
             while True:
                 b = sz & 0x7f

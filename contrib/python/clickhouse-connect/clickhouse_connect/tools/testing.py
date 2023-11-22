@@ -1,7 +1,7 @@
 from typing import Sequence, Optional, Union, Dict, Any
 
 from clickhouse_connect.driver import Client
-from clickhouse_connect.driver.query import format_query_value
+from clickhouse_connect.driver.query import format_query_value, quote_identifier
 
 
 class TableContext:
@@ -29,14 +29,14 @@ class TableContext:
             self.column_names = columns
             self.column_types = column_types
         self.engine = engine
-        self.order_by = self.column_names[0] if order_by is None else order_by
+        self.order_by = quote_identifier(self.column_names[0]) if order_by is None else order_by
 
     def __enter__(self):
         if self.client.min_version('19'):
             self.client.command(f'DROP TABLE IF EXISTS {self.table}')
         else:
             self.client.command(f'DROP TABLE IF EXISTS {self.table} SYNC')
-        col_defs = ','.join(f'{name} {col_type}' for name, col_type in zip(self.column_names, self.column_types))
+        col_defs = ','.join(f'{quote_identifier(name)} {col_type}' for name, col_type in zip(self.column_names, self.column_types))
         create_cmd = f'CREATE TABLE {self.table} ({col_defs}) ENGINE {self.engine} ORDER BY {self.order_by}'
         if self.settings:
             create_cmd += ' SETTINGS '

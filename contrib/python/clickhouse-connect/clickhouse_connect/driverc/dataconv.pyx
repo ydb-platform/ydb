@@ -19,6 +19,7 @@ from uuid import UUID, SafeUUID
 from libc.string cimport memcpy
 from datetime import tzinfo
 
+from clickhouse_connect.driver.exceptions import DataError
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -254,7 +255,7 @@ cdef inline extend_byte_array(target: bytearray, int start, object source, Py_ss
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def write_str_col(column: Sequence, encoding: Optional[str], dest: bytearray):
+def write_str_col(column: Sequence, nullable: bool, encoding: Optional[str], dest: bytearray):
     cdef unsigned long long buff_size = len(column) << 5
     cdef unsigned long long buff_loc = 0, sz = 0, dsz = 0
     cdef unsigned long long array_size = PyByteArray_GET_SIZE(dest)
@@ -263,50 +264,54 @@ def write_str_col(column: Sequence, encoding: Optional[str], dest: bytearray):
     cdef object encoded
     cdef char b
     cdef char * data
-    for x in column:
-        if not x:
-            temp_buff[buff_loc] = 0
-            buff_loc += 1
-            if buff_loc == buff_size:
-                extend_byte_array(dest, array_size, mv, buff_loc)
-                array_size += buff_loc
-                buff_loc = 0
-        else:
-            if not encoding:
-                data = x
-                dsz = len(x)
-            else:
-                encoded = x.encode(encoding)
-                dsz = len(encoded)
-                data = encoded
-            sz = dsz
-            while True:
-                b = sz & 0x7f
-                sz >>= 7
-                if sz != 0:
-                    b |= 0x80
-                temp_buff[buff_loc] = b
+    try:
+        for x in column:
+            if not x:
+                if not nullable and x is None:
+                    raise DataError('Invalid None value in non-Nullable column')
+                temp_buff[buff_loc] = 0
                 buff_loc += 1
                 if buff_loc == buff_size:
                     extend_byte_array(dest, array_size, mv, buff_loc)
                     array_size += buff_loc
                     buff_loc = 0
-                if sz == 0:
-                    break
-            if dsz + buff_loc >= buff_size:
-                if buff_loc > 0:  # Write what we have so far
-                    extend_byte_array(dest, array_size, mv, buff_loc)
-                    array_size += buff_loc
-                    buff_loc = 0
-                if (dsz << 4) > buff_size:  # resize our buffer for very large strings
-                    PyMem_Free(<void *> temp_buff)
-                    mv.release()
-                    buff_size = dsz << 6
-                    temp_buff = <char *> PyMem_Malloc(<size_t> buff_size)
-                    mv = PyMemoryView_FromMemory(temp_buff, buff_size, PyBUF_READ)
-            memcpy(temp_buff + buff_loc, data, dsz)
-            buff_loc += dsz
-    if buff_loc > 0:
-        extend_byte_array(dest, array_size, mv, buff_loc)
-    mv.release()
-    PyMem_Free(<void *>temp_buff)
+            else:
+                if not encoding:
+                    data = x
+                    dsz = len(x)
+                else:
+                    encoded = x.encode(encoding)
+                    dsz = len(encoded)
+                    data = encoded
+                sz = dsz
+                while True:
+                    b = sz & 0x7f
+                    sz >>= 7
+                    if sz != 0:
+                        b |= 0x80
+                    temp_buff[buff_loc] = b
+                    buff_loc += 1
+                    if buff_loc == buff_size:
+                        extend_byte_array(dest, array_size, mv, buff_loc)
+                        array_size += buff_loc
+                        buff_loc = 0
+                    if sz == 0:
+                        break
+                if dsz + buff_loc >= buff_size:
+                    if buff_loc > 0:  # Write what we have so far
+                        extend_byte_array(dest, array_size, mv, buff_loc)
+                        array_size += buff_loc
+                        buff_loc = 0
+                    if (dsz << 4) > buff_size:  # resize our buffer for very large strings
+                        PyMem_Free(<void *> temp_buff)
+                        mv.release()
+                        buff_size = dsz << 6
+                        temp_buff = <char *> PyMem_Malloc(<size_t> buff_size)
+                        mv = PyMemoryView_FromMemory(temp_buff, buff_size, PyBUF_READ)
+                memcpy(temp_buff + buff_loc, data, dsz)
+                buff_loc += dsz
+        if buff_loc > 0:
+            extend_byte_array(dest, array_size, mv, buff_loc)
+    finally:
+        mv.release()
+        PyMem_Free(<void *>temp_buff)

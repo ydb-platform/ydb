@@ -22,6 +22,7 @@ class ClickHouseDialect(DefaultDialect):
     default_schema_name = 'default'
     supports_native_decimal = True
     supports_native_boolean = True
+    supports_statement_cache = False
     returns_unicode_strings = True
     postfetch_lastrowid = False
     ddl_compiler = ChDDLCompiler

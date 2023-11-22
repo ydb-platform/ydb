@@ -3,7 +3,7 @@ import logging
 from typing import Sequence, Collection
 
 from clickhouse_connect.driver.insert import InsertContext
-from clickhouse_connect.driver.query import QueryContext
+from clickhouse_connect.driver.query import QueryContext, quote_identifier
 from clickhouse_connect.driver.types import ByteSource
 from clickhouse_connect.json_impl import any_to_json
 from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
@@ -94,7 +94,7 @@ class Tuple(ClickHouseType):
         self.element_names = type_def.keys
         self.element_types = [get_from_name(name) for name in type_def.values]
         if self.element_names:
-            self._name_suffix = f"({', '.join(k + ' ' + str(v) for k, v in zip(type_def.keys, type_def.values))})"
+            self._name_suffix = f"({', '.join(quote_identifier(k) + ' ' + str(v) for k, v in zip(type_def.keys, type_def.values))})"
         else:
             self._name_suffix = type_def.arg_str
 

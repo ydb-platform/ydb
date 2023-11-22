@@ -554,6 +554,11 @@ private:
                 PeerAddressString_ = PeerAddressString_.substr(5);
             }
 
+            if (PeerAddressString_.StartsWith("unix:")) {
+                PeerAddress_ = NNet::TNetworkAddress::CreateUnixDomainSocketAddress(PeerAddressString_.substr(5));
+                return true;
+            }
+
             // Decode URL-encoded square brackets.
             CGIUnescape(PeerAddressString_);
 

@@ -7,16 +7,55 @@ namespace NFq {
 
 using TAggregates = std::map<TString, std::optional<ui64>>;
 
+// TODO Dedup Code with KQP and YQL
+struct TAggregate {
+    ui64 Min = 0;
+    ui64 Max = 0;
+    ui64 Sum = 0;
+    ui64 Count = 0;
+    void Add(ui64 value) {
+        if (Count) {
+            if (Min > value) {
+                Min = value;
+            }
+            if (Max < value) {
+                Max = value;
+            }
+            Sum += value;
+        } else {
+            Min = Max = Sum = value;
+        }
+        Count++;
+    }
+    void Write(NYson::TYsonWriter& writer, const TString& keyName) {
+        if (Count) {
+            writer.OnKeyedItem(keyName);
+            writer.OnBeginMap();
+                writer.OnKeyedItem("min");
+                writer.OnInt64Scalar(Min);
+                writer.OnKeyedItem("max");
+                writer.OnInt64Scalar(Max);
+                writer.OnKeyedItem("avg");
+                writer.OnInt64Scalar(Sum / Count);
+                writer.OnKeyedItem("sum");
+                writer.OnInt64Scalar(Sum);
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(Count);
+            writer.OnEndMap();
+        }
+    }
+};
+
 struct TTotalStatistics {
-    ui64 MaxMemoryUsage = 0;
-    ui64 CpuTimeUs = 0;
-    ui64 SourceCpuTimeUs = 0;
-    ui64 TotalInputRows = 0;
-    ui64 TotalInputBytes = 0;
-    ui64 TotalOutputRows = 0;
-    ui64 TotalOutputBytes = 0;
-    ui64 TotalIngressBytes = 0;
-    ui64 TotalEgressBytes = 0;
+    TAggregate MaxMemoryUsage;
+    TAggregate CpuTimeUs;
+    TAggregate SourceCpuTimeUs;
+    TAggregate InputRows;
+    TAggregate InputBytes;
+    TAggregate OutputRows;
+    TAggregate OutputBytes;
+    TAggregate IngressBytes;
+    TAggregate EgressBytes;
     TAggregates Aggregates;
 };
 
@@ -88,13 +127,13 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
             if (name) {
                 auto sum = node.GetIntegerSafe();
                 if (name == "TotalInputRows") {
-                    totals.TotalInputRows += sum;
+                    totals.InputRows.Add(sum);
                 } else if (name == "TotalInputBytes") {
-                    totals.TotalInputBytes += sum;
+                    totals.InputBytes.Add(sum);
                 } else if (name == "TotalOutputRows") {
-                    totals.TotalOutputRows += sum;
+                    totals.OutputRows.Add(sum);
                 } else if (name == "TotalOutputBytes") {
-                    totals.TotalOutputBytes += sum;
+                    totals.OutputBytes.Add(sum);
                 }
                 writer.OnKeyedItem(name);
                 writer.OnBeginMap();
@@ -111,22 +150,31 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
                 writer.OnEndMap();
             }
             break;
-        case NJson::JSON_ARRAY:
+        case NJson::JSON_ARRAY: {
+            ui64 ingressBytes = 0;
+            ui64 egressBytes = 0;
             for (auto item : node.GetArray()) {
                 if (auto* subNode = item.GetValueByPath("Name")) {
                     WriteNamedNode(writer, item, name + "=" + subNode->GetStringSafe(), totals);
                 }
                 if (name == "Ingress") {
                     if (auto* ingressNode = item.GetValueByPath("Ingress.Bytes.Sum")) {
-                        totals.TotalIngressBytes += ingressNode->GetIntegerSafe();
+                        ingressBytes += ingressNode->GetIntegerSafe();
                     }
                 } else if (name == "Egress") {
                     if (auto* egressNode = item.GetValueByPath("Egress.Bytes.Sum")) {
-                        totals.TotalEgressBytes += egressNode->GetIntegerSafe();
+                        egressBytes += egressNode->GetIntegerSafe();
                     }
                 }
             }
+            if (ingressBytes) {
+                totals.IngressBytes.Add(ingressBytes);
+            }
+            if (egressBytes) {
+                totals.EgressBytes.Add(egressBytes);
+            }
             break;
+        }
         case NJson::JSON_MAP: {
             std::optional<ui64> count;
             std::optional<ui64> sum;
@@ -142,11 +190,11 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
             if (auto* subNode = node.GetValueByPath("Sum")) {
                 sum = subNode->GetIntegerSafe();
                 if (name == "MaxMemoryUsage") {
-                    totals.MaxMemoryUsage += *sum;
+                    totals.MaxMemoryUsage.Add(*sum);
                 } else if (name == "CpuTimeUs") {
-                    totals.CpuTimeUs += *sum;
+                    totals.CpuTimeUs.Add(*sum);
                 } else if (name == "SourceCpuTimeUs") {
-                    totals.SourceCpuTimeUs += *sum;
+                    totals.SourceCpuTimeUs.Add(*sum);
                 }
             }
             if (auto* subNode = node.GetValueByPath("Min")) {
@@ -288,69 +336,15 @@ TString GetV1StatFromV2Plan(const TString& plan) {
                         writer.OnKeyedItem(nodeType);
                         writer.OnBeginMap();
                         EnumeratePlans(writer, plan, stageViewIndex, totals);
-                        if (totals.MaxMemoryUsage) {
-                            writer.OnKeyedItem("MaxMemoryUsage");
-                            writer.OnBeginMap();
-                                writer.OnKeyedItem("sum");
-                                writer.OnInt64Scalar(totals.MaxMemoryUsage);
-                            writer.OnEndMap();
-                        }
-                        if (totals.CpuTimeUs) {
-                            writer.OnKeyedItem("CpuTimeUs");
-                            writer.OnBeginMap();
-                                writer.OnKeyedItem("sum");
-                                writer.OnStringScalar(FormatDurationUs(totals.CpuTimeUs));
-                            writer.OnEndMap();
-                        }
-                        if (totals.SourceCpuTimeUs) {
-                            writer.OnKeyedItem("SourceCpuTimeUs");
-                            writer.OnBeginMap();
-                                writer.OnKeyedItem("sum");
-                                writer.OnStringScalar(FormatDurationUs(totals.SourceCpuTimeUs));
-                            writer.OnEndMap();
-                        }
-                        if (totals.TotalInputRows) {
-                            writer.OnKeyedItem("TotalInputRows");
-                            writer.OnBeginMap();
-                                writer.OnKeyedItem("sum");
-                                writer.OnInt64Scalar(totals.TotalInputRows);
-                            writer.OnEndMap();
-                        }
-                        if (totals.TotalInputBytes) {
-                            writer.OnKeyedItem("TotalInputBytes");
-                            writer.OnBeginMap();
-                                writer.OnKeyedItem("sum");
-                                writer.OnInt64Scalar(totals.TotalInputBytes);
-                            writer.OnEndMap();
-                        }
-                        if (totals.TotalOutputRows) {
-                            writer.OnKeyedItem("TotalOutputRows");
-                            writer.OnBeginMap();
-                                writer.OnKeyedItem("sum");
-                                writer.OnInt64Scalar(totals.TotalOutputRows);
-                            writer.OnEndMap();
-                        }
-                        if (totals.TotalOutputBytes) {
-                            writer.OnKeyedItem("TotalOutputBytes");
-                            writer.OnBeginMap();
-                                writer.OnKeyedItem("sum");
-                                writer.OnInt64Scalar(totals.TotalOutputBytes);
-                            writer.OnEndMap();
-                        }
-                        if (totals.TotalIngressBytes) {
-                            writer.OnKeyedItem("TotalIngressBytes");
-                            writer.OnBeginMap();
-                                writer.OnKeyedItem("sum");
-                                writer.OnInt64Scalar(totals.TotalIngressBytes);
-                            writer.OnEndMap();
-                        }
-                        if (totals.TotalEgressBytes) {
-                            writer.OnKeyedItem("TotalEgressBytes");
-                            writer.OnBeginMap();
-                                writer.OnKeyedItem("sum");
-                                writer.OnInt64Scalar(totals.TotalEgressBytes);
-                            writer.OnEndMap();
-                        }
+                        totals.MaxMemoryUsage.Write(writer, "MaxMemoryUsage");
+                        totals.CpuTimeUs.Write(writer, "CpuTimeUs");
+                        totals.SourceCpuTimeUs.Write(writer, "SourceCpuTimeUs");
+                        totals.InputRows.Write(writer, "InputRows");
+                        totals.InputBytes.Write(writer, "InputBytes");
+                        totals.OutputRows.Write(writer, "OutputRows");
+                        totals.OutputBytes.Write(writer, "OutputBytes");
+                        totals.IngressBytes.Write(writer, "IngressBytes");
+                        totals.EgressBytes.Write(writer, "EgressBytes");
                         writer.OnEndMap();
                     }
                 }
@@ -580,19 +574,19 @@ void EnumeratePlansV2(NYson::TYsonWriter& writer, NJson::TJsonValue& value, ui32
             MergeAggregates(totals.Aggregates, aggregates);
             if (auto* subNode = statNode->GetValueByPath("MaxMemoryUsage.Sum")) {
                 auto sum = subNode->GetIntegerSafe();
-                totals.MaxMemoryUsage += sum;
+                totals.MaxMemoryUsage.Add(sum);
                 writer.OnKeyedItem("mem");
                 writer.OnInt64Scalar(sum);
             }
             if (auto* subNode = statNode->GetValueByPath("CpuTimeUs.Sum")) {
                 auto sum = subNode->GetIntegerSafe();
-                totals.CpuTimeUs += sum;
+                totals.CpuTimeUs.Add(sum);
                 writer.OnKeyedItem("cpu");
                 writer.OnStringScalar(FormatDurationUs(sum));
             }
             if (auto* subNode = statNode->GetValueByPath("SourceCpuTimeUs.Sum")) {
                 auto sum = subNode->GetIntegerSafe();
-                totals.SourceCpuTimeUs += sum;
+                totals.SourceCpuTimeUs.Add(sum);
                 writer.OnKeyedItem("scpu");
                 writer.OnStringScalar(FormatDurationUs(sum));
             }
@@ -627,17 +621,17 @@ TString GetV1StatFromV2PlanV2(const TString& plan) {
                         writer.OnBeginMap();
                         EnumeratePlansV2(writer, plan, stageViewIndex, totals);
                         WriteAggregates(writer, totals.Aggregates);
-                        if (totals.MaxMemoryUsage) {
+                        if (totals.MaxMemoryUsage.Sum) {
                             writer.OnKeyedItem("mem");
-                            writer.OnInt64Scalar(totals.MaxMemoryUsage);
+                            writer.OnInt64Scalar(totals.MaxMemoryUsage.Sum);
                         }
-                        if (totals.CpuTimeUs) {
+                        if (totals.CpuTimeUs.Sum) {
                             writer.OnKeyedItem("cpu");
-                            writer.OnStringScalar(FormatDurationUs(totals.CpuTimeUs));
+                            writer.OnStringScalar(FormatDurationUs(totals.CpuTimeUs.Sum));
                         }
-                        if (totals.SourceCpuTimeUs) {
+                        if (totals.SourceCpuTimeUs.Sum) {
                             writer.OnKeyedItem("scpu");
-                            writer.OnStringScalar(FormatDurationUs(totals.SourceCpuTimeUs));
+                            writer.OnStringScalar(FormatDurationUs(totals.SourceCpuTimeUs.Sum));
                         }
                         writer.OnEndMap();
                     }

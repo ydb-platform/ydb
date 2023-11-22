@@ -38,7 +38,8 @@ class TestS3(object):
         stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
 
         graph_name = "Graph=0" if yq_version == "v1" else "Sink"
-        egress_bytes = stat[graph_name]["EgressObjectStorageBytes"]["sum"]
+        egress_bytes = stat[graph_name]["EgressBytes"]["sum"]
+        assert stat[graph_name]["EgressObjectStorageBytes"]["sum"] == egress_bytes
 
         file_size = 0
         for file in bucket.objects.all():
@@ -75,8 +76,8 @@ class TestS3(object):
         stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
 
         graph_name = "Graph=0" if yq_version == "v1" else "Sink"
-        egress_bytes_1 = stat[graph_name]["EgressObjectStorageBytes"]["sum"]
-        print(json.dumps(stat, indent=4))
+        egress_bytes_1 = stat[graph_name]["EgressBytes"]["sum"]
+        assert stat[graph_name]["EgressObjectStorageBytes"]["sum"] == egress_bytes_1
 
         sql = R'''
             insert into sbucket.`{0}_2_{1}_{2}/` with (format={1})
@@ -91,9 +92,10 @@ class TestS3(object):
         stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
 
         graph_name = "Graph=0" if yq_version == "v1" else "Sink"
-        ingress_bytes_1 = stat[graph_name]["IngressObjectStorageBytes"]["sum"]
-        egress_bytes_2 = stat[graph_name]["EgressObjectStorageBytes"]["sum"]
-        print(json.dumps(stat, indent=4))
+        ingress_bytes_1 = stat[graph_name]["IngressBytes"]["sum"]
+        assert stat[graph_name]["IngressObjectStorageBytes"]["sum"] == ingress_bytes_1
+        egress_bytes_2 = stat[graph_name]["EgressBytes"]["sum"]
+        assert stat[graph_name]["EgressObjectStorageBytes"]["sum"] == egress_bytes_2
 
         sql = R'''
             select foo, bar from sbucket.`{0}_2_{1}_{2}/*` with (format={1}, schema(
@@ -107,8 +109,8 @@ class TestS3(object):
         stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
 
         graph_name = "Graph=0" if yq_version == "v1" else "ResultSet"
-        ingress_bytes_2 = stat[graph_name]["IngressObjectStorageBytes"]["sum"]
-        print(json.dumps(stat, indent=4))
+        ingress_bytes_2 = stat[graph_name]["IngressBytes"]["sum"]
+        assert stat[graph_name]["IngressObjectStorageBytes"]["sum"] == ingress_bytes_2
 
         file_size_1 = 0
         file_size_2 = 0
@@ -186,10 +188,12 @@ class TestS3(object):
         stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
 
         graph_name = "Precompute=0" if yq_version == "v1" else "Precompute_0_0"
-        ingress_0 = stat[graph_name]["IngressObjectStorageBytes"]["sum"]
+        ingress_0 = stat[graph_name]["IngressBytes"]["sum"]
+        assert stat[graph_name]["IngressObjectStorageBytes"]["sum"] == ingress_0
 
         graph_name = "Precompute=1" if yq_version == "v1" else "Precompute_0_1"
-        ingress_1 = stat[graph_name]["IngressObjectStorageBytes"]["sum"]
+        ingress_1 = stat[graph_name]["IngressBytes"]["sum"]
+        assert stat[graph_name]["IngressObjectStorageBytes"]["sum"] == ingress_1
 
         ingress = ingress_0 + ingress_1
 
@@ -242,7 +246,8 @@ class TestS3(object):
         stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
 
         graph_name = "Graph=0" if yq_version == "v1" else "ResultSet"
-        ingress_bytes = stat[graph_name]["IngressObjectStorageBytes"]["sum"]
+        ingress_bytes = stat[graph_name]["IngressBytes"]["sum"]
+        assert stat[graph_name]["IngressObjectStorageBytes"]["sum"] == ingress_bytes
 
         assert files_size == ingress_bytes, "Files size {} mistmatches ingress bytes {}".format(files_size, ingress_bytes)
         assert sum(kikimr.control_plane.get_metering()) == 110

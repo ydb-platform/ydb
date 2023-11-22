@@ -372,10 +372,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerPerfTest) {
 
     Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleBooleanKeys) {
         TSetup<LLVM> setup;
-
+        auto samples = I8Samples;
+        samples.emplace_back(-1, -1.0); //ensure to have at least one negative value
+        samples.emplace_back(1, 1.0); //ensure to have at least one positive value
         double pSum = 0.0, nSum = 0.0, pMax = 0.0, nMax = -1000.0, pMin = 1000.0, nMin = 0.0;
         const auto t = TInstant::Now();
-        for (const auto& sample : I8Samples) {
+        for (const auto& sample : samples) {
             if (sample.second > 0.0) {
                 pSum += sample.second;
                 pMax = std::max(pMax, sample.second);
@@ -407,8 +409,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerPerfTest) {
 
         const auto graph = setup.BuildGraph(pgmReturn, {list});
         NUdf::TUnboxedValue* items = nullptr;
-        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
-        std::transform(I8Samples.cbegin(), I8Samples.cend(), items, [](const std::pair<i8, double> s){ return ToValue<double>(s.second); });
+        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(samples.size(), items));
+        std::transform(samples.cbegin(), samples.cend(), items, [](const std::pair<i8, double> s){ return ToValue<double>(s.second); });
 
         const auto t1 = TInstant::Now();
         const auto& value = graph->GetValue();

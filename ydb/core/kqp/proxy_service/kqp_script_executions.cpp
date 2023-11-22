@@ -1,6 +1,5 @@
 #include "kqp_script_executions.h"
 #include "kqp_script_executions_impl.h"
-#include "kqp_table_creator.h"
 
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/common/events/events.h>
@@ -9,6 +8,7 @@
 #include <ydb/core/kqp/run_script_actor/kqp_run_script_actor.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/query_actor/query_actor.h>
+#include <ydb/library/table_creator/table_creator.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
@@ -147,6 +147,7 @@ private:
                     Col("script_secret_names", NScheme::NTypeIds::JsonDocument),
                 },
                 { "database", "execution_id" },
+                NKikimrServices::KQP_PROXY,
                 TtlCol("expire_at")
             )
         );
@@ -163,7 +164,8 @@ private:
                     Col("lease_deadline", NScheme::NTypeIds::Timestamp),
                     Col("lease_generation", NScheme::NTypeIds::Int64),
                 },
-                { "database", "execution_id" }
+                { "database", "execution_id" },
+                NKikimrServices::KQP_PROXY
             )
         );
     }
@@ -182,12 +184,13 @@ private:
                     Col("result_set", NScheme::NTypeIds::String),
                 },
                 { "database", "execution_id", "result_set_id", "row_id" },
+                NKikimrServices::KQP_PROXY,
                 TtlCol("expire_at")
             )
         );
     }
 
-    void Handle(TEvPrivate::TEvCreateTableResponse::TPtr&) {
+    void Handle(TEvTableCreator::TEvCreateTableResponse::TPtr&) {
         Y_ABORT_UNLESS(TablesCreating > 0);
         if (--TablesCreating == 0) {
             Send(Owner, std::move(ResultEvent));
@@ -196,7 +199,7 @@ private:
     }
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvCreateTableResponse, Handle);
+        hFunc(TEvTableCreator::TEvCreateTableResponse, Handle);
     )
 
 private:

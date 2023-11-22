@@ -1,10 +1,7 @@
-#include "kqp_script_executions.h"
-#include "kqp_script_executions_impl.h"
-#include "kqp_table_creator.h"
+#include "table_creator.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
-#include <ydb/library/services/services.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path.h>
@@ -23,33 +20,28 @@
 #include <util/generic/utility.h>
 #include <util/random/random.h>
 
-namespace NKikimr::NKqp {
-
-using namespace NKikimr::NKqp::NPrivate;
+namespace NKikimr {
 
 namespace {
-
-#define KQP_PROXY_LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
-#define KQP_PROXY_LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
-#define KQP_PROXY_LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
-#define KQP_PROXY_LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
-#define KQP_PROXY_LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
-#define KQP_PROXY_LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
-#define KQP_PROXY_LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
 
 class TTableCreator : public NActors::TActorBootstrapped<TTableCreator> {
 
 using TTableCreatorRetryPolicy = IRetryPolicy<bool>;
 
 public:
-    TTableCreator(TVector<TString> pathComponents, TVector<NKikimrSchemeOp::TColumnDescription> columns, TVector<TString> keyColumns,
-                  TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing())
+    TTableCreator(
+        TVector<TString> pathComponents,
+        TVector<NKikimrSchemeOp::TColumnDescription> columns,
+        TVector<TString> keyColumns,
+        NKikimrServices::EServiceKikimr logService,
+        TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing())
         : PathComponents(std::move(pathComponents))
         , Columns(std::move(columns))
         , KeyColumns(std::move(keyColumns))
+        , LogService(logService)
         , TtlSettings(std::move(ttlSettings))
         , LogPrefix("Table " + TableName() + " updater. ")
-    {   
+    {
         Y_ABORT_UNLESS(!PathComponents.empty());
         Y_ABORT_UNLESS(!Columns.empty());
     }
@@ -100,7 +92,8 @@ public:
             pathComponents.emplace_back(PathComponents[i]);
         }
         modifyScheme.SetWorkingDir(CanonizePath(pathComponents));
-        KQP_PROXY_LOG_D(LogPrefix << "Full table path:" << modifyScheme.GetWorkingDir() << "/" << TableName());
+        LOG_DEBUG_S(*TlsActivationContext, LogService,
+            LogPrefix << "Full table path:" << modifyScheme.GetWorkingDir() << "/" << TableName());
         modifyScheme.SetOperationType(OperationType);
         modifyScheme.SetInternal(true);
         modifyScheme.SetAllowAccessToPrivatePaths(true);
@@ -130,7 +123,8 @@ public:
         Y_ABORT_UNLESS(request.ResultSet.size() == 1);
         const NSchemeCache::TSchemeCacheNavigate::TEntry& result  = request.ResultSet[0];
         if (result.Status != EStatus::Ok) {
-            KQP_PROXY_LOG_D(LogPrefix << "Describe result: " << result.Status);
+            LOG_DEBUG_S(*TlsActivationContext, LogService,
+                LogPrefix << "Describe result: " << result.Status);
         }
 
         switch (result.Status) {
@@ -150,7 +144,7 @@ public:
             case EStatus::PathErrorUnknown:
                 Become(&TTableCreator::StateFuncUpgrade);
                 OperationType = NKikimrSchemeOp::ESchemeOpCreateTable;
-                KQP_PROXY_LOG_N(LogPrefix << "Creating table");
+                LOG_NOTICE_S(*TlsActivationContext, LogService, LogPrefix << "Creating table");
                 RunTableRequest();
                 break;
             case EStatus::LookupError:
@@ -172,7 +166,8 @@ public:
     }
 
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        KQP_PROXY_LOG_D(LogPrefix << "TEvProposeTransactionStatus: " << ev->Get()->Record);
+        LOG_DEBUG_S(*TlsActivationContext, LogService,
+            LogPrefix << "TEvProposeTransactionStatus: " << ev->Get()->Record);
         const auto ssStatus = ev->Get()->Record.GetSchemeShardStatus();
         switch (ev->Get()->Status()) {
             case NTxProxy::TResultStatus::ExecComplete:
@@ -216,7 +211,6 @@ public:
         } else {
             Fail();
         }
-       
     }
 
     void FallBack(bool longDelay = false) {
@@ -231,7 +225,8 @@ public:
     void SubscribeOnTransactionOrFallback(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
         const ui64 txId = ev->Get()->Status() == NTxProxy::TResultStatus::ExecInProgress ? ev->Get()->Record.GetTxId() : ev->Get()->Record.GetPathCreateTxId();
         if (txId == 0) {
-            KQP_PROXY_LOG_D(LogPrefix << "Unable to subscribe to concurrent transaction, falling back");
+            LOG_DEBUG_S(*TlsActivationContext, LogService,
+                LogPrefix << "Unable to subscribe to concurrent transaction, falling back");
             FallBack();
             return;
         }
@@ -242,12 +237,14 @@ public:
         auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
         NTabletPipe::SendData(SelfId(), SchemePipeActorId, std::move(request));
-        KQP_PROXY_LOG_D(LogPrefix << "Subscribe on create table tx: " << txId);
+        LOG_DEBUG_S(*TlsActivationContext, LogService,
+            LogPrefix << "Subscribe on create table tx: " << txId);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
-            KQP_PROXY_LOG_E(LogPrefix << "Request: " << GetOperationType() << ". Tablet to pipe not connected: " << NKikimrProto::EReplyStatus_Name(ev->Get()->Status) << ", retry");
+            LOG_ERROR_S(*TlsActivationContext, LogService,
+                LogPrefix << "Request: " << GetOperationType() << ". Tablet to pipe not connected: " << NKikimrProto::EReplyStatus_Name(ev->Get()->Status) << ", retry");
             PipeClientClosedByUs = true;
             NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
             SchemePipeActorId = {};
@@ -258,7 +255,8 @@ public:
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
         SchemePipeActorId = {};
         if (!PipeClientClosedByUs) {
-            KQP_PROXY_LOG_E(LogPrefix << "Request: " << GetOperationType() << ". Tablet to pipe destroyed, retry");
+            LOG_ERROR_S(*TlsActivationContext, LogService,
+                LogPrefix << "Request: " << GetOperationType() << ". Tablet to pipe destroyed, retry");
             Retry();
         }
         PipeClientClosedByUs = false;
@@ -268,22 +266,25 @@ public:
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-        KQP_PROXY_LOG_D(LogPrefix << "Request: " << GetOperationType() << ". Transaction completed: " << ev->Get()->Record.GetTxId() << ". Doublechecking...");
+        LOG_DEBUG_S(*TlsActivationContext, LogService,
+            LogPrefix << "Request: " << GetOperationType() << ". Transaction completed: " << ev->Get()->Record.GetTxId() << ". Doublechecking...");
         FallBack();
     }
 
     void Fail(NSchemeCache::TSchemeCacheNavigate::EStatus status) {
-        KQP_PROXY_LOG_E(LogPrefix << "Failed to upgrade table: " << status);
+        LOG_ERROR_S(*TlsActivationContext, LogService,
+            LogPrefix << "Failed to upgrade table: " << status);
         Reply();
     }
 
     void Fail(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        KQP_PROXY_LOG_E(LogPrefix << "Failed " << GetOperationType() << " request: " << ev->Get()->Status() << ". Response: " << ev->Get()->Record);
+        LOG_ERROR_S(*TlsActivationContext, LogService,
+            LogPrefix << "Failed " << GetOperationType() << " request: " << ev->Get()->Status() << ". Response: " << ev->Get()->Record);
         Reply();
     }
 
     void Fail() {
-        KQP_PROXY_LOG_E(LogPrefix << "Retry limit exceeded");
+        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << "Retry limit exceeded");
         Reply();
     }
 
@@ -292,12 +293,13 @@ public:
     }
 
     void Success(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        KQP_PROXY_LOG_I(LogPrefix << "Successful " << GetOperationType() <<  " request: " << ev->Get()->Status());
+        LOG_INFO_S(*TlsActivationContext, LogService,
+            LogPrefix << "Successful " << GetOperationType() <<  " request: " << ev->Get()->Status());
         Reply();
     }
 
     void Reply() {
-        Send(Owner, new TEvPrivate::TEvCreateTableResponse());
+        Send(Owner, new TEvTableCreator::TEvCreateTableResponse());
         if (SchemePipeActorId) {
             NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
         }
@@ -332,11 +334,13 @@ private:
             }
         }
         if (filteredColumns.empty()) {
-            KQP_PROXY_LOG_D(LogPrefix << "Column diff is empty, finishing");
+            LOG_DEBUG_S(*TlsActivationContext, LogService,
+                LogPrefix << "Column diff is empty, finishing");
         } else {
-            KQP_PROXY_LOG_N(LogPrefix << "Adding columns. New columns: " << filtered << ". Existing columns: " << columns);
+            LOG_NOTICE_S(*TlsActivationContext, LogService,
+                LogPrefix << "Adding columns. New columns: " << filtered << ". Existing columns: " << columns);
         }
-       
+
 
         Columns = std::move(filteredColumns);
     }
@@ -364,6 +368,7 @@ private:
     const TVector<TString> PathComponents;
     TVector<NKikimrSchemeOp::TColumnDescription> Columns;
     const TVector<TString> KeyColumns;
+    NKikimrServices::EServiceKikimr LogService;
     const TMaybe<NKikimrSchemeOp::TTTLSettings> TtlSettings;
     NKikimrSchemeOp::EOperationType OperationType = NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable;
     NActors::TActorId Owner;
@@ -375,9 +380,15 @@ private:
 
 } // namespace
 
-NActors::IActor* CreateTableCreator(TVector<TString> pathComponents, TVector<NKikimrSchemeOp::TColumnDescription> columns, TVector<TString> keyColumns,
-                  TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings) {
-    return new TTableCreator(std::move(pathComponents), std::move(columns), std::move(keyColumns), std::move(ttlSettings));
+NActors::IActor* CreateTableCreator(
+    TVector<TString> pathComponents,
+    TVector<NKikimrSchemeOp::TColumnDescription> columns,
+    TVector<TString> keyColumns,
+    NKikimrServices::EServiceKikimr logService,
+    TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings)
+{
+    return new TTableCreator(std::move(pathComponents), std::move(columns),
+        std::move(keyColumns), logService, std::move(ttlSettings));
 }
 
-} // namespace NKikimr::NKqp
+} // namespace NKikimr

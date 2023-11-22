@@ -36,6 +36,7 @@ enum ENodeType : int
     NT_SCHEDULER_POOL       /* "scheduler_pool" */,
     NT_LINK                 /* "link" */,
     NT_GROUP                /* "group" */,
+    NT_PORTAL               /* "portal_entrance" */,
 };
 
 ///

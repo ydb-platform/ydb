@@ -102,7 +102,7 @@ TString TShardState::GetAddress() const {
 TShardState::TShardState(const ui64 tabletId)
     : TabletId(tabletId)
 {
-    AFL_VERIFY(TabletId);
+    AFL_ENSURE(TabletId);
 }
 
 }

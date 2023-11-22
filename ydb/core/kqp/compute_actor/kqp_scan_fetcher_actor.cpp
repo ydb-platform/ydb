@@ -38,8 +38,8 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     , InFlightComputes(ComputeActorIds)
 {
     Y_UNUSED(traceId);
-    YQL_ENSURE(!Meta.GetReads().empty());
-    YQL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView);
+    AFL_ENSURE(!Meta.GetReads().empty());
+    AFL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView);
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "META:" << meta.DebugString();
     KeyColumnTypes.reserve(Meta.GetKeyColumnTypes().size());
     for (size_t i = 0; i < Meta.KeyColumnTypesSize(); i++) {
@@ -117,7 +117,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
     if (!state) {
         return;
     }
-    AFL_VERIFY(state->State == EShardState::Running)("state", state->State)("actor_id", state->ActorId)("ev_sender", ev->Sender);
+    AFL_ENSURE(state->State == EShardState::Running)("state", state->State)("actor_id", state->ActorId)("ev_sender", ev->Sender);
 
     TInstant startTime = TActivationContext::Now();
     if (ev->Get()->Finished) {
@@ -202,14 +202,14 @@ void TKqpScanFetcherActor::HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySet
     if (!InFlightShards.IsActive()) {
         return;
     }
-    YQL_ENSURE(!PendingResolveShards.empty());
+    AFL_ENSURE(!PendingResolveShards.empty());
     auto state = std::move(PendingResolveShards.front());
     PendingResolveShards.pop_front();
     ResolveNextShard();
 
     Y_ABORT_UNLESS(!InFlightShards.GetShardScanner(state.TabletId));
 
-    YQL_ENSURE(state.State == EShardState::Resolving);
+    AFL_ENSURE(state.State == EShardState::Resolving);
     CA_LOG_D("Received TEvResolveKeySetResult update for table '" << ScanDataMeta.TablePath << "'");
 
     auto* request = ev->Get()->Request.Get();
@@ -309,7 +309,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySet
         }
     }
 
-    YQL_ENSURE(!newShards.empty());
+    AFL_ENSURE(!newShards.empty());
 
     for (int i = newShards.ysize() - 1; i >= 0; --i) {
         PendingShards.emplace_front(std::move(newShards[i]));
@@ -324,7 +324,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySet
             PendingShards.front().LastKey = std::move(readShard.LastKey);
         }
 
-        YQL_ENSURE(!PendingShards.empty());
+        AFL_ENSURE(!PendingShards.empty());
     }
     StartTableScan();
 }
@@ -446,7 +446,7 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
         Counters->ScanQueryRateLimitLatency->Collect(latency.MilliSeconds());
     }
 
-    YQL_ENSURE(state->ActorId == ev->Sender, "expected: " << state->ActorId << ", got: " << ev->Sender);
+    AFL_ENSURE(state->ActorId == ev->Sender)("expected", state->ActorId)("got", ev->Sender);
 
     state->LastKey = std::move(msg.LastKey);
     const ui64 rowsCount = msg.GetRowsCount();
@@ -458,7 +458,7 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
         << ";tablet_id=" << state->TabletId);
     auto shardScanner = InFlightShards.GetShardScannerVerified(state->TabletId);
     auto tasksForCompute = shardScanner->OnReceiveData(msg, shardScanner);
-    AFL_VERIFY(tasksForCompute.size() == 1 || tasksForCompute.size() == 0 || tasksForCompute.size() == ComputeActorIds.size())("size", tasksForCompute.size())("compute_size", ComputeActorIds.size());
+    AFL_ENSURE(tasksForCompute.size() == 1 || tasksForCompute.size() == 0 || tasksForCompute.size() == ComputeActorIds.size())("size", tasksForCompute.size())("compute_size", ComputeActorIds.size());
     for (auto&& i : tasksForCompute) {
         const std::optional<ui32> computeShardId = i->GetComputeShardId();
         InFlightComputes.OnReceiveData(computeShardId, std::move(i));
@@ -477,7 +477,7 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
 }
 
 void TKqpScanFetcherActor::ProcessScanData() {
-    YQL_ENSURE(!PendingScanData.empty());
+    AFL_ENSURE(!PendingScanData.empty());
 
     auto ev = std::move(PendingScanData.front().first);
     auto enqueuedAt = std::move(PendingScanData.front().second);
@@ -487,7 +487,7 @@ void TKqpScanFetcherActor::ProcessScanData() {
     if (!state)
         return;
 
-    AFL_VERIFY(state->State == EShardState::Running || state->State == EShardState::PostRunning);
+    AFL_ENSURE(state->State == EShardState::Running || state->State == EShardState::PostRunning)("state", state->State);
     ProcessPendingScanDataItem(ev, enqueuedAt);
 }
 

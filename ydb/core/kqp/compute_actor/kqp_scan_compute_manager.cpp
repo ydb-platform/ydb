@@ -9,23 +9,23 @@ TShardState::TPtr TInFlightShards::Put(TShardState&& state) {
     MutableStatistics(state.TabletId).MutableStatistics(0).SetStartInstant(Now());
 
     TShardState::TPtr result = std::make_shared<TShardState>(std::move(state));
-    AFL_VERIFY(Shards.emplace(result->TabletId, result).second);
+    AFL_ENSURE(Shards.emplace(result->TabletId, result).second);
     return result;
 }
 
 std::vector<std::unique_ptr<TComputeTaskData>> TShardScannerInfo::OnReceiveData(TEvKqpCompute::TEvScanData& data, const std::shared_ptr<TShardScannerInfo>& selfPtr) {
     if (!data.Finished) {
-        AFL_VERIFY(!NeedAck);
+        AFL_ENSURE(!NeedAck);
         NeedAck = true;
     } else {
         Finished = true;
     }
     if (data.IsEmpty()) {
-        AFL_VERIFY(data.Finished);
+        AFL_ENSURE(data.Finished);
         return {};
     }
-    AFL_VERIFY(ActorId);
-    AFL_VERIFY(!DataChunksInFlightCount);
+    AFL_ENSURE(ActorId);
+    AFL_ENSURE(!DataChunksInFlightCount);
     std::vector<std::unique_ptr<TComputeTaskData>> result;
     if (data.SplittedBatches.size() > 1) {
         ui32 idx = 0;

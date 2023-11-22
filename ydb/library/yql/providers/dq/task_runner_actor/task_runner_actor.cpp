@@ -463,7 +463,7 @@ private:
             TaskRunner = Factory->GetOld(settings, TraceId);
         } catch (...) {
             TString message = "Could not create TaskRunner for " + ToString(taskId) + " on node " + ToString(replyTo.NodeId()) + ", error: " + CurrentExceptionMessage();
-            Send(replyTo, MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, message), 0, cookie);
+            Send(replyTo, TEvDq::TEvAbortExecution::InternalError(message), 0, cookie);
             return;
         }
 

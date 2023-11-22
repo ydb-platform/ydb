@@ -351,6 +351,10 @@ class YtError(Exception):
         """Member is already present in group"""
         return self.contains_code(908)
 
+    def is_prohibited_cross_cell_copy(self):
+        """Cross-cell "copy"/"move" command is explicitly disabled"""
+        return self.contains_code(1002)
+
 
 class YtResponseError(YtError):
     """Represents an error in YT response."""

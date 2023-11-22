@@ -171,7 +171,7 @@ public:
     }
 };
 
-template <const char* TFuncName, typename TFieldStorage, TFieldStorage (*FieldFunc)(const TUnboxedValuePod&), ui32 Divisor, ui32 Scale, ui32 Limit, bool Fractional> 
+template <const char* TFuncName, typename TFieldStorage, TFieldStorage (*FieldFunc)(const TUnboxedValuePod&), ui32 Divisor, ui32 Scale, ui32 Limit, bool Fractional>
 struct TGetTimeComponent {
     typedef bool TTypeAwareMarker;
 
@@ -261,8 +261,8 @@ struct TGetTimeComponent {
                     }
 
                     auto typeId = data.GetTypeId();
-                    if (typeId == TDataType<TDate>::Id || 
-                        typeId == TDataType<TDatetime>::Id || 
+                    if (typeId == TDataType<TDate>::Id ||
+                        typeId == TDataType<TDatetime>::Id ||
                         typeId == TDataType<TTimestamp>::Id) {
 
                         builder.Args()->Add(argsTuple.GetElementType(0)).Done();
@@ -983,6 +983,22 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         auto result = args[0];
         auto& storage = Reference(result);
         storage.Day = 1;
+        storage.Hour = 0;
+        storage.Minute = 0;
+        storage.Second = 0;
+        storage.Microsecond = 0;
+
+        auto& builder = valueBuilder->GetDateBuilder();
+        if (!storage.Validate(builder)) {
+            return TUnboxedValuePod();
+        }
+        return result;
+    }
+
+    SIMPLE_STRICT_UDF(TEndOfMonth, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
+        auto result = args[0];
+        auto& storage = Reference(result);
+        storage.Day = NMiniKQL::GetMonthLength(storage.Month, NMiniKQL::IsLeapYear(storage.Year));
         storage.Hour = 0;
         storage.Minute = 0;
         storage.Second = 0;
@@ -1786,6 +1802,8 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         TShiftYears,
         TShiftQuarters,
         TShiftMonths,
+
+        TEndOfMonth,
 
         TToUnits<ToSecondsName, ui32, 1>,
         TToUnits<ToMillisecondsName, ui64, 1000>,

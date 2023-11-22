@@ -32,7 +32,11 @@ type ConnectionManagerBase struct {
 
 type SQLFormatter interface {
 	GetDescribeTableQuery(request *api_service_protos.TDescribeTableRequest) (string, []any)
+
+	// Get placeholder for n'th argument (starting from 0) for prepared statement
 	GetPlaceholder(n int) string
+
+	// Sanitize names of databases, tables, columns, views, schemas
 	SanitiseIdentifier(ident string) string
 
 	// Support for high level expression (without subexpressions, they are checked separately)

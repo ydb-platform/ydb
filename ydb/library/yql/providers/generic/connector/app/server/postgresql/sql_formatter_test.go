@@ -24,10 +24,11 @@ func TestMakeDescribeTableQuery(t *testing.T) {
 
 func TestMakeReadSplitQuery(t *testing.T) {
 	type testCase struct {
-		testName  string
-		selectReq *api.TSelect
-		output    string
-		err       error
+		testName    string
+		selectReq   *api.TSelect
+		outputQuery string
+		outputArgs  []any
+		err         error
 	}
 
 	logger := utils.NewTestLogger(t)
@@ -42,8 +43,9 @@ func TestMakeReadSplitQuery(t *testing.T) {
 				},
 				What: &api.TSelect_TWhat{},
 			},
-			output: "",
-			err:    utils.ErrEmptyTableName,
+			outputQuery: "",
+			outputArgs:  nil,
+			err:         utils.ErrEmptyTableName,
 		},
 		{
 			testName: "empty_no columns",
@@ -53,8 +55,9 @@ func TestMakeReadSplitQuery(t *testing.T) {
 				},
 				What: &api.TSelect_TWhat{},
 			},
-			output: `SELECT 0 FROM "tab"`,
-			err:    nil,
+			outputQuery: `SELECT 0 FROM "tab"`,
+			outputArgs:  []any{},
+			err:         nil,
 		},
 		{
 			testName: "select_col",
@@ -75,8 +78,9 @@ func TestMakeReadSplitQuery(t *testing.T) {
 					},
 				},
 			},
-			output: `SELECT "col" FROM "tab"`,
-			err:    nil,
+			outputQuery: `SELECT "col" FROM "tab"`,
+			outputArgs:  []any{},
+			err:         nil,
 		},
 		{
 			testName: "is_null",
@@ -95,8 +99,9 @@ func TestMakeReadSplitQuery(t *testing.T) {
 					},
 				},
 			},
-			output: `SELECT "col0", "col1" FROM "tab" WHERE ("col1" IS NULL)`,
-			err:    nil,
+			outputQuery: `SELECT "col0", "col1" FROM "tab" WHERE ("col1" IS NULL)`,
+			outputArgs:  []any{},
+			err:         nil,
 		},
 		{
 			testName: "is_not_null",
@@ -115,8 +120,9 @@ func TestMakeReadSplitQuery(t *testing.T) {
 					},
 				},
 			},
-			output: `SELECT "col0", "col1" FROM "tab" WHERE ("col2" IS NOT NULL)`,
-			err:    nil,
+			outputQuery: `SELECT "col0", "col1" FROM "tab" WHERE ("col2" IS NOT NULL)`,
+			outputArgs:  []any{},
+			err:         nil,
 		},
 		{
 			testName: "bool_column",
@@ -135,8 +141,9 @@ func TestMakeReadSplitQuery(t *testing.T) {
 					},
 				},
 			},
-			output: `SELECT "col0", "col1" FROM "tab" WHERE "col2"`,
-			err:    nil,
+			outputQuery: `SELECT "col0", "col1" FROM "tab" WHERE "col2"`,
+			outputArgs:  []any{},
+			err:         nil,
 		},
 		{
 			testName: "complex_filter",
@@ -195,8 +202,9 @@ func TestMakeReadSplitQuery(t *testing.T) {
 					},
 				},
 			},
-			output: `SELECT "col0", "col1" FROM "tab" WHERE ((NOT ("col2" <= 42)) OR (("col1" <> 0) AND ("col3" IS NULL)))`,
-			err:    nil,
+			outputQuery: `SELECT "col0", "col1" FROM "tab" WHERE ((NOT ("col2" <= $1)) OR (("col1" <> $2) AND ("col3" IS NULL)))`,
+			outputArgs:  []any{int32(42), uint64(0)},
+			err:         nil,
 		},
 		{
 			testName: "unsupported_predicate",
@@ -217,8 +225,9 @@ func TestMakeReadSplitQuery(t *testing.T) {
 					},
 				},
 			},
-			output: `SELECT "col0", "col1" FROM "tab"`,
-			err:    nil,
+			outputQuery: `SELECT "col0", "col1" FROM "tab"`,
+			outputArgs:  []any{},
+			err:         nil,
 		},
 		{
 			testName: "unsupported_type",
@@ -239,8 +248,9 @@ func TestMakeReadSplitQuery(t *testing.T) {
 					},
 				},
 			},
-			output: `SELECT "col0", "col1" FROM "tab"`,
-			err:    nil,
+			outputQuery: `SELECT "col0", "col1" FROM "tab"`,
+			outputArgs:  []any{},
+			err:         nil,
 		},
 		{
 			testName: "partial_filter_removes_and",
@@ -279,8 +289,9 @@ func TestMakeReadSplitQuery(t *testing.T) {
 					},
 				},
 			},
-			output: `SELECT "col0", "col1" FROM "tab" WHERE ("col1" = 32)`,
-			err:    nil,
+			outputQuery: `SELECT "col0", "col1" FROM "tab" WHERE ("col1" = $1)`,
+			outputArgs:  []any{int32(32)},
+			err:         nil,
 		},
 		{
 			testName: "partial_filter",
@@ -333,8 +344,9 @@ func TestMakeReadSplitQuery(t *testing.T) {
 					},
 				},
 			},
-			output: `SELECT "col0", "col1" FROM "tab" WHERE (("col1" = 32) AND ("col3" IS NULL) AND ("col4" IS NOT NULL))`,
-			err:    nil,
+			outputQuery: `SELECT "col0", "col1" FROM "tab" WHERE (("col1" = $1) AND ("col3" IS NULL) AND ("col4" IS NOT NULL))`,
+			outputArgs:  []any{int32(32)},
+			err:         nil,
 		},
 		{
 			testName: "negative_sql_injection_by_table",
@@ -344,8 +356,9 @@ func TestMakeReadSplitQuery(t *testing.T) {
 				},
 				What: &api.TSelect_TWhat{},
 			},
-			output: `SELECT 0 FROM "information_schema.columns; DROP TABLE information_schema.columns"`,
-			err:    nil,
+			outputQuery: `SELECT 0 FROM "information_schema.columns; DROP TABLE information_schema.columns"`,
+			outputArgs:  []any{},
+			err:         nil,
 		},
 		{
 			testName: "negative_sql_injection_by_col",
@@ -366,8 +379,9 @@ func TestMakeReadSplitQuery(t *testing.T) {
 					},
 				},
 			},
-			output: `SELECT "0; DROP TABLE information_schema.columns" FROM "tab"`,
-			err:    nil,
+			outputQuery: `SELECT "0; DROP TABLE information_schema.columns" FROM "tab"`,
+			outputArgs:  []any{},
+			err:         nil,
 		},
 		{
 			testName: "negative_sql_injection_fake_quotes",
@@ -388,8 +402,9 @@ func TestMakeReadSplitQuery(t *testing.T) {
 					},
 				},
 			},
-			output: `SELECT "0""; DROP TABLE information_schema.columns;" FROM "tab"`,
-			err:    nil,
+			outputQuery: `SELECT "0""; DROP TABLE information_schema.columns;" FROM "tab"`,
+			outputArgs:  []any{},
+			err:         nil,
 		},
 	}
 
@@ -397,8 +412,9 @@ func TestMakeReadSplitQuery(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.testName, func(t *testing.T) {
-			output, _, err := utils.MakeReadSplitQuery(logger, formatter, tc.selectReq)
-			require.Equal(t, tc.output, output)
+			output, outputArgs, err := utils.MakeReadSplitQuery(logger, formatter, tc.selectReq)
+			require.Equal(t, tc.outputQuery, output)
+			require.Equal(t, tc.outputArgs, outputArgs)
 
 			if tc.err != nil {
 				require.True(t, errors.Is(err, tc.err))

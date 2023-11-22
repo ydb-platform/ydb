@@ -78,7 +78,7 @@ func (f sqlFormatter) GetDescribeTableQuery(request *api_service_protos.TDescrib
 }
 
 func (f sqlFormatter) GetPlaceholder(n int) string {
-	return fmt.Sprintf("$%d", n)
+	return fmt.Sprintf("$%d", n+1)
 }
 
 func (f sqlFormatter) SanitiseIdentifier(ident string) string {

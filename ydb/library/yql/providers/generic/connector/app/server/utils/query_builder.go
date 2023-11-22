@@ -15,7 +15,10 @@ func MakeDescribeTableQuery(logger log.Logger, formatter SQLFormatter, request *
 }
 
 func MakeReadSplitQuery(logger log.Logger, formatter SQLFormatter, request *api_service_protos.TSelect) (string, []any, error) {
-	var sb strings.Builder
+	var (
+		sb   strings.Builder
+		args []any
+	)
 
 	selectPart, err := formatSelectColumns(formatter, request.What, request.GetFrom().GetTable(), true)
 	if err != nil {
@@ -25,7 +28,9 @@ func MakeReadSplitQuery(logger log.Logger, formatter SQLFormatter, request *api_
 	sb.WriteString(selectPart)
 
 	if request.Where != nil {
-		clause, err := formatWhereClause(formatter, request.Where)
+		var clause string
+
+		clause, args, err = formatWhereClause(formatter, request.Where)
 		if err != nil {
 			logger.Error("Failed to format WHERE clause", log.Error(err), log.String("where", request.Where.String()))
 		} else {
@@ -36,5 +41,9 @@ func MakeReadSplitQuery(logger log.Logger, formatter SQLFormatter, request *api_
 
 	query := sb.String()
 
-	return query, nil, nil
+	if args == nil {
+		args = []any{}
+	}
+
+	return query, args, nil
 }

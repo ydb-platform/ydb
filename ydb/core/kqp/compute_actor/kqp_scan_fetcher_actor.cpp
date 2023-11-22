@@ -117,7 +117,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
     if (!state) {
         return;
     }
-    AFL_VERIFY(state->State == EShardState::Running);
+    AFL_VERIFY(state->State == EShardState::Running)("state", state->State)("actor_id", state->ActorId)("ev_sender", ev->Sender);
 
     TInstant startTime = TActivationContext::Now();
     if (ev->Get()->Finished) {
@@ -178,7 +178,10 @@ void TKqpScanFetcherActor::HandleExecute(TEvPipeCache::TEvDeliveryProblem::TPtr&
     }
     auto& msg = *ev->Get();
 
-    auto state = InFlightShards.GetShardStateVerified(msg.TabletId);
+    auto state = InFlightShards.GetShardState(msg.TabletId);
+    if (!state) {
+        return;
+    }
 
     const auto shardState = state->State;
     CA_LOG_W("Got EvDeliveryProblem, TabletId: " << msg.TabletId << ", NotDelivered: " << msg.NotDelivered << ", " << shardState);
@@ -192,7 +195,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvPrivate::TEvRetryShard::TPtr& ev) {
         return;
     }
     auto state = InFlightShards.GetShardStateVerified(ev->Get()->TabletId);
-    InFlightShards.RestartScanner(*state);
+    InFlightShards.StartScanner(*state);
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
@@ -513,6 +516,7 @@ void TKqpScanFetcherActor::StartTableScan() {
 }
 
 void TKqpScanFetcherActor::RetryDeliveryProblem(TShardState::TPtr state) {
+    InFlightShards.StopScanner(state->TabletId, false);
     Counters->ScanQueryShardDisconnect->Inc();
 
     if (state->TotalRetries >= MAX_TOTAL_SHARD_RETRIES) {
@@ -528,17 +532,12 @@ void TKqpScanFetcherActor::RetryDeliveryProblem(TShardState::TPtr state) {
     // so after several consecutive delivery problem responses retry logic should
     // resolve shard details again.
     if (state->RetryAttempt >= MAX_SHARD_RETRIES) {
+        state->ResetRetry();
         Send(state->ActorId, new NActors::TEvents::TEvPoisonPill());
-        return ResolveShard(*state);
+        return EnqueueResolveShard(state);
     }
 
     ++TotalRetries;
-
-    state->RetryAttempt++;
-    state->TotalRetries++;
-    state->ActorId = {};
-    state->State = EShardState::Initial;
-    state->SubscribedOnTablet = false;
     auto retryDelay = state->CalcRetryDelay();
     CA_LOG_W("TKqpScanFetcherActor: broken pipe with tablet " << state->TabletId
         << ", restarting scan from last received key " << state->PrintLastKey(KeyColumnTypes)

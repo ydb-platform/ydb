@@ -91,7 +91,7 @@ public:
     void FinishWaitSendData() {
         --DataChunksInFlightCount;
         AFL_VERIFY(DataChunksInFlightCount >= 0);
-        if (!DataChunksInFlightCount) {
+        if (!DataChunksInFlightCount && !!ActorId) {
             DoAck();
         }
     }
@@ -251,8 +251,6 @@ public:
 
     bool RestartScanner(TShardState& state) {
         StopScanner(state.TabletId, false);
-        state.State = NComputeActor::EShardState::Initial;
-        state.ActorId = {};
         state.ResetRetry();
         static constexpr ui64 MAX_SHARD_RETRIES = 5; // retry after: 0, 250, 500, 1000, 2000
         if (++state.TotalRetries >= MAX_SHARD_RETRIES) {
@@ -278,7 +276,7 @@ public:
 
     const std::shared_ptr<TShardState>& GetShardStateVerified(const ui64 tabletId) const {
         auto it = Shards.find(tabletId);
-        AFL_VERIFY(it != Shards.end())("tablet_id", tabletId);
+        AFL_VERIFY(it != Shards.end());
         return it->second;
     }
 
@@ -292,8 +290,11 @@ public:
     }
 
     void RegisterScannerActor(const ui64 tabletId, const TActorId& scanActorId) {
-        auto state = GetShardStateVerified(tabletId);
-        AFL_VERIFY(state->State == NComputeActor::EShardState::Starting);
+        auto state = GetShardState(tabletId);
+        if (!state) {
+            return;
+        }
+        AFL_VERIFY(state->State == NComputeActor::EShardState::Starting)("state", state->State);
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "RegisterScannerActor")("actor_id", scanActorId)
             ("state", state->State)("tabletId", state->TabletId);
 
@@ -318,14 +319,23 @@ public:
 
     void StopScanner(const ui64 tabletId, const bool stopShard = true) {
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "scanner_finished")("tablet_id", tabletId);
-        const auto actorId = GetShardStateVerified(tabletId)->ActorId;
+        auto& state = GetShardStateVerified(tabletId);
+        const auto actorId = state->ActorId;
         if (actorId) {
             AFL_VERIFY(ShardsByActorId.erase(actorId));
         }
-        auto it = ShardScanners.find(tabletId);
-        AFL_VERIFY(it != ShardScanners.end());
-        it->second->Stop(true, "");
-        ShardScanners.erase(it);
+        if (state->State != NComputeActor::EShardState::Initial) {
+            state->RetryAttempt++;
+            state->TotalRetries++;
+            state->ActorId = {};
+            state->State = NComputeActor::EShardState::Initial;
+            state->SubscribedOnTablet = false;
+
+            auto it = ShardScanners.find(tabletId);
+            AFL_VERIFY(it != ShardScanners.end());
+            it->second->Stop(true, "");
+            ShardScanners.erase(it);
+        }
 
         if (stopShard) {
             AFL_VERIFY(Shards.erase(tabletId));

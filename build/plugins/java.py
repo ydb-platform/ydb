@@ -438,8 +438,7 @@ def _maven_coords_for_project(unit, project_dir):
     pom_path = unit.resolve(os.path.join('$S', project_dir, 'pom.xml'))
     if os.path.exists(pom_path):
         import xml.etree.ElementTree as et
-
-        with open(pom_path) as f:
+        with open(pom_path, 'rb') as f:
             root = et.fromstring(f.read())
         for xpath in ('./{http://maven.apache.org/POM/4.0.0}artifactId', './artifactId'):
             artifact = root.find(xpath)

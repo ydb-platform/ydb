@@ -54,11 +54,34 @@ public:
         return Contains(*columnsSet);
     }
 
+    bool IsEqual(const std::shared_ptr<TColumnsSet>& columnsSet) const {
+        if (!columnsSet) {
+            return false;
+        }
+        return IsEqual(*columnsSet);
+    }
+
     bool Contains(const TColumnsSet& columnsSet) const {
         for (auto&& i : columnsSet.ColumnIds) {
             if (!ColumnIds.contains(i)) {
                 return false;
             }
+        }
+        return true;
+    }
+
+    bool IsEqual(const TColumnsSet& columnsSet) const {
+        if (columnsSet.GetColumnIds().size() != ColumnIds.size()) {
+            return false;
+        }
+        auto itA = ColumnIds.begin();
+        auto itB = columnsSet.ColumnIds.begin();
+        while (itA != ColumnIds.end()) {
+            if (*itA != *itB) {
+                return false;
+            }
+            ++itA;
+            ++itB;
         }
         return true;
     }

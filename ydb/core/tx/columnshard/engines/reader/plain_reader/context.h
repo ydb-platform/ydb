@@ -26,6 +26,10 @@ private:
     std::shared_ptr<TColumnsSet> FFMinusEFPKColumns;
     bool TrivialEFFlag = false;
 public:
+    bool IsSpecColumnsOnly() const {
+        return FFColumns->IsEqual(SpecColumns);
+    }
+
     ui64 GetMemoryForSources(const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const bool isExclusive);
 
     const TReadMetadata::TConstPtr& GetReadMetadata() const {

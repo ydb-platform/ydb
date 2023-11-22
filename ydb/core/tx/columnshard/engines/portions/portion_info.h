@@ -461,7 +461,8 @@ public:
         std::vector<TPreparedColumn> Columns;
         std::shared_ptr<arrow::Schema> Schema;
         size_t RowsCount = 0;
-
+        mutable THashMap<TString, std::shared_ptr<arrow::Array>> NullColumns;
+        mutable THashMap<TString, std::shared_ptr<arrow::Array>> ConstColumns;
     public:
         struct TAssembleOptions {
             std::optional<std::set<ui32>> IncludedColumnIds;

@@ -97,7 +97,7 @@ ui32 TRowSizeCalculator::GetRowBytesSize(const ui32 row) const {
     return result;
 }
 
-ui64 GetArrayDataRawSize(const std::shared_ptr<arrow::ArrayData>& data) {
+ui64 GetArrayMemorySize(const std::shared_ptr<arrow::ArrayData>& data) {
     if (!data) {
         return 0;
     }
@@ -142,7 +142,7 @@ ui64 GetBatchMemorySize(const std::shared_ptr<arrow::RecordBatch>& batch) {
     }
     ui64 bytes = 0;
     for (auto& column : batch->column_data()) {
-        bytes += GetArrayDataRawSize(column);
+        bytes += GetArrayMemorySize(column);
     }
     return bytes;
 }

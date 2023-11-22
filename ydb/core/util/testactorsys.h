@@ -203,6 +203,10 @@ public:
         AppData.MonotonicTimeProvider = CreateMonotonicTimeProvider();
 
         AppData.HiveConfig.SetWarmUpBootWaitingPeriod(10);
+        AppData.HiveConfig.SetMaxNodeUsageToKick(100);
+        AppData.HiveConfig.SetMinCounterScatterToBalance(100);
+        AppData.HiveConfig.SetMinScatterToBalance(100);
+        AppData.HiveConfig.SetObjectImbalanceToBalance(100);
     }
 
     ~TTestActorSystem() {

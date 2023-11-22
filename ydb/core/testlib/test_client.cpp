@@ -245,6 +245,7 @@ namespace Tests {
             appData.PersQueueGetReadSessionsInfoWorkerFactory = Settings->PersQueueGetReadSessionsInfoWorkerFactory.get();
             appData.DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
             appData.PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
+            appData.HiveConfig.MergeFrom(Settings->AppConfig.GetHiveConfig());
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;

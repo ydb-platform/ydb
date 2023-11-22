@@ -139,8 +139,12 @@ namespace NActors {
             nodeAppData->EnableKqpSpilling = app0->EnableKqpSpilling;
             nodeAppData->FeatureFlags = app0->FeatureFlags;
             nodeAppData->CompactionConfig = app0->CompactionConfig;
-            nodeAppData->HiveConfig = app0->HiveConfig;
             nodeAppData->HiveConfig.SetWarmUpBootWaitingPeriod(10);
+            nodeAppData->HiveConfig.SetMaxNodeUsageToKick(100);
+            nodeAppData->HiveConfig.SetMinCounterScatterToBalance(100);
+            nodeAppData->HiveConfig.SetMinScatterToBalance(100);
+            nodeAppData->HiveConfig.SetObjectImbalanceToBalance(100);
+            nodeAppData->HiveConfig.CopyFrom(app0->HiveConfig);
             nodeAppData->SchemeShardConfig = app0->SchemeShardConfig;
             nodeAppData->DataShardConfig = app0->DataShardConfig;
             nodeAppData->ColumnShardConfig = app0->ColumnShardConfig;

@@ -222,6 +222,10 @@ namespace Tests {
             AppConfig.MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetParallelScanningAvailable(true);
             AppConfig.MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetShardSplitFactor(16);
             AppConfig.MutableHiveConfig()->SetWarmUpBootWaitingPeriod(10);
+            AppConfig.MutableHiveConfig()->SetMaxNodeUsageToKick(100);
+            AppConfig.MutableHiveConfig()->SetMinCounterScatterToBalance(100);
+            AppConfig.MutableHiveConfig()->SetMinScatterToBalance(100);
+            AppConfig.MutableHiveConfig()->SetObjectImbalanceToBalance(100);
             AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
             FeatureFlags.SetEnableSeparationComputeActorsFromRead(true);
         }

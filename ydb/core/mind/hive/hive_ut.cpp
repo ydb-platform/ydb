@@ -262,6 +262,10 @@ namespace {
         app.SetRequestSequenceSize(10);
         app.SetHiveStoragePoolFreshPeriod(0);
 
+        app.HiveConfig.SetMaxNodeUsageToKick(0.9);
+        app.HiveConfig.SetMinCounterScatterToBalance(0.02);
+        app.HiveConfig.SetMinScatterToBalance(0.5);
+        app.HiveConfig.SetObjectImbalanceToBalance(0.02);
         if (appConfigSetup) {
             appConfigSetup(app);
         }

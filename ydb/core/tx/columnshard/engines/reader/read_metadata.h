@@ -129,8 +129,6 @@ private:
     TVersionedIndex IndexVersions;
     TSnapshot Snapshot;
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
-    mutable std::map<TSnapshot, ISnapshotSchema::TPtr> SchemasByVersionCache;
-    mutable ISnapshotSchema::TPtr EmptyVersionSchemaCache;
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
 
@@ -176,17 +174,9 @@ public:
 
     ISnapshotSchema::TPtr GetLoadSchema(const std::optional<TSnapshot>& version = {}) const {
         if (!version) {
-            if (!EmptyVersionSchemaCache) {
-                EmptyVersionSchemaCache = ResultIndexSchema;
-            }
-            return EmptyVersionSchemaCache;
+            return ResultIndexSchema;
         }
-        auto schemaOriginal = IndexVersions.GetSchema(*version);
-        auto it = SchemasByVersionCache.find(schemaOriginal->GetSnapshot());
-        if (it == SchemasByVersionCache.end()) {
-            it = SchemasByVersionCache.emplace(schemaOriginal->GetSnapshot(), schemaOriginal).first;
-        }
-        return it->second;
+        return IndexVersions.GetSchema(*version);
     }
 
     std::shared_ptr<arrow::Schema> GetBlobSchema(const ui64 version) const {

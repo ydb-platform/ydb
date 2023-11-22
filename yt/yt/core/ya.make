@@ -228,6 +228,7 @@ SRCS(
     yson/async_consumer.cpp
     yson/async_writer.cpp
     yson/attribute_consumer.cpp
+    yson/config.cpp
     yson/consumer.cpp
     yson/forwarding_consumer.cpp
     yson/lexer.cpp
@@ -324,7 +325,7 @@ PEERDIR(
     library/cpp/ytalloc/api
 
     yt/yt/build
-    
+
     yt/yt/core/misc/isa_crc64
 
     yt/yt_proto/yt/core

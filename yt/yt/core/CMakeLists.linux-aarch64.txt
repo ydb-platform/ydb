@@ -254,6 +254,7 @@ target_sources(yt-yt-core PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/async_consumer.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/async_writer.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/attribute_consumer.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/config.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/consumer.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/forwarding_consumer.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/yson/lexer.cpp

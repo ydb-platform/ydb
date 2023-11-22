@@ -4,6 +4,7 @@
 #include <yt/yt/core/yson/unittests/proto/protobuf_yson_casing_ut.pb.h>
 #include <yt/yt/core/yson/unittests/proto/protobuf_yson_casing_ext_ut.pb.h>
 
+#include <yt/yt/core/yson/config.h>
 #include <yt/yt/core/yson/protobuf_interop.h>
 #include <yt/yt/core/yson/null_consumer.h>
 #include <yt/yt/core/yson/string_merger.h>
@@ -1018,20 +1019,20 @@ TEST(TYsonToProtobufTest, Entities)
 
 TEST(TYsonToProtobufTest, ValidUtf8StringCheck)
 {
-    for (auto option: {EUtf8Check::None, EUtf8Check::Log, EUtf8Check::Throw}) {
-        TProtobufWriterOptions options{
-            .CheckUtf8 = option,
-        };
+    for (auto option: {EUtf8Check::Disable, EUtf8Check::LogOnFail, EUtf8Check::ThrowOnFail}) {
+        auto config = New<TProtobufInteropDynamicConfig>();
+        config->Utf8Check = option;
+        SetProtobufInteropConfig(config);
 
         TString invalidUtf8 = "\xc3\x28";
 
         auto check = [&] {
-            TEST_PROLOGUE_WITH_OPTIONS(TMessage, options)
+            TEST_PROLOGUE_WITH_OPTIONS(TMessage, {})
                 .BeginMap()
                     .Item("string_field").Value(invalidUtf8)
                 .EndMap();
         };
-        if (option == EUtf8Check::Throw) {
+        if (option == EUtf8Check::ThrowOnFail) {
             EXPECT_THROW_WITH_SUBSTRING(check(), "valid UTF-8");
         } else {
             EXPECT_NO_THROW(check());
@@ -1042,12 +1043,11 @@ TEST(TYsonToProtobufTest, ValidUtf8StringCheck)
         TString newYsonString;
         TStringOutput newYsonOutputStream(newYsonString);
         TYsonWriter ysonWriter(&newYsonOutputStream, EYsonFormat::Pretty);
-        if (option == EUtf8Check::Throw) {
+        if (option == EUtf8Check::ThrowOnFail) {
             EXPECT_THROW_WITH_SUBSTRING(
-                WriteProtobufMessage(&ysonWriter, message, TProtobufParserOptions{.CheckUtf8 = option}),
-                "valid UTF-8");
+                WriteProtobufMessage(&ysonWriter, message), "valid UTF-8");
         } else {
-            EXPECT_NO_THROW(WriteProtobufMessage(&ysonWriter, message, TProtobufParserOptions{.CheckUtf8 = option}));
+            EXPECT_NO_THROW(WriteProtobufMessage(&ysonWriter, message));
         }
     }
 }

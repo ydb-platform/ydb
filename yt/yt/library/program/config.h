@@ -20,6 +20,8 @@
 
 #include <yt/yt/core/service_discovery/yp/config.h>
 
+#include <yt/yt/core/yson/config.h>
+
 #include <yt/yt/library/profiling/solomon/exporter.h>
 
 #include <yt/yt/library/tracing/jaeger/tracer.h>
@@ -171,6 +173,7 @@ public:
     NTracing::TJaegerTracerDynamicConfigPtr Jaeger;
     TRpcConfigPtr Rpc;
     TTCMallocConfigPtr TCMalloc;
+    NYson::TProtobufInteropDynamicConfigPtr ProtobufInterop;
 
     REGISTER_YSON_STRUCT(TSingletonsDynamicConfig);
 

@@ -1,5 +1,6 @@
 #include "protobuf_interop.h"
 
+#include "config.h"
 #include "consumer.h"
 #include "forwarding_consumer.h"
 #include "null_consumer.h"
@@ -25,6 +26,9 @@
 #include <yt/yt/library/syncmap/map.h>
 
 #include <yt/yt/core/concurrency/thread_affinity.h>
+
+#include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
+#include <library/cpp/yt/memory/leaky_singleton.h>
 
 #include <library/cpp/yt/misc/cast.h>
 
@@ -149,7 +153,33 @@ TString DeriveYsonName(const TString& protobufName, const google::protobuf::File
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+struct TProtobufInteropConfigSingleton
+{
+    TAtomicIntrusivePtr<TProtobufInteropDynamicConfig> Config{New<TProtobufInteropDynamicConfig>()};
+};
+
+TProtobufInteropConfigSingleton* GlobalProtobufInteropConfig()
+{
+    return LeakySingleton<TProtobufInteropConfigSingleton>();
+}
+
+TProtobufInteropDynamicConfigPtr GetProtobufInteropConfig()
+{
+    return GlobalProtobufInteropConfig()->Config.Acquire();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+void SetProtobufInteropConfig(TProtobufInteropDynamicConfigPtr config)
+{
+    GlobalProtobufInteropConfig()->Config.Store(std::move(config));
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -859,20 +889,21 @@ protected:
         }
     }
 
-    void ValidateString(TStringBuf data, EUtf8Check checkOption, TString fieldFullName)
+    void ValidateString(TStringBuf data, TString fieldFullName)
     {
-        if (checkOption == EUtf8Check::None || IsUtf(data)) {
+        auto config = GetProtobufInteropConfig();
+        if (config->Utf8Check == EUtf8Check::Disable || IsUtf(data)) {
             return;
         }
-        switch (checkOption) {
-            case EUtf8Check::None:
+        switch (config->Utf8Check) {
+            case EUtf8Check::Disable:
                 break;
-            case EUtf8Check::Log:
+            case EUtf8Check::LogOnFail:
                 YT_LOG_WARNING("Field %v accepts only valid UTF-8 sequence, but got (%Qv)",
                     YPathStack_.GetHumanReadablePath(),
                     data);
                 break;
-            case EUtf8Check::Throw:
+            case EUtf8Check::ThrowOnFail:
                 THROW_ERROR_EXCEPTION("Field %v accepts only valid UTF-8 sequence, but got (%Qv)",
                     YPathStack_.GetHumanReadablePath(),
                     data)
@@ -986,7 +1017,7 @@ private:
             const auto* field = FieldStack_.back().Field;
             switch (field->GetType()) {
                 case FieldDescriptor::TYPE_STRING:
-                    ValidateString(value, Options_.CheckUtf8, field->GetFullName());
+                    ValidateString(value, field->GetFullName());
                 case FieldDescriptor::TYPE_BYTES:
                     BodyCodedStream_.WriteVarint64(value.length());
                     BodyCodedStream_.WriteRaw(value.begin(), static_cast<int>(value.length()));
@@ -2508,7 +2539,7 @@ private:
                         }
                         TStringBuf data(PooledString_.data(), length);
                         if (field->GetType() == FieldDescriptor::TYPE_STRING) {
-                            ValidateString(data, Options_.CheckUtf8, field->GetFullName());
+                            ValidateString(data, field->GetFullName());
                         }
                         ParseScalar([&] {
                             if (field->GetBytesFieldConverter()) {

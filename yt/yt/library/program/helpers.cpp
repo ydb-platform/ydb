@@ -25,6 +25,8 @@
 
 #include <yt/yt/core/net/address.h>
 
+#include <yt/yt/core/yson/protobuf_interop.h>
+
 #include <yt/yt/core/rpc/dispatcher.h>
 #include <yt/yt/core/rpc/grpc/dispatcher.h>
 
@@ -270,6 +272,10 @@ void ReconfigureSingletonsImpl(const TStaticConfig& config, const TDynamicConfig
         ConfigureTCMalloc(dynamicConfig->TCMalloc);
     } else if (config->TCMalloc) {
         ConfigureTCMalloc(config->TCMalloc);
+    }
+
+    if (dynamicConfig->ProtobufInterop) {
+        NYson::SetProtobufInteropConfig(dynamicConfig->ProtobufInterop);
     }
 }
 

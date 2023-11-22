@@ -1,0 +1,15 @@
+#include "config.h"
+
+namespace NYT::NYson {
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TProtobufInteropDynamicConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("utf8_check", &TThis::Utf8Check)
+        .Default(EUtf8Check::Disable);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // NYT::NYson

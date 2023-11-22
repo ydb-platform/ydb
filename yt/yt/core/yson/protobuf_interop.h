@@ -1,5 +1,7 @@
 #pragma once
 
+#include "public.h"
+
 #include "protobuf_interop_options.h"
 
 #include <yt/yt/core/ypath/public.h>
@@ -270,6 +272,10 @@ TString YsonStringToProto(
     const TYsonString& ysonString,
     const TProtobufMessageType* payloadType,
     TProtobufWriterOptions options);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void SetProtobufInteropConfig(TProtobufInteropDynamicConfigPtr config);
 
 ////////////////////////////////////////////////////////////////////////////////
 

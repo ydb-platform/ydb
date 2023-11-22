@@ -246,6 +246,12 @@ void Serialize(const TColumnSchema& columnSchema, NYson::IYsonConsumer* consumer
         .DoIf(columnSchema.Group().Defined(), [&] (TFluentMap fluent) {
             fluent.Item("group").Value(*columnSchema.Group());
         })
+        .DoIf(columnSchema.StableName().Defined(), [&] (TFluentMap fluent) {
+            fluent.Item("stable_name").Value(*columnSchema.StableName());
+         })
+        .DoIf(columnSchema.Deleted().Defined(), [&] (TFluentMap fluent) {
+            fluent.Item("deleted").Value(*columnSchema.Deleted());
+        })
     .EndMap();
 }
 
@@ -259,6 +265,8 @@ void Deserialize(TColumnSchema& columnSchema, const TNode& node)
     DESERIALIZE_ITEM("expression", columnSchema.Expression_);
     DESERIALIZE_ITEM("aggregate", columnSchema.Aggregate_);
     DESERIALIZE_ITEM("group", columnSchema.Group_);
+    DESERIALIZE_ITEM("stable_name", columnSchema.StableName_);
+    DESERIALIZE_ITEM("deleted", columnSchema.Deleted_);
 
     if (nodeMap.contains("type_v3")) {
         NTi::TTypePtr type;

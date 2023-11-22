@@ -23,6 +23,14 @@ bool CheckColumnTypesConstraints(NKikimrSchemeOp::TTableDescription& desc, TStri
     THashSet<TString> keyColumns(desc.GetKeyColumnNames().begin(), desc.GetKeyColumnNames().end());
 
     for (const auto& column : desc.GetColumns()) {
+        const auto& type = column.GetType();
+        if (type == "Uuid") {
+            if (!AppData()->FeatureFlags.GetEnableUuidAsPrimaryKey() && keyColumns.contains(column.GetName())) {
+                errMsg = TStringBuilder() << "Uuid as primary key is forbiden by configuration: " << column.GetName();
+                return false;
+            }
+        }
+
         if (column.GetNotNull()) {
             bool isPrimaryKey = keyColumns.contains(column.GetName());
 

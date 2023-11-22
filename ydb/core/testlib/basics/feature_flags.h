@@ -53,6 +53,7 @@ public:
     FEATURE_FLAG_SETTER(ForceColumnTablesCompositeMarks)
     FEATURE_FLAG_SETTER(EnableUniqConstraint)
     FEATURE_FLAG_SETTER(EnableTopicMessageMeta)
+    FEATURE_FLAG_SETTER(EnableUuidAsPrimaryKey)
 
     #undef FEATURE_FLAG_SETTER
 };

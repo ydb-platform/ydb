@@ -259,14 +259,14 @@ private:
 
         YQL_ENSURE(!batch.IsWide());
 
-        auto source = TaskRunner->GetSource(index);
+        auto* source = TaskRunner->GetSource(index);
         TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), DataTransportVersion);
         TDqSerializedBatch serialized = dataSerializer.Serialize(batch, source->GetInputType());
 
-        Invoker->Invoke([serialized=std::move(serialized),taskRunner=TaskRunner, actorSystem, selfId, cookie, parentId=ParentId, space, finish, index, settings=Settings, stageId=StageId]() mutable {
+        Invoker->Invoke([serialized=std::move(serialized), taskRunner=TaskRunner, actorSystem, selfId, cookie, parentId=ParentId, space, finish, index, settings=Settings, stageId=StageId]() mutable {
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
-                auto source = taskRunner->GetSource(index);
+                auto* source = taskRunner->GetSource(index);
                 source->Push(std::move(serialized), space);
                 if (finish) {
                     source->Finish();

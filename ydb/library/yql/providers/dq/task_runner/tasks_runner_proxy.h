@@ -54,7 +54,7 @@ public:
 
     virtual IInputChannel::TPtr GetInputChannel(ui64 channelId) = 0;
     virtual IOutputChannel::TPtr GetOutputChannel(ui64 channelId) = 0;
-    virtual NDq::IDqAsyncInputBuffer::TPtr GetSource(ui64 index) = 0;
+    virtual NDq::IDqAsyncInputBuffer* GetSource(ui64 index) = 0;
     virtual NDq::IDqAsyncOutputBuffer::TPtr GetSink(ui64 index) = 0;
 
     virtual const THashMap<TString,TString>& GetTaskParams() const = 0;

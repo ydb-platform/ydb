@@ -43,6 +43,7 @@ public:
 
     int GetSize() const;
     std::vector<TValuePtr> GetAll() const;
+    i64 GetCapacity() const;
 
     TValuePtr Find(const TKey& key);
 

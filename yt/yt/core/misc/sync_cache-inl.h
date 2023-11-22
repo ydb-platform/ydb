@@ -157,6 +157,12 @@ TSyncSlruCacheBase<TKey, TValue, THash>::GetAll() const
 }
 
 template <class TKey, class TValue, class THash>
+i64 TSyncSlruCacheBase<TKey, TValue, THash>::GetCapacity() const
+{
+    return Capacity_.load();
+}
+
+template <class TKey, class TValue, class THash>
 void TSyncSlruCacheBase<TKey, TValue, THash>::UpdateWeight(const TValuePtr& value)
 {
     UpdateWeight(value->GetKey());

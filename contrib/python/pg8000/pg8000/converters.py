@@ -18,7 +18,7 @@ from ipaddress import (
 from json import dumps, loads
 from uuid import UUID
 
-from dateutil.parser import parse
+from dateutil.parser import ParserError, parse
 
 from pg8000.exceptions import InterfaceError
 from pg8000.types import PGInterval, Range
@@ -131,7 +131,11 @@ def date_in(data):
     if data in ("infinity", "-infinity"):
         return data
     else:
-        return Datetime.strptime(data, "%Y-%m-%d").date()
+        try:
+            return Datetime.strptime(data, "%Y-%m-%d").date()
+        except ValueError:
+            # pg date can overflow Python Datetime
+            return data
 
 
 def date_out(v):
@@ -249,7 +253,11 @@ def timestamp_in(data):
         pattern = "%Y-%m-%d %H:%M:%S.%f" if "." in data else "%Y-%m-%d %H:%M:%S"
         return Datetime.strptime(data, pattern)
     except ValueError:
-        return parse(data)
+        try:
+            return parse(data)
+        except ParserError:
+            # pg timestamp can overflow Python Datetime
+            return data
 
 
 def timestamptz_in(data):
@@ -260,7 +268,11 @@ def timestamptz_in(data):
         patt = "%Y-%m-%d %H:%M:%S.%f%z" if "." in data else "%Y-%m-%d %H:%M:%S%z"
         return Datetime.strptime(f"{data}00", patt)
     except ValueError:
-        return parse(data)
+        try:
+            return parse(data)
+        except ParserError:
+            # pg timestamptz can overflow Python Datetime
+            return data
 
 
 def unknown_out(v):
@@ -758,14 +770,16 @@ def literal(value):
         return str(value)
     elif isinstance(value, (bytes, bytearray)):
         return f"X'{value.hex()}'"
+    elif isinstance(value, Datetime):
+        return f"'{datetime_out(value)}'"
     elif isinstance(value, Date):
         return f"'{date_out(value)}'"
     elif isinstance(value, Time):
         return f"'{time_out(value)}'"
-    elif isinstance(value, Datetime):
-        return f"'{datetime_out(value)}'"
     elif isinstance(value, Timedelta):
         return f"'{interval_out(value)}'"
+    elif isinstance(value, list):
+        return f"'{array_out(value)}'"
     else:
         val = str(value).replace("'", "''")
         return f"'{val}'"

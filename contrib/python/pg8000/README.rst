@@ -1195,13 +1195,21 @@ possible to change the default mapping using adapters (see the examples).
    +-----------------------+-----------------+-----------------------------------------+
    | datetime.datetime     | timestamp       | +/-infinity PostgreSQL values are       |
    | (without tzinfo)      | without         | represented as Python ``str`` values.   |
-   |                       | timezone        |                                         |
+   |                       | timezone        | If a ``timestamp`` is too big for       |
+   |                       |                 | ``datetime.datetime`` then a ``str`` is |
+   |                       |                 | used.                                   |
    +-----------------------+-----------------+-----------------------------------------+
    | datetime.datetime     | timestamp with  | +/-infinity PostgreSQL values are       |
    | (with tzinfo)         | timezone        | represented as Python ``str`` values.   |
+   |                       |                 | If a ``timestamptz`` is too big for     |
+   |                       |                 | ``datetime.datetime`` then a ``str`` is |
+   |                       |                 | used.                                   |
    +-----------------------+-----------------+-----------------------------------------+
    | datetime.date         | date            | +/-infinity PostgreSQL values are       |
    |                       |                 | represented as Python ``str`` values.   |
+   |                       |                 | If a ``date`` is too big for a          |
+   |                       |                 | ``datetime.date`` then a ``str`` is     |
+   |                       |                 | used.                                   |
    +-----------------------+-----------------+-----------------------------------------+
    | datetime.time         | time without    |                                         |
    |                       | time zone       |                                         |
@@ -2203,6 +2211,13 @@ Run ``tox`` to make sure all tests pass, then update the release notes, then do:
 
 Release Notes
 -------------
+
+Version 1.30.3, 2023-10-31
+``````````````````````````
+
+- Fix problem with PG date overflowing Python types. Now we return the ``str`` we got from the
+  server if we can't parse it. 
+
 
 Version 1.30.2, 2023-09-17
 ``````````````````````````

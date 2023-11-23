@@ -162,8 +162,13 @@ private:
                 LOG_T("Task runner. Inject watermark " << watermark);
                 TaskRunner->SetWatermarkIn(watermark);
             }
-
             res = TaskRunner->Run();
+// Uncomment me to test YQL-16986 prototype
+// Delete me after YQL-16988
+//            if (ERunStatus::PendingInput == res){
+//                //very poor man waiting for spiller async operation completion
+//                Schedule(TDuration::MilliSeconds(1), new TEvContinueRun(THashSet<ui32>(ev->Get()->InputChannels), ev->Get()->MemLimit));
+//            }
         }
 
         for (auto& channelId : inputMap) {

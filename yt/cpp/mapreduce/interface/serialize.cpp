@@ -165,10 +165,16 @@ void Serialize(const TColumnSchema& columnSchema, NYson::IYsonConsumer* consumer
         .Item("name").Value(columnSchema.Name())
         .DoIf(!columnSchema.RawTypeV3().Defined(),
             [&] (TFluentMap fluent) {
+                static const auto optionalYson = NTi::Optional(NTi::Yson());
+
                 fluent.Item("type").Value(NDetail::ToString(columnSchema.Type()));
                 fluent.Item("required").Value(columnSchema.Required());
-                if (columnSchema.Type() == VT_ANY
-                    && *columnSchema.TypeV3() != *NTi::Optional(NTi::Yson()))
+                if (
+                    (columnSchema.Type() == VT_ANY && *columnSchema.TypeV3() != *optionalYson) ||
+                    // See https://github.com/ytsaurus/ytsaurus/issues/173
+                    columnSchema.TypeV3()->IsDecimal() ||
+                    (columnSchema.TypeV3()->IsOptional() && columnSchema.TypeV3()->AsOptional()->GetItemType()->IsDecimal()))
+
                 {
                     // A lot of user canonize serialized schema.
                     // To be backward compatible we only set type_v3 for new types.

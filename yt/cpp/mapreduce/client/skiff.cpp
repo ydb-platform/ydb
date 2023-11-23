@@ -108,12 +108,18 @@ NSkiff::TSkiffSchemaPtr CreateSkiffSchema(
     TVector<TSkiffSchemaPtr> skiffColumns;
     for (const auto& column: schema.Columns()) {
         TSkiffSchemaPtr skiffColumn;
+        if (column.Deleted().Defined() && *column.Deleted()) {
+            continue;
+        }
         if (column.Type() == VT_ANY && *column.TypeV3() != *NTi::Optional(NTi::Yson())) {
             // We ignore all complex types until YT-12717 is done.
             return nullptr;
         }
-        if (column.Deleted().Defined() && *column.Deleted()) {
-            continue;
+        if (column.TypeV3()->IsDecimal() ||
+            column.TypeV3()->IsOptional() && column.TypeV3()->AsOptional()->GetItemType()->IsDecimal())
+        {
+            // Complex logic for decimal types, ignore them for now.
+            return nullptr;
         }
         if (column.Required() || NTi::IsSingular(column.TypeV3()->GetTypeName())) {
             skiffColumn = CreateSimpleTypeSchema(ValueTypeToSkiffType(column.Type()));

@@ -311,7 +311,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
     enum class EWakeupTag: ui64 {
         Restart,
-        RetryUpload,
     };
 
     void AllocateResource() {
@@ -574,9 +573,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         case NKikimrTxDataShard::TError::OK:
             return ProcessDownloadInfo(ev->Get()->Info, TStringBuf("UploadResponse"));
 
-        case NKikimrTxDataShard::TError::WRONG_SHARD_STATE: // OVERLOADED
-            return RetryUpload();
-
         case NKikimrTxDataShard::TError::SCHEME_ERROR:
         case NKikimrTxDataShard::TError::BAD_ARGUMENT:
             return Finish(false, record.GetErrorDescription());
@@ -660,10 +656,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         return true;
     }
 
-    void RetryUpload() {
-        Schedule(TDuration::MilliSeconds(50), new TEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::RetryUpload)));
-    }
-
     void RestartOrFinish(const TString& error) {
         if (Attempt++ < Retries) {
             Delay = Min(Delay * Attempt, MaxDelay);
@@ -679,8 +671,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         switch (static_cast<EWakeupTag>(ev->Get()->Tag)) {
         case EWakeupTag::Restart:
             return Restart();
-        case EWakeupTag::RetryUpload:
-            return UploadRows();
         }
     }
 

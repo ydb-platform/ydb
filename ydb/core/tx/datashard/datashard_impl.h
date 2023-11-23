@@ -2817,6 +2817,8 @@ private:
 
     bool ScheduledPlanPredictedTxs = false;
 
+    TVector<THolder<IEventHandle>> DelayedS3UploadRows;
+
     std::vector<TTrivialLogThrottler> LogThrottlers = {ELogThrottlerType::LAST, TDuration::Seconds(1)};
 public:
     auto& GetLockChangeRecords() {

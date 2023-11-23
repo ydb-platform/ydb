@@ -59,6 +59,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptEnableInplaceUpdate;
     NCommon::TConfSetting<bool, false> OptEnablePredicateExtract;
     NCommon::TConfSetting<bool, false> OptEnableOlapPushdown;
+    NCommon::TConfSetting<bool, false> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
     NCommon::TConfSetting<bool, false> OptEnableCostBasedOptimization;
 
@@ -81,6 +82,7 @@ struct TKikimrSettings {
     bool HasOptDisableTopSort() const;
     bool HasOptDisableSqlInToJoin() const;
     bool HasOptEnableOlapPushdown() const;
+    bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
     bool HasOptEnableCostBasedOptimization() const;
 

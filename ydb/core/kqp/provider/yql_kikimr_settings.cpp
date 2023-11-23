@@ -64,6 +64,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnableInplaceUpdate);
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
     REGISTER_SETTING(*this, OptEnableOlapPushdown);
+    REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
+    
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, OptEnableCostBasedOptimization);
 
@@ -125,6 +127,10 @@ bool TKikimrSettings::HasOptEnableInplaceUpdate() const {
 
 bool TKikimrSettings::HasOptEnableOlapPushdown() const {
     return GetOptionalFlagValue(OptEnableOlapPushdown.Get()) != EOptionalFlag::Disabled;
+}
+
+bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {
+    return GetOptionalFlagValue(OptEnableOlapProvideComputeSharding.Get()) == EOptionalFlag::Enabled;
 }
 
 bool TKikimrSettings::HasOptUseFinalizeByKey() const {

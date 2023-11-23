@@ -334,6 +334,8 @@ private:
             Y_ENSURE(prevIndex < ParsedTokens.size());
             Y_ENSURE(ParsedTokens[prevIndex].Content == "{");
             MarkedTokens[prevIndex].OpeningBracket = false;
+            ForceExpandedColumn = ParsedTokens[prevIndex].LinePos;
+            ForceExpandedLine = ParsedTokens[prevIndex].Line;
         } else if (descr == TRule_in_atom_expr::GetDescriptor()) {
             const auto& value = dynamic_cast<const TRule_in_atom_expr&>(msg);
             if (value.Alt_case() == TRule_in_atom_expr::kAltInAtomExpr7) {
@@ -354,6 +356,12 @@ private:
                 ForceExpandedColumn = paren.GetColumn();
                 ForceExpandedLine = paren.GetLine();
             }
+            suppressExpr = true;
+        } else if (descr == TRule_exists_expr::GetDescriptor()) {
+            const auto& value = dynamic_cast<const TRule_exists_expr&>(msg);
+            auto& paren = value.GetToken2();
+            ForceExpandedColumn = paren.GetColumn();
+            ForceExpandedLine = paren.GetLine();
             suppressExpr = true;
         }
 
@@ -2004,6 +2012,21 @@ private:
         VisitAllFields(TRule_key_expr::GetDescriptor(), msg);
     }
 
+    void VisitExistsExpr(const TRule_exists_expr& msg) {
+        VisitKeyword(msg.GetToken1());
+        VisitToken(msg.GetToken2());
+        
+        NewLine();
+        PushCurrentIndent();
+
+        Visit(msg.GetBlock3());
+
+        PopCurrentIndent();
+        NewLine();
+
+        VisitToken(msg.GetToken4());
+    }
+
     void PushCurrentIndent() {
         CurrentIndent += OneIndent;
     }
@@ -2104,6 +2127,7 @@ TStaticData::TStaticData()
         {TRule_ext_order_by_clause::GetDescriptor(), MakeFunctor(&TVisitor::VisitExtOrderByClause)},
         {TRule_key_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitKeyExpr)},
         {TRule_define_action_or_subquery_body::GetDescriptor(), MakeFunctor(&TVisitor::VisitDefineActionOrSubqueryBody)},
+        {TRule_exists_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitExistsExpr)},
 
         {TRule_pragma_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitPragma)},
         {TRule_select_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitSelect)},

@@ -1380,4 +1380,26 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
         TSetup setup;
         setup.Run(cases);
     }
+
+    Y_UNIT_TEST(ExistsExpr) {
+        TCases cases = {
+            {"SELECT EXISTS (SELECT 1);", 
+             "SELECT\n\tEXISTS (\n\t\tSELECT\n\t\t\t1\n\t);\n\n"},
+            {"SELECT CAST(EXISTS(SELECT 1) AS Int) AS x,\nFROM Input;", 
+             "SELECT\n\tCAST(\n\t\tEXISTS (\n\t\t\tSELECT\n\t\t\t\t1\n\t\t) AS Int\n\t) AS x,\nFROM Input;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(LambdaInsideExpr) {
+        TCases cases = {
+            {"SELECT ListMap(AsList(1,2),($x)->{return $x+1});", 
+             "SELECT\n\tListMap(\n\t\tAsList(1, 2), ($x) -> {\n\t\t\tRETURN $x + 1\n\t\t}\n\t);\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
 }

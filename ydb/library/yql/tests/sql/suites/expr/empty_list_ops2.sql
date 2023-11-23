@@ -1,6 +1,5 @@
 /* syntax version 1 */
 /* postgres can not */
-/* skip double format */
 select
     ListHasItems([]),
     Yql::Filter([],($x)->{return $x}),

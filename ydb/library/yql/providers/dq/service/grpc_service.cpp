@@ -161,7 +161,7 @@ namespace NYql::NDqs {
                             for (const auto& [k, v] : labels) {
                                 group = group->GetSubgroup(k, v);
                             }
-                            group->GetHistogram(name, ExponentialHistogram(10, 2, 50))->Collect(v.Sum);
+                            group->GetHistogram(name, ExponentialHistogram(10, 2, 50000))->Collect(v.Sum);
                         }
                     }
                 }

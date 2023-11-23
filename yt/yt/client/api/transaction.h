@@ -58,6 +58,11 @@ struct TTransactionCommitOptions
     //! Cell ids of additional 2PC participants.
     //! Used to implement cross-cluster commit via RPC proxy.
     std::vector<NObjectClient::TCellId> AdditionalParticipantCellIds;
+
+    //! If |true| then any participant (including alien cells) can become a coordinator.
+    //! If |false| then coordinator will be chosen on the primary cell of the cluster
+    //! that has been specified when starting transaction.
+    bool AllowAlienCoordinator = false;
 };
 
 struct TTransactionPingOptions

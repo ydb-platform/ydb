@@ -47,18 +47,7 @@ def join(
     dss = test_case.data_sources
     ds_head, ds_tail = dss[0], dss[1:]
 
-    yql_script_parts = [
-        '\nSELECT',
-        test_case.yql_select_what,
-        f'FROM {ds_head.yql_aliased_name(settings.get_cluster_name(ds_head.kind))} ',
-        '\n'.join(
-            f'JOIN {ds.yql_aliased_name(settings.get_cluster_name(ds.kind))} '
-            + f'ON {ds_head.alias}.id = {ds.alias}.id'
-            for ds in ds_tail
-        ),
-        f'ORDER BY {ds_head.alias}_id',
-    ]
-    yql_script = "\n".join(yql_script_parts)
+    yql_script = test_case.make_sql(settings)
 
     result = dqrun_runner.run(test_dir=tmp_path, script=yql_script, generic_settings=test_case.generic_settings)
 

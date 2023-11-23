@@ -38,10 +38,6 @@ namespace NYql {
             ythrow yexception() << "missing 'PASSWORD' value";
         }
 
-        if (!it->second) {
-            ythrow yexception() << "empty 'PASSWORD' value";
-        }
-
         clusterConfig.MutableCredentials()->Mutablebasic()->Setpassword(it->second);
     }
 
@@ -277,7 +273,7 @@ namespace NYql {
             R"(
             {context}: invalid cluster config: {msg}.
 
-            Full config dump: 
+            Full config dump:
             Name={name},
             Kind={kind},
             Location.Endpoint.host={host},

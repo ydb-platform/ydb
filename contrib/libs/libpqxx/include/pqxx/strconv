@@ -1,0 +1,4 @@
+/** String conversion definitions.
+ */
+// Actual definitions in .hxx file so editors and such recognize file type.
+#include "pqxx/strconv.hxx"

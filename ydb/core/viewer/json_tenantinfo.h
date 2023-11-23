@@ -615,9 +615,8 @@ public:
                         tenant.SetStorageGroups(storageGroups);
                         auto& ssdUsage = *tenant.AddStorageUsage();
                         ssdUsage.SetType(NKikimrViewer::TStorageUsage::SSD);
-                        if (storageAllocatedLimit > 0) {
-                            ssdUsage.SetUsage((float)storageAllocatedSize / storageAllocatedLimit);
-                        }
+                        ssdUsage.SetSize(storageAllocatedSize);
+                        ssdUsage.SetLimit(storageAllocatedLimit);
                         // TODO(andrew-rykov)
                         auto& hddUsage = *tenant.AddStorageUsage();
                         hddUsage.SetType(NKikimrViewer::TStorageUsage::HDD);

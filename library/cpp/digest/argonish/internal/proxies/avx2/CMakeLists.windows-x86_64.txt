@@ -19,6 +19,8 @@ target_sources_custom(internal-proxies-avx2
   SRCS
   ${CMAKE_SOURCE_DIR}/library/cpp/digest/argonish/internal/proxies/avx2/proxy_avx2.cpp
   CUSTOM_FLAGS
-  /arch:AVX2
-  /DAVX2_ENABLED=1
+  -mavx2
+  -mfma
+  -mbmi
+  -mbmi2
 )

@@ -20,6 +20,7 @@ target_link_libraries(kqp-opt-physical PUBLIC
   opt-physical-effects
   yql-dq-common
   yql-dq-opt
+  yql-dq-type_ann
   providers-common-pushdown
 )
 target_sources(kqp-opt-physical PRIVATE

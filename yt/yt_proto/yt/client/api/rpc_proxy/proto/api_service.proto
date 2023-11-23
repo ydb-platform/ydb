@@ -1275,6 +1275,12 @@ message TReplicaInfo
     required int32 mode = 4; // ETableReplicaMode
 }
 
+message TIndexInfo
+{
+    required NYT.NProto.TGuid index_table_id = 1;
+    required int32 index_kind = 2; // NTableClient::ESecondaryIndexKind
+}
+
 message TReqGetTableMountInfo
 {
     required string path = 1;
@@ -1289,6 +1295,7 @@ message TRspGetTableMountInfo
     required NYT.NProto.TGuid upstream_replica_id = 5;
     repeated TReplicaInfo replicas = 6;
     optional string physical_path = 7;
+    repeated TIndexInfo indices = 8;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1446,6 +1453,7 @@ message TReqCopyNode
     optional bool ignore_existing = 8 [default = false];
     optional bool lock_existing = 13 [default = false];
     optional bool pessimistic_quota_check = 9 [default = true];
+    optional bool enable_cross_cell_copying = 15 [default = true];
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -1473,6 +1481,7 @@ message TReqMoveNode
     optional bool preserve_expiration_timeout = 12 [default = false];
     optional bool preserve_owner = 11 [default = false];
     optional bool pessimistic_quota_check = 7 [default = true];
+    optional bool enable_cross_cell_copying = 13 [default = true];
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -2170,6 +2179,8 @@ message TReqListJobs
     optional bool with_competitors = 18;
 
     optional string task_name = 19;
+
+    optional bool with_monitoring_descriptor = 21;
 
     optional TMasterReadOptions master_read_options = 102;
 }

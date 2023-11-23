@@ -1,11 +1,12 @@
 #include "yql_http_gateway.h"
 #include "yql_dns_gateway.h"
 
-#include <ydb/library/yql/utils/log/log.h>
-#include <util/stream/str.h>
-#include <util/string/builder.h>
 #include <util/generic/size_literals.h>
 #include <util/generic/yexception.h>
+#include <util/stream/str.h>
+#include <util/string/builder.h>
+#include <ydb/library/yql/utils/aws_credentials.h>
+#include <ydb/library/yql/utils/log/log.h>
 
 #include <thread>
 #include <mutex>
@@ -17,6 +18,7 @@
 #endif
 
 namespace {
+
 int curlTrace(CURL *handle, curl_infotype type,
     char *data, size_t size,
     void *userp) {
@@ -111,8 +113,13 @@ public:
         , ErrorBuffer(static_cast<size_t>(CURL_ERROR_SIZE), '\0')
         , DnsCache(dnsCache)
         , Url(url) {
-    InitHandles();
-    Counter->Inc();
+        PrepareHeaders();
+        InitHandles();
+        Counter->Inc();
+    }
+
+    void PrepareHeaders() {
+        AwsCredentials = ExtractAwsCredentials(Headers);
     }
 
     virtual ~TEasyCurl() {
@@ -162,6 +169,11 @@ public:
         curl_easy_setopt(Handle, CURLOPT_LOW_SPEED_TIME, Config.LowSpeedTime);
         curl_easy_setopt(Handle, CURLOPT_LOW_SPEED_LIMIT, Config.LowSpeedLimit);
         curl_easy_setopt(Handle, CURLOPT_ERRORBUFFER, ErrorBuffer.data());
+
+        if (AwsCredentials) {
+            curl_easy_setopt(Handle, CURLOPT_AWS_SIGV4, "aws:amz:ru-central1:s3");
+            curl_easy_setopt(Handle, CURLOPT_USERPWD, AwsCredentials.c_str());
+        }
 
         if (DnsCache != nullptr) {
             curl_easy_setopt(Handle, CURLOPT_RESOLVE, DnsCache.get());
@@ -261,7 +273,8 @@ private:
         return res;
     };
 
-    const IHTTPGateway::THeaders Headers;
+    TString AwsCredentials;
+    IHTTPGateway::THeaders Headers;
     const EMethod Method;
     const size_t Offset;
     const size_t SizeLimit;
@@ -1045,7 +1058,9 @@ IHTTPGateway::THeaders IHTTPGateway::MakeYcHeaders(const TString& requestId, con
     }
     result.push_back(TString("X-Request-ID:") + requestId);
 
-    if (!token.empty()) {
+    if (TString header = PrepareAwsHeader(token)) {
+        result.push_back(header);
+    } else if (!token.empty()) {
         result.push_back(TString("X-YaCloud-SubjectToken:") + token);
     }
 

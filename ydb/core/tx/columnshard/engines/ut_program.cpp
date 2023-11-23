@@ -77,9 +77,16 @@ Y_UNIT_TEST_SUITE(TestProgram) {
                         auto blockBoolType = Ctx.template MakeType<NYql::TBlockExprType>(Ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Bool));
                         return ReqBuilder->AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::StringContains, blockStringType, blockStringType, blockBoolType);
                     }
+                    case NYql::TKernelRequestBuilder::EBinaryOp::Equals:
+                    case NYql::TKernelRequestBuilder::EBinaryOp::NotEquals:
+                    {
+                        auto blockLeftType = Ctx.template MakeType<NYql::TBlockExprType>(Ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Int16));
+                        auto blockRightType = Ctx.template MakeType<NYql::TBlockExprType>(Ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Float));
+                        auto blockBoolType = Ctx.template MakeType<NYql::TBlockExprType>(Ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Bool));
+                        return ReqBuilder->AddBinaryOp(operation, blockLeftType, blockRightType, blockBoolType);
+                    }
                     default:
                         Y_ABORT("Not implemented");
-
                 }
             }
 
@@ -136,7 +143,6 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             functionProto->SetKernelIdx(0);
             functionProto->AddArguments()->SetName("sum");
             functionProto->AddArguments()->SetName("vat");
-            functionProto->SetId(NKikimrSSA::TProgram::TAssignment::EFunction::TProgram_TAssignment_EFunction_FUNC_STR_LENGTH);
         }
         {
             auto* command = programProto.AddCommand();
@@ -188,7 +194,6 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             functionProto->SetKernelIdx(0);
             functionProto->AddArguments()->SetName("string");
             functionProto->AddArguments()->SetName("prefix");
-            functionProto->SetId(NKikimrSSA::TProgram::TAssignment::EFunction::TProgram_TAssignment_EFunction_FUNC_STR_LENGTH);
         }
         {
             auto* command = programProto.AddCommand();
@@ -225,6 +230,60 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         }
     }
 
+    Y_UNIT_TEST(YqlKernelEndsWithScalar) {
+        TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
+        TIndexColumnResolver columnResolver(indexInfo);
+
+        NKikimrSSA::TProgram programProto;
+        {
+            auto* command = programProto.AddCommand();
+            auto* constantProto = command->MutableAssign()->MutableConstant();
+            constantProto->SetBytes("amet.");
+            command->MutableAssign()->MutableColumn()->SetName("suffix");
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* functionProto = command->MutableAssign()->MutableFunction();
+            functionProto->SetFunctionType(NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL);
+            functionProto->SetKernelIdx(0);
+            functionProto->AddArguments()->SetName("string");
+            functionProto->AddArguments()->SetName("suffix");
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* prjectionProto = command->MutableProjection();
+            auto* column = prjectionProto->AddColumns();
+            column->SetName("0");
+        }
+
+        {
+            TKernelsWrapper kernels;
+            kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::EndsWith, true);
+            programProto.SetKernels(kernels.Serialize());
+            const auto programSerialized = SerializeProgram(programProto);
+
+            TProgramContainer program;
+            TString errors;
+            UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
+
+            TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"string", TTypeInfo(NTypeIds::Utf8) }}));
+            updates.AddRow().Add<std::string>("Lorem ipsum dolor sit amet.");
+            updates.AddRow().Add<std::string>("Lorem ipsum dolor sit.");
+
+            auto batch = updates.BuildArrow();
+            Cerr << batch->ToString() << Endl;
+            auto res = program.ApplyProgram(batch);
+            UNIT_ASSERT_C(res.ok(), res.ToString());
+
+            TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Uint8)) }));
+            result.AddRow().Add<ui8>(1);
+            result.AddRow().Add<ui8>(0);
+
+            auto expected = result.BuildArrow();
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+        }
+    }
+
     Y_UNIT_TEST(YqlKernelStartsWith) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
         TIndexColumnResolver columnResolver(indexInfo);
@@ -236,8 +295,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             functionProto->SetFunctionType(NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL);
             functionProto->SetKernelIdx(0);
             functionProto->AddArguments()->SetName("string");
-            functionProto->AddArguments()->SetName("substring");
-            functionProto->SetId(NKikimrSSA::TProgram::TAssignment::EFunction::TProgram_TAssignment_EFunction_FUNC_STR_LENGTH);
+            functionProto->AddArguments()->SetName("prefix");
         }
         {
             auto* command = programProto.AddCommand();
@@ -256,7 +314,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             TString errors;
             UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
 
-            TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"string", TTypeInfo(NTypeIds::Utf8) }, {"substring", TTypeInfo(NTypeIds::Utf8) }}));
+            TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"string", TTypeInfo(NTypeIds::Utf8) }, {"prefix", TTypeInfo(NTypeIds::Utf8) }}));
             updates.AddRow().Add<std::string>("Lorem ipsum dolor sit amet.").Add<std::string>("Lorem");
             updates.AddRow().Add<std::string>("Lorem ipsum dolor sit amet.").Add<std::string>("amet.");
 
@@ -271,8 +329,77 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             auto expected = result.BuildArrow();
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
         }
+    }
 
-        // Test with binary data
+    Y_UNIT_TEST(YqlKernelEndsWith) {
+        TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
+        TIndexColumnResolver columnResolver(indexInfo);
+
+        NKikimrSSA::TProgram programProto;
+
+        {
+            auto* command = programProto.AddCommand();
+            auto* functionProto = command->MutableAssign()->MutableFunction();
+            functionProto->SetFunctionType(NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL);
+            functionProto->SetKernelIdx(0);
+            functionProto->AddArguments()->SetName("string");
+            functionProto->AddArguments()->SetName("suffix");
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* prjectionProto = command->MutableProjection();
+            auto* column = prjectionProto->AddColumns();
+            column->SetName("0");
+        }
+
+        {
+            TKernelsWrapper kernels;
+            kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::EndsWith);
+            programProto.SetKernels(kernels.Serialize());
+            const auto programSerialized = SerializeProgram(programProto);
+
+            TProgramContainer program;
+            TString errors;
+            UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
+
+            TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"string", TTypeInfo(NTypeIds::Utf8) }, {"suffix", TTypeInfo(NTypeIds::Utf8) }}));
+            updates.AddRow().Add<std::string>("Lorem ipsum dolor sit amet.").Add<std::string>("Lorem");
+            updates.AddRow().Add<std::string>("Lorem ipsum dolor sit amet.").Add<std::string>("amet.");
+
+            auto batch = updates.BuildArrow();
+            auto res = program.ApplyProgram(batch);
+            UNIT_ASSERT_C(res.ok(), res.ToString());
+
+            TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Uint8)) }));
+            result.AddRow().Add<ui8>(0);
+            result.AddRow().Add<ui8>(1);
+
+            auto expected = result.BuildArrow();
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+        }
+    }
+
+    Y_UNIT_TEST(YqlKernelContains) {
+        TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
+        TIndexColumnResolver columnResolver(indexInfo);
+
+        NKikimrSSA::TProgram programProto;
+
+        {
+            auto* command = programProto.AddCommand();
+            auto* functionProto = command->MutableAssign()->MutableFunction();
+            functionProto->SetFunctionType(NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL);
+            functionProto->SetKernelIdx(0);
+            functionProto->AddArguments()->SetName("string");
+            functionProto->AddArguments()->SetName("substring");
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* prjectionProto = command->MutableProjection();
+            auto* column = prjectionProto->AddColumns();
+            column->SetName("0");
+        }
+
         {
             TKernelsWrapper kernels;
             kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::StringContains);
@@ -297,6 +424,61 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Uint8)) }));
             result.AddRow().Add<ui8>(1);
             result.AddRow().Add<ui8>(0);
+            result.AddRow().Add<ui8>(0);
+            result.AddRow().Add<ui8>(1);
+
+            auto expected = result.BuildArrow();
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+        }
+    }
+
+    Y_UNIT_TEST(YqlKernelEquals) {
+        TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
+        TIndexColumnResolver columnResolver(indexInfo);
+
+        NKikimrSSA::TProgram programProto;
+
+        {
+            auto* command = programProto.AddCommand();
+            auto* functionProto = command->MutableAssign()->MutableFunction();
+            functionProto->SetFunctionType(NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL);
+            functionProto->SetKernelIdx(0);
+            functionProto->AddArguments()->SetName("lhs");
+            functionProto->AddArguments()->SetName("rhs");
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* prjectionProto = command->MutableProjection();
+            auto* column = prjectionProto->AddColumns();
+            column->SetName("0");
+        }
+
+        {
+            TKernelsWrapper kernels;
+            kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::Equals);
+            programProto.SetKernels(kernels.Serialize());
+            const auto programSerialized = SerializeProgram(programProto);
+
+            TProgramContainer program;
+            TString errors;
+            UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
+
+            TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"lhs", TTypeInfo(NTypeIds::Int16) }, {"rhs", TTypeInfo(NTypeIds::Float) }}));
+            updates.AddRow().Add<i16>(-2).Add<float>(-2.f);
+            updates.AddRow().Add<i16>(-1).Add<float>(-1.1f);
+            updates.AddRow().Add<i16>(0).Add<float>(0.f);
+            updates.AddRow().Add<i16>(1).Add<float>(2.f);
+            updates.AddRow().Add<i16>(2).Add<float>(2.f);
+
+            auto batch = updates.BuildArrow();
+            Cerr << batch->ToString() << Endl;
+            auto res = program.ApplyProgram(batch);
+            UNIT_ASSERT_C(res.ok(), res.ToString());
+
+            TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Uint8)) }));
+            result.AddRow().Add<ui8>(1);
+            result.AddRow().Add<ui8>(0);
+            result.AddRow().Add<ui8>(1);
             result.AddRow().Add<ui8>(0);
             result.AddRow().Add<ui8>(1);
 

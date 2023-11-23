@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/grpc_services/grpc_helper.h>
 #include "move_topic_actor.h"
 
 namespace NKikimr {

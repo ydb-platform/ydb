@@ -630,7 +630,7 @@ public:
         UserToken = token;
     }
 
-    TVector<TString> GetCollectedSchemeData() override {
+    TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() override {
         return MetadataLoader->GetCollectedSchemeData();
     }
 

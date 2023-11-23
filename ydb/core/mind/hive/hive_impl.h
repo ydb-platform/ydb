@@ -382,6 +382,7 @@ protected:
     bool ProcessTabletBalancerScheduled = false;
     bool ProcessTabletBalancerPostponed = false;
     bool ProcessPendingOperationsScheduled = false;
+    bool LogTabletMovesScheduled = false;
     TResourceRawValues TotalRawResourceValues = {};
     TResourceNormalizedValues TotalNormalizedResourceValues = {};
     TInstant LastResourceChangeReaction;
@@ -436,16 +437,23 @@ protected:
         TFullTabletId Tablet;
         TNodeId From;
         TNodeId To;
+        double Priority;
+        TTabletTypes::EType TabletType;
 
-        TString ToHTML() {
-            TStringBuilder str;
-            str << "<tr><td>" << Timestamp << "</td><td>" << Tablet
-                << "</td><td>" << From << "&rarr;" << To << "</td><tr>";
-            return str;
-        }
+
+        TTabletMoveInfo(TInstant timestamp, const TTabletInfo& tablet, TNodeId from, TNodeId to);
+
+        TString ToHTML() const;
+
+        std::weak_ordering operator<=>(const TTabletMoveInfo& other) const;
     };
 
     TStaticRingBuffer<TTabletMoveInfo, 5> TabletMoveHistory;
+    std::vector<TTabletMoveInfo> TabletMoveSamplesForLog; // stores (at most) MOVE_SAMPLES_PER_LOG_ENTRY highest priority moves in a heap
+    static constexpr size_t MOVE_SAMPLES_PER_LOG_ENTRY = 10;
+    std::unordered_map<TTabletTypes::EType, ui64> TabletMovesByTypeForLog;
+    TInstant LogTabletMovesSchedulingTime;
+
 
     // to be removed later
     bool TabletOwnersSynced = false;
@@ -537,6 +545,7 @@ protected:
     void Handle(TEvHive::TEvTabletOwnersReply::TPtr& ev);
     void Handle(TEvHive::TEvUpdateTabletsObject::TPtr& ev);
     void Handle(TEvPrivate::TEvRefreshStorageInfo::TPtr& ev);
+    void Handle(TEvPrivate::TEvLogTabletMoves::TPtr& ev);
     void Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr& ev);
 
 protected:

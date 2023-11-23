@@ -1278,6 +1278,8 @@ public:
             return "RC";
         case TTabletTypes::BlobDepot:
             return "BD";
+        case TTabletTypes::StatisticsAggregator:
+            return "SA";
         default:
             return Sprintf("%d", (int)type);
         }

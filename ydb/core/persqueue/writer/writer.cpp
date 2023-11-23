@@ -595,7 +595,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
     void Write(ui64 cookie, NKikimrClient::TPersQueueRequest&& req) {
         auto ev = MakeHolder<TEvPersQueue::TEvRequest>();
-        ev->Record = req;
+        ev->Record = std::move(req);
 
         auto& request = *ev->Record.MutablePartitionRequest();
         request.SetMessageNo(MessageNo++);
@@ -812,7 +812,7 @@ private:
         bool QuotaAccepted;
 
         RequestHolder(NKikimrClient::TPersQueueRequest&& request, bool quotaChecked)
-            : Request(request)
+            : Request(std::move(request))
             , QuotaChecked(quotaChecked)
             , QuotaAccepted(false) {
         }

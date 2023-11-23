@@ -36,6 +36,7 @@ struct TParamsDelta {
     uint8_t AddExternalSchemeShard = 0;
     uint8_t AddExternalHive = 0;
     uint8_t AddExternalSysViewProcessor = 0;
+    uint8_t AddExternalStatisticsAggregator = 0;
     bool SharedTxSupportAdded = false;
     TVector<TStoragePool> StoragePoolsAdded;
 };
@@ -55,7 +56,7 @@ VerifyParams(TParamsDelta* delta, const TSubDomainInfo::TPtr& current, const NKi
     //
     // Currently this operation support very few workable result states:
     // 1. extsubdomain with full SharedTxSupport (ExternalSchemeShard, Coordinators, Mediators + required params),
-    //   with or without ExternalHive and ExternalSysViewProcessor
+    //   with or without ExternalHive, ExternalSysViewProcessor and ExternalStatisticsAggregator
     //
 
     // First params check: single values
@@ -171,6 +172,21 @@ VerifyParams(TParamsDelta* delta, const TSubDomainInfo::TPtr& current, const NKi
         }
     }
 
+    // ExternalStatisticsAggregator checks
+    uint8_t addExternalStatisticsAggregator = 0;
+    if (input.HasExternalStatisticsAggregator()) {
+        const bool prev = bool(current->GetTenantStatisticsAggregatorID());
+        const bool next = input.GetExternalStatisticsAggregator();
+        const bool changed = (prev != next);
+
+        if (changed) {
+            if (next == false) {
+                return paramError("ExternalStatisticsAggregator could only be added, not removed");
+            }
+            addExternalStatisticsAggregator = 1;
+        }
+    }
+
     // Second params check: combinations
 
     bool sharedTxSupportAdded = (coordinatorsAdded + mediatorsAdded) > 0;
@@ -235,6 +251,7 @@ VerifyParams(TParamsDelta* delta, const TSubDomainInfo::TPtr& current, const NKi
     delta->AddExternalSchemeShard = addExternalSchemeShard;
     delta->AddExternalHive = addExternalHive;
     delta->AddExternalSysViewProcessor = addExternalSysViewProcessor;
+    delta->AddExternalStatisticsAggregator = addExternalStatisticsAggregator;
     delta->SharedTxSupportAdded = sharedTxSupportAdded;
     delta->StoragePoolsAdded = std::move(storagePoolsAdded);
 
@@ -741,9 +758,9 @@ public:
 
         // Count tablets to create
 
-        //NOTE: ExternalHive and ExternalSysViewProcessor are _not_ counted against limits
+        //NOTE: ExternalHive, ExternalSysViewProcessor and ExternalStatisticsAggregator are _not_ counted against limits
         ui64 tabletsToCreateUnderLimit = delta.AddExternalSchemeShard + delta.CoordinatorsAdded + delta.MediatorsAdded;
-        ui64 tabletsToCreateOverLimit = delta.AddExternalSysViewProcessor;
+        ui64 tabletsToCreateOverLimit = delta.AddExternalSysViewProcessor + delta.AddExternalStatisticsAggregator;
         ui64 tabletsToCreateTotal = tabletsToCreateUnderLimit + tabletsToCreateOverLimit;
 
         // Check path limits
@@ -812,7 +829,12 @@ public:
         // Create shards for the requested tablets (except hive)
         {
             TChannelsBindings channelsBinding;
-            if (delta.SharedTxSupportAdded || delta.AddExternalSchemeShard || delta.AddExternalSysViewProcessor || delta.AddExternalHive) {
+            if (delta.SharedTxSupportAdded ||
+                delta.AddExternalSchemeShard ||
+                delta.AddExternalSysViewProcessor ||
+                delta.AddExternalHive ||
+                delta.AddExternalStatisticsAggregator)
+            {
                 if (!context.SS->ResolveSubdomainsChannels(alter->GetStoragePools(), channelsBinding)) {
                     result->SetError(NKikimrScheme::StatusInvalidParameter, "failed to construct channels binding");
                     return result;
@@ -837,6 +859,9 @@ public:
             }
             if (delta.AddExternalSysViewProcessor) {
                 AddShardsTo(txState, OperationId.GetTxId(), basenameId, 1, TTabletTypes::SysViewProcessor, channelsBinding, context.SS);
+            }
+            if (delta.AddExternalStatisticsAggregator) {
+                AddShardsTo(txState, OperationId.GetTxId(), basenameId, 1, TTabletTypes::StatisticsAggregator, channelsBinding, context.SS);
             }
             Y_ABORT_UNLESS(txState.Shards.size() == tabletsToCreateTotal);
         }

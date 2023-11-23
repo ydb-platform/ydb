@@ -22,6 +22,11 @@ struct TEvKafka {
         EvUpdateCounter,
         EvUpdateHistCounter,
         EvTopicOffsetsResponse,
+        EvJoinGroupRequest,
+        EvSyncGroupRequest,
+        EvHeartbeatRequest,
+        EvLeaveGroupRequest,
+        EvKillReadSession,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -40,6 +45,46 @@ struct TEvKafka {
 
         ui64 CorrelationId;
         const TMessagePtr<TProduceRequestData> Request;
+    };
+
+    struct TEvJoinGroupRequest : public TEventLocal<TEvJoinGroupRequest, EvJoinGroupRequest> {
+        TEvJoinGroupRequest(const ui64 correlationId, const TMessagePtr<TJoinGroupRequestData>& request)
+        : CorrelationId(correlationId)
+        , Request(request)
+        {}
+
+        ui64 CorrelationId;
+        const TMessagePtr<TJoinGroupRequestData> Request;
+    };
+
+    struct TEvLeaveGroupRequest : public TEventLocal<TEvLeaveGroupRequest, EvLeaveGroupRequest> {
+        TEvLeaveGroupRequest(const ui64 correlationId, const TMessagePtr<TLeaveGroupRequestData>& request)
+        : CorrelationId(correlationId)
+        , Request(request)
+        {}
+
+        ui64 CorrelationId;
+        const TMessagePtr<TLeaveGroupRequestData> Request;
+    };
+
+    struct TEvSyncGroupRequest : public TEventLocal<TEvSyncGroupRequest, EvSyncGroupRequest> {
+        TEvSyncGroupRequest(const ui64 correlationId, const TMessagePtr<TSyncGroupRequestData>& request)
+        : CorrelationId(correlationId)
+        , Request(request)
+        {}
+
+        ui64 CorrelationId;
+        const TMessagePtr<TSyncGroupRequestData> Request;
+    };
+
+    struct TEvHeartbeatRequest : public TEventLocal<TEvHeartbeatRequest, EvHeartbeatRequest> {
+        TEvHeartbeatRequest(const ui64 correlationId, const TMessagePtr<THeartbeatRequestData>& request)
+        : CorrelationId(correlationId)
+        , Request(request)
+        {}
+
+        ui64 CorrelationId;
+        const TMessagePtr<THeartbeatRequestData> Request;
     };
 
     struct TEvResponse : public TEventLocal<TEvResponse, EvResponse> {
@@ -117,6 +162,8 @@ struct TEvKafka {
         , Labels(labels)
         {}
     };
+
+    struct TEvKillReadSession : public TEventLocal<TEvKillReadSession, EvKillReadSession> {};
 
     struct TEvUpdateHistCounter : public TEventLocal<TEvUpdateHistCounter, EvUpdateHistCounter> {
         i64 Value;

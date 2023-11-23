@@ -21,6 +21,8 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/threading/future/future.h>
 
 #include <util/string/join.h>
@@ -191,6 +193,7 @@ struct TTableSettings {
     TResetableSetting<TTtlSettings, void> TtlSettings;
     TResetableSetting<TString, void> Tiering;
     TMaybe<TString> PartitionByHashFunction;
+    TMaybe<TString> StoreExternalBlobs;
 
     // These parameters are only used for external sources
     TMaybe<TString> DataSourcePath;
@@ -379,6 +382,11 @@ struct TExternalSource {
     TString AwsSecretAccessKey;
     NKikimrSchemeOp::TAuth DataSourceAuth;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
+};
+
+enum EMetaSerializationType : ui64 {
+    EncodedProto = 1,
+    Json = 2
 };
 
 struct TKikimrTableMetadata : public TThrRefBase {
@@ -752,7 +760,7 @@ public:
             const TString& cluster, const TString& table, const TLoadTableMetadataSettings& settings, const TString& database,
             const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) = 0;
 
-        virtual TVector<TString> GetCollectedSchemeData() = 0;
+        virtual TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() = 0;
 
         virtual ~IKqpTableMetadataLoader() = default;
     };
@@ -827,7 +835,7 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropExternalTable(const TString& cluster, const TDropExternalTableSettings& settings) = 0;
 
-    virtual TVector<TString> GetCollectedSchemeData() = 0;
+    virtual TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() = 0;
 
     virtual NThreading::TFuture<TExecuteLiteralResult> ExecuteLiteral(const TString& program, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) = 0;
 

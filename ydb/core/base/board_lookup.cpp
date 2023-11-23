@@ -5,6 +5,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <library/cpp/actors/core/interconnect.h>
 
+#include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -502,6 +503,7 @@ public:
         , StateStorageGroupId(groupId)
         , Subscriber(Mode == EBoardLookupMode::Subscription)
         , BoardRetrySettings(std::move(boardRetrySettings))
+        , WaitForReplicasToSuccess(0)
     {}
 
     void Bootstrap() {

@@ -84,6 +84,7 @@ void sleep_for(const chrono::duration<Rep, Period>& rel_time);
 
 #include <__assert> // all public C++ headers provide the assertion handler
 #include <__config>
+#include <__functional/hash.h>
 #include <__mutex_base>
 #include <__thread/poll_with_backoff.h>
 #include <__thread/timed_backoff_policy.h>
@@ -96,6 +97,14 @@ void sleep_for(const chrono::duration<Rep, Period>& rel_time);
 #include <tuple>
 #include <type_traits>
 #include <version>
+
+#ifndef _LIBCPP_REMOVE_TRANSITIVE_INCLUDES
+#  include <chrono>
+#  include <functional>
+#endif
+
+// standard-mandated includes
+#include <compare>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
@@ -197,7 +206,7 @@ __thread_specific_ptr<_Tp>::set_pointer(pointer __p)
 
 template<>
 struct _LIBCPP_TEMPLATE_VIS hash<__thread_id>
-    : public unary_function<__thread_id, size_t>
+    : public __unary_function<__thread_id, size_t>
 {
     _LIBCPP_INLINE_VISIBILITY
     size_t operator()(__thread_id __v) const _NOEXCEPT

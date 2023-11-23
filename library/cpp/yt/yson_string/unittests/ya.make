@@ -4,6 +4,7 @@ INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/ya_cpp.make.inc)
 
 SRCS(
     convert_ut.cpp
+    saveload_ut.cpp
 )
 
 PEERDIR(

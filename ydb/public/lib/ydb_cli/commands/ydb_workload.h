@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 
 #include <library/cpp/histogram/hdr/histogram.h>
 #include <util/datetime/base.h>
@@ -43,6 +44,7 @@ protected:
 
     std::unique_ptr<NYdb::TDriver> Driver;
     std::unique_ptr<NTable::TTableClient> TableClient;
+    std::unique_ptr<NQuery::TQueryClient> QueryClient;
 
     size_t TotalSec;
     size_t Threads;
@@ -52,6 +54,7 @@ protected:
     unsigned int WindowSec;
     bool Quiet;
     bool PrintTimestamp;
+    TString QueryExecuterType;
 
     TInstant StartTime;
     TInstant StopTime;

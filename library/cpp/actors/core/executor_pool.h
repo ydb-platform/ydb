@@ -1,13 +1,14 @@
 #pragma once
 
 #include "event.h"
-#include "mon_stats.h"
 #include "scheduler_queue.h"
 
 namespace NActors {
     class TActorSystem;
     struct TMailboxHeader;
     struct TWorkerContext;
+    struct TExecutorPoolStats;
+    struct TExecutorThreadStats;
     class ISchedulerCookie;
 
     struct TCpuConsumption {
@@ -40,6 +41,9 @@ namespace NActors {
         }
 
         // for workers
+        virtual void Initialize(TWorkerContext& wctx) {
+            Y_UNUSED(wctx);
+        }
         virtual ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) = 0;
         virtual void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingCounter) = 0;
         virtual TMailboxHeader *ResolveMailbox(ui32 hint) = 0;
@@ -121,6 +125,10 @@ namespace NActors {
             Y_UNUSED(threads);
         }
 
+        virtual void SetSpinThresholdCycles(ui32 cycles) {
+            Y_UNUSED(cycles);
+        }
+
         virtual i16 GetBlockingThreadCount() const {
             return 0;
         }
@@ -135,7 +143,6 @@ namespace NActors {
 
         virtual i16 GetMaxThreadCount() const {
             return 1;
-
         }
 
         virtual TCpuConsumption GetThreadCpuConsumption(i16 threadIdx) {

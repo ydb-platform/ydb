@@ -13,9 +13,12 @@ inputs:
   s3_endpoint:
     required: true
     description: "s3 endpoint"
-  log_suffix:
+  folder_prefix:
     required: true
-    description: "log suffix"
+    description: "folder prefix"
+  build_preset:
+    required: true
+    description: "build preset like relwithdebinfo"
 runs:
   using: "composite"
   steps:
@@ -32,8 +35,26 @@ runs:
         host_base = storage.yandexcloud.net
         host_bucket = %(bucket)s.storage.yandexcloud.net
         EOF
-        echo "S3_BUCKET_PATH=s3://${{ inputs.s3_bucket }}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{inputs.log_suffix}}" >> $GITHUB_ENV
-        echo "S3_URL_PREFIX=${{inputs.s3_endpoint}}/${{inputs.s3_bucket}}/${{ github.repository }}/${{github.workflow}}/${{github.run_id}}/${{inputs.log_suffix}}" >> $GITHUB_ENV
+        
+        folder="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
+        
+        case "${{ inputs.build_preset }}" in
+          relwithdebinfo)
+            ;;
+          release-asan)
+            folder+="-asan"
+            ;;
+          release-tsan)
+            folder+="-tsan"
+            ;;
+          *)
+            echo "Invalid preset: ${{ inputs.build_preset }}"
+            exit 1
+            ;;
+        esac
+
+        echo "S3_BUCKET_PATH=s3://${{ inputs.s3_bucket }}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
+        echo "S3_URL_PREFIX=${{ inputs.s3_endpoint }}/${{ inputs.s3_bucket }}/${{ github.repository }}/${{ github.workflow }}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
       env:
         s3_key_id: ${{ inputs.s3_key_id }}
         s3_secret_access_key: ${{ inputs.s3_key_secret }}

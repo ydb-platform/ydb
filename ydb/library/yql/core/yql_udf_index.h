@@ -17,6 +17,8 @@ struct TFunctionInfo {
     bool IsTypeAwareness = false;
     TString CallableType;
     TString RunConfigType;
+    bool IsStrict = false;
+    bool SupportsBlocks = false;
 };
 
 // todo: specify whether path is frozen

@@ -21,6 +21,7 @@ target_link_libraries(yql-plugin-native PUBLIC
   cpp-yson-node
   cpp-mapreduce-client
   cpp-mapreduce-common
+  yt-library-program
   library-yql-ast
   yql-sql-pg
   yql-parser-pg_wrapper
@@ -67,6 +68,7 @@ target_link_libraries(yql-plugin-native.global PUBLIC
   cpp-yson-node
   cpp-mapreduce-client
   cpp-mapreduce-common
+  yt-library-program
   library-yql-ast
   yql-sql-pg
   yql-parser-pg_wrapper

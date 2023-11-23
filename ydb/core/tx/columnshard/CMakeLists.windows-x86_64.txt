@@ -63,6 +63,7 @@ target_link_libraries(core-tx-columnshard PUBLIC
   columnshard-normalizer-portion
   core-tx-tiering
   tx-conveyor-usage
+  core-tx-tracing
   tx-long_tx_service-public
   ydb-core-util
   api-protos

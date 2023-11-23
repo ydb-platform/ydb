@@ -4,17 +4,6 @@ namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-
-TError MakeCanceledError()
-{
-    return TError("RPC request canceled");
-}
-
-} // namespace
-
-////////////////////////////////////////////////////////////////////////////////
-
 void IServiceContext::SetRequestInfo()
 {
     SetRawRequestInfo(TString(), false);
@@ -34,8 +23,8 @@ void IServiceContext::ReplyFrom(TFuture<TSharedRefArray> asyncMessage)
             Reply(TError(result));
         }
     }));
-    SubscribeCanceled(BIND([asyncMessage = std::move(asyncMessage)] {
-        asyncMessage.Cancel(MakeCanceledError());
+    SubscribeCanceled(BIND([asyncMessage = std::move(asyncMessage)] (const TError& error) {
+        asyncMessage.Cancel(error);
     }));
 }
 
@@ -44,8 +33,8 @@ void IServiceContext::ReplyFrom(TFuture<void> asyncError)
     asyncError.Subscribe(BIND([this, this_ = MakeStrong(this)] (const TError& error) {
         Reply(error);
     }));
-    SubscribeCanceled(BIND([asyncError = std::move(asyncError)] {
-        asyncError.Cancel(MakeCanceledError());
+    SubscribeCanceled(BIND([asyncError = std::move(asyncError)] (const TError& error) {
+        asyncError.Cancel(error);
     }));
 }
 
@@ -55,8 +44,8 @@ void IServiceContext::ReplyFrom(TFuture<void> asyncError, const IInvokerPtr& inv
         Reply(error);
     })
         .Via(invoker));
-    SubscribeCanceled(BIND([asyncError = std::move(asyncError)] {
-        asyncError.Cancel(MakeCanceledError());
+    SubscribeCanceled(BIND([asyncError = std::move(asyncError)] (const TError& error) {
+        asyncError.Cancel(error);
     }));
 }
 

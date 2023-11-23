@@ -3032,6 +3032,18 @@ bool IsWideBlockType(const TTypeAnnotationNode& type) {
     return blockLenType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Uint64;
 }
 
+bool IsWideSequenceBlockType(const TTypeAnnotationNode& type) {
+    const TTypeAnnotationNode* itemType = nullptr;
+    if (type.GetKind() == ETypeAnnotationKind::Stream) {
+        itemType = type.Cast<TStreamExprType>()->GetItemType();
+    } else if (type.GetKind() == ETypeAnnotationKind::Flow) {
+        itemType = type.Cast<TFlowExprType>()->GetItemType();
+    } else {
+        return false;
+    }
+    return IsWideBlockType(*itemType);
+}
+
 bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (!types.ArrowResolver) {
         return false;
@@ -4047,15 +4059,26 @@ IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnota
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
     TExprContext& ctx, TConvertFlags flags) {
     if (node->Type() == TExprNode::Lambda) {
-        if (expectedType.GetKind() == ETypeAnnotationKind::Callable) {
-            auto callableType = expectedType.Cast<TCallableExprType>();
+        auto currentType = &expectedType;
+        ui32 optLevel = 0;
+        while (currentType->GetKind() == ETypeAnnotationKind::Optional) {
+            currentType = RemoveOptionalType(currentType);
+            ++optLevel;
+        }
+
+        if (currentType->GetKind() == ETypeAnnotationKind::Callable) {
+            auto callableType = currentType->Cast<TCallableExprType>();
             auto lambdaArgsCount = node->Head().ChildrenSize();
             if (lambdaArgsCount != callableType->GetArgumentsSize()) {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            auto typeNode = ExpandType(node->Pos(), expectedType, ctx);
+            auto typeNode = ExpandType(node->Pos(), *currentType, ctx);
             node = ctx.NewCallable(node->Pos(), "Callable", { typeNode, node });
+            for (ui32 i = 0; i < optLevel; ++i) {
+                node = ctx.NewCallable(node->Pos(), "Just", { node });
+            }
+
             return IGraphTransformer::TStatus::Repeat;
         }
 

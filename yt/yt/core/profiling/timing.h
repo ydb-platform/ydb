@@ -112,13 +112,20 @@ public:
 //! Calls TTimer::Start() on construction and TTimer::Stop() on destruction.
 template <class TTimer>
 class TTimerGuard
+    : public TNonCopyable
 {
 public:
     explicit TTimerGuard(TTimer* timer);
+
+    TTimerGuard(TTimerGuard&& other) noexcept;
+    TTimerGuard& operator = (TTimerGuard&& other) noexcept;
+
     ~TTimerGuard();
 
 private:
-    TTimer* const Timer_;
+    TTimer* Timer_;
+
+    void TryStopTimer() noexcept;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

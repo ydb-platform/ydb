@@ -109,6 +109,8 @@ private:
 
     arrow::MemoryPool& ArrowPool_;
     bool IsBlock_ = false;
+    bool IsLegacyBlock_ = false;
+    ui32 BlockLenIndex_ = 0;
 
     TVector<std::unique_ptr<IBlockSerializer>> BlockSerializers_;
     TVector<std::unique_ptr<IBlockReader>> BlockReaders_;

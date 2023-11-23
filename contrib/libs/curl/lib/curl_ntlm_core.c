@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -36,12 +36,13 @@
 /* Please keep the SSL backend-specific #if branches in this order:
 
    1. USE_OPENSSL
-   2. USE_GNUTLS
-   3. USE_NSS
-   4. USE_MBEDTLS
-   5. USE_SECTRANSP
-   6. USE_OS400CRYPTO
-   7. USE_WIN32_CRYPTO
+   2. USE_WOLFSSL
+   3. USE_GNUTLS
+   4. USE_NSS
+   5. USE_MBEDTLS
+   6. USE_SECTRANSP
+   7. USE_OS400CRYPTO
+   8. USE_WIN32_CRYPTO
 
    This ensures that:
    - the same SSL branch gets activated throughout this source
@@ -82,6 +83,10 @@
 #    define DES_ecb_encrypt des_ecb_encrypt
 #    define DESKEY(x) x
 #    define DESKEYARG(x) x
+#  elif defined(OPENSSL_IS_AWSLC)
+#    define DES_set_key_unchecked (void)DES_set_key
+#    define DESKEYARG(x) *x
+#    define DESKEY(x) &x
 #  else
 #    define DESKEYARG(x) *x
 #    define DESKEY(x) &x
@@ -186,9 +191,9 @@ static void setup_des_key(const unsigned char *key_56,
 #elif defined(USE_NSS)
 
 /*
- * Expands a 56 bit key KEY_56 to 64 bit and encrypts 64 bit of data, using
- * the expanded key.  The caller is responsible for giving 64 bit of valid
- * data is IN and (at least) 64 bit large buffer as OUT.
+ * encrypt_des() expands a 56 bit key KEY_56 to 64 bit and encrypts 64 bit of
+ * data, using the expanded key. IN should point to 64 bits of source data,
+ * OUT to a 64 bit output buffer.
  */
 static bool encrypt_des(const unsigned char *in, unsigned char *out,
                         const unsigned char *key_56)
@@ -658,7 +663,8 @@ CURLcode Curl_ntlm_core_mk_ntlmv2_resp(unsigned char *ntlmv2hash,
             LONGQUARTET(tw.dwLowDateTime), LONGQUARTET(tw.dwHighDateTime));
 
   memcpy(ptr + 32, challenge_client, 8);
-  memcpy(ptr + 44, ntlm->target_info, ntlm->target_info_len);
+  if(ntlm->target_info_len)
+    memcpy(ptr + 44, ntlm->target_info, ntlm->target_info_len);
 
   /* Concatenate the Type 2 challenge with the BLOB and do HMAC MD5 */
   memcpy(ptr + 8, &ntlm->nonce[0], 8);

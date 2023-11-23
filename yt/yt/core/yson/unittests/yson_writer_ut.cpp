@@ -97,7 +97,6 @@ TEST_F(TYsonWriterTest, NaN)
 
 TEST_F(TYsonWriterTest, EmptyMap)
 {
-
     InSequence dummy;
     EXPECT_CALL(Mock, OnBeginMap());
     EXPECT_CALL(Mock, OnEndMap());
@@ -192,6 +191,21 @@ TEST_F(TYsonWriterTest, MapWithAttributes)
     writer.OnEndMap();
 
     Run();
+}
+
+TEST_F(TYsonWriterTest, UtfString)
+{
+    const TString utfString("строка ютф и специальные символы - \n \t \b");
+    TStringStream output;
+    TYsonWriter writer(
+        &output,
+        EYsonFormat::Text,
+        EYsonType::Node,
+        true,
+        TYsonWriter::DefaultIndent,
+        /*passThroughUtf8Characters*/ true);
+    writer.OnStringScalar(TStringBuf(utfString));
+    EXPECT_EQ("\"\xD1\x81\xD1\x82\xD1\x80\xD0\xBE\xD0\xBA\xD0\xB0 \xD1\x8E\xD1\x82\xD1\x84 \xD0\xB8 \xD1\x81\xD0\xBF\xD0\xB5\xD1\x86\xD0\xB8\xD0\xB0\xD0\xBB\xD1\x8C\xD0\xBD\xD1\x8B\xD0\xB5 \xD1\x81\xD0\xB8\xD0\xBC\xD0\xB2\xD0\xBE\xD0\xBB\xD1\x8B - \\n \\t \\x08\"", output.Str());
 }
 
 TEST_F(TYsonWriterTest, Escaping)

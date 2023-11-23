@@ -2,6 +2,8 @@
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
+#include <library/cpp/yt/misc/tls.h>
+
 #include <util/system/sanitizers.h>
 
 #include <array>
@@ -18,8 +20,8 @@ std::atomic<int> FlsSize;
 NThreading::TForkAwareSpinLock FlsLock;
 std::array<TFlsSlotDtor, MaxFlsSize> FlsDtors;
 
-thread_local TFls* PerThreadFls;
-thread_local TFls* CurrentFls;
+YT_THREAD_LOCAL(TFls*) PerThreadFls;
+YT_THREAD_LOCAL(TFls*) CurrentFls;
 
 int AllocateFlsSlot(TFlsSlotDtor dtor)
 {
@@ -76,6 +78,7 @@ void TFls::Set(int index, TCookie cookie)
 
 TFls* SwapCurrentFls(TFls* newFls)
 {
+
     return std::exchange(NDetail::CurrentFls, newFls);
 }
 

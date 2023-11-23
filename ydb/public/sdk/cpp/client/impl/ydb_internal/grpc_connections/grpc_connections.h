@@ -7,6 +7,7 @@
 #include "params.h"
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/string_helpers.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/db_driver_state/state.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/rpc_request_settings/settings.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/thread_pool/pool.h>
@@ -580,9 +581,9 @@ public:
     TListEndpointsResult MutateDiscovery(TListEndpointsResult result, const TStringType& database);
 
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    void DeleteChannels(const std::vector<TStringType>& endpoints) override {
+    void DeleteChannels(const std::vector<std::string>& endpoints) override {
         for (const auto& endpoint : endpoints) {
-            ChannelPool_.DeleteChannel(endpoint);
+            ChannelPool_.DeleteChannel(ToStringType(endpoint));
         }
     }
 #endif

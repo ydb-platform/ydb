@@ -215,7 +215,7 @@ public:
         return Tx.GetKqpTransaction().GetUseGenericReadSets();
     }
 
-    inline const ::NKikimrTxDataShard::TKqpLocks& GetKqpLocks() const {
+    inline const ::NKikimrDataEvents::TKqpLocks& GetKqpLocks() const {
         Y_ABORT_UNLESS(IsKqpDataTx());
         return Tx.GetKqpTransaction().GetLocks();
     }

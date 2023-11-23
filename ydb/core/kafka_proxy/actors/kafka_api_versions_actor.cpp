@@ -38,6 +38,13 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
     AddApiKey<TSaslAuthenticateRequestData>(response->ApiKeys, SASL_AUTHENTICATE);
     AddApiKey<TListOffsetsRequestData>(response->ApiKeys, LIST_OFFSETS);
     AddApiKey<TFetchRequestData>(response->ApiKeys, FETCH, {.MaxVersion=3});
+    AddApiKey<TJoinGroupRequestData>(response->ApiKeys, JOIN_GROUP);
+    AddApiKey<TSyncGroupRequestData>(response->ApiKeys, SYNC_GROUP);
+    AddApiKey<TLeaveGroupRequestData>(response->ApiKeys, LEAVE_GROUP);
+    AddApiKey<THeartbeatRequestData>(response->ApiKeys, HEARTBEAT);
+    AddApiKey<TFindCoordinatorRequestData>(response->ApiKeys, FIND_COORDINATOR);
+    AddApiKey<TOffsetCommitRequestData>(response->ApiKeys, OFFSET_COMMIT);
+    AddApiKey<TOffsetFetchRequestData>(response->ApiKeys, OFFSET_FETCH);
 
     return response;
 }

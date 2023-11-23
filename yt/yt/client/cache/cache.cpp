@@ -10,11 +10,13 @@ namespace NYT::NClient::NCache {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TConfig MakeClusterConfig(const TClustersConfig& clustersConfig, TStringBuf clusterUrl)
+TConfig MakeClusterConfig(
+    const TClustersConfig& clustersConfig,
+    TStringBuf clusterUrl)
 {
     auto [cluster, proxyRole] = ExtractClusterAndProxyRole(clusterUrl);
     auto it = clustersConfig.GetClusterConfigs().find(cluster);
-    TConfig config = (it != clustersConfig.GetClusterConfigs().end()) ? it->second : clustersConfig.GetDefaultConfig();
+    auto config = (it != clustersConfig.GetClusterConfigs().end()) ? it->second : clustersConfig.GetDefaultConfig();
     config.SetClusterName(ToString(cluster));
     if (!proxyRole.empty()) {
         config.SetProxyRole(ToString(proxyRole));
@@ -73,7 +75,7 @@ IClientsCachePtr CreateClientsCache(const TConfig& config)
 
 IClientsCachePtr CreateClientsCache(const NApi::TClientOptions& options)
 {
-    return CreateClientsCache(TClustersConfig{}, options);
+    return CreateClientsCache(TClustersConfig(), options);
 }
 
 IClientsCachePtr CreateClientsCache()

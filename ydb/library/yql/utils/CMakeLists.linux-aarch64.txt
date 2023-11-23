@@ -15,6 +15,7 @@ add_subdirectory(failure_injector)
 add_subdirectory(fetch)
 add_subdirectory(log)
 add_subdirectory(simd)
+add_subdirectory(sys)
 add_subdirectory(test_http_server)
 add_subdirectory(threading)
 add_subdirectory(ut)
@@ -33,6 +34,7 @@ target_link_libraries(library-yql-utils PUBLIC
   contrib-libs-miniselect
 )
 target_sources(library-yql-utils PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/aws_credentials.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/bind_in_range.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/debug_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/future_action.cpp

@@ -1,4 +1,5 @@
 /* postgres can not */
+/* skip double format */
 $ns = ($set)->{return ListSort(DictKeys($set))};
 $nd = ($dict)->{return ListSort(DictItems($dict), ($z)->{return $z.0})};
 

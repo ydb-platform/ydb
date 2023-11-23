@@ -14,11 +14,11 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TReadHunksCommand::TReadHunksCommand()
+void TReadHunksCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("descriptors", Descriptors);
+    registrar.Parameter("descriptors", &TThis::Descriptors);
 
-    RegisterParameter("parse_header", ParseHeader)
+    registrar.Parameter("parse_header", &TThis::ParseHeader)
         .Default(true);
 }
 
@@ -52,11 +52,11 @@ void TReadHunksCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TWriteHunksCommand::TWriteHunksCommand()
+void TWriteHunksCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("tablet_index", TabletIndex);
-    RegisterParameter("payloads", Payloads);
+    registrar.Parameter("path", &TThis::Path);
+    registrar.Parameter("tablet_index", &TThis::TabletIndex);
+    registrar.Parameter("payloads", &TThis::Payloads);
 }
 
 void TWriteHunksCommand::DoExecute(ICommandContextPtr context)
@@ -84,12 +84,12 @@ void TWriteHunksCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TLockHunkStoreCommand::TLockHunkStoreCommand()
+void TLockHunkStoreCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("tablet_index", TabletIndex);
-    RegisterParameter("store_id", StoreId);
-    RegisterParameter("locker_tablet_id", LockerTabletId);
+    registrar.Parameter("path", &TThis::Path);
+    registrar.Parameter("tablet_index", &TThis::TabletIndex);
+    registrar.Parameter("store_id", &TThis::StoreId);
+    registrar.Parameter("locker_tablet_id", &TThis::LockerTabletId);
 }
 
 void TLockHunkStoreCommand::DoExecute(ICommandContextPtr context)
@@ -108,12 +108,12 @@ void TLockHunkStoreCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TUnlockHunkStoreCommand::TUnlockHunkStoreCommand()
+void TUnlockHunkStoreCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
-    RegisterParameter("tablet_index", TabletIndex);
-    RegisterParameter("store_id", StoreId);
-    RegisterParameter("locker_tablet_id", LockerTabletId);
+    registrar.Parameter("path", &TThis::Path);
+    registrar.Parameter("tablet_index", &TThis::TabletIndex);
+    registrar.Parameter("store_id", &TThis::StoreId);
+    registrar.Parameter("locker_tablet_id", &TThis::LockerTabletId);
 }
 
 void TUnlockHunkStoreCommand::DoExecute(ICommandContextPtr context)

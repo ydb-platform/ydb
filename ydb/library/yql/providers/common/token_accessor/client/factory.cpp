@@ -75,7 +75,7 @@ ISecuredServiceAccountCredentialsFactory::TPtr CreateSecuredServiceAccountCreden
     return std::make_shared<TSecuredServiceAccountCredentialsFactoryImpl>(tokenAccessorEndpoint, useSsl, sslCaCert, connectionPoolSize, refreshPeriod, requestTimeout);
 }
 
-std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFactoryForStructuredToken(ISecuredServiceAccountCredentialsFactory::TPtr factory, const TString& structuredTokenJson, bool addBearerToToken) {
+std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFactoryForStructuredToken(ISecuredServiceAccountCredentialsFactory::TPtr factory, const TString& structuredTokenJson, bool addBearerToToken, const std::function<TString(const TString&, const TString&)>& basicToToken) {
     if (!NYql::IsStructuredTokenJson(structuredTokenJson)) {
         return WrapWithBearerIfNeeded(NYdb::CreateOAuthCredentialsProviderFactory(structuredTokenJson), addBearerToToken);
     }
@@ -98,6 +98,13 @@ std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFact
 
     if (parser.IsNoAuth()) {
         return NYdb::CreateInsecureCredentialsProviderFactory();
+    }
+
+    if (parser.HasBasicAuth() && basicToToken) {
+        TString login;
+        TString password;
+        parser.GetBasicAuth(login, password);
+        return NYdb::CreateOAuthCredentialsProviderFactory(basicToToken(login, password));
     }
 
     ythrow yexception() << "Unrecognized token of length " << structuredTokenJson.size();

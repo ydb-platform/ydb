@@ -6,6 +6,7 @@
 #include "blobstorage_pdisk_request_id.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/library/schlab/schine/job_kind.h>
@@ -959,8 +960,9 @@ void TPDisk::SendChunkWriteError(TChunkWrite &chunkWrite, const TString &errorRe
     NPDisk::TStatusFlags flags = status == NKikimrProto::OUT_OF_SPACE
         ? NotEnoughDiskSpaceStatusFlags(chunkWrite.Owner, chunkWrite.OwnerGroupType)
         : GetStatusFlags(chunkWrite.Owner, chunkWrite.OwnerGroupType);
-    ActorSystem->Send(chunkWrite.Sender, new NPDisk::TEvChunkWriteResult(status,
-        chunkWrite.ChunkIdx, chunkWrite.Cookie, flags, errorReason));
+    auto ev = std::make_unique<NPDisk::TEvChunkWriteResult>(status, chunkWrite.ChunkIdx, chunkWrite.Cookie, flags, errorReason);
+    ev->Orbit = std::move(chunkWrite.Orbit);
+    ActorSystem->Send(chunkWrite.Sender, ev.release());
     Mon.GetWriteCounter(chunkWrite.PriorityClass)->CountResponse();
     chunkWrite.IsReplied = true;
 }
@@ -2945,9 +2947,9 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             request->JobKind = NSchLab::JobKindWrite;
 
 
-            THolder<TEvChunkWriteResult> result(
-                    new TEvChunkWriteResult(NKikimrProto::OK, ev.ChunkIdx, ev.Cookie,
-                        GetStatusFlags(ev.Owner, ev.OwnerGroupType), TString()));
+            auto result = std::make_unique<TEvChunkWriteResult>(NKikimrProto::OK, ev.ChunkIdx, ev.Cookie,
+                        GetStatusFlags(ev.Owner, ev.OwnerGroupType), TString());
+            result->Orbit = std::move(ev.Orbit);
 
             ++state.OperationsInProgress;
             ++ownerData.InFlight->ChunkWrites;
@@ -2955,7 +2957,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 --state.OperationsInProgress;
                 --inFlight->ChunkWrites;
             };
-            ev.Completion = MakeHolder<TCompletionChunkWrite>(ev.Sender, result.Release(), &Mon, PDiskId,
+            ev.Completion = MakeHolder<TCompletionChunkWrite>(ev.Sender, result.release(), &Mon, PDiskId,
                     ev.CreationTime, ev.TotalSize, ev.PriorityClass, std::move(onDestroy), ev.ReqId);
 
             return true;

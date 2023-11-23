@@ -466,6 +466,7 @@ TString DataValueToString(const NKikimr::NUdf::TUnboxedValuePod& value, const TD
         case NUdf::EDataSlot::Decimal:
             {
                 const auto params = dynamic_cast<const TDataExprParamsType*>(type);
+                YQL_ENSURE(params, "Unable to cast decimal params");
                 return NDecimal::ToString(value.GetInt128(), FromString<ui8>(params->GetParamOne()), FromString<ui8>(params->GetParamTwo()));
             }
         case NUdf::EDataSlot::TzDate: {

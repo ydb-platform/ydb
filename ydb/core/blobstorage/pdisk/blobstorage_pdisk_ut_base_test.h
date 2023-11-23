@@ -358,7 +358,7 @@ public:
     TBaseTest(const TIntrusivePtr<TTestConfig> &cfg)
         : TCommonBaseTest(cfg)
     {
-        Become(&TBaseTest::StateRegister);
+        this->UnsafeBecome(&TBaseTest::StateRegister);
     }
 
 

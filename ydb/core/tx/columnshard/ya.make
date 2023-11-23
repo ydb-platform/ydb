@@ -57,6 +57,7 @@ PEERDIR(
     ydb/core/tx/columnshard/normalizer/portion
     ydb/core/tx/tiering
     ydb/core/tx/conveyor/usage
+    ydb/core/tx/tracing
     ydb/core/tx/long_tx_service/public
     ydb/core/util
     ydb/public/api/protos

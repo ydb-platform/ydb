@@ -135,6 +135,10 @@ public:
         return MakeMaybe<TFilePathWithMd5>(*path, md5);
     }
 
+    bool ContainsModule(const TStringBuf& moduleName) const override {
+        return FunctionRegistry_->IsLoadedUdfModule(moduleName);
+    }
+
     bool LoadMetadata(const TVector<TImport*>& imports, const TVector<TFunction*>& functions, TExprContext& ctx) const override {
         THashSet<TString> requiredLoadedModules;
         THashSet<TString> requiredExternalModules;
@@ -160,7 +164,7 @@ public:
         }
 
         TResolve request;
-        THashMap<TString, TImport*> importMap;
+        TVector<TImport*> usedImports;
         THoldingFileStorage holdingFileStorage(FileStorage_);
         THolder<TFilesBox> filesBox = CreateFilesBoxOverFileStorageTemp();
 
@@ -187,10 +191,9 @@ public:
                 import->Modules.ConstructInPlace();
             }
 
-            importMap[import->FileAlias] = import;
-
             try {
                 LoadImport(holdingFileStorage, *filesBox, *import, request);
+                usedImports.push_back(import);
             } catch (const std::exception& e) {
                 ctx.AddError(ExceptionToIssue(e));
                 hasErrors = true;
@@ -227,7 +230,7 @@ public:
         }
 
         // extract regardless of hasErrors value
-        hasErrors = !ExtractMetadata(response, importMap, externalFunctions, ctx) || hasErrors;
+        hasErrors = !ExtractMetadata(response, usedImports, externalFunctions, ctx) || hasErrors;
         hasErrors = !LoadFunctionsMetadata(loadedFunctions, *FunctionRegistry_, TypeInfoHelper_, ctx) || hasErrors;
 
         if (!hasErrors) {
@@ -316,21 +319,19 @@ private:
         filesBox.MakeLinkFrom(UdfDependencyStubPath_, sharedLibrary);
     }
 
-    static bool ExtractMetadata(const TResolveResult& response, const THashMap<TString, TImport*>& importMap, const TVector<TFunction*>& functions, TExprContext& ctx) {
+    static bool ExtractMetadata(const TResolveResult& response, const TVector<TImport*>& usedImports, const TVector<TFunction*>& functions, TExprContext& ctx) {
         bool hasErrors = false;
         YQL_ENSURE(response.UdfsSize() == functions.size(), "Number of returned udf signatures doesn't match original one");
+        YQL_ENSURE(response.ImportsSize() >= usedImports.size(), "Number of returned udf modules is too low");
 
-        for (size_t i = 0; i < response.ImportsSize(); ++i) {
+        for (size_t i = 0; i < usedImports.size(); ++i) {
             const TImportResult& importRes = response.GetImports(i);
 
-            TImport* import = nullptr;
-            if (auto p = importMap.FindPtr(importRes.GetFileAlias())) {
-                import = *p;
-            }
+            TImport* import = usedImports[i];
             if (importRes.HasError()) {
                 ctx.AddError(TIssue(import ? import->Pos : TPosition(), importRes.GetError()));
                 hasErrors = true;
-            } else if (import) {
+            } else {
                 import->Modules.ConstructInPlace();
                 for (auto& module : importRes.GetModules()) {
                     import->Modules->push_back(module);

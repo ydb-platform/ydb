@@ -120,6 +120,16 @@ struct TCommitSettings
     bool EnsureOtherEmpty(TExprContext& ctx);
 };
 
+struct TPgObjectSettings
+{
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
+    NNodes::TMaybeNode<NNodes::TCoAtom> IfExists;
+
+    TPgObjectSettings(NNodes::TMaybeNode<NNodes::TCoAtom>&& mode, NNodes::TMaybeNode<NNodes::TCoAtom>&& ifExists)
+        : Mode(std::move(mode))
+        , IfExists(std::move(ifExists)) {}
+};
+
 const TStructExprType* BuildCommonTableListType(TExprContext& ctx);
 
 TExprNode::TPtr BuildTypeExpr(TPositionHandle pos, const TTypeAnnotationNode& ann, TExprContext& ctx);
@@ -137,6 +147,8 @@ TWriteObjectSettings ParseWriteObjectSettings(NNodes::TExprList node, TExprConte
 TWritePermissionSettings ParseWritePermissionsSettings(NNodes::TExprList node, TExprContext& ctx);
 
 TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx);
+
+TPgObjectSettings ParsePgObjectSettings(NNodes::TExprList node, TExprContext& ctx);
 
 TString FullTableName(const TStringBuf& cluster, const TStringBuf& table);
 

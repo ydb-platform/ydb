@@ -5,8 +5,9 @@
 
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/s3/compressors/factory.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
+#include <ydb/library/yql/providers/s3/compressors/factory.h>
+#include <ydb/library/yql/utils/aws_credentials.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -184,6 +185,7 @@ public:
 
     void PassAway() override {
         if (InFlight || !Parts->Empty()) {
+            AbortMultipartUpload();
             LOG_W("TS3FileWriteActor", "PassAway: but NOT finished, InFlight: " << InFlight << ", Parts: " << Parts->Size() << ", Sealed: " << Parts->IsSealed() << ", request id: [" << RequestId << "]");
         } else {
             LOG_D("TS3FileWriteActor", "PassAway: request id: [" << RequestId << "]");
@@ -313,6 +315,14 @@ private:
         }
     }
 
+    static void OnMultipartUploadAbort(TActorSystem* actorSystem, TActorId selfId, const TTxId& TxId, const TString& requestId, IHTTPGateway::TResult&& result) {
+        if (!result.Issues) {
+            LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_COMPUTE, "TS3FileWriteActor: " << selfId << ", TxId: " << TxId << ". " << "Multipart upload aborted, request id: [" << requestId << "]");
+        } else {
+            LOG_WARN_S(*actorSystem, NKikimrServices::KQP_COMPUTE, "TS3FileWriteActor: " << selfId << ", TxId: " << TxId << ". " << "Failed to abort multipart upload, request id: [" << requestId << "], issues: " << result.Issues.ToString());
+        }
+    }
+
     static void OnUploadFinish(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, const TString& key, const TString& url, const TString& requestId, ui64 sentSize, IHTTPGateway::TResult&& result) {
         if (!result.Issues) {
             if (result.Content.HttpResponseCode >= 300) {
@@ -389,6 +399,21 @@ private:
             std::bind(&TS3FileWriteActor::OnMultipartUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, RequestId, SentSize, std::placeholders::_1),
             false,
             RetryPolicy);
+    }
+
+    void AbortMultipartUpload() {
+        // Try to abort multipart upload in case of unexpected termination.
+        // In case of error just logs warning.
+
+        if (!UploadId) {
+            return;
+        }
+
+        Gateway->Delete(Url + "?uploadId=" + UploadId,
+            IHTTPGateway::MakeYcHeaders(RequestId, CredProvider->GetAuthInfo(), "application/xml"),
+            std::bind(&TS3FileWriteActor::OnMultipartUploadAbort, ActorSystem, SelfId(), TxId, RequestId, std::placeholders::_1),
+            RetryPolicy);
+        UploadId.clear();
     }
 
     size_t InFlight = 0ULL;
@@ -655,7 +680,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy)
 {
     const auto token = secureParams.Value(params.GetToken(), TString{});
-    const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
+    const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, false, ConvertBasicToAwsToken);
     const auto actor = new TS3WriteActor(
         outputIndex,
         statsLevel,

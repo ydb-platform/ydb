@@ -6,7 +6,7 @@
 
 namespace NKikimr::NKqp {
 
-void BuildLocks(NKikimrMiniKQL::TResult& result, const TVector<NKikimrTxDataShard::TLock>& locks) {
+void BuildLocks(NKikimrMiniKQL::TResult& result, const TVector<NKikimrDataEvents::TLock>& locks) {
     auto setMemberDataType = [] (NKikimrMiniKQL::TMember& member, const TString& name, ui32 scheme) {
         member.SetName(name);
         member.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
@@ -39,7 +39,7 @@ void BuildLocks(NKikimrMiniKQL::TResult& result, const TVector<NKikimrTxDataShar
     }
 }
 
-NKikimrTxDataShard::TLock ExtractLock(const NYql::NDq::TMkqlValueRef& lock) {
+NKikimrDataEvents::TLock ExtractLock(const NYql::NDq::TMkqlValueRef& lock) {
     auto ensureMemberDataType = [] (const NKikimrMiniKQL::TMember& member, const TString& name, ui32 scheme) {
         YQL_ENSURE(member.GetName() == name);
         YQL_ENSURE(member.GetType().GetKind() == NKikimrMiniKQL::ETypeKind::Data);
@@ -61,7 +61,7 @@ NKikimrTxDataShard::TLock ExtractLock(const NYql::NDq::TMkqlValueRef& lock) {
     ensureMemberDataType(structType.GetMember(5), "SchemeShard", NKikimr::NUdf::TDataType<ui64>::Id);
     ensureMemberDataType(structType.GetMember(6), "HasWrites", NKikimr::NUdf::TDataType<bool>::Id);
 
-    NKikimrTxDataShard::TLock dsLock;
+    NKikimrDataEvents::TLock dsLock;
     dsLock.SetCounter(value.GetStruct(0).GetUint64());
     dsLock.SetDataShard(value.GetStruct(1).GetUint64());
     dsLock.SetGeneration(value.GetStruct(2).GetUint32());

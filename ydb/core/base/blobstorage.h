@@ -705,6 +705,7 @@ struct TEvBlobStorage {
         EvReadMetadata,
         EvWriteMetadata,
         EvPermitGarbageCollection,
+        EvReplInvoke,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -852,7 +853,6 @@ struct TEvBlobStorage {
         // node controller internal messages
         EvRegisterNodeRetry = EvPut + 14 * 512,
         EvAskRestartPDisk,
-        EvAskRestartVDisk,
         EvRestartPDisk,
         EvRestartPDiskResult,
         EvNodeWardenQueryGroupInfo,
@@ -864,6 +864,7 @@ struct TEvBlobStorage {
         EvNodeConfigGather,
         EvNodeWardenQueryStorageConfig,
         EvNodeWardenStorageConfig,
+        EvAskRestartVDisk,
 
         // Other
         EvRunActor = EvPut + 15 * 512,

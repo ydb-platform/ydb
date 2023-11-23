@@ -214,6 +214,14 @@ namespace NInterconnect {
         token.Request(read, write);
     }
 
+    bool TStreamSocket::RequestReadNotificationAfterWouldBlock(NActors::TPollerToken& token) {
+        return token.RequestReadNotificationAfterWouldBlock();
+    }
+
+    bool TStreamSocket::RequestWriteNotificationAfterWouldBlock(NActors::TPollerToken& token) {
+        return token.RequestWriteNotificationAfterWouldBlock();
+    }
+
     size_t TStreamSocket::ExpectedWriteLength() const {
         return 0;
     }
@@ -649,6 +657,21 @@ namespace NInterconnect {
 
     void TSecureSocket::Request(NActors::TPollerToken& token, bool /*read*/, bool /*write*/) {
         token.Request(WantRead(), WantWrite());
+    }
+
+    bool TSecureSocket::RequestReadNotificationAfterWouldBlock(NActors::TPollerToken& token) {
+        bool result = false;
+        if (WantRead()) {
+            result |= token.RequestReadNotificationAfterWouldBlock();
+        }
+        if (WantWrite()) {
+            result |= token.RequestWriteNotificationAfterWouldBlock();
+        }
+        return result;
+    }
+
+    bool TSecureSocket::RequestWriteNotificationAfterWouldBlock(NActors::TPollerToken& token) {
+        return RequestReadNotificationAfterWouldBlock(token);
     }
 
     size_t TSecureSocket::ExpectedWriteLength() const {

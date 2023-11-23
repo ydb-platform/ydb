@@ -1,4 +1,4 @@
-#include "datashard_ut_common.h"
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
 #include "datashard_active_transaction.h"
 #include "read_iterator.h"
@@ -193,10 +193,10 @@ void CheckResult(
     UNIT_ASSERT_VALUES_EQUAL(record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
     if (gold.size()) {
         switch (record.GetResultFormat()) {
-        case NKikimrTxDataShard::ARROW:
+        case NKikimrDataEvents::FORMAT_ARROW:
             CheckResultArrow(userTable, result, gold, goldTypes, columns);
             break;
-        case NKikimrTxDataShard::CELLVEC:
+        case NKikimrDataEvents::FORMAT_CELLVEC:
             CheckResultCellVec(userTable, result, gold, goldTypes, columns);
             break;
         default:
@@ -481,7 +481,7 @@ struct TTestHelper {
     std::unique_ptr<TEvDataShard::TEvRead> GetBaseReadRequest(
         const TString& tableName,
         ui64 readId,
-        NKikimrTxDataShard::EScanDataFormat format = NKikimrTxDataShard::ARROW,
+        NKikimrDataEvents::EDataFormat format = NKikimrDataEvents::FORMAT_ARROW,
         const TRowVersion& snapshot = {})
     {
         const auto& table = Tables[tableName];
@@ -536,7 +536,7 @@ struct TTestHelper {
         record.AddColumns(1);
         record.AddColumns(2);
 
-        record.SetResultFormat(NKikimrTxDataShard::CELLVEC);
+        record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
 
         return request;
     }
@@ -653,14 +653,14 @@ struct TTestHelper {
 
         auto readResult = SendRead(tableName, request.release());
 
-        const NKikimrTxDataShard::TLock* prevLock;
+        const NKikimrDataEvents::TLock* prevLock;
         if (prevResult.Record.TxLocksSize()) {
             prevLock = &prevResult.Record.GetTxLocks(0);
         } else {
             prevLock = &prevResult.Record.GetBrokenTxLocks(0);
         }
 
-        const NKikimrTxDataShard::TLock* newLock;
+        const NKikimrDataEvents::TLock* newLock;
         if (readResult->Record.TxLocksSize()) {
             newLock = &readResult->Record.GetTxLocks(0);
         } else {
@@ -676,7 +676,7 @@ struct TTestHelper {
     void TestChunkRead(ui32 chunkSize, ui32 rowCount, ui32 ranges = 1, ui32 limit = Max<ui32>()) {
         UpsertMany(1, rowCount);
 
-        auto request = GetBaseReadRequest("table-1-many", 1, NKikimrTxDataShard::CELLVEC, TRowVersion::Max());
+        auto request = GetBaseReadRequest("table-1-many", 1, NKikimrDataEvents::FORMAT_CELLVEC, TRowVersion::Max());
         request->Record.ClearSnapshot();
 
         ui32 base = 1;
@@ -871,7 +871,7 @@ public:
     THashMap<TString, TTableInfo> Tables;
 };
 
-void TestReadKey(NKikimrTxDataShard::EScanDataFormat format, bool withFollower = false) {
+void TestReadKey(NKikimrDataEvents::EDataFormat format, bool withFollower = false) {
     TTestHelper helper(withFollower);
 
     for (ui32 k: {1, 3, 5}) {
@@ -883,7 +883,7 @@ void TestReadKey(NKikimrTxDataShard::EScanDataFormat format, bool withFollower =
     }
 }
 
-void TestReadRangeInclusiveEnds(NKikimrTxDataShard::EScanDataFormat format) {
+void TestReadRangeInclusiveEnds(NKikimrDataEvents::EDataFormat format) {
     TTestHelper helper;
 
     auto request = helper.GetBaseReadRequest("table-1", 1, format);
@@ -903,7 +903,7 @@ void TestReadRangeInclusiveEnds(NKikimrTxDataShard::EScanDataFormat format) {
     });
 }
 
-void TestReadRangeMovies(NKikimrTxDataShard::EScanDataFormat format) {
+void TestReadRangeMovies(NKikimrDataEvents::EDataFormat format) {
     // test just to check if non-trivial type like string is properly replied
     TTestHelper helper;
 
@@ -938,19 +938,19 @@ void TestReadRangeMovies(NKikimrTxDataShard::EScanDataFormat format) {
 
 Y_UNIT_TEST_SUITE(DataShardReadIterator) {
     Y_UNIT_TEST(ShouldReadKeyCellVec) {
-        TestReadKey(NKikimrTxDataShard::CELLVEC);
+        TestReadKey(NKikimrDataEvents::FORMAT_CELLVEC);
     }
 
     Y_UNIT_TEST(ShouldReadKeyArrow) {
-        TestReadKey(NKikimrTxDataShard::ARROW);
+        TestReadKey(NKikimrDataEvents::FORMAT_ARROW);
     }
 
     Y_UNIT_TEST(ShouldReadRangeCellVec) {
-        TestReadRangeMovies(NKikimrTxDataShard::CELLVEC);
+        TestReadRangeMovies(NKikimrDataEvents::FORMAT_CELLVEC);
     }
 
     Y_UNIT_TEST(ShouldReadRangeArrow) {
-        TestReadRangeMovies(NKikimrTxDataShard::ARROW);
+        TestReadRangeMovies(NKikimrDataEvents::FORMAT_ARROW);
     }
 
     Y_UNIT_TEST(ShouldReadKeyOnlyValueColumn) {
@@ -1017,7 +1017,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // KIKIMR-16897: no columns mean we want to calc row count
         TTestHelper helper;
 
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::CELLVEC);
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_CELLVEC);
         request->Record.ClearColumns();
         AddKeyQuery(*request, {3, 3, 3});
         AddKeyQuery(*request, {1, 1, 1});
@@ -1037,7 +1037,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // KIKIMR-16897: no columns mean we want to calc row count
         TTestHelper helper;
 
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW);
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW);
         request->Record.ClearColumns();
         AddKeyQuery(*request, {3, 3, 3});
         AddKeyQuery(*request, {1, 1, 1});
@@ -1057,7 +1057,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // KIKIMR-16897: no columns mean we want to calc row count
         TTestHelper helper;
 
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::CELLVEC);
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_CELLVEC);
         request->Record.ClearColumns();
         AddRangeQuery<ui32>(
             *request,
@@ -1081,7 +1081,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // KIKIMR-16897: no columns mean we want to calc row count
         TTestHelper helper;
 
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW);
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW);
         request->Record.ClearColumns();
         AddRangeQuery<ui32>(
             *request,
@@ -1718,11 +1718,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
     }
 
     Y_UNIT_TEST(ShouldReadRangeInclusiveEndsCellVec) {
-        TestReadRangeInclusiveEnds(NKikimrTxDataShard::CELLVEC);
+        TestReadRangeInclusiveEnds(NKikimrDataEvents::FORMAT_CELLVEC);
     }
 
     Y_UNIT_TEST(ShouldReadRangeInclusiveEndsArrow) {
-        TestReadRangeInclusiveEnds(NKikimrTxDataShard::ARROW);
+        TestReadRangeInclusiveEnds(NKikimrDataEvents::FORMAT_ARROW);
     }
 
     Y_UNIT_TEST(ShouldReadRangeReverse) {
@@ -2372,7 +2372,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
     }
 
     Y_UNIT_TEST(ShouldReadFromFollower) {
-        TestReadKey(NKikimrTxDataShard::CELLVEC, true);
+        TestReadKey(NKikimrDataEvents::FORMAT_CELLVEC, true);
     }
 
     Y_UNIT_TEST(ShouldNotReadFutureMvccFromFollower) {
@@ -2385,7 +2385,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         TTestHelper helper(serverSettings, shardCount, true);
 
         TRowVersion someVersion = TRowVersion(10000, Max<ui64>());
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, someVersion);
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, someVersion);
         AddKeyQuery(*request, {3, 3, 3});
         auto readResult = helper.SendRead("table-1", request.release());
         const auto& record = readResult->Record;
@@ -2401,7 +2401,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         const ui64 shardCount = 1;
         TTestHelper helper(serverSettings, shardCount, true);
 
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, TRowVersion::Max());
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, TRowVersion::Max());
         request->Record.ClearSnapshot();
         AddKeyQuery(*request, {3, 3, 3});
         auto readResult = helper.SendRead("table-1", request.release());
@@ -2508,7 +2508,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // read from HEAD when there is no conflicting operation
         TTestHelper helper;
 
-        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, TRowVersion::Max());
+        auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, TRowVersion::Max());
         request->Record.ClearSnapshot();
         AddKeyQuery(*request, {3, 3, 3});
 
@@ -2535,7 +2535,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         auto hangedInfo = helper.HangWithTransactionWaitingRS(shardCount, false);
 
         {
-            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, TRowVersion::Max());
+            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, TRowVersion::Max());
             request->Record.ClearSnapshot();
             AddKeyQuery(*request, {3, 3, 3});
             AddKeyQuery(*request, {1, 1, 1});
@@ -2590,7 +2590,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         {
             // now read HEAD
-            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, TRowVersion::Max());
+            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, TRowVersion::Max());
             request->Record.ClearSnapshot();
             AddKeyQuery(*request, {3, 3, 3});
             AddKeyQuery(*request, {1, 1, 1});
@@ -2687,7 +2687,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 2a: read prior data
         {
             auto oldVersion = TRowVersion(hangedStep - 1, Max<ui64>());
-            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, oldVersion);
+            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, oldVersion);
             AddKeyQuery(*request, {3, 3, 3});
 
             auto readResult = helper.SendRead("table-1", request.release());
@@ -2701,7 +2701,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 2b-1 (key): try to read hanged step, note that we have hanged write to the same key
         {
             auto oldVersion = TRowVersion(hangedStep, Max<ui64>());
-            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, oldVersion);
+            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, oldVersion);
             AddKeyQuery(*request, {3, 3, 3});
 
             auto readResult = helper.SendRead(
@@ -2716,7 +2716,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 2b-2 (range): try to read hanged step, note that we have hanged write to the same key
         {
             auto oldVersion = TRowVersion(hangedStep, Max<ui64>());
-            auto request = helper.GetBaseReadRequest("table-1", 2, NKikimrTxDataShard::ARROW, oldVersion);
+            auto request = helper.GetBaseReadRequest("table-1", 2, NKikimrDataEvents::FORMAT_ARROW, oldVersion);
 
             AddRangeQuery<ui32>(
                 *request,
@@ -2738,7 +2738,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 2b-3 (key prefix, equals to range): try to read hanged step, note that we have hanged write to the same key
         {
             auto oldVersion = TRowVersion(hangedStep, Max<ui64>());
-            auto request = helper.GetBaseReadRequest("table-1", 3, NKikimrTxDataShard::ARROW, oldVersion);
+            auto request = helper.GetBaseReadRequest("table-1", 3, NKikimrDataEvents::FORMAT_ARROW, oldVersion);
             AddKeyQuery(*request, {3});
 
             auto readResult = helper.SendRead(
@@ -2798,7 +2798,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 4: try to read hanged step again
         {
             auto oldVersion = TRowVersion(hangedStep, Max<ui64>());
-            auto request = helper.GetBaseReadRequest("table-1", 4, NKikimrTxDataShard::ARROW, oldVersion);
+            auto request = helper.GetBaseReadRequest("table-1", 4, NKikimrDataEvents::FORMAT_ARROW, oldVersion);
             AddKeyQuery(*request, {3, 3, 3});
 
             auto readResult = helper.SendRead("table-1", request.release());
@@ -2812,7 +2812,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // 5: read prior data again
         {
             auto oldVersion = TRowVersion(hangedStep - 1, Max<ui64>());
-            auto request = helper.GetBaseReadRequest("table-1", 5, NKikimrTxDataShard::ARROW, oldVersion);
+            auto request = helper.GetBaseReadRequest("table-1", 5, NKikimrDataEvents::FORMAT_ARROW, oldVersion);
             AddKeyQuery(*request, {3, 3, 3});
 
             auto readResult = helper.SendRead("table-1", request.release());
@@ -2906,7 +2906,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // future snapshot
         snapshot = TRowVersion(lastStep + 3000, Max<ui64>());
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, snapshot);
+        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, snapshot);
         AddKeyQuery(*request1, {3, 3, 3});
         AddKeyQuery(*request1, {1, 1, 1});
         AddKeyQuery(*request1, {5, 5, 5});
@@ -3042,7 +3042,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // future snapshot
         snapshot = TRowVersion(lastStep + 3000, Max<ui64>());
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, snapshot);
+        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, snapshot);
         AddKeyQuery(*request1, {3, 3, 3});
         AddKeyQuery(*request1, {1, 1, 1});
         AddKeyQuery(*request1, {5, 5, 5});
@@ -3185,7 +3185,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         const ui64 lockTxId = 1011121314;
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, readVersion);
+        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, readVersion);
         request1->Record.SetLockTxId(lockTxId);
 
         AddRangeQuery<ui32>(
@@ -3224,7 +3224,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         const ui64 lockTxId = 1011121314;
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, readVersion);
+        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, readVersion);
         request1->Record.SetLockTxId(lockTxId);
         AddRangeQuery<ui32>(
             *request1,
@@ -3248,7 +3248,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             (300, 0, 0, 3000);
         )");
 
-        auto request2 = helper.GetBaseReadRequest("table-1", 2, NKikimrTxDataShard::ARROW, readVersion);
+        auto request2 = helper.GetBaseReadRequest("table-1", 2, NKikimrDataEvents::FORMAT_ARROW, readVersion);
         request2->Record.SetLockTxId(lockTxId);
         AddRangeQuery<ui32>(
             *request2,
@@ -3472,7 +3472,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         const ui64 lockTxId = 1011121314;
 
-        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, readVersion);
+        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrDataEvents::FORMAT_ARROW, readVersion);
         request1->Record.SetLockTxId(lockTxId);
         request1->Record.SetMaxRows(1); // set quota so that DS hangs waiting for ACK
 
@@ -3595,7 +3595,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorSysTables) {
             true
         );
 
-        request->Record.SetResultFormat(NKikimrTxDataShard::ARROW);
+        request->Record.SetResultFormat(NKikimrDataEvents::FORMAT_ARROW);
 
         auto readResult = helper.SendRead("table-1", request.release());
         const auto& record = readResult->Record;

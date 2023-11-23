@@ -116,39 +116,16 @@ std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable
     NJson::TJsonReaderConfig jsonConfig;
     NJson::TJsonValue stat;
 
+    if (!billable) {
+        return result;
+    }
+
     ui64 ingress = 0;
-    if (billable) {
-        if (NJson::ReadJsonTree(statistics, &jsonConfig, &stat)) {
-            for (const auto& graph : stat.GetMapSafe()) {
-                //
-                // in v1 graphs are always named as name=index
-                //
-                // in v2 two cases are possible
-                // - ResultSet or Sink (i.e. name) when only one subgraph exists
-                // - name_index when there are 2+ graphs
-                //
-                // Precompute always implies other graph, so we can distinguish v1 vs v2 by '=' or '_' symbol
-                //
-                if (graph.first.StartsWith("Graph=") || graph.first.StartsWith("Precompute=")) {
-                    // YQv1 raw
-                    if (auto* stageTotalNode = graph.second.GetValueByPath("TaskRunner.Stage=Total")) {
-                        if (stageTotalNode->GetType() == NJson::JSON_MAP) {
-                            for (const auto& metric : stageTotalNode->GetMapSafe()) {
-                                // Ingress.....Bytes i.e. IngressS3SourceBytes
-                                if (metric.first.StartsWith("Ingress") && metric.first.EndsWith("Bytes")) {
-                                    if (auto* sumNode = metric.second.GetValueByPath("sum")) {
-                                        ingress += sumNode->GetIntegerSafe();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else if (graph.first.StartsWith("ResultSet") || graph.first.StartsWith("Sink") || graph.first.StartsWith("Precompute_")) {
-                    // YQv2
-                    if (auto* ingressNode = graph.second.GetValueByPath("TotalIngressBytes.sum")) {
-                        ingress += ingressNode->GetIntegerSafe();
-                    }
-                }
+    if (NJson::ReadJsonTree(statistics, &jsonConfig, &stat)) {
+        for (const auto& graph : stat.GetMapSafe()) {
+            // all stats should expose IngressBytes now
+            if (auto* ingressNode = graph.second.GetValueByPath("IngressBytes.sum")) {
+                ingress += ingressNode->GetIntegerSafe();
             }
         }
     }
@@ -296,7 +273,8 @@ TString GetPrettyStatistics(const TString& statistics) {
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressS3SinkBytes", "EgressObjectStorageBytes");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressPqSourceBytes", "IngressStreamBytes");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressPqSinkBytes", "EgressStreamBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Source=0.Stage=Total.RowsIn", "IngressRows");
+                    RemapNode(writer, p.second, "IngressBytes", "IngressBytes");
+                    RemapNode(writer, p.second, "EgressBytes", "EgressBytes");
                 writer.OnEndMap();
             }
             // YQv2
@@ -308,8 +286,8 @@ TString GetPrettyStatistics(const TString& statistics) {
                     AggregateNode(writer, p.second, "TotalCpuTimeUs", "CpuTimeUs");
                     AggregateNode(writer, p.second, "Ingress=S3Source.Ingress.Bytes", "IngressObjectStorageBytes");
                     AggregateNode(writer, p.second, "Egress=S3Sink.Egress.Bytes", "EgressObjectStorageBytes");
-                    RemapNode(writer, p.second, "TotalIngressBytes", "TotalIngressBytes");
-                    RemapNode(writer, p.second, "TotalEgressBytes", "TotalEgressBytes");
+                    RemapNode(writer, p.second, "IngressBytes", "IngressBytes");
+                    RemapNode(writer, p.second, "EgressBytes", "EgressBytes");
                 writer.OnEndMap();
             }
         }

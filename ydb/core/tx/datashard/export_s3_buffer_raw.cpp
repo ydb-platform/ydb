@@ -123,8 +123,8 @@ bool TS3BufferRaw::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
             out << '"' << CGIEscapeRet(NBinaryJson::SerializeToJson(cell.AsBuf())) << '"';
             break;
         case NScheme::NTypeIds::Pg:
-            // TODO: support pg types
-            Y_ABORT("Unsupported pg type");
+            serialized = PgToStream(cell.AsBuf(), column.Type.GetTypeDesc(), out, ErrorString);
+            break;
         default:
             Y_ABORT("Unsupported type");
         }

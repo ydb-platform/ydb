@@ -159,6 +159,11 @@ TExprBase KqpBuildUpdateStages(TExprBase node, TExprContext& ctx, const TKqpOpti
         .Table(update.Table())
         .Input(prepareUpdate)
         .Columns(update.Columns())
+        .Settings()
+            .Add()
+                .Name().Build("IsUpdate")
+            .Build()
+        .Build()
         .Done();
 
     return node;

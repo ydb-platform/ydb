@@ -645,7 +645,7 @@ public:
     void ExtractDatashardErrors(const NKikimrTxDataShard::TEvProposeTransactionResult& record) {
         TStringBuilder builder;
         for (const auto &er : record.GetError()) {
-            builder << "[" << NKikimrTxDataShard::TError_EKind_Name(er.GetKind()) << "] " << er.GetReason() << Endl;
+            builder << "[" << er.GetKind() << "] " << er.GetReason() << Endl;
         }
 
         DatashardErrors = builder;

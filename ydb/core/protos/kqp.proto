@@ -326,7 +326,8 @@ message TEvCreateSessionRequest {
     // If flag is true, kqp proxy will create session  on the different node,
     // if flag is false, in this case proxy will create session locally.
     optional bool CanCreateRemoteSession = 4 [default = false];
-    optional bool SupportsBalancing = 5 [ default = false];
+    optional bool SupportsBalancing = 5 [default = false];
+    optional bool PgWire = 6 [default = false];
 }
 
 message TCreateSessionResponse {
@@ -576,12 +577,14 @@ message TEvScanInitActor {
     optional uint64 ScanId = 1;
     optional NActorsProto.TActorId ScanActorId = 2;
     optional uint32 Generation = 3;
+    optional uint64 TabletId = 4;
 };
 
 message TEvScanError {
     optional Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
     optional uint32 Generation = 3;
+    optional uint64 TabletId = 4;
 }
 
 message TEvRemoteScanData {
@@ -607,6 +610,7 @@ message TEvRemoteScanData {
 
     optional bool RequestedBytesLimitReached = 11 [default = false];
     optional uint32 AvailablePacks = 12;
+    repeated bytes SplittedArrowBatches = 13;
 }
 
 message TEvRemoteScanDataAck {

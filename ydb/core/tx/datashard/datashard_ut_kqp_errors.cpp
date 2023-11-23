@@ -270,7 +270,7 @@ void TestProposeResultLost(TTestActorRuntime& runtime, TActorId client, const TS
         if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
             auto* fe = ev.Get()->Get<TEvPipeCache::TEvForward>();
             if (fe->Ev->Type() == TEvDataShard::TEvProposeTransaction::EventType) {
-                executer = ((TEvDataShard::TEvProposeTransaction*) fe->Ev.Get())->GetSource();
+                executer = ev->Sender;
                 // Cerr << "-- executer: " << executer << Endl;
                 return TTestActorRuntime::EEventAction::PROCESS;
             }

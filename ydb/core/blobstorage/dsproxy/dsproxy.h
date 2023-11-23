@@ -159,7 +159,7 @@ inline void SetExecutionRelay(IEventBase& ev, std::shared_ptr<TEvBlobStorage::TE
 }
 
 template<typename TDerived>
-class TBlobStorageGroupRequestActor : public TActor<TBlobStorageGroupRequestActor<TDerived>> {
+class TBlobStorageGroupRequestActor : public TActor<TDerived> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_GROUP_REQUEST;
@@ -170,7 +170,7 @@ public:
             NKikimrServices::EServiceKikimr logComponent, bool logAccEnabled, TMaybe<TGroupStat::EKind> latencyQueueKind,
             TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters, ui32 restartCounter, TString name,
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay)
-        : TActor<TBlobStorageGroupRequestActor<TDerived>>(&TThis::InitialStateFunc, TDerived::ActorActivityType())
+        : TActor<TDerived>(&TThis::InitialStateFunc, TDerived::ActorActivityType())
         , Info(std::move(info))
         , GroupQueues(std::move(groupQueues))
         , Mon(std::move(mon))

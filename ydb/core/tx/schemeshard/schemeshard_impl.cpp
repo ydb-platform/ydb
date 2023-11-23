@@ -14,6 +14,8 @@
 #include <ydb/core/statistics/stat_service.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <util/system/byteorder.h>
+#include <util/system/unaligned_mem.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -6229,10 +6231,11 @@ bool TSchemeShard::FillSplitPartitioning(TVector<TString>& rangeEnds, const TCon
         auto& boundary = boundaries.Get(i);
         TVector<TCell> rangeEnd;
         TSerializedCellVec prefix;
+        TVector<TString> memoryOwner;
         if (boundary.HasSerializedKeyPrefix()) {
             prefix.Parse(boundary.GetSerializedKeyPrefix());
             rangeEnd = TVector<TCell>(prefix.GetCells().begin(), prefix.GetCells().end());
-        } else if (!NMiniKQL::CellsFromTuple(nullptr, boundary.GetKeyPrefix(), keyColTypes, false, rangeEnd, errStr)) {
+        } else if (!NMiniKQL::CellsFromTuple(nullptr, boundary.GetKeyPrefix(), keyColTypes, false, rangeEnd, errStr, memoryOwner)) {
             errStr = Sprintf("Error at split boundary %d: %s", i, errStr.data());
             return false;
         }
@@ -6405,6 +6408,22 @@ bool TSchemeShard::FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 key
             maxVal = Max<ui64>();
             valSz = 8;
             break;
+        case NScheme::NTypeIds::Uuid: {
+            maxVal = Max<ui64>();
+            valSz = 16;
+            char buffer[16] = {};
+
+            for (ui32 i = 1; i < partitionCount; ++i) {
+                ui64 val = maxVal * (double(i) / partitionCount);
+                // Make sure most significant byte is at the start of the byte buffer for UUID comparison.
+                val = HostToInet(val);
+                WriteUnaligned<ui64>(buffer, val);
+                rangeEnd[0] = TCell(buffer, valSz);
+                rangeEnds.push_back(TSerializedCellVec::Serialize(rangeEnd));
+            }
+
+            return true;
+        }
         default:
             errStr = TStringBuilder() << "Unsupported first key column type " << NScheme::TypeName(firstKeyColType) << ", only Uint32 and Uint64 are supported";
             return false;

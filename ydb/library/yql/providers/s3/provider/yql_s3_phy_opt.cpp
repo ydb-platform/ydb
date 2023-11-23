@@ -97,6 +97,7 @@ public:
             AddHandler(0, &TS3WriteObject::Match, HNDL(S3WriteObject));
         }
         AddHandler(0, &TS3Insert::Match, HNDL(S3Insert));
+        AddHandler(0, &TCoTake::Match, HNDL(PushDownLimit));
 #undef HNDL
     }
 
@@ -109,6 +110,49 @@ public:
         }
 
         return TExprBase(maybeRead.Cast().World().Ptr());
+    }
+
+    TMaybeNode<TExprBase> PushDownLimit(TExprBase node, TExprContext& ctx) const {
+        auto take = node.Cast<TCoTake>();
+
+        auto maybeReadObject = take
+            .Input().Maybe<TCoRight>()
+            .Input().Maybe<TS3ReadObject>();
+        if (!maybeReadObject) {
+            return node;
+        }
+
+        auto maybeCount = take.Count().Maybe<TCoUint64>();
+        if (!maybeCount) {
+            return node;
+        }
+        auto count = maybeCount.Cast();
+        auto countNum = FromString<ui64>(count.Literal().Ref().Content());
+        YQL_ENSURE(countNum > 0, "Got invalid limit " << countNum << " to push down");
+
+        auto object = maybeReadObject.Cast().Object();
+        if (auto rowsLimitHintStr = object.RowsLimitHint().Ref().Content(); !rowsLimitHintStr.empty()) {
+            // LimitHint is already pushed down
+            auto rowsLimitHint = FromString<ui64>(rowsLimitHintStr);
+            if (countNum >= rowsLimitHint) {
+                // Already propagated
+                return node;
+            }
+        }
+
+        return Build<TCoTake>(ctx, take.Pos())
+            .InitFrom(take)
+            .Input<TCoRight>()
+                .Input<TS3ReadObject>()
+                    .InitFrom(maybeReadObject.Cast())
+                    .Object()
+                        .InitFrom(object)
+                        .RowsLimitHint(count.Literal())
+                        .Build()
+                    .Build()
+                .Build()
+            .Count(count.Ptr())
+            .Done();
     }
 
     TMaybe<TDqStage> BuildSinkStage(TPositionHandle writePos, TS3DataSink dataSink, TS3Target target, TExprBase input, TExprContext& ctx, const TGetParents& getParents) const {

@@ -1,0 +1,7 @@
+GO_LIBRARY()
+
+LICENSE(MIT)
+
+SRCS(anynil.go)
+
+END()

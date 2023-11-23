@@ -33,7 +33,7 @@ void IDataSource::InitFilterStageData(const std::shared_ptr<NArrow::TColumnFilte
     Y_ABORT_UNLESS(!FilterStageData);
     FilterStageData = std::make_shared<TFilterStageData>(appliedFilter, earlyFilter, batch);
     if (batch) {
-        Y_ABORT_UNLESS((ui32)batch->num_columns() == FetchingPlan->GetFilterStage()->GetSize());
+        AFL_VERIFY((ui32)batch->num_columns() == FetchingPlan->GetFilterStage()->GetSize())("batch", batch->schema()->ToString())("filter", FetchingPlan->GetFilterStage()->DebugString());
     }
     DoStartFetchStage(sourcePtr);
 }

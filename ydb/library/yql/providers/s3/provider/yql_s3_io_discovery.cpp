@@ -1,6 +1,8 @@
 #include "yql_s3_provider_impl.h"
 #include "yql_s3_listing_strategy.h"
 
+#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
@@ -9,8 +11,7 @@
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/utils/aws_credentials.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/url_builder.h>
 
@@ -116,7 +117,7 @@ private:
                 if (dqSource.DataSource().Category() != S3ProviderName) {
                     return false;
                 }
-                auto maybeS3ParseSettings = dqSource.Input().Maybe<TS3ParseSettingsBase>();
+                auto maybeS3ParseSettings = dqSource.Input().Maybe<TS3ParseSettings>();
                 if (!maybeS3ParseSettings) {
                     return false;
                 }
@@ -162,7 +163,7 @@ private:
     TStatus ApplyDirectoryListing(const TDqSourceWrap& source, const TPendingRequests& pendingRequests,
         const TVector<TListRequest>& requests, TNodeOnNodeOwnedMap& replaces, TExprContext& ctx)
     {
-        TS3ParseSettingsBase parse = source.Input().Maybe<TS3ParseSettingsBase>().Cast();
+        TS3ParseSettings parse = source.Input().Maybe<TS3ParseSettings>().Cast();
         TExprNodeList newPaths;
         TExprNodeList extraValuesItems;
         size_t dirIndex = 0;
@@ -257,8 +258,7 @@ private:
         }
 
         auto newExtraValues = ctx.NewCallable(source.Pos(), "OrderedExtend", std::move(extraValuesItems));
-        auto newInput = Build<TS3ParseSettingsBase>(ctx, parse.Pos())
-            .CallableName(parse.Ref().Content())
+        auto newInput = Build<TS3ParseSettings>(ctx, parse.Pos())
             .InitFrom(parse)
             .Paths(ctx.NewList(parse.Paths().Pos(), std::move(newPaths)))
             .Settings(RemoveSetting(parse.Settings().Cast().Ref(), "directories", ctx))
@@ -495,6 +495,7 @@ private:
             s3Object = Build<TS3Object>(ctx, object.Pos())
                     .Paths(ctx.NewList(object.Pos(), std::move(pathNodes)))
                     .Format(std::move(format))
+                    .RowsLimitHint(ctx.NewAtom(object.Pos(), ""))
                     .Settings(ctx.NewList(object.Pos(), std::move(settings)))
                 .Done().Ptr();
 
@@ -568,15 +569,15 @@ private:
         TS3DataSource dataSource = source.DataSource().Maybe<TS3DataSource>().Cast();
         const auto& connect = State_->Configuration->Clusters.at(dataSource.Cluster().StringValue());
         const auto& token = State_->Configuration->Tokens.at(dataSource.Cluster().StringValue());
-        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token);
+        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token, false, ConvertBasicToAwsToken);
 
         const TString url = connect.Url;
         const TString tokenStr = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
 
-        auto s3ParseSettingsBase = source.Input().Maybe<TS3ParseSettingsBase>().Cast();
+        auto s3ParseSettings = source.Input().Maybe<TS3ParseSettings>().Cast();
         TString filePattern;
-        if (s3ParseSettingsBase.Ref().ChildrenSize() > TS3ParseSettingsBase::idx_Settings) {
-            const auto& settings = *s3ParseSettingsBase.Ref().Child(TS3ParseSettingsBase::idx_Settings);
+        if (s3ParseSettings.Ref().ChildrenSize() > TS3ParseSettings::idx_Settings) {
+            const auto& settings = *s3ParseSettings.Ref().Child(TS3ParseSettings::idx_Settings);
             if (!FindFilePattern(settings, ctx, filePattern)) {
                 return false;
             }
@@ -584,15 +585,15 @@ private:
         const TString effectiveFilePattern = filePattern ? filePattern : "*";
 
         auto resultSetLimitPerPath = std::max(State_->Configuration->MaxDiscoveryFilesPerQuery, State_->Configuration->MaxDirectoriesAndFilesPerQuery);
-        if (!s3ParseSettingsBase.Paths().Empty()) {
-            resultSetLimitPerPath /= s3ParseSettingsBase.Paths().Size();
+        if (!s3ParseSettings.Paths().Empty()) {
+            resultSetLimitPerPath /= s3ParseSettings.Paths().Size();
         }
         resultSetLimitPerPath =
             std::min(resultSetLimitPerPath,
                      State_->Configuration->MaxDiscoveryFilesPerDirectory.Get().GetOrElse(
                          State_->Configuration->MaxListingResultSizePerPhysicalPartition));
 
-        for (auto path : s3ParseSettingsBase.Paths()) {
+        for (auto path : s3ParseSettings.Paths()) {
             NS3Details::TPathList directories;
             NS3Details::UnpackPathsList(path.Data().Literal().Value(), FromString<bool>(path.IsText().Literal().Value()), directories);
 
@@ -726,7 +727,7 @@ private:
 
         const auto& connect = State_->Configuration->Clusters.at(read.DataSource().Cluster().StringValue());
         const auto& token = State_->Configuration->Tokens.at(read.DataSource().Cluster().StringValue());
-        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token);
+        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token, false, ConvertBasicToAwsToken);
 
         const TString url = connect.Url;
         const TString tokenStr = credentialsProviderFactory->CreateProvider()->GetAuthInfo();

@@ -37,23 +37,17 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
     protoTask->SetFinishTimeMs(taskStats.FinishTs.MilliSeconds()); // to be reviewed
     protoTask->SetStartTimeMs(taskStats.StartTs.MilliSeconds());   // to be reviewed
 
+    if (NActors::TlsActivationContext && NActors::TlsActivationContext->ActorSystem()) {
+        protoTask->SetNodeId(NActors::TlsActivationContext->ActorSystem()->NodeId);
+    }
+    protoTask->SetHostName(HostName());
+    protoTask->SetComputeCpuTimeUs(taskStats.ComputeCpuTime.MicroSeconds());
+    protoTask->SetBuildCpuTimeUs(taskStats.BuildCpuTime.MicroSeconds());
+
+    protoTask->SetWaitInputTimeUs(taskStats.WaitInputTime.MicroSeconds());
+    protoTask->SetWaitOutputTimeUs(taskStats.WaitOutputTime.MicroSeconds());
+
     if (StatsLevelCollectProfile(level)) {
-        if (NActors::TlsActivationContext && NActors::TlsActivationContext->ActorSystem()) {
-            protoTask->SetNodeId(NActors::TlsActivationContext->ActorSystem()->NodeId);
-        }
-        protoTask->SetHostName(HostName());
-        protoTask->SetComputeCpuTimeUs(taskStats.ComputeCpuTime.MicroSeconds());
-        protoTask->SetBuildCpuTimeUs(taskStats.BuildCpuTime.MicroSeconds());
-
-        protoTask->SetWaitTimeUs(taskStats.WaitTime.MicroSeconds());             // to be reviewed
-        protoTask->SetWaitOutputTimeUs(taskStats.WaitOutputTime.MicroSeconds()); // to be reviewed
-
-        // All run statuses metrics
-        protoTask->SetPendingInputTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::PendingInput].MicroSeconds());   // to be reviewed
-        protoTask->SetPendingOutputTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::PendingOutput].MicroSeconds()); // to be reviewed
-        protoTask->SetFinishTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::Finished].MicroSeconds());             // to be reviewed
-        static_assert(TRunStatusTimeMetrics::StatusesCount == 3); // Add all statuses here
-
         if (taskStats.ComputeCpuTimeByRun) {
             auto snapshot = taskStats.ComputeCpuTimeByRun->Snapshot();
             for (ui32 i = 0; i < snapshot->Count(); i++) {
@@ -106,6 +100,7 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
                     }
                     {
                         auto& protoChannel = *protoTask->AddInputChannels();
+                        protoChannel.SetChannelId(pushStats.ChannelId); // only one of ids
                         protoChannel.SetSrcStageId(srcStageId);
                         FillAsyncStats(*protoChannel.MutablePush(), pushStats);
                         FillAsyncStats(*protoChannel.MutablePop(), popStats);
@@ -135,8 +130,8 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
     //
     // task runner is not aware of ingress/egress stats, fill in in CA
     //
-    for (auto& [inputIndex, sources] : taskStats.Sources) {
-        if (StatsLevelCollectFull(level)) {
+    if (StatsLevelCollectFull(level)) {
+        for (auto& [inputIndex, sources] : taskStats.Sources) {
             auto& protoSource = *protoTask->AddSources();
             protoSource.SetInputIndex(inputIndex);
             FillAsyncStats(*protoSource.MutablePush(), sources->GetPushStats());
@@ -184,6 +179,7 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
                     }
                     {
                         auto& protoChannel = *protoTask->AddOutputChannels();
+                        protoChannel.SetChannelId(popStats.ChannelId); // only one of ids
                         protoChannel.SetDstStageId(dstStageId);
                         FillAsyncStats(*protoChannel.MutablePush(), pushStats);
                         FillAsyncStats(*protoChannel.MutablePop(), popStats);

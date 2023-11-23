@@ -13,6 +13,10 @@
 
 namespace NActors {
 
+IEventHandle* GetAuthorizeTicketHandle(const NActors::TActorId& owner, const TString& ticket);
+IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner, NMonitoring::IMonHttpRequest& request);
+IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner);
+
 class TActorSystem;
 struct TActorId;
 

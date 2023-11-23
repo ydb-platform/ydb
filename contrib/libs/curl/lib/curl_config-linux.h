@@ -142,17 +142,20 @@
 /* Define to 1 if you have the alarm function. */
 #define HAVE_ALARM 1
 
+/* Define to 1 if you have the `arc4random' function. */
+/* #undef HAVE_ARC4RANDOM */
+
 /* Define to 1 if you have the <arpa/inet.h> header file. */
 #define HAVE_ARPA_INET_H 1
 
 /* Define to 1 if you have the <arpa/tftp.h> header file. */
 #define HAVE_ARPA_TFTP_H 1
 
-/* Define to 1 if you have the <assert.h> header file. */
-#define HAVE_ASSERT_H 1
-
 /* Define to 1 if you have _Atomic support. */
 #define HAVE_ATOMIC 1
+
+/* Define to 1 if using AWS-LC. */
+/* #undef HAVE_AWSLC */
 
 /* Define to 1 if you have the basename function. */
 #define HAVE_BASENAME 1
@@ -174,6 +177,10 @@
 
 /* Define to 1 if you have the clock_gettime function and monotonic timer. */
 #define HAVE_CLOCK_GETTIME_MONOTONIC 1
+
+/* Define to 1 if you have the clock_gettime function and raw monotonic timer.
+   */
+#define HAVE_CLOCK_GETTIME_MONOTONIC_RAW 1
 
 /* Define to 1 if you have the closesocket function. */
 /* #undef HAVE_CLOSESOCKET */
@@ -197,9 +204,6 @@
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #define HAVE_DLFCN_H 1
 
-/* Define to 1 if you have the <errno.h> header file. */
-#define HAVE_ERRNO_H 1
-
 /* Define to 1 if you have the <err.h> header file. */
 /* #undef HAVE_ERR_H */
 
@@ -217,6 +221,9 @@
 
 /* Define to 1 if you have the `fnmatch' function. */
 #define HAVE_FNMATCH 1
+
+/* Define to 1 if you have the `fork' function. */
+#define HAVE_FORK 1
 
 /* Define to 1 if you have the freeaddrinfo function. */
 #define HAVE_FREEADDRINFO 1
@@ -360,6 +367,9 @@
 /* Define to 1 if you have the ldap.h header file. */
 /* #undef HAVE_LDAP_H */
 
+/* Define to 1 if you have the `ldap_init_fd' function. */
+/* #undef HAVE_LDAP_INIT_FD */
+
 /* Use LDAPS implementation */
 /* #undef HAVE_LDAP_SSL */
 
@@ -458,7 +468,7 @@
 /* #undef HAVE_OLD_GSSMIT */
 
 /* Define to 1 if using OpenSSL 3 or later. */
-/* #undef HAVE_OPENSSL3 */
+#define HAVE_OPENSSL3 1
 
 /* Define to 1 if you have the <openssl/crypto.h> header file. */
 #define HAVE_OPENSSL_CRYPTO_H 1
@@ -583,6 +593,9 @@
 
 /* Define to 1 if you have the <ssl.h> header file. */
 /* #undef HAVE_SSL_H */
+
+/* Define to 1 if you have the `SSL_set0_wbio' function. */
+#define HAVE_SSL_SET0_WBIO 1
 
 /* Define to 1 if you have the <stdatomic.h> header file. */
 #define HAVE_STDATOMIC_H 1
@@ -716,9 +729,6 @@
 /* Define to 1 if you have the windows.h header file. */
 /* #undef HAVE_WINDOWS_H */
 
-/* Define to 1 if you have the winldap.h header file. */
-/* #undef HAVE_WINLDAP_H */
-
 /* Define to 1 if you have the winsock2.h header file. */
 /* #undef HAVE_WINSOCK2_H */
 
@@ -727,6 +737,9 @@
 
 /* if you have wolfSSL_DES_ecb_encrypt */
 /* #undef HAVE_WOLFSSL_DES_ECB_ENCRYPT */
+
+/* if you have wolfSSL_BIO_set_shutdown */
+/* #undef HAVE_WOLFSSL_FULL_BIO */
 
 /* Define to 1 if you have the `wolfSSL_get_peer_certificate' function. */
 /* #undef HAVE_WOLFSSL_GET_PEER_CERTIFICATE */
@@ -796,6 +809,9 @@
 
 /* Size of curl_off_t in number of bytes */
 #define SIZEOF_CURL_OFF_T 8
+
+/* Size of curl_socket_t in number of bytes */
+#define SIZEOF_CURL_SOCKET_T 4
 
 /* Size of int in number of bytes */
 #ifndef SIZEOF_INT
@@ -878,8 +894,8 @@
 /* if ngtcp2_crypto_gnutls is in use */
 /* #undef USE_NGTCP2_CRYPTO_GNUTLS */
 
-/* if ngtcp2_crypto_openssl is in use */
-/* #undef USE_NGTCP2_CRYPTO_OPENSSL */
+/* if ngtcp2_crypto_quictls is in use */
+/* #undef USE_NGTCP2_CRYPTO_QUICTLS */
 
 /* if ngtcp2_crypto_wolfssl is in use */
 /* #undef USE_NGTCP2_CRYPTO_WOLFSSL */
@@ -949,9 +965,6 @@
 
 /* Version number of package */
 #define VERSION "-"
-
-/* Define to 1 to provide own prototypes. */
-/* #undef WANT_IDN_PROTOTYPES */
 
 /* Define to 1 if OS is AIX. */
 #ifndef _ALL_SOURCE

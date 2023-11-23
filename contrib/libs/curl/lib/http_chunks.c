@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -113,7 +113,7 @@ CHUNKcode Curl_httpchunk_read(struct Curl_easy *data,
   *wrote = 0; /* nothing's written yet */
 
   /* the original data is written to the client, but we go on with the
-     chunk read process, to properly calculate the content length*/
+     chunk read process, to properly calculate the content length */
   if(data->set.http_te_skip && !k->ignorebody) {
     result = Curl_client_write(data, CLIENTWRITE_BODY, datap, datalen);
     if(result) {

@@ -84,7 +84,7 @@
                                                                                     }
                                                                                 }
                                                                             ],
-                                                                            "Version": 3
+                                                                            "Version": 4
                                                                         },
                                                                         "Table": "clickbench/plans/column/hits"
                                                                     }

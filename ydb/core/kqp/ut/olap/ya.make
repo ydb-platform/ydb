@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/library/yql/sql/pg_dummy
     ydb/core/tx/columnshard/hooks/testing
+    ydb/core/tx/datashard/ut_common
 )
 
 YQL_LAST_ABI_VERSION()

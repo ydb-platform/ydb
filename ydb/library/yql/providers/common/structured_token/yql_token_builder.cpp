@@ -45,7 +45,7 @@ TStructuredTokenBuilder& TStructuredTokenBuilder::SetNoAuth() {
     return *this;
 }
 
-TStructuredTokenBuilder& TStructuredTokenBuilder::ReplaceReferences(const TMap<TString, TString> secrets) {
+TStructuredTokenBuilder& TStructuredTokenBuilder::ReplaceReferences(const std::map<TString, TString>& secrets) {
     if (Data.HasField("basic_password_ref")) {
         auto reference = Data.GetField("basic_password_ref");
         Data.ClearField("basic_password_ref");
@@ -159,6 +159,18 @@ TString ComposeStructuredTokenJsonForServiceAccountWithSecret(const TString& ser
     
     if (serviceAccountId && serviceAccountIdSignatureSecretName && serviceAccountIdSignature) {
         result.SetServiceAccountIdAuthWithSecret(serviceAccountId, serviceAccountIdSignatureSecretName, serviceAccountIdSignature);
+        return result.ToJson();
+    }
+
+    result.SetNoAuth();
+    return result.ToJson();
+}
+
+TString ComposeStructuredTokenJsonForBasicAuthWithSecret(const TString& login, const TString& passwordSecretName, const TString& password) {
+    TStructuredTokenBuilder result;
+    
+    if (login && passwordSecretName && password) {
+        result.SetBasicAuth(login, password).SetBasicAuthWithSecret(login, passwordSecretName);
         return result.ToJson();
     }
 

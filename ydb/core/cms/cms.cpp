@@ -11,6 +11,7 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/erasure/erasure.h>
 #include <ydb/core/protos/cms.pb.h>
@@ -22,6 +23,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
@@ -249,8 +251,6 @@ void TCms::AdjustInfo(TClusterInfoPtr &info, const TActorContext &ctx) const
 {
     for (const auto &entry : State->Permissions)
         info->AddLocks(entry.second, &ctx);
-    for (const auto &entry : State->ScheduledRequests)
-        info->ScheduleActions(entry.second, &ctx);
     for (const auto &entry : State->Notifications)
         info->AddExternalLocks(entry.second, &ctx);
 }
@@ -1728,13 +1728,7 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         }
     }
 
-    ClusterInfo->LogManager.PushRollbackPoint();
-    for (const auto &scheduled_request : State->ScheduledRequests) {
-            for (auto &action : scheduled_request.second.Request.GetActions())
-                ClusterInfo->LogManager.ApplyAction(action, ClusterInfo);
-    }
     bool ok = CheckPermissionRequest(rec, resp->Record, scheduled.Request, ctx);
-    ClusterInfo->LogManager.RollbackOperations();
 
     // Schedule request if required.
     if (rec.GetDryRun()) {
@@ -1748,7 +1742,6 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
             scheduled.Owner = user;
             scheduled.Order = State->NextRequestId - 1;
             scheduled.RequestId = reqId;
-            ClusterInfo->ScheduleActions(scheduled, &ctx);
 
             copy = new TRequestInfo(scheduled);
             State->ScheduledRequests.emplace(reqId, std::move(scheduled));
@@ -1799,20 +1792,8 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
 
     auto requestStartTime = TInstant::Now();
 
-    ClusterInfo->LogManager.PushRollbackPoint();
-    for (const auto &scheduled_request : State->ScheduledRequests) {
-        if (scheduled_request.second.Order < request.Order) {
-            for (auto &action : scheduled_request.second.Request.GetActions())
-                ClusterInfo->LogManager.ApplyAction(action, ClusterInfo);
-        }
-    }
-    // Deactivate locks of this and later requests to
-    // avoid false conflicts.
-    ClusterInfo->DeactivateScheduledLocks(request.Order);
     request.Request.SetAvailabilityMode(rec.GetAvailabilityMode());
     bool ok = CheckPermissionRequest(request.Request, resp->Record, scheduled.Request, ctx);
-    ClusterInfo->ReactivateScheduledLocks();
-    ClusterInfo->LogManager.RollbackOperations();
 
     // Schedule request if required.
     if (rec.GetDryRun()) {
@@ -1821,15 +1802,12 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
         TAutoPtr<TRequestInfo> copy;
         auto order = request.Order;
 
-        ClusterInfo->UnscheduleActions(request.RequestId);
         State->ScheduledRequests.erase(it);
         if (scheduled.Request.ActionsSize()) {
             scheduled.Owner = user;
             scheduled.Order = order;
             scheduled.RequestId = rec.GetRequestId();
             resp->Record.SetRequestId(scheduled.RequestId);
-
-            ClusterInfo->ScheduleActions(scheduled, &ctx);
 
             copy = new TRequestInfo(scheduled);
             State->ScheduledRequests.emplace(scheduled.RequestId, std::move(scheduled));

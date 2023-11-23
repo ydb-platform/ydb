@@ -8,10 +8,13 @@
 #include <library/cpp/actors/core/mailbox.h>
 #include <library/cpp/actors/core/scheduler_queue.h>
 #include <library/cpp/actors/interconnect/interconnect_common.h>
+#include <library/cpp/actors/util/should_continue.h>
+#include <library/cpp/actors/core/monotonic_provider.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <util/system/env.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include "single_thread_ic_mock.h"
 
@@ -200,6 +203,10 @@ public:
         AppData.MonotonicTimeProvider = CreateMonotonicTimeProvider();
 
         AppData.HiveConfig.SetWarmUpBootWaitingPeriod(10);
+        AppData.HiveConfig.SetMaxNodeUsageToKick(100);
+        AppData.HiveConfig.SetMinCounterScatterToBalance(100);
+        AppData.HiveConfig.SetMinScatterToBalance(100);
+        AppData.HiveConfig.SetObjectImbalanceToBalance(100);
     }
 
     ~TTestActorSystem() {
@@ -408,7 +415,7 @@ public:
             Schedule(Clock, ev, nullptr, nodeId);
             return true;
         } else {
-            Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown), nodeId);
+            Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown), nodeId);
             return false;
         }
     }

@@ -3,6 +3,7 @@
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 #include <ydb/core/tablet_flat/flat_dbase_sz_env.h>
 #include "ydb/core/tablet_flat/shared_sausagecache.h"
+#include <ydb/core/protos/datashard_config.pb.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -116,6 +117,7 @@ public:
 private:
     void Die(const TActorContext& ctx) override {
         ctx.Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvNotifyActorDied);
+        ctx.Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister);
         TActorBootstrapped::Die(ctx);
     }
 

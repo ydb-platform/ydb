@@ -4,6 +4,8 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <google/protobuf/text_format.h>
+
 
 namespace NKikimr {
 namespace NSysView {

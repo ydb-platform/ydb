@@ -49,11 +49,13 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
     public:
         TUdfModuleLoader(
                 TUdfModulesMap& modulesMap,
+                THashSet<TString>* newModules,
                 const TString& libraryPath,
                 const TUdfModuleRemappings& remappings,
                 ui32 abiVersion,
                 const TString& customUdfPrefix = {})
             : ModulesMap(modulesMap)
+            , NewModules(newModules)
             , LibraryPath(libraryPath)
             , Remappings(remappings)
             , AbiVersion(NUdf::AbiVersionToStr(abiVersion))
@@ -86,6 +88,8 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
                              << "UDF module duplication: name " << TStringBuf(name)
                              << ", already loaded from " << oldModule->LibraryPath
                              << ", trying to load from " << LibraryPath);
+                } else if (NewModules) {
+                    NewModules->insert(newName);
                 }
             }
         }
@@ -95,6 +99,7 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
 
     private:
         TUdfModulesMap& ModulesMap;
+        THashSet<TString>* NewModules;
         const TString LibraryPath;
         const TUdfModuleRemappings& Remappings;
         const TString AbiVersion;
@@ -125,15 +130,14 @@ public:
     void LoadUdfs(
             const TString& libraryPath,
             const TUdfModuleRemappings& remmapings,
-            ui32 flags /* = 0 */,
-            const TString& customUdfPrefix = {}) override
+            ui32 flags = 0,
+            const TString& customUdfPrefix = {},
+            THashSet<TString>* modules = nullptr) override
     {
         TUdfLibraryPtr lib;
 
         auto libIt = LoadedLibraries_.find(libraryPath);
-        if (libIt != LoadedLibraries_.end()) {
-            return;
-        } else {
+        if (libIt == LoadedLibraries_.end()) {
             lib = MakeIntrusive<TUdfLibrary>();
 #ifdef _win32_
             ui32 loadFlags = 0;
@@ -182,6 +186,8 @@ public:
             }
 
             libIt = LoadedLibraries_.insert({ libraryPath, lib }).first;
+        } else {
+            lib = libIt->second;
         }
 
         // (2) ensure that Register() func is present
@@ -189,13 +195,19 @@ public:
                     lib->Lib.Sym(RegisterFuncName));
 
         // (3) do load
+        THashSet<TString> newModules;
         TUdfModuleLoader loader(
-                    UdfModules_,
-                    libraryPath,
-                    remmapings,
-                    lib->AbiVersion, customUdfPrefix);
+            UdfModules_,
+            &newModules,
+            libraryPath,
+            remmapings,
+            lib->AbiVersion, customUdfPrefix);
         registerFunc(loader, flags);
         Y_ENSURE(!loader.HasError(), loader.GetError());
+
+        if (modules) {
+            *modules = std::move(newModules);
+        }
     }
 
     void AddModule(
@@ -211,7 +223,7 @@ public:
 
         TUdfModuleRemappings remappings;
         TUdfModuleLoader loader(
-                    UdfModules_, libraryPathStr,
+                    UdfModules_, nullptr, libraryPathStr,
                     remappings, NUdf::CurrentAbiVersion());
         loader.AddModule(moduleName, std::move(module));
 
@@ -540,8 +552,11 @@ TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(
 
     // system UDFs loaded with default names
     TUdfModuleRemappings remappings;
+    THashSet<TString> usedUdfPaths;
     for (const TString& udfPath: udfsPaths) {
-        registry->LoadUdfs(udfPath, remappings, flags);
+        if (usedUdfPaths.insert(udfPath).second) {
+            registry->LoadUdfs(udfPath, remappings, flags);
+        }
     }
 
     return registry.Release();

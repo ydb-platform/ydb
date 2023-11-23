@@ -1,0 +1,4 @@
+RECURSE(
+    exec
+    kernels
+)

@@ -35,6 +35,7 @@ struct TRowPatternFactor {
     uint64_t QuantityMax;
     bool Greedy;
     bool Output; //include in output with ALL ROW PER MATCH
+    bool Unused; // optimization flag; is true when the variable is not used in defines and measures
 };
 
 THashSet<TString> GetPatternVars(const TRowPattern&);

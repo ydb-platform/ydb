@@ -215,6 +215,10 @@ private:
             {
                 return TStatus::Ok;
             }
+            case TKikimrKey::Type::PGObject:
+            {
+                return TStatus::Ok;
+            }
         }
 
         return TStatus::Error;
@@ -380,7 +384,6 @@ private:
             if (!NPgTypeAnn::RewriteValuesColumnNames(node, table, ctx, Types)) {
                 return TStatus::Error;
             }
-            rowType = table->SchemeNode;
             return TStatus::Repeat;
         }
 
@@ -837,6 +840,12 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             auto columnInfo = typeAnnotations.find(name);
             auto columnMetaIt = meta->Columns.find(name);
 
+            if (!SessionCtx->Config().EnableColumnsWithDefault) {
+                ctx.AddError(TIssue(ctx.GetPosition(defaultSettingExpr.Pos()),
+                    "Columns with default values are not supported yet."));
+                return TStatus::Error;
+            }
+
             if (columnInfo == typeAnnotations.end() || columnMetaIt == meta->Columns.end()) {
                 ctx.AddError(TIssue(ctx.GetPosition(defaultSettingExpr.Pos()), TStringBuilder()
                     << "Unexpected default expr for column " << name));
@@ -1113,6 +1122,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 meta->TableSettings.PartitionByHashFunction = TString(
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                 );
+            } else if (name == "storeExternalBlobs") {
+                meta->TableSettings.StoreExternalBlobs = TString(setting.Value().Cast<TCoAtom>().Value());
             } else {
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                     TStringBuilder() << "Unknown table profile setting: " << name));
@@ -1201,15 +1212,13 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    if (columnTuple.Size() > 2) {
-                        auto families = columnTuple.Item(2);
-                        if (families.Cast<TCoAtomList>().Size() > 1) {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                                << " Column: \"" << name
-                                << "\". Several column families for a single column are not yet supported"));
-                            return TStatus::Error;
-                        }
+                    auto families = columnTuple.Item(3);
+                    if (families.Cast<TCoAtomList>().Size() > 1) {
+                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                            << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                            << " Column: \"" << name
+                            << "\". Several column families for a single column are not yet supported"));
+                        return TStatus::Error;
                     }
                 }
             } else if (name == "dropColumns") {
@@ -1564,6 +1573,11 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             }
         }
 
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandlePgDropObject(TPgDropObject node, TExprContext& /*ctx*/) override {
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

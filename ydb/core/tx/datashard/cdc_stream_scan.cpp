@@ -2,6 +2,8 @@
 #include "change_record_body_serializer.h"
 #include "datashard_impl.h"
 
+#include <ydb/core/protos/datashard_config.pb.h>
+
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
 

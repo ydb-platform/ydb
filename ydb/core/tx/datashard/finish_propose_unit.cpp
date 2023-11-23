@@ -250,8 +250,7 @@ TString TFinishProposeUnit::PrintErrors(const NKikimrTxDataShard::TEvProposeTran
     TStringOutput str(s);
     str << "[ ";
     for (size_t i = 0; i < rec.ErrorSize(); ++i) {
-        str << NKikimrTxDataShard::TError_EKind_Name(rec.GetError(i).GetKind())
-            << "(" << rec.GetError(i).GetReason() << ") ";
+        str << rec.GetError(i).GetKind() << "(" << rec.GetError(i).GetReason() << ") ";
     }
     str << "]";
     return s;

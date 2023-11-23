@@ -6,7 +6,6 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/core/kqp/provider/yql_kikimr_results.h>
 
 #include <ydb/library/yql/core/yql_opt_proposed_by_data.h>
 #include <ydb/library/yql/core/services/yql_plan.h>
@@ -21,7 +20,6 @@
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/sql/sql.h>
 
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/random_provider/random_provider.h>
@@ -904,7 +902,6 @@ public:
         , IsInternalCall(isInternalCall)
         , FederatedQuerySetup(federatedQuerySetup)
         , SessionCtx(new TKikimrSessionContext(funcRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider))
-        , ClustersMap({{Cluster, TString(KikimrProviderName)}})
         , TypesCtx(MakeIntrusive<TTypeAnnotationContext>())
         , PlanBuilder(CreatePlanBuilder(*TypesCtx))
         , FakeWorld(ExprCtx->NewWorld(TPosition()))
@@ -1064,101 +1061,31 @@ private:
     TExprNode::TPtr CompileQuery(const TKqpQueryRef& query, bool isSql, bool sqlAutoCommit, TExprContext& ctx,
         TMaybe<TSqlVersion>& sqlVersion, const TMaybe<bool>& usePgParser) const
     {
-        TAstParseResult astRes;
-        if (isSql) {
-            NSQLTranslation::TTranslationSettings settings{};
-            if (usePgParser) {
-                settings.PgParser = *usePgParser;
-            }
-            if (sqlVersion) {
-                settings.SyntaxVersion = *sqlVersion;
-
-                if (*sqlVersion > 0) {
-                    // Restrict fallback to V0
-                    settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
-                }
-            } else {
-                settings.SyntaxVersion = SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef();
-                settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
-            }
-
-            if (SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources()) {
-                settings.DynamicClusterProvider = NYql::KikimrProviderName;
-                settings.BindingsMode = SessionCtx->Config().BindingsMode;
-            }
-
-            settings.InferSyntaxVersion = true;
-            settings.V0ForceDisable = false;
-            settings.WarnOnV0 = false;
-            settings.DefaultCluster = Cluster;
-            settings.ClusterMapping = ClustersMap;
-            auto tablePathPrefix = SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef();
-            if (!tablePathPrefix.empty()) {
-                settings.PathPrefix = tablePathPrefix;
-            }
-            settings.EndOfQueryCommit = sqlAutoCommit;
-            settings.Flags.insert("FlexibleTypes");
-            settings.Flags.insert("AnsiLike");
-
-            if (SessionCtx->Query().Type == EKikimrQueryType::Scan
-                || SessionCtx->Query().Type == EKikimrQueryType::YqlScript
-                || SessionCtx->Query().Type == EKikimrQueryType::YqlScriptStreaming
-                || SessionCtx->Query().Type == EKikimrQueryType::Query
-                || SessionCtx->Query().Type == EKikimrQueryType::Script)
-            {
-                // We enable EmitAggApply for filter and aggregate pushdowns to Column Shards
-                settings.Flags.insert("EmitAggApply");
-            } else {
-                settings.Flags.insert("DisableEmitStartsWith");
-            }
-
-            if (SessionCtx->Query().Type == EKikimrQueryType::Query
-                || SessionCtx->Query().Type == EKikimrQueryType::Script)
-            {
-                settings.Flags.insert("AnsiOptionalAs");
-                settings.Flags.insert("WarnOnAnsiAliasShadowing");
-                settings.Flags.insert("AnsiCurrentRow");
-                settings.Flags.insert("AnsiInForEmptyOrNullableItemsCollections");
-            }
-
-            if (query.ParameterTypes) {
-                NSQLTranslation::TTranslationSettings versionSettings = settings;
-                NYql::TIssues versionIssues;
-
-                if (ParseTranslationSettings(query.Text, versionSettings, versionIssues) && versionSettings.SyntaxVersion == 1) {
-                    for (const auto& [paramName, paramType] : *(query.ParameterTypes)) {
-                        auto type = NYql::ParseTypeFromYdbType(paramType, ctx);
-                        if (type != nullptr) {
-                            if (paramName.StartsWith("$")) {
-                                settings.DeclaredNamedExprs[paramName.substr(1)] = NYql::FormatType(type);
-                            } else {
-                                settings.DeclaredNamedExprs[paramName] = NYql::FormatType(type);
-                            }
-                        }
-                    }
-                }
-            }
-
-            ui16 actualSyntaxVersion = 0;
-            astRes = NSQLTranslation::SqlToYql(query.Text, settings, nullptr, &actualSyntaxVersion);
-            TypesCtx->DeprecatedSQL = (actualSyntaxVersion == 0);
-            sqlVersion = actualSyntaxVersion;
+        std::shared_ptr<NYql::TAstParseResult> queryAst;
+        if (!query.AstResult) {
+            auto astRes = ParseQuery(SessionCtx->Query().Type, usePgParser,
+                query.Text, query.ParameterTypes, isSql, sqlAutoCommit, sqlVersion, TypesCtx->DeprecatedSQL,
+                Cluster, SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef(),
+                SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), SessionCtx->Config().BindingsMode,
+                SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources(), ctx, SessionCtx->Config().EnablePgConstsToParams);
+            queryAst = std::make_shared<NYql::TAstParseResult>(std::move(astRes));
         } else {
-            sqlVersion = {};
-            astRes = ParseAst(query.Text);
-
-            // Do not check SQL constraints on s-expressions input, as it may come from both V0/V1.
-            // Constraints were already checked on type annotation of SQL query.
-            TypesCtx->DeprecatedSQL = true;
+            queryAst = query.AstResult->Ast;
+            sqlVersion = query.AstResult->SqlVersion;
+            if (query.AstResult->DeprecatedSQL) {
+               TypesCtx->DeprecatedSQL = *query.AstResult->DeprecatedSQL;
+            }
         }
 
-        ctx.IssueManager.AddIssues(astRes.Issues);
-        if (!astRes.IsOk()) {
+        YQL_ENSURE(queryAst);
+        ctx.IssueManager.AddIssues(queryAst->Issues);
+        if (!queryAst->IsOk()) {
             return nullptr;
         }
 
+        YQL_ENSURE(queryAst->Root);
         TExprNode::TPtr result;
-        if (!CompileExpr(*astRes.Root, result, ctx, ModuleResolver.get(), nullptr)) {
+        if (!CompileExpr(*queryAst->Root, result, ctx, ModuleResolver.get(), nullptr)) {
             return nullptr;
         }
 
@@ -1504,12 +1431,13 @@ private:
             *PlanBuilder, sqlVersion, true /* UseDqExplain */);
     }
 
-    void InitS3Provider() {
+    void InitS3Provider(EKikimrQueryType queryType) {
         auto state = MakeIntrusive<NYql::TS3State>();
         state->Types = TypesCtx.Get();
         state->FunctionRegistry = FuncRegistry;
         state->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
         state->Configuration->WriteThroughDqIntegration = true;
+        state->Configuration->AllowAtomicUploadCommit = queryType == EKikimrQueryType::Script;
 
         state->Configuration->Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
 
@@ -1565,7 +1493,7 @@ private:
         TypesCtx->AddDataSink(providerNames, kikimrDataSink);
 
         if ((queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query) && FederatedQuerySetup) {
-            InitS3Provider();
+            InitS3Provider(queryType);
             InitGenericProvider();
         }
 
@@ -1668,7 +1596,6 @@ private:
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
-    THashMap<TString, TString> ClustersMap;
 
     TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> FuncRegistryHolder;
     const NKikimr::NMiniKQL::IFunctionRegistry* FuncRegistry;

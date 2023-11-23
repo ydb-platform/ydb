@@ -12,6 +12,7 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/histogram/hdr/histogram.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 #include <util/generic/queue.h>
 #include <util/random/fast.h>

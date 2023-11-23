@@ -152,7 +152,7 @@ struct TAppData {
 
     NHttpProxy::IAuthFactory* DataStreamsAuthFactory = nullptr;
 
-    NActors::IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&);
+    NActors::IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&) = nullptr;
 
     const NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory* PersQueueGetReadSessionsInfoWorkerFactory = nullptr;
     const NPQ::IPersQueueMirrorReaderFactory* PersQueueMirrorReaderFactory = nullptr;

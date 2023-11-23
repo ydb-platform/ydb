@@ -73,7 +73,7 @@ function main() {
 
 let run = () => {
   require.config({
-    paths: { vs: "../../ext/monaco-editor/vs" }
+    paths: { vs: "../cms/ext/monaco-editor/vs" }
   });
 
   require(["vs/editor/editor.main"], function () {

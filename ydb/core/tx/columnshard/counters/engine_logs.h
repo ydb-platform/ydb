@@ -251,11 +251,6 @@ private:
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionSizeDistribution;
     std::vector<std::shared_ptr<TIncrementalHistogram>> PortionRecordsDistribution;
 public:
-    NMonitoring::TDynamicCounters::TCounterPtr OverloadGranules;
-    NMonitoring::TDynamicCounters::TCounterPtr CompactOverloadGranulesSelection;
-    NMonitoring::TDynamicCounters::TCounterPtr NoCompactGranulesSelection;
-    NMonitoring::TDynamicCounters::TCounterPtr SplitCompactGranulesSelection;
-    NMonitoring::TDynamicCounters::TCounterPtr InternalCompactGranulesSelection;
 
     class TPortionsInfoGuard {
     private:

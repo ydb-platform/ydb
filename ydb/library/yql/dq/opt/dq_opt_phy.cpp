@@ -379,7 +379,7 @@ TExprBase DqBuildPartitionsStageStub(TExprBase node, TExprContext& ctx, IOptimiz
                     .Build()
                 .Build()
             .Build()
-        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Settings(TDqStageSettings().SetPartitionMode(TDqStageSettings::EPartitionMode::Aggregate).BuildNode(ctx, node.Pos()))
         .Done();
 
     return Build<TDqCnUnionAll>(ctx, node.Pos())
@@ -734,7 +734,7 @@ TExprBase DqBuildPureFlatmapStage(TExprBase node, TExprContext& ctx) {
                 .Build()
             .Build()
         .Settings(TDqStageSettings::New()
-            .SetSinglePartition()
+            .SetPartitionMode(TDqStageSettings::EPartitionMode::Single)
             .BuildNode(ctx, flatmap.Input().Pos()))
         .Done();
 
@@ -1177,7 +1177,7 @@ TExprBase DqBuildShuffleStage(TExprBase node, TExprContext& ctx, IOptimizationCo
                     .Build()
                 .Build()
             .Build()
-        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Settings(TDqStageSettings().SetPartitionMode(TDqStageSettings::EPartitionMode::Aggregate).BuildNode(ctx, node.Pos()))
         .Done();
 
     return Build<TDqCnUnionAll>(ctx, node.Pos())
@@ -2098,7 +2098,7 @@ TExprBase DqBuildPureExprStage(TExprBase node, TExprContext& ctx) {
                 .Build()
             .Build()
         .Settings(TDqStageSettings::New()
-            .SetSinglePartition()
+            .SetPartitionMode(TDqStageSettings::EPartitionMode::Single)
             .BuildNode(ctx, node.Pos()))
         .Done();
 
@@ -2229,7 +2229,7 @@ TExprBase DqBuildPrecompute(TExprBase node, TExprContext& ctx) {
     return phyPrecompute;
 }
 
-TExprBase DqBuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
+TExprBase DqBuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TParentsMap& parentsMap, bool allowStageMultiUsage) {
     if (!node.Maybe<TCoHasItems>()) {
         return node;
     }
@@ -2241,6 +2241,10 @@ TExprBase DqBuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContex
     }
 
     auto unionAll = hasItems.List().Cast<TDqCnUnionAll>();
+
+    if (!IsSingleConsumerConnection(unionAll, parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
 
     if (auto connToPushableStage = DqBuildPushableStage(unionAll, ctx)) {
         return TExprBase(ctx.ChangeChild(*node.Raw(), TCoHasItems::idx_List, std::move(connToPushableStage)));

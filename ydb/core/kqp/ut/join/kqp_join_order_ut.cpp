@@ -76,7 +76,9 @@ static void CreateSampleTable(TSession session) {
 
 static TKikimrRunner GetKikimrWithJoinSettings(){
     TVector<NKikimrKqp::TKqpSetting> settings;
+
     NKikimrKqp::TKqpSetting setting;
+    
     setting.SetName("OptEnableCostBasedOptimization");
     setting.SetValue("true");
     settings.push_back(setting);
@@ -113,13 +115,50 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
                   ON U.id = V.id
             )");
 
-            auto result = session.ExplainDataQuery(query).ExtractValueSync();
+            auto result = session.ExecuteDataQuery(query,TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-            NJson::TJsonValue plan;
-            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-            Cout << result.GetPlan();
+            //NJson::TJsonValue plan;
+            //NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            //Cout << result.GetPlan();
+        }
+    }
+
+    Y_UNIT_TEST(FourWayJoinLeftFirst) {
+
+        auto kikimr = GetKikimrWithJoinSettings();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTable(session);
+
+        /* join with parameters */
+        {
+            const TString query = Q_(R"(
+                SELECT *
+                FROM `/Root/R` as R
+                  LEFT JOIN
+                     `/Root/S` as S
+                  ON R.id = S.id
+                  INNER JOIN
+                     `/Root/T` as T
+                  ON S.id = T.id
+                  INNER JOIN
+                     `/Root/U` as U
+                  ON T.id = U.id
+                  INNER JOIN
+                     `/Root/V` as V
+                  ON U.id = V.id
+            )");
+
+            auto result = session.ExecuteDataQuery(query,TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            //NJson::TJsonValue plan;
+            //NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            //Cout << result.GetPlan();
         }
     }
 
@@ -260,6 +299,44 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
                      `/Root/U` as U
                   ON T.id = U.id
                   INNER JOIN
+                     `/Root/V` as V
+                  ON U.id = V.id
+                WHERE R.payload1 = 'blah' AND V.payload5 = 'blah' AND R.id = 1
+            )");
+
+            auto result = session.ExplainDataQuery(query).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            Cout << result.GetPlan();
+        }
+    }
+
+    Y_UNIT_TEST(FourWayJoinWithPredsAndEquivAndLeft) {
+
+        auto kikimr = GetKikimrWithJoinSettings();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTable(session);
+
+        /* join with parameters */
+        {
+            const TString query = Q_(R"(
+                SELECT *
+                FROM `/Root/R` as R
+                  INNER JOIN
+                     `/Root/S` as S
+                  ON R.id = S.id
+                  INNER JOIN
+                     `/Root/T` as T
+                  ON S.id = T.id
+                  INNER JOIN
+                     `/Root/U` as U
+                  ON T.id = U.id
+                  LEFT JOIN
                      `/Root/V` as V
                   ON U.id = V.id
                 WHERE R.payload1 = 'blah' AND V.payload5 = 'blah' AND R.id = 1

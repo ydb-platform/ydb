@@ -1,6 +1,7 @@
 #include "topic_parser.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <util/folder/path.h>
 

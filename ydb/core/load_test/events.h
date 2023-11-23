@@ -1,5 +1,6 @@
 #include <ydb/core/base/events.h>
 
+#include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/load_test.pb.h>
 
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>

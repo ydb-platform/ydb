@@ -11,6 +11,7 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tabletid.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -33,6 +34,8 @@
 #include <util/generic/vector.h>
 #include <util/generic/xrange.h>
 #include <util/string/builder.h>
+
+#include <google/protobuf/util/json_util.h>
 
 namespace NKikimr {
 namespace NSchemeBoard {

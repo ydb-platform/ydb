@@ -1,3 +1,4 @@
+/* skip double format */
 SELECT
     AsList(
         ListMap(AsList(33,42),($x)->{

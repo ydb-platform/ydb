@@ -8,6 +8,7 @@
 #include <yt/yt/core/yson/parser.h>
 
 #include <library/cpp/yt/misc/variant.h>
+#include <library/cpp/yt/misc/tls.h>
 
 #include <util/stream/mem.h>
 
@@ -29,20 +30,20 @@ const auto IntStringVariant = VariantStructLogicalType({
     {"string", SimpleLogicalType(ESimpleLogicalValueType::String)},
 });
 
-thread_local TYsonConverterConfig PositionalToNamedConfigInstance;
+YT_THREAD_LOCAL(TYsonConverterConfig) PositionalToNamedConfigInstance;
 
 class TWithConfig
 {
 public:
     TWithConfig(const TYsonConverterConfig& config)
-        : OldConfig_(PositionalToNamedConfigInstance)
+        : OldConfig_(GetTlsRef(PositionalToNamedConfigInstance))
     {
-        PositionalToNamedConfigInstance = config;
+        GetTlsRef(PositionalToNamedConfigInstance) = config;
     }
 
     ~TWithConfig()
     {
-        PositionalToNamedConfigInstance = OldConfig_;
+        GetTlsRef(PositionalToNamedConfigInstance) = OldConfig_;
     }
 private:
     TYsonConverterConfig OldConfig_;
@@ -73,7 +74,7 @@ TString ConvertYson(
             };
             converter = CreateYsonClientToServerConverter(descriptor, config);
         } else {
-            converter = CreateYsonServerToClientConverter(descriptor, PositionalToNamedConfigInstance);
+            converter = CreateYsonServerToClientConverter(descriptor, GetTlsRef(PositionalToNamedConfigInstance));
         }
     } catch (const std::exception& ex) {
         ADD_FAILURE() << "cannot create converter: " << ex.what();

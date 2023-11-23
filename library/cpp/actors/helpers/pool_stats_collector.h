@@ -158,6 +158,8 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr MinConsumedCpu;
         NMonitoring::TDynamicCounters::TCounterPtr MaxBookedCpu;
         NMonitoring::TDynamicCounters::TCounterPtr MinBookedCpu;
+        NMonitoring::TDynamicCounters::TCounterPtr SpinningTimeUs;
+        NMonitoring::TDynamicCounters::TCounterPtr SpinThresholdUs;
 
 
         THistogramCounters LegacyActivationTimeHistogram;
@@ -220,6 +222,9 @@ private:
             MinConsumedCpu = PoolGroup->GetCounter("MinConsumedCpuByPool", false);
             MaxBookedCpu = PoolGroup->GetCounter("MaxBookedCpuByPool", false);
             MinBookedCpu = PoolGroup->GetCounter("MinBookedCpuByPool", false);
+            SpinningTimeUs = PoolGroup->GetCounter("SpinningTimeUs", true);
+            SpinThresholdUs = PoolGroup->GetCounter("SpinThresholdUs", false);
+
 
             LegacyActivationTimeHistogram.Init(PoolGroup.Get(), "ActivationTime", "usec", 5*1000*1000);
             ActivationTimeHistogram = PoolGroup->GetHistogram(
@@ -270,6 +275,9 @@ private:
             *DecreasingThreadsByHoggishState = poolStats.DecreasingThreadsByHoggishState;
             *DecreasingThreadsByExchange = poolStats.DecreasingThreadsByExchange;
             *NotEnoughCpuExecutions = stats.NotEnoughCpuExecutions;
+
+            *SpinningTimeUs = poolStats.SpinningTimeUs;
+            *SpinThresholdUs = poolStats.SpinThresholdUs;
 
             LegacyActivationTimeHistogram.Set(stats.ActivationTimeHistogram);
             ActivationTimeHistogram->Reset();
@@ -322,6 +330,10 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr MaxBookedCpu;
         NMonitoring::TDynamicCounters::TCounterPtr MinBookedCpu;
 
+        NMonitoring::TDynamicCounters::TCounterPtr AvgAwakeningTimeUs;
+        NMonitoring::TDynamicCounters::TCounterPtr AvgWakingUpTimeUs;
+
+
         void Init(NMonitoring::TDynamicCounters* group) {
             Group = group;
 
@@ -329,6 +341,8 @@ private:
             MinConsumedCpu = Group->GetCounter("MinConsumedCpu", false);
             MaxBookedCpu = Group->GetCounter("MaxBookedCpu", false);
             MinBookedCpu = Group->GetCounter("MinBookedCpu", false);
+            AvgAwakeningTimeUs = Group->GetCounter("AvgAwakeningTimeUs", false);
+            AvgWakingUpTimeUs = Group->GetCounter("AvgWakingUpTimeUs", false);
         }
 
         void Set(const THarmonizerStats& harmonizerStats) {
@@ -337,10 +351,11 @@ private:
             *MinConsumedCpu = harmonizerStats.MinConsumedCpu;
             *MaxBookedCpu = harmonizerStats.MaxBookedCpu;
             *MinBookedCpu = harmonizerStats.MinBookedCpu;
+
+            *AvgAwakeningTimeUs = harmonizerStats.AvgAwakeningTimeUs;
+            *AvgWakingUpTimeUs = harmonizerStats.AvgWakingUpTimeUs;
 #else
-            Y_UNUSED(poolStats);
-            Y_UNUSED(stats);
-            Y_UNUSED(numThreads);
+            Y_UNUSED(harmonizerStats);
 #endif
         }
 

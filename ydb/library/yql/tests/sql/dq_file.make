@@ -23,6 +23,7 @@ DEPENDS(
     ydb/library/yql/tools/dqrun
     ydb/library/yql/tools/yqlrun
     ydb/library/yql/tests/common/test_framework/udfs_deps
+    ydb/library/yql/udfs/test/test_import
 )
 DATA(
     arcadia/ydb/library/yql/tests/sql # python files

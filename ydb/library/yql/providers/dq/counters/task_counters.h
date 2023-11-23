@@ -119,7 +119,7 @@ struct TTaskCounters : public TCounters {
         };
         if (stats.ComputeCpuTime) SetCounter(GetCounterName("TaskRunner", labels, "ComputeCpuTime"), stats.ComputeCpuTime.MicroSeconds());
         if (stats.BuildCpuTime)   SetCounter(GetCounterName("TaskRunner", labels, "BuildCpuTime"),   stats.BuildCpuTime.MicroSeconds());
-        if (stats.WaitTime)       SetCounter(GetCounterName("TaskRunner", labels, "WaitTime"),       stats.WaitTime.MicroSeconds());
+        if (stats.WaitInputTime)  SetCounter(GetCounterName("TaskRunner", labels, "WaitInputTime"),  stats.WaitInputTime.MicroSeconds());
         if (stats.WaitOutputTime) SetCounter(GetCounterName("TaskRunner", labels, "WaitOutputTime"), stats.WaitOutputTime.MicroSeconds());
     }
 

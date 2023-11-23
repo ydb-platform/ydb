@@ -1,6 +1,8 @@
 #include "kqp_prepared_query.h"
 
+#include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/library/yql/core/yql_data_provider.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
@@ -96,6 +98,10 @@ TKqpPhyTxHolder::TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPrepar
     }
 }
 
+TIntrusiveConstPtr<TTableConstInfoMap> TKqpPhyTxHolder::GetTableConstInfoById() const {
+    return TableConstInfoById;
+}
+
 bool TKqpPhyTxHolder::IsLiteralTx() const {
     return LiteralTx;
 }
@@ -157,6 +163,16 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
     }
 
     QueryTables = TVector<TString>(tablesSet.begin(), tablesSet.end());
+}
+
+TIntrusivePtr<TTableConstInfo>& TPreparedQueryHolder::GetInfo(const TTableId& tableId) {
+    auto info = TableConstInfoById->Map.FindPtr(tableId);
+    MKQL_ENSURE_S(info);
+    return *info;
+}
+
+const THashMap<TTableId, TIntrusivePtr<TTableConstInfo>>& TPreparedQueryHolder::GetTableConstInfo() const {
+    return TableConstInfoById->Map;
 }
 
 void TPreparedQueryHolder::FillTable(const NKqpProto::TKqpPhyTable& phyTable) {

@@ -24,6 +24,7 @@ target_link_libraries(providers-common-http_gateway PUBLIC
   providers-common-proto
   yql-public-issue
   yql-utils-log
+  library-yql-utils
 )
 target_sources(providers-common-http_gateway PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/http_gateway/yql_http_gateway.cpp

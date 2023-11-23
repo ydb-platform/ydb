@@ -1070,6 +1070,14 @@ private:
             i64 Min;
             i64 Max;
             i64 Sum;
+            void AssignStats(const TStatisticsNode& other) {
+                Name  = other.Name;
+                Avg   = other.Avg;
+                Count = other.Count;
+                Min   = other.Min;
+                Max   = other.Max;
+                Sum   = other.Sum;
+            }
             void Write(NYson::TYsonWriter& writer) {
                 writer.OnBeginMap();
                 if (Children.empty()) {
@@ -1149,6 +1157,18 @@ private:
             node->Avg = metric.GetAvg();
             node->Max = metric.GetMax();
             node->Min = metric.GetMin();
+        }
+
+        //
+        // Copy Ingress/Egress to top level
+        // TODO: move all TaskRunner::Stage=Total stats to top level???
+        //
+        auto& stageTotalNode = statistics.Children["TaskRunner"].Children["Stage=Total"];
+        if (const auto& it = stageTotalNode.Children.find("IngressBytes"); it != stageTotalNode.Children.end()) {
+            statistics.Children["IngressBytes"].AssignStats(it->second);
+        }
+        if (const auto& it = stageTotalNode.Children.find("EgressBytes"); it != stageTotalNode.Children.end()) {
+            statistics.Children["EgressBytes"].AssignStats(it->second);
         }
 
         NYson::TYsonWriter writer(&out);
@@ -1890,9 +1910,8 @@ private:
 
         //todo: consider cluster name clashes
         AddClustersFromConfig(gatewaysConfig, clusters);
-        AddClustersFromConnections(YqConnections,
-            Params.Config.GetCommon().GetUseBearerForYdb(),
-            Params.Config.GetCommon().GetObjectStorageEndpoint(),
+        AddClustersFromConnections(Params.Config.GetCommon(),
+            YqConnections,
             monitoringEndpoint,
             Params.AuthToken,
             Params.AccountIdSignatures,

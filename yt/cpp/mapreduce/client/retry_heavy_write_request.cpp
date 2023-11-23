@@ -56,7 +56,10 @@ void RetryHeavyWriteRequest(
             header.AddTransactionId(attemptTx.GetId(), /* overwrite = */ true);
             header.SetRequestCompression(ToString(context.Config->ContentEncoding));
 
-            auto request = context.HttpClient->StartRequest(GetFullUrl(hostName, context, header), requestId, header);
+            auto request = context.HttpClient->StartRequest(
+                GetFullUrlForProxy(hostName, context, header),
+                requestId,
+                header);
             TransferData(input.Get(), request->GetStream());
             request->Finish()->GetResponse();
         } catch (TErrorResponse& e) {

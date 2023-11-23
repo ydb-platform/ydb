@@ -106,7 +106,7 @@ public:
 
             TActorId txproxy = MakeTxProxyID();
             TBase::Send(txproxy, request.Release());
-            Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
+            UnsafeBecome(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
         } else {
             TBase::Bootstrap();
             if (!TBase::RequestSettings.FilterFields.empty()) {

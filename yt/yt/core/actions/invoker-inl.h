@@ -23,7 +23,6 @@ TExtendedCallback<R(TArgs...)>::Via(IInvokerPtr invoker) &&
     return ViaImpl(std::move(*this), std::move(invoker));
 }
 
-
 template <class R, class... TArgs>
 TExtendedCallback<R(TArgs...)>
 TExtendedCallback<R(TArgs...)>::ViaImpl(TExtendedCallback<R(TArgs...)> callback, TIntrusivePtr<IInvoker> invoker)

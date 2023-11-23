@@ -40,6 +40,5 @@ jobs:
     secrets: inherit
     with:
       build_target: ydb/
-      sanitizer: none
       run_build: true
       run_tests: true

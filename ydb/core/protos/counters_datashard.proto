@@ -26,6 +26,7 @@ enum ESimpleCounters {
     COUNTER_READ_ITERATORS_EXHAUSTED_COUNT = 16                    [(CounterOpts) = {Name: "ReadIteratorsExhaustedCount"}];
     COUNTER_CHANGE_RECORDS_REQUESTED = 17                          [(CounterOpts) = {Name: "ChangeRecordsRequested"}];
     COUNTER_CHANGE_DELIVERY_LAG = 18                               [(CounterOpts) = {Name: "ChangeDeliveryLag"}];
+    COUNTER_CHANGE_DATA_LAG = 19                                   [(CounterOpts) = {Name: "ChangeDataLag"}];
 }
 
 enum ECumulativeCounters {

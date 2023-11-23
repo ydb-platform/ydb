@@ -1,5 +1,6 @@
 #include "protobuf_interop.h"
 
+#include "config.h"
 #include "consumer.h"
 #include "forwarding_consumer.h"
 #include "null_consumer.h"
@@ -26,7 +27,12 @@
 
 #include <yt/yt/core/concurrency/thread_affinity.h>
 
+#include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
+#include <library/cpp/yt/memory/leaky_singleton.h>
+
 #include <library/cpp/yt/misc/cast.h>
+
+#include <library/cpp/yt/string/string.h>
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
@@ -68,6 +74,12 @@ static constexpr int ProtobufMapValueFieldNumber = 2;
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+const NLogging::TLogger Logger("ProtobufInterop");
+
+////////////////////////////////////////////////////////////////////////////////
 
 bool IsSignedIntegralType(FieldDescriptor::Type type)
 {
@@ -141,7 +153,33 @@ TString DeriveYsonName(const TString& protobufName, const google::protobuf::File
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+struct TProtobufInteropConfigSingleton
+{
+    TAtomicIntrusivePtr<TProtobufInteropDynamicConfig> Config{New<TProtobufInteropDynamicConfig>()};
+};
+
+TProtobufInteropConfigSingleton* GlobalProtobufInteropConfig()
+{
+    return LeakySingleton<TProtobufInteropConfigSingleton>();
+}
+
+TProtobufInteropDynamicConfigPtr GetProtobufInteropConfig()
+{
+    return GlobalProtobufInteropConfig()->Config.Acquire();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+void SetProtobufInteropConfig(TProtobufInteropDynamicConfigPtr config)
+{
+    GlobalProtobufInteropConfig()->Config.Store(std::move(config));
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -850,6 +888,31 @@ protected:
             }
         }
     }
+
+    void ValidateString(TStringBuf data, TString fieldFullName)
+    {
+        auto config = GetProtobufInteropConfig();
+        if (config->Utf8Check == EUtf8Check::Disable || IsUtf(data)) {
+            return;
+        }
+        switch (config->Utf8Check) {
+            case EUtf8Check::Disable:
+                break;
+            case EUtf8Check::LogOnFail:
+                YT_LOG_WARNING("Field %v accepts only valid UTF-8 sequence, but got (%Qv)",
+                    YPathStack_.GetHumanReadablePath(),
+                    data);
+                break;
+            case EUtf8Check::ThrowOnFail:
+                THROW_ERROR_EXCEPTION("Field %v accepts only valid UTF-8 sequence, but got (%Qv)",
+                    YPathStack_.GetHumanReadablePath(),
+                    data)
+                    << TErrorAttribute("ypath", YPathStack_.GetPath())
+                    << TErrorAttribute("proto_field", fieldFullName);
+                break;
+        }
+    }
+
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -862,10 +925,10 @@ public:
     TProtobufWriter(
         ZeroCopyOutputStream* outputStream,
         const TProtobufMessageType* rootType,
-        const TProtobufWriterOptions& options)
+        TProtobufWriterOptions options)
         : OutputStream_(outputStream)
         , RootType_(rootType)
-        , Options_(options)
+        , Options_(std::move(options))
         , BodyOutputStream_(&BodyString_)
         , BodyCodedStream_(&BodyOutputStream_)
         , AttributeValueStream_(AttributeValue_)
@@ -954,12 +1017,7 @@ private:
             const auto* field = FieldStack_.back().Field;
             switch (field->GetType()) {
                 case FieldDescriptor::TYPE_STRING:
-                    if (Options_.CheckUtf8 && !IsUtf(value)) {
-                        THROW_ERROR_EXCEPTION("Field %v accepts only valid UTF-8 sequence",
-                            YPathStack_.GetHumanReadablePath())
-                            << TErrorAttribute("ypath", YPathStack_.GetPath())
-                            << TErrorAttribute("proto_field", field->GetFullName());
-                    }
+                    ValidateString(value, field->GetFullName());
                 case FieldDescriptor::TYPE_BYTES:
                     BodyCodedStream_.WriteVarint64(value.length());
                     BodyCodedStream_.WriteRaw(value.begin(), static_cast<int>(value.length()));
@@ -1118,6 +1176,11 @@ private:
 
     void OnMyKeyedItem(TStringBuf key) override
     {
+        TString keyData;
+        if (Options_.ConvertSnakeToCamelCase) {
+            keyData = UnderscoreCaseToCamelCase(key);
+            key = keyData;
+        }
         const auto* field = FieldStack_.back().Field;
         if (field && field->IsYsonMap() && !FieldStack_.back().ParsingYsonMapFromList) {
             OnMyKeyedItemYsonMap(field, key);
@@ -1739,7 +1802,7 @@ private:
 std::unique_ptr<IYsonConsumer> CreateProtobufWriter(
     ZeroCopyOutputStream* outputStream,
     const TProtobufMessageType* rootType,
-    const TProtobufWriterOptions& options)
+    TProtobufWriterOptions options)
 {
     return std::make_unique<TProtobufWriter>(outputStream, rootType, options);
 }
@@ -2475,11 +2538,8 @@ private:
                                 << TErrorAttribute("proto_field", field->GetFullName());
                         }
                         TStringBuf data(PooledString_.data(), length);
-                        if (Options_.CheckUtf8 && field->GetType() == FieldDescriptor::TYPE_STRING && !IsUtf(data)) {
-                            THROW_ERROR_EXCEPTION("Field %v expected to contain valid UTF-8 sequence",
-                                YPathStack_.GetHumanReadablePath())
-                                << TErrorAttribute("ypath", YPathStack_.GetPath())
-                                << TErrorAttribute("proto_field", field->GetFullName());
+                        if (field->GetType() == FieldDescriptor::TYPE_STRING) {
+                            ValidateString(data, field->GetFullName());
                         }
                         ParseScalar([&] {
                             if (field->GetBytesFieldConverter()) {
@@ -2954,13 +3014,21 @@ TString YsonStringToProto(
     const TProtobufMessageType* payloadType,
     EUnknownYsonFieldsMode unknownFieldsMode)
 {
-    TString serializedProto;
-    google::protobuf::io::StringOutputStream protobufStream(&serializedProto);
     TProtobufWriterOptions protobufWriterOptions;
     protobufWriterOptions.UnknownYsonFieldModeResolver =
         TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(
             unknownFieldsMode);
-    auto protobufWriter = CreateProtobufWriter(&protobufStream, payloadType, protobufWriterOptions);
+    return YsonStringToProto(ysonString, payloadType, std::move(protobufWriterOptions));
+}
+
+TString YsonStringToProto(
+    const TYsonString& ysonString,
+    const TProtobufMessageType* payloadType,
+    TProtobufWriterOptions options)
+{
+    TString serializedProto;
+    google::protobuf::io::StringOutputStream protobufStream(&serializedProto);
+    auto protobufWriter = CreateProtobufWriter(&protobufStream, payloadType, std::move(options));
     ParseYsonStringBuffer(ysonString.AsStringBuf(), EYsonType::Node, protobufWriter.get());
     return serializedProto;
 }

@@ -22,6 +22,7 @@
 #include <library/cpp/yt/exception/exception.h>
 
 #include <library/cpp/yt/misc/thread_name.h>
+#include <library/cpp/yt/misc/tls.h>
 
 #include <util/string/subst.h>
 
@@ -60,15 +61,15 @@ TString ToString(TErrorCode code)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-thread_local bool ErrorSanitizerEnabled = false;
-thread_local TInstant ErrorSanitizerDatetimeOverride = {};
+YT_THREAD_LOCAL(bool) ErrorSanitizerEnabled = false;
+YT_THREAD_LOCAL(TInstant) ErrorSanitizerDatetimeOverride = {};
 
 TErrorSanitizerGuard::TErrorSanitizerGuard(TInstant datetimeOverride)
     : SavedEnabled_(ErrorSanitizerEnabled)
-    , SavedDatetimeOverride_(ErrorSanitizerDatetimeOverride)
+    , SavedDatetimeOverride_(GetTlsRef(ErrorSanitizerDatetimeOverride))
 {
     ErrorSanitizerEnabled = true;
-    ErrorSanitizerDatetimeOverride = datetimeOverride;
+    GetTlsRef(ErrorSanitizerDatetimeOverride) = datetimeOverride;
 }
 
 TErrorSanitizerGuard::~TErrorSanitizerGuard()
@@ -76,7 +77,7 @@ TErrorSanitizerGuard::~TErrorSanitizerGuard()
     YT_ASSERT(ErrorSanitizerEnabled);
 
     ErrorSanitizerEnabled = SavedEnabled_;
-    ErrorSanitizerDatetimeOverride = SavedDatetimeOverride_;
+    GetTlsRef(ErrorSanitizerDatetimeOverride) = SavedDatetimeOverride_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -282,7 +283,7 @@ private:
     void CaptureOriginAttributes()
     {
         if (ErrorSanitizerEnabled) {
-            Datetime_ = ErrorSanitizerDatetimeOverride;
+            Datetime_ = GetTlsRef(ErrorSanitizerDatetimeOverride);
             return;
         }
 
@@ -710,9 +711,14 @@ void TError::ThrowOnError() const
     }
 }
 
-TError TError::Wrap() const
+TError TError::Wrap() const &
 {
     return *this;
+}
+
+TError TError::Wrap() &&
+{
+    return std::move(*this);
 }
 
 Y_WEAK TString GetErrorSkeleton(const TError& /*error*/)
@@ -1212,54 +1218,54 @@ void Deserialize(TError& error, NYson::TYsonPullParserCursor* cursor)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TError operator << (TError error, const TErrorAttribute& attribute)
+TError& TError::operator <<= (const TErrorAttribute& attribute) &
 {
-    error.MutableAttributes()->SetYson(attribute.Key, attribute.Value);
-    return error;
+    MutableAttributes()->SetYson(attribute.Key, attribute.Value);
+    return *this;
 }
 
-TError operator << (TError error, const std::vector<TErrorAttribute>& attributes)
+TError& TError::operator <<= (const std::vector<TErrorAttribute>& attributes) &
 {
     for (const auto& attribute : attributes) {
-        error.MutableAttributes()->SetYson(attribute.Key, attribute.Value);
+        MutableAttributes()->SetYson(attribute.Key, attribute.Value);
     }
-    return error;
+    return *this;
 }
 
-TError operator << (TError error, const TError& innerError)
+TError& TError::operator <<= (const TError& innerError) &
 {
-    error.MutableInnerErrors()->push_back(innerError);
-    return error;
+    MutableInnerErrors()->push_back(innerError);
+    return *this;
 }
 
-TError operator << (TError error, TError&& innerError)
+TError& TError::operator <<= (TError&& innerError) &
 {
-    error.MutableInnerErrors()->push_back(std::move(innerError));
-    return error;
+    MutableInnerErrors()->push_back(std::move(innerError));
+    return *this;
 }
 
-TError operator << (TError error, const std::vector<TError>& innerErrors)
+TError& TError::operator <<= (const std::vector<TError>& innerErrors) &
 {
-    error.MutableInnerErrors()->insert(
-        error.MutableInnerErrors()->end(),
+    MutableInnerErrors()->insert(
+        MutableInnerErrors()->end(),
         innerErrors.begin(),
         innerErrors.end());
-    return error;
+    return *this;
 }
 
-TError operator << (TError error, std::vector<TError>&& innerErrors)
+TError& TError::operator <<= (std::vector<TError>&& innerErrors) &
 {
-    error.MutableInnerErrors()->insert(
-        error.MutableInnerErrors()->end(),
+    MutableInnerErrors()->insert(
+        MutableInnerErrors()->end(),
         std::make_move_iterator(innerErrors.begin()),
         std::make_move_iterator(innerErrors.end()));
-    return error;
+    return *this;
 }
 
-TError operator << (TError error, const NYTree::IAttributeDictionary& attributes)
+TError& TError::operator <<= (const NYTree::IAttributeDictionary& attributes) &
 {
-    error.MutableAttributes()->MergeFrom(attributes);
-    return error;
+    MutableAttributes()->MergeFrom(attributes);
+    return *this;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

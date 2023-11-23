@@ -405,6 +405,9 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         if (processingParams.HasSysViewProcessor()) {
             RegisterShard(db, subdomain, TVector<ui64>{processingParams.GetSysViewProcessor()}, TTabletTypes::SysViewProcessor);
         }
+        if (processingParams.HasStatisticsAggregator()) {
+            RegisterShard(db, subdomain, TVector<ui64>{processingParams.GetStatisticsAggregator()}, TTabletTypes::StatisticsAggregator);
+        }
 
         subdomain->Initialize(Self->ShardInfos);
 

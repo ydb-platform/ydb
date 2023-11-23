@@ -240,6 +240,10 @@ public:
         DiagnosticFormat_ = format;
     }
 
+    void SetResultType(IDataProvider::EResultFormat type) {
+        ResultType_ = type;
+    }
+
     TMaybe<TString> GetDiagnostics();
     IGraphTransformer::TStatistics GetRawDiagnostics();
 
@@ -409,6 +413,7 @@ private:
     TAutoPtr<IGraphTransformer> Transformer_;
     TIntrusivePtr<TResultProviderConfig> ResultProviderConfig_;
     bool SupportsResultPosition_ = false;
+    IDataProvider::EResultFormat ResultType_;
     NYson::EYsonFormat ResultFormat_;
     NYson::EYsonFormat OutputFormat_;
     TMaybe<NYson::EYsonFormat> DiagnosticFormat_;

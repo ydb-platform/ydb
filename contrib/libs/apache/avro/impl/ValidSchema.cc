@@ -69,8 +69,8 @@ static bool validate(const NodePtr &node, SymbolMap &symbolMap) {
     }
 
     node->lock();
-    auto leaves = node->leaves();
-    for (auto i = 0; i < leaves; ++i) {
+    size_t leaves = node->leaves();
+    for (size_t i = 0; i < leaves; ++i) {
         const NodePtr &leaf(node->leafAt(i));
 
         if (!validate(leaf, symbolMap)) {

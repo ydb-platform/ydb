@@ -3,11 +3,16 @@
 #include <library/cpp/actors/http/http_proxy.h>
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <ydb/core/fq/libs/actors/database_resolver.h>
 #include <ydb/core/fq/libs/actors/proxy.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
+
+#include <util/system/file.h>
+#include <util/stream/file.h>
 
 namespace NKikimr::NKqp {
 
@@ -70,7 +75,16 @@ namespace NKikimr::NKqp {
             ConnectorClient = NYql::NConnector::MakeClientGRPC(GenericGatewaysConfig.GetConnector());
 
             if (queryServiceConfig.HasMdbTransformHost()) {
-                MdbEndpointGenerator = NFq::MakeMdbEndpointGeneratorGeneric(queryServiceConfig.GetMdbTransformHost());
+                auto mdbTransformHost = queryServiceConfig.GetMdbTransformHost();
+                bool useNativeProtocolForClickHouse = false;
+                for (const auto& p: queryServiceConfig.GetGeneric().GetDefaultSettings()) {
+                    if (p.GetName() == "UseNativeProtocolForClickHouse") {
+                        TryFromString<bool>(p.GetValue(), useNativeProtocolForClickHouse);
+                        break;
+                    }
+                }
+
+                MdbEndpointGenerator = NFq::MakeMdbEndpointGeneratorGeneric(mdbTransformHost, useNativeProtocolForClickHouse);
             }
 
             // Create actors required for MDB database resolving

@@ -1546,7 +1546,7 @@ public:
                            NKikimrTxDataShard::TEvProposeTransactionResult::EStatus& rejectStatus,
                            ERejectReasons& rejectReasons,
                            TString& rejectDescription);
-    bool CheckDataTxRejectAndReply(TEvDataShard::TEvProposeTransaction* msg, const TActorContext& ctx);
+    bool CheckDataTxRejectAndReply(const TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
 
     TSysLocks& SysLocksTable() { return SysLocks; }
 
@@ -1702,6 +1702,7 @@ public:
     bool ReassignChannelsEnabled() const override;
     void OnYellowChannelsChanged() override;
     void OnRejectProbabilityRelaxed() override;
+    void OnFollowersCountChanged() override;
     ui64 GetMemoryUsage() const override;
 
     bool HasPipeServer(const TActorId& pipeServerId);
@@ -1834,7 +1835,7 @@ public:
     void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 lockId, ui64 lockOffset, const TPathId& pathId);
     void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order);
     void EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records);
-    void UpdateChangeDeliveryLag(TInstant now);
+    void UpdateChangeExchangeLag(TInstant now);
     void CreateChangeSender(const TActorContext& ctx);
     void KillChangeSender(const TActorContext& ctx);
     void MaybeActivateChangeSender(const TActorContext& ctx);
@@ -1894,6 +1895,9 @@ public:
     // Promotes current follower read edge
     bool PromoteFollowerReadEdge(TTransactionContext& txc);
     bool PromoteFollowerReadEdge();
+
+    // Returns true when this shard has potential followers
+    bool HasFollowers() const;
 
     // Returns a suitable row version for performing a transaction
     TRowVersion GetMvccTxVersion(EMvccTxMode mode, TOperation* op = nullptr) const;
@@ -2698,24 +2702,26 @@ private:
         TPathId TableId;
         ui64 SchemaVersion;
         bool SchemaSnapshotAcquired;
+        TInstant CreatedAt;
         TInstant EnqueuedAt;
         ui64 LockId;
         ui64 LockOffset;
 
         explicit TEnqueuedRecord(ui64 bodySize, const TPathId& tableId,
-                ui64 schemaVersion, TInstant now, ui64 lockId = 0, ui64 lockOffset = 0)
+                ui64 schemaVersion, TInstant created, TInstant enqueued, ui64 lockId = 0, ui64 lockOffset = 0)
             : BodySize(bodySize)
             , TableId(tableId)
             , SchemaVersion(schemaVersion)
             , SchemaSnapshotAcquired(false)
-            , EnqueuedAt(now)
+            , CreatedAt(created)
+            , EnqueuedAt(enqueued)
             , LockId(lockId)
             , LockOffset(lockOffset)
         {
         }
 
         explicit TEnqueuedRecord(const IDataShardChangeCollector::TChange& record, TInstant now)
-            : TEnqueuedRecord(record.BodySize, record.TableId, record.SchemaVersion, now,
+            : TEnqueuedRecord(record.BodySize, record.TableId, record.SchemaVersion, record.CreatedAt(), now,
                 record.LockId, record.LockOffset)
         {
         }

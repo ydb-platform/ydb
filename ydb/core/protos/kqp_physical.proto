@@ -9,7 +9,6 @@ import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/public/api/protos/ydb_value.proto";
-import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/core/protos/index_builder.proto";
 
 message TKqpPhyExternalBinding {
@@ -69,6 +68,7 @@ message TKqpPhyColumn {
         string DefaultFromSequence = 4;
         NKikimrMiniKQL.TResult DefaultFromLiteral = 5;
     }
+    bool NotNull = 6;
 }
 
 enum EKqpPhyTableKind {
@@ -192,6 +192,8 @@ message TKqpPhyOpReadOlapRanges {
 
     // Type of read result: unboxed values or Arrow blocks of data
     EReadType ReadType = 13;
+
+    repeated string GroupByColumnNames = 14;
 }
 
 message TKqpPhyOpReadRanges {

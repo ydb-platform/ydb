@@ -156,13 +156,16 @@ public:
     void InitializeStruct(TStruct* target);
 
 private:
-    static inline thread_local IYsonStructMeta* CurrentlyInitializingMeta_ = nullptr;
+    static inline YT_THREAD_LOCAL(IYsonStructMeta*) CurrentlyInitializingMeta_ = nullptr;
 
     template <class TStruct>
     friend class TYsonStructRegistrar;
 
     template <class TStruct, class TValue>
     friend class TYsonFieldAccessor;
+
+    template <class TStruct, class TValue>
+    friend class TUniversalYsonParameterAccessor;
 
     //! Performs dynamic cast using thread safe cache.
     /*!
@@ -206,6 +209,9 @@ public:
 
     template <class TBase, class TValue>
     TYsonStructParameter<TValue>& BaseClassParameter(const TString& key, TValue(TBase::*field));
+
+    template <class TValue>
+    TYsonStructParameter<TValue>& ParameterWithUniversalAccessor(const TString& key, std::function<TValue&(TStruct*)> accessor);
 
     void Preprocessor(std::function<void(TStruct*)> preprocessor);
 

@@ -494,6 +494,7 @@ struct TEvSchemeShard {
                                  ui64 userAttrsVersion,
                                  ui64 tenantHive,
                                  ui64 tenantSysViewProcessor,
+                                 ui64 tenantStatisticsAggregator,
                                  const TString& rootACL)
         {
             Record.SetDomainSchemeShard(domainKey.OwnerId);
@@ -508,6 +509,7 @@ struct TEvSchemeShard {
 
             Record.SetTenantHive(tenantHive);
             Record.SetTenantSysViewProcessor(tenantSysViewProcessor);
+            Record.SetTenantStatisticsAggregator(tenantStatisticsAggregator);
 
             Record.SetTenantRootACL(rootACL);
         }
@@ -553,6 +555,10 @@ struct TEvSchemeShard {
 
         void SetTenantSysViewProcessor(ui64 svp) {
             Record.SetTenantSysViewProcessor(svp);
+        }
+
+        void SetTenantStatisticsAggregator(ui64 sa) {
+            Record.SetTenantStatisticsAggregator(sa);
         }
 
         void SetUpdateTenantRootACL(const TString& acl) {

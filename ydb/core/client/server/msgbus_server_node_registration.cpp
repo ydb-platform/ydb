@@ -5,6 +5,8 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/nameservice.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/mind/node_broker.h>
 #include <ydb/core/kqp/common/kqp.h>

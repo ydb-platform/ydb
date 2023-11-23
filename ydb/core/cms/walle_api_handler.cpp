@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/cms/cms.h>
 #include <ydb/core/mon/mon.h>
 

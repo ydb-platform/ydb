@@ -29,13 +29,7 @@ struct TQueryFile
 
     REGISTER_YSON_STRUCT(TQueryFile);
 
-    static void Register(TRegistrar registrar)
-    {
-        registrar.Parameter("name", &TThis::Name)
-            .NonEmpty();
-        registrar.Parameter("content", &TThis::Content);
-        registrar.Parameter("type", &TThis::Type);
-    }
+    static void Register(TRegistrar registrar);
 };
 
 DEFINE_REFCOUNTED_TYPE(TQueryFile)

@@ -125,7 +125,7 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 >        "created": "2022-12-12T00:00:00.000000Z",
 >        "customer": "Name123"
 >    },
->    "ts": [1670792400, 562949953607163]
+>    "ts": [1670792400890, 562949953607163]
 > }
 > ```
 
@@ -225,6 +225,16 @@ Records whose retention time has expired are deleted, regardless of whether they
 Deleting records before they are processed by the client will cause [offset](topic.md#offset) skips, which means that the offsets of the last record read from the partition and the earliest available record will differ by more than one.
 
 To set up the record retention period, specify the [RETENTION_PERIOD](../yql/reference/syntax/alter_table.md#changefeed-options) parameter when creating a changefeed.
+
+## Topic partitions {#topic-partitions}
+
+By default, the number of [topic partitions](topic.md#partitioning) is equal to the number of table partitions. The number of topic partitions can be redefined by specifying [TOPIC_MIN_ACTIVE_PARTITIONS](../yql/reference/syntax/alter_table.md#changefeed-options) parameter when creating a changefeed.
+
+{% note info %}
+
+Currently, the ability to explicitly specify the number of topic partitions is available only for tables whose first primary key component is of type `Uint64` or `Uint32`.
+
+{% endnote %}
 
 ## Creating and deleting a changefeed {#ddl}
 

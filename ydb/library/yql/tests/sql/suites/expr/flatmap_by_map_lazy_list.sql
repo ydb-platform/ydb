@@ -1,3 +1,4 @@
+/* skip double format */
 $lazy = ListFromRange(1us, 3us);
 $list = AsList("one", "two");
 

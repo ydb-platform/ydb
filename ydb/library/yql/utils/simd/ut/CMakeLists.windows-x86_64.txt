@@ -16,6 +16,7 @@ target_link_libraries(ydb-library-yql-utils-simd-ut PUBLIC
   yutil
   library-cpp-cpuid_check
   cpp-testing-unittest_main
+  yql-utils-simd
 )
 target_sources(ydb-library-yql-utils-simd-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/simd/simd_ut.cpp

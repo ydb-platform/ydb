@@ -118,7 +118,7 @@ In the example below, the items of the `mytable` table will be deleted an hour a
 
 {% note tip %}
 
-When setting up TTL using YQL, an `Interval` is created from a string literal in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format.
+When setting up TTL using YQL, an `Interval` is created from a string literal in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format with [some restrictions](../../yql/reference/builtins/basic#data-type-literals).
 
 {% endnote %}
 
@@ -159,7 +159,7 @@ The example below shows how to use the `modified_at` column with a numeric type 
   ```go
   err := session.AlterTable(ctx, "mytable",
     options.WithSetTimeToLiveSettings(
-      options.NewTTLSettings().ColumnSecond("modified_at").ExpireAfter(time.Hour),
+      options.NewTTLSettings().ColumnSeconds("modified_at").ExpireAfter(time.Hour),
     ),
   )
   ```

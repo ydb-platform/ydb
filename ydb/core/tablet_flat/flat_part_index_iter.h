@@ -20,59 +20,38 @@ public:
         : Part(part)
         , Env(env)
         , GroupId(groupId)
+        , GroupInfo(part->Scheme->GetLayout(groupId))
         // Note: EndRowId may be Max<TRowId>() for legacy TParts
         , EndRowId(groupId.IsMain() && part->Stat.Rows ? part->Stat.Rows : Max<TRowId>())
     { }
     
-    EReady Seek(TRowId rowId, bool restart = false) {
+    EReady Seek(TRowId rowId) {
         auto index = TryGetIndex();
         if (!index) {
             return EReady::Page;
         }
 
-        Iter = index->LookupRow(rowId, restart ? TIter() : Iter);
+        Iter = index->LookupRow(rowId, Iter);
         return DataOrGone();
     }
 
-    EReady Seek(TCells key, ESeek seek, const TPartScheme::TGroupInfo &scheme, const TKeyCellDefaults *keyDefaults) {
+    EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) {
         auto index = TryGetIndex();
         if (!index) {
             return EReady::Page;
         }
 
-        Iter = index->LookupKey(key, scheme, seek, keyDefaults);
+        Iter = index->LookupKey(key, GroupInfo, seek, keyDefaults);
         return DataOrGone();
     }
 
-    EReady SeekReverse(TCells key, ESeek seek, const TPartScheme::TGroupInfo &scheme, const TKeyCellDefaults *keyDefaults) {
+    EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) {
         auto index = TryGetIndex();
         if (!index) {
             return EReady::Page;
         }
 
-        Iter = index->LookupKeyReverse(key, scheme, seek, keyDefaults);
-        return DataOrGone();
-    }
-
-    EReady Next() {
-        auto index = TryGetIndex();
-        if (!index) {
-            return EReady::Page;
-        }
-        Iter++;
-        return DataOrGone();
-    }
-
-    EReady Prev() {
-        auto index = TryGetIndex();
-        if (!index) {
-            return EReady::Page;
-        }
-        if (Iter.Off() == 0) {
-            Iter = { };
-            return EReady::Gone;
-        }
-        Iter--;
+        Iter = index->LookupKeyReverse(key, GroupInfo, seek, keyDefaults);
         return DataOrGone();
     }
 
@@ -89,21 +68,32 @@ public:
         return DataOrGone();
     }
 
+    EReady Next() {
+        Y_DEBUG_ABORT_UNLESS(Index);
+        Y_DEBUG_ABORT_UNLESS(Iter);
+        Iter++;
+        return DataOrGone();
+    }
+
+    EReady Prev() {
+        Y_DEBUG_ABORT_UNLESS(Index);
+        Y_DEBUG_ABORT_UNLESS(Iter);
+        if (Iter.Off() == 0) {
+            Iter = { };
+            return EReady::Gone;
+        }
+        Iter--;
+        return DataOrGone();
+    }
+
     bool IsValid() const {
+        Y_DEBUG_ABORT_UNLESS(Index);
         return bool(Iter);
     }
 
     // for precharge and TForward only
     TIndex* TryLoadRaw() {
         return TryGetIndex();
-    }
-
-    std::optional<NPage::TLabel> TryGetLabel() {
-        auto index = TryGetIndex();
-        if (!index) {
-            return { };
-        }
-        return index->Label();
     }
 
 public:
@@ -125,10 +115,11 @@ public:
 
     TRowId GetNextRowId() const {
         Y_ABORT_UNLESS(Index);
+        Y_ABORT_UNLESS(Iter);
         auto next = Iter + 1;
         return next
             ? next->GetRowId()
-            : Max<TRowId>();
+            : EndRowId;
     }
 
     const TRecord * GetRecord() const {
@@ -167,6 +158,7 @@ private:
     const TPart* const Part;
     IPages* const Env;
     const TGroupId GroupId;
+    const TPartScheme::TGroupInfo& GroupInfo;
     std::optional<TIndex> Index;
     TIter Iter;
     TRowId EndRowId;

@@ -1295,25 +1295,47 @@ TClientPtr CreateClientImpl(
     TClientContext context;
     context.Config = options.Config_ ? options.Config_ : TConfig::Get();
     context.TvmOnly = options.TvmOnly_;
-    context.UseTLS = options.UseTLS_;
     context.ProxyAddress = options.ProxyAddress_;
 
     context.ServerName = serverName;
-    if (serverName.find('.') == TString::npos &&
-        serverName.find(':') == TString::npos)
+    if (context.ServerName.find('.') == TString::npos &&
+        context.ServerName.find(':') == TString::npos)
     {
         context.ServerName += ".yt.yandex.net";
     }
 
-    if (serverName.find(':') == TString::npos) {
+    static constexpr char httpUrlSchema[] = "http://";
+    static constexpr char httpsUrlSchema[] = "https://";
+    if (options.UseTLS_) {
+        context.UseTLS = *options.UseTLS_;
+    } else {
+        context.UseTLS = context.ServerName.StartsWith(httpsUrlSchema);
+    }
+
+    if (context.ServerName.StartsWith(httpUrlSchema)) {
+        if (context.UseTLS) {
+            ythrow TApiUsageError() << "URL schema doesn't match UseTLS option";
+        }
+
+        context.ServerName.erase(0, sizeof(httpUrlSchema) - 1);
+    }
+    if (context.ServerName.StartsWith(httpsUrlSchema)) {
+        if (!context.UseTLS) {
+            ythrow TApiUsageError() << "URL schema doesn't match UseTLS option";
+        }
+
+        context.ServerName.erase(0, sizeof(httpsUrlSchema) - 1);
+    }
+
+    if (context.ServerName.find(':') == TString::npos) {
         context.ServerName = CreateHostNameWithPort(context.ServerName, context);
     }
     if (options.TvmOnly_) {
         context.ServerName = Format("tvm.%v", context.ServerName);
     }
 
-    if (options.UseTLS_ || options.UseCoreHttpClient_) {
-        context.HttpClient = NHttpClient::CreateCoreHttpClient(options.UseTLS_, context.Config);
+    if (context.UseTLS || options.UseCoreHttpClient_) {
+        context.HttpClient = NHttpClient::CreateCoreHttpClient(context.UseTLS, context.Config);
     } else {
         context.HttpClient = NHttpClient::CreateDefaultHttpClient();
     }

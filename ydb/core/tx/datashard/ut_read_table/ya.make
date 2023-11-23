@@ -15,6 +15,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/core/tx/datashard/ut_common
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
@@ -29,8 +30,6 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    datashard_ut_common.cpp
-    datashard_ut_common.h
     datashard_ut_read_table.cpp
 )
 

@@ -171,16 +171,20 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
     doNotKeep.reserve(Trash.size());
     trashGoingToCollect.reserve(Trash.size());
 
-    for (const TLogoBlobID& id : Trash) {
-        auto genStep = THelpers::GenerationStep(id);
-        if (collectGenStep < genStep) {
-            break;
+    for (auto it = Trash.begin(); it != Trash.end(); ) {
+        const TLogoBlobID& id = *it;
+        const auto genStep = THelpers::GenerationStep(id);
+        if (collectGenStep < genStep) { // we have to advance to next channel in trash
+            it = Trash.upper_bound(TLogoBlobID(id.TabletID(), Max<ui32>(), Max<ui32>(), id.Channel(),
+                TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId, TLogoBlobID::MaxCrcMode));
+            continue;
         }
         if (genStep <= storedGenStep) {
             doNotKeep.push_back(id);
         }
         Y_ABORT_UNLESS(genStep <= collectGenStep);
         trashGoingToCollect.push_back(id);
+        ++it;
     }
     doNotKeep.shrink_to_fit();
     trashGoingToCollect.shrink_to_fit();

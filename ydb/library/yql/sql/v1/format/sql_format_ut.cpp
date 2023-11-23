@@ -790,7 +790,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
             {"select 1 from user assume order by key",
              "SELECT\n\t1\nFROM user\nASSUME ORDER BY\n\tkey;\n\n"},
             {"select 1 from user window w1 as (), w2 as ()",
-             "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t),\n\tw2 AS (\n\t);\n\n"},
+             "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (),\n\tw2 AS ();\n\n"},
             {"select 1 from user window w1 as (user)",
              "SELECT\n\t1\nFROM user\nWINDOW\n\tw1 AS (\n\t\tuser\n\t);\n\n"},
             {"select 1 from user window w1 as (partition by user)",
@@ -1329,4 +1329,55 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
     TSetup setup;
     setup.Run(cases);
 }
+
+    Y_UNIT_TEST(CreateTableTrailingComma) {
+        TCases cases = {
+            {"CREATE TABLE tableName (Key Uint32, PRIMARY KEY (Key),);",
+             "CREATE TABLE tableName (\n\tKey Uint32,\n\tPRIMARY KEY (Key),\n);\n\n"},
+            {"CREATE TABLE tableName (Key Uint32,);",
+             "CREATE TABLE tableName (\n\tKey Uint32,\n);\n\n"},
+        };
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(Union) {
+        TCases cases = {
+            {"select 1 union all select 2 union select 3 union all select 4 union select 5", 
+             "SELECT\n\t1\nUNION ALL\nSELECT\n\t2\nUNION\nSELECT\n\t3\nUNION ALL\nSELECT\n\t4\nUNION\nSELECT\n\t5;\n\n"},
+             };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(CommentAfterLastSelect) {
+        TCases cases = {
+            {"SELECT 1--comment\n",
+             "SELECT\n\t1--comment\n;\n\n"},
+            {"SELECT 1\n\n--comment\n",
+             "SELECT\n\t1--comment\n;\n\n"},
+            {"SELECT 1\n\n--comment",
+             "SELECT\n\t1--comment\n;\n\n"},
+            {"SELECT * FROM Input\n\n\n\n/* comment */\n\n\n\n",
+             "SELECT\n\t*\nFROM Input/* comment */;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(WindowFunctionInsideExpr) {
+        TCases cases = {
+            {"SELECT CAST(ROW_NUMBER() OVER () AS String) AS x,\nFROM Input;", 
+             "SELECT\n\tCAST(ROW_NUMBER() OVER () AS String) AS x,\nFROM Input;\n\n"},
+            {"SELECT CAST(ROW_NUMBER() OVER (PARTITION BY key) AS String) AS x,\nFROM Input;", 
+             "SELECT\n\tCAST(\n\t\tROW_NUMBER() OVER (\n\t\t\tPARTITION BY\n\t\t\t\tkey\n\t\t) AS String\n\t) AS x,\nFROM Input;\n\n"},
+            {"SELECT CAST(ROW_NUMBER() OVER (users) AS String) AS x,\nFROM Input;", 
+            "SELECT\n\tCAST(\n\t\tROW_NUMBER() OVER (\n\t\t\tusers\n\t\t) AS String\n\t) AS x,\nFROM Input;\n\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
 }

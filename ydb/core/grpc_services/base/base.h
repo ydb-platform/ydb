@@ -29,8 +29,6 @@
 
 namespace NKikimr {
 
-struct TAppConfig;
-
 namespace NSchemeCache {
     struct TSchemeCacheNavigate;
 }
@@ -336,7 +334,7 @@ class ICheckerIface;
 // The way to pass some common data to request processing
 class IFacilityProvider {
 public:
-    virtual TIntrusiveConstPtr<TAppConfig> GetAppConfig() const = 0;
+    virtual ui64 GetChannelBufferSize() const = 0;
     // Registers new actor using method chosen by grpc proxy
     virtual TActorId RegisterActor(IActor* actor) const = 0;
 };

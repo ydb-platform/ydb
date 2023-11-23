@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
+#include <ydb/core/fq/libs/config/protos/common.pb.h>
 
 namespace NFq {
 
@@ -11,9 +12,8 @@ NYql::TS3ClusterConfig CreateS3ClusterConfig(const TString& name, const TString&
 
 NYql::TSolomonClusterConfig CreateSolomonClusterConfig(const TString& name, const TString& authToken, const TString& endpoint, const TString& accountSignature, const FederatedQuery::Monitoring& monitoring);
 
-void AddClustersFromConnections(const THashMap<TString, FederatedQuery::Connection>& connections,
-    bool useBearerForYdb,
-    const TString& objectStorageEndpoint,
+void AddClustersFromConnections(const NConfig::TCommonConfig& common,
+    const THashMap<TString, FederatedQuery::Connection>& connections,
     const TString& monitoringEndpoint,
     const TString& authToken,
     const THashMap<TString, TString>& accountIdSignatures,

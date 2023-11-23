@@ -1,5 +1,6 @@
 #include "kqp_ut_common.h"
 
+#include <ydb/core/base/backtrace.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
@@ -87,7 +88,7 @@ TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() {
 }
 
 TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
-    // EnableKikimrBacktraceFormat(); // Very slow, enable only when required locally
+    EnableYDBBacktraceFormat();
 
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
@@ -123,6 +124,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableNotNullColumns(true);
     ServerSettings->SetEnableMoveIndex(true);
     ServerSettings->SetEnableUniqConstraint(true);
+    ServerSettings->SetUseRealThreads(settings.UseRealThreads);
 
     if (settings.Storage) {
         ServerSettings->SetCustomDiskParams(*settings.Storage);
@@ -138,7 +140,11 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 
     Server.Reset(MakeHolder<Tests::TServer>(*ServerSettings));
     Server->EnableGRpc(grpcPort);
-    Server->SetupDefaultProfiles();
+
+    RunCall([this, domain = settings.DomainRoot] {
+        this->Server->SetupDefaultProfiles();
+        return true;
+    });
 
     Client.Reset(MakeHolder<Tests::TClient>(*ServerSettings));
 
@@ -458,10 +464,16 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_NODE, NActors::NLog::PRI_DEBUG);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
 
-    Client->InitRootScheme(settings.DomainRoot);
-
+    RunCall([this, domain = settings.DomainRoot]{
+        this->Client->InitRootScheme(domain);
+        return true;
+    });
+    
     if (settings.WithSampleTables) {
-        CreateSampleTables();
+        RunCall([this] {
+            this->CreateSampleTables();
+            return true;
+        });
     }
 }
 
@@ -596,6 +608,90 @@ void FillProfile(NYdb::NTable::TScanQueryPart& streamPart, NYson::TYsonWriter& w
     Y_UNUSED(writer);
     Y_UNUSED(profiles);
     Y_UNUSED(profileIndex);
+}
+
+void CreateLargeTable(TKikimrRunner& kikimr, ui32 rowsPerShard, ui32 keyTextSize,
+    ui32 dataTextSize, ui32 batchSizeRows, ui32 fillShardsCount, ui32 largeTableKeysPerShard)
+{
+    kikimr.GetTestClient().CreateTable("/Root", R"(
+        Name: "LargeTable"
+        Columns { Name: "Key", Type: "Uint64" }
+        Columns { Name: "KeyText", Type: "String" }
+        Columns { Name: "Data", Type: "Int64" }
+        Columns { Name: "DataText", Type: "String" }
+        KeyColumnNames: ["Key", "KeyText"],
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 1000000 } } } }
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 2000000 } } } }
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 3000000 } } } }
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 4000000 } } } }
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 5000000 } } } }
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 6000000 } } } }
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 7000000 } } } }
+    )");
+
+    auto client = kikimr.GetTableClient();
+
+    for (ui32 shardIdx = 0; shardIdx < fillShardsCount; ++shardIdx) {
+        ui32 rowIndex = 0;
+        while (rowIndex < rowsPerShard) {
+
+            auto rowsBuilder = NYdb::TValueBuilder();
+            rowsBuilder.BeginList();
+            for (ui32 i = 0; i < batchSizeRows; ++i) {
+                rowsBuilder.AddListItem()
+                    .BeginStruct()
+                    .AddMember("Key")
+                        .OptionalUint64(shardIdx * largeTableKeysPerShard + rowIndex)
+                    .AddMember("KeyText")
+                        .OptionalString(TString(keyTextSize, '0' + (i + shardIdx) % 10))
+                    .AddMember("Data")
+                        .OptionalInt64(rowIndex)
+                    .AddMember("DataText")
+                        .OptionalString(TString(dataTextSize, '0' + (i + shardIdx + 1) % 10))
+                    .EndStruct();
+
+                ++rowIndex;
+                if (rowIndex == rowsPerShard) {
+                    break;
+                }
+            }
+            rowsBuilder.EndList();
+
+            auto result = client.BulkUpsert("/Root/LargeTable", rowsBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+}
+
+void CreateManyShardsTable(TKikimrRunner& kikimr, ui32 totalRows, ui32 shards, ui32 batchSizeRows)
+{
+    kikimr.GetTestClient().CreateTable("/Root", R"(
+        Name: "ManyShardsTable"
+        Columns { Name: "Key", Type: "Uint32" }
+        Columns { Name: "Data", Type: "Int32" }
+        KeyColumnNames: ["Key"]
+        UniformPartitionsCount: 
+    )" + std::to_string(shards));
+
+    auto client = kikimr.GetTableClient();
+
+    for (ui32 rows = 0; rows < totalRows; rows += batchSizeRows) {
+        auto rowsBuilder = NYdb::TValueBuilder();
+        rowsBuilder.BeginList();
+        for (ui32 i = 0; i < batchSizeRows && rows + i < totalRows; ++i) {
+            rowsBuilder.AddListItem()
+                .BeginStruct()
+                .AddMember("Key")
+                    .OptionalUint32((std::numeric_limits<ui32>::max() / totalRows) * (rows + i))
+                .AddMember("Data")
+                    .OptionalInt32(i)
+                .EndStruct();
+        }
+        rowsBuilder.EndList();
+
+        auto result = client.BulkUpsert("/Root/ManyShardsTable", rowsBuilder.Build()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    }
 }
 
 void PrintResultSet(const NYdb::TResultSet& resultSet, NYson::TYsonWriter& writer) {
@@ -739,6 +835,30 @@ TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it, bool th
     return out.Str();
 }
 
+static void FillPlan(const NYdb::NTable::TScanQueryPart& streamPart, TCollectedStreamResult& res) {
+    if (streamPart.HasQueryStats() ) {
+        res.QueryStats = NYdb::TProtoAccessor::GetProto(streamPart.GetQueryStats());
+
+        auto plan = res.QueryStats->query_plan();
+        if (!plan.empty()) {
+            res.PlanJson = plan;
+        }
+    }
+}
+
+static void FillPlan(const NYdb::NScripting::TYqlResultPart& streamPart, TCollectedStreamResult& res) {
+    if (streamPart.HasQueryStats() ) {
+        res.QueryStats = NYdb::TProtoAccessor::GetProto(streamPart.GetQueryStats());
+
+        auto plan = res.QueryStats->query_plan();
+        if (!plan.empty()) {
+            res.PlanJson = plan;
+        }
+    }
+}
+
+static void FillPlan(const NYdb::NQuery::TExecuteQueryPart& /*streamPart*/, TCollectedStreamResult& /*res*/) {}
+
 template<typename TIterator>
 TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
     TCollectedStreamResult res;
@@ -770,6 +890,14 @@ TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
             }
         }
 
+        if constexpr (std::is_same_v<TIterator, NYdb::NQuery::TExecuteQueryIterator>) {
+            if (streamPart.HasResultSet()) {
+                auto resultSet = streamPart.ExtractResultSet();
+                PrintResultSet(resultSet, resultSetWriter);
+                res.RowsCount += resultSet.RowsCount();
+            }
+        }
+
         if constexpr (std::is_same_v<TIterator, NYdb::NScripting::TYqlResultPartIterator>) {
             if (streamPart.HasPartialResult()) {
                 const auto& partialResult = streamPart.GetPartialResult();
@@ -780,15 +908,9 @@ TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
         }
 
         if constexpr (std::is_same_v<TIterator, NYdb::NTable::TScanQueryPartIterator>
-                || std::is_same_v<TIterator, NYdb::NScripting::TYqlResultPartIterator>) {
-            if (streamPart.HasQueryStats() ) {
-                res.QueryStats = NYdb::TProtoAccessor::GetProto(streamPart.GetQueryStats());
-
-                auto plan = res.QueryStats->query_plan();
-                if (!plan.empty()) {
-                    res.PlanJson = plan;
-                }
-            }
+                || std::is_same_v<TIterator, NYdb::NScripting::TYqlResultPartIterator>
+                || std::is_same_v<TIterator, NYdb::NQuery::TExecuteQueryIterator>) {
+            FillPlan(streamPart, res);
         } else {
             if (streamPart.HasPlan()) {
                 res.PlanJson = streamPart.ExtractPlan();
@@ -809,6 +931,7 @@ TCollectedStreamResult CollectStreamResult(TIterator& it) {
 
 template TCollectedStreamResult CollectStreamResult(NYdb::NTable::TScanQueryPartIterator& it);
 template TCollectedStreamResult CollectStreamResult(NYdb::NScripting::TYqlResultPartIterator& it);
+template TCollectedStreamResult CollectStreamResult(NYdb::NQuery::TExecuteQueryIterator& it);
 
 TString ReadTableToYson(NYdb::NTable::TSession session, const TString& table) {
     TReadTableSettings settings;

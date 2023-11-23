@@ -264,6 +264,7 @@ public:
 
     bool IsFirstClass() const;
 
+    operator bool() const { return Valid && !ClientsideName; };
 
 private:
     void BuildInternals(const NKikimrPQ::TPQTabletConfig& config);
@@ -336,7 +337,7 @@ public:
                             topic, localDc, localDc, database, NormalizedPrefix//, RootDatabases
                     );
                 } else if (dc.empty()) {
-                    TDiscoveryConverterPtr converter;
+                    TDiscoveryConverterPtr converter{new TDiscoveryConverter()};
                     converter->Valid = false;
                     converter->Reason = TStringBuilder() << "DC should be explicitly specified for topic " << topic << Endl;
                     return converter;

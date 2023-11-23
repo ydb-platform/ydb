@@ -53,6 +53,7 @@ private:
         Tables = ev->Get()->Tables;
         MvccSnapshot = ev->Get()->MvccSnapshot;
         Orbit = std::move(ev->Get()->Orbit);
+        Cookie = ev->Get()->Cookie;
 
         LOG_D("KqpSnapshotManager: got snapshot request from " << ClientActorId);
 
@@ -117,7 +118,8 @@ private:
             LOG_D("KqpSnapshotManager: snapshot: " << Snapshot << " acquired");
 
             bool sent = Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
-                    Snapshot, NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)));
+                    Snapshot, NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)),
+                    0, Cookie);
             Y_DEBUG_ABORT_UNLESS(sent);
 
             PassAway();
@@ -151,7 +153,8 @@ private:
         issues.AddIssue("stale propose TEvProposeTransactionStatus in cleanup state");
 
         Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
-            IKqpGateway::TKqpSnapshot::InvalidSnapshot, NKikimrIssues::TStatusIds::TIMEOUT, std::move(issues), std::move(Orbit)));
+            IKqpGateway::TKqpSnapshot::InvalidSnapshot, NKikimrIssues::TStatusIds::TIMEOUT, std::move(issues), std::move(Orbit)),
+            0, Cookie);
 
         PassAway();
     }
@@ -170,7 +173,8 @@ private:
             LOG_D("KqpSnapshotManager: snapshot " << Snapshot.Step << ":" << Snapshot.TxId << " created");
 
             bool sent = Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
-                Snapshot, NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)));
+                Snapshot, NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)),
+                0, Cookie);
             Y_DEBUG_ABORT_UNLESS(sent);
 
             Become(&TThis::StateRefreshing);
@@ -271,7 +275,8 @@ private:
     void ReplyErrorAndDie(NKikimrIssues::TStatusIds::EStatusCode status, NYql::TIssues&& issues) {
         if (CurrentStateFunc() == &TThis::StateAwaitCreation || CurrentStateFunc() == &TThis::StateAwaitAcquireResult) {
             Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
-                IKqpGateway::TKqpSnapshot::InvalidSnapshot, status, std::move(issues), std::move(Orbit)));
+                IKqpGateway::TKqpSnapshot::InvalidSnapshot, status, std::move(issues), std::move(Orbit)),
+                0, Cookie);
         } else {
             SendDiscard();
         }
@@ -284,6 +289,7 @@ private:
     TActorId ClientActorId;
     IKqpGateway::TKqpSnapshot Snapshot;
     NLWTrace::TOrbit Orbit;
+    ui64 Cookie = 0;
 
     bool MvccSnapshot = false;
 

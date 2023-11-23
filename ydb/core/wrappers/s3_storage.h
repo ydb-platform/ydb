@@ -86,7 +86,11 @@ public:
         const Aws::Auth::AWSCredentials& credentials,
         const TString& bucket, const Aws::S3::Model::StorageClass storageClass,
         bool verbose = true)
-        : Client(new Aws::S3::S3Client(credentials, config))
+        : Client(new Aws::S3::S3Client(
+            credentials,
+            config,
+            Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+            /*useVirtualAddressing=*/ true))
         , Config(config)
         , Credentials(credentials)
         , Bucket(bucket)

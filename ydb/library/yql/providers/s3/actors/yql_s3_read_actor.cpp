@@ -53,6 +53,7 @@
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
+#include <ydb/library/yql/utils/aws_credentials.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 
@@ -2897,7 +2898,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     ReadPathsList(params, taskParams, readRanges, paths);
 
     const auto token = secureParams.Value(params.GetToken(), TString{});
-    const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
+    const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, false, ConvertBasicToAwsToken);
     const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
 
     const auto& settings = params.GetSettings();
@@ -2940,6 +2941,12 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         intervalUnit = NYql::NSerialization::TSerializationInterval::ToUnit(it->second);
     }
 
+    // For later use
+    std::optional<ui64> rowsLimitHint;
+    if (params.GetRowsLimitHint() != 0) {
+        rowsLimitHint = params.GetRowsLimitHint();
+    }
+
     if (params.HasFormat() && params.HasRowType()) {
         const auto pb = std::make_unique<TProgramBuilder>(typeEnv, functionRegistry);
         const auto outputItemType = NCommon::ParseTypeFromYson(TStringBuf(params.GetRowType()), *pb, Cerr);
@@ -2947,7 +2954,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         const auto structType = static_cast<TStructType*>(outputItemType);
 
         const auto readSpec = std::make_shared<TReadSpec>();
-        readSpec->Arrow = params.GetArrow();
+        readSpec->Arrow = params.GetFormat() == "parquet";
         readSpec->ParallelRowGroupCount = params.GetParallelRowGroupCount();
         readSpec->RowGroupReordering = params.GetRowGroupReordering();
         readSpec->ParallelDownloadCount = params.GetParallelDownloadCount();

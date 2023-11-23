@@ -206,7 +206,7 @@ protected:
     double AmountRequested = 0.0;
     double TotalSent = 0.0; // Only for session statistics. Accuracy of this variable will degrade in time.
     double TotalConsumed = 0.0;
-    ui32 LastReportId;
+    ui32 LastReportId = 0;
     bool Active = false;
     bool NeedSendChangedProps = false;
     IResourceSink::TPtr ResourceSink;

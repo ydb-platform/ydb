@@ -1,4 +1,6 @@
 #include "node_warden_impl.h"
+#include <ydb/core/base/nameservice.h>
+
 
 namespace NKikimr::NStorage {
 

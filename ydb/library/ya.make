@@ -21,6 +21,7 @@ RECURSE(
     query_actor
     schlab
     security
+    table_creator
     testlib
     time_series_vec
     wilson_ids

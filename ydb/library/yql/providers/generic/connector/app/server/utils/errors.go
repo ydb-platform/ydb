@@ -10,17 +10,22 @@ import (
 )
 
 var (
-	ErrTableDoesNotExist          = fmt.Errorf("table does not exist")
-	ErrDataSourceNotSupported     = fmt.Errorf("data source not supported")
-	ErrDataTypeNotSupported       = fmt.Errorf("data type not supported")
-	ErrReadLimitExceeded          = fmt.Errorf("read limit exceeded")
-	ErrInvalidRequest             = fmt.Errorf("invalid request")
-	ErrValueOutOfTypeBounds       = fmt.Errorf("value is out of possible range of values for the type")
-	ErrUnimplemented              = fmt.Errorf("unimplemented")
-	ErrUnimplementedTypedValue    = fmt.Errorf("unimplemented typed value")
-	ErrUnimplementedExpression    = fmt.Errorf("unimplemented expression")
-	ErrUnimplementedOperation     = fmt.Errorf("unimplemented operation")
-	ErrUnimplementedPredicateType = fmt.Errorf("unimplemented predicate type")
+	ErrTableDoesNotExist                   = fmt.Errorf("table does not exist")
+	ErrDataSourceNotSupported              = fmt.Errorf("data source not supported")
+	ErrDataTypeNotSupported                = fmt.Errorf("data type not supported")
+	ErrReadLimitExceeded                   = fmt.Errorf("read limit exceeded")
+	ErrInvalidRequest                      = fmt.Errorf("invalid request")
+	ErrValueOutOfTypeBounds                = fmt.Errorf("value is out of possible range of values for the type")
+	ErrUnimplemented                       = fmt.Errorf("unimplemented")
+	ErrUnimplementedTypedValue             = fmt.Errorf("unimplemented typed value")
+	ErrUnimplementedExpression             = fmt.Errorf("unimplemented expression")
+	ErrUnsupportedExpression               = fmt.Errorf("expression is not supported")
+	ErrUnimplementedOperation              = fmt.Errorf("unimplemented operation")
+	ErrUnimplementedPredicateType          = fmt.Errorf("unimplemented predicate type")
+	ErrInvariantViolation                  = fmt.Errorf("implementation error (invariant violation)")
+	ErrUnimplementedArithmeticalExpression = fmt.Errorf("unimplemented arithmetical expression")
+	ErrEmptyTableName                      = fmt.Errorf("empty table name")
+	ErrPageSizeExceeded                    = fmt.Errorf("page size exceeded, check service configuration")
 )
 
 func NewSuccess() *api_service_protos.TError {
@@ -65,6 +70,12 @@ func NewAPIErrorFromStdError(err error) *api_service_protos.TError {
 		status = Ydb.StatusIds_UNSUPPORTED
 	case errors.Is(err, ErrUnimplemented):
 		status = Ydb.StatusIds_UNSUPPORTED
+	case errors.Is(err, ErrUnimplementedArithmeticalExpression):
+		status = Ydb.StatusIds_UNSUPPORTED
+	case errors.Is(err, ErrEmptyTableName):
+		status = Ydb.StatusIds_BAD_REQUEST
+	case errors.Is(err, ErrPageSizeExceeded):
+		status = Ydb.StatusIds_INTERNAL_ERROR
 	default:
 		status = Ydb.StatusIds_INTERNAL_ERROR
 	}

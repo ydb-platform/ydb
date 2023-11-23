@@ -6,6 +6,7 @@
 
 #include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/cputime.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
 
 namespace NKikimr {
@@ -628,8 +629,7 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
     if (Self->GetVolatileTxManager().FindByTxId(txId)) {
         // This readset is for a known volatile transaction, we need to
         // hand it off to volatile tx manager.
-        Self->GetVolatileTxManager().ProcessReadSet(rs, txc);
-        return true;
+        return Self->GetVolatileTxManager().ProcessReadSet(rs, std::move(ack), txc);
     }
 
     if (step <= OutdatedReadSetStep()) {
@@ -1318,7 +1318,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         info.SetMvccSnapshot(TRowVersion(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId()));
     }
     TActiveTransaction::TPtr tx = MakeIntrusive<TActiveTransaction>(info);
-    tx->SetTarget(ev->Get()->GetSource());
+    tx->SetTarget(ev->Sender);
     tx->SetTxBody(rec.GetTxBody());
     tx->SetCookie(ev->Cookie);
     tx->Orbit = std::move(ev->Get()->Orbit);

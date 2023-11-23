@@ -4,6 +4,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 
+#include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/actors/core/mon.h>
 

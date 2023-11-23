@@ -1,0 +1,1 @@
+RECURSE(sqlite_flightsql_server)

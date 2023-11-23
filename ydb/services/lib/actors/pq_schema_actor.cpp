@@ -2,6 +2,7 @@
 
 #include <ydb/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/core/base/feature_flags.h>
 
 #include <ydb/public/lib/jwt/jwt.h>
 

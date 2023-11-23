@@ -107,7 +107,7 @@ public:
 
     ~TMkqlWriterImpl();
 
-    void SetSpecs(const TMkqlIOSpecs& specs);
+    void SetSpecs(const TMkqlIOSpecs& specs, const TVector<TString>& columns = {});
 
     void AddRow(const NKikimr::NUdf::TUnboxedValuePod row) override;
     void AddFlatRow(const NUdf::TUnboxedValuePod* row) override;

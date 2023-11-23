@@ -21,6 +21,10 @@ message TServerConfig {
     // Go runtime profiler.
     // Disabled if this part of config is empty.
     TPprofServerConfig pprof_server = 6;
+    // Metrics server config
+    TMetricsServerConfig metrics_server = 7;
+    // Paging settings
+    TPagingConfig paging = 8;
 }
 
 // TConnectorServerConfig - configuration of the main GRPC server
@@ -72,4 +76,31 @@ message TPprofServerConfig {
     // TLS settings.
     // Leave it empty for insecure connections.
     TServerTLSConfig tls = 2;
+}
+
+// TMetricsConfig - configuration of the metrics service
+message TMetricsServerConfig {
+    // Network address server will be listening on
+    NYql.NConnector.NApi.TEndpoint endpoint = 1;
+    // TLS settings.
+    // Leave it empty for insecure connections.
+    TServerTLSConfig tls = 2;
+}
+
+// TPagingConfig configures the way of splitting of the data stream into the fragments (or pages)
+// in order to return them as separate GRPC messages to the client.
+message TPagingConfig {
+    // Configures the limit of a page size in rows.
+    // It may override other limits. Ignored if set to zero.
+    uint64 rows_per_page = 1;
+
+    // Configures the limit of a page size in bytes.
+    // It may override other limits. Ignored if set to zero.
+    uint64 bytes_per_page = 2;
+
+    // Connector service can read ahead some data from the data source before returning it to the client.
+    // This setting configures the number of pages that may reside in the service's address space 
+    // waiting for the client readiness for the data consumption.
+    // Tune this carefully cause this may cause service OOMs. 
+    uint32 prefetch_queue_capacity = 3;
 }

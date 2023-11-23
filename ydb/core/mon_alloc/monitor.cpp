@@ -4,6 +4,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -19,6 +20,8 @@
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
 #include <util/stream/str.h>
+#include <util/stream/file.h>
+
 
 namespace NKikimr {
     using TDynamicCountersPtr = TIntrusivePtr<::NMonitoring::TDynamicCounters>;

@@ -236,7 +236,7 @@ namespace NActors {
         static bool DefaultFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event);
         static bool NopFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline);
         static void DefaultRegistrationObserver(TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId);
-        TEventObserver SetObserverFunc(TEventObserver observerFunc);
+        TEventObserver SetObserverFunc(TEventObserver observerFunc);  // deprecated, use AddObserver
         TScheduledEventsSelector SetScheduledEventsSelectorFunc(TScheduledEventsSelector scheduledEventsSelectorFunc);
         TEventFilter SetEventFilter(TEventFilter filterFunc);
         TScheduledEventFilter SetScheduledEventFilter(TScheduledEventFilter filterFunc);
@@ -323,6 +323,22 @@ namespace NActors {
             TEventObserverCollection& List;
             TEventObserverCollection::iterator Iter;
         };
+
+        // An example of using AddObserver in unit tests
+        /*
+            auto observerHolder = runtime.AddObserver<TEvDataShard::TEvRead>([&](TEvDataShard::TEvRead::TPtr& event) {
+                // Do something with the event inside the calback
+                Cout << "An event is observed " << ev->Get()->Record.ShortDebugString() << Endl;
+
+                // Optionally reset the event, all subsequent handlers of this event will not be called
+                event.Reset();
+            });
+
+            // Do something inside the main code of the unit test
+
+            // Optionally remove the observer, otherwise it will be destroyed in its destructor
+            observerHolder.Remove();
+        */
 
         template <typename TEvType>
         TEventObserverHolder AddObserver(std::function<void(typename TEvType::TPtr&)> observerFunc)

@@ -43,6 +43,9 @@ protected:
     virtual void DoStartFetchStage(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
     virtual void DoAbort() = 0;
 public:
+    std::shared_ptr<arrow::RecordBatch> GetLastPK() const {
+        return Finish.ExtractSortingPosition();
+    }
     void IncIntervalsCount() {
         ++IntervalsCount;
     }

@@ -13,16 +13,15 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template<>
+template <>
 void Out<NYT::TNode>(IOutputStream& s, const NYT::TNode& node);
 
-template<>
+template <>
 void Out<TGUID>(IOutputStream& s, const TGUID& guid);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NYT {
-namespace NTesting {
+namespace NYT::NTesting {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -35,6 +34,12 @@ TString GenerateRandomData(size_t size, ui64 seed = 42);
 
 TVector<TNode> ReadTable(const IClientBasePtr& client, const TString& tablePath);
 void WriteTable(const IClientBasePtr& client, const TString& tablePath, const std::vector<TNode>& rowList);
+
+template <class TMessage>
+TVector<TMessage> ReadProtoTable(const IClientBasePtr& client, const TString& tablePath);
+
+template <class TMessage>
+void WriteProtoTable(const IClientBasePtr& client, const TString& tablePath, const std::vector<TMessage>& rowList);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -172,8 +177,7 @@ TString ToYson(const T& x)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NTesting
-} // namespace NYT
+} // namespace NYT::NTesting
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -195,3 +199,8 @@ void Out<NYT::NTesting::TOwningYaMRRow>(IOutputStream& out, const NYT::NTesting:
 
 #define ASSERT_SERIALIZABLES_NE(a, b) \
     ASSERT_NE(a, b) << NYT::NTesting::ToYson(a) << " == " << NYT::NTesting::ToYson(b)
+
+#define YT_UNITTEST_LIB_H_
+#include "yt_unittest_lib-inl.h"
+#undef YT_UNITTEST_LIB_H_
+

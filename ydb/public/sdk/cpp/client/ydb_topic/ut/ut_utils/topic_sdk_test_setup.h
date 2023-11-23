@@ -16,7 +16,7 @@ class TTopicSdkTestSetup {
 public:
     TTopicSdkTestSetup(const TString& testCaseName, const NKikimr::Tests::TServerSettings& settings = MakeServerSettings(), bool createTopic = true);
 
-    void CreateTopic(const TString& path = TEST_TOPIC, const TString& consumer = TEST_CONSUMER);
+    void CreateTopic(const TString& path = TEST_TOPIC, const TString& consumer = TEST_CONSUMER, size_t partitionCount = 1);
 
     TString GetEndpoint() const;
     TString GetTopicPath(const TString& name = TEST_TOPIC) const;

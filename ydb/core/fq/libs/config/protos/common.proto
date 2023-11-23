@@ -26,4 +26,5 @@ message TCommonConfig {
     string MonitoringEndpoint = 11;
     uint64 MaxTasksPerStage = 12;
     bool KeepInternalErrors = 13;
+    bool UseNativeProtocolForClickHouse = 14;
 }

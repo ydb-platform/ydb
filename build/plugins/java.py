@@ -285,6 +285,8 @@ def onexternal_jar(unit, *args):
 
 def on_check_java_srcdir(unit, *args):
     args = list(args)
+    if 'SKIP_CHECK_SRCDIR' in args:
+        return
     for arg in args:
         if not '$' in arg:
             arc_srcdir = os.path.join(unit.get('MODDIR'), arg)
@@ -436,8 +438,7 @@ def _maven_coords_for_project(unit, project_dir):
     pom_path = unit.resolve(os.path.join('$S', project_dir, 'pom.xml'))
     if os.path.exists(pom_path):
         import xml.etree.ElementTree as et
-
-        with open(pom_path) as f:
+        with open(pom_path, 'rb') as f:
             root = et.fromstring(f.read())
         for xpath in ('./{http://maven.apache.org/POM/4.0.0}artifactId', './artifactId'):
             artifact = root.find(xpath)

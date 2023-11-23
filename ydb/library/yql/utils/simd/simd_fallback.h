@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <immintrin.h>
 
+#include <library/cpp/digest/crc32c/crc32c.h>
+
 #include <util/system/types.h>
 #include <util/stream/output.h>
 #include <util/generic/string.h>
@@ -80,7 +82,7 @@ struct TBase8: TBase<TSimd8<T>> {
         size_t j = (1 << 16) - 1;
         for (size_t i = 0; i < 4; i += 1, j <<= 16) {
             if (N & (1LL << i)) {
-                dst |= other->Value & j;
+                dst |= other.Value & j;
             } else {
                 dst |= this->Value & j;
             }
@@ -92,13 +94,29 @@ struct TBase8: TBase<TSimd8<T>> {
         ui64 dst = 0;
         size_t j = (1 << 8) - 1;
         for (size_t i = 0; i < 8; i += 1, j <<= 8) {
-            if (mask.Value & (1LL << i)) {
-                dst |= other->Value & j;
+            if (mask.Value & (1uLL << (i * 8 + 7))) {
+                dst |= other.Value & j;
             } else {
                 dst |= this->Value & j;
             }
         }
         return TSimd8<T>(dst);
+    }
+
+    static inline ui32 CRC32u8(ui32 crc, ui8 data) {
+        return ~Crc32cExtend(~crc, (void*) &data, 1);
+    }
+
+    static inline ui32 CRC32u16(ui32 crc, ui16 data) {
+        return ~Crc32cExtend(~crc, (void*) &data, 2);
+    }
+
+    static inline ui32 CRC32u32(ui32 crc, ui32 data) {
+        return ~Crc32cExtend(~crc, (void*) &data, 4);
+    }
+
+    static inline ui64 CRC32u64(ui64 crc, ui64 data) {
+        return ~Crc32cExtend(~crc, (void*) &data, 8);
     }
 
     friend inline Mask operator==(const TSimd8<T> lhs, const TSimd8<T> rhs) {
@@ -130,8 +148,22 @@ struct TSimd8<bool>: TBase8<bool> {
         return ui64(-value);
     }
 
+    inline int ToBitMask() const {
+        int result = 0;
+        for (size_t j = 0; j < 8; j += 1) {
+            if ((1ULL << (j * 8 + 7)) & this->Value) {
+                result |= (1 << j);
+            }
+        }
+        return result;
+    }
+
     inline bool Any() const {
         return Value != 0;
+    }
+
+    inline bool All() const {
+        return this->Value == ui64(-1);
     }
 
     inline TSimd8<bool> operator~() const {
@@ -207,7 +239,7 @@ struct TBase8Numeric: TBase8<T> {
     void Log(IOutputStream& out, TString delimeter = " ", TString end = "\n") {
         const size_t n = sizeof(this->Value) / sizeof(TOut);
         TOut buf[n];
-        Store((i8*) buf);
+        Store((T*) buf);
         if (n == sizeof(this->Value)) {
             for (size_t i = 0; i < n; i += 1) {
                 out << int(buf[i]);

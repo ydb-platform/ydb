@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
 
         auto result = filter1.Or(filter2);
         UNIT_ASSERT_VALUES_EQUAL(result.Size(), 5);
-        auto resultVec = result.BuildSimpleFilter(result.Size());
+        auto resultVec = result.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", resultVec), "1,1,1,1,0");
     }
 
@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
         auto result = filter1.CombineSequentialAnd(filter2);
 
         UNIT_ASSERT_VALUES_EQUAL(result.Size(), 7);
-        auto resultVec = result.BuildSimpleFilter(result.Size());
+        auto resultVec = result.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", resultVec), "1,1,1,0,1,0,0");
     }
 }

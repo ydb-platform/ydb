@@ -1,9 +1,19 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
+namespace NYql {
+    class TExprNode;
+    struct TExprContext;
+
+    namespace NNodes {
+        class TDqConnection;
+    }
+}
+
 namespace NKikimr::NKqp {
+class TRequestPredictor;
+
 class TStagePredictor {
 private:
     YDB_READONLY_FLAG(HasFinalCombiner, false);
@@ -29,22 +39,13 @@ private:
     void Prepare();
     friend class TRequestPredictor;
 public:
-    void Scan(const NYql::TExprNode::TPtr& stageNode);
+    void Scan(const TIntrusivePtr<NYql::TExprNode>& stageNode);
     void AcceptInputStageInfo(const TStagePredictor& info, const NYql::NNodes::TDqConnection& connection);
     void SerializeToKqpSettings(NYql::NDqProto::TProgram::TSettings& kqpProto) const;
     bool DeserializeFromKqpSettings(const NYql::NDqProto::TProgram::TSettings& kqpProto);
     static ui32 GetUsableThreads();
     bool NeedLLVM() const;
     ui32 CalcTasksOptimalCount(const ui32 availableThreadsCount, const std::optional<ui32> previousStageTasksCount) const;
-};
-
-class TRequestPredictor {
-private:
-    std::deque<TStagePredictor> StagePredictors;
-    std::map<ui64, TStagePredictor*> StagesMap;
-public:
-    double GetLevelDataVolume(const ui32 level) const;
-    TStagePredictor& BuildForStage(const NYql::NNodes::TDqPhyStage& stage, NYql::TExprContext& ctx);
 };
 
 }

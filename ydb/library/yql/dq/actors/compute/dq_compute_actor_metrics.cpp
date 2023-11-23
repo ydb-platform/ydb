@@ -32,7 +32,6 @@ TDqComputeActorMetrics::TDqComputeActorMetrics(
 #define ADD_COUNTER(name) \
         name = ComputeActorSubgroup->GetCounter(#name)
 
-        ADD_COUNTER(ResumeExecution);
         ADD_COUNTER(ChannelsInfo);
         ADD_COUNTER(AbortExecution);
         ADD_COUNTER(Wakeup);
@@ -50,19 +49,27 @@ TDqComputeActorMetrics::TDqComputeActorMetrics(
         ADD_COUNTER(NewAsyncInputDataArrived);
         ADD_COUNTER(AsyncInputError);
         ADD_COUNTER(OtherEvent);
+        ADD_COUNTER(ResumeExecutionTot);
 
 #undef ADD_COUNTER
+
+        for (ui32 i = 0; i < static_cast<ui32>(EResumeSource::Last); ++i) {
+            ResumeExecution[i] = ComputeActorSubgroup->GetCounter(TStringBuilder() << "ResumeExecution" << i);
+        }
     }
 }
 
-void TDqComputeActorMetrics::ReportEvent(ui32 type)
+void TDqComputeActorMetrics::ReportEvent(ui32 type, TAutoPtr<NActors::IEventHandle>& ev)
 {
     if (!Enable) {
         return;
     }
 
     switch (type) {
-        case TEvDqCompute::TEvResumeExecution::EventType: ResumeExecution->Inc(); break;
+        case TEvDqCompute::TEvResumeExecution::EventType: 
+            ResumeExecution[static_cast<ui32>((*reinterpret_cast<TEvDqCompute::TEvResumeExecution::TPtr*>(&ev))->Get()->Source)]->Inc(); 
+            ResumeExecutionTot->Inc();
+            break;
         case TEvDqCompute::TEvChannelsInfo::EventType: ChannelsInfo->Inc(); break;
         case TEvDq::TEvAbortExecution::EventType: AbortExecution->Inc(); break;
         case NActors::TEvents::TEvWakeup::EventType: Wakeup->Inc(); break;

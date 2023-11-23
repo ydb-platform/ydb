@@ -53,6 +53,8 @@ public:
     virtual ui64 GetVersion() const = 0;
     virtual ui32 GetColumnsCount() const = 0;
 
+    std::set<ui32> GetPkColumnsIds() const;
+
     std::shared_ptr<arrow::RecordBatch> NormalizeBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const;
     std::shared_ptr<arrow::RecordBatch> PrepareForInsert(const TString& data, const std::shared_ptr<arrow::Schema>& dataSchema) const;
 };

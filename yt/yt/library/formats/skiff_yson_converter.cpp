@@ -735,6 +735,8 @@ TYsonToSkiffConverter CreateDecimalYsonToSkiffConverter(
             return CreatePrimitiveTypeYsonToSkiffConverter<EYsonItemType::StringValue>(
                 std::move(descriptor),
                 TDecimalSkiffWriter<EWireType::Int128>(precision));
+        case EWireType::Yson32:
+            return CreatePrimitiveTypeYsonToSkiffConverter(std::move(descriptor), wireType);
         default:
             CheckSkiffWireTypeForDecimal(precision, wireType);
             YT_ABORT();
@@ -1793,6 +1795,8 @@ TSkiffToYsonConverter CreateDecimalSkiffToYsonConverter(
             return TPrimitiveTypeSkiffToYsonConverter(TDecimalSkiffParser<EWireType::Int64>(precision));
         case EWireType::Int128:
             return TPrimitiveTypeSkiffToYsonConverter(TDecimalSkiffParser<EWireType::Int128>(precision));
+        case EWireType::Yson32:
+            return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
         default:
             CheckSkiffWireTypeForDecimal(precision, wireType);
             // Previous call must throw

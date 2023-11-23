@@ -78,7 +78,7 @@ protected:
         TResOrPullBase resOrPull(input);
 
         IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(resOrPull.Ref());
-        YQL_ENSURE(fillSettings.Format == IDataProvider::EResultFormat::Yson);
+        YQL_ENSURE(fillSettings.Format == IDataProvider::EResultFormat::Yson || fillSettings.Format == IDataProvider::EResultFormat::Skiff);
 
         auto data = resOrPull.Input();
         if (auto maybePull = resOrPull.Maybe<TPull>()) {

@@ -480,6 +480,28 @@ return;
         }
     }
 
+    Y_UNIT_TEST(UpdateFkPkOverlap) {
+        TKikimrRunner kikimr(SyntaxV1Settings());
+        CreateTableWithMultishardIndexComplexFkPk(kikimr.GetTestClient(), IG_UNIQUE);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        FillTable(session);
+
+        {
+            const TString query(Q_(R"(
+                UPDATE `/Root/MultiShardIndexed` SET fk = 1000000000 WHERE key = 2;
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto yson = ReadTableToYson(session, "/Root/MultiShardIndexed/index/indexImplTable");
+            const TString expected = R"([[[1000000000u];[1u]];[[1000000000u];[2u]];[[3000000000u];[3u]];[[4294967295u];[4u]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+    }
+
     Y_UNIT_TEST(InsertNullInPk) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         CreateTableWithMultishardIndex(kikimr.GetTestClient(), IG_UNIQUE);

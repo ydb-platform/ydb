@@ -42,6 +42,14 @@ public:
         out << info.DebugString();
         return out;
     }
+
+    bool HasSnapshotMinMax() const {
+        return !!RecordSnapshotMax && !!RecordSnapshotMin;
+    }
+
+    bool HasPrimaryKeyBorders() const {
+        return !!IndexKeyStart && !!IndexKeyEnd;
+    }
 };
 
 class TPortionAddress {

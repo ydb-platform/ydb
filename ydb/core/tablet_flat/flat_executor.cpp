@@ -37,6 +37,7 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/monotonic_provider.h>
 
 #include <util/generic/xrange.h>
 #include <util/generic/ymath.h>
@@ -784,14 +785,25 @@ void TExecutor::FollowerAuxUpdate(TString upd) {
     }
 }
 
-void TExecutor::FollowerAttached() {
-    HadFollowerAttached = true;
+void TExecutor::FollowerAttached(ui32 totalFollowers) {
+    Stats->FollowersCount = totalFollowers;
     NeedFollowerSnapshot = true;
 
     if (CurrentStateFunc() != &TThis::StateWork)
         return;
 
     MakeLogSnapshot();
+
+    Owner->OnFollowersCountChanged();
+}
+
+void TExecutor::FollowerDetached(ui32 totalFollowers) {
+    Stats->FollowersCount = totalFollowers;
+
+    if (CurrentStateFunc() != &TThis::StateWork)
+        return;
+
+    Owner->OnFollowersCountChanged();
 }
 
 void TExecutor::FollowerSyncComplete() {
@@ -1287,6 +1299,7 @@ void TExecutor::RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartV
             auto req = partView.As<NTable::TPartStore>()->GetPages(groupIndex);
 
             TPrivatePageCache::TInfo *info = PrivatePageCache->Info(req->PageCollection->Label());
+            Y_ABORT_UNLESS(info);
             for (ui32 pageId : req->Pages)
                 PrivatePageCache->MarkSticky(pageId, info);
 

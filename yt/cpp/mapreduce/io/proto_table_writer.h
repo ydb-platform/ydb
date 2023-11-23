@@ -55,7 +55,12 @@ private:
     TVector<const ::google::protobuf::Descriptor*> Descriptors_;
 };
 
-// Sometime useful outside mapreduce/yt
+/// [Deprecated] Create TNode from protobuf message
+///
+/// @deprecated This function works only in simple cases. On nontrivial messages its interpretation
+/// of protobuf messages might significantly differ from YT interpretation.
+///
+/// This function doesn't support composite types and many attributes supported by protobuf Reader/Writer.
 TNode MakeNodeFromMessage(const ::google::protobuf::Message& row);
 
 ////////////////////////////////////////////////////////////////////////////////

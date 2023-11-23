@@ -1,12 +1,12 @@
-# Импорт данных из PostrgeSQL
+# Импорт данных из PostgreSQL
 
 Данные из PostgreSQL в YDB можно перенести c помощью утилит [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), [psql](https://www.postgresql.org/docs/current/app-psql.html) и [YDB CLI](../reference/ydb-cli/index.md). Утилиты [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) и [psql](https://www.postgresql.org/docs/current/app-psql.html) устанавливаются вместе с PostgreSQL, [YDB CLI](../reference/ydb-cli/index.md) — консольный клиент YDB, который [устанавливается отдельно](../reference/ydb-cli/install.md).
 
 Для этого нужно:
 
 1. Сделать дамп данных через [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) со следующими параметрами:
-    * `--inserts` — для добавления данных через команду [INSERT](statements.md#insert), вместо использования протокола [COPY](https://www.postgresql.org/docs/current/sql-copy.html).
-    * `--column-inserts` — для добавления данных через команду [INSERT](statements.md#insert) с именами колонок.
+    * `--inserts` — для добавления данных через команду [INSERT](./statements/insert_into.md), вместо использования протокола [COPY](https://www.postgresql.org/docs/current/sql-copy.html).
+    * `--column-inserts` — для добавления данных через команду [INSERT](./statements/insert_into.md) с именами колонок.
     * `--rows-per-insert=1000` — для вставки данных пачками и ускорения процесса.
     * `--encoding=utf_8` — YDB поддерживает строковые данные только в [UTF-8](https://ru.wikipedia.org/wiki/UTF-8).
 2. Привести дамп к виду, который поддерживается YDB командой `ydb tools pg-convert` [YDB CLI](../reference/ydb-cli/index.md).
@@ -14,11 +14,11 @@
 
 ## Команда pg-convert {#pg-convert}
 
-Команда `ydb tools pg-convert` считывает из файла или stdin'а дамп, полученный утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), выполняет преобразования и выводит в stdout дамп, который можно отправить в postgres-совместимую прослойку YDB.
+Команда `ydb tools pg-convert` считывает из файла или stdin'а дамп, полученный утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), выполняет преобразования и выводит в stdout дамп, который можно отправить в PostgreSQL-совместимую прослойку YDB.
 
 `ydb tools pg-convert` выполняет следующие преобразования:
 
-* Перенос создания первичного ключа в тело команды [CREATE TABLE](statements.md#create).
+* Перенос создания первичного ключа в тело команды [CREATE TABLE](./statements/create_table.md).
 * Вырезание схемы `public` из имен таблиц.
 * Удаление секции `WITH (...)` в `CREATE TABLE`
 * Комментирование неподдерживаемых конструкций (опционально):
@@ -45,7 +45,7 @@
 
 {% note warning %}
 
-При загрузке больших дампов считывание из stdin'a не рекомендуется, поскольку в таком случае весь дамп будет сохранен в оперативной памяти. Рекомедуется использовать опцию с файлом, в таком случае CLI будет держать в памяти небольшую часть дампа.
+При загрузке больших дампов считывание из stdin'a не рекомендуется, поскольку в таком случае весь дамп будет сохранен в оперативной памяти. Рекомендуется использовать опцию с файлом, в таком случае CLI будет держать в памяти небольшую часть дампа.
 
 {% endnote %}
 

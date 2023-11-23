@@ -11710,6 +11710,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["OrderedExtract"] = &ExtractWrapper;
         Functions["UnionAll"] = &UnionAllWrapper;
         Functions["UnionMerge"] = &UnionAllWrapper;
+        Functions["Union"] = &UnionAllWrapper;
         Functions["ListExtend"] = &ListExtendWrapper<false>;
         Functions["ListExtendStrict"] = &ListExtendWrapper<true>;
         Functions["ListUnionAll"] = &ListUnionAllWrapper;
@@ -12203,6 +12204,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["AssumeColumnOrder"] = &AssumeColumnOrderWrapper;
         ExtFunctions["AssumeColumnOrderPartial"] = &AssumeColumnOrderWrapper;
         ExtFunctions["UnionAllPositional"] = &UnionAllPositionalWrapper;
+        ExtFunctions["UnionPositional"] = &UnionAllPositionalWrapper;
         ExtFunctions["SafeCast"] = &CastWrapper<false>;
         ExtFunctions["StrictCast"] = &CastWrapper<true>;
 
@@ -12223,6 +12225,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ColumnOrderFunctions["Merge"] = ColumnOrderFunctions["Extend"] = &OrderForMergeExtend;
         ColumnOrderFunctions[RightName] = &OrderFromFirst;
         ColumnOrderFunctions["UnionAll"] = &OrderForUnionAll;
+        ColumnOrderFunctions["Union"] = &OrderForUnionAll;
         ColumnOrderFunctions["EquiJoin"] = &OrderForEquiJoin;
         ColumnOrderFunctions["CalcOverWindow"] = &OrderForCalcOverWindow;
 

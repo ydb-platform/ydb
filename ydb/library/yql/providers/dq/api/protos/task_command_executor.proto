@@ -19,7 +19,6 @@ message TCommandHeader {
         RUN = 5;
         PREPARE = 6;
         STOP = 7;
-        GET_INPUT_TYPE = 8;
         GET_FREE_SPACE = 9;
 
         FINISH_OUTPUT = 10;
@@ -35,13 +34,11 @@ message TCommandHeader {
         GET_FREE_SPACE_SOURCE = 18;
         GET_STORED_BYTES_SOURCE = 19;
         PUSH_SOURCE = 20;
-        GET_SOURCE_TYPE = 21;
         FINISH_SOURCE = 22;
 
         // Sink
         SINK_POP = 23; // TSinkPopRequest -> TSinkPopResponse
         SINK_IS_FINISHED = 24; // Header -> TIsFinishedResponse
-        SINK_OUTPUT_TYPE = 25; // Header -> TGetTypeResponse
         SINK_STATS = 26; // Header -> TGetSinkStatsResponse
 
         GET_METERING_STATS = 27;
@@ -78,24 +75,29 @@ message TMeteringStatsResponse {
 
 message TSinkPopRequest {
     uint64 Bytes = 1;
-    bool Raw = 2;
 };
 
 message TSinkPopResponse {
     uint64 Bytes = 1;
     TData Data = 2;
     repeated TMetric Metric = 3;
-    repeated bytes String = 4;
 }
 
 message TIsFinishedResponse {
     bool Result = 1;
 }
 
+message TFreeSpace {
+    uint64 Id = 1;
+    int64 Space = 2;
+}
+
 message TRunResponse {
     int32 Result = 1;
     repeated TMetric Metric = 2;
     TRusage Rusage = 3;
+    repeated TFreeSpace ChannelFreeSpace = 4;
+    repeated TFreeSpace SourceFreeSpace = 5;
 }
 
 message TPrepareResponse {
@@ -146,15 +148,5 @@ message TPrepareRequest {
 message TSourcePushRequest {
     TData Data = 1;
     int64 Space = 2;
-    repeated bytes String = 3;
-    int32 Chunks = 4;
 }
 
-message TSourcePushChunk {
-    int64 Parts = 1;
-    bytes String = 2;
-}
-
-message TSourcePushPart {
-    bytes String = 1;
-}

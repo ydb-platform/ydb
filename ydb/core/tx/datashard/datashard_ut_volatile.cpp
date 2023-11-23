@@ -1,4 +1,4 @@
-#include "datashard_ut_common.h"
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
 #include "datashard_ut_common_pq.h"
 #include "datashard_active_transaction.h"
@@ -1048,7 +1048,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             msg->Record.MutableSnapshot()->SetTxId(Max<ui64>());
             msg->Record.AddColumns(1);
             msg->Record.AddColumns(2);
-            msg->Record.SetResultFormat(NKikimrTxDataShard::ARROW);
+            msg->Record.SetResultFormat(NKikimrDataEvents::FORMAT_ARROW);
 
             TVector<TCell> fromKeyCells = { TCell::Make(ui32(0)) };
             TVector<TCell> toKeyCells = { TCell::Make(ui32(10)) };
@@ -1178,7 +1178,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             msg->Record.MutableSnapshot()->SetTxId(Max<ui64>());
             msg->Record.AddColumns(1);
             msg->Record.AddColumns(2);
-            msg->Record.SetResultFormat(NKikimrTxDataShard::ARROW);
+            msg->Record.SetResultFormat(NKikimrDataEvents::FORMAT_ARROW);
             msg->Record.SetMaxRowsInResult(1);
 
             TVector<TCell> fromKeyCells = { TCell::Make(ui32(0)) };

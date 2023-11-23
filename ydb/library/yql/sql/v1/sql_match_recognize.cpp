@@ -310,7 +310,7 @@ NYql::NMatchRecognize::TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTer
                     Y_ABORT("You should change implementation according to grammar changes");
             }
         }
-        term.push_back(NYql::NMatchRecognize::TRowPatternFactor{std::move(primary), quantityMin, quantityMax, greedy, output});
+        term.push_back(NYql::NMatchRecognize::TRowPatternFactor{std::move(primary), quantityMin, quantityMax, greedy, output, false});
     }
     return term;
 }

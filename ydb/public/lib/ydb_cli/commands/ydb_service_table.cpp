@@ -822,6 +822,11 @@ void TCommandExplain::Config(TConfig& config) {
     config.SetFreeArgsNum(0);
 }
 
+void TCommandExplain::SaveDiagnosticsToFile(const TString& diagnostics) {
+    TFileOutput file(TStringBuilder() << "diagnostics_" << TGUID::Create().AsGuidString() << ".txt");
+    file << diagnostics;
+}
+
 void TCommandExplain::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParseFormats();
@@ -843,8 +848,14 @@ int TCommandExplain::Run(TConfig& config) {
             settings.Explain(true);
         }
 
+        if (CollectFullDiagnostics) {
+            settings.CollectFullDiagnostics(true);
+        }
+
         auto result = client.StreamExecuteScanQuery(Query, settings).GetValueSync();
         ThrowOnError(result);
+
+        TString diagnostics;
 
         SetInterruptHandlers();
         while (!IsInterrupted()) {
@@ -860,6 +871,13 @@ int TCommandExplain::Run(TConfig& config) {
                 planJson = proto.query_plan();
                 ast = proto.query_ast();
             }
+            if (tablePart.HasDiagnostics()) {
+                diagnostics = tablePart.ExtractDiagnostics();
+            }
+        }
+
+        if (CollectFullDiagnostics) {
+            SaveDiagnosticsToFile(diagnostics);
         }
 
         if (IsInterrupted()) {
@@ -930,8 +948,7 @@ int TCommandExplain::Run(TConfig& config) {
         ast = result.GetAst();
 
         if (CollectFullDiagnostics) {
-            TFileOutput file(TStringBuilder() << "diagnostics_" << TGUID::Create().AsGuidString() << ".txt");
-            file << result.GetDiagnostics();
+            SaveDiagnosticsToFile(result.GetDiagnostics());
         }
 
     } else {

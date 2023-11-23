@@ -9,20 +9,24 @@
 
 add_library(libs-hyperscan-runtime_avx512)
 target_compile_options(libs-hyperscan-runtime_avx512 PRIVATE
-  /D__SSE4_1__=1
+  -msse4.1
   -DHAVE_SSE41
-  /D__SSE4_2__=1
+  -msse4.2
   -DHAVE_SSE42
   -DHAVE_POPCOUNT_INSTR
-  /D__POPCNT__=1
-  /arch:AVX
-  /DAVX_ENABLED=1
+  -mpopcnt
+  -mavx
   -DHAVE_AVX
-  /arch:AVX2
-  /DAVX2_ENABLED=1
+  -mavx2
+  -mfma
+  -mbmi
+  -mbmi2
   -DHAVE_AVX2
-  /arch:AVX512
-  /DAVX512_ENABLED=1
+  -mavx512f
+  -mavx512cd
+  -mavx512bw
+  -mavx512dq
+  -mavx512vl
   -DHAVE_AVX512
   -DCrc32c_ComputeBuf=avx512_Crc32c_ComputeBuf
   -DblockInitSufPQ=avx512_blockInitSufPQ

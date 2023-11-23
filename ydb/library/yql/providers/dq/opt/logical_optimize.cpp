@@ -8,11 +8,14 @@
 #include <ydb/library/yql/dq/integration/yql_dq_optimization.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/core/cbo/cbo_optimizer.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/optimizer.h>
+
+#include <util/generic/bitmap.h>
 
 namespace NYql::NDqs {
 
@@ -60,6 +63,10 @@ public:
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqReadWrap));
         AddHandler(0, &TCoCountBase::Match, HNDL(TakeOrSkipOverDqReadWrap));
         AddHandler(0, &TCoExtendBase::Match, HNDL(ExtendOverDqReadWrap));
+        AddHandler(0, &TCoNarrowMap::Match, HNDL(DqReadWideWrapFieldSubset));
+        AddHandler(0, &TCoNarrowFlatMap::Match, HNDL(DqReadWideWrapFieldSubset));
+        AddHandler(0, &TCoNarrowMultiMap::Match, HNDL(DqReadWideWrapFieldSubset));
+        AddHandler(0, &TCoWideMap::Match, HNDL(DqReadWideWrapFieldSubset));
         AddHandler(0, &TCoAggregateBase::Match, HNDL(RewriteAggregate));
         AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeSortToTopSort));
         AddHandler(0, &TCoEquiJoin::Match, HNDL(OptimizeEquiJoinWithCosts));
@@ -70,8 +77,15 @@ public:
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(FlatMapOverExtend));
         AddHandler(0, &TDqQuery::Match, HNDL(MergeQueriesWithSinks));
         AddHandler(0, &TCoSqlIn::Match, HNDL(SqlInDropCompact));
-        AddHandler(0, &TDqReadWrapBase::Match, HNDL(DqReadWrapByProvider));
+        AddHandler(0, &TDqReplicate::Match, HNDL(ReplicateFieldSubset));
+
+        AddHandler(1, &TDqReadWrapBase::Match, HNDL(DqReadWrapByProvider));
+
+        AddHandler(2, &TDqReadWrap::Match, HNDL(ExtractMembersOverDqReadWrapMultiUsage));
+        AddHandler(2, &TDqReadWrapBase::Match, HNDL(UnorderedOverDqReadWrapMultiUsage));
 #undef HNDL
+
+        SetGlobal(2u);
     }
 
 protected:
@@ -121,7 +135,6 @@ protected:
                     return node;
                 }
             }
-
             auto providerRead = maybeRead.Cast();
             if (auto dqOpt = GetDqOptCallback(providerRead)) {
                 auto updatedRead = dqOpt->ApplyExtractMembers(providerRead.Ptr(), extract.Members().Ptr(), ctx);
@@ -211,9 +224,10 @@ protected:
                 if (outReaders.empty()) {
                     return {};
                 }
-                if (inReaders != outReaders) {
-                    YQL_ENSURE(outReaders.size() <= inReaders.size());
+                if (inReaders == outReaders) {
+                    return node;
                 }
+                YQL_ENSURE(outReaders.size() <= inReaders.size());
                 size_t i = 0;
                 for (; i < outReaders.size(); ++i) {
                     newChildren[list[i].first] = ctx.ChangeChild(*newChildren[list[i].first], TDqReadWrapBase::idx_Input, std::move(outReaders[i]));
@@ -230,6 +244,74 @@ protected:
         } else {
             return TExprBase(newChildren.front());
         }
+    }
+
+    TMaybeNode<TExprBase> DqReadWideWrapFieldSubset(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        auto map = node.Cast<TCoMapBase>();
+
+        if (const auto maybeRead = map.Input().Maybe<TDqReadWideWrap>().Input()) {
+            const TParentsMap* parentsMap = getParents();
+            auto parentsIt = parentsMap->find(map.Input().Raw());
+            YQL_ENSURE(parentsIt != parentsMap->cend());
+            if (parentsIt->second.size() > 1) {
+                return node;
+            }
+
+            TDynBitMap unusedArgs;
+            for (ui32 i = 0; i < map.Lambda().Args().Size(); ++i) {
+                if (auto parentsIt = parentsMap->find(map.Lambda().Args().Arg(i).Raw()); parentsIt == parentsMap->cend() || parentsIt->second.empty()) {
+                    unusedArgs.Set(i);
+                }
+            }
+            if (unusedArgs.Empty()) {
+                return node;
+            }
+
+            auto providerRead = maybeRead.Cast();
+            if (auto dqOpt = GetDqOptCallback(providerRead)) {
+
+                auto structType = GetSeqItemType(*providerRead.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1]).Cast<TStructExprType>();
+                TExprNode::TListType newMembers;
+                for (ui32 i = 0; i < map.Lambda().Args().Size(); ++i) {
+                    if (!unusedArgs.Get(i)) {
+                        newMembers.push_back(ctx.NewAtom(providerRead.Pos(), structType->GetItems().at(i)->GetName()));
+                    }
+                }
+
+                auto updatedRead = dqOpt->ApplyExtractMembers(providerRead.Ptr(), ctx.NewList(providerRead.Pos(), std::move(newMembers)), ctx);
+                if (!updatedRead) {
+                    return {};
+                }
+                if (updatedRead == providerRead.Ptr()) {
+                    return node;
+                }
+
+                TExprNode::TListType newArgs;
+                TNodeOnNodeOwnedMap replaces;
+                for (ui32 i = 0; i < map.Lambda().Args().Size(); ++i) {
+                    if (!unusedArgs.Get(i)) {
+                        auto newArg = ctx.NewArgument(map.Lambda().Args().Arg(i).Pos(), map.Lambda().Args().Arg(i).Name());
+                        newArgs.push_back(newArg);
+                        replaces.emplace(map.Lambda().Args().Arg(i).Raw(), std::move(newArg));
+                    }
+                }
+
+                auto newLambda = ctx.NewLambda(
+                    map.Lambda().Pos(),
+                    ctx.NewArguments(map.Lambda().Args().Pos(), std::move(newArgs)),
+                    ctx.ReplaceNodes(GetLambdaBody(map.Lambda().Ref()), replaces));
+
+                return Build<TCoMapBase>(ctx, map.Pos())
+                    .CallableName(map.CallableName())
+                    .Input<TDqReadWideWrap>()
+                        .InitFrom(map.Input().Cast<TDqReadWideWrap>())
+                        .Input(updatedRead)
+                    .Build()
+                    .Lambda(newLambda)
+                    .Done();
+            }
+        }
+        return node;
     }
 
     TMaybeNode<TExprBase> FlatMapOverExtend(TExprBase node, TExprContext& ctx) {
@@ -330,6 +412,10 @@ protected:
         return DqSqlInDropCompact(node, ctx);
     }
 
+    TMaybeNode<TExprBase> ReplicateFieldSubset(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
+        return DqReplicateFieldSubset(node, ctx, *getParents());
+    }
+
     TMaybeNode<TExprBase> DqReadWrapByProvider(TExprBase node, TExprContext& ctx) const {
         auto providerRead = node.Cast<TDqReadWrapBase>().Input();
         if (auto dqOpt = GetDqOptCallback(providerRead)) {
@@ -339,6 +425,83 @@ protected:
             }
             if (updatedRead != providerRead.Ptr()) {
                 return TExprBase(ctx.ChangeChild(node.Ref(), TDqReadWrapBase::idx_Input, std::move(updatedRead)));
+            }
+        }
+        return node;
+    }
+
+    TMaybeNode<TExprBase> ExtractMembersOverDqReadWrapMultiUsage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        auto providerRead = node.Cast<TDqReadWrap>().Input();
+        if (auto dqOpt = GetDqOptCallback(providerRead)) {
+            TNodeOnNodeOwnedMap toOptimize;
+            TExprNode::TPtr res;
+            bool error = false;
+            OptimizeSubsetFieldsForNodeWithMultiUsage(node.Ptr(), *getParents(), toOptimize, ctx,
+                [&] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) -> TExprNode::TPtr {
+                    auto updatedRead = dqOpt->ApplyExtractMembers(providerRead.Ptr(), members, ctx);
+                    if (!updatedRead) {
+                        error = true;
+                        return {};
+                    }
+                    if (updatedRead != providerRead.Ptr()) {
+                        res = ctx.ChangeChild(node.Ref(), TDqReadWrap::idx_Input, std::move(updatedRead));
+                        return res;
+                    }
+
+                    return input;
+                }
+            );
+            if (error) {
+                return {};
+            }
+            if (!toOptimize.empty()) {
+                for (auto& [s, d]: toOptimize) {
+                    optCtx.RemapNode(*s, d);
+                }
+                return TExprBase(res);
+            }
+        }
+
+        return node;
+    }
+
+    TMaybeNode<TExprBase> UnorderedOverDqReadWrapMultiUsage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        auto providerRead = node.Cast<TDqReadWrapBase>().Input();
+        if (auto dqOpt = GetDqOptCallback(providerRead)) {
+            auto parentsMap = getParents();
+            auto it = parentsMap->find(node.Raw());
+            if (it == parentsMap->cend() || it->second.size() <= 1) {
+                return node;
+            }
+
+            bool hasUnordered = false;
+            for (auto parent: it->second) {
+                if (TCoUnorderedBase::Match(parent)) {
+                    hasUnordered = true;
+                } else if (!TCoAggregateBase::Match(parent) && !TCoFlatMap::Match(parent)) {
+                    return node;
+                }
+            }
+
+            if (!hasUnordered) {
+                return node;
+            }
+
+            auto updatedRead = dqOpt->ApplyUnordered(providerRead.Ptr(), ctx);
+            if (!updatedRead) {
+                return {};
+            }
+            if (updatedRead != providerRead.Ptr()) {
+                auto newDqReadWrap = ctx.ChangeChild(node.Ref(), TDqReadWrapBase::idx_Input, std::move(updatedRead));
+                for (auto parent: it->second) {
+                    if (TCoUnorderedBase::Match(parent)) {
+                        optCtx.RemapNode(*parent, newDqReadWrap);
+                    } else if (TCoAggregateBase::Match(parent) || TCoFlatMap::Match(parent)) {
+                        optCtx.RemapNode(*parent, ctx.ChangeChild(*parent, 0, TExprNode::TPtr(newDqReadWrap)));
+                    }
+                }
+
+                return TExprBase(newDqReadWrap);
             }
         }
         return node;

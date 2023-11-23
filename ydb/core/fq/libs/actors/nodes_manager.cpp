@@ -188,6 +188,7 @@ private:
         hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
         hFunc(NFq::TEvInternalService::TEvHealthCheckResponse, HandleResponse)
         hFunc(NActors::TEvAddressInfo, Handle)
+        hFunc(NActors::TEvResolveError, Handle)
         )
 
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
@@ -205,9 +206,14 @@ private:
             Address = NAddr::PrintHost(*ev->Get()->Address);
             NodesHealthCheck();
         } else {
-            LOG_E("TNodesManagerActor error resolving");
+            LOG_E("TNodesManagerActor::TEvAddressInfo: empty Address");
             ResolveSelfAddress();
         }
+    }
+
+    void Handle(NActors::TEvResolveError::TPtr& ev) {
+        LOG_E("TNodesManagerActor::TEvResolveError: " << ev->Get()->Explain << ", Host: " << ev->Get()->Host);
+        ResolveSelfAddress();
     }
 
     void ResolveSelfAddress() {

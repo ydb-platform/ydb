@@ -13,6 +13,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/stream.pb.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
@@ -3023,6 +3024,7 @@ bool TDataReq::ParseRangeKey(const NKikimrMiniKQL::TParams &proto,
                              EParseRangeKeyExp exp)
 {
     TVector<TCell> key;
+    TVector<TString> memoryOwner;
     if (proto.HasValue()) {
         if (!proto.HasType()) {
             UnresolvedKeys.push_back("No type was specified in the range key tuple");
@@ -3032,7 +3034,7 @@ bool TDataReq::ParseRangeKey(const NKikimrMiniKQL::TParams &proto,
         auto& value = proto.GetValue();
         auto& type = proto.GetType();
         TString errStr;
-        bool res = NMiniKQL::CellsFromTuple(&type, value, keyType, true, key, errStr);
+        bool res = NMiniKQL::CellsFromTuple(&type, value, keyType, true, key, errStr, memoryOwner);
         if (!res) {
             UnresolvedKeys.push_back("Failed to parse range key tuple: " + errStr);
             return false;

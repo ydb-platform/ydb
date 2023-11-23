@@ -33,12 +33,4 @@
 
 
 namespace NKikimr {
-
-struct TAppConfig : public NKikimrConfig::TAppConfig, public TThrRefBase, TNonCopyable {
-    explicit TAppConfig(const NKikimrConfig::TAppConfig& c)
-        : NKikimrConfig::TAppConfig(c)
-    {}
-};
-
-
 } // NKikimr

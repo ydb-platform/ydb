@@ -10,6 +10,8 @@ namespace NKikimr::NKqp {
         TString TraceId;
         TString Database;
         TString SessionId;
+        TString CurrentExecutionId;
+        TString CustomerSuppliedId;
 
         TUserRequestContext() = default;
 
@@ -18,6 +20,12 @@ namespace NKikimr::NKqp {
             , Database(database)
             , SessionId(sessionId) {}
 
+        TUserRequestContext(const TString& traceId, const TString& database, const TString& sessionId, const TString& currentExecutionId, const TString& customerSuppliedId)
+            : TraceId(traceId)
+            , Database(database)
+            , SessionId(sessionId)
+            , CurrentExecutionId(currentExecutionId)
+            , CustomerSuppliedId(customerSuppliedId) {}
 
         void Out(IOutputStream& o) const;
     };

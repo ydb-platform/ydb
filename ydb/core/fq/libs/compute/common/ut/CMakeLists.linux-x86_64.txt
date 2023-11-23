@@ -34,6 +34,7 @@ target_link_options(ydb-core-fq-libs-compute-common-ut PRIVATE
 )
 target_sources(ydb-core-fq-libs-compute-common-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/compute/common/ut/config_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/compute/common/ut/utils_ut.cpp
 )
 set_property(
   TARGET

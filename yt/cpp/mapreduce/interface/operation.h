@@ -538,6 +538,9 @@ struct TOperationSpecBase
 
     /// How much resources can be consumed by operation.
     FLUENT_FIELD_OPTION_ENCAPSULATED(TSchedulerResources, ResourceLimits);
+
+    /// How many jobs can fail before operation is failed.
+    FLUENT_FIELD_OPTION(ui64, MaxFailedJobCount);
 };
 
 ///
@@ -549,9 +552,6 @@ struct TUserOperationSpecBase
     /// @cond Doxygen_Suppress
     using TSelf = TDerived;
     /// @endcond
-
-    /// How many jobs can fail before operation is failed.
-    FLUENT_FIELD_OPTION(ui64, MaxFailedJobCount);
 
     /// On any unsuccessful job completion (i.e. abortion or failure) force the whole operation to fail.
     FLUENT_FIELD_OPTION(bool, FailOnJobRestart);

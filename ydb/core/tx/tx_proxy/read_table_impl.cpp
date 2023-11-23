@@ -5,6 +5,7 @@
 #include <ydb/core/tx/tx_processing.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/scheme/scheme_borders.h>
@@ -95,6 +96,7 @@ namespace {
             TVector<TString>& unresolvedKeys)
     {
         TVector<TCell> key;
+        TVector<TString> memoryOwner;
         if (proto.HasValue()) {
             if (!proto.HasType()) {
                 unresolvedKeys.push_back("No type was specified in the range key tuple");
@@ -104,7 +106,7 @@ namespace {
             auto& value = proto.GetValue();
             auto& type = proto.GetType();
             TString errStr;
-            bool res = NMiniKQL::CellsFromTuple(&type, value, keyTypes, true, key, errStr);
+            bool res = NMiniKQL::CellsFromTuple(&type, value, keyTypes, true, key, errStr, memoryOwner);
             if (!res) {
                 unresolvedKeys.push_back("Failed to parse range key tuple: " + errStr);
                 return false;
@@ -1069,7 +1071,7 @@ private:
 
     void ExtractDatashardErrors(const NKikimrTxDataShard::TEvProposeTransactionResult& record) {
         for (const auto &er : record.GetError()) {
-            DatashardErrors << "[" << NKikimrTxDataShard::TError_EKind_Name(er.GetKind()) << "] " << er.GetReason() << Endl;
+            DatashardErrors << "[" << er.GetKind() << "] " << er.GetReason() << Endl;
         }
 
         ComplainingDatashards.push_back(record.GetOrigin());
@@ -1601,7 +1603,7 @@ private:
                 TXLOG_T("Ignore propose result from ShardId# " << shardId << " TxId# " << msg->GetTxId()
                         << " in State# " << state.State << " ReadTxId# " << state.ReadTxId);
                 // Pretend we don't exist if sender tracks delivery
-                ctx.Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
+                ctx.Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown));
                 return;
         }
 
@@ -1994,7 +1996,7 @@ private:
         if (state.State != EShardState::ReadTableStreaming || state.ReadTxId != record.GetTxId()) {
             // Ignore outdated messages and pretend we don't exist
             TXLOG_T("Ignoring outdated TEvStreamQuotaRequest from ShardId# " << shardId);
-            ctx.Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
+            ctx.Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown));
             return;
         }
 
@@ -2045,7 +2047,7 @@ private:
         if (state.State != EShardState::ReadTableStreaming || state.ReadTxId != record.GetTxId()) {
             // Ignore outdated messages and pretend we don't exist
             TXLOG_T("Ignoring outdated TEvStreamQuotaRelease from ShardId# " << shardId);
-            ctx.Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
+            ctx.Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown));
             return;
         }
 
@@ -2711,7 +2713,7 @@ private:
             HFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandleZombieDie);
             default:
                 // For all other events we play dead as if we didn't exist
-                Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
+                Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown));
                 break;
         }
     }

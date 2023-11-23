@@ -131,6 +131,16 @@ inline bool TLockMask::HasNewLocks() const
     return false;
 }
 
+inline bool TLockMask::IsNone() const {
+    for (int index = 0; index < GetSize(); ++index) {
+        if (Get(index) != ELockType::None) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 inline void TLockMask::Reserve(int size)
 {
     YT_VERIFY(size < MaxSize);

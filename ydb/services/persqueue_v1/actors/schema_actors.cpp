@@ -695,12 +695,18 @@ void TDescribeTopicActorImpl::Handle(NKikimr::TEvPersQueue::TEvStatusResponse::T
     if (tabletInfo.ResultRecived) return;
 
     auto& record = ev->Get()->Record;
+    bool doRestart = (record.PartResultSize() == 0);
+    
     for (auto& partResult : record.GetPartResult()) {
         if (partResult.GetStatus() == NKikimrPQ::TStatusResponse::STATUS_INITIALIZING ||
             partResult.GetStatus() == NKikimrPQ::TStatusResponse::STATUS_UNKNOWN) {
-            RestartTablet(record.GetTabletId(), ctx, {}, TDuration::MilliSeconds(100));
-            return;
+                doRestart = true;
+                break;
         }
+    }
+    if (doRestart) {
+        RestartTablet(record.GetTabletId(), ctx, {}, TDuration::MilliSeconds(100));
+        return;
     }
 
     tabletInfo.ResultRecived = true;
@@ -1406,7 +1412,7 @@ TPartitionsLocationActor::TPartitionsLocationActor(const TGetPartitionsLocationR
 void TPartitionsLocationActor::Bootstrap(const NActors::TActorContext&)
 {
     SendDescribeProposeRequest();
-    Become(&TPartitionsLocationActor::StateWork);
+    UnsafeBecome(&TPartitionsLocationActor::StateWork);
     SendNodesRequest();
 
 }

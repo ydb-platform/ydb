@@ -185,7 +185,12 @@ public:
     }
 
     static const std::vector<ui32>& GetSpecialColumnIds() {
-        static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID };
+        static const std::vector<ui32> result = {(ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID};
+        return result;
+    }
+
+    static const std::set<ui32>& GetSpecialColumnIdsSet() {
+        static const std::set<ui32> result(GetSpecialColumnIds().begin(), GetSpecialColumnIds().end());
         return result;
     }
 

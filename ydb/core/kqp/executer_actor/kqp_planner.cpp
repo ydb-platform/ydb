@@ -330,8 +330,8 @@ void TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, bool shareMailbox, bool op
     if (Deadline) {
         settings.Timeout = Deadline - TAppData::TimeProvider->Now();
     }
-    //settings.ExtraMemoryAllocationPool = NRm::EKqpMemoryPool::DataQuery;
-    settings.ExtraMemoryAllocationPool = NRm::EKqpMemoryPool::Unspecified;
+
+    settings.ExtraMemoryAllocationPool = NRm::EKqpMemoryPool::DataQuery;
     settings.FailOnUndelivery = true;
     settings.StatsMode = GetDqStatsMode(StatsMode);
     settings.UseSpilling = false;

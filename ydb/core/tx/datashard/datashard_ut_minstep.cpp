@@ -1,5 +1,5 @@
 #include "defs.h"
-#include "datashard_ut_common.h"
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -365,7 +365,6 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         {
             auto event = new TEvDataShard::TEvProposeTransaction;
             event->Record = proposeRecord;
-            ActorIdToProto(sender, event->Record.MutableSource());
             runtime.Send(new IEventHandle(shardActorId, sender, event), 0, true);
         }
 

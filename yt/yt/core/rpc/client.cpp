@@ -426,6 +426,9 @@ void TClientRequest::TraceRequest(const NTracing::TTraceContextPtr& traceContext
 {
     traceContext->AddTag(RequestIdAnnotation, GetRequestId());
     traceContext->AddTag(EndpointAnnotation, Channel_->GetEndpointDescription());
+    for (const auto& [tagKey, tagValue] : TracingTags_) {
+        traceContext->AddTag(tagKey, tagValue);
+    }
 }
 
 void TClientRequest::PrepareHeader()

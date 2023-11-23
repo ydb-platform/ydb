@@ -1126,6 +1126,53 @@ TEST(TYsonStructTest, DontSerializeDefault)
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+struct TSimpleStruct
+{
+    int Value;
+};
+
+class TConfigWithUniversalParameterAccessor
+    : public TYsonStruct
+{
+public:
+    TSimpleStruct NestedStruct;
+
+    REGISTER_YSON_STRUCT(TConfigWithUniversalParameterAccessor);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.ParameterWithUniversalAccessor<int>("value", [] (TThis* config) -> int& { return config->NestedStruct.Value; })
+            .Default(123);
+    }
+};
+
+TEST(TYsonStructTest, UniversalParameterAccessor)
+{
+    {
+        auto config = New<TConfigWithUniversalParameterAccessor>();
+        EXPECT_EQ(123, config->NestedStruct.Value);
+
+        config->NestedStruct.Value = 3;
+        auto output = ConvertToYsonString(config, NYson::EYsonFormat::Text);
+
+        TString expectedYson = "{\"value\"=3;}";
+        EXPECT_TRUE(AreNodesEqual(
+            ConvertToNode(TYsonString(expectedYson)),
+            ConvertToNode(TYsonString(output.AsStringBuf()))));
+    }
+
+    {
+        TString sourceYson = "{\"value\"=3;}";
+        auto config = ConvertTo<TIntrusivePtr<TConfigWithUniversalParameterAccessor>>(TYsonString(TStringBuf(sourceYson)));
+
+        EXPECT_EQ(3, config->NestedStruct.Value);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TVirtualInheritanceConfig
     : public virtual TYsonStruct
 {
@@ -1491,6 +1538,8 @@ TEST(TYsonStructTest, TestHierarchiesWithCustomInitializationOfBaseParameters)
     EXPECT_EQ(deserialized->Double, 2.2);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TYsonStructTest, TestSimpleSerialization)
 {
     TBufferStream stream;
@@ -1591,6 +1640,34 @@ TEST(TYsonStructTest, TestComplexSerialization)
         SCOPED_TRACE(Format("%v-th config from configs list", i));
         TestCompleteConfig(configsList[i], /*offset*/ i);
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TTestOptionalNoInit
+    : public NYT::NYTree::TYsonStructLite
+{
+public:
+    int FieldWithInit = 1;
+    int FieldNoInit = 1;
+
+    REGISTER_YSON_STRUCT_LITE(TTestOptionalNoInit);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("field1", &TThis::FieldWithInit)
+            .Optional();
+        registrar.Parameter("field2", &TThis::FieldNoInit)
+            .Optional(/*init*/ false);
+    }
+};
+
+
+TEST(TYsonStructTest, TestOptionalNoInit)
+{
+    TTestOptionalNoInit x;
+    EXPECT_EQ(0, x.FieldWithInit);
+    EXPECT_EQ(1, x.FieldNoInit);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

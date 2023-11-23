@@ -34,20 +34,20 @@ Y_UNIT_TEST_SUITE(I128TypeTraitsSuite) {
 
     Y_UNIT_TEST(AbsFromPositive) {
         const i128 n = 1;
-        const i128 m = std::abs(n);
+        const i128 m = abs(n);
         UNIT_ASSERT(m == n);
     }
 
     Y_UNIT_TEST(AbsFromNegative) {
         const i128 n = -1;
-        const i128 m = std::abs(n);
+        const i128 m = abs(n);
         const i128 expected = 1;
         UNIT_ASSERT(m == expected);
     }
 
     Y_UNIT_TEST(AbsFromZero) {
         const i128 n = 0;
-        const i128 m = std::abs(n);
+        const i128 m = abs(n);
         UNIT_ASSERT(m == n);
     }
 

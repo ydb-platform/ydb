@@ -57,6 +57,9 @@ struct TObjectDistribution {
     }
 
     void UpdateCount(const TNodeInfo& node, i64 diff) {
+        if (!node.MatchesFilter(NodeFilter) || !node.IsAllowedToRunTablet()) {
+            return;
+        }
         auto [it, newNode] = Distribution.insert({node.Id, 0});
         i64& value = it->second;
         i64 numNodes = Distribution.size();
@@ -72,6 +75,12 @@ struct TObjectDistribution {
         double newMean = (Mean * (numNodes - 1) + value) / numNodes;
         VarianceNumerator += (Mean - value) * (newMean - value);
         Mean = newMean;
+    }
+
+    void SetCount(const TNodeInfo& node, i64 value) {
+        auto it = Distribution.find(node.Id);
+        i64 oldValue = (it == Distribution.end()) ? 0 : it->second;
+        UpdateCount(node, value - oldValue);
     }
 
     void RemoveNode(TNodeId node) {
@@ -157,12 +166,8 @@ struct TObjectDistributions {
         } else if (imbalanceBefore > 1e-7 && imbalanceAfter <= 1e-7) {
             --ImbalancedObjects;
         }
-        if (!dist.Distribution.empty()) {
-            auto sortedIt = SortedDistributions.insert(std::move(handle));
-            distIt->second = sortedIt;
-        } else {
-            Distributions.erase(distIt);
-        }
+        auto sortedIt = SortedDistributions.insert(std::move(handle));
+        distIt->second = sortedIt;
         return true;
     }
 
@@ -176,9 +181,6 @@ struct TObjectDistributions {
 
     void UpdateCountForTablet(const TLeaderTabletInfo& tablet, const TNodeInfo& node, i64 diff) {
         if (!Enabled) {
-            return;
-        }
-        if (!node.IsAllowedToRunTablet(tablet) && diff <= 0) {
             return;
         }
         auto object = tablet.ObjectId;
@@ -206,7 +208,11 @@ struct TObjectDistributions {
             UpdateCount(obj, node, 0);
         }
         for (const auto& [obj, tablets] : node.TabletsOfObject) {
-            UpdateCount(obj, node, tablets.size());
+            ui64 cnt = tablets.size();
+            auto updateFunc = [&](TObjectDistribution& dist) {
+                dist.SetCount(node, cnt);
+            };
+            UpdateDistribution(obj, updateFunc);
         }
     }
 

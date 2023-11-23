@@ -1289,10 +1289,10 @@ class GnuToolchain(Toolchain):
             if self.tc.is_from_arcadia or self.tc.is_system_cxx:
                 if target.is_apple:
                     if target.is_ios:
-                        self.setup_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
+                        self.setup_xcode_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
                         self.platform_projects.append('build/platform/macos_system_stl')
                     if target.is_macos:
-                        self.setup_sdk(project='build/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
+                        self.setup_xcode_sdk(project='build/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
                         self.platform_projects.append('build/platform/macos_system_stl')
 
                 if target.is_linux:
@@ -1315,10 +1315,10 @@ class GnuToolchain(Toolchain):
                 if target.is_apple:
                     if not tc.os_sdk_local:
                         if target.is_ios:
-                            self.setup_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
+                            self.setup_xcode_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
                             self.platform_projects.append('build/platform/macos_system_stl')
                         if target.is_macos:
-                            self.setup_sdk(project='build/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
+                            self.setup_xcode_sdk(project='build/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
                             self.platform_projects.append('build/platform/macos_system_stl')
                     else:
                         if target.is_iossim:
@@ -1331,6 +1331,12 @@ class GnuToolchain(Toolchain):
     def setup_sdk(self, project, var):
         self.platform_projects.append(project)
         self.c_flags_platform.append('--sysroot={}'.format(var))
+        self.swift_flags_platform += ['-sdk', var]
+
+    def setup_xcode_sdk(self, project, var):
+        self.platform_projects.append(project)
+        self.c_flags_platform.append('-isysroot')
+        self.c_flags_platform.append(var)
         self.swift_flags_platform += ['-sdk', var]
 
     # noinspection PyShadowingBuiltins

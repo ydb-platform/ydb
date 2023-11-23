@@ -1,5 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
+/* skip double format */
 $t = AsList(AsStruct(1 as a),AsStruct(2 as a));
 $f = AGGREGATION_FACTORY("mode");
 

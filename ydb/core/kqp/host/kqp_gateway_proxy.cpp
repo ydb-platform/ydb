@@ -257,6 +257,22 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
         }
     }
 
+    if (metadata->TableSettings.StoreExternalBlobs) {
+        auto& storageSettings = *proto.mutable_storage_settings();
+        TString value = to_lower(metadata->TableSettings.StoreExternalBlobs.GetRef());
+        if (value == "enabled") {
+            storageSettings.set_store_external_blobs(Ydb::FeatureFlag::ENABLED);
+        } else if (value == "disabled") {
+            storageSettings.set_store_external_blobs(Ydb::FeatureFlag::DISABLED);
+        } else {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Unknown feature flag '"
+                << metadata->TableSettings.StoreExternalBlobs.GetRef()
+                << "' for store external blobs";
+            return false;
+        }
+    }
+
     proto.set_temporary(metadata->Temporary);
 
     return true;
@@ -475,6 +491,14 @@ public:
                         }
                     }
                     FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata);
+                    if (sequences.size() > 0 && !sessionCtx->Config().EnableSequences) {
+                        IKqpGateway::TGenericResult errResult;
+                        errResult.AddIssue(NYql::TIssue("Sequences are not supported yet."));
+                        errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::UNSUPPORTED));
+                        tablePromise.SetValue(errResult);
+                        return;
+                    }
+
                     for(const auto& [seq, seqType]: sequences) {
                         auto seqDesc = schemeTx.MutableCreateIndexedTable()->MutableSequenceDescription()->Add();
                         seqDesc->SetName(seq);
@@ -575,7 +599,7 @@ public:
                 errResult.AddIssue(NYql::TIssue(error));
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
                 tablePromise.SetValue(errResult);
-                return tablePromise.GetFuture();      
+                return tablePromise.GetFuture();
             }
             TGenericResult result;
             result.SetSuccess();
@@ -631,10 +655,14 @@ public:
         CHECK_PREPARED_DDL(AlterTable);
 
         auto tablePromise = NewPromise<TGenericResult>();
-    
+
         if (!IsPrepare()) {
             SessionCtx->Query().PrepareOnly = false;
-            if (SessionCtx->Query().PreparingQuery) {
+            if (!SessionCtx->Query().PreparingQuery) {
+                SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+            }
+
+            if (SessionCtx->Query().PreparingQuery->MutablePhysicalQuery()->GetTransactions().size() > 0) {
                 auto code = Ydb::StatusIds::BAD_REQUEST;
                 auto error = TStringBuilder() << "multiple transactions are not supported for alter table operation.";
                 IKqpGateway::TGenericResult errResult;
@@ -643,8 +671,6 @@ public:
                 tablePromise.SetValue(errResult);
                 return tablePromise.GetFuture();
             }
-
-            SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
         }
 
         auto prepareFuture = PrepareAlterTable(cluster, std::move(req), requestType, flags);
@@ -711,7 +737,7 @@ public:
             auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
             auto& phyTx = *phyQuery.AddTransactions();
             phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
-            
+
 
             phyTx.MutableSchemeOperation()->MutableDropTable()->Swap(&schemeTx);
             phyTx.MutableSchemeOperation()->MutableDropTable()->SetSuccessOnNotExist(settings.SuccessOnNotExist);
@@ -837,7 +863,7 @@ public:
         FORWARD_ENSURE_NO_PREPARE(DropExternalTable, cluster, settings);
     }
 
-    TVector<TString> GetCollectedSchemeData() override {
+    TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() override {
         return Gateway->GetCollectedSchemeData();
     }
 

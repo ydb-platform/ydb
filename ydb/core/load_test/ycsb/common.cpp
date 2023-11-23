@@ -16,7 +16,7 @@ namespace {
 
 class TReadIteratorScan : public TActorBootstrapped<TReadIteratorScan> {
     std::unique_ptr<TEvDataShard::TEvRead> Request;
-    const NKikimrTxDataShard::EScanDataFormat Format;
+    const NKikimrDataEvents::EDataFormat Format;
     const ui64 TabletId;
     const TActorId Parent;
     const TSubLoadId Id;
@@ -114,7 +114,7 @@ private:
             return StopWithError(ctx, ss.Str());
         }
 
-        if (Format != NKikimrTxDataShard::CELLVEC) {
+        if (Format != NKikimrDataEvents::FORMAT_CELLVEC) {
             return StopWithError(ctx, "Unsupported format");
         }
 

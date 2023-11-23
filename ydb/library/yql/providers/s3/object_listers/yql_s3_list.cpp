@@ -284,12 +284,7 @@ public:
     ~TS3Lister() override = default;
 private:
     static void SubmitRequestIntoGateway(TListingContext& ctx) {
-        IHTTPGateway::THeaders headers;
-        if (!ctx.ListingRequest.Token.empty()) {
-            headers.emplace_back("X-YaCloud-SubjectToken:" + ctx.ListingRequest.Token);
-        }
-        headers.emplace_back(TString{"X-Request-ID:"} + ctx.RequestId);
-
+        IHTTPGateway::THeaders headers = IHTTPGateway::MakeYcHeaders(ctx.RequestId, ctx.ListingRequest.Token, {});
         TUrlBuilder urlBuilder(ctx.ListingRequest.Url);
         urlBuilder.AddUrlParam("list-type", "2")
             .AddUrlParam("prefix", ctx.ListingRequest.Prefix)

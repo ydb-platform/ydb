@@ -109,8 +109,8 @@ namespace NActors {
                 Listener.Reset();
                 PollerToken.Reset();
                 Become(&TThis::Initial, TDuration::Seconds(1), new TEvents::TEvBootstrap);
-            } else if (PollerToken) {
-                PollerToken->Request(true, false);
+            } else if (PollerToken && PollerToken->RequestReadNotificationAfterWouldBlock()) {
+                continue;
             }
             break;
         }

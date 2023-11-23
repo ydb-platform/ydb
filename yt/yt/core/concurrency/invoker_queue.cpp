@@ -6,6 +6,8 @@
 
 #include <yt/yt/core/profiling/tscp.h>
 
+#include <library/cpp/yt/misc/tls.h>
+
 namespace NYT::NConcurrency {
 
 using namespace NProfiling;
@@ -18,7 +20,7 @@ static const auto& Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit thread_local TCpuProfilerTagGuard CpuProfilerTagGuard;
+constinit YT_THREAD_LOCAL(TCpuProfilerTagGuard) CpuProfilerTagGuard;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -501,9 +503,9 @@ bool TInvokerQueue<TQueueImpl>::BeginExecute(TEnqueuedAction* action, typename T
     updateCounters(CumulativeCounters_);
 
     if (const auto& profilerTag = action->ProfilerTag) {
-        CpuProfilerTagGuard = TCpuProfilerTagGuard(profilerTag);
+        GetTlsRef(CpuProfilerTagGuard) = TCpuProfilerTagGuard(profilerTag);
     } else {
-        CpuProfilerTagGuard = {};
+        GetTlsRef(CpuProfilerTagGuard) = {};
     }
 
     SetCurrentInvoker(GetProfilingTagSettingInvoker(action->ProfilingTag));
@@ -514,7 +516,7 @@ bool TInvokerQueue<TQueueImpl>::BeginExecute(TEnqueuedAction* action, typename T
 template <class TQueueImpl>
 void TInvokerQueue<TQueueImpl>::EndExecute(TEnqueuedAction* action)
 {
-    CpuProfilerTagGuard = TCpuProfilerTagGuard{};
+    GetTlsRef(CpuProfilerTagGuard) = TCpuProfilerTagGuard{};
     SetCurrentInvoker(nullptr);
 
     YT_ASSERT(action);

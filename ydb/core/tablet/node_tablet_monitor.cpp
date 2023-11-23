@@ -4,6 +4,7 @@
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <ydb/core/mon/mon.h>
 #include <library/cpp/actors/core/mon.h>
+#include <ydb/core/base/domain.h>
 #include <ydb/core/base/appdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/actors/core/interconnect.h>

@@ -159,9 +159,10 @@ public:
             } else {
                 if (reverse) {
                     if (LastKey.empty()) {
+                        size_t last = FirstUnprocessedRequest.GetOrElse(Ranges.size() - 1);
                         return TTableRange(
                             Ranges.front().From.GetCells(), Ranges.front().FromInclusive,
-                            Ranges[FirstUnprocessedRequest.GetOrElse(Ranges.size() - 1)].To.GetCells(), Ranges.back().ToInclusive);
+                            Ranges[last].To.GetCells(), Ranges[last].ToInclusive);
                     } else {
                         return TTableRange(
                             Ranges.front().From.GetCells(), Ranges.front().FromInclusive,
@@ -169,8 +170,9 @@ public:
                     }
                 } else {
                     if (LastKey.empty()) {
+                        size_t first = FirstUnprocessedRequest.GetOrElse(0);
                         return TTableRange(
-                            Ranges[FirstUnprocessedRequest.GetOrElse(0)].From.GetCells(), Ranges.front().FromInclusive,
+                            Ranges[first].From.GetCells(), Ranges[first].FromInclusive,
                             Ranges.back().To.GetCells(), Ranges.back().ToInclusive);
                     } else {
                         return TTableRange(
@@ -410,6 +412,8 @@ public:
             Settings->GetTable().GetTableId().GetSchemaVersion()
         );
 
+        Snapshot = IKqpGateway::TKqpSnapshot(Settings->GetSnapshot().GetStep(), Settings->GetSnapshot().GetTxId());
+
         if (Settings->GetUseFollowers() && !Snapshot.IsValid()) {
             // reading from followers is allowed only of snapshot is not specified and
             // specific flag is set. otherwise we always read from main replicas.
@@ -431,7 +435,6 @@ public:
                         ) : nullptr));
         }
         Counters->ReadActorsCount->Inc();
-        Snapshot = IKqpGateway::TKqpSnapshot(Settings->GetSnapshot().GetStep(), Settings->GetSnapshot().GetTxId());
 
         if (Settings->HasMaxInFlightShards()) {
             MaxInFlight = Settings->GetMaxInFlightShards();
@@ -490,6 +493,8 @@ public:
                 }
             }
         }
+
+        CA_LOG_D("Shards State: " << state.ToString(KeyColumnTypes));
 
         if (!Settings->HasShardIdHint()) {
             InFlightShards.PushBack(&state);
@@ -634,8 +639,8 @@ public:
                 PendingShards.PushBack(state.Release());
                 return;
             }
-        } else if (!Snapshot.IsValid()) {
-            return RuntimeError("inconsistent reads after shards split", NDqProto::StatusIds::UNAVAILABLE);
+        } else if (!Snapshot.IsValid() && !Settings->GetAllowInconsistentReads()) {
+            return RuntimeError("Inconsistent reads after shards split", NDqProto::StatusIds::UNAVAILABLE);
         }
 
         if (keyDesc->GetPartitions().empty()) {
@@ -920,6 +925,19 @@ public:
         return TStringBuilder() << "first request = " << token.GetFirstUnprocessedQuery() << " lastkey = " << lastKey;
     }
 
+    void ReportNullValue(const THolder<TEventHandle<TEvDataShard::TEvReadResult>>& result, size_t columnIndex) {
+        CA_LOG_D(TStringBuilder() << "validation failed, "
+            << " seqno = " << result->Get()->Record.GetSeqNo()
+            << " finished = " << result->Get()->Record.GetFinished());
+        NYql::TIssue issue;
+        issue.SetCode(NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, NYql::TSeverityIds::S_FATAL);
+        issue.SetMessage(TStringBuilder()
+            << "Read from column index " << columnIndex << ": got NULL from NOT NULL column");
+        NYql::TIssues issues;
+        issues.AddIssue(std::move(issue));
+        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::INTERNAL_ERROR));
+    }
+
     void HandleRead(TEvDataShard::TEvReadResult::TPtr ev) {
         const auto& record = ev->Get()->Record;
         auto id = record.GetReadId();
@@ -1008,6 +1026,7 @@ public:
             << " seqno = " << ev->Get()->Record.GetSeqNo()
             << " finished = " << ev->Get()->Record.GetFinished());
         CA_LOG_T(TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(ev->Get()) << " continuation token " << DebugPrintContionuationToken(record.GetContinuationToken()));
+
         Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())});
         NotifyCA();
     }
@@ -1106,6 +1125,20 @@ public:
                     stats.AddStatistics(
                         NMiniKQL::WriteColumnValuesFromArrow(editAccessors, *result->Get()->GetArrowBatch(), columnIndex, resultColumnIndex, column.TypeInfo)
                     );
+                    if (column.NotNull) {
+                        std::shared_ptr<arrow::Array> columnSharedPtr = result->Get()->GetArrowBatch()->column(columnIndex);       
+                        bool gotNullValue = false;
+                        for (ui64 rowIndex = 0; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
+                            if (columnSharedPtr->IsNull(rowIndex)) {
+                                gotNullValue = true;
+                                break;
+                            }
+                        }
+                        if (gotNullValue) {
+                            ReportNullValue(result, columnIndex);
+                            return stats;
+                        }
+                    }
                     columnIndex += 1;
                 }
             }
@@ -1121,7 +1154,7 @@ public:
     }
 
     TString DebugPrintCells(const TEvDataShard::TEvReadResult* result) {
-        if (result->Record.GetResultFormat() == NKikimrTxDataShard::EScanDataFormat::ARROW) {
+        if (result->Record.GetResultFormat() == NKikimrDataEvents::FORMAT_ARROW) {
             return "{ARROW}";
         }
         TStringBuilder builder;
@@ -1164,6 +1197,10 @@ public:
                 if (column.IsSystem) {
                     NMiniKQL::FillSystemColumn(rowItems[resultColumnIndex], shardId, column.Tag, column.TypeInfo);
                 } else {
+                    if (column.NotNull && row[columnIndex].IsNull()) {
+                        ReportNullValue(result, columnIndex);
+                        return stats;
+                    }
                     rowItems[resultColumnIndex] = NMiniKQL::GetCellValue(row[columnIndex], column.TypeInfo);
                     columnIndex += 1;
                 }
@@ -1209,11 +1246,11 @@ public:
             if (!batch.Defined()) {
                 batch.ConstructInPlace();
                 switch (msg.Record.GetResultFormat()) {
-                    case NKikimrTxDataShard::EScanDataFormat::ARROW:
+                    case NKikimrDataEvents::FORMAT_ARROW:
                         BytesStats.AddStatistics(PackArrow(result, freeSpace));
                         break;
-                    case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
-                    case NKikimrTxDataShard::EScanDataFormat::CELLVEC:
+                    case NKikimrDataEvents::FORMAT_UNSPECIFIED:
+                    case NKikimrDataEvents::FORMAT_CELLVEC:
                         BytesStats.AddStatistics(PackCells(result, freeSpace));
                 }
             }
@@ -1390,6 +1427,7 @@ private:
             column.Tag = srcColumn.GetId();
             column.TypeInfo = MakeTypeInfo(srcColumn);
             column.IsSystem = IsSystemColumn(column.Tag);
+            column.NotNull = srcColumn.GetNotNull();
             ResultColumns.push_back(column);
         }
     }
@@ -1399,6 +1437,7 @@ private:
         bool IsSystem = false;
         ui32 Tag = 0;
         NScheme::TTypeInfo TypeInfo;
+        bool NotNull;
     };
 
     const NKikimrTxDataShard::TKqpReadRangesSourceSettings* Settings;
@@ -1423,8 +1462,8 @@ private:
 
     TQueue<TResult> Results;
 
-    TVector<NKikimrTxDataShard::TLock> Locks;
-    TVector<NKikimrTxDataShard::TLock> BrokenLocks;
+    TVector<NKikimrDataEvents::TLock> Locks;
+    TVector<NKikimrDataEvents::TLock> BrokenLocks;
 
     IKqpGateway::TKqpSnapshot Snapshot;
 

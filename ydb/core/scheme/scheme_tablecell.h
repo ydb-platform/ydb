@@ -551,6 +551,22 @@ private:
     TVector<TCell> Cells;
 };
 
+class TCellsStorage
+{
+public:
+    TCellsStorage() = default;
+
+    inline TConstArrayRef<TCell> GetCells() const {
+        return Cells;
+    }
+
+    void Reset(TArrayRef<const TCell> cells);
+
+private:
+    TArrayRef<TCell> Cells;
+    std::vector<char> CellsData;
+};
+
 class TOwnedCellVecBatch {
 public:
     TOwnedCellVecBatch();

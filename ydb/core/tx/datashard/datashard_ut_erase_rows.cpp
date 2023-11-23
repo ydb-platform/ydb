@@ -1,6 +1,6 @@
 #include "defs.h"
 #include "datashard_distributed_erase.h"
-#include "datashard_ut_common.h"
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>

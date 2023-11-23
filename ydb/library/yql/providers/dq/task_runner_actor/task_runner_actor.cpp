@@ -257,19 +257,17 @@ private:
         auto* actorSystem = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
         auto selfId = SelfId();
 
-        TVector<TString> strings;
         YQL_ENSURE(!batch.IsWide());
-        batch.ForEachRow([&strings](const auto& value) {
-            strings.emplace_back(value.AsStringRef());
-        });
 
-        Invoker->Invoke([strings=std::move(strings),taskRunner=TaskRunner, actorSystem, selfId, cookie, parentId=ParentId, space, finish, index, settings=Settings, stageId=StageId]() mutable {
+        auto* source = TaskRunner->GetSource(index);
+        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), DataTransportVersion);
+        TDqSerializedBatch serialized = dataSerializer.Serialize(batch, source->GetInputType());
+
+        Invoker->Invoke([serialized=std::move(serialized), taskRunner=TaskRunner, actorSystem, selfId, cookie, parentId=ParentId, space, finish, index, settings=Settings, stageId=StageId]() mutable {
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
-                auto source = taskRunner->GetSource(index);
-                if (!strings.empty()) {
-                    (static_cast<NTaskRunnerProxy::IStringSource*>(source.Get()))->PushString(std::move(strings), space);
-                }
+                auto* source = taskRunner->GetSource(index);
+                source->Push(std::move(serialized), space);
                 if (finish) {
                     source->Finish();
                 }
@@ -368,9 +366,10 @@ private:
     void OnSinkPopFinished(TEvSinkPopFinished::TPtr& ev) {
         auto guard = TaskRunner->BindAllocator();
         NKikimr::NMiniKQL::TUnboxedValueBatch batch;
-        for (auto& row: ev->Get()->Strings) {
-            batch.emplace_back(NKikimr::NMiniKQL::MakeString(row));
-        }
+        auto sink = TaskRunner->GetSink(ev->Get()->Index);
+        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), (NDqProto::EDataTransportVersion)ev->Get()->Batch.Proto.GetTransportVersion());
+        dataSerializer.Deserialize(std::move(ev->Get()->Batch), sink->GetOutputType(), batch);
+
         Parent->SinkSend(
             ev->Get()->Index,
             std::move(batch),
@@ -392,13 +391,13 @@ private:
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
                 auto sink = taskRunner->GetSink(ev->Get()->Index);
-                TVector<TString> batch;
+                NDq::TDqSerializedBatch batch;
                 NDqProto::TCheckpoint checkpoint;
                 TMaybe<NDqProto::TCheckpoint> maybeCheckpoint;
                 i64 size = 0;
                 i64 checkpointSize = 0;
                 if (ev->Get()->Size > 0) {
-                    size = (static_cast<NTaskRunnerProxy::IStringSink*>(sink.Get()))->PopString(batch, ev->Get()->Size);
+                    size = sink->Pop(batch, ev->Get()->Size);
                 }
                 bool hasCheckpoint = sink->Pop(checkpoint);
                 if (hasCheckpoint) {
@@ -410,7 +409,7 @@ private:
                 auto event = MakeHolder<TEvSinkPopFinished>(
                     ev->Get()->Index,
                     std::move(maybeCheckpoint), size, checkpointSize, finished, changed);
-                event->Strings = std::move(batch);
+                event->Batch = std::move(batch);
                 // repack data and forward
                 actorSystem->Send(
                     new IEventHandle(
@@ -457,13 +456,14 @@ private:
             ev->Get()->Task.GetMeta().UnpackTo(&taskMeta);
             Settings->Dispatch(taskMeta.GetSettings());
             Settings->FreezeDefaults();
+            DataTransportVersion = Settings->GetDataTransportVersion();
             StageId = taskMeta.GetStageId();
 
             NDq::TDqTaskSettings settings(&ev->Get()->Task);
             TaskRunner = Factory->GetOld(settings, TraceId);
         } catch (...) {
             TString message = "Could not create TaskRunner for " + ToString(taskId) + " on node " + ToString(replyTo.NodeId()) + ", error: " + CurrentExceptionMessage();
-            Send(replyTo, MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, message), 0, cookie);
+            Send(replyTo, TEvDq::TEvAbortExecution::InternalError(message), 0, cookie);
             return;
         }
 
@@ -471,7 +471,11 @@ private:
         Invoker->Invoke([taskRunner=TaskRunner, replyTo, selfId, cookie, actorSystem, settings=Settings, stageId=StageId, startTime, clusterName = ClusterName](){
             try {
                 //auto guard = taskRunner->BindAllocator(); // only for local mode
-                auto result = taskRunner->Prepare();
+                NDq::TDqTaskRunnerMemoryLimits limits;
+                limits.ChannelBufferSize = settings->ChannelBufferSize.Get().GetOrElse(TDqSettings::TDefault::ChannelBufferSize);
+                limits.OutputChunkMaxSize = settings->OutputChunkMaxSize.Get().GetOrElse(TDqSettings::TDefault::OutputChunkMaxSize);
+                limits.ChunkSizeLimit = settings->ChunkSizeLimit.Get().GetOrElse(TDqSettings::TDefault::ChunkSizeLimit);
+                auto result = taskRunner->Prepare(limits);
                 auto sensors = GetSensors(result);
                 auto sensorName = TCounters::GetCounterName(
                     "Actor",
@@ -576,6 +580,7 @@ private:
     THashSet<ui32> Inputs;
     THashSet<ui32> Sources;
     TIntrusivePtr<TDqConfiguration> Settings;
+    NDqProto::EDataTransportVersion DataTransportVersion;
     ui64 StageId;
     TWorkerRuntimeData* RuntimeData;
     TString ClusterName;

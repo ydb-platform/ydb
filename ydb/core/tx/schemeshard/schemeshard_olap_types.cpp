@@ -190,7 +190,6 @@ namespace NKikimr::NSchemeShard {
                 return false;
             }
         }
-        
         TSet<TString> addColumnNames;
         for (auto& columnSchema : alterRequest.GetAddColumns()) {
             TOlapColumnAdd column({});

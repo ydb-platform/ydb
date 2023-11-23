@@ -36,8 +36,8 @@ void TTargetWithStream::Progress(ui64 schemeShardId, const TActorId& proxy, cons
 }
 
 void TTargetWithStream::Shutdown(const TActorContext& ctx) {
-    for (auto& x : TVector<TActorId>{StreamCreator, StreamRemover}) {
-        if (auto actorId = std::exchange(x, {})) {
+    for (auto* x : TVector<TActorId*>{&StreamCreator, &StreamRemover}) {
+        if (auto actorId = std::exchange(*x, {})) {
             ctx.Send(actorId, new TEvents::TEvPoison());
         }
     }

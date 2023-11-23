@@ -11,6 +11,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/mon.h>
 #include <library/cpp/actors/core/mon_stats.h>
+#include <library/cpp/actors/core/monotonic_provider.h>
 #include <library/cpp/actors/core/process_stats.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/log_settings.h>
@@ -45,6 +46,13 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/tabletid.h>
+#include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/base/domain.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/nameservice.h>
+#include <ydb/core/base/tablet_types.h>
+#include <ydb/core/base/resource_profile.h>
+#include <ydb/core/base/event_filter.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/library/services/services.pb.h>
 

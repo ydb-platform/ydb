@@ -12,6 +12,16 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TQueryFile::Register(TRegistrar registrar)
+{
+    registrar.Parameter("name", &TThis::Name)
+        .NonEmpty();
+    registrar.Parameter("content", &TThis::Content);
+    registrar.Parameter("type", &TThis::Type);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void Serialize(const TQuery& query, NYson::IYsonConsumer* consumer)
 {
     static_assert(pfr::tuple_size<TQuery>::value == 14);

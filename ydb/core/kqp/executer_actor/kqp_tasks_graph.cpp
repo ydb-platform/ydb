@@ -1,6 +1,7 @@
 #include "kqp_tasks_graph.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 
@@ -859,19 +860,19 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
             case ETableKind::Unknown:
             case ETableKind::External:
             case ETableKind::SysView: {
-                protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
+                protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
                 break;
             }
             case ETableKind::Datashard: {
                 if (AppData()->FeatureFlags.GetEnableArrowFormatAtDatashard()) {
-                    protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW);
+                    protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
                 } else {
-                    protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
+                    protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
                 }
                 break;
             }
             case ETableKind::Olap: {
-                protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW);
+                protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
                 break;
             }
         }
@@ -885,6 +886,10 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
                 protoTaskMeta.SetEnableShardsSequentialScan(task.Meta.GetEnableShardsSequentialScanUnsafe());
             }
             protoTaskMeta.SetReadType(ReadTypeToProto(task.Meta.ReadInfo.ReadType));
+
+            for (auto&& i : task.Meta.ReadInfo.GroupByColumnNames) {
+                protoTaskMeta.AddGroupByColumnNames(i.data(), i.size());
+            }
 
             for (auto columnType : task.Meta.ReadInfo.ResultColumnsTypes) {
                 auto* protoResultColumn = protoTaskMeta.AddResultColumns();

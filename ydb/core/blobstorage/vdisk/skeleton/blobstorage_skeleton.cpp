@@ -16,6 +16,7 @@
 #include "skeleton_capturevdisklayout.h"
 #include "skeleton_compactionstate.h"
 #include "skeleton_block_and_get.h"
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <ydb/core/blobstorage/vdisk/localrecovery/localrecovery_public.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
@@ -719,6 +720,7 @@ namespace NKikimr {
                 NKikimrBlobStorage::EPutHandleClass handleClass = record.GetHandleClass();
                 auto hugeWrite = CreateHullWriteHugeBlob(ev->Sender, ev->Cookie, ignoreBlock, handleClass, info,
                     std::move(result));
+                hugeWrite->Orbit = std::move(ev->Get()->Orbit);
                 ctx.Send(Db->HugeKeeperID, hugeWrite.release(), 0, 0, std::move(info.TraceId));
             } else {
                 ctx.Send(SelfId(), new TEvHullLogHugeBlob(0, info.BlobId, info.Ingress, TDiskPart(), ignoreBlock,
@@ -2437,6 +2439,18 @@ namespace NKikimr {
             RescheduleSnapshotExpirationCheck();
         }
 
+        void Handle(TEvReplInvoke::TPtr ev) {
+            if (Db->ReplID) {
+                TActivationContext::Send(ev->Forward(Db->ReplID));
+            } else {
+                HandleReplNotInProgress(ev);
+            }
+        }
+
+        void HandleReplNotInProgress(TEvReplInvoke::TPtr ev) {
+            ev->Get()->Callback({}, "replication is not in progress");
+        }
+
         // NOTES: we have 4 state functions, one of which is an error state (StateDatabaseError) and
         // others are good: StateLocalRecovery, StateSyncGuidRecovery, StateNormal
         // We switch between states in the following manner:
@@ -2489,6 +2503,7 @@ namespace NKikimr {
             HFunc(TEvProxyQueueState, Handle)
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
+            hFunc(TEvReplInvoke, HandleReplNotInProgress)
         )
 
         STRICT_STFUNC(StateSyncGuidRecovery,
@@ -2541,6 +2556,7 @@ namespace NKikimr {
             HFunc(TEvProxyQueueState, Handle)
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
+            hFunc(TEvReplInvoke, HandleReplNotInProgress)
         )
 
         STRICT_STFUNC(StateNormal,
@@ -2607,6 +2623,7 @@ namespace NKikimr {
             HFunc(TEvProxyQueueState, Handle)
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
+            hFunc(TEvReplInvoke, Handle)
         )
 
         STRICT_STFUNC(StateDatabaseError,
@@ -2633,6 +2650,7 @@ namespace NKikimr {
             hFunc(TEvVPatchDyingRequest, Handle)
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
+            hFunc(TEvReplInvoke, HandleReplNotInProgress)
         )
 
         PDISK_TERMINATE_STATE_FUNC_DEF;

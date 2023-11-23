@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 #include <ydb/core/grpc_services/cancelation/cancelation.h>
@@ -265,6 +266,14 @@ public:
         }
     }
 
+    void SetUserRequestContext(TIntrusivePtr<TUserRequestContext> userRequestContext) {
+        UserRequestContext = userRequestContext;
+    }
+
+    TIntrusivePtr<TUserRequestContext> GetUserRequestContext() const {
+        return UserRequestContext;
+    }
+
     mutable NKikimrKqp::TEvQueryRequest Record;
 
 private:
@@ -291,6 +300,7 @@ private:
     TDuration OperationTimeout;
     TDuration CancelAfter;
     const ::Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
+    TIntrusivePtr<TUserRequestContext> UserRequestContext;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

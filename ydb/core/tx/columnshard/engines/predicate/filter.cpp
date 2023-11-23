@@ -3,7 +3,7 @@
 
 namespace NKikimr::NOlap {
 
-NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(std::shared_ptr<arrow::RecordBatch> data) const {
+NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const arrow::Datum& data) const {
     if (SortedRanges.empty()) {
         return NArrow::TColumnFilter::BuildAllowFilter();
     }

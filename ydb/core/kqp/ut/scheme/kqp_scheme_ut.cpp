@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/columnshard/columnshard_ut_common.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
@@ -9,6 +9,7 @@
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/formats/arrow/serializer/full.h>
+#include <ydb/library/uuid/uuid.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
@@ -1084,7 +1085,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto describeResult = session.DescribeTable("/Root/moved").GetValueSync();
-            UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         }
 
         {
@@ -1097,7 +1098,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto describeResult = session.DescribeTable("/Root/table").GetValueSync();
-            UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         }
 
         {
@@ -1125,11 +1126,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             {
                 auto describeResult = session.DescribeTable("/Root/moved").GetValueSync();
-                UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
             }
             {
                 auto describeResult = session.DescribeTable("/Root/movedsecond").GetValueSync();
-                UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
             }
         }
 
@@ -1166,12 +1167,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             {
                 auto describeResult = session.DescribeTable("/Root/second").GetValueSync();
-                UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
             }
 
             {
                 auto describeResult = session.DescribeTable("/Root/table").GetValueSync();
-                UNIT_ASSERT_C(!describeResult.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_C(!describeResult.IsSuccess(), describeResult.GetIssues().ToString());
             }
         }
 
@@ -1623,7 +1624,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto describeResult = session.DescribeTable(tableName,
             NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true)).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 4);
 
         AlterTableSetttings(session, tableName, {{"UNIFORM_PARTITIONS", "8"}}, compat,
@@ -1659,7 +1660,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto describeResult = session.DescribeTable(tableName,
             TDescribeTableSettings().WithTableStatistics(true).WithKeyShardBoundary(true)).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 5);
 
         auto extractValue = [](const TValue& val) {
@@ -1725,7 +1726,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto describeResult = session.DescribeTable(tableName,
             TDescribeTableSettings().WithTableStatistics(true).WithKeyShardBoundary(true)).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 4);
 
         auto extractValue = [](const TValue& val) {
@@ -1780,7 +1781,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto describeResult = session.DescribeTable(tableName,
             TDescribeTableSettings().WithTableStatistics(true).WithKeyShardBoundary(true)).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 4);
 
         auto extractValue = [](const TValue& val) {
@@ -1855,6 +1856,143 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             "Partition at keys has 2 key values while there are only 1 key columns", "Unexpected error message");
     }
 
+    struct testData {
+        TString condition;
+        ui64 resultRows;
+        ui64 touchedPartitions;
+    };
+
+    void uuidInsertAndCheck(TSession &session, TString tableName, TVector<testData> expectedPartitions) {
+        TVector<TString> uuids {
+                {"AAAAAA00-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAA11-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAA22-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAA33-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAA44-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAA55-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAA66-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAA77-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAA88-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAA99-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAAAA-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAABB-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAACC-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAADD-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAAEE-0000-458F-ABE9-4A0CD520903B"},
+                {"AAAAAAFF-0000-458F-ABE9-4A0CD520903B"},
+        };
+        {
+            TStringBuilder builder;
+            builder << "REPLACE INTO `" << tableName << "` (Key, Value) VALUES ";
+            for (ui32 i = 0; i < uuids.size() - 1; ++i) {
+                builder << "(Uuid(\"" << uuids[i] << "\"), " << i << "),";
+            }
+            builder << "(Uuid(\"" << uuids[uuids.size() - 1] << "\"), " << uuids.size() - 1 << ");";
+            TString query = builder;
+
+            auto replaceResult = session.ExecuteDataQuery(query,
+                                                          TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(replaceResult.GetStatus(), EStatus::SUCCESS,
+                                       replaceResult.GetIssues().ToString());
+        }
+
+        for (auto &test: expectedPartitions) {
+            TString query = Sprintf("SELECT Key as cnt from `%s` WHERE %s;", tableName.data(), test.condition.data());
+
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+            auto selectResult = session.ExecuteDataQuery(query,
+                                                         TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                                                         execSettings).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(selectResult.GetStatus(), EStatus::SUCCESS,
+                                       selectResult.GetIssues().ToString());
+
+            UNIT_ASSERT_VALUES_EQUAL(selectResult.GetResultSets().size(), 1);
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*selectResult.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(selectResult.GetResultSet(0).RowsCount(), test.resultRows);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).partitions_count(), test.touchedPartitions);
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableWithPartitionAtKeysUuid) {
+        TKikimrSettings kikimrSettings = TKikimrSettings()
+            .SetEnableUuidAsPrimaryKey(true);
+        TKikimrRunner kikimr(kikimrSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithPartitionAtKeysSimpleUuid";
+
+        {
+            auto builder = TTableBuilder()
+                    .AddNonNullableColumn("Key", EPrimitiveType::Uuid)
+                    .AddNullableColumn("Value", EPrimitiveType::Int32)
+                    .SetPrimaryKeyColumn("Key");
+
+            // Ordering is not lexicographic as UUID is stored in binary form with the following byte order
+            // from original hex pairs: [3 2 1 0 5 4 7 6 8 9 a b c d e f]
+            // String UUID (with spaces added) 00 11 22 33-44 55-66 77-88 99-AA BB CC DD EE FF
+            // becomes                         33 22 11 00 55 44 77 66 88 99 AA BB CC DD EE FF
+            const TVector <TUuidValue> expectedRanges = {
+                    TUuidValue("FFFFFF11-C00F-458F-ABE9-4A0CD520903B"),
+                    TUuidValue("FFFFFFDD-AF48-428B-9D13-893C220118C4")
+            };
+            auto explicitPartitions = TExplicitPartitions();
+            for (ui32 i = 0; i < expectedRanges.size(); i++) {
+                explicitPartitions.AppendSplitPoints(
+                        TValueBuilder().BeginTuple().AddElement()
+                                .OptionalUuid(expectedRanges[i]).EndTuple().Build()
+                );
+            }
+            auto result = session.CreateTable(tableName,
+                                              builder.Build(),
+                                              TCreateTableSettings()
+                                                      .PartitioningPolicy(TPartitioningPolicy().ExplicitPartitions(explicitPartitions))
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        // See comment above for comparison explanation.
+        TVector<testData> inputs = {
+                {"Key > Cast(\"00000000-FFFF-FFFF-ABE9-4A0CD520903B\" as Uuid)",16, 3},
+                {"Key > Cast(\"FFFFFF11-C00F-458F-ABE9-4A0CD520903B\" as Uuid)", 14, 2},
+                {"Key < Cast(\"FFFFFF11-C00F-458F-ABE9-4A0CD520903B\" as Uuid)", 2, 1}
+        };
+        uuidInsertAndCheck(session, tableName, inputs);
+    }
+
+    Y_UNIT_TEST(CreateTableWithUniformPartitionsUuid) {
+        TKikimrSettings kikimrSettings = TKikimrSettings()
+            .SetEnableUuidAsPrimaryKey(true);
+        TKikimrRunner kikimr(kikimrSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithPartitionAtKeysSimpleUuid";
+
+        {
+            auto builder = TTableBuilder()
+                    .AddNonNullableColumn("Key", EPrimitiveType::Uuid)
+                    .AddNullableColumn("Value", EPrimitiveType::Int32)
+                    .SetPrimaryKeyColumn("Key");
+
+            auto result = session.CreateTable(tableName,
+                                              builder.Build(),
+                                              TCreateTableSettings()
+                                                  .PartitioningPolicy(TPartitioningPolicy().UniformPartitions(4))
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        // See comment above for comparison explanation.
+        TVector<testData> inputs = {
+                {"Key > Cast(\"00000000-FFFF-FFFF-ABE9-4A0CD520903B\" as Uuid)",16, 4},
+                {"Key < Cast(\"0000003F-C00F-458F-ABE9-4A0CD520903B\" as Uuid)", 4, 1},
+                {"Key < Cast(\"0000007F-C00F-458F-ABE9-4A0CD520903B\" as Uuid)", 8, 2},
+                {"Key < Cast(\"000000BF-C00F-458F-ABE9-4A0CD520903B\" as Uuid)", 12, 3},
+                {"Key < Cast(\"000000FF-C00F-458F-ABE9-4A0CD520903B\" as Uuid)", 15, 4}
+        };
+        uuidInsertAndCheck(session, tableName, inputs);
+    }
+
     Y_UNIT_TEST(CreateTableWithFamiliesRegular) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -1877,7 +2015,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         const auto& columnFamilies = describeResult.GetTableDescription().GetColumnFamilies();
         UNIT_ASSERT_VALUES_EQUAL(columnFamilies.size(), 3);
         for (const auto& family : columnFamilies) {
@@ -1916,7 +2054,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         {
             auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
-            UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
             const auto& columnFamilies = describeResult.GetTableDescription().GetColumnFamilies();
             UNIT_ASSERT_VALUES_EQUAL(columnFamilies.size(), 2);
             for (const auto& family : columnFamilies) {
@@ -1948,7 +2086,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         {
             auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
-            UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
             const auto& columnFamilies = describeResult.GetTableDescription().GetColumnFamilies();
             UNIT_ASSERT_VALUES_EQUAL(columnFamilies.size(), 3);
             for (const auto& family : columnFamilies) {
@@ -1971,6 +2109,30 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     || column.Name == "Value3" || column.Name == "Value4", column.Name);
             }
         }
+    }
+
+    Y_UNIT_TEST(CreateTableWithStoreExternalBlobs) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnablePublicApiExternalBlobs(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithStoreExternalBlobs";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                STORE_EXTERNAL_BLOBS = ENABLED
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto describeResult = session.DescribeTable(tableName).GetValueSync();
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+        UNIT_ASSERT(describeResult.GetTableDescription().GetStorageSettings().GetStoreExternalBlobs().GetOrElse(false));
     }
 
     Y_UNIT_TEST(CreateAndAlterTableComplex) {
@@ -3166,7 +3328,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
-        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         const auto tableDesc = session.DescribeTable(tableName).GetValueSync().GetTableDescription();
         TVector<TTableColumn> columns = tableDesc.GetTableColumns();
         UNIT_ASSERT_VALUES_EQUAL(columns.size(), 3);
@@ -3531,8 +3693,130 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(SerialTypeDisabled) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/SerialTableDisabled` (
+                    Key Serial,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
+                                       result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(SerialTypeCreateAndAlter) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/SerialTableCreateAndAlter` (
+                    Key Int32,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/SerialTableCreateAndAlter` ADD COLUMN SeqNo Serial;
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
+                                       result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(CreateAndAlterAddColumnDefault) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
+        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(false);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/SerialTableCreateAndAlter` (
+                    Key Int32,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/SerialTableCreateAndAlter` ADD COLUMN SeqNo DEFAULT 5;
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
+                                       result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(CreateDefaultsDisabled) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
+        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(false);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/CreateAndAlterDefaultsDisabled` (
+                    Key Int32,
+                    Value String Default "empty",
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
+                                       result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(SerialTypeNegative1) {
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3553,7 +3837,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(SerialTypeNegative2) {
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3574,7 +3860,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     void TestSerialType(TString serialType) {
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3662,7 +3950,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DefaultValuesForTable) {
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
+        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3679,7 +3970,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
                                        result.GetIssues().ToString());
-        }        
+        }
 
         {
             TString query = R"(
@@ -3726,7 +4017,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DefaultValuesForTable2) {
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
+        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3743,11 +4037,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
                                        result.GetIssues().ToString());
-        }        
+        }
     }
 
     Y_UNIT_TEST(DefaultValuesForTable3) {
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
+        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3765,11 +4062,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
                                         "Default expr Key is nullable or optional, but column has not null constraint");
-        }        
+        }
     }
 
     Y_UNIT_TEST(DefaultValuesForTable4) {
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
+        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
+
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3786,7 +4088,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
                                        result.GetIssues().ToString());
-        }        
+        }
     }
 
     Y_UNIT_TEST(ChangefeedRetentionPeriod) {
@@ -5187,202 +5489,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto resultSuccess = session.ExecuteSchemeQuery("DROP EXTERNAL DATA SOURCE test").GetValueSync();
         UNIT_ASSERT_C(resultSuccess.GetStatus() == EStatus::SCHEME_ERROR, TStringBuilder{} << resultSuccess.GetStatus() << " " << resultSuccess.GetIssues().ToString());
     }
-}
-
-namespace {
-    class TTestHelper {
-    public:
-        class TColumnSchema {
-            YDB_ACCESSOR_DEF(TString, Name);
-            YDB_ACCESSOR_DEF(NScheme::TTypeId, Type);
-            YDB_FLAG_ACCESSOR(Nullable, true);
-        public:
-            TString BuildQuery() const {
-                auto str = TStringBuilder() << Name << " " << NScheme::GetTypeName(Type);
-                if (!NullableFlag) {
-                    str << " NOT NULL";
-                }
-                return str;
-            }
-        };
-
-        using TUpdatesBuilder = NColumnShard::TTableUpdatesBuilder;
-
-        class TColumnTableBase {
-            YDB_ACCESSOR_DEF(TString, Name);
-            YDB_ACCESSOR_DEF(TVector<TColumnSchema>, Schema);
-            YDB_ACCESSOR_DEF(TVector<TString>, PrimaryKey);
-            YDB_ACCESSOR_DEF(TVector<TString>, Sharding);
-            YDB_ACCESSOR(ui32, MinPartitionsCount, 1);
-        public:
-            TString BuildQuery() const {
-                auto str = TStringBuilder() << "CREATE " << GetObjectType() << " `" << Name << "`";
-                str << " (" << BuildColumnsStr(Schema) <<  ", PRIMARY KEY (" << JoinStrings(PrimaryKey, ", ") << "))";
-                if (!Sharding.empty()) {
-                    str << " PARTITION BY HASH(" << JoinStrings(Sharding, ", ") << ")";
-                }
-                str << " WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT =" << MinPartitionsCount << ");";
-                return str;
-            }
-
-            std::shared_ptr<arrow::Schema> GetArrowSchema(const TVector<TColumnSchema>& columns) {
-                std::vector<std::shared_ptr<arrow::Field>> result;
-                for (auto&& col : columns) {
-                    result.push_back(BuildField(col.GetName(), col.GetType(), col.IsNullable()));
-                }
-                return std::make_shared<arrow::Schema>(result);
-            }
-
-        private:
-            virtual TString GetObjectType() const = 0;
-            TString BuildColumnsStr(const TVector<TColumnSchema>& clumns) const {
-                TVector<TString> columnStr;
-                for (auto&& c : clumns) {
-                    columnStr.push_back(c.BuildQuery());
-                }
-                return JoinStrings(columnStr, ", ");
-            }
-
-            std::shared_ptr<arrow::Field> BuildField(const TString name, const NScheme::TTypeId& typeId, bool nullable) const {
-                switch(typeId) {
-                case NScheme::NTypeIds::Bool:
-                    return arrow::field(name, arrow::boolean(), nullable);
-                case NScheme::NTypeIds::Int8:
-                    return arrow::field(name, arrow::int8(), nullable);
-                case NScheme::NTypeIds::Int16:
-                    return arrow::field(name, arrow::int16(), nullable);
-                case NScheme::NTypeIds::Int32:
-                    return arrow::field(name, arrow::int32(), nullable);
-                case NScheme::NTypeIds::Int64:
-                    return arrow::field(name, arrow::int64(), nullable);
-                case NScheme::NTypeIds::Uint8:
-                    return arrow::field(name, arrow::uint8(), nullable);
-                case NScheme::NTypeIds::Uint16:
-                    return arrow::field(name, arrow::uint16(), nullable);
-                case NScheme::NTypeIds::Uint32:
-                    return arrow::field(name, arrow::uint32(), nullable);
-                case NScheme::NTypeIds::Uint64:
-                    return arrow::field(name, arrow::uint64(), nullable);
-                case NScheme::NTypeIds::Float:
-                    return arrow::field(name, arrow::float32(), nullable);
-                case NScheme::NTypeIds::Double:
-                    return arrow::field(name, arrow::float64(), nullable);
-                case NScheme::NTypeIds::String:
-                    return arrow::field(name, arrow::binary(), nullable);
-                case NScheme::NTypeIds::Utf8:
-                    return arrow::field(name, arrow::utf8(), nullable);
-                case NScheme::NTypeIds::Json:
-                    return arrow::field(name, arrow::utf8(), nullable);
-                case NScheme::NTypeIds::Yson:
-                    return arrow::field(name, arrow::binary(), nullable);
-                case NScheme::NTypeIds::Date:
-                    return arrow::field(name, arrow::uint16(), nullable);
-                case NScheme::NTypeIds::Datetime:
-                    return arrow::field(name, arrow::uint32(), nullable);
-                case NScheme::NTypeIds::Timestamp:
-                    return arrow::field(name, arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), nullable);
-                case NScheme::NTypeIds::Interval:
-                    return arrow::field(name, arrow::duration(arrow::TimeUnit::TimeUnit::MICRO), nullable);
-                case NScheme::NTypeIds::JsonDocument:
-                    return arrow::field(name, arrow::binary(), nullable);
-                }
-                return nullptr;
-            }
-        };
-
-        class TColumnTable : public TColumnTableBase {
-        private:
-            TString GetObjectType() const override {
-                return "TABLE";
-            }
-        };
-
-        class TColumnTableStore : public TColumnTableBase {
-        private:
-            TString GetObjectType() const override {
-                return "TABLESTORE";
-            }
-        };
-
-    private:
-        TKikimrRunner Kikimr;
-        NYdb::NTable::TTableClient TableClient;
-        NYdb::NLongTx::TClient LongTxClient;
-        NYdb::NTable::TSession Session;
-
-    public:
-        TTestHelper(const TKikimrSettings& settings)
-            : Kikimr(settings)
-            , TableClient(Kikimr.GetTableClient())
-            , LongTxClient(Kikimr.GetDriver())
-            , Session(TableClient.CreateSession().GetValueSync().GetSession())
-        {}
-
-        TKikimrRunner& GetKikimr() {
-            return Kikimr;
-        }
-
-        NYdb::NTable::TSession& GetSession() {
-            return Session;
-        }
-
-        void CreateTable(const TColumnTableBase& table) {
-            std::cerr << (table.BuildQuery()) << std::endl;
-            auto result = Session.ExecuteSchemeQuery(table.BuildQuery()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        void InsertData(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const std::function<void()> onBeforeCommit = {}, const EStatus opStatus = EStatus::SUCCESS) {
-            NLongTx::TLongTxBeginResult resBeginTx = LongTxClient.BeginWriteTx().GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
-
-            auto txId = resBeginTx.GetResult().tx_id();
-            auto batch = updates.BuildArrow();
-            TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
-
-            NLongTx::TLongTxWriteResult resWrite =
-                    LongTxClient.Write(txId, table.GetName(), txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), opStatus, resWrite.Status().GetIssues().ToString());
-
-            if (onBeforeCommit) {
-                onBeforeCommit();
-            }
-
-            NLongTx::TLongTxCommitResult resCommitTx = LongTxClient.CommitTx(txId).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
-        }
-
-        void BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS) {
-            Y_UNUSED(opStatus);
-            NKikimr::Tests::NCS::THelper helper(Kikimr.GetTestServer());
-            auto batch = updates.BuildArrow();
-            helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
-        }
-
-        void ReadData(const TString& query, const TString& expected, const EStatus opStatus = EStatus::SUCCESS) {
-            auto it = TableClient.StreamExecuteScanQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString()); // Means stream successfully get
-            TString result = StreamResultToYson(it, false, opStatus);
-            if (opStatus == EStatus::SUCCESS) {
-                UNIT_ASSERT_NO_DIFF(ReformatYson(result), ReformatYson(expected));
-            }
-        }
-
-        void RebootTablets(const TString& tableName) {
-            auto runtime = Kikimr.GetTestServer().GetRuntime();
-            TActorId sender = runtime->AllocateEdgeActor();
-            TVector<ui64> shards;
-            {
-                auto describeResult = DescribeTable(&Kikimr.GetTestServer(), sender, tableName);
-                for (auto shard : describeResult.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards()) {
-                    shards.push_back(shard);
-                }
-            }
-            for (auto shard : shards) {
-                RebootTablet(*runtime, shard, sender);
-            }
-        }
-    };
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapScheme) {

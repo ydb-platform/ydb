@@ -87,7 +87,7 @@ void PlanWriteTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot 
         auto ev = runtime.GrabEdgeEvent<NEvents::TDataEvents::TEvWriteResult>(sender);
         const auto& res = ev->Get()->Record;
         UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
-        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrDataEvents::TEvWriteResult::COMPLETED);
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
     }
 }
 
@@ -194,7 +194,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
 
     record.MutableSnapshot()->SetStep(snap.GetPlanStep());
     record.MutableSnapshot()->SetTxId(snap.GetTxId());
-    record.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW);
+    record.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, scan.release());
 }
@@ -429,7 +429,7 @@ namespace NKikimr::NColumnShard {
         PlanSchemaTx(runtime, sender, snap);
     }
 
-    void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema) {
+    void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& schema, const ui32 keySize) {
         using namespace NTxUT;
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
 
@@ -439,7 +439,11 @@ namespace NKikimr::NColumnShard {
 
         TestTableDescription tableDescription;
         tableDescription.Schema = schema;
-        tableDescription.Pk = { schema[0] };
+        tableDescription.Pk = {};
+        for (ui64 i = 0; i < keySize; ++i) {
+            Y_ABORT_UNLESS(i < schema.size());
+            tableDescription.Pk.push_back(schema[i]);
+        }
         TActorId sender = runtime.AllocateEdgeActor();
         SetupSchema(runtime, sender, tableId, tableDescription);
     }

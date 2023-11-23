@@ -13,6 +13,7 @@ PEERDIR(
     library/cpp/yson/node
     yt/cpp/mapreduce/client
     yt/cpp/mapreduce/common
+    yt/yt/library/program
     ydb/library/yql/ast
     ydb/library/yql/sql/pg
     ydb/library/yql/parser/pg_wrapper

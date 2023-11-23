@@ -15,6 +15,7 @@ struct TExternalTableColumn {
     ui32 Id;
     NScheme::TTypeInfo Type;
     TString TypeMod;
+    bool NotNull;
 };
 
 struct TColumnUnboxedPlaceInfo: public TExternalTableColumn {

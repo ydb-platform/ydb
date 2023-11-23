@@ -103,7 +103,8 @@ public:
                         if (!tableDesc.FillViews(
                             clusterAndTable.first, clusterAndTable.second, ctx,
                             State_->Types->Modules.get(), State_->Types->UrlListerManager.Get(), *State_->Types->RandomProvider,
-                            State_->Configuration->ViewIsolation.Get().GetOrElse(false)
+                            State_->Configuration->ViewIsolation.Get().GetOrElse(false),
+                            State_->Types->UdfResolver
                         )) {
                             return TStatus::Error;
                         }
@@ -231,7 +232,8 @@ public:
                     if (!tableDesc.Fill(
                         cluster, tableName, ctx,
                         State_->Types->Modules.get(), State_->Types->UrlListerManager.Get(), *State_->Types->RandomProvider,
-                        State_->Configuration->ViewIsolation.Get().GetOrElse(false)
+                        State_->Configuration->ViewIsolation.Get().GetOrElse(false),
+                        State_->Types->UdfResolver
                     )) {
                         return TStatus::Error;
                     }

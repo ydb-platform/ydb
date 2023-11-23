@@ -263,6 +263,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, TableContentTmpFolder);
     REGISTER_SETTING(*this, TableContentColumnarStatistics);
     REGISTER_SETTING(*this, TableContentUseSkiff);
+    REGISTER_SETTING(*this, TableContentLocalExecution);
     REGISTER_SETTING(*this, DisableJobSplitting);
     REGISTER_SETTING(*this, UseColumnarStatistics)
         .Parser([](const TString& v) {

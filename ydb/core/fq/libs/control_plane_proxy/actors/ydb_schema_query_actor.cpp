@@ -528,10 +528,9 @@ NActors::IActor* MakeCreateConnectionActor(
     TSigner::TPtr signer,
     bool withoutRollback) {
     auto queryFactoryMethod =
-        [objectStorageEndpoint = commonConfig.GetObjectStorageEndpoint(),
-         signer                = std::move(signer),
+        [signer = std::move(signer),
          requestTimeout,
-         &counters, permissions, withoutRollback](const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request)
+         &counters, permissions, withoutRollback, commonConfig](const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request)
         -> std::vector<TSchemaQueryTask> {
         auto& connectionContent = request->Get()->Request.content();
 
@@ -566,7 +565,7 @@ NActors::IActor* MakeCreateConnectionActor(
             };
         statements.push_back(
             TSchemaQueryTask{.SQL = TString{MakeCreateExternalDataSourceQuery(
-                                 connectionContent, objectStorageEndpoint, signer)},
+                                 connectionContent, signer, commonConfig)},
                              .ScheduleErrorRecoverySQLGeneration =
                                  withoutRollback ? NoRecoverySQLGeneration()
                                                  : alreadyExistRecoveryActorFactoryMethod,
@@ -603,8 +602,8 @@ NActors::IActor* MakeModifyConnectionActor(
     const NConfig::TCommonConfig& commonConfig,
     TSigner::TPtr signer) {
     auto queryFactoryMethod =
-        [objectStorageEndpoint = commonConfig.GetObjectStorageEndpoint(),
-         signer                = std::move(signer)](
+        [signer = std::move(signer),
+         commonConfig](
             const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request)
         -> std::vector<TSchemaQueryTask> {
         using namespace fmt::literals;
@@ -644,7 +643,7 @@ NActors::IActor* MakeModifyConnectionActor(
         statements.push_back(TSchemaQueryTask{
             .SQL = TString{MakeDeleteExternalDataSourceQuery(oldConnectionContent.name())},
             .RollbackSQL           = TString{MakeCreateExternalDataSourceQuery(
-                oldConnectionContent, objectStorageEndpoint, signer)},
+                oldConnectionContent, signer, commonConfig)},
             .ShouldSkipStepOnError = IsPathDoesNotExistIssue});
 
         if (dropOldSecret) {
@@ -663,7 +662,7 @@ NActors::IActor* MakeModifyConnectionActor(
 
         statements.push_back(
             TSchemaQueryTask{.SQL         = TString{MakeCreateExternalDataSourceQuery(
-                                 newConnectionContent, objectStorageEndpoint, signer)},
+                                 newConnectionContent, signer, commonConfig)},
                              .RollbackSQL = TString{MakeDeleteExternalDataSourceQuery(
                                  newConnectionContent.name())}});
 
@@ -714,8 +713,8 @@ NActors::IActor* MakeDeleteConnectionActor(
     const NConfig::TCommonConfig& commonConfig,
     TSigner::TPtr signer) {
     auto queryFactoryMethod =
-        [objectStorageEndpoint = commonConfig.GetObjectStorageEndpoint(),
-         signer                = std::move(signer)](
+        [signer = std::move(signer),
+         commonConfig](
             const TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr& request)
         -> std::vector<TSchemaQueryTask> {
         auto& connectionContent = *request->Get()->ConnectionContent;
@@ -726,8 +725,8 @@ NActors::IActor* MakeDeleteConnectionActor(
         std::vector<TSchemaQueryTask> statements = {TSchemaQueryTask{
             .SQL = TString{MakeDeleteExternalDataSourceQuery(connectionContent.name())},
             .RollbackSQL           = MakeCreateExternalDataSourceQuery(connectionContent,
-                                                             objectStorageEndpoint,
-                                                             signer),
+                                                             signer,
+                                                             commonConfig),
             .ShouldSkipStepOnError = IsPathDoesNotExistIssue}};
         if (dropSecret) {
             statements.push_back(

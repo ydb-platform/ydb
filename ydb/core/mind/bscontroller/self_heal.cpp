@@ -152,6 +152,7 @@ namespace NKikimr::NBsController {
             request->SetIgnoreGroupReserve(true);
             request->SetSettleOnlyOnOperationalDisks(true);
             request->SetIsSelfHealReasonDecommit(IsSelfHealReasonDecommit);
+            request->SetAllowUnusableDisks(true);
             if (VDiskToReplace) {
                 ev->SelfHeal = true;
                 auto *cmd = request->AddCommand()->MutableReassignGroupDisk();

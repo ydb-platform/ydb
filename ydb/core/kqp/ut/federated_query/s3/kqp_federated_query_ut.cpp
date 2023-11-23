@@ -57,7 +57,11 @@ Aws::S3::S3Client MakeS3Client() {
     Aws::Client::ClientConfiguration s3ClientConfig;
     s3ClientConfig.endpointOverride = GetEnv("S3_ENDPOINT");
     s3ClientConfig.scheme = Aws::Http::Scheme::HTTP;
-    return Aws::S3::S3Client(std::make_shared<Aws::Auth::AnonymousAWSCredentialsProvider>(), s3ClientConfig);
+    return Aws::S3::S3Client(
+        std::make_shared<Aws::Auth::AnonymousAWSCredentialsProvider>(),
+        s3ClientConfig,
+        Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+        /*useVirtualAddressing=*/ true);
 }
 
 void CreateBucket(const TString& bucket, Aws::S3::S3Client& s3Client) {
@@ -281,7 +285,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                 break;
             }
 
-            UNIT_ASSERT(part.HasResultSet());
+            if (!part.HasResultSet()) {
+                continue;
+            }
 
             auto result = part.GetResultSet();
 
@@ -1250,7 +1256,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             FROM `/Root/external_data_source`.`/`
             WITH (
                 FORMAT="raw",
-
                 SCHEMA=(
                     `data` String NOT NULL
                 )
@@ -1380,6 +1385,67 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             UNIT_ASSERT_C(!resultFuture.GetValueSync().IsSuccess(), resultFuture.GetValueSync().GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(resultFuture.GetValueSync().GetIssues().ToString(), "Callable not expected in effects tx: Unwrap");
         }
+    }
+
+    Y_UNIT_TEST(ExecuteScriptWithLocationWithoutSlashAtTheEnd) {
+        using namespace fmt::literals;
+        const TString externalDataSourceName = "/Root/external_data_source";
+        const TString externalTableName = "/Root/test_binding_resolve";
+        const TString bucket = "test_bucket_with_location_without_slash_at_the_end";
+        const TString object = "year=1/month=2/test_object";
+        const TString content = "data,year,month\ntest,1,2";
+
+        CreateBucketWithObject(bucket, object, content);
+
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+        CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `{external_table}` (
+                data STRING NOT NULL,
+                year UINT32 NOT NULL,
+                month UINT32 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{external_source}",
+                LOCATION="/",
+                FORMAT="csv_with_names",
+                PARTITIONED_BY="[year, month]"
+            );)",
+            "external_source"_a = externalDataSourceName,
+            "external_table"_a = externalTableName,
+            "location"_a = TStringBuilder() << GetEnv("S3_ENDPOINT") << '/' << bucket
+            );
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto db = kikimr->GetQueryClient();
+        const TString sql = fmt::format(R"(
+                SELECT * FROM `{external_table}`
+            )", "external_table"_a = externalTableName);
+
+        auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
+        UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+
+        TResultSetParser resultSet(results.ExtractResultSet());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+
+        UNIT_ASSERT(resultSet.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("data").GetString(), "test");
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("year").GetUint32(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("month").GetUint32(), 2);
     }
 }
 

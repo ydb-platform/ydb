@@ -281,6 +281,9 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             // here we could erase intermediate entries but who cares as they would be skipped?
 
             it = LogInfo.find(prevGeneration);
+
+            // Note: prevGeneration is guaranteed to exist because of GenerationInfo call above
+            Y_ABORT_UNLESS(it != LogInfo.end());
         }
 
         // cleanup front entries

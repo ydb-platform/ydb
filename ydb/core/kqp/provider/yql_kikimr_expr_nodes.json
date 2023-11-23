@@ -381,6 +381,18 @@
                 {"Index": 4, "Name": "Pathes", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "Roles", "Type": "TCoAtomList"}
             ]
+        },
+        {
+            "Name": "TPgDropObject",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "PgDropObject!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "ObjectId", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "TypeId", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "MissingOk", "Type": "TCoAtom"}
+            ]
         }
     ]
 }

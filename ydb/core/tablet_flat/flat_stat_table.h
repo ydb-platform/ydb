@@ -7,6 +7,8 @@
 #include <util/generic/queue.h>
 #include <util/generic/hash_set.h>
 
+#include <ydb/core/scheme/scheme_tablecell.h>
+
 namespace NKikimr {
 namespace NTable {
 
@@ -29,13 +31,15 @@ public:
         ui64 lastRowCount = stats.RowCount;
         ui64 lastDataSize = stats.DataSize.Size;
 
+        TCellsStorage cellsStorage;
+
         while (!Heap.empty()) {
             TScreenedPartIndexIterator* it = Heap.top();
             Heap.pop();
 
             // makes key copy
-            TSerializedCellVec serialized = TSerializedCellVec(TSerializedCellVec::Serialize({it->GetCurrentKey().Columns, it->GetCurrentKey().ColumnCount}));
-            TDbTupleRef key(KeyColumns->BasicTypes().data(), serialized.GetCells().data(), serialized.GetCells().size());
+            cellsStorage.Reset({it->GetCurrentKey().Columns, it->GetCurrentKey().ColumnCount});
+            TDbTupleRef key(KeyColumns->BasicTypes().data(), cellsStorage.GetCells().data(), cellsStorage.GetCells().size());
 
             auto ready = it->Next(stats);
             if (ready == EReady::Page) {

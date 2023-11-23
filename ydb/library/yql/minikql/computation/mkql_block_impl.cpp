@@ -271,6 +271,10 @@ TBlockState::TBlockState(TMemoryUsageInfo* memInfo, size_t width)
     Pointer_ = Values.data();
 }
 
+void TBlockState::ClearValues() {
+    Values.assign(Values.size(), NUdf::TUnboxedValuePod());
+}
+
 void TBlockState::FillArrays() {
     auto& counterDatum = TArrowBlock::From(Values.back()).GetDatum();
     MKQL_ENSURE(counterDatum.is_scalar(), "Unexpected block length type (expecting scalar)");

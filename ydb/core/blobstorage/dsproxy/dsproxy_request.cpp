@@ -1,5 +1,7 @@
 #include "dsproxy_impl.h"
 #include "dsproxy_monactor.h"
+#include <ydb/core/base/feature_flags.h>
+
 
 namespace NKikimr {
 

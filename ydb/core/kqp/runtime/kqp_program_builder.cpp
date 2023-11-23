@@ -268,7 +268,7 @@ TRuntimeNode TKqpProgramBuilder::KqpLookupTable(const TTableId& tableId, const T
 }
 
 TRuntimeNode TKqpProgramBuilder::KqpUpsertRows(const TTableId& tableId, const TRuntimeNode& rows,
-    const TArrayRef<TKqpTableColumn>& upsertColumns)
+    const TArrayRef<TKqpTableColumn>& upsertColumns, bool isUpdate)
 {
     auto streamType = AS_TYPE(TStreamType, rows.GetStaticType());
     auto rowType = AS_TYPE(TStructType, streamType->GetItemType());
@@ -279,7 +279,7 @@ TRuntimeNode TKqpProgramBuilder::KqpUpsertRows(const TTableId& tableId, const TR
     builder.Add(BuildTableIdLiteral(tableId, *this));
     builder.Add(rows);
     builder.Add(BuildColumnIndicesMap(*this, *rowType, upsertColumns));
-
+    builder.Add(this->NewDataLiteral<bool>(isUpdate));
     return TRuntimeNode(builder.Build(), false);
 }
 

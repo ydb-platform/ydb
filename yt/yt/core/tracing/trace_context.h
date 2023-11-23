@@ -390,6 +390,8 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool IsCurrentTraceContextRecorded();
+
 template <class TFn>
 void AnnotateTraceContext(TFn&& fn);
 

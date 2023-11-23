@@ -40,6 +40,7 @@
 
 #include <library/cpp/yt/misc/hash.h>
 #include <library/cpp/yt/misc/variant.h>
+#include <library/cpp/yt/misc/tls.h>
 
 #include <library/cpp/yt/string/raw_formatter.h>
 
@@ -357,7 +358,7 @@ TCpuInstant GetEventInstant(const TLoggerQueueItem& item)
 using TThreadLocalQueue = TSpscQueue<TLoggerQueueItem>;
 
 static constexpr uintptr_t ThreadQueueDestroyedSentinel = -1;
-static thread_local TThreadLocalQueue* PerThreadQueue;
+YT_THREAD_LOCAL(TThreadLocalQueue*) PerThreadQueue;
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -371,7 +372,7 @@ public:
     TImpl()
         : EventQueue_(New<TMpscInvokerQueue>(
             EventCount_,
-            NConcurrency::GetThreadTags("Profiling")))
+            NConcurrency::GetThreadTags("Logging")))
         , LoggingThread_(New<TThread>(this))
         , SystemWriters_({
             CreateStderrLogWriter(
@@ -497,7 +498,6 @@ public:
         }
 
         EventQueue_->Shutdown();
-        LoggingThread_->Stop();
     }
 
     /*!
@@ -614,7 +614,6 @@ public:
 
             // Flush everything and die.
             Shutdown();
-
             std::terminate();
         }
 
@@ -711,7 +710,9 @@ private:
             : TSchedulerThread(
                 owner->EventCount_,
                 "Logging",
-                "Logging")
+                "Logging",
+                /*threadPriority*/ NThreading::EThreadPriority::Normal,
+                /*shutdownPriority*/ 200)
             , Owner_(owner)
         { }
 
@@ -1020,7 +1021,7 @@ private:
     {
         if (!PerThreadQueue) {
             PerThreadQueue = new TThreadLocalQueue();
-            RegisteredLocalQueues_.Enqueue(PerThreadQueue);
+            RegisteredLocalQueues_.Enqueue(GetTlsRef(PerThreadQueue));
         }
 
         ++EnqueuedEvents_;
@@ -1368,7 +1369,7 @@ private:
     const TShutdownCookie ShutdownCookie_ = RegisterShutdownCallback(
         "LogManager",
         BIND_NO_PROPAGATE(&TImpl::Shutdown, MakeWeak(this)),
-        /*priority*/ 200);
+        /*priority*/ 201);
 
     DECLARE_THREAD_AFFINITY_SLOT(LoggingThread);
 
@@ -1455,13 +1456,13 @@ struct TLocalQueueReclaimer
     {
         if (PerThreadQueue) {
             auto logManager = TLogManager::Get()->Impl_;
-            logManager->UnregisteredLocalQueues_.Enqueue(PerThreadQueue);
+            logManager->UnregisteredLocalQueues_.Enqueue(GetTlsRef(PerThreadQueue));
             PerThreadQueue = reinterpret_cast<TThreadLocalQueue*>(ThreadQueueDestroyedSentinel);
         }
     }
 };
 
-static thread_local TLocalQueueReclaimer LocalQueueReclaimer;
+YT_THREAD_LOCAL(TLocalQueueReclaimer) LocalQueueReclaimer;
 
 ////////////////////////////////////////////////////////////////////////////////
 

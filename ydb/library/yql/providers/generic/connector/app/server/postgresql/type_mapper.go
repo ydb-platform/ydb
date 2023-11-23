@@ -39,7 +39,7 @@ func (tm typeMapper) SQLTypeToYDBColumn(columnName, typeName string, rules *api_
 	case "date":
 		switch rules.GetDateTimeFormat() {
 		case api_service_protos.EDateTimeFormat_STRING_FORMAT:
-			ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_STRING}}
+			ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_UTF8}}
 		case api_service_protos.EDateTimeFormat_YQL_FORMAT:
 			ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_DATE}}
 		default:
@@ -52,7 +52,7 @@ func (tm typeMapper) SQLTypeToYDBColumn(columnName, typeName string, rules *api_
 	case "timestamp without time zone":
 		switch rules.GetDateTimeFormat() {
 		case api_service_protos.EDateTimeFormat_STRING_FORMAT:
-			ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_STRING}}
+			ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_UTF8}}
 		case api_service_protos.EDateTimeFormat_YQL_FORMAT:
 			ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_TIMESTAMP}}
 		default:
@@ -156,7 +156,7 @@ func (tm typeMapper) AddRowToArrowIPCStreaming(
 			}
 		case *pgtype.Date:
 			switch ydbTypeID {
-			case Ydb.Type_STRING:
+			case Ydb.Type_UTF8:
 				err = appendValueToArrowBuilder[utils.Date, string, *array.StringBuilder, utils.DateToStringConverter](utils.Date(t.Time), builders[i], t.Valid)
 			case Ydb.Type_DATE:
 				err = appendValueToArrowBuilder[utils.Date, uint16, *array.Uint16Builder, utils.DateConverter](utils.Date(t.Time), builders[i], t.Valid)
@@ -165,7 +165,7 @@ func (tm typeMapper) AddRowToArrowIPCStreaming(
 			}
 		case *pgtype.Timestamp:
 			switch ydbTypeID {
-			case Ydb.Type_STRING:
+			case Ydb.Type_UTF8:
 				err = appendValueToArrowBuilder[utils.Timestamp, string, *array.StringBuilder, utils.TimestampToStringConverter](utils.Timestamp(t.Time), builders[i], t.Valid)
 			case Ydb.Type_TIMESTAMP:
 				err = appendValueToArrowBuilder[utils.Timestamp, uint64, *array.Uint64Builder, utils.TimestampConverter](utils.Timestamp(t.Time), builders[i], t.Valid)
@@ -200,8 +200,10 @@ func acceptorFromOID(oid uint32) (any, error) {
 		return new(pgtype.Float4), nil
 	case pgtype.Float8OID:
 		return new(pgtype.Float8), nil
-	case pgtype.TextOID, pgtype.BPCharOID, pgtype.VarcharOID, pgtype.ByteaOID:
+	case pgtype.TextOID, pgtype.BPCharOID, pgtype.VarcharOID:
 		return new(pgtype.Text), nil
+	case pgtype.ByteaOID:
+		return new(*[]byte), nil
 	case pgtype.DateOID:
 		return new(pgtype.Date), nil
 	case pgtype.TimestampOID:

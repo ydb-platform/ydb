@@ -25,11 +25,21 @@ static const std::unordered_set<std::string> SecondLevelFilters = {
 };
 
 struct TPushdownSettings : public NPushdown::TSettings {
-    TPushdownSettings() {
+    TPushdownSettings()
+        : NPushdown::TSettings(NYql::NLog::EComponent::ProviderKqp)
+    {
         using EFlag = NPushdown::TSettings::EFeatureFlag;
         Enable(EFlag::LikeOperator, NSsa::RuntimeVersion >= 2U);
         Enable(EFlag::LikeOperatorOnlyForUtf8, NSsa::RuntimeVersion < 3U);
         Enable(EFlag::JsonQueryOperators | EFlag::JsonExistsOperator, NSsa::RuntimeVersion >= 3U);
+        Enable(EFlag::LogicalXorOperator
+            | EFlag::ParameterExpression
+            | EFlag::CastExpression
+            | EFlag::StringTypes
+            | EFlag::DateTimeTypes
+            | EFlag::UuidType
+            | EFlag::DecimalType
+            | EFlag::DyNumberType);
     }
 };
 

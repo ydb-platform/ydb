@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/core/url_lister/interface/url_lister_manager.h>
+#include <ydb/library/yql/core/yql_udf_resolver.h>
 
 #include <library/cpp/random_provider/random_provider.h>
 
@@ -44,12 +45,13 @@ inline bool HasExclusiveModifyIntents(TYtTableIntents intents) {
 
 struct TYtViewDescription {
     TString Sql;
-    ui16 SyntaxVersion = 0;
+    ui16 SyntaxVersion = 1;
     TExprNode::TPtr CompiledSql; // contains Read! to self/self_raw tables
     const TTypeAnnotationNode* RowType = nullptr; // Filled only if scheme requested
 
     bool Fill(const TString& provider, const TString& cluster, const TString& sql, ui16 syntaxVersion, TExprContext& ctx,
-        IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider, bool enableViewIsolation);
+        IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider, 
+        bool enableViewIsolation, IUdfResolver::TPtr udfResolver);
     void CleanupCompiledSQL();
 };
 
@@ -71,11 +73,11 @@ struct TYtTableDescriptionBase {
     bool Fill(const TString& provider, const TString& cluster, const TString& table, const TStructExprType* type,
         const TString& viewSql, ui16 syntaxVersion, const THashMap<TString, TString>& metaAttrs, TExprContext& ctx,
         IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
-        bool enableViewIsolation);
+        bool enableViewIsolation, IUdfResolver::TPtr udfResolver);
     void CleanupCompiledSQL();
     bool FillViews(const TString& provider, const TString& cluster, const TString& table, const THashMap<TString, TString>& metaAttrs,
         TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
-        bool enableViewIsolation);
+        bool enableViewIsolation, IUdfResolver::TPtr udfResolver);
 };
 
 }

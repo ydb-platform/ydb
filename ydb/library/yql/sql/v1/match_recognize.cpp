@@ -128,6 +128,7 @@ private:
                 BuildQuotedAtom(pos, ToString(factor.QuantityMax)),
                 BuildQuotedAtom(pos, ToString(factor.Greedy)),
                 BuildQuotedAtom(pos, ToString(factor.Output)),
+                BuildQuotedAtom(pos, ToString(factor.Unused))
         });
     }
 

@@ -5,32 +5,32 @@ import argparse
 
 import fetch_from
 
-MDS_PREFIX = "https://storage.yandex-team.ru/get-devtools/"
-
 
 def parse_args():
     parser = argparse.ArgumentParser()
     fetch_from.add_common_arguments(parser)
 
     parser.add_argument('--key', required=True)
+    parser.add_argument('--entrypoint', required=False, default="storage.yandex-team.ru/get-devtools")
+    parser.add_argument('--scheme', required=False, default="https")
 
     return parser.parse_args()
 
 
-def fetch(key):
-    parts = key.split("/")
+def fetch(args):
+    parts = args.key.split("/")
     if len(parts) != 3:
-        raise ValueError("Invalid MDS key '{}'".format(key))
+        raise ValueError("Invalid MDS key '{}'".format(args.key))
 
     _, sha1, file_name = parts
-
-    fetched_file = fetch_from.fetch_url(MDS_PREFIX + key, False, file_name, expected_sha1=sha1)
+    url = "{}://{}/{}".format(args.scheme, args.entrypoint, args.key)
+    fetched_file = fetch_from.fetch_url(url, False, file_name, expected_sha1=sha1)
 
     return fetched_file, file_name
 
 
 def main(args):
-    fetched_file, resource_file_name = fetch(args.key)
+    fetched_file, resource_file_name = fetch(args)
 
     fetch_from.process(fetched_file, resource_file_name, args)
 

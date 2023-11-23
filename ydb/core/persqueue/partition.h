@@ -4,6 +4,7 @@
 #include "header.h"
 #include "key.h"
 #include "partition_init.h"
+#include "partition_sourcemanager.h"
 #include "partition_types.h"
 #include "quota_tracker.h"
 #include "sourceid.h"
@@ -78,6 +79,8 @@ class TPartition : public TActorBootstrapped<TPartition> {
     friend TInitDataRangeStep;
     friend TInitDataStep;
 
+    friend TPartitionSourceManager;
+
 public:
     const TString& TopicName() const;
 
@@ -87,6 +90,9 @@ private:
 private:
     struct THasDataReq;
     struct THasDataDeadline;
+
+    bool CanWrite() const;
+    bool CanEnqueue() const;
 
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
     void ReplyPropose(const TActorContext& ctx, const NKikimrPQ::TEvProposeTransaction& event, NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode);
@@ -101,7 +107,7 @@ private:
     void AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, bool headCleared, const TActorContext& ctx);
     void AnswerCurrentWrites(const TActorContext& ctx);
     void CancelAllWritesOnIdle(const TActorContext& ctx);
-    void CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::TEvRequest* request, const TString& errorStr, const TWriteMsg& p, TSourceIdWriter& sourceIdWriter, NPersQueue::NErrorCode::EErrorCode errorCode = NPersQueue::NErrorCode::BAD_REQUEST);
+    void CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::TEvRequest* request, const TString& errorStr, const TWriteMsg& p, TPartitionSourceManager::TModificationBatch& sourceIdBatch, NPersQueue::NErrorCode::EErrorCode errorCode = NPersQueue::NErrorCode::BAD_REQUEST);
     void ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue::TEvRequest* request);
     void CreateMirrorerActor();
     void DoRead(TEvPQ::TEvRead::TPtr ev, TDuration waitQuotaTime, const TActorContext& ctx);
@@ -155,7 +161,6 @@ private:
     void HandleOnWrite(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx);
     void HandleOnWrite(TEvPQ::TEvUpdateAvailableSize::TPtr& ev, const TActorContext& ctx);
     void HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx);
-    void HandleSetOffsetResponse(ui64 cookie, const TActorContext& ctx);
     void HandleWakeup(const TActorContext& ctx);
     void HandleWriteResponse(const TActorContext& ctx);
 
@@ -174,6 +179,8 @@ private:
     void ProcessReserveRequests(const TActorContext& ctx);
     void ProcessTimestampRead(const TActorContext& ctx);
     void ProcessTimestampsForNewData(const ui64 prevEndOffset, const TActorContext& ctx);
+
+    void ProcessMaxSeqNoRequest(const TActorContext& ctx);
 
     void ReadTimestampForOffset(const TString& user, TUserInfo& ui, const TActorContext& ctx);
     void ReportCounters(const TActorContext& ctx, bool force = false);
@@ -199,7 +206,7 @@ private:
 
     TInstant GetWriteTimeEstimate(ui64 offset) const;
     bool AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx,
-        TSourceIdWriter& sourceIdWriter, THeartbeatEmitter& heartbeatEmitter);
+        TPartitionSourceManager::TModificationBatch& sourceIdBatch);
     bool CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
 
     // Removes blobs that are no longer required. Blobs are no longer required if the storage time of all messages
@@ -300,6 +307,7 @@ private:
 
     void BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config,
                                     const TActorContext& ctx);
+    void OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorContext& ctx);
     void EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config,
                                   NPersQueue::TTopicConverterPtr topicConverter,
                                   const TActorContext& ctx);
@@ -312,7 +320,8 @@ private:
 
     template <typename T>
     void EmplaceRequest(T&& body, const TActorContext& ctx) {
-        Requests.emplace_back(body, WriteQuota->GetQuotedTime(ctx.Now()), ctx.Now() - TInstant::Zero());
+        const auto now = ctx.Now();
+        Requests.emplace_back(body, WriteQuota->GetQuotedTime(now), now - TInstant::Zero());
     }
     void EmplaceResponse(TMessage&& message, const TActorContext& ctx);
 
@@ -327,6 +336,9 @@ private:
 
     void ResendPendingEvents(const TActorContext& ctx);
 
+    void Handle(TEvPQ::TEvSourceIdRequest::TPtr& ev, const TActorContext& ctx);
+
+    TString LogPrefix() const;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
@@ -460,6 +472,8 @@ private:
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
+            HFuncTraced(TEvPQ::TEvSourceIdRequest, Handle);
+            HFuncTraced(TEvPQ::TEvSourceIdResponse, SourceManager.Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
@@ -515,6 +529,8 @@ private:
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
+            HFuncTraced(TEvPQ::TEvSourceIdRequest, Handle);
+            HFuncTraced(TEvPQ::TEvSourceIdResponse, SourceManager.Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
@@ -525,35 +541,44 @@ private:
     }
 
 private:
+    enum class ProcessResult {
+        Continue,
+        Abort,
+        Break
+    };
+
     struct ProcessParameters {
-        ProcessParameters(TSourceIdWriter& sourceIdWriter,
-                          THeartbeatEmitter& heartbeatEmitter)
-                : SourceIdWriter(sourceIdWriter)
-                , HeartbeatEmitter(heartbeatEmitter) {
+        ProcessParameters(TPartitionSourceManager::TModificationBatch& sourceIdBatch)
+                : SourceIdBatch(sourceIdBatch) {
             }
 
-        TSourceIdWriter& SourceIdWriter;
-        THeartbeatEmitter& HeartbeatEmitter;
+        TPartitionSourceManager::TModificationBatch& SourceIdBatch;
 
         ui64 CurOffset;
         bool OldPartsCleared;
         bool HeadCleared;
     };
 
-    bool ProcessRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& parameters);
-    bool ProcessRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters& parameters);
-    bool ProcessRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters);
-    bool ProcessRequest(TWriteMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
+    ProcessResult ProcessRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& parameters);
+    ProcessResult ProcessRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters& parameters);
+    ProcessResult ProcessRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters);
+    ProcessResult ProcessRequest(TWriteMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
 
 private:
     ui64 TabletID;
     ui32 Partition;
     NKikimrPQ::TPQTabletConfig Config;
     NKikimrPQ::TPQTabletConfig TabletConfig;
+    const NKikimrPQ::TPQTabletConfig::TPartition* PartitionConfig = nullptr;
+    const NKikimrPQ::TPQTabletConfig::TPartition* PendingPartitionConfig = nullptr;
+
     const TTabletCountersBase& Counters;
     NPersQueue::TTopicConverterPtr TopicConverter;
     bool IsLocalDC;
     TString DCId;
+
+    TPartitionGraph PartitionGraph;
+    TPartitionSourceManager SourceManager;
 
     ui32 MaxBlobSize;
     const ui32 TotalLevels = 4;
@@ -575,6 +600,7 @@ private:
 
     std::deque<TMessage> Requests;
     std::deque<TMessage> Responses;
+    std::deque<TEvPQ::TEvGetMaxSeqNoRequest::TPtr> MaxSeqNoRequests;
 
     THead Head;
     THead NewHead;
@@ -632,7 +658,7 @@ private:
     TInstant CreationTime;
     TDuration InitDuration;
     bool InitDone;
-    const bool NewPartition;
+    bool NewPartition;
 
     THashMap<TString, NKikimr::NPQ::TOwnerInfo> Owners;
     THashSet<TActorId> OwnerPipes;

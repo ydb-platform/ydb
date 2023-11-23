@@ -126,6 +126,18 @@ TCheckFunc ExtractTenantSysViewProcessor(ui64* tenantSVPId) {
     };
 }
 
+TCheckFunc ExtractTenantStatisticsAggregator(ui64* tenantSAId) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+        const auto& pathDescr = record.GetPathDescription();
+        UNIT_ASSERT(pathDescr.HasDomainDescription());
+        const auto& domainDesc = pathDescr.GetDomainDescription();
+        UNIT_ASSERT(domainDesc.HasProcessingParams());
+        const auto& procParams = domainDesc.GetProcessingParams();
+        *tenantSAId = procParams.GetStatisticsAggregator();
+    };
+}
+
 TCheckFunc ExtractDomainHive(ui64* domainHiveId) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
@@ -197,6 +209,19 @@ TCheckFunc StoragePoolsEqual(TSet<TString> poolNames) {
 
         UNIT_ASSERT_VALUES_EQUAL(presentPools.size(), poolNames.size());
         UNIT_ASSERT_VALUES_EQUAL(presentPools, poolNames);
+    };
+}
+
+TCheckFunc SharedHive(ui64 sharedHiveId) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());
+
+        const auto& domainDesc = record.GetPathDescription().GetDomainDescription();
+        if (sharedHiveId) {
+            UNIT_ASSERT_VALUES_EQUAL(domainDesc.GetSharedHive(), sharedHiveId);
+        } else {
+            UNIT_ASSERT(!domainDesc.HasSharedHive());
+        }
     };
 }
 
@@ -472,7 +497,8 @@ void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult &record) {
     for (ui32 i = 0; i < descr.GetTable().SplitBoundarySize(); ++i) {
         const auto& b = descr.GetTable().GetSplitBoundary(i);
         TVector<TCell> cells;
-        NMiniKQL::CellsFromTuple(nullptr, b.GetKeyPrefix(), keyColTypes, false, cells, errStr);
+        TVector<TString> memoryOwner;
+        NMiniKQL::CellsFromTuple(nullptr, b.GetKeyPrefix(), keyColTypes, false, cells, errStr, memoryOwner);
         UNIT_ASSERT_VALUES_EQUAL(errStr, "");
 
         TString serialized = TSerializedCellVec::Serialize(cells);

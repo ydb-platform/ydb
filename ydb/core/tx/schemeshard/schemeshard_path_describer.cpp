@@ -712,6 +712,10 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     if (const auto& auditSettings = subDomainInfo->GetAuditSettings()) {
         entry->MutableAuditSettings()->CopyFrom(*auditSettings);
     }
+
+    if (TTabletId sharedHive = subDomainInfo->GetSharedHive()) {
+        entry->SetSharedHive(sharedHive.GetValue());
+    }
 }
 
 void TPathDescriber::DescribeDomainExtra(TPathElement::TPtr pathEl) {
@@ -865,6 +869,9 @@ static bool ConsiderAsDropped(const TPath& path) {
         return false;
     }
     if (path.IsCdcStream()) {
+        return false;
+    }
+    if (path.IsReplication()) {
         return false;
     }
 

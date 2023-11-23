@@ -307,6 +307,23 @@ private:
     template <bool IsSigned2>
     friend constexpr ui64 GetLow(TInteger128<IsSigned2> value) noexcept;
 
+    friend constexpr bool signbit(TInteger128 arg) noexcept {
+        if constexpr (IsSigned) {
+            return GetHigh(arg) & 0x8000000000000000;
+        } else {
+            Y_UNUSED(arg);
+            return false;
+        }
+    }
+
+    friend constexpr TInteger128 abs(TInteger128 arg) noexcept {
+        if constexpr (IsSigned) {
+            return signbit(arg) ? (-arg) : arg;
+        } else {
+            return arg;
+        }
+    }
+
     friend IOutputStream& operator<<(IOutputStream& out, const TInteger128& other);
 }; // class TInteger128
 
@@ -459,23 +476,6 @@ namespace std {
             return 0;
         }
     };
-
-    constexpr bool signbit(const ui128 arg) noexcept {
-        Y_UNUSED(arg);
-        return false;
-    }
-
-    constexpr bool signbit(const i128 arg) noexcept {
-        return GetHigh(arg) & 0x8000000000000000;
-    }
-
-    constexpr ui128 abs(const ui128 arg) noexcept {
-        return arg;
-    }
-
-    constexpr i128 abs(const i128 arg) noexcept {
-        return signbit(arg) ? (-arg) : arg;
-    }
 }
 
 constexpr bool operator==(const ui128 lhs, const ui128 rhs) noexcept {
@@ -507,8 +507,8 @@ constexpr bool operator<(const i128 lhs, const i128 rhs) noexcept {
         return false;
     }
 
-    const bool lhsIsNegative = std::signbit(lhs);
-    const bool rhsIsNegative = std::signbit(rhs);
+    const bool lhsIsNegative = signbit(lhs);
+    const bool rhsIsNegative = signbit(rhs);
 
     if (lhsIsNegative && !rhsIsNegative) {
         return true;
@@ -921,12 +921,12 @@ constexpr ui128 operator/(const ui128 lhs, const ui128 rhs) noexcept {
 }
 
 constexpr i128 operator/(const i128 lhs, const i128 rhs) noexcept {
-    i128 a = std::abs(lhs);
-    i128 b = std::abs(rhs);
+    i128 a = abs(lhs);
+    i128 b = abs(rhs);
 
     ui128 quotient{};
     NPrivateInt128::DivMod128(a, b, &quotient, nullptr);
-    if (std::signbit(lhs) ^ std::signbit(rhs)) {
+    if (signbit(lhs) ^ signbit(rhs)) {
         quotient = -quotient;
     }
     return quotient;
@@ -939,11 +939,11 @@ constexpr ui128 operator%(const ui128 lhs, const ui128 rhs) noexcept {
 }
 
 constexpr i128 operator%(const i128 lhs, const i128 rhs) noexcept {
-    i128 a = std::abs(lhs);
-    i128 b = std::abs(rhs);
+    i128 a = abs(lhs);
+    i128 b = abs(rhs);
     ui128 remainder{};
     NPrivateInt128::DivMod128(a, b, nullptr, &remainder);
-    if (std::signbit(lhs)) {
+    if (signbit(lhs)) {
         remainder = -remainder;
     }
     return remainder;
@@ -1075,7 +1075,7 @@ namespace NPrivateInt128 {
         // X/0 = +/- inf, X%0 = X
         if (rhs == 0) {
             // UB, let's return: `X / 0 = +inf`, and `X % 0 = X`
-            result.Quotient = std::signbit(lhs) ? std::numeric_limits<i128>::min() : std::numeric_limits<i128>::max();
+            result.Quotient = signbit(lhs) ? std::numeric_limits<i128>::min() : std::numeric_limits<i128>::max();
             result.Remainder = lhs;
         }
 
@@ -1098,7 +1098,7 @@ namespace NPrivateInt128 {
         }
 
         // abs(X)<abs(Y), X/Y = 0, X%Y = X
-        else if (std::abs(lhs) < std::abs(rhs)) {
+        else if (abs(lhs) < abs(rhs)) {
             result.Quotient = 0;
             result.Remainder = lhs;
         }
@@ -1113,12 +1113,12 @@ namespace NPrivateInt128 {
             result.Remainder = 0;
         }
 
-        else if (std::abs(lhs) > std::abs(rhs)) {
-            const bool quotientMustBeNegative = std::signbit(lhs) ^ std::signbit(rhs);
-            const bool remainderMustBeNegative = std::signbit(lhs);
+        else if (abs(lhs) > abs(rhs)) {
+            const bool quotientMustBeNegative = signbit(lhs) ^ signbit(rhs);
+            const bool remainderMustBeNegative = signbit(lhs);
 
-            lhs = std::abs(lhs);
-            rhs = std::abs(rhs);
+            lhs = abs(lhs);
+            rhs = abs(rhs);
 
             // result is division of two ui64
             if (GetHigh(lhs) == 0 && GetHigh(rhs) == 0) {

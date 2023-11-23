@@ -15,6 +15,7 @@ struct TAuthActorData {
 
     THolder<NKikimrClient::TSqsRequest> SQSRequest;
     THolder<IReplyCallback> HTTPCallback;
+    std::function<void(TString)> UserSidCallback;
 
     bool EnableQueueLeader;
 

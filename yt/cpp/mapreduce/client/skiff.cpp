@@ -112,6 +112,9 @@ NSkiff::TSkiffSchemaPtr CreateSkiffSchema(
             // We ignore all complex types until YT-12717 is done.
             return nullptr;
         }
+        if (column.Deleted().Defined() && *column.Deleted()) {
+            continue;
+        }
         if (column.Required() || NTi::IsSingular(column.TypeV3()->GetTypeName())) {
             skiffColumn = CreateSimpleTypeSchema(ValueTypeToSkiffType(column.Type()));
         } else {

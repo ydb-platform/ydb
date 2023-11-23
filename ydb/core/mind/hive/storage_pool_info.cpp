@@ -1,5 +1,6 @@
 #include "storage_pool_info.h"
 #include "hive_impl.h"
+#include <library/cpp/random_provider/random_provider.h>
 
 namespace NKikimr {
 namespace NHive {

@@ -1,4 +1,4 @@
-#include "datashard_ut_common.h"
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "change_sender_common_ops.h"
 
 #include <library/cpp/digest/md5/md5.h>

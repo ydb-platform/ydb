@@ -88,6 +88,7 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 {% endif %}
 * `VIRTUAL_TIMESTAMPS`: Enabling/disabling [virtual timestamps](../../../../concepts/cdc#virtual-timestamps). Disabled by default.
 * `RETENTION_PERIOD`: [Record retention period](../../../../concepts/cdc#retention-period). The value type is `Interval` and the default value is 24 hours (`Interval('PT24H')`).
+* `TOPIC_MIN_ACTIVE_PARTITIONS`: [The number of topic partitions](../../../../concepts/cdc#topic-partitions). By default, the number of topic partitions is equal to the number of table partitions.
 * `INITIAL_SCAN`: Enables/disables [initial table scan](../../../../concepts/cdc#initial-scan). Disabled by default.
 {% if audience == "tech" %}
 * `AWS_REGION`: Value to be written to the `awsRegion` field. Used only with the `DYNAMODB_STREAMS_JSON` format.

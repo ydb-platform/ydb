@@ -14,23 +14,22 @@ protected:
     YDB_READONLY(bool, IncludeFinish, true);
     YDB_READONLY(bool, IncludeStart, false);
     YDB_READONLY(ui32, IntervalIdx, 0);
+    bool IsExclusiveIntervalFlag = false;
 public:
-    bool IsExclusiveInterval(const ui32 sourcesCount) const {
-        return IsExclusiveInterval(sourcesCount, IncludeStart, IncludeFinish);
-    }
-
-    static bool IsExclusiveInterval(const ui32 sourcesCount, const bool includeStart, const bool includeFinish) {
-        return includeFinish && includeStart && sourcesCount == 1;
-    }
-
     TMergingContext(const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
-        const ui32 intervalIdx, const bool includeFinish, const bool includeStart)
+        const ui32 intervalIdx, const bool includeFinish, const bool includeStart, const bool isExclusiveInterval)
         : Start(start)
         , Finish(finish)
         , IncludeFinish(includeFinish)
         , IncludeStart(includeStart)
-        , IntervalIdx(intervalIdx) {
+        , IntervalIdx(intervalIdx)
+        , IsExclusiveIntervalFlag(isExclusiveInterval)
+    {
 
+    }
+
+    bool IsExclusiveInterval() const {
+        return IsExclusiveIntervalFlag;
     }
 
     NJson::TJsonValue DebugJson() const {
@@ -39,6 +38,7 @@ public:
         result.InsertValue("idx", IntervalIdx);
         result.InsertValue("finish", Finish.DebugJson());
         result.InsertValue("include_finish", IncludeFinish);
+        result.InsertValue("exclusive", IsExclusiveIntervalFlag);
         return result;
     }
 
@@ -116,7 +116,7 @@ public:
 
     TFetchingInterval(const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
         const ui32 intervalIdx, const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TSpecialReadContext>& context,
-        const bool includeFinish, const bool includeStart);
+        const bool includeFinish, const bool includeStart, const bool isExclusiveInterval);
 };
 
 }

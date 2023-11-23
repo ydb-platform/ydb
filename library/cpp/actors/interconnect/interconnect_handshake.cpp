@@ -164,8 +164,9 @@ namespace NActors {
             }
 
             void WaitPoller(bool read, bool write, TString state) {
-                PollerToken->Request(read, write);
-                Actor->WaitForSpecificEvent<TEvPollerReady>(std::move(state));
+                if (!PollerToken->RequestNotificationAfterWouldBlock(read, write)) {
+                    Actor->WaitForSpecificEvent<TEvPollerReady>(std::move(state));
+                }
             }
 
             template <typename TDataPtr, typename TSendRecvFunc>

@@ -65,11 +65,19 @@ def onresource_files(unit, *args):
         unit.onresource(res)
 
 
-def onall_resource_files(unit, *args):
+def on_all_resource_files(unit, macro, *args):
     # This is only validation, actual work is done in ymake.core.conf implementation
     for arg in args:
         if '*' in arg or '?' in arg:
-            ymake.report_configure_error('Wildcards in [[imp]]ALL_RESOURCE_FILES[[rst]] are not allowed')
+            ymake.report_configure_error('Wildcards in [[imp]]{}[[rst]] are not allowed'.format(macro))
+
+
+def onall_resource_files(unit, *args):
+    on_all_resource_files(unit, 'ALL_RESOURCE_FILES', args)
+
+
+def onall_resource_files_from_dirs(unit, *args):
+    on_all_resource_files(unit, 'ALL_RESOURCE_FILES_FROM_DIRS', args)
 
 
 def on_ya_conf_json(unit, conf_file):

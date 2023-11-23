@@ -1,4 +1,5 @@
 /* postgres can not */
+/* skip double format */
 $id = ($x)->{
     $f = Yql::Callable(CallableType(0, TypeOf($x)), ()->{return $x});
     return $f();

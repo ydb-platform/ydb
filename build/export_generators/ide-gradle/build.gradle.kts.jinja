@@ -49,6 +49,13 @@ java {
     withJavadocJar()
 }
 
+{% if target.jar_source_set is defined -%}
+{%     for source_set in target.jar_source_set -%}
+{%-        set srcdir, glob = source_set.split(':') -%}
+sourceSets.main.java.srcDirs += '{{ srcdir }}'
+{%     endfor -%}
+{% endif -%}
+
 dependencies {
 {% for target in targets -%}
 {% if target.junit5_test -%}

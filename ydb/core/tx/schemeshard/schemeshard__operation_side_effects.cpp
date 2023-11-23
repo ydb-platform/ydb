@@ -503,6 +503,25 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
             }
         }
 
+        if (!tenantLink.TenantStatisticsAggregator && subDomain->GetTenantStatisticsAggregatorID()) {
+            message->SetTenantStatisticsAggregator(ui64(subDomain->GetTenantStatisticsAggregatorID()));
+            hasChanges = true;
+        }
+
+        if (tenantLink.TenantStatisticsAggregator) {
+            if (subDomain->GetAlter()) {
+                Y_VERIFY_S(tenantLink.TenantStatisticsAggregator == subDomain->GetAlter()->GetTenantStatisticsAggregatorID(),
+                           "tenant SA is inconsistent"
+                               << " on tss: " << tenantLink.TenantStatisticsAggregator
+                               << " on gss: " << subDomain->GetAlter()->GetTenantStatisticsAggregatorID());
+            } else {
+                Y_VERIFY_S(tenantLink.TenantStatisticsAggregator == subDomain->GetTenantStatisticsAggregatorID(),
+                           "tenant SA is inconsistent"
+                               << " on tss: " << tenantLink.TenantStatisticsAggregator
+                               << " on gss: " << subDomain->GetTenantStatisticsAggregatorID());
+            }
+        }
+
         if (!hasChanges) {
             LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "DoUpdateTenant no hasChanges"

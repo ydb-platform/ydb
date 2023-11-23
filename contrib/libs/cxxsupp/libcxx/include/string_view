@@ -199,29 +199,45 @@ namespace std {
 #include <__algorithm/min.h>
 #include <__assert> // all public C++ headers provide the assertion handler
 #include <__config>
+#include <__functional/hash.h>
 #include <__functional/unary_function.h>
 #include <__fwd/string_view.h>
+#include <__iterator/concepts.h>
+#include <__iterator/readable_traits.h>
+#include <__iterator/reverse_iterator.h>
+#include <__memory/pointer_traits.h>
 #include <__ranges/concepts.h>
 #include <__ranges/data.h>
 #include <__ranges/enable_borrowed_range.h>
 #include <__ranges/enable_view.h>
 #include <__ranges/size.h>
-#include <__string>
-#include <compare>
+#include <__string/char_traits.h>
 #include <iosfwd>
-#include <iterator>
 #include <limits>
 #include <stdexcept>
 #include <type_traits>
 #include <version>
 
-#if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
-#  pragma GCC system_header
+#ifndef _LIBCPP_REMOVE_TRANSITIVE_INCLUDES
+#  include <algorithm>
+#  include <functional>
+#  include <iterator>
 #endif
 
-#ifdef _LIBCPP_COMPILER_MSVC
-#pragma warning ( push )
-#pragma warning ( disable : 4455 )
+// standard-mandated includes
+
+// [iterator.range]
+#include <__iterator/access.h>
+#include <__iterator/data.h>
+#include <__iterator/empty.h>
+#include <__iterator/reverse_access.h>
+#include <__iterator/size.h>
+
+// [string.view.synop]
+#include <compare>
+
+#if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
+#  pragma GCC system_header
 #endif
 
 _LIBCPP_PUSH_MACROS
@@ -908,14 +924,13 @@ operator<<(basic_ostream<_CharT, _Traits>& __os,
 // [string.view.hash]
 template<class _CharT>
 struct _LIBCPP_TEMPLATE_VIS hash<basic_string_view<_CharT, char_traits<_CharT> > >
-    : public unary_function<basic_string_view<_CharT, char_traits<_CharT> >, size_t>
+    : public __unary_function<basic_string_view<_CharT, char_traits<_CharT> >, size_t>
 {
     _LIBCPP_INLINE_VISIBILITY
     size_t operator()(const basic_string_view<_CharT, char_traits<_CharT> > __val) const _NOEXCEPT {
         return __do_string_hash(__val.data(), __val.data() + __val.size());
     }
 };
-
 
 #if _LIBCPP_STD_VER > 11
 inline namespace literals
@@ -959,10 +974,6 @@ inline namespace literals
 } // namespace literals
 #endif
 _LIBCPP_END_NAMESPACE_STD
-
-#ifdef _LIBCPP_COMPILER_MSVC
-#pragma warning ( pop )
-#endif
 
 _LIBCPP_POP_MACROS
 

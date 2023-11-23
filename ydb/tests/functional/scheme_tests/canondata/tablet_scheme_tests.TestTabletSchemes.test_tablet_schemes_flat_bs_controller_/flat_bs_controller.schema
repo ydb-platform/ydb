@@ -105,6 +105,16 @@
                 "ColumnId": 21,
                 "ColumnName": "CompatibilityInfo",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 22,
+                "ColumnName": "UseSelfHealLocalPolicy",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 23,
+                "ColumnName": "TryToRelocateBrokenDisksLocallyFirst",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -130,7 +140,9 @@
                     18,
                     19,
                     20,
-                    21
+                    21,
+                    22,
+                    23
                 ],
                 "RoomID": 0,
                 "Codec": 0,

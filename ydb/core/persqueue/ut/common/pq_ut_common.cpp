@@ -916,7 +916,8 @@ void CmdRead(const ui32 partition, const ui64 offset, const ui32 count, const ui
             UNIT_ASSERT(result->Record.GetPartitionResponse().HasCmdReadResult());
             auto res = result->Record.GetPartitionResponse().GetCmdReadResult();
 
-            UNIT_ASSERT_EQUAL(res.ResultSize(), resCount);
+            UNIT_ASSERT_EQUAL_C(res.ResultSize(), resCount,
+                "Result size missmatch: expected " << resCount << " but received " << res.ResultSize());
             ui64 off = offset;
 
             for (ui32 i = 0; i < resCount; ++i) {

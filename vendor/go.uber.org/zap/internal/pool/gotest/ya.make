@@ -1,0 +1,5 @@
+GO_TEST_FOR(vendor/go.uber.org/zap/internal/pool)
+
+LICENSE(MIT)
+
+END()

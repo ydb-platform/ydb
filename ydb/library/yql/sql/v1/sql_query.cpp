@@ -177,33 +177,33 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            if (rule.HasBlock8()) {
-                Context().Error(GetPos(rule.GetBlock8().GetRule_table_inherits1().GetToken1()))
+            if (rule.HasBlock9()) {
+                Context().Error(GetPos(rule.GetBlock9().GetRule_table_inherits1().GetToken1()))
                     << "INHERITS clause is not supported yet";
                 return false;
             }
 
-            if (rule.HasBlock9()) {
+            if (rule.HasBlock10()) {
                 if (tableType == ETableType::TableStore) {
-                    Context().Error(GetPos(rule.GetBlock9().GetRule_table_partition_by1().GetToken1()))
+                    Context().Error(GetPos(rule.GetBlock10().GetRule_table_partition_by1().GetToken1()))
                         << "PARTITION BY is not supported for TABLESTORE";
                     return false;
                 }
-                const auto list = rule.GetBlock9().GetRule_table_partition_by1().GetRule_pure_column_list4();
+                const auto list = rule.GetBlock10().GetRule_table_partition_by1().GetRule_pure_column_list4();
                 params.PartitionByColumns.push_back(IdEx(list.GetRule_an_id2(), *this));
                 for (auto& node : list.GetBlock3()) {
                     params.PartitionByColumns.push_back(IdEx(node.GetRule_an_id2(), *this));
                 }
             }
 
-            if (rule.HasBlock10()) {
-                if (!CreateTableSettings(rule.GetBlock10().GetRule_with_table_settings1(), params)) {
+            if (rule.HasBlock11()) {
+                if (!CreateTableSettings(rule.GetBlock11().GetRule_with_table_settings1(), params)) {
                     return false;
                 }
             }
 
-            if (rule.HasBlock11()) {
-                Context().Error(GetPos(rule.GetBlock11().GetRule_table_tablestore1().GetToken1()))
+            if (rule.HasBlock12()) {
+                Context().Error(GetPos(rule.GetBlock12().GetRule_table_tablestore1().GetToken1()))
                     << "TABLESTORE clause is not supported yet";
                 return false;
             }
@@ -1427,6 +1427,21 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                 Error() << "Expected file alias as pragma value";
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
+            }
+
+            if (Ctx.Settings.FileAliasPrefix) {
+                if (values.size() == 1) {
+                    values.emplace_back(TDeferredAtom(Ctx.Pos(), ""));
+                }
+
+                TString prefix;
+                if (!values[1].GetLiteral(prefix, Ctx)) {
+                    Error() << "Expected literal UDF module prefix in views";
+                    Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                    return {};
+                }
+
+                values[1] = TDeferredAtom(Ctx.Pos(), Ctx.Settings.FileAliasPrefix + prefix);
             }
 
             Ctx.IncrementMonCounter("sql_pragma", "udf");

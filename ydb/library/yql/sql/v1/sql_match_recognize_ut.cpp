@@ -405,7 +405,7 @@ FROM Input MATCH_RECOGNIZE(
         const auto& lastTerm = patternCallable->GetChild(2);
         UNIT_ASSERT(IsQuotedListOfSize(lastTerm, 3));
         const auto& firstFactorOfLastTerm = lastTerm->GetChild(1)->GetChild(0);
-        UNIT_ASSERT(IsQuotedListOfSize(firstFactorOfLastTerm, 5));
+        UNIT_ASSERT(IsQuotedListOfSize(firstFactorOfLastTerm, 6));
         const auto nestedPattern = firstFactorOfLastTerm->GetChild(1)->GetChild(0);
         UNIT_ASSERT_EQUAL(nestedPattern->GetChildrenCount(), 1 + 1);
         UNIT_ASSERT_EQUAL(nestedPattern->GetChild(0)->GetContent(), "MatchRecognizePattern");
@@ -461,7 +461,8 @@ FROM Input MATCH_RECOGNIZE(
                     FromString<uint64_t>(factor->GetChild(1)->GetChild(1)->GetContent()), //QuantityMin
                     FromString<uint64_t>(factor->GetChild(2)->GetChild(1)->GetContent()), //QuantityMax
                     FromString<bool>(factor->GetChild(3)->GetChild(1)->GetContent()), //Greedy
-                    false //Output, not used in this test
+                    false, //Output, not used in this test
+                    false, // Flag "Unused", not used in this test
             };
         };
         {

@@ -202,9 +202,9 @@ private:
 
 class TDqChannelStorage : public IDqChannelStorage {
 public:
-    TDqChannelStorage(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUp, const TActorContext& ctx) {
+    TDqChannelStorage(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUp) {
         SelfActor_ = new TDqChannelStorageActor(txId, channelId, std::move(wakeUp));
-        ctx.RegisterWithSameMailbox(SelfActor_);
+        TlsActivationContext->AsActorContext().RegisterWithSameMailbox(SelfActor_);
     }
 
     ~TDqChannelStorage() {
@@ -233,10 +233,9 @@ private:
 
 } // anonymous namespace
 
-IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId, IDqChannelStorage::TWakeUpCallback wakeUp,
-    const TActorContext& ctx)
+IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId, IDqChannelStorage::TWakeUpCallback wakeUp)
 {
-    return new TDqChannelStorage(txId, channelId, std::move(wakeUp), ctx);
+    return new TDqChannelStorage(txId, channelId, std::move(wakeUp));
 }
 
 } // namespace NYql::NDq

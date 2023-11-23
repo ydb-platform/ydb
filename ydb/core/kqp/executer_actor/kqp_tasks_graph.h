@@ -33,7 +33,7 @@ struct TStageInfoMeta {
     TTableId TableId;
     TString TablePath;
     ETableKind TableKind;
-    TIntrusiveConstPtr<TKqpTableKeys::TTableConstInfo> TableConstInfo;
+    TIntrusiveConstPtr<TTableConstInfo> TableConstInfo;
     TIntrusiveConstPtr<NKikimr::NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> ColumnTableInfoPtr;
 
     TVector<bool> SkipNullKeys;
@@ -181,6 +181,7 @@ public:
         NScheme::TTypeInfo Type;
         TString TypeMod;
         TString Name;
+        bool NotNull;
     };
 
     struct TColumnWrite {
@@ -210,6 +211,7 @@ public:
         EReadType ReadType = EReadType::Rows;
         TKqpOlapProgram OlapProgram;
         TVector<NScheme::TTypeInfo> ResultColumnsTypes;
+        std::vector<std::string> GroupByColumnNames;
     };
 
     struct TWriteInfo {
@@ -258,7 +260,7 @@ void FillChannelDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TChannel&
     const NYql::NDq::TChannel& channel, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion);
 
 template<typename Proto>
-TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, TIntrusiveConstPtr<TKqpTableKeys::TTableConstInfo> tableInfo) {
+TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, TIntrusiveConstPtr<TTableConstInfo> tableInfo) {
     TVector<TTaskMeta::TColumn> columns;
     columns.reserve(op.GetColumns().size());
 
@@ -270,6 +272,7 @@ TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, TIntrusiveConstPtr<
         c.Type = tableColumn.Type;
         c.TypeMod = tableColumn.TypeMod;
         c.Name = column.GetName();
+        c.NotNull = tableColumn.NotNull;
 
         columns.emplace_back(std::move(c));
     }

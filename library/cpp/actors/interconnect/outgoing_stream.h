@@ -67,7 +67,10 @@ namespace NInterconnect {
         }
 
         TMutableContiguousSpan AcquireSpanForWriting(size_t maxLen) {
-            if (maxLen && AppendOffset == BufferSize) { // we have no free buffer, allocate one
+            if (!maxLen) {
+                return {nullptr, 0};
+            }
+            if (AppendOffset == BufferSize) { // we have no free buffer, allocate one
                 Buffers.emplace_back(static_cast<TBuffer*>(malloc(sizeof(TBuffer))));
                 AppendBuffer = Buffers.back().get();
                 Y_ABORT_UNLESS(AppendBuffer);

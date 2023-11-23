@@ -1,4 +1,6 @@
+import gzip
 import json as json_module
+import re
 from json.decoder import JSONDecodeError
 from typing import Any
 from typing import Callable
@@ -11,7 +13,7 @@ from urllib.parse import parse_qsl
 from urllib.parse import urlparse
 
 from requests import PreparedRequest
-from requests.packages.urllib3.util.url import parse_url
+from urllib3.util.url import parse_url
 
 
 def _create_key_val_str(input_dict: Union[Dict[Any, Any], Any]) -> str:
@@ -47,7 +49,7 @@ def _create_key_val_str(input_dict: Union[Dict[Any, Any], Any]) -> str:
         elif isinstance(val, list):
             val = list_to_str(input_list=val)
 
-        items_list.append("{}: {}".format(key, val))
+        items_list.append(f"{key}: {val}")
 
     key_val_str = "{{{}}}".format(", ".join(items_list))
     return key_val_str
@@ -124,8 +126,11 @@ def json_params_matcher(
         request_body = request.body
         json_params = (params or {}) if not isinstance(params, list) else params
         try:
-            if isinstance(request_body, bytes):
-                request_body = request_body.decode("utf-8")
+            if isinstance(request.body, bytes):
+                try:
+                    request_body = request.body.decode("utf-8")
+                except UnicodeDecodeError:
+                    request_body = gzip.decompress(request.body).decode("utf-8")
             json_body = json_module.loads(request_body) if request_body else {}
 
             if (
@@ -251,7 +256,7 @@ def query_string_matcher(query: Optional[str]) -> Callable[..., Any]:
 
     def match(request: PreparedRequest) -> Tuple[bool, str]:
         reason = ""
-        data = parse_url(request.url)
+        data = parse_url(request.url or "")
         request_query = data.query
 
         request_qsl = sorted(parse_qsl(request_query)) if request_query else {}
@@ -402,6 +407,23 @@ def header_matcher(
     :return: (func) matcher
     """
 
+    def _compare_with_regex(request_headers: Union[Dict[Any, Any], Any]) -> bool:
+        if strict_match and len(request_headers) != len(headers):
+            return False
+
+        for k, v in headers.items():
+            if request_headers.get(k) is not None:
+                if isinstance(v, re.Pattern):
+                    if re.match(v, request_headers[k]) is None:
+                        return False
+                else:
+                    if not v == request_headers[k]:
+                        return False
+            elif strict_match:
+                return False
+
+        return True
+
     def match(request: PreparedRequest) -> Tuple[bool, str]:
         request_headers: Union[Dict[Any, Any], Any] = request.headers or {}
 
@@ -409,7 +431,7 @@ def header_matcher(
             # filter down to just the headers specified in the matcher
             request_headers = {k: v for k, v in request_headers.items() if k in headers}
 
-        valid = sorted(headers.items()) == sorted(request_headers.items())
+        valid = _compare_with_regex(request_headers)
 
         if not valid:
             return False, "Headers do not match: {} doesn't match {}".format(

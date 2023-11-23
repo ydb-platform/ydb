@@ -43,15 +43,25 @@ struct TEvScanExchange {
         YDB_ACCESSOR_DEF(TVector<TOwnedCellVec>, Rows);
         YDB_ACCESSOR(ui64, TabletId, 0);
     public:
+        ui32 GetRowsCount() const {
+            return ArrowBatch ? ArrowBatch->num_rows() : Rows.size();
+        }
+
+        TEvSendData(const ui64 tabletId, const std::shared_ptr<arrow::RecordBatch>& batch)
+            : ArrowBatch(batch)
+            , TabletId(tabletId)
+        {
+        }
+
         TEvSendData(TEvKqpCompute::TEvScanData& msg, const ui64 tabletId)
             : TabletId(tabletId) {
             switch (msg.GetDataFormat()) {
-                case NKikimrTxDataShard::EScanDataFormat::CELLVEC:
-                case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
+                case NKikimrDataEvents::FORMAT_CELLVEC:
+                case NKikimrDataEvents::FORMAT_UNSPECIFIED:
                     Rows = std::move(msg.Rows);
                     Y_ABORT_UNLESS(Rows.size());
                     break;
-                case NKikimrTxDataShard::EScanDataFormat::ARROW:
+                case NKikimrDataEvents::FORMAT_ARROW:
                     ArrowBatch = msg.ArrowBatch;
                     Y_ABORT_UNLESS(ArrowBatch);
                     Y_ABORT_UNLESS(ArrowBatch->num_rows());

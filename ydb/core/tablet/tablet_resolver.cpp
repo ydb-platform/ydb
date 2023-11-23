@@ -14,6 +14,8 @@
 #include <ydb/core/util/queue_oneone_inplace.h>
 #include <util/generic/map.h>
 #include <util/generic/deque.h>
+#include <library/cpp/random_provider/random_provider.h>
+
 
 namespace NKikimr {
 
@@ -313,7 +315,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         if (endpoint.first) {
             ctx.Send(sender, new TEvTabletResolver::TEvForwardResult(msg->TabletID, endpoint.second, endpoint.first, LastCacheEpoch));
             if (!!msg->Ev) {
-                ctx.ExecutorThread.Send(IEventHandle::Forward(msg->Ev, msg->SelectActor(endpoint.second, endpoint.first)));
+                ctx.ExecutorThread.Send(IEventHandle::Forward(std::move(msg->Ev), msg->SelectActor(endpoint.second, endpoint.first)));
             }
             return true;
         } else {

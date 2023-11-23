@@ -713,7 +713,7 @@ public:
         , Flow(flow)
         , Items(std::move(items))
         , NewItem(newItem)
-        , PasstroughItem(GetPasstroughtMap({NewItem}, Items).front())
+        , PasstroughItem(GetPasstroughtMap(TComputationNodePtrVector{NewItem}, Items).front())
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {}
 

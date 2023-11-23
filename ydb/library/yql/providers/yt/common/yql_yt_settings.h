@@ -233,6 +233,7 @@ struct TYtSettings {
     NCommon::TConfSetting<NSize::TSize, false> TableContentMinAvgChunkSize;
     NCommon::TConfSetting<ui32, false> TableContentMaxInputTables;
     NCommon::TConfSetting<ui32, false> TableContentMaxChunksForNativeDelivery;
+    NCommon::TConfSetting<bool, false> TableContentLocalExecution;
     NCommon::TConfSetting<bool, false> UseTypeV2;
     NCommon::TConfSetting<bool, false> UseNativeYtTypes;
     NCommon::TConfSetting<bool, false> UseNativeDescSort;

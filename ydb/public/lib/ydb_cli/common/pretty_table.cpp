@@ -15,12 +15,37 @@ TPrettyTable::TRow::TRow(size_t nColumns)
 {
 }
 
+size_t TPrettyTable::TRow::ExtraBytes(TStringBuf data) const {
+    // counter of previously uncounted bytes
+    size_t extraBytes = 0;
+    for (char ch : data) {
+        size_t n = 0;
+        // if the first bit of the character is not 0, we met a multibyte
+        // counting the number of single bits at the beginning of a byte
+        while ((ch & 0x80) != 0) {
+            n++;
+            ch <<= 1;
+        }
+        // update counter
+        if (n != 0) {
+            extraBytes += n - 1;
+        }
+    }
+
+    return extraBytes;
+}
+
 size_t TPrettyTable::TRow::ColumnWidth(size_t columnIndex) const {
     Y_ABORT_UNLESS(columnIndex < Columns.size());
 
     size_t width = 0;
+    TStringBuf data;
     for (const auto& line : Columns.at(columnIndex)) {
-        width = Max(width, line.size());
+        data = line;
+
+        size_t extraBytes = ExtraBytes(data);
+
+        width = Max(width, line.size() - extraBytes);
     }
 
     return width;
@@ -49,13 +74,15 @@ bool TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>& w
                 }
             }
 
+            size_t extraBytes = ExtraBytes(data);
+
             if (data) {
-                o << RightPad(data.SubStr(0, width), width);
+                o << RightPad(data.SubStr(0, width + extraBytes), width + extraBytes);
             } else {
-                o << RightPad(' ', width);
+                o << RightPad(' ', width + extraBytes);
             }
 
-            if (data.size() > width) {
+            if (data.size() > width + extraBytes) {
                 next = true;
             }
         }

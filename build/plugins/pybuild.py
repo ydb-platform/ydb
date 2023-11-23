@@ -307,10 +307,10 @@ def onpy_srcs(unit, *args):
     dump_dir = unit.get('PYTHON_BUILD_DUMP_DIR')
     dump_output = None
     if dump_dir:
-        import thread
+        import threading
 
         pid = os.getpid()
-        tid = thread.get_ident()
+        tid = threading.current_thread().ident
         dump_name = '{}-{}.dump'.format(pid, tid)
         dump_output = open(os.path.join(dump_dir, dump_name), 'a')
 

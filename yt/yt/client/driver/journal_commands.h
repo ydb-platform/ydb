@@ -16,7 +16,9 @@ class TReadJournalCommand
     : public TTypedCommand<NApi::TJournalReaderOptions>
 {
 public:
-    TReadJournalCommand();
+    REGISTER_YSON_STRUCT_LITE(TReadJournalCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -31,7 +33,9 @@ class TWriteJournalCommand
     : public TTypedCommand<NApi::TJournalWriterOptions>
 {
 public:
-    TWriteJournalCommand();
+    REGISTER_YSON_STRUCT_LITE(TWriteJournalCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TRichYPath Path;
@@ -46,7 +50,9 @@ class TTruncateJournalCommand
     : public TTypedCommand<NApi::TTruncateJournalOptions>
 {
 public:
-    TTruncateJournalCommand();
+    REGISTER_YSON_STRUCT_LITE(TTruncateJournalCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NYPath::TYPath Path;

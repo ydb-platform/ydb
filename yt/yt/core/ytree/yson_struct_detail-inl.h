@@ -596,6 +596,19 @@ TValue& TYsonFieldAccessor<TStruct, TValue>::GetValue(const TYsonStructBase* sou
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TStruct, class TValue>
+TUniversalYsonParameterAccessor<TStruct, TValue>::TUniversalYsonParameterAccessor(std::function<TValue&(TStruct*)> accessor)
+    : Accessor_(std::move(accessor))
+{ }
+
+template <class TStruct, class TValue>
+TValue& TUniversalYsonParameterAccessor<TStruct, TValue>::GetValue(const TYsonStructBase* source)
+{
+    return Accessor_(TYsonStructRegistry::Get()->template CachedDynamicCast<TStruct>(source));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class TValue>
 TYsonStructParameter<TValue>::TYsonStructParameter(TString key, std::unique_ptr<IYsonFieldAccessor<TValue>> fieldAccessor)
     : Key_(std::move(key))
@@ -616,7 +629,7 @@ void TYsonStructParameter<TValue>::Load(
             options.Path,
             options.MergeStrategy.value_or(MergeStrategy_),
             options.RecursiveUnrecognizedRecursively);
-    } else if (!DefaultCtor_) {
+    } else if (!Optional_) {
         THROW_ERROR_EXCEPTION("Missing required parameter %v",
             options.Path);
     }
@@ -659,7 +672,7 @@ void TYsonStructParameter<TValue>::Load(
             options.Path,
             options.MergeStrategy.value_or(MergeStrategy_),
             options.RecursiveUnrecognizedRecursively);
-    } else if (!DefaultCtor_) {
+    } else if (!Optional_) {
         THROW_ERROR_EXCEPTION("Missing required parameter %v",
             options.Path);
     }
@@ -780,9 +793,14 @@ const TString& TYsonStructParameter<TValue>::GetKey() const
 }
 
 template <class TValue>
-TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::Optional()
+TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::Optional(bool init)
 {
-    DefaultCtor_ = [] () { return TValue{}; };
+    Optional_ = true;
+
+    if (init) {
+        DefaultCtor_ = [] () { return TValue{}; };
+    }
+
     return *this;
 }
 
@@ -791,20 +809,21 @@ TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::Default(TValue defau
 {
     static_assert(!std::is_convertible_v<TValue, TIntrusivePtr<TYsonStruct>>, "Use DefaultCtor to register TYsonStruct default.");
     DefaultCtor_ = [value = std::move(defaultValue)] () { return value; };
+    Optional_ = true;
     return *this;
 }
 
 template <class TValue>
 TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::Default()
 {
-    DefaultCtor_ = [] () { return TValue{}; };
-    return *this;
+    return Optional();
 }
 
 template <class TValue>
 TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::DefaultCtor(std::function<TValue()> defaultCtor)
 {
     DefaultCtor_ = std::move(defaultCtor);
+    Optional_ = true;
     return *this;
 }
 
@@ -826,6 +845,7 @@ template <class... TArgs>
 TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::DefaultNew(TArgs&&... args)
 {
     TriviallyInitializedIntrusivePtr_ = true;
+    Optional_ = true;
     return DefaultCtor([=] () mutable { return New<typename TValue::TUnderlying>(std::forward<TArgs>(args)...); });
 }
 

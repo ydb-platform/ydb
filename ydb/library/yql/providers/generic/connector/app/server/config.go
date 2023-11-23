@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math"
 	"os"
 
@@ -24,14 +23,16 @@ func validateServerConfig(c *config.TServerConfig) error {
 		return fmt.Errorf("validate `pprof_server`: %w", err)
 	}
 
+	if err := validatePagingConfig(c.Paging); err != nil {
+		return fmt.Errorf("validate `paging`: %w", err)
+	}
+
 	return nil
 }
 
 func validateConnectorServerConfig(c *config.TConnectorServerConfig) error {
 	if c == nil {
-		// TODO: make it required after YQ-2057
-		// return fmt.Errorf("required field is missing")
-		return nil
+		return fmt.Errorf("required section is missing")
 	}
 
 	if err := validateEndpoint(c.Endpoint); err != nil {
@@ -47,7 +48,7 @@ func validateConnectorServerConfig(c *config.TConnectorServerConfig) error {
 
 func validateEndpoint(c *api_common.TEndpoint) error {
 	if c == nil {
-		return fmt.Errorf("required field is missing")
+		return fmt.Errorf("required section is missing")
 	}
 
 	if c.Host == "" {
@@ -109,6 +110,25 @@ func validatePprofServerConfig(c *config.TPprofServerConfig) error {
 	return nil
 }
 
+const maxInterconnectMessageSize = 50 * 1024 * 1024
+
+func validatePagingConfig(c *config.TPagingConfig) error {
+	if c == nil {
+		return fmt.Errorf("required section is missing")
+	}
+
+	limitIsSet := c.BytesPerPage != 0 || c.RowsPerPage != 0
+	if !limitIsSet {
+		return fmt.Errorf("you must set either `bytes_per_page` or `rows_per_page` or both of them")
+	}
+
+	if c.BytesPerPage > maxInterconnectMessageSize {
+		return fmt.Errorf("`bytes_per_page` limit exceeds the limits of interconnect system used by YDB engine")
+	}
+
+	return nil
+}
+
 func fileMustExist(path string) error {
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
@@ -123,14 +143,19 @@ func fileMustExist(path string) error {
 }
 
 func newConfigFromPath(configPath string) (*config.TServerConfig, error) {
-	data, err := ioutil.ReadFile(configPath)
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("read file %v: %w", configPath, err)
 	}
 
 	var cfg config.TServerConfig
 
-	if err := prototext.Unmarshal(data, &cfg); err != nil {
+	unmarshaller := prototext.UnmarshalOptions{
+		// Do not emit an error if config contains outdated or too fresh fields
+		DiscardUnknown: true,
+	}
+
+	if err := unmarshaller.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("prototext unmarshal `%v`: %w", string(data), err)
 	}
 

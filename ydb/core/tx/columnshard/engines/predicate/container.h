@@ -29,6 +29,10 @@ private:
 
 public:
 
+    bool IsEmpty() const {
+        return !Object;
+    }
+
     template <class TArrayColumn>
     std::optional<typename TArrayColumn::value_type> Get(const ui32 colIndex, const ui32 rowIndex,
         const std::optional<typename TArrayColumn::value_type> defaultValue = {}) const {
@@ -63,7 +67,7 @@ public:
 
     static std::optional<TPredicateContainer> BuildPredicateTo(std::shared_ptr<NOlap::TPredicate> object, const TIndexInfo* indexInfo);
 
-    NKikimr::NArrow::TColumnFilter BuildFilter(const std::shared_ptr<arrow::RecordBatch>& data) const {
+    NKikimr::NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const {
         if (!Object) {
             return NArrow::TColumnFilter::BuildAllowFilter();
         }

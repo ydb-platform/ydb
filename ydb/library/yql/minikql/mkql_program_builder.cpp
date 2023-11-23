@@ -5826,6 +5826,7 @@ TRuntimeNode PatternToRuntimeNode(const TRowPattern& pattern, const TProgramBuil
             factorBuilder.Add(programBuilder.NewDataLiteral<ui64>(factor.QuantityMax));
             factorBuilder.Add(programBuilder.NewDataLiteral<bool>(factor.Greedy));
             factorBuilder.Add(programBuilder.NewDataLiteral<bool>(factor.Output));
+            factorBuilder.Add(programBuilder.NewDataLiteral<bool>(factor.Unused));
             termBuilder.Add({factorBuilder.Build(), true});
         }
         patternBuilder.Add({termBuilder.Build(), true});

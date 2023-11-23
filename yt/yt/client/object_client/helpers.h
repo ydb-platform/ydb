@@ -18,6 +18,9 @@ namespace NYT::NObjectClient {
 //! |#|-prefix.
 extern const TStringBuf ObjectIdPathPrefix;
 
+//! Function for temporary use: to gradually allow types supported in Sequoia.
+bool IsScalarType(NObjectClient::EObjectType type);
+
 //! Creates the YPath pointing to an object with a given #id.
 NYPath::TYPath FromObjectId(TObjectId id);
 

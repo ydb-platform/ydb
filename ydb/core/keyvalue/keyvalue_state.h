@@ -19,6 +19,7 @@
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_metrics.h>
 #include <ydb/core/keyvalue/protos/events.pb.h>
+#include <library/cpp/time_provider/time_provider.h>
 #include <bitset>
 
 namespace NActors {
@@ -263,7 +264,7 @@ protected:
 
     ui32 PerGenerationCounter; // for garbage collection
 
-    NMetrics::TResourceMetrics* ResourceMetrics;
+    NMetrics::TResourceMetrics* ResourceMetrics = nullptr;
 
     TMaybe<NKeyValue::THelpers::TGenerationStep> PartialCollectedGenerationStep;
     TVector<TLogoBlobID> PartialCollectedDoNotKeep;

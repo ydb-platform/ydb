@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -77,22 +77,13 @@ size_t tool_header_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
   const char *end = (char *)ptr + cb;
   const char *scheme = NULL;
 
-  /*
-   * Once that libcurl has called back tool_header_cb() the returned value
-   * is checked against the amount that was intended to be written, if
-   * it does not match then it fails with CURLE_WRITE_ERROR. So at this
-   * point returning a value different from sz*nmemb indicates failure.
-   */
-  size_t failure = (size && nmemb) ? 0 : 1;
-
   if(!per->config)
-    return failure;
+    return CURL_WRITEFUNC_ERROR;
 
 #ifdef DEBUGBUILD
   if(size * nmemb > (size_t)CURL_MAX_HTTP_HEADER) {
-    warnf(per->config->global, "Header data exceeds single call write "
-          "limit!\n");
-    return failure;
+    warnf(per->config->global, "Header data exceeds single call write limit");
+    return CURL_WRITEFUNC_ERROR;
   }
 #endif
 
@@ -175,7 +166,7 @@ size_t tool_header_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
         if(outs->stream) {
           /* indication of problem, get out! */
           free(filename);
-          return failure;
+          return CURL_WRITEFUNC_ERROR;
         }
 
         outs->is_cd_filename = TRUE;
@@ -185,12 +176,12 @@ size_t tool_header_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
         outs->alloc_filename = TRUE;
         hdrcbdata->honor_cd_filename = FALSE; /* done now! */
         if(!tool_create_output_file(outs, per->config))
-          return failure;
+          return CURL_WRITEFUNC_ERROR;
       }
       break;
     }
     if(!outs->stream && !tool_create_output_file(outs, per->config))
-      return failure;
+      return CURL_WRITEFUNC_ERROR;
   }
   if(hdrcbdata->config->writeout) {
     char *value = memchr(ptr, ':', cb);
@@ -210,7 +201,7 @@ size_t tool_header_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
     char *value = NULL;
 
     if(!outs->stream && !tool_create_output_file(outs, per->config))
-      return failure;
+      return CURL_WRITEFUNC_ERROR;
 
     if(hdrcbdata->global->isatty && hdrcbdata->global->styled_output)
       value = memchr(ptr, ':', cb);
@@ -352,6 +343,15 @@ void write_linked_location(CURL *curl, const char *location, size_t loclen,
   char *copyloc = NULL, *locurl = NULL, *scheme = NULL, *finalurl = NULL;
   const char *loc = location;
   size_t llen = loclen;
+  char *vver = getenv("VTE_VERSION");
+
+  if(vver) {
+    long vvn = strtol(vver, NULL, 10);
+    /* Skip formatting for old versions of VTE <= 0.48.1 (Mar 2017) since some
+       of those versions have formatting bugs. (#10428) */
+    if(0 < vvn && vvn <= 4801)
+      goto locout;
+  }
 
   /* Strip leading whitespace of the redirect URL */
   while(llen && *loc == ' ') {

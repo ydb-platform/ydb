@@ -69,11 +69,11 @@ private:
             compilationIntervalMs -= static_cast<i64>(timer.Get().MilliSeconds());
         }
 
+        Counters->CompileComputationPatternsQueueSize->Set(PatternsToCompile.size() - PatternToCompileIndex);
+
         if (PatternToCompileIndex == patternsToCompileSize) {
             PatternsToCompile.clear();
         }
-
-        Counters->CompileComputationPatternsQueueSize->Set(PatternsToCompile.size());
 
         ScheduleWakeup(ctx);
     }

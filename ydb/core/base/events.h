@@ -168,6 +168,7 @@ struct TKikimrEvents : TEvents {
         ES_STATISTICS,
         ES_LDAP_AUTH_PROVIDER,
         ES_DB_METADATA_CACHE,
+        ES_TABLE_CREATOR,
     };
 };
 

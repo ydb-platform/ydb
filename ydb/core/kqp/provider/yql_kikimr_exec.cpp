@@ -1090,16 +1090,25 @@ public:
                         auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType();
                         auto dataType = actualType->Cast<TDataExprType>();
                         SetColumnType(*add_column->mutable_type(), TString(dataType->GetName()), notNull);
-                        if (columnTuple.Size() > 2) {
-                            auto families = columnTuple.Item(2).Cast<TCoAtomList>();
-                            if (families.Size() > 1) {
-                                ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
-                                    "Unsupported number of families"));
+
+                        auto columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
+                        for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
+                            if (constraint.Name().Value() == "serial") {
+                                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), 
+                                    "Column addition with serial data type is unsupported"));
                                 return SyncError();
                             }
-                            for (auto family : families) {
-                                add_column->set_family(TString(family.Value()));
-                            }
+                        }
+
+                        auto families = columnTuple.Item(3).Cast<TCoAtomList>();
+                        if (families.Size() > 1) {
+                            ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
+                                "Unsupported number of families"));
+                            return SyncError();
+                        }
+
+                        for (auto family : families) {
+                            add_column->set_family(TString(family.Value()));
                         }
                     }
                 } else if (name == "dropColumns") {
@@ -1832,6 +1841,29 @@ public:
                 auto resultNode = ctx.NewWorld(input->Pos());
                 return resultNode;
             }, "Executing DROP GROUP");
+        }
+
+        if (auto maybePgDropObject = TMaybeNode<TPgDropObject>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+            auto pgDrop = maybePgDropObject.Cast();
+
+            auto cluster = TString(pgDrop.DataSink().Cluster());
+            const auto type = TString(pgDrop.TypeId().Value());
+            const auto objectName = TString(pgDrop.ObjectId().Value());
+
+            if (type == "pgIndex") {
+                // TODO: KIKIMR-19695
+                ctx.AddError(TIssue(ctx.GetPosition(pgDrop.Pos()),
+                                    TStringBuilder() << "DROP INDEX for Postgres indexes is not implemented yet"));
+                return SyncError();
+            } else {
+                ctx.AddError(TIssue(ctx.GetPosition(pgDrop.TypeId().Pos()),
+                                    TStringBuilder() << "Unknown PgDrop operation: " << type));
+                return SyncError();
+            }
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()

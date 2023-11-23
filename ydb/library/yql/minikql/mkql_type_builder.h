@@ -19,7 +19,7 @@ public:
     NUdf::IBlockItemHasher::TPtr MakeHasher(NUdf::TType* type) const final;
 };
 
-constexpr size_t MaxBlockSizeInBytes = 1_MB;
+constexpr size_t MaxBlockSizeInBytes = 240_KB;
 static_assert(MaxBlockSizeInBytes < (size_t)std::numeric_limits<i32>::max());
 
 // maximum size of block item in bytes

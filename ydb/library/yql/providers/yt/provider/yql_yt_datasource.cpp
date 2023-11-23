@@ -4,6 +4,7 @@
 #include "yql_yt_key.h"
 #include "yql_yt_op_settings.h"
 #include "yql_yt_dq_integration.h"
+#include "yql_yt_dq_optimize.h"
 
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
@@ -87,6 +88,7 @@ public:
             bool collectNodes = mode == EReleaseTempDataMode::Immediate;
             return MakeHolder<TYtDataSourceTrackableNodeProcessor>(collectNodes);
         })
+        , DqOptimizer_([this]() { return CreateYtDqOptimizers(State_); })
     {
     }
 
@@ -483,6 +485,10 @@ public:
         return State_->DqIntegration_.Get();
     }
 
+    IDqOptimization* GetDqOptimization() override {
+        return DqOptimizer_.Get();
+    }
+
 private:
     TExprNode::TPtr InjectUdfRemapperOrView(TYtRead readNode, TExprContext& ctx, bool fromReadSchema) {
         const bool weakConcat = NYql::HasSetting(readNode.Arg(4).Ref(), EYtSettingType::WeakConcat);
@@ -845,6 +851,7 @@ private:
     TLazyInitHolder<IGraphTransformer> ConstraintTransformer_;
     TLazyInitHolder<TExecTransformerBase> ExecTransformer_;
     TLazyInitHolder<TYtDataSourceTrackableNodeProcessor> TrackableNodeProcessor_;
+    TLazyInitHolder<IDqOptimization> DqOptimizer_;
 };
 
 TIntrusivePtr<IDataProvider> CreateYtDataSource(TYtState::TPtr state) {

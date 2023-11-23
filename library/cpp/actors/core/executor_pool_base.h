@@ -2,6 +2,7 @@
 
 #include "executor_pool.h"
 #include "executor_thread.h"
+#include "mon_stats.h"
 #include "scheduler_queue.h"
 #include <library/cpp/actors/util/affinity.h>
 #include <library/cpp/actors/util/unordered_cache.h>

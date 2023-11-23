@@ -12,12 +12,7 @@ SRCS(
 )
 
 IF (NOT OPENSOURCE)
-    PEERDIR(
-        infra/yp_service_discovery/api
-    )
-    SRCS(
-        service_discovery.cpp
-    )
+    INCLUDE(ya_non_opensource.inc)
 ELSE()
     SRCS(
         service_discovery_dummy.cpp

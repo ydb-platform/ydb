@@ -235,6 +235,11 @@ namespace NKikimr::NBlobDepot {
             return s.Str();
         }
 
+        TGenStep Previous() const {
+            Y_ABORT_UNLESS(Value);
+            return TGenStep(Value - 1);
+        }
+
         friend bool operator ==(const TGenStep& x, const TGenStep& y) { return x.Value == y.Value; }
         friend bool operator !=(const TGenStep& x, const TGenStep& y) { return x.Value != y.Value; }
         friend bool operator < (const TGenStep& x, const TGenStep& y) { return x.Value <  y.Value; }

@@ -139,7 +139,7 @@ namespace NTable {
             Y_DEBUG_ABORT_UNLESS(seek == ESeek::Exact || seek == ESeek::Lower || seek == ESeek::Upper,
                     "Only ESeek{Exact, Upper, Lower} are currently supported here");
 
-            if (auto ready = Index.Seek(key, seek, scheme, keyDefaults); ready != EReady::Data) {
+            if (auto ready = Index.Seek(seek, key, keyDefaults); ready != EReady::Data) {
                 return Terminate(ready);
             }
 
@@ -217,7 +217,7 @@ namespace NTable {
             Y_DEBUG_ABORT_UNLESS(seek == ESeek::Exact || seek == ESeek::Lower || seek == ESeek::Upper,
                     "Only ESeek{Exact, Upper, Lower} are currently supported here");
 
-            if (auto ready = Index.SeekReverse(key, seek, scheme, keyDefaults); ready != EReady::Data) {
+            if (auto ready = Index.SeekReverse(seek, key, keyDefaults); ready != EReady::Data) {
                 return Terminate(ready);
             }
 
@@ -588,7 +588,7 @@ namespace NTable {
             }
 
             // Full binary search
-            if (auto ready = Index.Seek(key, ESeek::Lower, scheme, keyDefaults); ready != EReady::Data) {
+            if (auto ready = Index.Seek(ESeek::Lower, key, keyDefaults); ready != EReady::Data) {
                 return Terminate(ready);
             }
 

@@ -87,7 +87,8 @@ public:
 
     enum class EResultFormat {
         Yson,
-        Custom
+        Custom,
+        Skiff
     };
 
     // settings for result data provider

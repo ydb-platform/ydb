@@ -157,7 +157,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         ResourceSubscribeActorId = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletId, SelfId()));
         ReadCoordinatorActorId = ctx.Register(new NOlap::NBlobOperations::NRead::TReadCoordinatorActor(TabletId, SelfId()));
-        IndexedData = ReadMetadata->BuildReader(std::make_shared<NOlap::TReadContext>(Storages, Counters, true, ReadMetadata, SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId));
+        IndexedData = ReadMetadata->BuildReader(std::make_shared<NOlap::TReadContext>(Storages, Counters, true, ReadMetadata, SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId, NOlap::TComputeShardingPolicy()));
         LOG_S_DEBUG("Starting read (" << IndexedData->DebugString(false) << ") at tablet " << TabletId);
 
         bool earlyExit = false;
@@ -215,18 +215,6 @@ private:
     mutable TString SerializedSchema;
 
     TString GetSerializedSchema(const std::shared_ptr<arrow::RecordBatch>& batch) const {
-        auto resultSchema = ReadMetadata->GetResultSchema();
-        Y_ABORT_UNLESS(resultSchema);
-
-        // TODO: make real ResultSchema with SSA effects
-        if (resultSchema->Equals(batch->schema())) {
-            if (!SerializedSchema.empty()) {
-                return SerializedSchema;
-            }
-            SerializedSchema = NArrow::SerializeSchema(*resultSchema);
-            return SerializedSchema;
-        }
-
         return NArrow::SerializeSchema(*batch->schema());
     }
 };

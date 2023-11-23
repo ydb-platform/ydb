@@ -1873,6 +1873,15 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
             Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
             return false;
         }
+    } else if (to_lower(id.Name) == "store_external_blobs") {
+        if (reset) {
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!StoreId(*value, settings.StoreExternalBlobs, *this)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be an identifier";
+            return false;
+        }
     } else {
         Ctx.Error() << "Unknown table setting: " << id.Name;
         return false;

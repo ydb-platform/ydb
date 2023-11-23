@@ -8,20 +8,23 @@ import (
 
 	"github.com/apache/arrow/go/v13/arrow/memory"
 	"github.com/ydb-platform/ydb/library/go/core/log"
+	"github.com/ydb-platform/ydb/library/go/core/metrics/solomon"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/config"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/rdbms"
+	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/streaming"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/reflection"
 )
 
 type serviceConnector struct {
 	api_service.UnimplementedConnectorServer
-	handlerFactory     *rdbms.HandlerFactory
+	handlerFactory     rdbms.HandlerFactory
 	memoryAllocator    memory.Allocator
 	readLimiterFactory *paging.ReadLimiterFactory
 	cfg                *config.TServerConfig
@@ -104,14 +107,26 @@ func (s *serviceConnector) doListSplitsHandleSelect(
 	totalSplits *int,
 ) error {
 	logger := utils.AnnotateLogger(s.logger, "ListSplits", slct.DataSourceInstance)
-	logger.Debug("responding selects", log.Int("split_id", *totalSplits), log.String("select", slct.String()))
+
+	args := []log.Field{
+		log.Int("split_id", *totalSplits),
+	}
+	args = append(args, utils.SelectToFields(slct)...)
+
+	logger.Debug("responding selects", args...)
+
 	resp := &api_service_protos.TListSplitsResponse{
 		Error:  utils.NewSuccess(),
 		Splits: []*api_service_protos.TSplit{{Select: slct}},
 	}
 
 	for _, split := range resp.Splits {
-		logger.Debug("responding split", log.Int("split_id", *totalSplits), log.String("split", split.Select.String()))
+		args := []log.Field{
+			log.Int("split_id", *totalSplits),
+		}
+		args = append(args, utils.SelectToFields(split.Select)...)
+
+		logger.Debug("responding split", args...)
 
 		*totalSplits++
 	}
@@ -141,44 +156,50 @@ func (s *serviceConnector) doListSplitsResponse(
 	return nil
 }
 
-func (s *serviceConnector) ReadSplits(request *api_service_protos.TReadSplitsRequest, stream api_service.Connector_ReadSplitsServer) error {
+func (s *serviceConnector) ReadSplits(
+	request *api_service_protos.TReadSplitsRequest,
+	stream api_service.Connector_ReadSplitsServer) error {
 	logger := utils.AnnotateLogger(s.logger, "ReadSplits", request.DataSourceInstance)
 	logger.Info("request handling started", log.Int("total_splits", len(request.Splits)))
 
-	if err := ValidateReadSplitsRequest(logger, request); err != nil {
+	err := s.doReadSplits(logger, request, stream)
+	if err != nil {
 		logger.Error("request handling failed", log.Error(err))
 
 		response := &api_service_protos.TReadSplitsResponse{Error: utils.NewAPIErrorFromStdError(err)}
 
 		if err := stream.Send(response); err != nil {
-			logger.Error("send channel failed", log.Error(err))
-
-			return err
+			return fmt.Errorf("stream send: %w", err)
 		}
 	}
 
-	logger = log.With(logger, log.String("data source kind", request.DataSourceInstance.GetKind().String()))
+	logger.Info("request handling finished")
 
-	var totalBytes uint64
+	return nil
+}
 
-	for _, split := range request.Splits {
-		bytesInSplit, err := s.readSplit(logger, stream, request, split)
+func (s *serviceConnector) doReadSplits(
+	logger log.Logger,
+	request *api_service_protos.TReadSplitsRequest,
+	stream api_service.Connector_ReadSplitsServer,
+) error {
+	if err := ValidateReadSplitsRequest(logger, request); err != nil {
+		return fmt.Errorf("validate read splits request: %w", err)
+	}
+
+	handler, err := s.handlerFactory.Make(logger, request.DataSourceInstance.Kind)
+	if err != nil {
+		return fmt.Errorf("make handler: %w", err)
+	}
+
+	for i, split := range request.Splits {
+		splitLogger := log.With(logger, log.Int("split_id", i))
+
+		err = s.readSplit(splitLogger, stream, request, split, handler)
 		if err != nil {
-			logger.Error("request handling failed", log.Error(err))
-
-			response := &api_service_protos.TReadSplitsResponse{Error: utils.NewAPIErrorFromStdError(err)}
-
-			if err := stream.Send(response); err != nil {
-				logger.Error("send channel failed", log.Error(err))
-
-				return err
-			}
+			return fmt.Errorf("read split %d: %w", i, err)
 		}
-
-		totalBytes += bytesInSplit
 	}
-
-	logger.Info("request handling finished", log.UInt64("total_bytes", totalBytes))
 
 	return nil
 }
@@ -188,36 +209,57 @@ func (s *serviceConnector) readSplit(
 	stream api_service.Connector_ReadSplitsServer,
 	request *api_service_protos.TReadSplitsRequest,
 	split *api_service_protos.TSplit,
-) (uint64, error) {
-	logger.Debug("split reading started")
+	handler rdbms.Handler,
+) error {
+	logger.Debug("split reading started", utils.SelectToFields(split.Select)...)
 
-	handler, err := s.handlerFactory.Make(logger, request.DataSourceInstance.Kind)
+	columnarBufferFactory, err := paging.NewColumnarBufferFactory(
+		logger,
+		s.memoryAllocator,
+		s.readLimiterFactory,
+		request.Format,
+		split.Select.What,
+		handler.TypeMapper())
 	if err != nil {
-		return 0, fmt.Errorf("get handler: %w", err)
+		return fmt.Errorf("new columnar buffer factory: %w", err)
 	}
 
-	columnarBufferFactory := paging.NewColumnarBufferFactory(logger, s.memoryAllocator, s.readLimiterFactory, request.Format, split.Select.What, handler.TypeMapper())
+	trafficTracker := paging.NewTrafficTracker(s.cfg.Paging)
 
-	streamer, err := NewStreamer(
+	sink, err := paging.NewSink(
+		stream.Context(),
+		logger,
+		trafficTracker,
+		columnarBufferFactory,
+		s.readLimiterFactory.MakeReadLimiter(logger),
+		int(s.cfg.Paging.PrefetchQueueCapacity),
+	)
+	if err != nil {
+		return fmt.Errorf("new sink: %w", err)
+	}
+
+	streamer := streaming.NewStreamer(
 		logger,
 		stream,
 		request,
 		split,
-		columnarBufferFactory,
+		sink,
 		handler,
 	)
-	if err != nil {
-		return 0, fmt.Errorf("new streamer: %w", err)
+
+	if err := streamer.Run(); err != nil {
+		return fmt.Errorf("run paging streamer: %w", err)
 	}
 
-	totalBytesSent, err := streamer.Run()
-	if err != nil {
-		return 0, fmt.Errorf("run paging streamer: %w", err)
-	}
+	readStats := trafficTracker.DumpStats(true)
 
-	logger.Debug("split reading finished", log.UInt64("total_bytes_sent", totalBytesSent))
+	logger.Debug(
+		"split reading finished",
+		log.UInt64("total_bytes", readStats.GetBytes()),
+		log.UInt64("total_rows", readStats.GetRows()),
+	)
 
-	return totalBytesSent, nil
+	return nil
 }
 
 func (s *serviceConnector) start() error {
@@ -230,11 +272,17 @@ func (s *serviceConnector) start() error {
 	return nil
 }
 
-func makeGRPCOptions(logger log.Logger, cfg *config.TServerConfig) ([]grpc.ServerOption, error) {
+func makeGRPCOptions(logger log.Logger, cfg *config.TServerConfig, registry *solomon.Registry) ([]grpc.ServerOption, error) {
 	var (
 		opts      []grpc.ServerOption
 		tlsConfig *config.TServerTLSConfig
 	)
+
+	unaryInterceptors := []grpc.UnaryServerInterceptor{UnaryServerMetrics(registry)}
+
+	streamInterceptors := []grpc.StreamServerInterceptor{StreamServerMetrics(registry)}
+
+	opts = append(opts, grpc.ChainUnaryInterceptor(unaryInterceptors...), grpc.ChainStreamInterceptor(streamInterceptors...))
 
 	// TODO: drop deprecated fields after YQ-2057
 	switch {
@@ -259,7 +307,6 @@ func makeGRPCOptions(logger log.Logger, cfg *config.TServerConfig) ([]grpc.Serve
 
 	// for security reasons we do not allow TLS < 1.2, see YQ-1877
 	creds := credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
-
 	opts = append(opts, grpc.Creds(creds))
 
 	return opts, nil
@@ -272,6 +319,7 @@ func (s *serviceConnector) stop() {
 func newServiceConnector(
 	logger log.Logger,
 	cfg *config.TServerConfig,
+	registry *solomon.Registry,
 ) (service, error) {
 	queryLoggerFactory := utils.NewQueryLoggerFactory(cfg.Logger)
 
@@ -294,12 +342,13 @@ func newServiceConnector(
 		return nil, fmt.Errorf("net listen: %w", err)
 	}
 
-	options, err := makeGRPCOptions(logger, cfg)
+	options, err := makeGRPCOptions(logger, cfg, registry)
 	if err != nil {
 		return nil, fmt.Errorf("make GRPC options: %w", err)
 	}
 
 	grpcServer := grpc.NewServer(options...)
+	reflection.Register(grpcServer)
 
 	s := &serviceConnector{
 		handlerFactory:     rdbms.NewHandlerFactory(queryLoggerFactory),

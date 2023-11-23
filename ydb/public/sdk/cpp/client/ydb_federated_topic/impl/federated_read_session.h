@@ -2,15 +2,16 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federated_topic_impl.h>
 
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/read_session.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session.h>
 
 namespace NYdb::NFederatedTopic {
 
-class TFederatedReadSession : public IFederatedReadSession,
-                     public std::enable_shared_from_this<TFederatedReadSession> {
+class TFederatedReadSessionImpl : public NPersQueue::TEnableSelfContext<TFederatedReadSessionImpl> {
     friend class TFederatedTopicClient::TImpl;
+    friend class TFederatedReadSession;
 
 private:
     struct TSubSession {
@@ -24,24 +25,23 @@ private:
     };
 
 public:
-    TFederatedReadSession(const TFederatedReadSessionSettings& settings,
-                          std::shared_ptr<TGRpcConnectionsImpl> connections,
-                          const TFederatedTopicClientSettings& clientSetttings,
-                          std::shared_ptr<TFederatedDbObserver> observer);
+    TFederatedReadSessionImpl(const TFederatedReadSessionSettings& settings,
+                              std::shared_ptr<TGRpcConnectionsImpl> connections,
+                              const TFederatedTopicClientSettings& clientSetttings,
+                              std::shared_ptr<TFederatedDbObserver> observer);
 
-    ~TFederatedReadSession() = default;
+    ~TFederatedReadSessionImpl() = default;
 
-    NThreading::TFuture<void> WaitEvent() override;
-    TVector<TReadSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount, size_t maxByteSize) override;
-    TMaybe<TReadSessionEvent::TEvent> GetEvent(bool block, size_t maxByteSize) override;
+    NThreading::TFuture<void> WaitEvent();
+    TVector<TReadSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount, size_t maxByteSize);
 
-    bool Close(TDuration timeout) override;
+    bool Close(TDuration timeout);
 
-    inline TString GetSessionId() const override {
+    inline TString GetSessionId() const {
         return SessionId;
     }
 
-    inline NTopic::TReaderCounters::TPtr GetCounters() const override {
+    inline NTopic::TReaderCounters::TPtr GetCounters() const {
         return Settings.Counters_; // Always not nullptr.
     }
 
@@ -91,6 +91,54 @@ private:
 
     // Exiting.
     bool Closing = false;
+};
+
+
+class TFederatedReadSession : public IFederatedReadSession,
+                              public NPersQueue::TContextOwner<TFederatedReadSessionImpl> {
+    friend class TFederatedTopicClient::TImpl;
+
+public:
+    TFederatedReadSession(const TFederatedReadSessionSettings& settings,
+                          std::shared_ptr<TGRpcConnectionsImpl> connections,
+                          const TFederatedTopicClientSettings& clientSettings,
+                          std::shared_ptr<TFederatedDbObserver> observer)
+        : TContextOwner(settings, std::move(connections), clientSettings, std::move(observer)) {
+    }
+
+    ~TFederatedReadSession() {
+        TryGetImpl()->Close(TDuration::Zero());
+    }
+
+    NThreading::TFuture<void> WaitEvent() override  {
+        return TryGetImpl()->WaitEvent();
+    }
+
+    TVector<TReadSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount, size_t maxByteSize) override {
+        return TryGetImpl()->GetEvents(block, maxEventsCount, maxByteSize);
+    }
+
+    TMaybe<TReadSessionEvent::TEvent> GetEvent(bool block, size_t maxByteSize) override {
+    auto events = GetEvents(block, 1, maxByteSize);
+        return events.empty() ? Nothing() : TMaybe<TReadSessionEvent::TEvent>{std::move(events.front())};
+    }
+
+    bool Close(TDuration timeout) override {
+        return TryGetImpl()->Close(timeout);
+    }
+
+    inline TString GetSessionId() const override {
+        return TryGetImpl()->GetSessionId();
+    }
+
+    inline NTopic::TReaderCounters::TPtr GetCounters() const override {
+        return TryGetImpl()->GetCounters();
+    }
+
+private:
+    void Start() {
+        return TryGetImpl()->Start();
+    }
 };
 
 } // namespace NYdb::NFederatedTopic

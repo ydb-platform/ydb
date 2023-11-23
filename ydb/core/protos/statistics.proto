@@ -18,3 +18,7 @@ message TEvRegisterNode {
     optional uint32 NodeId = 1;
     optional bool HasStatistics = 2;
 }
+
+message TEvConfigureAggregator {
+    optional string Database = 1;
+}

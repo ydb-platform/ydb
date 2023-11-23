@@ -1,6 +1,7 @@
 #include "blobstorage_pdisk_impl.h"
 
 #include <ydb/core/blobstorage/base/html.h>
+#include <ydb/core/base/feature_flags.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 

@@ -1,0 +1,18 @@
+Pull stream:
+path = /Moscow/index.html?from=index
+host = news.yandex.ru
+path = /radio/
+host = music.yandex.ru
+
+Push stream:
+path = /Moscow/index.html?from=index
+host = news.yandex.ru
+path = /radio/
+host = music.yandex.ru
+end
+
+Pull stream with pre-compilation:
+path = /Moscow/index.html?from=index
+host = news.yandex.ru
+path = /radio/
+host = music.yandex.ru

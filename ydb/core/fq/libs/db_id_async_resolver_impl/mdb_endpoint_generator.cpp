@@ -8,9 +8,10 @@ namespace NFq {
 
     using TEndpoint = NYql::IMdbEndpointGenerator::TEndpoint;
 
-    // Currently we're going to use only HTTP protocol for ClickHouse
-    constexpr ui32 CLICKHOUSE_SECURE_PORT = 8443;
-    constexpr ui32 CLICKHOUSE_INSECURE_PORT = 8123;
+    constexpr ui32 CLICKHOUSE_NATIVE_SECURE_PORT = 9440;
+    constexpr ui32 CLICKHOUSE_NATIVE_INSECURE_PORT = 9000;
+    constexpr ui32 CLICKHOUSE_HTTP_SECURE_PORT = 8443;
+    constexpr ui32 CLICKHOUSE_HTTP_INSECURE_PORT = 8123;
 
     // Managed PostgreSQL provides the only port both for secure and insecure connections
     constexpr ui32 POSTGRESQL_PORT = 6432;
@@ -21,7 +22,7 @@ namespace NFq {
             // Inherited from here
             // https://a.yandex-team.ru/arcadia/ydb/core/fq/libs/actors/database_resolver.cpp?rev=r11819335#L27
             if (databaseType == NYql::EDatabaseType::ClickHouse) {
-                auto port = useTls ? CLICKHOUSE_SECURE_PORT : CLICKHOUSE_INSECURE_PORT;
+                auto port = useTls ? CLICKHOUSE_HTTP_SECURE_PORT : CLICKHOUSE_HTTP_INSECURE_PORT;
                 return TEndpoint(ReplaceDomain(mdbHost), port);
             }
 
@@ -38,8 +39,8 @@ namespace NFq {
     // that interacts with data sources through a separate Connector service
     class TMdbEndpointGeneratorGeneric: public NYql::IMdbEndpointGenerator {
     public:
-        TMdbEndpointGeneratorGeneric(bool transformHost)
-            : TransformHost(transformHost)
+        TMdbEndpointGeneratorGeneric(bool transformHost, bool useNativeProtocolForClickHouse = false)
+            : TransformHost(transformHost), UseNativeProtocolForClickHouse(useNativeProtocolForClickHouse)
         {
         }
 
@@ -49,8 +50,13 @@ namespace NFq {
             switch (databaseType) {
                 case NYql::EDatabaseType::ClickHouse: {
                     // https://cloud.yandex.ru/docs/managed-clickhouse/operations/connect
-                    // TODO: fix Native protocol + TLS https://st.yandex-team.ru/YQ-2286
-                    auto port = useTls ? CLICKHOUSE_SECURE_PORT : CLICKHOUSE_INSECURE_PORT;
+                    ui32 port;
+                    if (UseNativeProtocolForClickHouse) {
+                        port = useTls ? CLICKHOUSE_NATIVE_SECURE_PORT : CLICKHOUSE_NATIVE_INSECURE_PORT;
+                    } else {
+                        port = useTls ? CLICKHOUSE_HTTP_SECURE_PORT : CLICKHOUSE_HTTP_INSECURE_PORT;
+                    }
+
                     return TEndpoint(fixedHost, port);
                 }
                 case NYql::EDatabaseType::PostgreSQL:
@@ -63,11 +69,12 @@ namespace NFq {
 
     private:
         bool TransformHost;
+        bool UseNativeProtocolForClickHouse;
     };
 
     NYql::IMdbEndpointGenerator::TPtr
-    MakeMdbEndpointGeneratorGeneric(bool transformHost) {
-        return std::make_shared<TMdbEndpointGeneratorGeneric>(transformHost);
+    MakeMdbEndpointGeneratorGeneric(bool transformHost, bool useNativeProtocolForClickHouse) {
+        return std::make_shared<TMdbEndpointGeneratorGeneric>(transformHost, useNativeProtocolForClickHouse);
     }
 
     // TMdbEndpointGeneratorNoop just does nothing

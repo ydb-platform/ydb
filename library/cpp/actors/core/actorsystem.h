@@ -8,7 +8,6 @@
 #include "executor_pool.h"
 #include "log_settings.h"
 #include "scheduler_cookie.h"
-#include "mon_stats.h"
 #include "cpu_manager.h"
 #include "executor_thread.h"
 

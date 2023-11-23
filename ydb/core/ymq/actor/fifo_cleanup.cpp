@@ -10,6 +10,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 
 #include <util/random/random.h>
+#include <util/generic/guid.h>
 
 namespace NKikimr::NSQS {
 

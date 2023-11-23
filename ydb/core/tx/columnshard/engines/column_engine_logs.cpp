@@ -13,6 +13,9 @@
 #include "changes/cleanup.h"
 #include "changes/ttl.h"
 
+#include <library/cpp/time_provider/time_provider.h>
+#include <library/cpp/actors/core/monotonic_provider.h>
+
 #include <concepts>
 
 namespace NKikimr::NOlap {
@@ -171,7 +174,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
             currentIndexInfo = &VersionedIndex.GetSchema(portion.GetMinSnapshot())->GetIndexInfo();
             lastSnapshot = portion.GetMinSnapshot();
         }
-        Y_ABORT_UNLESS(portion.ValidSnapshotInfo());
+        AFL_VERIFY(portion.ValidSnapshotInfo())("details", portion.DebugString());
         // Locate granule and append the record.
         TColumnRecord rec(loadContext, *currentIndexInfo);
         GetGranulePtrVerified(portion.GetPathId())->AddColumnRecord(*currentIndexInfo, portion, rec, loadContext.GetPortionMeta());
@@ -208,7 +211,7 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
 
     TSaverContext saverContext(StoragesManager->GetInsertOperator(), StoragesManager);
 
-    auto changes = std::make_shared<TInsertColumnEngineChanges>(DefaultMark(), std::move(dataToIndex), TSplitSettings(), saverContext);
+    auto changes = std::make_shared<TInsertColumnEngineChanges>(std::move(dataToIndex), TSplitSettings(), saverContext);
     auto pkSchema = VersionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey();
 
     for (const auto& data : changes->GetDataToIndex()) {

@@ -1003,6 +1003,10 @@ public:
                     YQL_ENSURE(false, "Can't reset TIERING");
                 }
             }
+            if (Params.TableSettings.StoreExternalBlobs) {
+                const auto& ref = Params.TableSettings.StoreExternalBlobs.GetRef();
+                settings = L(settings, Q(Y(Q("storeExternalBlobs"), BuildQuotedAtom(ref.Pos, ref.Name))));
+            }
             if (Params.TableSettings.StoreType) {
                 const auto& ref = Params.TableSettings.StoreType.GetRef();
                 settings = L(settings, Q(Y(Q("storeType"), BuildQuotedAtom(ref.Pos, ref.Name))));
@@ -1076,14 +1080,21 @@ public:
                 if (col.Nullable) {
                     type = Y("AsOptionalType", type);
                 }
+
                 columnDesc = L(columnDesc, type);
-                if (col.Families) {
-                    auto familiesDesc = Y();
-                    for (const auto& family : col.Families) {
-                        familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
-                    }
-                    columnDesc = L(columnDesc, Q(familiesDesc));
+                auto columnConstraints = Y();
+                if (col.Serial) {
+                    columnConstraints = L(columnConstraints, Q(Y(Q("serial"), Q("true"))));
                 }
+
+                columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
+
+                auto familiesDesc = Y();
+                for (const auto& family : col.Families) {
+                    familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
+                }
+                columnDesc = L(columnDesc, Q(familiesDesc));
+
                 columns = L(columns, Q(columnDesc));
             }
             actions = L(actions, Q(Y(Q("addColumns"), Q(columns))));
@@ -1196,6 +1207,10 @@ public:
                 } else {
                     settings = L(settings, Q(Y(Q("resetTiering"), Q(Y()))));
                 }
+            }
+            if (Params.TableSettings.StoreExternalBlobs) {
+                const auto& ref = Params.TableSettings.StoreExternalBlobs.GetRef();
+                settings = L(settings, Q(Y(Q("storeExternalBlobs"), BuildQuotedAtom(ref.Pos, ref.Name))));
             }
             actions = L(actions, Q(Y(Q("setTableSettings"), Q(settings))));
         }

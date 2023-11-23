@@ -68,21 +68,6 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
         return std::make_pair(partsUploaded, objectsPut);
     }
 
-    void WriteRow(TTestBasicRuntime& runtime, ui64 tabletId, const TString& key, const TString& value) {
-        NKikimrMiniKQL::TResult result;
-        TString error;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
-            (
-                (let key '( '('key (Utf8 '%s) ) ) )
-                (let row '( '('value (Utf8 '%s) ) ) )
-                (return (AsList (UpdateRow '__user__Table key row) ))
-            )
-        )", key.c_str(), value.c_str()), result, error);
-
-        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
-        UNIT_ASSERT_VALUES_EQUAL(error, "");
-    }
-
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnSingleShardTable) {
         TTestBasicRuntime runtime;
 
@@ -92,7 +77,7 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )", [](TTestBasicRuntime& runtime) {
-            WriteRow(runtime, TTestTxConfig::FakeHiveTablets, "a", "valueA");
+            WriteRow(runtime, "a", "valueA");
         });
     }
 
@@ -110,8 +95,8 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
               }
             }
         )", [](TTestBasicRuntime& runtime) {
-            WriteRow(runtime, TTestTxConfig::FakeHiveTablets + 0, "a", "valueA");
-            WriteRow(runtime, TTestTxConfig::FakeHiveTablets + 1, "b", "valueb");
+            WriteRow(runtime, "a", "valueA", TTestTxConfig::FakeHiveTablets + 0);
+            WriteRow(runtime, "b", "valueb", TTestTxConfig::FakeHiveTablets + 1);
         });
     }
 
@@ -127,7 +112,7 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
             KeyColumnNames: ["key"]
         )", [](TTestBasicRuntime& runtime) {
             for (ui32 i = 0; i < 100 * batchSize; ++i) {
-                WriteRow(runtime, TTestTxConfig::FakeHiveTablets, Sprintf("a%d", i), "valueA");
+                WriteRow(runtime, Sprintf("a%d", i), "valueA");
             }
         }, batchSize, minWriteBatchSize);
 

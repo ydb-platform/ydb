@@ -57,6 +57,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
+#include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -94,6 +95,7 @@
 #include <ydb/core/kesus/proxy/proxy.h>
 #include <ydb/core/kesus/tablet/tablet.h>
 #include <ydb/core/sys_view/processor/processor.h>
+#include <ydb/core/statistics/aggregator/aggregator.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
@@ -243,6 +245,7 @@ namespace Tests {
             appData.PersQueueGetReadSessionsInfoWorkerFactory = Settings->PersQueueGetReadSessionsInfoWorkerFactory.get();
             appData.DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
             appData.PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
+            appData.HiveConfig.MergeFrom(Settings->AppConfig.GetHiveConfig());
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;
@@ -722,6 +725,10 @@ namespace Tests {
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NReplication::CreateController, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[TTabletTypes::StatisticsAggregator] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NStat::CreateStatisticsAggregator, TMailboxType::Revolving, appData.UserPoolId,
+                TMailboxType::Revolving, appData.SystemPoolId));
     }
 
     void TServer::SetupLocalService(ui32 nodeIdx, const TString &domainName) {
@@ -855,10 +862,10 @@ namespace Tests {
                 auto databaseResolverActorId = NFq::MakeDatabaseResolverActorId();
                 Runtime->RegisterService(
                     databaseResolverActorId,
-                    Runtime->Register(NFq::CreateDatabaseResolver(httpProxyActorId, nullptr), nodeIdx),
+                    Runtime->Register(NFq::CreateDatabaseResolver(httpProxyActorId, Settings->CredentialsFactory), nodeIdx),
                     nodeIdx
                 );
-                
+
                 std::shared_ptr<NFq::TDatabaseAsyncResolverImpl> databaseAsyncResolver;
                 if (queryServiceConfig.GetGeneric().HasMdbGateway() && queryServiceConfig.HasMdbTransformHost()) {
                     databaseAsyncResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
@@ -873,7 +880,7 @@ namespace Tests {
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NYql::IHTTPGateway::Make(&queryServiceConfig.GetHttpGateway()),
                     NYql::NConnector::MakeClientGRPC(queryServiceConfig.GetGeneric().GetConnector()),
-                    nullptr,
+                    Settings->CredentialsFactory,
                     databaseAsyncResolver,
                     queryServiceConfig.GetS3(),
                     queryServiceConfig.GetGeneric()
@@ -889,6 +896,10 @@ namespace Tests {
                                                                   federatedQuerySetupFactory);
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
+
+            IActor* scriptFinalizeService = NKqp::CreateKqpFinalizeScriptService(Settings->AppConfig.GetQueryServiceConfig().GetFinalizeScriptServiceConfig(), Settings->AppConfig.GetMetadataProviderConfig(), federatedQuerySetupFactory);
+            TActorId scriptFinalizeServiceId = Runtime->Register(scriptFinalizeService, nodeIdx);
+            Runtime->RegisterService(NKqp::MakeKqpFinalizeScriptServiceId(Runtime->GetNodeId(nodeIdx)), scriptFinalizeServiceId, nodeIdx);
         }
 
         {

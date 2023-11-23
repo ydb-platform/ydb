@@ -12,6 +12,7 @@ target_link_libraries(stream_store PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
+  yql-utils-simd
 )
 target_link_options(stream_store PRIVATE
   -Wl,-platform_version,macos,11.0,11.0

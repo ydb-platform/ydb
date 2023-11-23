@@ -363,7 +363,7 @@ inline TString ServerCert(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <bool EnableSsl>
+template <bool EnableSsl, bool EnableUds>
 class TRpcOverGrpcImpl
 {
 public:
@@ -386,7 +386,13 @@ public:
             channelConfig->Credentials->PemKeyCertPair->CertChain = New<NCrypto::TPemBlobConfig>();
             channelConfig->Credentials->PemKeyCertPair->CertChain->Value = ClientCert;
         }
-        channelConfig->Address = address;
+
+        if (EnableUds) {
+            channelConfig->Address = Format("unix:%v", address);
+        } else {
+            channelConfig->Address = address;
+        }
+
         channelConfig->GrpcArguments = std::move(grpcArguments);
         return NGrpc::CreateGrpcChannel(channelConfig);
     }
@@ -405,9 +411,12 @@ public:
             serverAddressConfig->Credentials->PemKeyCertPairs[0]->CertChain->Value = ServerCert;
         }
 
-        auto address = Format("localhost:%v", port);
+        if (EnableUds) {
+            serverAddressConfig->Address = Format("unix:localhost:%v", port);
+        } else {
+            serverAddressConfig->Address = Format("localhost:%v", port);
+        }
 
-        serverAddressConfig->Address = address;
         auto serverConfig = New<NGrpc::TServerConfig>();
         serverConfig->Addresses.push_back(serverAddressConfig);
         return NGrpc::CreateServer(serverConfig);
@@ -450,8 +459,10 @@ using TAllTransports = ::testing::Types<
     TRpcOverBus<TRpcOverBusImpl<true>>,
 #endif
     TRpcOverBus<TRpcOverBusImpl<false>>,
-    TRpcOverGrpcImpl<false>,
-    TRpcOverGrpcImpl<true>
+    TRpcOverGrpcImpl<false, false>,
+    TRpcOverGrpcImpl<false, true>,
+    TRpcOverGrpcImpl<true, false>,
+    TRpcOverGrpcImpl<true, true>
 >;
 
 using TWithoutUds = ::testing::Types<
@@ -459,8 +470,8 @@ using TWithoutUds = ::testing::Types<
     TRpcOverBus<TRpcOverBusImpl<true>>,
 #endif
     TRpcOverBus<TRpcOverBusImpl<false>>,
-    TRpcOverGrpcImpl<false>,
-    TRpcOverGrpcImpl<true>
+    TRpcOverGrpcImpl<false, false>,
+    TRpcOverGrpcImpl<true, false>
 >;
 
 using TWithoutGrpc = ::testing::Types<
@@ -472,8 +483,10 @@ using TWithoutGrpc = ::testing::Types<
 >;
 
 using TGrpcOnly = ::testing::Types<
-    TRpcOverGrpcImpl<false>,
-    TRpcOverGrpcImpl<true>
+    TRpcOverGrpcImpl<false, false>,
+    TRpcOverGrpcImpl<false, true>,
+    TRpcOverGrpcImpl<true, false>,
+    TRpcOverGrpcImpl<true, true>
 >;
 
 ////////////////////////////////////////////////////////////////////////////////

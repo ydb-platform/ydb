@@ -6,6 +6,8 @@
 #include <ydb/core/util/tuples.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
+#include <library/cpp/random_provider/random_provider.h>
+#include <library/cpp/time_provider/time_provider.h>
 #include <util/generic/array_ref.h>
 
 template <>
@@ -1603,6 +1605,20 @@ void THive::UpdateCounterNodesConnected(i64 nodesConnectedDiff) {
 void THive::RecordTabletMove(const TTabletMoveInfo& moveInfo) {
     TabletMoveHistory.PushBack(moveInfo);
     TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);
+    if (TabletMoveSamplesForLog.size() < MOVE_SAMPLES_PER_LOG_ENTRY) {
+        TabletMoveSamplesForLog.push_back(moveInfo);
+        std::push_heap(TabletMoveSamplesForLog.begin(), TabletMoveSamplesForLog.end(), std::greater<TTabletMoveInfo>{});
+    } else if (moveInfo.Priority > TabletMoveSamplesForLog.front().Priority) {
+        TabletMoveSamplesForLog.push_back(moveInfo);
+        std::pop_heap(TabletMoveSamplesForLog.begin(), TabletMoveSamplesForLog.end(), std::greater<TTabletMoveInfo>{});
+        TabletMoveSamplesForLog.pop_back();
+    }
+    TabletMovesByTypeForLog[moveInfo.TabletType]++;
+    if (!LogTabletMovesScheduled) {
+        LogTabletMovesScheduled = true;
+        LogTabletMovesSchedulingTime = moveInfo.Timestamp;
+        Schedule(TDuration::Minutes(5), new TEvPrivate::TEvLogTabletMoves());
+    }
 }
 
 bool THive::DomainHasNodes(const TSubDomainKey &domainKey) const {
@@ -1892,8 +1908,11 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
         record.SetExtendedTabletInfo(true);
     }
     for (auto it = Nodes.begin(); it != Nodes.end(); ++it) {
-        auto& nodeStats = *record.AddNodeStats();
         const TNodeInfo& node = it->second;
+        if (node.IsUnknown()) {
+            continue;
+        }
+        auto& nodeStats = *record.AddNodeStats();
         nodeStats.SetNodeId(node.Id);
         if (!node.ServicedDomains.empty()) {
             nodeStats.MutableNodeDomain()->CopyFrom(node.ServicedDomains.front());
@@ -2793,6 +2812,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvPrivate::TEvBalancerOut, Handle);
         hFunc(TEvHive::TEvUpdateTabletsObject, Handle);
         hFunc(TEvPrivate::TEvRefreshStorageInfo, Handle);
+        hFunc(TEvPrivate::TEvLogTabletMoves, Handle);
     }
 }
 
@@ -2889,6 +2909,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvBalancerOut::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvUpdateTabletsObject::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvRefreshStorageInfo::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvLogTabletMoves::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3119,6 +3140,38 @@ void THive::Handle(TEvHive::TEvUpdateTabletsObject::TPtr& ev) {
 
 void THive::Handle(TEvPrivate::TEvRefreshStorageInfo::TPtr&) {
     RequestPoolsInformation();
+}
+
+void THive::Handle(TEvPrivate::TEvLogTabletMoves::TPtr&) {
+    LogTabletMovesScheduled = false;
+    if (TabletMovesByTypeForLog.empty()) {
+        return;
+    }
+    std::sort(TabletMoveSamplesForLog.begin(), TabletMoveSamplesForLog.end(), [](const TTabletMoveInfo& lhs, const TTabletMoveInfo& rhs) {
+        return lhs.Timestamp < rhs.Timestamp;
+    });
+    TStringBuilder movesByTypeString;
+    ui64 movesCount = 0;
+    for (const auto& [type, cnt] : TabletMovesByTypeForLog) {
+        if (!movesByTypeString.empty()) {
+            movesByTypeString << ", ";
+        }
+        movesByTypeString << cnt << "x " << TTabletTypes::TypeToStr(type);
+        movesCount += cnt;
+    }
+    BLOG_I("Made " << movesCount <<
+           " tablet moves (" << movesByTypeString <<
+           ") since " << LogTabletMovesSchedulingTime <<
+           ", including:");
+    for (const auto& moveInfo : TabletMoveSamplesForLog) {
+        auto tablet = FindTablet(moveInfo.Tablet);
+        BLOG_I("tablet " << (tablet ? tablet->ToString() : ToString(moveInfo.Tablet)) <<
+               " from node " << moveInfo.From <<
+               " to node " << moveInfo.To <<
+               " at " << moveInfo.Timestamp);
+    }
+    TabletMoveSamplesForLog.clear();
+    TabletMovesByTypeForLog.clear();
 }
 
 TVector<TNodeId> THive::GetNodesForWhiteboardBroadcast(size_t maxNodesToReturn) {

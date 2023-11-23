@@ -256,14 +256,14 @@ void DataFileWriterBase::setMetadata(const string &key, const string &value) {
     metadata_[key] = v;
 }
 
-DataFileReaderBase::DataFileReaderBase(const char *filename) : filename_(filename), codec_(NULL_CODEC), stream_(fileSeekableInputStream(filename)),
-                                                               decoder_(binaryDecoder()), objectCount_(0), eof_(false), blockStart_(-1),
-                                                               blockEnd_(-1) {
+DataFileReaderBase::DataFileReaderBase(const char *filename) : filename_(filename), stream_(fileSeekableInputStream(filename)),
+                                                               decoder_(binaryDecoder()), objectCount_(0), eof_(false),
+                                                               codec_(NULL_CODEC), blockStart_(-1), blockEnd_(-1) {
     readHeader();
 }
 
-DataFileReaderBase::DataFileReaderBase(std::unique_ptr<InputStream> inputStream) : codec_(NULL_CODEC), stream_(std::move(inputStream)),
-                                                                                   decoder_(binaryDecoder()), objectCount_(0), eof_(false) {
+DataFileReaderBase::DataFileReaderBase(std::unique_ptr<InputStream> inputStream) : stream_(std::move(inputStream)),
+                                                                                   decoder_(binaryDecoder()), objectCount_(0), eof_(false), codec_(NULL_CODEC) {
     readHeader();
 }
 

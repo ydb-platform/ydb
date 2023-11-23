@@ -41,6 +41,7 @@ IActor* CreateComputeActor(
     computeRuntimeSettings.FailOnUndelivery = false;
     computeRuntimeSettings.StatsMode = (statsMode != NDqProto::DQ_STATS_MODE_UNSPECIFIED) ? statsMode : NDqProto::DQ_STATS_MODE_FULL;
     computeRuntimeSettings.UseSpilling = options.UseSpilling;
+    computeRuntimeSettings.AsyncInputPushLimit = 64_MB;
 
     // clear fake actorids
     for (auto& input : *task->MutableInputs()) {

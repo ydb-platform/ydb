@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/common/simple/query_id.h>
+#include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 
@@ -92,8 +93,18 @@ struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::Ev
     TKqpCompileResult::TConstPtr CompileResult;
     NKqpProto::TKqpStatsCompile Stats;
     std::optional<TString> ReplayMessage;
+    std::optional<TString> ReplayMessageUserView;
 
     NLWTrace::TOrbit Orbit;
+};
+
+struct TEvParseResponse: public TEventLocal<TEvParseResponse, TKqpEvents::EvParseResponse> {
+    TEvParseResponse(const TKqpQueryId& query, TMaybe<TQueryAst> astResult)
+        : AstResult(std::move(astResult))
+        , Query(query) {}
+
+    TMaybe<TQueryAst> AstResult;
+    TKqpQueryId Query;
 };
 
 struct TEvCompileInvalidateRequest: public TEventLocal<TEvCompileInvalidateRequest,

@@ -31,6 +31,10 @@ public:
     const NTable::TScheme::TTableSchema& GetSchema() const override {
         return PrimaryIndexStatsSchema;
     }
+
+    NSsa::TColumnInfo GetDefaultColumn() const override {
+        return NSsa::TColumnInfo::Original(1, "PathId");
+    }
 };
 
 
@@ -43,6 +47,9 @@ public:
         , ResultSchema(NOlap::MakeArrowSchema(PrimaryIndexStatsSchema.Columns, ReadMetadata->ResultColumnIds))
         , IndexStats(ReadMetadata->IndexStats.begin(), ReadMetadata->IndexStats.end())
     {
+        if (ResultSchema->num_fields() == 0) {
+            ResultSchema = KeySchema;
+        }
     }
 
     bool Finished() const override {

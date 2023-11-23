@@ -26,18 +26,12 @@ using TQueryId = TGuid;
 class TYqlPluginOptions
 {
 public:
-    TString MRJobBinary = "./mrjob";
-    TString UdfDirectory;
+    int RequiredABIVersion;
 
-    //! Mapping cluster name -> proxy address.
-    THashMap<TString, TString> Clusters;
-    std::optional<TString> DefaultCluster;
-
+    TYsonString SingletonsConfig;
+    TYsonString GatewayConfig;
+    TYsonString FileStorageConfig;
     TYsonString OperationAttributes;
-
-    int MaxFilesSizeMb;
-    int MaxFileCount;
-    int DownloadFileRetryCount;
 
     TString YTTokenPath;
 

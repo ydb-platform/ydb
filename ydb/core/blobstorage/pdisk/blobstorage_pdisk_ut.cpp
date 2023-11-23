@@ -1002,13 +1002,17 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(PDiskIncreaseLogChunksLimitAfterRestart) {
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx({
+            .IsBad=false,
+            .DiskSize = 1_GB,
+            .ChunkSize = 1_MB,
+        });
 
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
         vdisk.SendEvLogSync();
 
-        TRcBuf buf(TString(1_MB, 'a'));
+        TRcBuf buf(TString(64_MB, 'a'));
         auto writeLog = [&]() {
             testCtx.Send(new NPDisk::TEvLog(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0,
                         buf, vdisk.GetLsnSeg(), nullptr));

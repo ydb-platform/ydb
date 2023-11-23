@@ -104,9 +104,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
     Y_UNIT_TEST(ImplicitParameterTypes) {
         TKikimrRunner kikimr;
-        if (!kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.GetEnableImplicitQueryParameterTypes()) {
-            return;
-        }
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableImplicitQueryParameterTypes(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -125,6 +123,274 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(CheckQueryCacheForPreparedQuery) {
+        // All params are declared in the text
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableImplicitQueryParameterTypes(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto query = Q1_(R"(
+            DECLARE $group AS Int32;
+            DECLARE $name AS String;
+
+            SELECT * FROM `/Root/Test` WHERE Group = $group AND Name = $name;
+        )");
+
+        auto prepareResult = session.PrepareDataQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.KeepInQueryCache(true);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$name")
+                .String("Sergey")
+                .Build()
+            .AddParam("$group")
+                .Int32(1)
+                .Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params, execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+    }
+
+    Y_UNIT_TEST(CheckQueryCacheForUnpreparedQuery) {
+        // Some params are declared in text, some by user
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableImplicitQueryParameterTypes(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto query = Q1_(R"(
+            DECLARE $group AS Int32;
+
+            SELECT $group, $name;
+        )");
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$name")
+                .String("Sergey")
+                .Build()
+            .AddParam("$group")
+                .Int32(1)
+                .Build()
+            .AddParam("$phone")
+                .String("80")
+                .Build()
+            .Build();
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.KeepInQueryCache(true);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto firstQueryResult = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params, execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(firstQueryResult.GetStatus(), EStatus::SUCCESS, firstQueryResult.GetIssues().ToString());
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*firstQueryResult.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+        {
+            // The same query with the same params
+            auto params = db.GetParamsBuilder()
+                .AddParam("$name")
+                    .String("Sergey")
+                    .Build()
+                .AddParam("$group")
+                    .Int32(1)
+                    .Build()
+                .AddParam("$phone")
+                    .String("80")
+                    .Build()
+                .Build();
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params, execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+        }
+
+        {
+            // The same query with different type of user param
+            auto params = db.GetParamsBuilder()
+                .AddParam("$name")
+                    .Int64(2)
+                    .Build()
+                .AddParam("$group")
+                    .Int32(1)
+                    .Build()
+                .AddParam("$phone")
+                    .String("80")
+                    .Build()
+                .Build();
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params, execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+        }
+
+        {
+            // The same query with extra param
+            auto params = db.GetParamsBuilder()
+                .AddParam("$name")
+                    .String("Sergey")
+                    .Build()
+                .AddParam("$group")
+                    .Int32(1)
+                    .Build()
+                .AddParam("$phone")
+                    .String("80")
+                    .Build()
+                .AddParam("$age")
+                    .Int32(1)
+                    .Build()
+                .Build();
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params, execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+        }
+
+        {
+            // The same query with less params
+            auto params = db.GetParamsBuilder()
+                .AddParam("$name")
+                    .String("Sergey")
+                    .Build()
+                .AddParam("$group")
+                    .Int32(1)
+                    .Build()
+                .Build();
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params, execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+        }
+    }
+
+    Y_UNIT_TEST(CheckQueryCacheForExecuteAndPreparedQueries) {
+        // All params are declared in the text
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableImplicitQueryParameterTypes(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto query = Q1_(R"(
+            DECLARE $group AS Int32;
+            DECLARE $name AS String;
+
+            SELECT * FROM `/Root/Test` WHERE Group = $group AND Name = $name;
+        )");
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.KeepInQueryCache(true);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$name")
+                .String("Sergey")
+                .Build()
+            .AddParam("$group")
+                .Int32(1)
+                .Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params, execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+        auto prepareResult = session.PrepareDataQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(CheckCacheByAst) {
+        auto query1 = Q1_(R"(
+            SELECT * FROM `/Root/Test` WHERE Group = 1 AND Name = "2";
+        )");
+        auto query2 = Q1_(R"(
+            select * from `/Root/Test` where Group = 1 AND Name = "2";
+        )");
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.KeepInQueryCache(true);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        {
+            // Check disable setting
+            NKikimrConfig::TAppConfig appConfig;
+            appConfig.MutableTableServiceConfig()->SetEnableAstCache(false);
+            auto setting = NKikimrKqp::TKqpSetting();
+            auto serverSettings = TKikimrSettings()
+                .SetAppConfig(appConfig)
+                .SetKqpSettings({setting});
+            TKikimrRunner kikimr(serverSettings.SetWithSampleTables(true));
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+            result = session.ExecuteDataQuery(query2, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+        }
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        {
+            // Check 2 exec queries
+            TKikimrRunner kikimr(serverSettings.SetWithSampleTables(true));
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+            result = session.ExecuteDataQuery(query2, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+        }
+        {
+            // Check Prepare and Exec queries
+            TKikimrRunner kikimr(serverSettings.SetWithSampleTables(true));
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+
+            auto prepareResult = session.PrepareDataQuery(query1).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
+
+            auto execResult = session.ExecuteDataQuery(query2, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, execResult.GetIssues().ToString());
+            auto stats = NYdb::TProtoAccessor::GetProto(*execResult.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+        }
     }
 
     Y_UNIT_TEST(ExplicitSameParameterTypesQueryCacheCheck) {
@@ -154,9 +420,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
     Y_UNIT_TEST(ImplicitSameParameterTypesQueryCacheCheck) {
         TKikimrRunner kikimr;
-        if (!kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.GetEnableImplicitQueryParameterTypes()) {
-            return;
-        }
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableImplicitQueryParameterTypes(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -182,9 +446,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
     Y_UNIT_TEST(ImplicitDifferentParameterTypesQueryCacheCheck) {
         TKikimrRunner kikimr;
-        if (!kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.GetEnableImplicitQueryParameterTypes()) {
-            return;
-        }
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableImplicitQueryParameterTypes(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

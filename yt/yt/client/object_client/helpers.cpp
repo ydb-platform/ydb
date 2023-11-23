@@ -13,6 +13,17 @@ NYPath::TYPath FromObjectId(TObjectId id)
     return TString(ObjectIdPathPrefix) + ToString(id);
 }
 
+bool IsScalarType(EObjectType type)
+{
+    return
+        type == EObjectType::StringNode ||
+        type == EObjectType::Int64Node ||
+        type == EObjectType::Uint64Node ||
+        type == EObjectType::DoubleNode ||
+        type == EObjectType::ListNode ||
+        type == EObjectType::BooleanNode;
+}
+
 bool IsVersionedType(EObjectType type)
 {
     return

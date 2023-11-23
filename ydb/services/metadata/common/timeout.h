@@ -5,6 +5,7 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/events.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 namespace NKikimr::NMetadata::NInternal {
 

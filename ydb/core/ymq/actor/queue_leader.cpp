@@ -191,7 +191,7 @@ void TQueueLeader::PassAway() {
     }
     GetConfigurationRequests_.clear();
 
-    Y_ABORT_UNLESS(ExecuteRequests_.empty());
+    Y_ABORT_UNLESS(ExecuteRequests_.empty() || CurrentStateFunc() == &TThis::StateInit);
 
     if (DeduplicationCleanupActor_) {
         Send(DeduplicationCleanupActor_, new TEvPoisonPill());

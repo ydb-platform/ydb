@@ -4,7 +4,7 @@ LICENSE(BSD-3-Clause)
 
 PROVIDES(numpy)
 
-VERSION(1.24.4)
+VERSION(1.25.2)
 
 NO_COMPILER_WARNINGS()
 NO_EXTENDED_SOURCE_SEARCH()
@@ -51,9 +51,9 @@ ENDIF()
 
 NO_CHECK_IMPORTS(
     numpy._pyinstaller.*
+    numpy.core.umath_tests
     numpy.distutils.command.*
     numpy.distutils.msvc9compiler
-    numpy.testing._private.noseclasses
 )
 
 NO_LINT()
@@ -77,12 +77,14 @@ PY_SRCS(
     numpy/_typing/_char_codes.py
     numpy/_typing/_dtype_like.py
     numpy/_typing/_extended_precision.py
-    numpy/_typing/_generic_alias.py
     numpy/_typing/_nbit.py
     numpy/_typing/_nested_sequence.py
     numpy/_typing/_scalars.py
     numpy/_typing/_shape.py
     numpy/_typing/_ufunc.pyi
+    numpy/_utils/__init__.py
+    numpy/_utils/_inspect.py
+    numpy/_utils/_pep440.py
     numpy/_version.py
     numpy/array_api/__init__.py
     numpy/array_api/_array_object.py
@@ -91,6 +93,7 @@ PY_SRCS(
     numpy/array_api/_data_type_functions.py
     numpy/array_api/_dtypes.py
     numpy/array_api/_elementwise_functions.py
+    numpy/array_api/_indexing_functions.py
     numpy/array_api/_manipulation_functions.py
     numpy/array_api/_searching_functions.py
     numpy/array_api/_set_functions.py
@@ -100,8 +103,6 @@ PY_SRCS(
     numpy/array_api/_utility_functions.py
     numpy/array_api/linalg.py
     numpy/compat/__init__.py
-    numpy/compat/_inspect.py
-    numpy/compat/_pep440.py
     numpy/compat/py3k.py
     numpy/core/__init__.py
     numpy/core/__init__.pyi
@@ -201,6 +202,7 @@ PY_SRCS(
     numpy/distutils/fcompiler/sun.py
     numpy/distutils/fcompiler/vast.py
     numpy/distutils/from_template.py
+    numpy/distutils/fujitsuccompiler.py
     numpy/distutils/intelccompiler.py
     numpy/distutils/lib2def.py
     numpy/distutils/line_endings.py
@@ -217,7 +219,10 @@ PY_SRCS(
     numpy/doc/__init__.py
     numpy/doc/constants.py
     numpy/doc/ufuncs.py
-    numpy/dual.py
+    numpy/dtypes.py
+    numpy/dtypes.pyi
+    numpy/exceptions.py
+    numpy/exceptions.pyi
     numpy/fft/__init__.py
     numpy/fft/__init__.pyi
     numpy/fft/_pocketfft.py
@@ -274,7 +279,6 @@ PY_SRCS(
     numpy/linalg/linalg.pyi
     numpy/ma/__init__.py
     numpy/ma/__init__.pyi
-    numpy/ma/bench.py
     numpy/ma/core.py
     numpy/ma/core.pyi
     numpy/ma/extras.py
@@ -309,15 +313,11 @@ PY_SRCS(
     numpy/testing/__init__.py
     numpy/testing/__init__.pyi
     numpy/testing/_private/__init__.py
-    numpy/testing/_private/decorators.py
     numpy/testing/_private/extbuild.py
-    numpy/testing/_private/noseclasses.py
-    numpy/testing/_private/nosetester.py
-    numpy/testing/_private/parameterized.py
     numpy/testing/_private/utils.py
     numpy/testing/_private/utils.pyi
+    numpy/testing/overrides.py
     numpy/testing/print_coercion_tables.py
-    numpy/testing/utils.py
     numpy/typing/__init__.py
     numpy/typing/mypy_plugin.py
     numpy/version.py
@@ -364,6 +364,7 @@ SRCS(
     numpy/core/src/multiarray/dlpack.c
     numpy/core/src/multiarray/dragon4.c
     numpy/core/src/multiarray/dtype_transfer.c
+    numpy/core/src/multiarray/dtype_traversal.c
     numpy/core/src/multiarray/dtypemeta.c
     numpy/core/src/multiarray/einsum.c
     numpy/core/src/multiarray/einsum_sumprod.c
@@ -401,8 +402,8 @@ SRCS(
     numpy/core/src/multiarray/typeinfo.c
     numpy/core/src/multiarray/usertypes.c
     numpy/core/src/multiarray/vdot.c
-    numpy/core/src/npymath/_signbit.c
-    numpy/core/src/npymath/halffloat.c
+    numpy/core/src/npymath/arm64_exports.c
+    numpy/core/src/npymath/halffloat.cpp
     numpy/core/src/npymath/ieee754.c
     numpy/core/src/npymath/ieee754.cpp
     numpy/core/src/npymath/npy_math.c
@@ -448,18 +449,24 @@ ENDIF()
 SRCS(
     numpy/core/src/_simd/_simd.dispatch.c
     numpy/core/src/multiarray/argfunc.dispatch.c
-    numpy/core/src/npysort/x86-qsort.dispatch.cpp
+    numpy/core/src/npysort/simd_qsort.dispatch.cpp
+    numpy/core/src/npysort/simd_qsort_16bit.dispatch.cpp
     numpy/core/src/umath/_umath_tests.dispatch.c
     numpy/core/src/umath/loops_arithm_fp.dispatch.c
     numpy/core/src/umath/loops_arithmetic.dispatch.c
+    numpy/core/src/umath/loops_autovec.dispatch.c
     numpy/core/src/umath/loops_comparison.dispatch.c
     numpy/core/src/umath/loops_exponent_log.dispatch.c
     numpy/core/src/umath/loops_hyperbolic.dispatch.c
+    numpy/core/src/umath/loops_logical.dispatch.c
     numpy/core/src/umath/loops_minmax.dispatch.c
     numpy/core/src/umath/loops_modulo.dispatch.c
     numpy/core/src/umath/loops_trigonometric.dispatch.c
     numpy/core/src/umath/loops_umath_fp.dispatch.c
+    numpy/core/src/umath/loops_unary.dispatch.c
+    numpy/core/src/umath/loops_unary_complex.dispatch.c
     numpy/core/src/umath/loops_unary_fp.dispatch.c
+    numpy/core/src/umath/loops_unary_fp_le.dispatch.c
 )
 
 IF (ARCH_X86_64)
@@ -470,15 +477,16 @@ IF (ARCH_X86_64)
     SRC_C_AVX2(numpy/core/src/multiarray/argfunc.dispatch.avx2.c $F16C_FLAGS)
     SRC(numpy/core/src/multiarray/argfunc.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
     SRC(numpy/core/src/multiarray/argfunc.dispatch.sse42.c)
-    SRC(numpy/core/src/npysort/x86-qsort.dispatch.avx512_skx.cpp $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC(numpy/core/src/npysort/simd_qsort.dispatch.avx512_skx.cpp $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC(numpy/core/src/npysort/simd_qsort_16bit.dispatch.avx512_icl.cpp $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS -mavx512vbmi2)
     SRC_C_AVX2(numpy/core/src/umath/_umath_tests.dispatch.avx2.c $F16C_FLAGS)
     SRC(numpy/core/src/umath/_umath_tests.dispatch.sse41.c)
-    SRC_C_AVX2(numpy/core/src/umath/loops_arithm_fp.dispatch.avx2.c $F16C_FLAGS)
-    SRC(numpy/core/src/umath/loops_arithm_fp.dispatch.avx512f.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC_C_AVX2(numpy/core/src/umath/loops_arithm_fp.dispatch.fma3.avx2.c $F16C_FLAGS)
     SRC_C_AVX2(numpy/core/src/umath/loops_arithmetic.dispatch.avx2.c $F16C_FLAGS)
     SRC(numpy/core/src/umath/loops_arithmetic.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
     SRC(numpy/core/src/umath/loops_arithmetic.dispatch.avx512f.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
     SRC(numpy/core/src/umath/loops_arithmetic.dispatch.sse41.c)
+    SRC_C_AVX2(numpy/core/src/umath/loops_autovec.dispatch.avx2.c $F16C_FLAGS)
     SRC_C_AVX2(numpy/core/src/umath/loops_comparison.dispatch.avx2.c $F16C_FLAGS)
     SRC(numpy/core/src/umath/loops_comparison.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
     SRC(numpy/core/src/umath/loops_comparison.dispatch.avx512f.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
@@ -488,12 +496,19 @@ IF (ARCH_X86_64)
     SRC_C_AVX2(numpy/core/src/umath/loops_exponent_log.dispatch.fma3.avx2.c $F16C_FLAGS)
     SRC(numpy/core/src/umath/loops_hyperbolic.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
     SRC_C_AVX2(numpy/core/src/umath/loops_hyperbolic.dispatch.fma3.avx2.c $F16C_FLAGS)
+    SRC_C_AVX2(numpy/core/src/umath/loops_logical.dispatch.avx2.c $F16C_FLAGS)
+    SRC(numpy/core/src/umath/loops_logical.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
     SRC_C_AVX2(numpy/core/src/umath/loops_minmax.dispatch.avx2.c $F16C_FLAGS)
     SRC(numpy/core/src/umath/loops_minmax.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
     SRC(numpy/core/src/umath/loops_trigonometric.dispatch.avx512f.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
     SRC_C_AVX2(numpy/core/src/umath/loops_trigonometric.dispatch.fma3.avx2.c $F16C_FLAGS)
     SRC(numpy/core/src/umath/loops_umath_fp.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC_C_AVX2(numpy/core/src/umath/loops_unary.dispatch.avx2.c $F16C_FLAGS)
+    SRC(numpy/core/src/umath/loops_unary.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC(numpy/core/src/umath/loops_unary_complex.dispatch.avx512f.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC_C_AVX2(numpy/core/src/umath/loops_unary_complex.dispatch.fma3.avx2.c $F16C_FLAGS)
     SRC(numpy/core/src/umath/loops_unary_fp.dispatch.sse41.c)
+    SRC(numpy/core/src/umath/loops_unary_fp_le.dispatch.sse41.c)
 ELSEIF (ARCH_ARM64)
     SRC(numpy/core/src/umath/_umath_tests.dispatch.asimdhp.c)
 ENDIF()

@@ -26,6 +26,7 @@ enum class EAlterOperationKind {
     RenameIndex,
 };
 
+struct TPathId;
 
 
 THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTableRequest* req); 

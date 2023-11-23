@@ -179,6 +179,8 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
 
     case NKikimrProto::NODATA:
         Partition()->Config = Partition()->TabletConfig;
+        Partition()->PartitionConfig = GetPartitionConfig(Partition()->Config, Partition()->Partition);
+        Partition()->PartitionGraph.Rebuild(Partition()->Config);
         break;
 
     case NKikimrProto::ERROR:
@@ -983,7 +985,7 @@ bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev) {
     for (ui32 i = 0; i < response.GetStatusResultSize(); ++i) {
         auto& res = response.GetGetStatusResult(i);
         TStorageStatusFlags status = res.GetStatusFlags();
-        diskIsOk = diskIsOk && !status.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove);
+        diskIsOk = diskIsOk && !status.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop);
     }
     return !diskIsOk;
 }

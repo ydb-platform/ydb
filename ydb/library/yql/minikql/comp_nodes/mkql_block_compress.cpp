@@ -260,7 +260,7 @@ public:
 
         if (!s.Count) {
             do if (!s.InputSize_) {
-                s.Values.assign(s.Values.size(), NUdf::TUnboxedValuePod());
+                s.ClearValues();
                 switch (Flow_->FetchValues(ctx, fields)) {
                     case EFetchResult::Yield:
                         return EFetchResult::Yield;
@@ -382,9 +382,10 @@ public:
 
         block = read;
 
-        const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetPointer() }, "values_ptr", block);
-        const auto values = new LoadInst(ptrValuesType, valuesPtr, "values", block);
-        SafeUnRefUnboxed(values, ctx, block);
+        const auto clearFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::ClearValues));
+        const auto clearType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
+        const auto clearPtr = CastInst::Create(Instruction::IntToPtr, clearFunc, PointerType::getUnqual(clearType), "clear", block);
+        CallInst::Create(clearType, clearPtr, {stateArg}, "", block);
 
         const auto getres = GetNodeValues(Flow_, ctx, block);
 
@@ -421,6 +422,8 @@ public:
 
         block = save;
 
+        const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetPointer() }, "values_ptr", block);
+        const auto values = new LoadInst(ptrValuesType, valuesPtr, "values", block);
         for (size_t idx = 0U; idx <= Types_.size(); ++idx) {
             const auto pointer = GetElementPtrInst::CreateInBounds(arrayType, values, {  ConstantInt::get(indexType, 0),  ConstantInt::get(indexType, idx) }, "pointer", block);
             const auto value = getres.second[idx < BitmapIndex_ ? idx : idx + 1U](ctx, block);

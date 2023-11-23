@@ -220,6 +220,15 @@ class Config:
         set to True.
 
         Defaults to None.
+
+    :type client_context_params: dict
+    :param client_context_params: A dictionary of parameters specific to
+        individual services. If available, valid parameters can be found in
+        the ``Client Context Parameters`` section of the service client's
+        documentation. Invalid parameters or ones that are not used by the
+        specified service will be ignored.
+
+        Defaults to None.
     """
 
     OPTION_DEFAULTS = OrderedDict(
@@ -247,6 +256,7 @@ class Config:
             ('tcp_keepalive', None),
             ('request_min_compression_size_bytes', None),
             ('disable_request_compression', None),
+            ('client_context_params', None),
         ]
     )
 

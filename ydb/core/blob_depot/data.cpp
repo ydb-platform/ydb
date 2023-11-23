@@ -569,12 +569,16 @@ namespace NKikimr::NBlobDepot {
         for (const TLogoBlobID& id : TrashInFlight) {
             for (; it != Trash.end() && *it < id; ++it) {}
             Y_ABORT_UNLESS(it != Trash.end() && *it == id);
-            it = Trash.erase(it);
-            self->AccountBlob(id, false);
-            self->TotalStoredTrashSize -= id.BlobSize();
-            self->Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = self->TotalStoredTrashSize;
+            DeleteTrashRecord(self, it);
         }
         LastConfirmedGenStep = IssuedGenStep;
+    }
+
+    void TData::TRecordsPerChannelGroup::DeleteTrashRecord(TData *self, std::set<TLogoBlobID>::iterator& it) {
+        self->AccountBlob(*it, false);
+        self->TotalStoredTrashSize -= it->BlobSize();
+        self->Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = self->TotalStoredTrashSize;
+        it = Trash.erase(it);
     }
 
     void TData::TRecordsPerChannelGroup::OnLeastExpectedBlobIdChange(TData *self) {
@@ -582,15 +586,26 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::TRecordsPerChannelGroup::ClearInFlight(TData *self) {
-        Y_ABORT_UNLESS(CollectGarbageRequestInFlight);
-        CollectGarbageRequestInFlight = false;
+        Y_ABORT_UNLESS(CollectGarbageRequestsInFlight);
+        --CollectGarbageRequestsInFlight;
         CollectIfPossible(self);
     }
 
     void TData::TRecordsPerChannelGroup::CollectIfPossible(TData *self) {
-        if (!CollectGarbageRequestInFlight && !Trash.empty() && self->Loaded) {
+        if (!CollectGarbageRequestsInFlight && Collectible(self) && self->Loaded) {
             self->HandleTrash(*this);
         }
+    }
+
+    bool TData::TRecordsPerChannelGroup::Collectible(TData *self) const {
+        return !Trash.empty() || HardGenStep < GetHardGenStep(self);
+    }
+
+    TGenStep TData::TRecordsPerChannelGroup::GetHardGenStep(TData *self) const {
+        const TGenStep genStep = Used.empty()
+            ? TGenStep(self->Self->Channels[Channel].GetLeastExpectedBlobId(self->Self->Executor()->Generation()))
+            : TGenStep(*Used.begin());
+        return genStep.Previous();
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -131,7 +131,7 @@ struct IServiceContext
     virtual bool IsCanceled() const = 0;
 
     //! Raised when request processing is canceled.
-    DECLARE_INTERFACE_SIGNAL(void(), Canceled);
+    DECLARE_INTERFACE_SIGNAL(void(const TError&), Canceled);
 
     //! Raised when Reply() was called. Allows doing some post-request stuff like extended structured logging.
     DECLARE_INTERFACE_SIGNAL(void(), Replied);

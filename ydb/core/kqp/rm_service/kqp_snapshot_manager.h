@@ -13,19 +13,22 @@ struct TEvKqpSnapshot {
     struct TEvCreateSnapshotRequest : public TEventLocal<TEvCreateSnapshotRequest,
         TKqpSnapshotEvents::EvCreateSnapshotRequest>
     {
-        explicit TEvCreateSnapshotRequest(const TVector<TString>& tables, NLWTrace::TOrbit&& orbit = {})
+        explicit TEvCreateSnapshotRequest(const TVector<TString>& tables, ui64 cookie, NLWTrace::TOrbit&& orbit = {})
             : Tables(tables)
             , MvccSnapshot(false)
-            , Orbit(std::move(orbit)) {}
+            , Orbit(std::move(orbit))
+            , Cookie(cookie) {}
 
-        explicit TEvCreateSnapshotRequest(NLWTrace::TOrbit&& orbit = {})
+        explicit TEvCreateSnapshotRequest(ui64 cookie, NLWTrace::TOrbit&& orbit = {})
             : Tables({})
             , MvccSnapshot(true)
-            , Orbit(std::move(orbit)) {}
+            , Orbit(std::move(orbit))
+            , Cookie(cookie) {}
 
         const TVector<TString> Tables;
         const bool MvccSnapshot;
         NLWTrace::TOrbit Orbit;
+        ui64 Cookie;
     };
 
     struct TEvCreateSnapshotResponse : public TEventLocal<TEvCreateSnapshotResponse,

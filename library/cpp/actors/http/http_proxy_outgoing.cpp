@@ -107,7 +107,9 @@ protected:
                         if (!read && !write) {
                             write = true;
                         }
-                        PollerToken->Request(read, write);
+                        if (PollerToken->RequestNotificationAfterWouldBlock(read, write)) {
+                            continue;
+                        }
                     }
                     break;
                 } else {
@@ -144,7 +146,9 @@ protected:
                     if (!read && !write) {
                         read = true;
                     }
-                    PollerToken->Request(read, write);
+                    if (PollerToken->RequestNotificationAfterWouldBlock(read, write)) {
+                        continue;
+                    }
                 }
                 return;
             } else {

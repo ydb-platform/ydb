@@ -2,11 +2,12 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/ydb_issue/issue_helpers.h>
-#include <ydb/core/grpc_services/base/base.h>
-#include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/grpc_services/audit_dml_operations.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/cancelation/cancelation_event.h>
+#include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -210,6 +211,7 @@ private:
                 HFunc(TRpcServices::TEvGrpcNextReply, Handle);
                 HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
                 HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
+                HFunc(NKikimr::NGRpcService::TEvSubscribeGrpcCancel, Handle);
                 default:
                     UnexpectedEvent(__func__, ev);
             }
@@ -274,6 +276,10 @@ private:
             issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Internal error"));
             ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, std::move(issues));
         }
+    }
+
+    void Handle(NKikimr::NGRpcService::TEvSubscribeGrpcCancel::TPtr&, const TActorContext&) {
+        // Ignore event now
     }
 
     void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
@@ -356,18 +362,33 @@ private:
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
         NYql::IssuesFromMessage(issueMessage, issues);
 
-        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS && NeedReportStats(*Request_->GetProtoRequest())) {
-            Ydb::Query::ExecuteQueryResponsePart response;
-            response.set_status(Ydb::StatusIds::SUCCESS);
+        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            Request_->SetRuHeader(record.GetConsumedRu());
 
             auto& kqpResponse = record.GetResponse();
-            FillQueryStats(*response.mutable_exec_stats(), kqpResponse);
+
+            Ydb::Query::ExecuteQueryResponsePart response;
 
             AuditContextAppend(Request_.get(), *Request_->GetProtoRequest(), response);
 
-            TString out;
-            Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
-            Request_->SendSerializedResult(std::move(out), record.GetYdbStatus());
+            bool hasTrailingMessage = false;
+
+            if (kqpResponse.HasTxMeta()) {
+                hasTrailingMessage = true;
+                response.mutable_tx_meta()->set_id(kqpResponse.GetTxMeta().id());
+            }
+
+            if (NeedReportStats(*Request_->GetProtoRequest())) {
+                hasTrailingMessage = true;
+                FillQueryStats(*response.mutable_exec_stats(), kqpResponse);
+            }
+
+            if (hasTrailingMessage) {
+                response.set_status(Ydb::StatusIds::SUCCESS);
+                TString out;
+                Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
+                Request_->SendSerializedResult(std::move(out), record.GetYdbStatus());
+            }
         }
 
         ReplyFinishStream(record.GetYdbStatus(), issues);
@@ -452,7 +473,7 @@ namespace NQuery {
 
 void DoExecuteQuery(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     // Use default channel buffer size as inflight limit
-    ui64 inflightLimitBytes = f.GetAppConfig()->GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
+    ui64 inflightLimitBytes = f.GetChannelBufferSize();
 
     auto* req = dynamic_cast<TEvExecuteQueryRequest*>(p.release());
     Y_ABORT_UNLESS(req != nullptr, "Wrong using of TGRpcRequestWrapper");

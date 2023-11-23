@@ -94,6 +94,9 @@ namespace NActors {
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         RelaxedStore(&ev->SendTime, (::NHPTimer::STime)GetCycleCountFast());
 #endif
+        if (TlsThreadContext) {
+            TlsThreadContext->IsCurrentRecipientAService = ev->Recipient.IsService();
+        }
         return MailboxTable->SendTo(ev, this);
     }
 
@@ -102,6 +105,9 @@ namespace NActors {
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         RelaxedStore(&ev->SendTime, (::NHPTimer::STime)GetCycleCountFast());
 #endif
+        if (TlsThreadContext) {
+            TlsThreadContext->IsCurrentRecipientAService = ev->Recipient.IsService();
+        }
         return MailboxTable->SpecificSendTo(ev, this);
     }
 

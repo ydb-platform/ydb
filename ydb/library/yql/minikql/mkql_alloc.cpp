@@ -142,13 +142,16 @@ void TAllocState::UnlockObject(::NKikimr::NUdf::TUnboxedValuePod value) {
 
 void TScopedAlloc::Acquire() {
     if (!AttachedCount_) {
+        if (PrevState_) {
+            PgReleaseThreadContext(PrevState_->MainContext);
+        }
         PrevState_ = TlsAllocState;
         TlsAllocState = &MyState_;
         PgAcquireThreadContext(MyState_.MainContext);
     } else {
         Y_ABORT_UNLESS(TlsAllocState == &MyState_, "Mismatch allocator in thread");
-    }
 
+    }
     ++AttachedCount_;
 }
 
@@ -157,6 +160,9 @@ void TScopedAlloc::Release() {
         Y_ABORT_UNLESS(TlsAllocState == &MyState_, "Mismatch allocator in thread");
         PgReleaseThreadContext(MyState_.MainContext);
         TlsAllocState = PrevState_;
+        if (PrevState_) {
+            PgAcquireThreadContext(PrevState_->MainContext);
+        }
         PrevState_ = nullptr;
     }
 }

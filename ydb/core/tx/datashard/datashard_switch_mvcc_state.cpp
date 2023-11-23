@@ -1,5 +1,7 @@
 #include "datashard_txs.h"
 
+#include <ydb/core/base/feature_flags.h>
+
 namespace NKikimr::NDataShard {
 
 void TDataShard::CheckMvccStateChangeCanStart(const TActorContext& ctx) {

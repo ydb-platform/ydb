@@ -47,6 +47,7 @@ target_sources(core-mind-hive PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/storage_group_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/storage_pool_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tablet_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tablet_move_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__adopt_tablet.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__block_storage_result.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__configure_subdomain.cpp

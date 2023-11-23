@@ -113,7 +113,7 @@ func makeYdbDateTimeType(ydbTypeID Ydb.Type_PrimitiveTypeId, format api_service_
 		// type marked as nullable because ClickHouse's type value range is much more wide than YDB's type value range
 		return &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: ydbTypeID}}, true, nil
 	case api_service_protos.EDateTimeFormat_STRING_FORMAT:
-		return &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_STRING}}, false, nil
+		return &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_UTF8}}, false, nil
 	default:
 		return nil, false, fmt.Errorf("unexpected datetime format '%s': %w", format, utils.ErrDataTypeNotSupported)
 	}
@@ -270,10 +270,10 @@ func (typeMapper) appendValueToBuilder(
 	case Ydb.Type_DOUBLE:
 		err = appendValueToArrowBuilder[float64, float64, *array.Float64Builder, utils.Float64Converter](acceptor, builder)
 	case Ydb.Type_STRING:
-		// depends on date/time representation format
+		err = appendValueToArrowBuilder[string, []byte, *array.BinaryBuilder, utils.StringToBytesConverter](acceptor, builder)
+	case Ydb.Type_UTF8:
+		// date/time in string representation format
 		switch acceptor.(type) {
-		case **string:
-			err = appendValueToArrowBuilder[string, string, *array.StringBuilder, utils.StringConverter](acceptor, builder)
 		case **utils.Date:
 			err = appendValueToArrowBuilder[utils.Date, string, *array.StringBuilder, utils.DateToStringConverter](acceptor, builder)
 		case **utils.Datetime:

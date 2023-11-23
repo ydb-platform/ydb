@@ -31,6 +31,11 @@ namespace ErrorCodes
     extern const int INCORRECT_DATA;
 }
 
+struct TParseRule {
+    int Len = 0;
+    std::function<bool(char)> IsSkip = [](char) { return false; };
+};
+
 template <typename IteratorSrc, typename IteratorDst>
 void parseHex(IteratorSrc src, IteratorDst dst, const size_t num_bytes)
 {
@@ -1173,11 +1178,28 @@ bool loadAtPosition(ReadBuffer & in, Memory<> & memory, char * & current)
 void readDateTimeTextISO(time_t & x, ReadBuffer & istr) {
     char prefix[26] = {};
     int offset = 0;
-    for (const auto& len: {20, 25}) {
-        istr.readStrict(prefix + offset, len - offset);
-        offset = len;
+    std::vector<TParseRule> rules{ 
+        // 2022-10-19 16:40:47
+        { 19, [](char ch) { return ch == '+' || ch == 'Z'; } },
+        // 2022-10-19 16:40:47Z
+        { 20, isdigit }, 
+        // 2022-10-19 16:40:47+03:00
+        { 25 } };
+    for (const auto& rule: rules) {
+        istr.readStrict(prefix + offset, rule.Len - offset);
+        offset = rule.Len;
+        char next = '\0';
+        if (istr.peek(next)) {
+            if (rule.IsSkip(next)) {
+                continue;
+            }
+        }
+        if (next == '.') {
+            prefix[offset] = '.';
+            break; // fatal error
+        }
         TInstant result;
-        if (TInstant::TryParseIso8601(TStringBuf{prefix, prefix + len}, result)) {
+        if (TInstant::TryParseIso8601(TStringBuf{prefix, prefix + rule.Len}, result)) {
             x = result.GetValue() / 1000000;
             return;
         }
@@ -1251,19 +1273,58 @@ void readDateTimeTextPOSIX(time_t & x, ReadBuffer & istr)
 }
 
 void readTimestampTextISO(DateTime64 & x, ReadBuffer & istr) {
-    char prefix[28] = {};
+    char prefix[33] = {};
     int offset = 0;
-    for (const auto& len: {20, 24, 25, 27}) {
-        istr.readStrict(prefix + offset, len - offset);
-        offset = len;
+    std::vector<TParseRule> rules{ 
+        // 2022-10-19 16:40:47
+        { 19, [](char ch) { return ch == '+' || ch == 'Z' || ch == '.'; } },
+        // 2022-10-19 16:40:47Z
+        { 20, isdigit }, 
+        // 2022-10-19 16:40:47.1
+        { 21, [](char ch) { return isdigit(ch) || ch == 'Z' || ch == '+'; } }, 
+        // 2022-10-19 16:40:47.12
+        // 2022-10-19 16:40:47.1Z
+        { 22, [](char ch) { return isdigit(ch) || ch == 'Z' || ch == '+' || ch == ':'; } }, 
+        // 2022-10-19 16:40:47.123
+        // 2022-10-19 16:40:47.12Z
+        { 23, [](char ch) { return isdigit(ch) || ch == 'Z' || ch == '+'; } },
+        // 2022-10-19 16:40:47.1234
+        // 2022-10-19 16:40:47.123Z
+        { 24, [](char ch) { return isdigit(ch) || ch == 'Z' || ch == '+' || ch == ':'; } }, 
+        // 2022-10-19 16:40:47+03:00
+        // 2022-10-19 16:40:47.1234Z
+        { 25, [](char ch) { return isdigit(ch) || ch == ':'; } },
+        // 2022-10-19T16:40:47.123456
+        { 26, [](char ch) { return isdigit(ch) || ch == 'Z' || ch == '+' || ch == ':'; } },
+        // 2022-10-19 16:40:47.123456Z
+        // 2022-10-19 16:40:47.1+03:00
+        { 27, [](char ch) { return isdigit(ch) || ch == ':'; } }, 
+        // 2022-10-19 16:40:47.12+03:00
+        { 28, isdigit }, 
+        // 2022-10-19 16:40:47.123+03:00
+        { 29, [](char ch) { return isdigit(ch) || ch == ':'; } }, 
+        // 2022-10-19 16:40:47.1234+03:00
+        { 30, isdigit },
+        // 2022-10-19 16:40:47.123456+03:00
+        { 32 } };
+    for (const auto& rule: rules) {
+        istr.readStrict(prefix + offset, rule.Len - offset);
+        offset = rule.Len;
+        char next = '\0';
+        if (istr.peek(next)) {
+            if (rule.IsSkip(next)) {
+                continue;
+            }
+        }
         TInstant result;
-        if (TInstant::TryParseIso8601(TStringBuf{prefix, prefix + len}, result)) {
+        if (TInstant::TryParseIso8601(TStringBuf{prefix, prefix + rule.Len}, result)) {
             x = result.GetValue();
             return;
         }
     }
     throw ParsingException(TStringBuilder() << "Error in timestamp parsing. Input data: " << prefix, ErrorCodes::CANNOT_PARSE_DATETIME);
 }
+
 
 char* readTimestampTextFormat(DateTime64 & x, char* str, const String& format)
 {

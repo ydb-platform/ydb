@@ -49,7 +49,7 @@ public:
 
     void Bootstrap() {
         TSocketType socket;
-        TSocketAddressType bindAddress(socket.MakeAddress("::", Settings.Port));
+        TSocketAddressType bindAddress(socket.MakeAddress(Settings.Address, Settings.Port));
         int err = socket.Bind(bindAddress.get());
         if (err == 0) {
             std::shared_ptr<TEndpointInfo> endpoint = std::make_shared<TEndpointInfo>();

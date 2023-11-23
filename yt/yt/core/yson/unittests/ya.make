@@ -24,6 +24,7 @@ SRCS(
     proto/protobuf_scalar_type_ut.proto
     proto/protobuf_yson_ut.proto
     proto/protobuf_yson_casing_ut.proto
+    proto/protobuf_yson_casing_ext_ut.proto
 )
 
 INCLUDE(${ARCADIA_ROOT}/yt/opensource_tests.inc)

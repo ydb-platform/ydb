@@ -22,10 +22,12 @@ protected:
     TString Group;
     TString Member;
 
-    TUpdateMembershipCommand()
+    REGISTER_YSON_STRUCT_LITE(TUpdateMembershipCommand);
+
+    static void Register(TRegistrar registrar)
     {
-        this->RegisterParameter("group", Group);
-        this->RegisterParameter("member", Member);
+        registrar.Parameter("group", &TUpdateMembershipCommand::Group);
+        registrar.Parameter("member", &TUpdateMembershipCommand::Member);
     }
 };
 
@@ -34,6 +36,11 @@ protected:
 class TAddMemberCommand
     : public TUpdateMembershipCommand<NApi::TAddMemberOptions>
 {
+    REGISTER_YSON_STRUCT_LITE(TAddMemberCommand);
+
+    static void Register(TRegistrar)
+    { }
+
 private:
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -43,6 +50,11 @@ private:
 class TRemoveMemberCommand
     : public TUpdateMembershipCommand<NApi::TRemoveMemberOptions>
 {
+    REGISTER_YSON_STRUCT_LITE(TRemoveMemberCommand);
+
+    static void Register(TRegistrar)
+    { }
+
 private:
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -53,7 +65,9 @@ class TParseYPathCommand
     : public TCommandBase
 {
 public:
-    TParseYPathCommand();
+    REGISTER_YSON_STRUCT_LITE(TParseYPathCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     TString Path;
@@ -66,6 +80,11 @@ private:
 class TGetVersionCommand
     : public TCommandBase
 {
+    REGISTER_YSON_STRUCT_LITE(TGetVersionCommand);
+
+    static void Register(TRegistrar)
+    { }
+
 private:
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -75,6 +94,11 @@ private:
 class TGetSupportedFeaturesCommand
     : public TCommandBase
 {
+    REGISTER_YSON_STRUCT_LITE(TGetSupportedFeaturesCommand);
+
+    static void Register(TRegistrar)
+    { }
+
 private:
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -85,7 +109,9 @@ class TCheckPermissionCommand
     : public TTypedCommand<NApi::TCheckPermissionOptions>
 {
 public:
-    TCheckPermissionCommand();
+    REGISTER_YSON_STRUCT_LITE(TCheckPermissionCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     TString User;
@@ -101,7 +127,9 @@ class TCheckPermissionByAclCommand
     : public TTypedCommand<NApi::TCheckPermissionByAclOptions>
 {
 public:
-    TCheckPermissionByAclCommand();
+    REGISTER_YSON_STRUCT_LITE(TCheckPermissionByAclCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     std::optional<TString> User;
@@ -117,7 +145,9 @@ class TTransferAccountResourcesCommand
     : public TTypedCommand<NApi::TTransferAccountResourcesOptions>
 {
 public:
-    TTransferAccountResourcesCommand();
+    REGISTER_YSON_STRUCT_LITE(TTransferAccountResourcesCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     TString SourceAccount;
@@ -133,7 +163,9 @@ class TTransferPoolResourcesCommand
     : public TTypedCommand<NApi::TTransferPoolResourcesOptions>
 {
 public:
-    TTransferPoolResourcesCommand();
+    REGISTER_YSON_STRUCT_LITE(TTransferPoolResourcesCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     TString SourcePool;
@@ -169,7 +201,9 @@ class TExecuteBatchCommand
     : public TTypedCommand<TExecuteBatchOptions>
 {
 public:
-    TExecuteBatchCommand();
+    REGISTER_YSON_STRUCT_LITE(TExecuteBatchCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     using TRequestPtr = TIntrusivePtr<TExecuteBatchCommandRequest>;
@@ -191,7 +225,9 @@ class TDiscoverProxiesCommand
     : public TTypedCommand<TDiscoverProxiesOptions>
 {
 public:
-    TDiscoverProxiesCommand();
+    REGISTER_YSON_STRUCT_LITE(TDiscoverProxiesCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     NApi::EProxyType Type;
@@ -209,7 +245,9 @@ class TBalanceTabletCellsCommand
     : public TTypedCommand<NApi::TBalanceTabletCellsOptions>
 {
 public:
-    TBalanceTabletCellsCommand();
+    REGISTER_YSON_STRUCT_LITE(TBalanceTabletCellsCommand);
+
+    static void Register(TRegistrar registrar);
 
 private:
     TString TabletCellBundle;

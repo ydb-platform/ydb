@@ -8,7 +8,7 @@ void RegisterStreamLookupActorFactory(NYql::NDq::TDqAsyncIoFactory& factory, TIn
     factory.RegisterInputTransform<NKikimrKqp::TKqpStreamLookupSettings>("StreamLookupInputTransformer", [counters](NKikimrKqp::TKqpStreamLookupSettings&& settings,
         NYql::NDq::TDqAsyncIoFactory::TInputTransformArguments&& args) {
             return CreateStreamLookupActor(args.InputIndex, args.StatsLevel, args.TransformInput, args.ComputeActorId, args.TypeEnv,
-                args.HolderFactory, args.Alloc, std::move(settings), counters);
+                args.HolderFactory, args.Alloc, args.InputDesc, std::move(settings), counters);
     });
 }
 

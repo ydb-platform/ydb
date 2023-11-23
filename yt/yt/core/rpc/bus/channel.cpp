@@ -26,6 +26,8 @@
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
+#include <library/cpp/yt/misc/tls.h>
+
 #include <array>
 
 namespace NYT::NRpc::NBus {
@@ -404,7 +406,7 @@ private:
             }
 
             // YT-1639: Avoid long chain of recursive calls.
-            thread_local int Depth = 0;
+            YT_THREAD_LOCAL(int) Depth = 0;
             constexpr int MaxDepth = 10;
             if (Depth < MaxDepth) {
                 ++Depth;

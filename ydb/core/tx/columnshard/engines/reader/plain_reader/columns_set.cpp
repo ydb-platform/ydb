@@ -15,9 +15,6 @@ NKikimr::NOlap::NPlainReader::TColumnsSet TColumnsSet::operator-(const TColumnsS
     for (auto&& i : external.ColumnIds) {
         result.ColumnIds.erase(i);
     }
-    for (auto&& i : external.ColumnNames) {
-        result.ColumnNames.erase(i);
-    }
     arrow::FieldVector fields;
     for (auto&& i : Schema->fields()) {
         if (!external.Schema->GetFieldByName(i->name())) {
@@ -25,13 +22,13 @@ NKikimr::NOlap::NPlainReader::TColumnsSet TColumnsSet::operator-(const TColumnsS
         }
     }
     result.Schema = std::make_shared<arrow::Schema>(fields);
+    result.Rebuild();
     return result;
 }
 
 NKikimr::NOlap::NPlainReader::TColumnsSet TColumnsSet::operator+(const TColumnsSet& external) const {
     TColumnsSet result = *this;
     result.ColumnIds.insert(external.ColumnIds.begin(), external.ColumnIds.end());
-    result.ColumnNames.insert(external.ColumnNames.begin(), external.ColumnNames.end());
     auto fields = result.Schema->fields();
     for (auto&& i : external.Schema->fields()) {
         if (!result.Schema->GetFieldByName(i->name())) {
@@ -39,6 +36,7 @@ NKikimr::NOlap::NPlainReader::TColumnsSet TColumnsSet::operator+(const TColumnsS
         }
     }
     result.Schema = std::make_shared<arrow::Schema>(fields);
+    result.Rebuild();
     return result;
 }
 

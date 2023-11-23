@@ -877,6 +877,8 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::UpdateWeight(const TKey& key)
 
     NotifyOnTrim(shard->Trim(guard), nullptr);
 
+    OnWeightUpdated(weightDelta);
+
     if (GhostCachesEnabled_.load()) {
         shard->SmallGhost.UpdateWeight(key, newWeight);
         shard->LargeGhost.UpdateWeight(key, newWeight);
@@ -907,6 +909,10 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::OnAdded(const TValuePtr& /*value*
 
 template <class TKey, class TValue, class THash>
 void TAsyncSlruCacheBase<TKey, TValue, THash>::OnRemoved(const TValuePtr& /*value*/)
+{ }
+
+template <class TKey, class TValue, class THash>
+void TAsyncSlruCacheBase<TKey, TValue, THash>::OnWeightUpdated(i64 /*weightDelta*/)
 { }
 
 template <class TKey, class TValue, class THash>
@@ -1372,6 +1378,16 @@ template <class TKey, class TValue, class THash>
 TMemoryTrackingAsyncSlruCacheBase<TKey, TValue, THash>::~TMemoryTrackingAsyncSlruCacheBase()
 {
     MemoryTracker_->SetLimit(0);
+}
+
+template <class TKey, class TValue, class THash>
+void TMemoryTrackingAsyncSlruCacheBase<TKey, TValue, THash>::OnWeightUpdated(i64 weightDelta)
+{
+    if (weightDelta > 0) {
+        MemoryTracker_->Acquire(weightDelta);
+    } else {
+        MemoryTracker_->Release(-weightDelta);
+    }
 }
 
 template <class TKey, class TValue, class THash>

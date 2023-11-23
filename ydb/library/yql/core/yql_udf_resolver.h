@@ -68,6 +68,7 @@ public:
         const TVector<TFunction*>& functions, TExprContext& ctx) const = 0;
 
     virtual TResolveResult LoadRichMetadata(const TVector<TImport>& imports) const = 0;
+    virtual bool ContainsModule(const TStringBuf& moduleName) const = 0;
 };
 
 TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TUserDataBlock>& blocks);

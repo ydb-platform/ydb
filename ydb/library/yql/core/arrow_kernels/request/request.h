@@ -8,21 +8,32 @@ namespace NYql {
 
 class TKernelRequestBuilder {
 public:
-    enum EUnaryOp {
-        Not
+    enum class EUnaryOp {
+        Not,
+        Size,
     };
 
-    enum EBinaryOp {
+    enum class EBinaryOp {
         And,
         Or,
         Xor,
+
         Add,
         Sub,
         Mul,
         Div,
+        Mod,
+
         StartsWith,
         EndsWith,
-        StringContains
+        StringContains,
+
+        Equals,
+        NotEquals,
+        Less,
+        LessOrEqual,
+        Greater,
+        GreaterOrEqual,
     };
 
     TKernelRequestBuilder(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry);
@@ -30,7 +41,7 @@ public:
 
     ui32 AddUnaryOp(EUnaryOp op, const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* retType);
     ui32 AddBinaryOp(EBinaryOp op, const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* arg2Type, const TTypeAnnotationNode* retType);
-    ui32 Udf(const TString& name, bool isPolymorphic, const std::vector<const TTypeAnnotationNode*>& argTypes, const TTypeAnnotationNode* retType);
+    ui32 Udf(const TString& name, bool isPolymorphic, const TTypeAnnotationNode::TListType& argTypes, const TTypeAnnotationNode* retType);
     // (json/json?,utf8)->bool/bool?
     ui32 JsonExists(const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* arg2Type, const TTypeAnnotationNode* retType);
     ui32 JsonValue(const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* arg2Type, const TTypeAnnotationNode* retType);
@@ -41,13 +52,12 @@ private:
     NKikimr::NMiniKQL::TBlockType* MakeType(const TTypeAnnotationNode* type);
 private:
     NKikimr::NMiniKQL::TScopedAlloc Alloc_;
-    NKikimr::NMiniKQL::TTypeEnvironment Env_;
+    const NKikimr::NMiniKQL::TTypeEnvironment Env_;
     NKikimr::NMiniKQL::TProgramBuilder Pb_;
-    TVector<NKikimr::NMiniKQL::TRuntimeNode> Items_;
-    TVector<NKikimr::NMiniKQL::TRuntimeNode> ArgsItems_;
+    std::vector<NKikimr::NMiniKQL::TRuntimeNode> Items_;
+    std::vector<NKikimr::NMiniKQL::TRuntimeNode> ArgsItems_;
     std::unordered_map<const TTypeAnnotationNode*, NKikimr::NMiniKQL::TBlockType*> CachedTypes_;
     std::unordered_map<const TTypeAnnotationNode*, NKikimr::NMiniKQL::TRuntimeNode> CachedArgs_;
 };
-
 
 }

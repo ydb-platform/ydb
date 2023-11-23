@@ -3297,7 +3297,8 @@
         "Sheets":{
           "shape":"SheetList",
           "documentation":"<p>A list of the associated sheets with the unique identifier and name of each sheet.</p>"
-        }
+        },
+        "Options":{"shape":"AssetOptions"}
       },
       "documentation":"<p>Metadata structure for an analysis in Amazon QuickSight</p>"
     },
@@ -3340,7 +3341,11 @@
           "shape":"ColumnConfigurationList",
           "documentation":"<p> An array of analysis-level column configurations. Column configurations can be used to set default formatting for a column to be used throughout an analysis. </p>"
         },
-        "AnalysisDefaults":{"shape":"AnalysisDefaults"}
+        "AnalysisDefaults":{"shape":"AnalysisDefaults"},
+        "Options":{
+          "shape":"AssetOptions",
+          "documentation":"<p>An array of option definitions for an analysis.</p>"
+        }
       },
       "documentation":"<p>The definition of an analysis.</p>"
     },
@@ -4374,6 +4379,20 @@
       "max":100,
       "min":1
     },
+    "AssetOptions":{
+      "type":"structure",
+      "members":{
+        "Timezone":{
+          "shape":"String",
+          "documentation":"<p>Determines the timezone for the analysis.</p>"
+        },
+        "WeekStart":{
+          "shape":"DayOfTheWeek",
+          "documentation":"<p>Determines the week start day for an analysis.</p>"
+        }
+      },
+      "documentation":"<p>An array of analysis level configurations.</p>"
+    },
     "AssignmentStatus":{
       "type":"string",
       "enum":[
@@ -5320,6 +5339,10 @@
           "shape":"ColumnDataType",
           "documentation":"<p>New column data type.</p>"
         },
+        "SubType":{
+          "shape":"ColumnDataSubType",
+          "documentation":"<p>The sub data type of the new column. Sub types are only available for decimal columns that are part of a SPICE dataset.</p>"
+        },
         "Format":{
           "shape":"TypeCastFormat",
           "documentation":"<p>When casting a column from string to datetime type, you can supply a string in a format supported by Amazon QuickSight to denote the source data format.</p>"
@@ -5642,6 +5665,13 @@
       "enum":[
         "DIMENSION",
         "MEASURE"
+      ]
+    },
+    "ColumnDataSubType":{
+      "type":"string",
+      "enum":[
+        "FLOAT",
+        "FIXED"
       ]
     },
     "ColumnDataType":{
@@ -6588,6 +6618,10 @@
         "ValidationStrategy":{
           "shape":"ValidationStrategy",
           "documentation":"<p>The option to relax the validation needed to create an analysis with definition objects. This skips the validation step for specific errors.</p>"
+        },
+        "FolderArns":{
+          "shape":"FolderArnList",
+          "documentation":"<p>When you create the analysis, Amazon QuickSight adds the analysis to these folders.</p>"
         }
       }
     },
@@ -6687,6 +6721,10 @@
         "ValidationStrategy":{
           "shape":"ValidationStrategy",
           "documentation":"<p>The option to relax the validation needed to create a dashboard with definition objects. This option skips the validation step for specific errors.</p>"
+        },
+        "FolderArns":{
+          "shape":"FolderArnList",
+          "documentation":"<p>When you create the dashboard, Amazon QuickSight adds the dashboard to these folders.</p>"
         }
       }
     },
@@ -6788,6 +6826,10 @@
         "DatasetParameters":{
           "shape":"DatasetParameterList",
           "documentation":"<p>The parameter declarations of the dataset.</p>"
+        },
+        "FolderArns":{
+          "shape":"FolderArnList",
+          "documentation":"<p>When you create the dataset, Amazon QuickSight adds the dataset to these folders.</p>"
         }
       }
     },
@@ -6871,6 +6913,10 @@
         "Tags":{
           "shape":"TagList",
           "documentation":"<p>Contains a map of the key-value pairs for the resource tag or tags assigned to the data source.</p>"
+        },
+        "FolderArns":{
+          "shape":"FolderArnList",
+          "documentation":"<p>When you create the data source, Amazon QuickSight adds the data source to these folders.</p>"
         }
       }
     },
@@ -8466,7 +8512,8 @@
         "Sheets":{
           "shape":"SheetList",
           "documentation":"<p>A list of the associated sheets with the unique identifier and name of each sheet.</p>"
-        }
+        },
+        "Options":{"shape":"AssetOptions"}
       },
       "documentation":"<p>Dashboard version.</p>"
     },
@@ -8498,7 +8545,11 @@
           "shape":"ColumnConfigurationList",
           "documentation":"<p>An array of dashboard-level column configurations. Column configurations are used to set the default formatting for a column that is used throughout a dashboard. </p>"
         },
-        "AnalysisDefaults":{"shape":"AnalysisDefaults"}
+        "AnalysisDefaults":{"shape":"AnalysisDefaults"},
+        "Options":{
+          "shape":"AssetOptions",
+          "documentation":"<p>An array of option definitions for a dashboard.</p>"
+        }
       },
       "documentation":"<p>The contents of a dashboard.</p>"
     },
@@ -8828,12 +8879,18 @@
       },
       "documentation":"<p>Allows data paths to be sorted by a specific data value.</p>"
     },
+    "DataPathType":{
+      "type":"structure",
+      "members":{
+        "PivotTableDataPathType":{
+          "shape":"PivotTableDataPathType",
+          "documentation":"<p>The type of data path value utilized in a pivot table. Choose one of the following options:</p> <ul> <li> <p> <code>HIERARCHY_ROWS_LAYOUT_COLUMN</code> - The type of data path for the rows layout column, when <code>RowsLayout</code> is set to <code>HIERARCHY</code>.</p> </li> <li> <p> <code>MULTIPLE_ROW_METRICS_COLUMN</code> - The type of data path for the metric column when the row is set to Metric Placement.</p> </li> <li> <p> <code>EMPTY_COLUMN_HEADER</code> - The type of data path for the column with empty column header, when there is no field in <code>ColumnsFieldWell</code> and the row is set to Metric Placement.</p> </li> <li> <p> <code>COUNT_METRIC_COLUMN</code> - The type of data path for the column with <code>COUNT</code> as the metric, when there is no field in the <code>ValuesFieldWell</code>.</p> </li> </ul>"
+        }
+      },
+      "documentation":"<p>The type of the data path value.</p>"
+    },
     "DataPathValue":{
       "type":"structure",
-      "required":[
-        "FieldId",
-        "FieldValue"
-      ],
       "members":{
         "FieldId":{
           "shape":"FieldId",
@@ -8842,6 +8899,10 @@
         "FieldValue":{
           "shape":"FieldValue",
           "documentation":"<p>The actual value of the field that needs to be sorted.</p>"
+        },
+        "DataPathType":{
+          "shape":"DataPathType",
+          "documentation":"<p>The type configuration of the field.</p>"
         }
       },
       "documentation":"<p>The data path that needs to be sorted.</p>"
@@ -9378,7 +9439,15 @@
         },
         "DatabricksParameters":{
           "shape":"DatabricksParameters",
-          "documentation":"<p>The required parameters that are needed to connect to a Databricks data source.</p>"
+          "documentation":"<p>The parameters that are required to connect to a Databricks data source.</p>"
+        },
+        "StarburstParameters":{
+          "shape":"StarburstParameters",
+          "documentation":"<p>The parameters that are required to connect to a Starburst data source.</p>"
+        },
+        "TrinoParameters":{
+          "shape":"TrinoParameters",
+          "documentation":"<p>The parameters that are required to connect to a Trino data source.</p>"
         }
       },
       "documentation":"<p>The parameters that Amazon QuickSight uses to connect to your underlying data source. This is a variant type structure. For this structure to be valid, only one of the attributes can be non-null.</p>"
@@ -9525,7 +9594,7 @@
           "documentation":"<p>The HTTP path of the Databricks data source.</p>"
         }
       },
-      "documentation":"<p>The required parameters that are needed to connect to a Databricks data source.</p>"
+      "documentation":"<p>The parameters that are required to connect to a Databricks data source.</p>"
     },
     "DatasetMetadata":{
       "type":"structure",
@@ -9888,6 +9957,18 @@
       "max":17,
       "min":1,
       "pattern":"^(?:LAST_DAY_OF_MONTH|1[0-9]|2[0-8]|[12]|[3-9])$"
+    },
+    "DayOfTheWeek":{
+      "type":"string",
+      "enum":[
+        "SUNDAY",
+        "MONDAY",
+        "TUESDAY",
+        "WEDNESDAY",
+        "THURSDAY",
+        "FRIDAY",
+        "SATURDAY"
+      ]
     },
     "DayOfWeek":{
       "type":"string",
@@ -14529,6 +14610,11 @@
       },
       "documentation":"<p>A folder in Amazon QuickSight.</p>"
     },
+    "FolderArnList":{
+      "type":"list",
+      "member":{"shape":"Arn"},
+      "max":1
+    },
     "FolderColumnList":{
       "type":"list",
       "member":{"shape":"String"},
@@ -14634,7 +14720,10 @@
     },
     "FolderType":{
       "type":"string",
-      "enum":["SHARED"]
+      "enum":[
+        "SHARED",
+        "RESTRICTED"
+      ]
     },
     "Font":{
       "type":"structure",
@@ -16686,6 +16775,10 @@
         "Type":{
           "shape":"InputColumnDataType",
           "documentation":"<p>The data type of the column.</p>"
+        },
+        "SubType":{
+          "shape":"ColumnDataSubType",
+          "documentation":"<p>The sub data type of the column. Sub types are only available for decimal columns that are part of a SPICE dataset.</p>"
         }
       },
       "documentation":"<p>Metadata for a column that is used as the input of a transform operation.</p>"
@@ -20283,7 +20376,7 @@
       "members":{
         "Name":{
           "shape":"ColumnName",
-          "documentation":"<p>A display name for the dataset.</p>"
+          "documentation":"<p>The display name of the column..</p>"
         },
         "Description":{
           "shape":"ColumnDescriptiveText",
@@ -20291,7 +20384,11 @@
         },
         "Type":{
           "shape":"ColumnDataType",
-          "documentation":"<p>The type.</p>"
+          "documentation":"<p>The data type of the column.</p>"
+        },
+        "SubType":{
+          "shape":"ColumnDataSubType",
+          "documentation":"<p>The sub data type of the column.</p>"
         }
       },
       "documentation":"<p>Output column.</p>"
@@ -21217,6 +21314,15 @@
       "member":{"shape":"PivotTableDataPathOption"},
       "max":100
     },
+    "PivotTableDataPathType":{
+      "type":"string",
+      "enum":[
+        "HIERARCHY_ROWS_LAYOUT_COLUMN",
+        "MULTIPLE_ROW_METRICS_COLUMN",
+        "EMPTY_COLUMN_HEADER",
+        "COUNT_METRIC_COLUMN"
+      ]
+    },
     "PivotTableDimensionList":{
       "type":"list",
       "member":{"shape":"DimensionField"},
@@ -21553,6 +21659,10 @@
         "MetricHeaderCellStyle":{
           "shape":"TableCellStyle",
           "documentation":"<p>The cell styling options for the total of header cells.</p>"
+        },
+        "TotalAggregationOptions":{
+          "shape":"TotalAggregationOptionList",
+          "documentation":"<p>The total aggregation options for each value field.</p>"
         }
       },
       "documentation":"<p>The optional configuration of totals cells in a <code>PivotTableVisual</code>.</p>"
@@ -22158,7 +22268,11 @@
         },
         "AxisBinding":{
           "shape":"AxisBinding",
-          "documentation":"<p>The axis binding type of the reference line. Choose one of the following options:</p> <ul> <li> <p>PrimaryY</p> </li> <li> <p>SecondaryY</p> </li> </ul>"
+          "documentation":"<p>The axis binding type of the reference line. Choose one of the following options:</p> <ul> <li> <p> <code>PrimaryY</code> </p> </li> <li> <p> <code>SecondaryY</code> </p> </li> </ul>"
+        },
+        "SeriesType":{
+          "shape":"ReferenceLineSeriesType",
+          "documentation":"<p>The series type of the reference line data configuration. Choose one of the following options:</p> <ul> <li> <p> <code>BAR</code> </p> </li> <li> <p> <code>LINE</code> </p> </li> </ul>"
         }
       },
       "documentation":"<p>The data configuration of the reference line.</p>"
@@ -22241,6 +22355,13 @@
         "SOLID",
         "DASHED",
         "DOTTED"
+      ]
+    },
+    "ReferenceLineSeriesType":{
+      "type":"string",
+      "enum":[
+        "BAR",
+        "LINE"
       ]
     },
     "ReferenceLineStaticDataConfiguration":{
@@ -24482,6 +24603,17 @@
         "MEDIAN"
       ]
     },
+    "SimpleTotalAggregationFunction":{
+      "type":"string",
+      "enum":[
+        "DEFAULT",
+        "SUM",
+        "AVERAGE",
+        "MIN",
+        "MAX",
+        "NONE"
+      ]
+    },
     "SiteBaseUrl":{
       "type":"string",
       "max":1024,
@@ -24954,6 +25086,40 @@
         }
       },
       "documentation":"<p>Secure Socket Layer (SSL) properties that apply when Amazon QuickSight connects to your underlying data source.</p>"
+    },
+    "StarburstParameters":{
+      "type":"structure",
+      "required":[
+        "Host",
+        "Port",
+        "Catalog"
+      ],
+      "members":{
+        "Host":{
+          "shape":"Host",
+          "documentation":"<p>The host name of the Starburst data source.</p>"
+        },
+        "Port":{
+          "shape":"Port",
+          "documentation":"<p>The port for the Starburst data source.</p>"
+        },
+        "Catalog":{
+          "shape":"Catalog",
+          "documentation":"<p>The catalog name for the Starburst data source.</p>"
+        },
+        "ProductType":{
+          "shape":"StarburstProductType",
+          "documentation":"<p>The product type for the Starburst data source.</p>"
+        }
+      },
+      "documentation":"<p>The parameters that are required to connect to a Starburst data source.</p>"
+    },
+    "StarburstProductType":{
+      "type":"string",
+      "enum":[
+        "GALAXY",
+        "ENTERPRISE"
+      ]
     },
     "StartAssetBundleExportJobRequest":{
       "type":"structure",
@@ -26207,7 +26373,8 @@
         "Sheets":{
           "shape":"SheetList",
           "documentation":"<p>A list of the associated sheets with the unique identifier and name of each sheet.</p>"
-        }
+        },
+        "Options":{"shape":"AssetOptions"}
       },
       "documentation":"<p>A version of a template.</p>"
     },
@@ -26239,7 +26406,11 @@
           "shape":"ColumnConfigurationList",
           "documentation":"<p> An array of template-level column configurations. Column configurations are used to set default formatting for a column that's used throughout a template. </p>"
         },
-        "AnalysisDefaults":{"shape":"AnalysisDefaults"}
+        "AnalysisDefaults":{"shape":"AnalysisDefaults"},
+        "Options":{
+          "shape":"AssetOptions",
+          "documentation":"<p>An array of option definitions for a template.</p>"
+        }
       },
       "documentation":"<p>The detailed definition of a template.</p>"
     },
@@ -26697,15 +26868,19 @@
         },
         "Value":{
           "shape":"Timestamp",
-          "documentation":"<p>The value of a <code>TimeEquality</code> filter.</p> <p>This field is mutually exclusive to <code>ParameterName</code>.</p>"
+          "documentation":"<p>The value of a <code>TimeEquality</code> filter.</p> <p>This field is mutually exclusive to <code>RollingDate</code> and <code>ParameterName</code>.</p>"
         },
         "ParameterName":{
           "shape":"ParameterName",
-          "documentation":"<p>The parameter whose value should be used for the filter value.</p> <p>This field is mutually exclusive to <code>Value</code>.</p>"
+          "documentation":"<p>The parameter whose value should be used for the filter value.</p> <p>This field is mutually exclusive to <code>Value</code> and <code>RollingDate</code>.</p>"
         },
         "TimeGranularity":{
           "shape":"TimeGranularity",
           "documentation":"<p>The level of time precision that is used to aggregate <code>DateTime</code> values.</p>"
+        },
+        "RollingDate":{
+          "shape":"RollingDateConfiguration",
+          "documentation":"<p>The rolling date input for the <code>TimeEquality</code> filter.</p> <p>This field is mutually exclusive to <code>Value</code> and <code>ParameterName</code>.</p>"
         }
       },
       "documentation":"<p>A <code>TimeEqualityFilter</code> filters values that are equal to a given value.</p>"
@@ -27576,6 +27751,39 @@
       },
       "documentation":"<p>The total aggregation computation configuration.</p>"
     },
+    "TotalAggregationFunction":{
+      "type":"structure",
+      "members":{
+        "SimpleTotalAggregationFunction":{
+          "shape":"SimpleTotalAggregationFunction",
+          "documentation":"<p>A built in aggregation function for total values.</p>"
+        }
+      },
+      "documentation":"<p>An aggregation function that aggregates the total values of a measure.</p>"
+    },
+    "TotalAggregationOption":{
+      "type":"structure",
+      "required":[
+        "FieldId",
+        "TotalAggregationFunction"
+      ],
+      "members":{
+        "FieldId":{
+          "shape":"FieldId",
+          "documentation":"<p>The field id that's associated with the total aggregation option.</p>"
+        },
+        "TotalAggregationFunction":{
+          "shape":"TotalAggregationFunction",
+          "documentation":"<p>The total aggregation function that you want to set for a specified field id.</p>"
+        }
+      },
+      "documentation":"<p>The total aggregation settings map of a field id.</p>"
+    },
+    "TotalAggregationOptionList":{
+      "type":"list",
+      "member":{"shape":"TotalAggregationOption"},
+      "max":200
+    },
     "TotalOptions":{
       "type":"structure",
       "members":{
@@ -27598,6 +27806,10 @@
         "TotalCellStyle":{
           "shape":"TableCellStyle",
           "documentation":"<p>Cell styling options for the total cells.</p>"
+        },
+        "TotalAggregationOptions":{
+          "shape":"TotalAggregationOptionList",
+          "documentation":"<p>The total aggregation settings for each value field.</p>"
         }
       },
       "documentation":"<p>The total options for a table visual.</p>"
@@ -27774,6 +27986,29 @@
         }
       },
       "documentation":"<p>The options that determine the presentation of trend arrows in a KPI visual.</p>"
+    },
+    "TrinoParameters":{
+      "type":"structure",
+      "required":[
+        "Host",
+        "Port",
+        "Catalog"
+      ],
+      "members":{
+        "Host":{
+          "shape":"Host",
+          "documentation":"<p>The host name of the Trino data source.</p>"
+        },
+        "Port":{
+          "shape":"Port",
+          "documentation":"<p>The port for the Trino data source.</p>"
+        },
+        "Catalog":{
+          "shape":"Catalog",
+          "documentation":"<p>The catalog name for the Trino data source.</p>"
+        }
+      },
+      "documentation":"<p>The parameters that are required to connect to a Trino data source.</p>"
     },
     "TwitterParameters":{
       "type":"structure",

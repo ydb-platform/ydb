@@ -197,15 +197,18 @@ private:
             if (stage.SourcesSize() > 0) {
                 switch (stage.GetSources(0).GetTypeCase()) {
                     case NKqpProto::TKqpSource::kReadRangesSource:
-                        BuildScanTasksFromSource(stageInfo, {});
+                        BuildScanTasksFromSource(
+                            stageInfo,
+                            /* shardsResolved */ true,
+                            /* limitTasksPerNode */ false);
                         break;
                     default:
                         YQL_ENSURE(false, "unknown source type");
                 }
             } else if (stageInfo.Meta.ShardOperations.empty()) {
-                BuildComputeTasks(stageInfo, {});
+                BuildComputeTasks(stageInfo);
             } else if (stageInfo.Meta.IsSysView()) {
-                BuildSysViewScanTasks(stageInfo, {});
+                BuildSysViewScanTasks(stageInfo);
             } else if (stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()) {
                 HasOlapTable = true;
                 BuildScanTasksFromShards(stageInfo);
@@ -292,10 +295,11 @@ private:
     }
 
 public:
-    void Finalize() {
+
+    void FillResponseStats(Ydb::StatusIds::StatusCode status) {
         auto& response = *ResponseEv->Record.MutableResponse();
 
-        response.SetStatus(Ydb::StatusIds::SUCCESS);
+        response.SetStatus(status);
 
         if (Stats) {
             ReportEventElapsedTime();
@@ -303,12 +307,23 @@ public:
             Stats->FinishTs = TInstant::Now();
             Stats->Finish();
 
-            if (CollectFullStats(Request.StatsMode)) {
+            if (Stats->CollectStatsByLongTasks || CollectFullStats(Request.StatsMode)) {
                 const auto& tx = Request.Transactions[0].Body;
                 auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
                 response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
             }
+
+            if (Stats->CollectStatsByLongTasks) {
+                const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
+                if (!txPlansWithStats.empty()) {
+                    LOG_N("Full stats: " << txPlansWithStats);
+                }
+            }
         }
+    }
+
+    void Finalize() {
+        FillResponseStats(Ydb::StatusIds::SUCCESS);
 
         LWTRACK(KqpScanExecuterFinalize, ResponseEv->Orbit, TxId, LastTaskId, LastComputeActorId, ResponseEv->ResultsSize());
 

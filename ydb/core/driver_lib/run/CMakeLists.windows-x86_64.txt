@@ -69,6 +69,7 @@ target_link_libraries(run PUBLIC
   ydb-core-kafka_proxy
   ydb-core-kqp
   core-kqp-federated_query
+  core-kqp-finalize_script_service
   core-kqp-rm_service
   ydb-core-load_test
   ydb-core-local_pgwire
@@ -89,6 +90,7 @@ target_link_libraries(run PUBLIC
   ydb-core-scheme_types
   ydb-core-security
   ydb-core-statistics
+  core-statistics-aggregator
   core-sys_view-processor
   core-sys_view-service
   ydb-core-tablet

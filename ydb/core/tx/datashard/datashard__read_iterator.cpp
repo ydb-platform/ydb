@@ -7,6 +7,8 @@
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 
+#include <library/cpp/actors/core/monotonic_provider.h>
+
 #include <util/system/hp_timer.h>
 
 #include <utility>
@@ -44,48 +46,6 @@ private:
     std::unique_ptr<IBlockBuilder> Clone() const override {
         return nullptr;
     }
-};
-
-class TCellsStorage
-{
-public:
-    TCellsStorage() = default;
-
-    void Reset(TArrayRef<const TCell> cells)
-    {
-        size_t CellsSize = cells.size();
-        Cells.resize(CellsSize);
-
-        size_t cellsDataSize = 0;
-        for (size_t i = 0; i < CellsSize; ++i) {
-            auto cell = cells[i];
-            Cells[i] = cell;
-
-            if (!cell.IsNull() && !cell.IsInline() && cell.Size() != 0) {
-                cellsDataSize += cell.Size();
-            }
-        }
-
-        CellsData.resize(cellsDataSize);
-        char *cellsData = CellsData.data();
-
-        for (size_t i = 0; i < CellsSize; ++i) {
-            auto cell = Cells[i];
-
-            if (!cell.IsNull() && !cell.IsInline() && cell.Size() != 0) {
-                memcpy(cellsData, cell.Data(), cell.Size());
-                Cells[i] = TCell(cellsData, cell.Size());
-                cellsData += cell.Size();
-            }
-        }
-    }
-
-    TArrayRef<const TCell> GetCells() const {
-        return Cells;
-    }
-private:
-    TSmallVec<TCell> Cells;
-    std::vector<char> CellsData;
 };
 
 class TCellBlockBuilder : public IBlockBuilder {
@@ -238,10 +198,10 @@ std::pair<std::unique_ptr<IBlockBuilder>, TString> CreateBlockBuilder(
     }
 
     switch (state.Format) {
-    case NKikimrTxDataShard::ARROW:
+    case NKikimrDataEvents::FORMAT_ARROW:
         blockBuilder.reset(new NArrow::TArrowBatchBuilder());
         break;
-    case NKikimrTxDataShard::CELLVEC:
+    case NKikimrDataEvents::FORMAT_CELLVEC:
         blockBuilder.reset(new TCellBlockBuilder());
         break;
     default:
@@ -721,12 +681,12 @@ public:
             }
 
             switch (State.Format) {
-            case NKikimrTxDataShard::ARROW: {
+            case NKikimrDataEvents::FORMAT_ARROW: {
                 auto& arrowBuilder = static_cast<NArrow::TArrowBatchBuilder&>(BlockBuilder);
                 result.SetArrowBatch(arrowBuilder.FlushBatch(false));
                 break;
             }
-            case NKikimrTxDataShard::CELLVEC: {
+            case NKikimrDataEvents::FORMAT_CELLVEC: {
                 auto& cellBuilder = static_cast<TCellBlockBuilder&>(BlockBuilder);
                 TOwnedCellVecBatch batch;
                 cellBuilder.FlushBatch(batch);
@@ -1869,7 +1829,7 @@ private:
         auto locks = sysLocks.ApplyLocks();
 
         for (auto& lock : locks) {
-            NKikimrTxDataShard::TLock* addLock;
+            NKikimrDataEvents::TLock* addLock;
             if (lock.IsError()) {
                 addLock = Result->Record.AddBrokenTxLocks();
             } else {
@@ -2103,7 +2063,7 @@ public:
                             ctx.SelfID.NodeId());
                         return true;
                     }
-                    if (record.GetResultFormat() != NKikimrTxDataShard::CELLVEC) {
+                    if (record.GetResultFormat() != NKikimrDataEvents::FORMAT_CELLVEC) {
                         ReplyError(
                             Ydb::StatusIds::UNSUPPORTED,
                             TStringBuilder() << "Unsupported result format "
@@ -2446,7 +2406,7 @@ public:
             }
 
             if (isBroken) {
-                NKikimrTxDataShard::TLock *addLock = record.AddBrokenTxLocks();
+                NKikimrDataEvents::TLock *addLock = record.AddBrokenTxLocks();
                 addLock->SetLockId(state.Lock->GetLockId());
                 addLock->SetDataShard(Self->TabletID());
                 addLock->SetGeneration(state.Lock->GetGeneration());

@@ -437,7 +437,7 @@ struct TEvDataShard {
             const TStringBuf& txBody, ui32 flags = NDataShard::TTxFlags::Default)
         {
             Record.SetTxKind(txKind);
-            ActorIdToProto(source, Record.MutableSource());
+            ActorIdToProto(source, Record.MutableSourceDeprecated());
             Record.SetTxId(txId);
             Record.SetExecLevel(0);
             Record.SetTxBody(txBody.data(), txBody.size());
@@ -479,10 +479,6 @@ struct TEvDataShard {
 
         NKikimrTxDataShard::ETransactionKind GetTxKind() const {
             return Record.GetTxKind();
-        }
-
-        TActorId GetSource() const {
-            return ActorIdFromProto(Record.GetSource());
         }
 
         ui64 GetTxId() const {

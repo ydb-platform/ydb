@@ -1,5 +1,7 @@
 #pragma once
 
+#include "public.h"
+
 #include <yt/yt/client/api/public.h>
 #include <yt/yt/client/api/rpc_proxy/config.h>
 #include <yt/yt/client/api/rpc_proxy/connection.h>
@@ -10,20 +12,13 @@ namespace NYT::NClient::NCache {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TConfig;
-class TClustersConfig;
-
-////////////////////////////////////////////////////////////////////////////////
-
-//! Cache of  clients per cluster.
-class IClientsCache
+//! Cache of clients per cluster.
+struct IClientsCache
     : public TRefCounted
 {
-public:
     virtual NApi::IClientPtr GetClient(TStringBuf clusterUrl) = 0;
 };
 
-DECLARE_REFCOUNTED_TYPE(IClientsCache)
 DEFINE_REFCOUNTED_TYPE(IClientsCache)
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -43,8 +38,7 @@ IClientsCachePtr CreateClientsCache(const NApi::TClientOptions& options);
 //! Shortcut to create cache with default config.
 IClientsCachePtr CreateClientsCache();
 
-
-//! Helper function to create one cluster config from cluster url and clusters config
+//! Helper function to create one cluster config from cluster URL and clusters config.
 TConfig MakeClusterConfig(const TClustersConfig& config, TStringBuf clusterUrl);
 
 ////////////////////////////////////////////////////////////////////////////////

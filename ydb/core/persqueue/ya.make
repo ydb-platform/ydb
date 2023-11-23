@@ -15,6 +15,7 @@ SRCS(
     partition_init.cpp
     partition_monitoring.cpp
     partition_read.cpp
+    partition_sourcemanager.cpp
     partition_write.cpp
     partition.cpp
     percentile_counter.cpp

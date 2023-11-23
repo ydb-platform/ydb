@@ -25,13 +25,11 @@
 // TODO: limit number of messages per second
 // TODO: make TLogComponentLevelRequest/Response network messages
 
-#define IS_LOG_PRIORITY_ENABLED(priority, component)                           \
-    (NActors::TlsActivationContext ? (static_cast<::NActors::NLog::TSettings*>((*NActors::TlsActivationContext).LoggerSettings()) &&            \
-     static_cast<::NActors::NLog::TSettings*>((*NActors::TlsActivationContext).LoggerSettings())->Satisfies(   \
-             static_cast<::NActors::NLog::EPriority>(priority),                                  \
-             static_cast<::NActors::NLog::EComponent>(component),                                \
-             0ull)                                                                               \
-    ) : true)
+#define IS_LOG_PRIORITY_ENABLED(priority, component) \
+    [p = static_cast<::NActors::NLog::EPriority>(priority), c = static_cast<::NActors::NLog::EComponent>(component)]() -> bool { \
+        ::NActors::TActivationContext *context = ::NActors::TlsActivationContext; \
+        return !context || context->LoggerSettings()->Satisfies(p, c, 0ull); \
+    }()
 
 #define IS_EMERG_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_EMERG, component)
 #define IS_ALERT_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_ALERT, component)
@@ -516,13 +514,7 @@ namespace NActors {
             return *this;
         }
 
-        ~TFormattedRecordWriter() {
-            if (ActorContext) {
-                ::NActors::MemLogAdapter(*ActorContext, Priority, Component, TBase::GetResult());
-            } else {
-                Cerr << "FALLBACK_ACTOR_LOGGING;priority=" << Priority << ";component=" << Component << ";" << TBase::GetResult() << Endl;
-            }
-        }
+        ~TFormattedRecordWriter();
     };
 
     class TVerifyFormattedRecordWriter: public TFormatedStreamWriter {
@@ -541,9 +533,27 @@ namespace NActors {
 
         ~TVerifyFormattedRecordWriter();
     };
+
+    class TEnsureFormattedRecordWriter: public TFormatedStreamWriter {
+    private:
+        using TBase = TFormatedStreamWriter;
+        const TString ConditionText;
+    public:
+
+        TEnsureFormattedRecordWriter(const TString& conditionText);
+
+        template <class TKey, class TValue>
+        TEnsureFormattedRecordWriter& operator()(const TKey& pName, const TValue& pValue) {
+            TBase::Write(pName, pValue);
+            return *this;
+        }
+
+        ~TEnsureFormattedRecordWriter() noexcept(false);
+    };
 }
 
 #define AFL_VERIFY(condition) if (condition); else NActors::TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
+#define AFL_ENSURE(condition) if (condition); else NActors::TEnsureFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
 
 #ifndef NDEBUG
 /// Assert that depend on NDEBUG macro and outputs message like printf

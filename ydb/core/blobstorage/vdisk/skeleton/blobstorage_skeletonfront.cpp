@@ -14,6 +14,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/skeleton_events.h>
 #include <ydb/core/blobstorage/vdisk/scrub/scrub_actor.h>
+#include <ydb/core/blobstorage/vdisk/repl/blobstorage_repl.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_server.h>
 
@@ -906,6 +907,57 @@ namespace NKikimr {
                                     TABLED() {str << "Read only";}
                                     TABLED() {str << (Config->BaseInfo.ReadOnly ? "True" : "False");}
                                 }
+                                std::vector<std::pair<TString, TString>> rows;
+                                TABLER() {
+                                    TABLED() { str << "Replication"; };
+                                    TABLED() {
+                                        if (ReplMonGroup.ReplUnreplicatedVDisks()) {
+                                            THtmlLightSignalRenderer(NKikimrWhiteboard::Yellow, "Ongoing").Output(str);
+                                            str << "&emsp;<a href=\"?repl=1&maxRows=1000\">inspect problem blobs</a>";
+
+                                            ui64 n = ReplMonGroup.ReplSecondsRemaining();
+                                            TString time;
+                                            time = TStringBuilder() << n % 60 << "s";
+                                            n /= 60;
+                                            if (n) {
+                                                time = TStringBuilder() << n % 60 << "m" << time;
+                                                n /= 60;
+                                                if (n) {
+                                                    time = TStringBuilder() << n << "h" << time;
+                                                }
+                                            }
+
+                                            rows.emplace_back("&emsp;Replication time remaining", time);
+                                            rows.emplace_back("&emsp;Blobs", TStringBuilder()
+                                                << ReplMonGroup.ReplItemsDone() << " processed after VDisk start<br/>"
+                                                << ReplMonGroup.ReplItemsRemaining() << " to go");
+                                            const ui64 blobsWithProblems = ReplMonGroup.ReplTotalBlobsWithProblems();
+                                            const ui64 phantoms = ReplMonGroup.ReplPhantomBlobsWithProblems();
+                                            rows.emplace_back("&emsp;Blobs with problems", TStringBuilder()
+                                                << blobsWithProblems);
+                                            rows.emplace_back("&emsp;Phantom-like blobs among them", TStringBuilder()
+                                                << phantoms);
+
+                                            TStringStream s;
+                                            if (blobsWithProblems == 0) {
+                                                THtmlLightSignalRenderer(NKikimrWhiteboard::Green, "ongoing normally").Output(s);
+                                            } else if (blobsWithProblems == phantoms) {
+                                                THtmlLightSignalRenderer(NKikimrWhiteboard::Yellow, "phantoms only").Output(s);
+                                            } else {
+                                                THtmlLightSignalRenderer(NKikimrWhiteboard::Yellow, "problems were encountered").Output(s);
+                                            }
+                                            rows.emplace_back("&emsp;Conclusion", s.Str());
+                                        } else {
+                                            THtmlLightSignalRenderer(NKikimrWhiteboard::Green, "Finished").Output(str);
+                                        }
+                                    }
+                                }
+                                for (const auto& [key, value] : rows) {
+                                    TABLER() {
+                                        TABLED() { str << key; }
+                                        TABLED() { str << value; }
+                                    }
+                                }
                                 if (VDiskMonGroup.VDiskState() == NKikimrWhiteboard::PDiskError) {
                                     TABLER() {
                                         TABLED() {str << "Error Details";}
@@ -1542,9 +1594,13 @@ namespace NKikimr {
             const TString& type = cgi.Get("type");
             TString html = (type == TString()) ? GenerateHtmlState(ctx) : TString();
 
-            auto aid = ctx.Register(CreateFrontSkeletonMonRequestHandler(SelfVDiskId, ctx.SelfID, SkeletonId,
-                ctx.SelfID, Config, Top, ev, html, VDiskMonGroup));
-            ActiveActors.Insert(aid);
+            if (cgi.Has("repl")) {
+                ActiveActors.Insert(ctx.Register(CreateReplMonRequestHandler(SkeletonId, SelfVDiskId, Top, ev)));
+            } else {
+                auto aid = ctx.Register(CreateFrontSkeletonMonRequestHandler(SelfVDiskId, ctx.SelfID, SkeletonId,
+                    ctx.SelfID, Config, Top, ev, html, VDiskMonGroup));
+                ActiveActors.Insert(aid);
+            }
         }
 
         void Handle(TEvVDiskStatRequest::TPtr &ev) {

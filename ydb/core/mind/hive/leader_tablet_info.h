@@ -3,6 +3,7 @@
 #include "hive.h"
 #include "tablet_info.h"
 #include "follower_tablet_info.h"
+#include <ydb/core/base/channel_profiles.h>
 
 namespace NKikimr {
 namespace NHive {

@@ -4796,6 +4796,10 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
     map["UnionAll"] = std::bind(&ExpandUnionAll<false>, _1, _2, _3);
     map["UnionMerge"] = std::bind(&ExpandUnionAll<true>, _1, _2, _3);
+    map["Union"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content();
+        return ctx.NewCallable(node->Pos(), "SqlAggregateAll", { ctx.NewCallable(node->Pos(), "UnionAll", node->ChildrenList()) });
+    };
 
     map["Aggregate"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         TCoAggregate self(node);
@@ -6118,6 +6122,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
 
         return ExpandPositionalUnionAll(*node, columnOrders, node->ChildrenList(), ctx, optCtx);
+    };
+
+    map["UnionPositional"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content();
+        return ctx.NewCallable(node->Pos(), "SqlAggregateAll", { ctx.NewCallable(node->Pos(), "UnionAllPositional", node->ChildrenList()) });
     };
 
     map["MapJoinCore"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {

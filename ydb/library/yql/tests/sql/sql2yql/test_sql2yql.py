@@ -9,7 +9,7 @@ def pytest_generate_tests(metafunc):
     return pytest_generate_tests_by_template('.sql', metafunc)
 
 
-def get_sql2yql_cmd(suite, case, case_file, out_dir, ansi_lexer, test_format):
+def get_sql2yql_cmd(suite, case, case_file, out_dir, ansi_lexer, test_format, test_double_format):
     cmd = [
         SQLRUN_PATH,
         case_file,
@@ -21,6 +21,8 @@ def get_sql2yql_cmd(suite, case, case_file, out_dir, ansi_lexer, test_format):
     if test_format:
         cmd.append('--test-format')
         cmd.append('--format-output=%s' % os.path.join(out_dir, 'formatted.sql'))
+        if test_double_format:
+            cmd.append('--test-double-format')
     else:
         cmd.append('--yql')
         cmd.append('--output=%s' % os.path.join(out_dir, 'sql.yql'))
@@ -51,7 +53,7 @@ def test(suite, case, tmpdir):
     with open(case_file, 'r') as f:
         content = f.read()
         ansi_lexer = 'ansi_lexer' in content
-    cmd = get_sql2yql_cmd(suite, case, case_file, out_dir, ansi_lexer, test_format=False)
+    cmd = get_sql2yql_cmd(suite, case, case_file, out_dir, ansi_lexer, test_format=False, test_double_format=False)
     yatest.common.process.execute(cmd, env={'YQL_DETERMINISTIC_MODE': '1'})
     files.append(os.path.join(out_dir, 'sql.yql'))
 

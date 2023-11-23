@@ -131,6 +131,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
     settings.Syntax = GetSyntax();
+    settings.IsPrepareQuery = GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE;
 
     bool keepInCache = false;
     switch (GetAction()) {

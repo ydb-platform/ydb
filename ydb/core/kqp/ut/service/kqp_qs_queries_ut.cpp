@@ -3,6 +3,7 @@
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
 
 #include <ydb/core/kqp/counters/kqp_counters.h>
@@ -172,6 +173,132 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key";
         auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         CheckQueryResult(result);
+    }
+
+    Y_UNIT_TEST(ExecuteQueryExplicitBeginCommitRollback) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+        auto sessionResult = db.GetSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), EStatus::SUCCESS, sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+
+        {
+            auto beginTxResult = session.BeginTransaction(TTxSettings::OnlineRO()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(beginTxResult.GetStatus(), EStatus::BAD_REQUEST, beginTxResult.GetIssues().ToString());
+            UNIT_ASSERT(beginTxResult.GetIssues());
+        }
+
+        {
+            auto beginTxResult = session.BeginTransaction(TTxSettings::SerializableRW()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(beginTxResult.GetStatus(), EStatus::SUCCESS, beginTxResult.GetIssues().ToString());
+
+            auto transaction = beginTxResult.GetTransaction();
+            auto commitTxResult = transaction.Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(commitTxResult.GetStatus(), EStatus::SUCCESS, commitTxResult.GetIssues().ToString());
+
+            auto rollbackTxResult = transaction.Rollback().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(rollbackTxResult.GetStatus(), EStatus::NOT_FOUND, rollbackTxResult.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ExecuteQueryExplicitTxTLI) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+        auto sessionResult = db.GetSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), EStatus::SUCCESS, sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+
+        auto beginTxResult = session.BeginTransaction(TTxSettings::SerializableRW()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(beginTxResult.GetStatus(), EStatus::SUCCESS, beginTxResult.GetIssues().ToString());
+        auto transaction = beginTxResult.GetTransaction();
+        UNIT_ASSERT(transaction.IsActive());
+
+        {
+            const TString query = "UPDATE TwoShard SET Value2 = 0";
+            auto result = transaction.GetSession().ExecuteQuery(query, TTxControl::Tx(transaction.GetId())).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+
+            const TString query = "UPDATE TwoShard SET Value2 = 1";
+            auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto commitTxResult = transaction.Commit().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commitTxResult.GetStatus(), EStatus::ABORTED, commitTxResult.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ExecuteQueryInteractiveTx) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+        auto sessionResult = db.GetSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), EStatus::SUCCESS, sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+
+        const TString query = "UPDATE TwoShard SET Value2 = 0";
+        auto result = session.ExecuteQuery(query, TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto transaction = result.GetTransaction();
+        UNIT_ASSERT(transaction->IsActive());
+
+        auto checkResult = [&](TString expected) {
+            auto selectRes = db.ExecuteQuery(
+                "SELECT * FROM TwoShard ORDER BY Key",
+                TTxControl::BeginTx().CommitTx()
+            ).ExtractValueSync();
+
+            UNIT_ASSERT_C(selectRes.IsSuccess(), selectRes.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(selectRes.GetResultSet(0)));
+        };
+        checkResult(R"([[[1u];["One"];[-1]];[[2u];["Two"];[0]];[[3u];["Three"];[1]];[[4000000001u];["BigOne"];[-1]];[[4000000002u];["BigTwo"];[0]];[[4000000003u];["BigThree"];[1]]])");
+
+        auto txRes = transaction->Commit().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(txRes.GetStatus(), EStatus::SUCCESS, txRes.GetIssues().ToString());
+
+        checkResult(R"([[[1u];["One"];[0]];[[2u];["Two"];[0]];[[3u];["Three"];[0]];[[4000000001u];["BigOne"];[0]];[[4000000002u];["BigTwo"];[0]];[[4000000003u];["BigThree"];[0]]])");
+    }
+
+    Y_UNIT_TEST(ExecuteQueryInteractiveTxCommitWithQuery) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+        auto sessionResult = db.GetSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), EStatus::SUCCESS, sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+
+        const TString query = "UPDATE TwoShard SET Value2 = 0";
+        auto result = session.ExecuteQuery(query, TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto transaction = result.GetTransaction();
+        UNIT_ASSERT(transaction->IsActive());
+
+        auto checkResult = [&](TString expected) {
+            auto selectRes = db.ExecuteQuery(
+                "SELECT * FROM TwoShard ORDER BY Key",
+                TTxControl::BeginTx().CommitTx()
+            ).ExtractValueSync();
+
+            UNIT_ASSERT_C(selectRes.IsSuccess(), selectRes.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(selectRes.GetResultSet(0)));
+        };
+        checkResult(R"([[[1u];["One"];[-1]];[[2u];["Two"];[0]];[[3u];["Three"];[1]];[[4000000001u];["BigOne"];[-1]];[[4000000002u];["BigTwo"];[0]];[[4000000003u];["BigThree"];[1]]])");
+
+        result = session.ExecuteQuery("UPDATE TwoShard SET Value2 = 1 WHERE Key = 1",
+            TTxControl::Tx(transaction->GetId()).CommitTx()).ExtractValueSync();;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(!result.GetTransaction()->IsActive());
+
+        checkResult(R"([[[1u];["One"];[1]];[[2u];["Two"];[0]];[[3u];["Three"];[0]];[[4000000001u];["BigOne"];[0]];[[4000000002u];["BigTwo"];[0]];[[4000000003u];["BigThree"];[0]]])");
+    }
+
+
+    Y_UNIT_TEST(ForbidInteractiveTxOnImplicitSession) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        const TString query = "SELECT 1";
+        UNIT_ASSERT_EXCEPTION(db.ExecuteQuery(query, TTxControl::BeginTx()).ExtractValueSync(), NYdb::TContractViolation);
     }
 
     Y_UNIT_TEST(ExecuteRetryQuery) {

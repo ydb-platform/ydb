@@ -10,6 +10,7 @@ struct TRunSettings {
     const bool PkOverlap;
     const bool IndexOverlap;
     const bool WithDataColumn;
+    const bool UniqIndex;
 };
 
 static const TString TABLE_PATH = "Root/TestIdx";
@@ -18,6 +19,7 @@ static void RunTest(ui32 shardsCount, ui32 rowsCount, ui32 indexCount, const TRu
     bool pkOverlap = settings.PkOverlap;
     bool indexOverlap = settings.IndexOverlap;
     bool withDataColumn = settings.WithDataColumn;
+    bool uniqIndex = settings.UniqIndex;
 
     TKikimrRunner kikimr(SyntaxV1Settings());
 
@@ -42,12 +44,25 @@ static void RunTest(ui32 shardsCount, ui32 rowsCount, ui32 indexCount, const TRu
     for (ui32 i = 0; i < indexCount; i++) {
         TStringStream ss;
         ss << "index_" << i;
-        builder.AddNullableColumn(ss.Str(), EPrimitiveType::Utf8);
+        if (uniqIndex && i == 0) {
+            builder.AddNullableColumn(ss.Str(), EPrimitiveType::Int8);
+        } else {
+            builder.AddNullableColumn(ss.Str(), EPrimitiveType::Utf8);
+        }
+
 
         if (!pkOverlap) {
-            builder.AddSecondaryIndex(ss.Str() + "_name", TVector<TString>{ss.Str()}, dataColumn);
+            if (uniqIndex) {
+                builder.AddUniqueSecondaryIndex(ss.Str() + "_name", TVector<TString>{ss.Str()}, dataColumn);
+            } else {
+                builder.AddSecondaryIndex(ss.Str() + "_name", TVector<TString>{ss.Str()}, dataColumn);
+            }
         } else {
-            builder.AddSecondaryIndex(ss.Str() + "_name", TVector<TString>{ss.Str(), keyColumnName}, dataColumn);
+            if (uniqIndex) {
+                builder.AddUniqueSecondaryIndex(ss.Str() + "_name", TVector<TString>{ss.Str(), keyColumnName}, dataColumn);
+            } else {
+                builder.AddSecondaryIndex(ss.Str() + "_name", TVector<TString>{ss.Str(), keyColumnName}, dataColumn);
+            }
         }
         if (indexOverlap) {
             pks.push_back(ss.Str());
@@ -77,7 +92,26 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
         UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 1000, 1, TRunSettings {
             .PkOverlap = true,
             .IndexOverlap = false,
-            .WithDataColumn = false
+            .WithDataColumn = false,
+            .UniqIndex = false
+        }));
+    }
+
+    Y_UNIT_TEST(MultiShardTableOneUniqIndex) {
+        UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 2000, 1, TRunSettings {
+            .PkOverlap = true,
+            .IndexOverlap = false,
+            .WithDataColumn = false,
+            .UniqIndex = true
+        }));
+    }
+
+    Y_UNIT_TEST(MultiShardTableUniqAndNonUniqIndex) {
+        UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 2000, 2, TRunSettings {
+            .PkOverlap = true,
+            .IndexOverlap = false,
+            .WithDataColumn = false,
+            .UniqIndex = true
         }));
     }
 
@@ -85,7 +119,17 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
         UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 1000, 1, TRunSettings{
             .PkOverlap = true,
             .IndexOverlap = false,
-            .WithDataColumn = true
+            .WithDataColumn = true,
+            .UniqIndex = false
+        }));
+    }
+
+    Y_UNIT_TEST(MultiShardTableOneUniqIndexDataColumn) {
+        UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 2000, 1, TRunSettings {
+            .PkOverlap = true,
+            .IndexOverlap = false,
+            .WithDataColumn = true,
+            .UniqIndex = true
         }));
     }
 
@@ -93,7 +137,8 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
         UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 1000, 1, TRunSettings{
             .PkOverlap = false,
             .IndexOverlap = true,
-            .WithDataColumn = false
+            .WithDataColumn = false,
+            .UniqIndex = false
         }));
     }
 
@@ -101,15 +146,17 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
         UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 1000, 1, TRunSettings{
             .PkOverlap = false,
             .IndexOverlap = true,
-            .WithDataColumn = true
+            .WithDataColumn = true,
+            .UniqIndex = false
         }));
     }
 
     Y_UNIT_TEST(MultiShardTableOneIndexPkOverlap) {
         UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 1000, 1, TRunSettings{
-           .PkOverlap = true,
-           .IndexOverlap = false,
-           .WithDataColumn = false
+            .PkOverlap = true,
+            .IndexOverlap = false,
+            .WithDataColumn = false,
+            .UniqIndex = false
         }));
     }
 
@@ -117,7 +164,8 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
         UNIT_ASSERT_NO_EXCEPTION(RunTest(10, 1000, 2, TRunSettings{
             .PkOverlap = false,
             .IndexOverlap = false,
-            .WithDataColumn = false
+            .WithDataColumn = false,
+            .UniqIndex = false
         }));
     }
 

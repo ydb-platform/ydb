@@ -116,13 +116,16 @@ template <size_t N> struct hash<std::bitset<N>>;
 #include <__assert> // all public C++ headers provide the assertion handler
 #include <__bit_reference>
 #include <__config>
+#include <__functional/hash.h>
 #include <__functional/unary_function.h>
 #include <climits>
 #include <cstddef>
-#include <iosfwd>
 #include <stdexcept>
-#include <string>
 #include <version>
+
+// standard-mandated includes
+#include <iosfwd>
+#include <string>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
@@ -1091,7 +1094,7 @@ operator^(const bitset<_Size>& __x, const bitset<_Size>& __y) _NOEXCEPT
 
 template <size_t _Size>
 struct _LIBCPP_TEMPLATE_VIS hash<bitset<_Size> >
-    : public unary_function<bitset<_Size>, size_t>
+    : public __unary_function<bitset<_Size>, size_t>
 {
     _LIBCPP_INLINE_VISIBILITY
     size_t operator()(const bitset<_Size>& __bs) const _NOEXCEPT

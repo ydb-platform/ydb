@@ -32,6 +32,17 @@ TTxReadBase::PrepareReadMetadata(const NOlap::TReadDescription& read,
 bool TTxReadBase::ParseProgram(NKikimrSchemeOp::EOlapProgramType programType,
     TString serializedProgram, NOlap::TReadDescription& read, const NOlap::IColumnResolver& columnResolver) {
     if (serializedProgram.empty()) {
+        AFL_VERIFY(!read.ColumnIds.size() || !read.ColumnNames.size());
+        NOlap::TProgramContainer container;
+        std::vector<TString> names;
+        for (auto&& i : read.ColumnIds) {
+            names.emplace_back(columnResolver.GetColumnName(i));
+        }
+        for (auto&& i : read.ColumnNames) {
+            names.emplace_back(i);
+        }
+        container.OverrideProcessingColumns(std::vector<TString>(names.begin(), names.end()));
+        read.SetProgram(std::move(container));
         return true;
     }
     NOlap::TProgramContainer ssaProgram;
@@ -41,6 +52,7 @@ bool TTxReadBase::ParseProgram(NKikimrSchemeOp::EOlapProgramType programType,
         return false;
     }
     read.SetProgram(std::move(ssaProgram));
+
     return true;
 }
 

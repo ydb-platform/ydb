@@ -21,8 +21,6 @@ items:
       href: ../troubleshooting/monitoring.md
 - name: Обновление
   href: ../administration/upgrade.md
-# - name: Роллинг рестарт
-#   href: ../administration/rolling-restart.md
 - name: Изменение конфигурации актор-системы
   href: ../maintenance/manual/change_actorsystem_configs.md
 - name: Управление конфигурацией кластера

@@ -13,6 +13,7 @@ struct TListenerSettings {
     TString CertificateFile;
     TString PrivateKeyFile;
     TString SslCertificatePem;
+    TString Address = "::";
 };
 
 enum EErrorAction {

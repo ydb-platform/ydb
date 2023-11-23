@@ -1117,6 +1117,44 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 6);
     }
 
+    Y_UNIT_TEST(GenericQueryNoRowsLimit) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        setting.SetName("_ResultRowsLimit");
+        setting.SetValue("5");
+
+        TKikimrRunner kikimr({setting});
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(Q_(R"(
+            SELECT * FROM `/Root/EightShard` WHERE Text = "Value2";
+        )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        UNIT_ASSERT(!result.GetResultSet(0).Truncated());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 8);
+    }
+
+    Y_UNIT_TEST(GenericQueryNoRowsLimitLotsOfRows) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetQueryClient();
+
+        CreateLargeTable(kikimr, 1000, 10, 10, 5000, 10);
+
+        auto result = db.ExecuteQuery(Q_(R"(
+            SELECT * FROM `/Root/LargeTable`;
+        )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(!result.GetResultSet(0).Truncated());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 10000);
+
+        result = db.ExecuteQuery(Q_(R"(
+            SELECT * FROM `/Root/LargeTable` LIMIT 5000;
+        )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(!result.GetResultSet(0).Truncated());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 5000);
+    }
+
     Y_UNIT_TEST(NoEvaluate) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

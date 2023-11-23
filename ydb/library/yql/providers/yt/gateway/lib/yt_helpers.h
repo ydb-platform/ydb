@@ -21,7 +21,7 @@
 namespace NYql {
 
 class TMkqlIOCache;
-class TExecuteResOrPull;
+class IExecuteResOrPull;
 class TTableLimiter;
 struct TYqlOperationOptions;
 
@@ -41,11 +41,11 @@ void TransferTableAttributes(const NYT::TNode& attributes, const std::function<v
 NYT::TNode FilterYqlAttributes(const NYT::TNode& attributes);
 
 bool IterateYamredRows(NYT::ITransactionPtr tx, const NYT::TRichYPath& table, ui32 tableIndex, TMkqlIOCache& specsCache,
-    TExecuteResOrPull& exec, const TTableLimiter& limiter, const TMaybe<TSampleParams>& sampling = {});
+    IExecuteResOrPull& exec, const TTableLimiter& limiter, const TMaybe<TSampleParams>& sampling = {});
 bool IterateYsonRows(NYT::ITransactionPtr tx, const NYT::TRichYPath& table, ui32 tableIndex, TMkqlIOCache& specsCache,
-    TExecuteResOrPull& exec, const TTableLimiter& limiter, const TMaybe<TSampleParams>& sampling = {});
+    IExecuteResOrPull& exec, const TTableLimiter& limiter, const TMaybe<TSampleParams>& sampling = {});
 bool SelectRows(NYT::IClientPtr client, const TString& table, ui32 tableIndex, TMkqlIOCache& specsCache,
-    TExecuteResOrPull& exec, TTableLimiter& limiter);
+    IExecuteResOrPull& exec, TTableLimiter& limiter);
 
 NYT::TNode YqlOpOptionsToSpec(const TYqlOperationOptions& opOpts, const TString& userName, const TVector<std::pair<TString, TString>>& code = {});
 NYT::TNode YqlOpOptionsToAttrs(const TYqlOperationOptions& opOpts);

@@ -401,11 +401,11 @@ constexpr auto IndexPage = R"EOF(
 <!DOCTYPE html>
 <html>
 <body>
-<a href="sensors">sensors top</a>
+<a href="%vsensors">sensors top</a>
 <br/>
-<a href="tags">tags top</a>
+<a href="%vtags">tags top</a>
 <br/>
-<a href="status">status</a>
+<a href="%vstatus">status</a>
 </body>
 </html>
 )EOF";
@@ -422,7 +422,10 @@ void TSolomonExporter::HandleIndex(const TString& prefix, const IRequestPtr& req
     rsp->SetStatus(EStatusCode::OK);
     rsp->GetHeaders()->Add("Content-Type", "text/html; charset=UTF-8");
 
-    WaitFor(rsp->WriteBody(TSharedRef::FromString(IndexPage)))
+    auto prefixWithSlash = !prefix.empty() ? prefix + "/" : prefix;
+    auto indexPageFormatted = Format(IndexPage, prefixWithSlash, prefixWithSlash, prefixWithSlash);
+
+    WaitFor(rsp->WriteBody(TSharedRef::FromString(indexPageFormatted)))
         .ThrowOnError();
 }
 

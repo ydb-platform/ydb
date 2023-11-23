@@ -66,7 +66,7 @@ i64 TChangeRecord::GetSeqNo() const {
 
 TInstant TChangeRecord::GetApproximateCreationDateTime() const {
     return GetGroup()
-        ? TInstant::FromValue(GetGroup())
+        ? TInstant::MicroSeconds(GetGroup())
         : TInstant::MilliSeconds(GetStep());
 }
 
@@ -105,6 +105,10 @@ void TChangeRecord::Out(IOutputStream& out) const {
 
 TChangeRecordBuilder::TChangeRecordBuilder(EKind kind) {
     Record.Kind = kind;
+}
+
+TChangeRecordBuilder::TChangeRecordBuilder(TChangeRecord&& record) {
+    Record = std::move(record);
 }
 
 TChangeRecordBuilder& TChangeRecordBuilder::WithLockId(ui64 lockId) {

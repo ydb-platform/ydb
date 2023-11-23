@@ -457,7 +457,6 @@ class TExecutor
     ui64 CompactionReadUniqCounter = 0;
 
     bool LogBatchFlushScheduled = false;
-    bool HadFollowerAttached = false;
     bool NeedFollowerSnapshot = false;
 
     mutable bool HadRejectProbabilityByTxInFly = false;
@@ -654,7 +653,8 @@ public:
 
     void AllowBorrowedGarbageCompaction(ui32 tableId) override;
 
-    void FollowerAttached() override;
+    void FollowerAttached(ui32 totalFollowers) override;
+    void FollowerDetached(ui32 totalFollowers) override;
     void FollowerSyncComplete() override;
     void FollowerGcApplied(ui32 step, TDuration followerSyncDelay) override;
     void FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx) override;

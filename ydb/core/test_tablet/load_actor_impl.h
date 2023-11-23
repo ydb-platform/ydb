@@ -79,7 +79,7 @@ namespace NKikimr::NTestShard {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Generic request/response management
 
-        ui32 BytesProcessed = 0;
+        ui64 BytesProcessed = 0;
         ui32 StallCounter = 0;
         ui64 LastCookie = 0;
 

@@ -70,6 +70,7 @@ protected:
     void Handle(TEvTablet::TEvFAuxUpdate::TPtr&);
     void Handle(TEvTablet::TEvFollowerGcApplied::TPtr&);
     void Handle(TEvTablet::TEvNewFollowerAttached::TPtr&);
+    void Handle(TEvTablet::TEvFollowerDetached::TPtr&);
     void Handle(TEvTablet::TEvUpdateConfig::TPtr&);
 
     /**

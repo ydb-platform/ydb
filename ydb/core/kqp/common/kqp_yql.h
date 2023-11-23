@@ -55,6 +55,7 @@ struct TKqpReadTableSettings {
     static constexpr TStringBuf SortedSettingName = "Sorted";
     static constexpr TStringBuf SequentialSettingName = "Sequential";
     static constexpr TStringBuf ForcePrimaryName = "ForcePrimary";
+    static constexpr TStringBuf GroupByFieldNames = "GroupByFieldNames";
 
     TVector<TString> SkipNullKeys;
     TExprNode::TPtr ItemsLimit;
@@ -78,11 +79,15 @@ struct TKqpReadTableSettings {
 
 struct TKqpUpsertRowsSettings {
     static constexpr TStringBuf InplaceSettingName = "Inplace";
+    static constexpr TStringBuf IsUpdateSettingName = "IsUpdate";
 
     bool Inplace = false;
+    bool IsUpdate = false;
 
     void SetInplace() { Inplace = true; }
+    void SetIsUpdate() { IsUpdate = true; }
 
+    static TKqpUpsertRowsSettings Parse(const NNodes::TCoNameValueTupleList& settingsList);
     static TKqpUpsertRowsSettings Parse(const NNodes::TKqpUpsertRows& node);
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 };

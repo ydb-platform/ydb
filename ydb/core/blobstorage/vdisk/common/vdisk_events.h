@@ -21,6 +21,7 @@
 
 #include <ydb/core/util/pb.h>
 
+#include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/digest/multi.h>
@@ -437,7 +438,7 @@ namespace NKikimr {
 
     private:
         const TInstant Start;
-        ui64 Size;
+        ui64 Size = 0;
         ::NMonitoring::TDynamicCounters::TCounterPtr CounterPtr;
         NVDiskMon::TLtcHistoPtr HistoPtr;
         bool Finalized = false;

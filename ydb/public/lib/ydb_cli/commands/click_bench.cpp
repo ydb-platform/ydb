@@ -220,9 +220,9 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
 
     TStringStream report;
     report << "Results for " << IterationsCount << " iterations" << Endl;
-    report << "+---------+----------+---------+---------+----------+---------+---------+---------+---------+" << Endl;
-    report << "| Query # | ColdTime |   Min   |   Max   |   Mean   |   Std   |  RttMin |  RttMax |  RttAvg |" << Endl;
-    report << "+---------+----------+---------+---------+----------+---------+---------+---------+---------+" << Endl;
+    report << "+---------+----------+---------+---------+----------+----------+---------+---------+---------+---------+" << Endl;
+    report << "| Query # | ColdTime |   Min   |   Max   |   Mean   |  Median  |   Std   |  RttMin |  RttMax |  RttAvg |" << Endl;
+    report << "+---------+----------+---------+---------+----------+----------+---------+---------+---------+---------+" << Endl;
 
     NJson::TJsonValue jsonReport(NJson::JSON_ARRAY);
     const bool collectJsonSensors = !JsonReportFileName.empty();
@@ -302,26 +302,26 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
         Y_ABORT_UNLESS(success);
         auto& testInfo = inserted->second;
 
-        report << Sprintf("|   %02u    | %8.3f | %7.3f | %7.3f | %8.3f | %7.3f | %7.3f | %7.3f | %7.3f |", queryN,
+        report << Sprintf("|   %02u    | %8.3f | %7.3f | %7.3f | %8.3f | %8.3f | %7.3f | %7.3f | %7.3f | %7.3f |", queryN,
             testInfo.ColdTime.MilliSeconds() * 0.001, testInfo.Min.MilliSeconds() * 0.001, testInfo.Max.MilliSeconds() * 0.001,
-            testInfo.Mean * 0.001, testInfo.Std * 0.001, testInfo.RttMin.MilliSeconds() * 0.001, testInfo.RttMax.MilliSeconds() * 0.001,
+            testInfo.Mean * 0.001, testInfo.Median * 0.001, testInfo.Std * 0.001, testInfo.RttMin.MilliSeconds() * 0.001, testInfo.RttMax.MilliSeconds() * 0.001,
             testInfo.RttMean * 0.001) << Endl;
         if (collectJsonSensors) {
             jsonReport.AppendValue(GetSensorValue("ColdTime", testInfo.ColdTime, queryN));
             jsonReport.AppendValue(GetSensorValue("Min", testInfo.Min, queryN));
             jsonReport.AppendValue(GetSensorValue("Max", testInfo.Max, queryN));
             jsonReport.AppendValue(GetSensorValue("Mean", testInfo.Mean, queryN));
+            jsonReport.AppendValue(GetSensorValue("Median", testInfo.Median, queryN));
             jsonReport.AppendValue(GetSensorValue("Std", testInfo.Std, queryN));
             jsonReport.AppendValue(GetSensorValue("DiffsCount", diffsCount, queryN));
             jsonReport.AppendValue(GetSensorValue("FailsCount", failsCount, queryN));
             jsonReport.AppendValue(GetSensorValue("SuccessCount", successIteration, queryN));
-
         }
     }
 
     driver.Stop(true);
 
-    report << "+---------+----------+---------+---------+----------+---------+---------+---------+---------+" << Endl;
+    report << "+---------+----------+---------+---------+----------+----------+---------+---------+---------+---------+" << Endl;
 
     Cout << Endl << report.Str() << Endl;
     Cout << "Results saved to " << OutFilePath << Endl;

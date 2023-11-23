@@ -489,7 +489,7 @@ public:
             record.AddColumns(meta.Id);
         }
 
-        record.SetResultFormat(::NKikimrTxDataShard::EScanDataFormat::CELLVEC);
+        record.SetResultFormat(::NKikimrDataEvents::FORMAT_CELLVEC);
 
         for (auto& key : keys) {
             request->Keys.emplace_back(TSerializedCellVec::Serialize(key));
@@ -563,12 +563,11 @@ public:
                     vb.AddMember(colMeta.Name);
                     if (colMeta.Type.GetTypeId() == NScheme::NTypeIds::Pg)
                     {
-                        const auto pgTypeId = NPg::PgTypeIdFromTypeDesc(colMeta.Type.GetTypeDesc());
-                        const NYdb::TPgValue pgValue{
-                            cell.IsNull() ? NYdb::TPgValue::VK_NULL : NYdb::TPgValue::VK_TEXT,
-                            NPg::PgNativeTextFromNativeBinary({cell.AsBuf().data(), cell.AsBuf().size()}, pgTypeId).Str,
-                            getPgTypeFromColMeta(colMeta)
-                        };
+                        const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.Type.GetTypeDesc());
+                        if (pgResult.Error) {
+                            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "PgNativeTextFromNativeBinary error " << *pgResult.Error);
+                        }
+                        const NYdb::TPgValue pgValue{cell.IsNull() ? NYdb::TPgValue::VK_NULL : NYdb::TPgValue::VK_TEXT, pgResult.Str, getPgTypeFromColMeta(colMeta)};
                         vb.Pg(pgValue);
                     }
                     else

@@ -14,7 +14,6 @@ import (
 
 type servicePprof struct {
 	httpServer *http.Server
-	mux        *http.ServeMux
 	logger     log.Logger
 }
 
@@ -41,10 +40,6 @@ func (s *servicePprof) stop() {
 }
 
 func newServicePprof(logger log.Logger, cfg *config.TPprofServerConfig) service {
-	httpServer := &http.Server{
-		Addr: utils.EndpointToString(cfg.Endpoint),
-	}
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
@@ -52,12 +47,16 @@ func newServicePprof(logger log.Logger, cfg *config.TPprofServerConfig) service 
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
+	httpServer := &http.Server{
+		Addr:    utils.EndpointToString(cfg.Endpoint),
+		Handler: mux,
+	}
+
 	// TODO: TLS
 	logger.Warn("server will use insecure connections")
 
 	return &servicePprof{
 		httpServer: httpServer,
 		logger:     logger,
-		mux:        mux,
 	}
 }

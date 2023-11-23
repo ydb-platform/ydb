@@ -10,6 +10,7 @@
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 
@@ -918,7 +919,7 @@ private:
                         }
                         op.Properties["Cluster"] = cluster;
                         AddOperator(stagePlanNode, "Source", op);
-                    } else if (auto settings = source.Settings().Maybe<TS3ParseSettingsBase>(); settings.IsValid()) {
+                    } else if (auto settings = source.Settings().Maybe<TS3ParseSettings>(); settings.IsValid()) {
                         TOperator op;
                         op.Properties["Name"] = S3ProviderName;
                         op.Properties["Format"] = settings.Cast().Format().StringValue();
@@ -1975,9 +1976,8 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
 
         SetNonZero(node, "ComputeTimeUs", taskStats.GetComputeCpuTimeUs());
 
-        SetNonZero(node, "WaitTimeUs", taskStats.GetWaitTimeUs());                   // need to be reviewed
-        SetNonZero(node, "PendingInputTimeUs", taskStats.GetPendingInputTimeUs());   // need to be reviewed
-        SetNonZero(node, "PendingOutputTimeUs", taskStats.GetPendingOutputTimeUs()); // need to be reviewed
+        SetNonZero(node, "WaitInputTimeUs", taskStats.GetWaitInputTimeUs());
+        SetNonZero(node, "WaitOutputTimeUs", taskStats.GetWaitOutputTimeUs());
 
         NKqpProto::TKqpTaskExtraStats taskExtraStats;
         if (taskStats.GetExtra().UnpackTo(&taskExtraStats)) {

@@ -10,12 +10,12 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSetUserPasswordCommand::TSetUserPasswordCommand()
+void TSetUserPasswordCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("user", User_);
-    RegisterParameter("current_password_sha256", CurrentPasswordSha256_)
+    registrar.Parameter("user", &TThis::User_);
+    registrar.Parameter("current_password_sha256", &TThis::CurrentPasswordSha256_)
         .Default();
-    RegisterParameter("new_password_sha256", NewPasswordSha256_);
+    registrar.Parameter("new_password_sha256", &TThis::NewPasswordSha256_);
 }
 
 void TSetUserPasswordCommand::DoExecute(ICommandContextPtr context)
@@ -32,10 +32,10 @@ void TSetUserPasswordCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TIssueTokenCommand::TIssueTokenCommand()
+void TIssueTokenCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("user", User_);
-    RegisterParameter("password_sha256", PasswordSha256_)
+    registrar.Parameter("user", &TThis::User_);
+    registrar.Parameter("password_sha256", &TThis::PasswordSha256_)
         .Default();
 }
 
@@ -52,12 +52,12 @@ void TIssueTokenCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRevokeTokenCommand::TRevokeTokenCommand()
+void TRevokeTokenCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("user", User_);
-    RegisterParameter("password_sha256", PasswordSha256_)
+    registrar.Parameter("user", &TThis::User_);
+    registrar.Parameter("password_sha256", &TThis::PasswordSha256_)
         .Default();
-    RegisterParameter("token_sha256", TokenSha256_);
+    registrar.Parameter("token_sha256", &TThis::TokenSha256_);
 }
 
 void TRevokeTokenCommand::DoExecute(ICommandContextPtr context)
@@ -74,10 +74,10 @@ void TRevokeTokenCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TListUserTokensCommand::TListUserTokensCommand()
+void TListUserTokensCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("user", User_);
-    RegisterParameter("password_sha256", PasswordSha256_)
+    registrar.Parameter("user", &TThis::User_);
+    registrar.Parameter("password_sha256", &TThis::PasswordSha256_)
         .Default();
 }
 

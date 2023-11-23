@@ -380,6 +380,20 @@ struct TEvWhiteboard{
         }
     };
 
+    static TEvSystemStateUpdate *CreateSharedCacheStatsUpdateRequest(ui64 memUsedBytes, ui64 memLimitBytes) {
+        TEvSystemStateUpdate *request = new TEvSystemStateUpdate();
+        auto *pb = request->Record.MutableSharedCacheStats();
+        pb->SetUsedBytes(memUsedBytes);
+        pb->SetLimitBytes(memLimitBytes);
+        return request;
+    }
+
+    static TEvSystemStateUpdate *CreateTotalSessionsUpdateRequest(ui32 totalSessions) {
+        TEvSystemStateUpdate *request = new TEvSystemStateUpdate();
+        request->Record.SetTotalSessions(totalSessions);
+        return request;
+    }
+
     struct TEvSystemStateAddEndpoint : TEventLocal<TEvSystemStateAddEndpoint, EvSystemStateAddEndpoint> {
         TString Name;
         TString Address;

@@ -187,7 +187,7 @@ public:
                 return n;
             }
             TExprBase node(n);
-            if (auto maybeParse = node.Maybe<TS3ParseSettingsBase>()) {
+            if (auto maybeParse = node.Maybe<TS3ParseSettings>()) {
                 auto maybeSettings = maybeParse.Cast().Settings();
                 if (maybeSettings && HasSetting(maybeSettings.Cast().Ref(), "directories")) {
                     needList = true;
@@ -232,7 +232,7 @@ public:
                                 fileSizeLimit = it->second;
                             }
                         }
-                        if (formatName == "parquet" && State_->Configuration->UseBlocksSource.Get().GetOrElse(State_->Types->UseBlocks)) {
+                        if (formatName == "parquet") {
                             fileSizeLimit = State_->Configuration->BlockFileSizeLimit;
                         }
 
@@ -488,14 +488,14 @@ public:
                 .Done();
         }
 
-        const auto parseSettingsBase = dqSource.Input().Maybe<TS3ParseSettingsBase>().Cast();
+        const auto parseSettings = dqSource.Input().Maybe<TS3ParseSettings>().Cast();
 
-        const TStructExprType* readRowType = parseSettingsBase.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+        const TStructExprType* readRowType = parseSettings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
 
         TVector<const TItemExprType*> readRowDataItems = readRowType->GetItems();
         TVector<const TItemExprType*> outputRowDataItems = outputRowType->GetItems();
 
-        if (auto settings = parseSettingsBase.Settings()) {
+        if (auto settings = parseSettings.Settings()) {
             if (auto ps = GetSetting(settings.Cast().Ref(), "partitionedby")) {
                 THashSet<TStringBuf> cols;
                 for (size_t i = 1; i < ps->ChildrenSize(); ++i) {
@@ -508,7 +508,8 @@ public:
             }
         }
 
-        if (outputRowDataItems.size() == 0 && readRowDataItems.size() != 0 && !parseSettingsBase.Maybe<TS3ArrowSettings>()) {
+        auto formatName = parseSettings.Format().StringValue();
+        if (outputRowDataItems.size() == 0 && readRowDataItems.size() != 0 && formatName != "parquet") {
             const TStructExprType* readRowDataType = ctx.MakeType<TStructExprType>(readRowDataItems);
             auto item = GetLightColumn(*readRowDataType);
             YQL_ENSURE(item);
@@ -519,9 +520,8 @@ public:
 
         return Build<TDqSourceWrap>(ctx, dqSource.Pos())
             .InitFrom(dqSource)
-            .Input<TS3ParseSettingsBase>()
-                .CallableName(parseSettingsBase.CallableName())
-                .InitFrom(parseSettingsBase)
+            .Input<TS3ParseSettings>()
+                .InitFrom(parseSettings)
                 .Paths(newPaths)
                 .RowType(ExpandType(dqSource.Input().Pos(), *readRowType, ctx))
             .Build()

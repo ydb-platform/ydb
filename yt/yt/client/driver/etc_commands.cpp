@@ -55,9 +55,9 @@ void TRemoveMemberCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TParseYPathCommand::TParseYPathCommand()
+void TParseYPathCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("path", Path);
+    registrar.Parameter("path", &TThis::Path);
 }
 
 void TParseYPathCommand::DoExecute(ICommandContextPtr context)
@@ -95,15 +95,23 @@ void TGetSupportedFeaturesCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCheckPermissionCommand::TCheckPermissionCommand()
+void TCheckPermissionCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("user", User);
-    RegisterParameter("permission", Permission);
-    RegisterParameter("path", Path);
-    RegisterParameter("columns", Options.Columns)
-        .Optional();
-    RegisterParameter("vital", Options.Vital)
-        .Optional();
+    registrar.Parameter("user", &TThis::User);
+    registrar.Parameter("permission", &TThis::Permission);
+    registrar.Parameter("path", &TThis::Path);
+    registrar.ParameterWithUniversalAccessor<std::optional<std::vector<TString>>>(
+        "columns",
+        [] (TThis* command) -> auto& {
+            return command->Options.Columns;
+        })
+        .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "vital",
+        [] (TThis* command) -> auto& {
+            return command->Options.Vital;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TCheckPermissionCommand::DoExecute(ICommandContextPtr context)
@@ -142,11 +150,11 @@ void TCheckPermissionCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCheckPermissionByAclCommand::TCheckPermissionByAclCommand()
+void TCheckPermissionByAclCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("user", User);
-    RegisterParameter("permission", Permission);
-    RegisterParameter("acl", Acl);
+    registrar.Parameter("user", &TThis::User);
+    registrar.Parameter("permission", &TThis::Permission);
+    registrar.Parameter("acl", &TThis::Acl);
 }
 
 void TCheckPermissionByAclCommand::DoExecute(ICommandContextPtr context)
@@ -169,11 +177,11 @@ void TCheckPermissionByAclCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTransferAccountResourcesCommand::TTransferAccountResourcesCommand()
+void TTransferAccountResourcesCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("source_account", SourceAccount);
-    RegisterParameter("destination_account", DestinationAccount);
-    RegisterParameter("resource_delta", ResourceDelta);
+    registrar.Parameter("source_account", &TThis::SourceAccount);
+    registrar.Parameter("destination_account", &TThis::DestinationAccount);
+    registrar.Parameter("resource_delta", &TThis::ResourceDelta);
 }
 
 void TTransferAccountResourcesCommand::DoExecute(ICommandContextPtr context)
@@ -190,12 +198,12 @@ void TTransferAccountResourcesCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTransferPoolResourcesCommand::TTransferPoolResourcesCommand()
+void TTransferPoolResourcesCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("source_pool", SourcePool);
-    RegisterParameter("destination_pool", DestinationPool);
-    RegisterParameter("pool_tree", PoolTree);
-    RegisterParameter("resource_delta", ResourceDelta);
+    registrar.Parameter("source_pool", &TThis::SourcePool);
+    registrar.Parameter("destination_pool", &TThis::DestinationPool);
+    registrar.Parameter("pool_tree", &TThis::PoolTree);
+    registrar.Parameter("resource_delta", &TThis::ResourceDelta);
 }
 
 void TTransferPoolResourcesCommand::DoExecute(ICommandContextPtr context)
@@ -342,12 +350,16 @@ private:
     }
 };
 
-TExecuteBatchCommand::TExecuteBatchCommand()
+void TExecuteBatchCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("concurrency", Options.Concurrency)
+    registrar.ParameterWithUniversalAccessor<int>(
+        "concurrency",
+        [] (TThis* command) -> auto& {
+            return command->Options.Concurrency;
+        })
         .Default(50)
         .GreaterThan(0);
-    RegisterParameter("requests", Requests);
+    registrar.Parameter("requests", &TThis::Requests);
 }
 
 void TExecuteBatchCommand::DoExecute(ICommandContextPtr context)
@@ -379,17 +391,17 @@ void TExecuteBatchCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDiscoverProxiesCommand::TDiscoverProxiesCommand()
+void TDiscoverProxiesCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("type", Type)
+    registrar.Parameter("type", &TThis::Type)
         .Default(EProxyType::Rpc);
-    RegisterParameter("role", Role)
+    registrar.Parameter("role", &TThis::Role)
         .Default(DefaultRpcProxyRole);
-    RegisterParameter("address_type", AddressType)
+    registrar.Parameter("address_type", &TThis::AddressType)
         .Default(NApi::NRpcProxy::DefaultAddressType);
-    RegisterParameter("network_name", NetworkName)
+    registrar.Parameter("network_name", &TThis::NetworkName)
         .Default(NApi::NRpcProxy::DefaultNetworkName);
-    RegisterParameter("ignore_balancers", IgnoreBalancers)
+    registrar.Parameter("ignore_balancers", &TThis::IgnoreBalancers)
         .Default(false);
 }
 
@@ -412,12 +424,16 @@ void TDiscoverProxiesCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TBalanceTabletCellsCommand::TBalanceTabletCellsCommand()
+void TBalanceTabletCellsCommand::Register(TRegistrar registrar)
 {
-    RegisterParameter("bundle", TabletCellBundle);
-    RegisterParameter("tables", MovableTables)
+    registrar.Parameter("bundle", &TThis::TabletCellBundle);
+    registrar.Parameter("tables", &TThis::MovableTables)
         .Optional();
-    RegisterParameter("keep_actions", Options.KeepActions)
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "keep_actions",
+        [] (TThis* command) -> auto& {
+            return command->Options.KeepActions;
+        })
         .Default(false);
 }
 

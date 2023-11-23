@@ -1045,11 +1045,13 @@ public:
     }
 
     void SendToSchemeExecuter(const TKqpPhyTxHolder::TConstPtr& tx) {
-        auto userToken = QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>();
-        const TString requestType = QueryState ? QueryState->GetRequestType() : TString();
+        YQL_ENSURE(QueryState);
+
+        auto userToken = QueryState->UserToken;
+        const TString requestType = QueryState->GetRequestType();
         bool temporary = GetTemporaryTableInfo(tx).has_value();
 
-        auto executerActor = CreateKqpSchemeExecuter(tx, SelfId(), requestType, Settings.Database, userToken,
+        auto executerActor = CreateKqpSchemeExecuter(tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken,
             temporary, *TempTablesState.SessionId, QueryState->UserRequestContext);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);

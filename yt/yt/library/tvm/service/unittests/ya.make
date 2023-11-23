@@ -2,7 +2,7 @@ GTEST(unittester-library-auth_tvm)
 
 ALLOCATOR(YT)
 
-INCLUDE(${ARCADIA_ROOT}/yt/opensource_tests.inc)
+INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(
     yt/yt/build

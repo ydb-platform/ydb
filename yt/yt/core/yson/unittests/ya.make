@@ -27,7 +27,7 @@ SRCS(
     proto/protobuf_yson_casing_ext_ut.proto
 )
 
-INCLUDE(${ARCADIA_ROOT}/yt/opensource_tests.inc)
+INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(
     yt/yt/core

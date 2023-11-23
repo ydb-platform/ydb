@@ -133,6 +133,22 @@ public:
                 return StartBuildOperation();
             }
 
+            case NKqpProto::TKqpSchemeOperation::kCreateUser: {
+                auto modifyScheme = schemeOp.GetCreateUser();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+            case NKqpProto::TKqpSchemeOperation::kAlterUser: {
+                auto modifyScheme = schemeOp.GetAlterUser();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+            case NKqpProto::TKqpSchemeOperation::kDropUser: {
+                auto modifyScheme = schemeOp.GetDropUser();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
             default:
                 InternalError(TStringBuilder() << "Unexpected scheme operation: "
                     << (ui32) schemeOp.GetOperationCase());

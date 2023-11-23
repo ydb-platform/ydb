@@ -630,6 +630,21 @@ public:
         UserToken = token;
     }
 
+    bool GetDomainLoginOnly() override {
+        TAppData* appData = AppData(ActorSystem);
+        return appData && appData->AuthConfig.GetDomainLoginOnly();
+    }
+
+    TMaybe<TString> GetDomainName() override {
+        TAppData* appData = AppData(ActorSystem);
+        if (GetDomainLoginOnly()) {
+            if (appData->DomainsInfo && !appData->DomainsInfo->Domains.empty()) {
+                return appData->DomainsInfo->Domains.begin()->second->Name;
+            }
+        }
+        return {};
+    }
+
     TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() override {
         return MetadataLoader->GetCollectedSchemeData();
     }
@@ -1368,17 +1383,11 @@ public:
             auto& dropUser = *schemeTx.MutableAlterLogin()->MutableRemoveUser();
 
             dropUser.SetUser(settings.UserName);
+            dropUser.SetMissingOk(settings.Force);
 
             SendSchemeRequest(ev.Release()).Apply(
-                [dropUserPromise, &settings](const TFuture<TGenericResult>& future) mutable {
-                    const auto& realResult = future.GetValue();
-                    if (!realResult.Success() && realResult.Status() == TIssuesIds::DEFAULT_ERROR && settings.Force) {
-                        IKqpGateway::TGenericResult fakeResult;
-                        fakeResult.SetSuccess();
-                        dropUserPromise.SetValue(std::move(fakeResult));
-                    } else {
-                        dropUserPromise.SetValue(realResult);
-                    }
+                [dropUserPromise](const TFuture<TGenericResult>& future) mutable {
+                    dropUserPromise.SetValue(future.GetValue());
                 }
             );
 
@@ -2094,17 +2103,7 @@ private:
     }
 
     bool GetDatabaseForLoginOperation(TString& database) {
-        TAppData* appData = AppData(ActorSystem);
-        if (appData && appData->AuthConfig.GetDomainLoginOnly()) {
-            if (appData->DomainsInfo && !appData->DomainsInfo->Domains.empty()) {
-                database = "/" + appData->DomainsInfo->Domains.begin()->second->Name;
-                return true;
-            }
-        } else {
-            database = Database;
-            return true;
-        }
-        return false;
+        return SetDatabaseForLoginOperation(database, GetDomainLoginOnly(), GetDomainName(), GetDatabase());
     }
 
     bool GetPathPair(const TString& tableName, std::pair<TString, TString>& pathPair,
@@ -2265,6 +2264,16 @@ bool SplitTablePath(const TString& tableName, const TString& database, std::pair
     } else {
         return IKqpGateway::TrySplitTablePath(tableName, pathPair, error);
     }
+}
+
+bool SetDatabaseForLoginOperation(TString& result, bool getDomainLoginOnly, TMaybe<TString> domainName,
+    const TString& database)
+{
+    if (getDomainLoginOnly && !domainName) {
+        return false;
+    }
+    result = domainName ? "/" + *domainName : database;
+    return true;
 }
 
 

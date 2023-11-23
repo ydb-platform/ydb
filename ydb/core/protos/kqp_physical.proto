@@ -386,6 +386,9 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme DropTable = 2;
         NKikimrSchemeOp.TModifyScheme AlterTable = 3;
         NKikimrIndexBuilder.TIndexBuildSettings BuildOperation = 4;
+        NKikimrSchemeOp.TModifyScheme CreateUser = 5;
+        NKikimrSchemeOp.TModifyScheme AlterUser = 6;
+        NKikimrSchemeOp.TModifyScheme DropUser = 7;
 
         string Type = 9;
         uint64 Flags = 10;

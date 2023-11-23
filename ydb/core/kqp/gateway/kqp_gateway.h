@@ -163,6 +163,8 @@ public:
 
 public:
     virtual TString GetDatabase() = 0;
+    virtual bool GetDomainLoginOnly() = 0;
+    virtual TMaybe<TString> GetDomainName() = 0;
 
     /* Scheme */
     virtual NThreading::TFuture<TKqpTableProfilesResult> GetTableProfiles() = 0;
@@ -200,6 +202,9 @@ TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, const T
 
 bool SplitTablePath(const TString& tableName, const TString& database, std::pair<TString, TString>& pathPair,
     TString& error, bool createDir);
+
+bool SetDatabaseForLoginOperation(TString& result, bool getDomainLoginOnly, TMaybe<TString> domainName,
+    const TString& database);
 
 } // namespace NKikimr::NKqp
 

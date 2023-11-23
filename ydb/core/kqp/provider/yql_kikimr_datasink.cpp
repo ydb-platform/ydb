@@ -794,7 +794,7 @@ public:
                         .Done()
                         .Ptr();
 
-                 } else if (mode == "drop" || mode == "drop_if_exists") {
+                } else if (mode == "drop" || mode == "drop_if_exists") {
                     return MakeKiDropTable(node, settings, key, ctx);
                 } else {
                     YQL_ENSURE(false, "unknown TableScheme mode \"" << TString(mode) << "\"");

@@ -99,7 +99,9 @@ TLoginProvider::TRemoveUserResponse TLoginProvider::RemoveUser(const TRemoveUser
 
     auto itUserModify = Sids.find(request.User);
     if (itUserModify == Sids.end() || itUserModify->second.Type != ESidType::USER) {
-        response.Error = "User not found";
+        if (!request.MissingOk) {
+            response.Error = "User not found";
+        }
         return response;
     }
 

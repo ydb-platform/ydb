@@ -2736,9 +2736,9 @@
     ],
     "test.test[match_recognize-alerts-streaming-default.txt-Debug]": [
         {
-            "checksum": "addb819f78b95c15ca2f07da966f806b",
-            "size": 5497,
-            "uri": "https://{canondata_backend}/1942278/62c45e31d5fff8d0d7beffe426b33aec87242b5e/resource.tar.gz#test.test_match_recognize-alerts-streaming-default.txt-Debug_/opt.yql"
+            "checksum": "265537794494c10822c0ae3caf2f72af",
+            "size": 5855,
+            "uri": "https://{canondata_backend}/212715/e697796a41bf025b25a9ce3feee2344c5dcbd7d9/resource.tar.gz#test.test_match_recognize-alerts-streaming-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[match_recognize-alerts-streaming-default.txt-Plan]": [
@@ -2757,9 +2757,9 @@
     ],
     "test.test[match_recognize-simple_paritioning-streaming-default.txt-Debug]": [
         {
-            "checksum": "6c887c37b904e2582f1ff2eb5e36ca5d",
-            "size": 3272,
-            "uri": "https://{canondata_backend}/1942278/62c45e31d5fff8d0d7beffe426b33aec87242b5e/resource.tar.gz#test.test_match_recognize-simple_paritioning-streaming-default.txt-Debug_/opt.yql"
+            "checksum": "ab5647ac59852b23ab62828c6bf5e23c",
+            "size": 3287,
+            "uri": "https://{canondata_backend}/1942173/2d950a73c887747ac5d5d11958531290098e5395/resource.tar.gz#test.test_match_recognize-simple_paritioning-streaming-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[match_recognize-simple_paritioning-streaming-default.txt-Plan]": [
@@ -2778,9 +2778,9 @@
     ],
     "test.test[match_recognize-test_type-default.txt-Debug]": [
         {
-            "checksum": "853611ed0f2bc089c518e64eda058973",
-            "size": 2925,
-            "uri": "https://{canondata_backend}/1937367/d3efc76b94aa4ceb09138ae54ddae7e6baf26ec0/resource.tar.gz#test.test_match_recognize-test_type-default.txt-Debug_/opt.yql"
+            "checksum": "f237ba53d4395d3769288c46d9619abd",
+            "size": 3138,
+            "uri": "https://{canondata_backend}/212715/e697796a41bf025b25a9ce3feee2344c5dcbd7d9/resource.tar.gz#test.test_match_recognize-test_type-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[match_recognize-test_type-default.txt-Plan]": [

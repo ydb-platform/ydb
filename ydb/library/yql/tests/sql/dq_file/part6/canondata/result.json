@@ -3447,9 +3447,9 @@
     ],
     "test.test[match_recognize-alerts-streaming-default.txt-Debug]": [
         {
-            "checksum": "b90ce285ad954f51ef416e5121375235",
-            "size": 5577,
-            "uri": "https://{canondata_backend}/1784117/84e5539d9eb1fa06aed3012cd84be2264e2caeb7/resource.tar.gz#test.test_match_recognize-alerts-streaming-default.txt-Debug_/opt.yql_patched"
+            "checksum": "8b7be5f1f1a32456f1f4a7c32910723c",
+            "size": 5935,
+            "uri": "https://{canondata_backend}/1900335/d3caf6ae49c6f1143fbe0ff0e930c679766932e1/resource.tar.gz#test.test_match_recognize-alerts-streaming-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[match_recognize-alerts-streaming-default.txt-Plan]": [
@@ -3469,9 +3469,9 @@
     ],
     "test.test[match_recognize-simple_paritioning-streaming-default.txt-Debug]": [
         {
-            "checksum": "19794b1c1d34994f1f8d75967e14e60a",
-            "size": 3337,
-            "uri": "https://{canondata_backend}/1784117/84e5539d9eb1fa06aed3012cd84be2264e2caeb7/resource.tar.gz#test.test_match_recognize-simple_paritioning-streaming-default.txt-Debug_/opt.yql_patched"
+            "checksum": "95f7f6fecfb0bc130af790e5cbdb67ee",
+            "size": 3352,
+            "uri": "https://{canondata_backend}/1923547/22c2c509a5434879db9a69ad8b9605c384a0c07b/resource.tar.gz#test.test_match_recognize-simple_paritioning-streaming-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[match_recognize-simple_paritioning-streaming-default.txt-Plan]": [
@@ -3491,9 +3491,9 @@
     ],
     "test.test[match_recognize-test_type-default.txt-Debug]": [
         {
-            "checksum": "dafc5cc5a5159114d1db9cd6fd54da47",
-            "size": 2993,
-            "uri": "https://{canondata_backend}/1871182/71ebe565a1b9516b1fa184b75e577161b7c1a437/resource.tar.gz#test.test_match_recognize-test_type-default.txt-Debug_/opt.yql_patched"
+            "checksum": "413daca8efd9dda687246a807bf6d461",
+            "size": 3206,
+            "uri": "https://{canondata_backend}/1900335/d3caf6ae49c6f1143fbe0ff0e930c679766932e1/resource.tar.gz#test.test_match_recognize-test_type-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[match_recognize-test_type-default.txt-Plan]": [

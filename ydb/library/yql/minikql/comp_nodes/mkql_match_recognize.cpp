@@ -484,7 +484,7 @@ TRowPattern ConvertPattern(const TRuntimeNode& pattern) {
         TVector<TRowPatternFactor> term;
         for (ui32 j = 0; j != inputTerm->GetValuesCount(); ++j) {
             const auto& inputFactor = AS_VALUE(TTupleLiteral,  inputTerm->GetValue(j));
-            MKQL_ENSURE(inputFactor->GetValuesCount() == 5, "Internal logic error");
+            MKQL_ENSURE(inputFactor->GetValuesCount() == 6, "Internal logic error");
             const auto& primary = inputFactor->GetValue(0);
             term.push_back(TRowPatternFactor{
                     primary.GetRuntimeType()->IsData() ?
@@ -493,7 +493,8 @@ TRowPattern ConvertPattern(const TRuntimeNode& pattern) {
                     AS_VALUE(TDataLiteral, inputFactor->GetValue(1))->AsValue().Get<ui64>(),
                     AS_VALUE(TDataLiteral, inputFactor->GetValue(2))->AsValue().Get<ui64>(),
                     AS_VALUE(TDataLiteral, inputFactor->GetValue(3))->AsValue().Get<bool>(),
-                    AS_VALUE(TDataLiteral, inputFactor->GetValue(4))->AsValue().Get<bool>()
+                    AS_VALUE(TDataLiteral, inputFactor->GetValue(4))->AsValue().Get<bool>(),
+                    AS_VALUE(TDataLiteral, inputFactor->GetValue(5))->AsValue().Get<bool>()
             });
         }
         result.push_back(std::move(term));

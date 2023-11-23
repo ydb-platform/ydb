@@ -15,7 +15,7 @@ struct TVoidTransition {
 };
 using TEpsilonTransition = size_t; //to
 using TEpsilonTransitions = std::vector<TEpsilonTransition, TMKQLAllocator<TEpsilonTransition>>;
-using TMatchedVarTransition = std::pair<ui32, size_t>; //{varIndex, to}
+using TMatchedVarTransition = std::pair<std::pair<ui32, bool>, size_t>; //{{varIndex, saveState}, to}
 using TQuantityEnterTransition = size_t; //to
 using TQuantityExitTransition = std::pair<std::pair<ui64, ui64>, std::pair<size_t, size_t>>; //{{min, max}, {foFindMore, toMatched}}
 using TNfaTransition = std::variant<
@@ -203,7 +203,7 @@ private:
         auto input = AddNode();
         auto output = AddNode();
         auto item = factor.Primary.index() == 0 ?
-                    BuildVar(varNameToIndex.at(std::get<0>(factor.Primary))) :
+                    BuildVar(varNameToIndex.at(std::get<0>(factor.Primary)), !factor.Unused) :
                     BuildTerms(std::get<1>(factor.Primary), varNameToIndex);
         if (1 == factor.QuantityMin && 1 == factor.QuantityMax) { //simple linear case
             Graph->Transitions[input] = TEpsilonTransitions{item.Input};
@@ -223,12 +223,12 @@ private:
         }
         return {input, output};
     }
-    TNfaItem BuildVar(ui32 varIndex) {
+    TNfaItem BuildVar(ui32 varIndex, bool isUsed) {
         auto input = AddNode();
         auto matchVar = AddNode();
         auto output = AddNode();
         Graph->Transitions[input] = TEpsilonTransitions({matchVar});
-        Graph->Transitions[matchVar] = std::pair{varIndex, output};
+        Graph->Transitions[matchVar] = std::pair{std::pair{varIndex, isUsed}, output};
         return {input, output};
     }
 public:
@@ -283,13 +283,17 @@ public:
             //all other transitions are handled in MakeEpsilonTransitions
             if (const auto* matchedVarTransition = std::get_if<TMatchedVarTransition>(&TransitionGraph->Transitions[s.Index])) {
                 MatchedRangesArg->SetValue(ctx, ctx.HolderFactory.Create<TMatchedVarsValue<TRange>>(ctx.HolderFactory, s.Vars));
-                const auto varIndex = matchedVarTransition->first;
+                const auto varIndex = matchedVarTransition->first.first;
                 const auto& v = Defines[varIndex]->GetValue(ctx);
                 if (v && v.Get<bool>()) {
-                    auto vars = s.Vars; //TODO get rid of this copy
-                    auto& matchedVar = vars[varIndex];
-                    Extend(matchedVar, currentRowLock);
-                    newStates.emplace(matchedVarTransition->second, std::move(vars), std::stack<ui64, std::deque<ui64, TMKQLAllocator<ui64>>>(s.Quantifiers));
+                    if (matchedVarTransition->first.second) {
+                        auto vars = s.Vars; //TODO get rid of this copy
+                        auto& matchedVar = vars[varIndex];
+                        Extend(matchedVar, currentRowLock);
+                        newStates.emplace(matchedVarTransition->second, std::move(vars), std::stack<ui64, std::deque<ui64, TMKQLAllocator<ui64>>>(s.Quantifiers));
+                    } else {
+                        newStates.emplace(matchedVarTransition->second, s.Vars, std::stack<ui64, std::deque<ui64, TMKQLAllocator<ui64>>>(s.Quantifiers));
+                    }
                 }
                 deletedStates.insert(s);
             }

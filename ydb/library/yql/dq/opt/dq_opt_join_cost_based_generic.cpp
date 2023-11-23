@@ -18,6 +18,7 @@ struct TState {
     std::vector<THashMap<TStringBuf, int>> VarIds; // relId -> varsIds
     THashMap<TStringBuf, std::vector<int>> Table2RelIds;
     std::vector<std::vector<std::tuple<TStringBuf, TStringBuf>>> Var2TableCol; // relId, varId -> table, col
+    TExprNode::TPtr JoinTree; // We need the original join tree as well
     TPositionHandle Pos;
 
     TState(const TCoEquiJoin& join)
@@ -191,6 +192,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     int cols = 0;
     state.CollectJoins(equiJoin.Arg(equiJoin.ArgCount() - 2).Ptr());
+    state.JoinTree = equiJoin.Arg(equiJoin.ArgCount() - 2).Ptr();
     for (auto& rel : state.Input.Rels) {
         cols += rel.TargetVars.size();
     }

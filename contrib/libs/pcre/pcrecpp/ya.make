@@ -22,6 +22,12 @@ CFLAGS(
     -DHAVE_CONFIG_H
 )
 
+IF(PCRE_LINK_SIZE)
+    CFLAGS(
+        -DPCRE_LINK_SIZE=$PCRE_LINK_SIZE
+    )
+ENDIF()
+
 SRCDIR(contrib/libs/pcre)
 
 SRCS(

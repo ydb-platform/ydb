@@ -399,6 +399,7 @@ namespace NKikimr::NBlobDepot {
             TGenStep LastConfirmedGenStep;
             TGenStep HardGenStep; // last sucessfully confirmed (non-persistent value)
             ui32 CollectGarbageRequestsInFlight = 0;
+            TBlobSeqId LastLeastBlobSeqId;
 
             TRecordsPerChannelGroup(ui8 channel, ui32 groupId)
                 : Channel(channel)
@@ -411,8 +412,8 @@ namespace NKikimr::NBlobDepot {
             void OnLeastExpectedBlobIdChange(TData *self);
             void ClearInFlight(TData *self);
             void CollectIfPossible(TData *self);
-            bool Collectible(TData *self) const;
-            TGenStep GetHardGenStep(TData *self) const;
+            bool Collectible(TData *self);
+            TGenStep GetHardGenStep(TData *self);
         };
 
         bool Loaded = false;

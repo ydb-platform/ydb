@@ -92,6 +92,8 @@ namespace NKikimr::NBlobDepot {
             const bool wasUncertain = value.IsWrittenUncertainly();
             const bool wasGoingToAssimilate = value.GoingToAssimilate;
 
+            const ui32 generation = Self->Executor()->Generation();
+
 #ifndef NDEBUG
             TValue originalValue(value);
 #endif
@@ -131,6 +133,9 @@ namespace NKikimr::NBlobDepot {
             EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), [&](TLogoBlobID id, ui32, ui32) {
                 const auto [it, inserted] = RefCount.try_emplace(id);
                 if (inserted) {
+                    Y_ABORT_UNLESS(!CanBeCollected(TBlobSeqId::FromLogoBlobId(id)));
+                    Y_VERIFY_DEBUG_S(id.Generation() == generation, "BlobId# " << id << " Generation# " << generation);
+                    Y_DEBUG_ABORT_UNLESS(Self->Channels[id.Channel()].GetLeastExpectedBlobId(generation) <= TBlobSeqId::FromLogoBlobId(id));
                     AddFirstMentionedBlob(id);
                 }
                 if (outcome == EUpdateOutcome::DROP) {
@@ -543,7 +548,7 @@ namespace NKikimr::NBlobDepot {
     bool TData::CanBeCollected(TBlobSeqId id) const {
         const ui32 groupId = Self->Info()->GroupFor(id.Channel, id.Generation);
         const auto it = RecordsPerChannelGroup.find(std::make_tuple(id.Channel, groupId));
-        return it != RecordsPerChannelGroup.end() && TGenStep(id) <= it->second.IssuedGenStep;
+        return it != RecordsPerChannelGroup.end() && TGenStep(id) <= Min(it->second.IssuedGenStep, it->second.HardGenStep);
     }
 
     void TData::OnLeastExpectedBlobIdChange(ui8 channel) {
@@ -592,20 +597,35 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::TRecordsPerChannelGroup::CollectIfPossible(TData *self) {
-        if (!CollectGarbageRequestsInFlight && Collectible(self) && self->Loaded) {
+        if (!CollectGarbageRequestsInFlight && self->Loaded && Collectible(self)) {
             self->HandleTrash(*this);
         }
     }
 
-    bool TData::TRecordsPerChannelGroup::Collectible(TData *self) const {
+    bool TData::TRecordsPerChannelGroup::Collectible(TData *self) {
         return !Trash.empty() || HardGenStep < GetHardGenStep(self);
     }
 
-    TGenStep TData::TRecordsPerChannelGroup::GetHardGenStep(TData *self) const {
-        const TGenStep genStep = Used.empty()
-            ? TGenStep(self->Self->Channels[Channel].GetLeastExpectedBlobId(self->Self->Executor()->Generation()))
-            : TGenStep(*Used.begin());
-        return genStep.Previous();
+    TGenStep TData::TRecordsPerChannelGroup::GetHardGenStep(TData *self) {
+        auto& channel = self->Self->Channels[Channel];
+        const ui32 generation = self->Self->Executor()->Generation();
+        TBlobSeqId leastBlobSeqId = channel.GetLeastExpectedBlobId(generation);
+        if (!Used.empty()) {
+            leastBlobSeqId = Min(leastBlobSeqId, TBlobSeqId::FromLogoBlobId(*Used.begin()));
+        }
+
+        // ensure this blob seq id does not decrease
+        Y_VERIFY_S(LastLeastBlobSeqId <= leastBlobSeqId, "LastLeastBlobSeqId# " << LastLeastBlobSeqId
+            << " leastBlobSeqId# " << leastBlobSeqId
+            << " GetLeastExpectedBlobId# " << channel.GetLeastExpectedBlobId(generation)
+            << " Generation# " << generation
+            << " Channel# " << int(Channel)
+            << " GroupId# " << GroupId
+            << " Used.begin# " << (Used.empty() ? "<none>" : TBlobSeqId::FromLogoBlobId(*Used.begin()).ToString())
+            << " HardGenStep# " << HardGenStep);
+        LastLeastBlobSeqId = leastBlobSeqId;
+
+        return TGenStep(leastBlobSeqId).Previous();
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -618,16 +638,19 @@ namespace NKikimr::NBlobDepot {
 
         Y_ABORT_UNLESS(blobSeqId.Channel < Self->Channels.size());
         auto& channel = Self->Channels[blobSeqId.Channel];
+
         const ui64 value = blobSeqId.ToSequentialNumber();
-        Y_VERIFY_S(agent.GivenIdRanges[blobSeqId.Channel].GetPoint(value), "BlobSeqId# " << blobSeqId.ToString() << " Id# " << Self->GetLogId());
-        Y_VERIFY_S(channel.GivenIdRanges.GetPoint(value), " BlobSeqId# " << blobSeqId.ToString() << " Id# " << Self->GetLogId());
+
+        agent.GivenIdRanges[blobSeqId.Channel].RemovePoint(value);
+        channel.GivenIdRanges.RemovePoint(value);
+
         const bool inserted = channel.SequenceNumbersInFlight.insert(value).second;
         Y_ABORT_UNLESS(inserted);
 
         return true;
     }
 
-    void TData::EndCommittingBlobSeqId(TAgent& agent, TBlobSeqId blobSeqId) {
+    void TData::EndCommittingBlobSeqId(TAgent& /*agent*/, TBlobSeqId blobSeqId) {
         Y_ABORT_UNLESS(blobSeqId.Channel < Self->Channels.size());
         auto& channel = Self->Channels[blobSeqId.Channel];
 
@@ -635,15 +658,8 @@ namespace NKikimr::NBlobDepot {
         const auto leastExpectedBlobIdBefore = channel.GetLeastExpectedBlobId(generation);
 
         const size_t numErased = channel.SequenceNumbersInFlight.erase(blobSeqId.ToSequentialNumber());
-        Y_ABORT_UNLESS(numErased == 1);
 
-        const ui64 value = blobSeqId.ToSequentialNumber();
-        if (channel.GivenIdRanges.GetPoint(value)) { // if not set, it must have been trimmed by the agent during transaction (or even reset)
-            agent.GivenIdRanges[blobSeqId.Channel].RemovePoint(value);
-            channel.GivenIdRanges.RemovePoint(value);
-        }
-
-        if (channel.GetLeastExpectedBlobId(generation) != leastExpectedBlobIdBefore) {
+        if (numErased && channel.GetLeastExpectedBlobId(generation) != leastExpectedBlobIdBefore) {
             OnLeastExpectedBlobIdChange(blobSeqId.Channel);
         }
     }
@@ -692,5 +708,20 @@ namespace NKikimr::NBlobDepot {
 
 template<>
 void Out<NKikimr::NBlobDepot::TBlobDepot::TData::TKey>(IOutputStream& s, const NKikimr::NBlobDepot::TBlobDepot::TData::TKey& x) {
+    x.Output(s);
+}
+
+template<>
+void Out<NKikimr::NBlobDepot::TBlobSeqId>(IOutputStream& s, const NKikimr::NBlobDepot::TBlobSeqId& x) {
+    x.Output(s);
+}
+
+template<>
+void Out<NKikimr::NBlobDepot::TGivenIdRange>(IOutputStream& s, const NKikimr::NBlobDepot::TGivenIdRange& x) {
+    x.Output(s);
+}
+
+template<>
+void Out<NKikimr::NBlobDepot::TGenStep>(IOutputStream& s, const NKikimr::NBlobDepot::TGenStep& x) {
     x.Output(s);
 }

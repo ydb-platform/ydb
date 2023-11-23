@@ -4,7 +4,7 @@ LICENSE(BSD-3-Clause)
 
 SRCS(
     kind_string.go
-    tables13.0.0.go
+    tables15.0.0.go
     transform.go
     trieval.go
     width.go
@@ -21,4 +21,6 @@ GO_XTEST_SRCS(example_test.go)
 
 END()
 
-RECURSE(gotest)
+RECURSE(
+    gotest
+)

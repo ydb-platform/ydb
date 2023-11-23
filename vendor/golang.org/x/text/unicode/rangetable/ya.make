@@ -5,7 +5,7 @@ LICENSE(BSD-3-Clause)
 SRCS(
     merge.go
     rangetable.go
-    tables13.0.0.go
+    tables15.0.0.go
 )
 
 GO_TEST_SRCS(
@@ -15,4 +15,6 @@ GO_TEST_SRCS(
 
 END()
 
-RECURSE(gotest)
+RECURSE(
+    gotest
+)

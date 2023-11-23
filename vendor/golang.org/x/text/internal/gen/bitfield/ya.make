@@ -2,7 +2,9 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
-SRCS(bitfield.go)
+SRCS(
+    bitfield.go
+)
 
 GO_TEST_SRCS(
     bitfield_test.go
@@ -12,4 +14,6 @@ GO_TEST_SRCS(
 
 END()
 
-RECURSE(gotest)
+RECURSE(
+    gotest
+)

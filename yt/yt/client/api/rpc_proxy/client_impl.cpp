@@ -1862,9 +1862,8 @@ TFuture<TMaintenanceCounts> TClient::RemoveMaintenance(
             counts[EMaintenanceType::DisableTabletCells] = rspValue->disable_tablet_cells();
             counts[EMaintenanceType::PendingRestart] = rspValue->pending_restart();
         } else {
-            for (auto type : TEnumTraits<EMaintenanceType>::GetDomainValues()) {
-                auto it = protoCounts.find(ConvertMaintenanceTypeToProto(type));
-                counts[type] = it == protoCounts.end() ? 0 : it->second;
+            for (auto [type, count] : protoCounts) {
+                counts[CheckedEnumCast<EMaintenanceType>(type)] = count;
             }
         }
 

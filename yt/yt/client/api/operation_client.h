@@ -301,7 +301,7 @@ struct TListOperationsResult
 struct TJob
 {
     NJobTrackerClient::TJobId Id;
-    NJobTrackerClient::TJobId OperationId;
+    NJobTrackerClient::TOperationId OperationId;
     std::optional<NJobTrackerClient::EJobType> Type;
     std::optional<NJobTrackerClient::EJobState> ControllerState;
     std::optional<NJobTrackerClient::EJobState> ArchiveState;

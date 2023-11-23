@@ -2,12 +2,14 @@
 
 #include <library/cpp/yt/misc/enum.h>
 #include <library/cpp/yt/misc/guid.h>
+#include <library/cpp/yt/misc/strong_typedef.h>
 
 namespace NYT::NJobTrackerClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TJobId = TGuid;
+YT_DEFINE_STRONG_TYPEDEF(TJobId, TGuid);
+
 extern const TJobId NullJobId;
 
 using TOperationId = TGuid;

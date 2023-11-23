@@ -267,6 +267,7 @@ public:
     bool EnableAlterDatabaseCreateHiveFirst = false;
     bool EnablePQConfigTransactionsAtSchemeShard = false;
     bool EnableStatistics = false;
+    bool EnableTablePgTypes = false;
 
     TShardDeleter ShardDeleter;
 

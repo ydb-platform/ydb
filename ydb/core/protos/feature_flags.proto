@@ -120,4 +120,5 @@ message TFeatureFlags {
     optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = false];
     optional bool EnableStatistics = 106 [default = false];
     optional bool EnableUuidAsPrimaryKey = 107 [default = false];
+    optional bool EnableTablePgTypes = 108 [default = false];
 }

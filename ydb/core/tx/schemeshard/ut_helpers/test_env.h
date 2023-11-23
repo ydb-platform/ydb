@@ -56,6 +56,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableTopicSplitMerge, std::nullopt);
         OPTION(std::optional<bool>, EnableChangefeedDynamoDBStreamsFormat, std::nullopt);
         OPTION(std::optional<bool>, EnableChangefeedDebeziumJsonFormat, std::nullopt);
+        OPTION(std::optional<bool>, EnableTablePgTypes, std::nullopt);
 
         #undef OPTION
     };

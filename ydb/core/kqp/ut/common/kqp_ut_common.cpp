@@ -125,6 +125,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableMoveIndex(true);
     ServerSettings->SetEnableUniqConstraint(true);
     ServerSettings->SetUseRealThreads(settings.UseRealThreads);
+    ServerSettings->SetEnableTablePgTypes(true);
 
     if (settings.Storage) {
         ServerSettings->SetCustomDiskParams(*settings.Storage);
@@ -468,7 +469,7 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
         this->Client->InitRootScheme(domain);
         return true;
     });
-    
+
     if (settings.WithSampleTables) {
         RunCall([this] {
             this->CreateSampleTables();
@@ -670,7 +671,7 @@ void CreateManyShardsTable(TKikimrRunner& kikimr, ui32 totalRows, ui32 shards, u
         Columns { Name: "Key", Type: "Uint32" }
         Columns { Name: "Data", Type: "Int32" }
         KeyColumnNames: ["Key"]
-        UniformPartitionsCount: 
+        UniformPartitionsCount:
     )" + std::to_string(shards));
 
     auto client = kikimr.GetTableClient();

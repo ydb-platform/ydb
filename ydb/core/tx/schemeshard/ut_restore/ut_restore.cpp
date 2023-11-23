@@ -731,7 +731,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
 
     Y_UNIT_TEST(ExportImportPg) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(

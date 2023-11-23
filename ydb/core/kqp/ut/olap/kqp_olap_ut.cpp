@@ -2171,6 +2171,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         std::string ExpectedReadNodeType;
         TExpectedLimitChecker LimitChecker;
         TExpectedRecordChecker RecordChecker;
+        bool UseLlvm = true;
     public:
         void FillExpectedAggregationGroupByPlanOptions() {
 #if SSA_RUNTIME_VERSION >= 2U
@@ -2185,6 +2186,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             queryFixed << "--!syntax_v1" << Endl;
             if (!Pushdown) {
                 queryFixed << "PRAGMA Kikimr.OptEnableOlapPushdown = \"false\";" << Endl;
+            }
+            if (!UseLlvm) {
+                queryFixed << "PRAGMA Kikimr.UseLlvm = \"false\";" << Endl;
             }
             queryFixed << "PRAGMA Kikimr.OptUseFinalizeByKey;" << Endl;
 
@@ -2215,6 +2219,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
         TAggregationTestCase& SetQuery(const TString& value) {
             Query = value;
+            return *this;
+        }
+        TAggregationTestCase& SetUseLlvm(const bool value) {
+            UseLlvm = value;
             return *this;
         }
         const TString& GetExpectedReply() const {
@@ -2348,7 +2356,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
 
         ui32 numIterations = 10;
-        const ui32 iterationPackSize = 2000;
+        const ui32 iterationPackSize = NSan::PlainOrUnderSanitizer(2000, 20);
         for (ui64 i = 0; i < numIterations; ++i) {
             WriteTestDataForClickBench(kikimr, "/Root/benchTable", 0, 1000000 + i * 1000000, iterationPackSize);
         }
@@ -2388,7 +2396,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         // write data
 
         ui32 numIterations = 10;
-        const ui32 iterationPackSize = 2000;
+        const ui32 iterationPackSize = NSan::PlainOrUnderSanitizer(2000, 20);
         for (ui64 i = 0; i < numIterations; ++i) {
             TClickHelper(*server).SendDataViaActorSystem("/Root/benchTable", 0, 1000000 + i * 1000000,
                                                          iterationPackSize);
@@ -3277,7 +3285,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
             // .SetExpectedReadNodeType("TableFullScan");
             .SetExpectedReadNodeType("Aggregate-TableFullScan");
-        ;
         q7.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q9;
@@ -3356,7 +3363,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetExpectedReadNodeType("Aggregate-Filter-TableFullScan");
         q39.FillExpectedAggregationGroupByPlanOptions();
 
-        TestClickBench({ q7, q9, q12, q14, q22, q39 });
+        std::vector<TAggregationTestCase> cases = {q7, q9, q12, q14, q22, q39};
+        for (auto&& c : cases) {
+            c.SetUseLlvm(NSan::PlainOrUnderSanitizer(true, false));
+        }
+
+        TestClickBench(cases);
     }
 
     Y_UNIT_TEST(StatsSysView) {

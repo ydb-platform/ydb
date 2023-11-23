@@ -3,10 +3,10 @@
 #include "interface.h"
 
 #include <yt/yql/plugin/plugin.h>
-#include <util/system/dynlib.h>
 
-#include <vector>
-#include <optional>
+#include <yt/yt/core/misc/error.h>
+
+#include <util/system/dynlib.h>
 
 namespace NYT::NYqlPlugin {
 namespace NBridge {
@@ -27,6 +27,10 @@ std::optional<TString> ToString(const char* str, size_t strLength)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+const auto RequiredAbiVersion = 0;
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TDynamicYqlPlugin
 {
 public:
@@ -38,6 +42,10 @@ public:
         #define XX(function) function = reinterpret_cast<TFunc ## function*>(Library_.Sym(#function));
         FOR_EACH_BRIDGE_INTERFACE_FUNCTION(XX);
         #undef XX
+
+        if (RequiredAbiVersion != BridgeGetAbiVersion()) {
+            THROW_ERROR_EXCEPTION("YQL plugin ABI version mismatch; expected version %v, actual version %v", RequiredAbiVersion, BridgeGetAbiVersion());
+        }
     }
 
 protected:
@@ -61,7 +69,6 @@ public:
         TString singletonsConfig = options.SingletonsConfig ? options.SingletonsConfig.ToString() : "{}";
 
         TBridgeYqlPluginOptions bridgeOptions {
-            .RequiredABIVersion = options.RequiredABIVersion,
             .SingletonsConfig = singletonsConfig.data(),
             .SingletonsConfigLength = static_cast<int>(singletonsConfig.size()),
             .GatewayConfig = options.GatewayConfig.AsStringBuf().Data(),

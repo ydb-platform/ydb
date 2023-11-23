@@ -1,4 +1,5 @@
 #include <util/generic/bt_exception.h>
+#include <util/generic/hash.h>
 #include <util/string/cast.h>
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
@@ -95,6 +96,20 @@ SIMPLE_UDF(TSleep, ui64(ui64)) {
     ui64 time = args[0].Get<ui64>();
     usleep(time);
     return TUnboxedValuePod(static_cast<ui64>(0));
+}
+
+using TComplexReturnTypeSignature = TDict<char*, ui32>(char*);
+SIMPLE_UDF(TComplexReturnType, TComplexReturnTypeSignature) {
+    const TStringBuf s = args[0].AsStringRef();
+    THashMap<TString, ui32> stat;
+    for(auto c: s) {
+       ++stat[TString{c}];
+    }
+    auto dictBuilder = valueBuilder->NewDict(ReturnType_, 0);
+    for(const auto& [k, v]: stat) {
+        dictBuilder->Add(valueBuilder->NewString(k), TUnboxedValuePod{v});
+    }
+    return dictBuilder->Build();
 }
 
 extern const char c[] = "C";
@@ -239,6 +254,7 @@ SIMPLE_MODULE(TSimpleUdfModule,
                 TConcat,
                 TRepeat,
                 TSleep,
+                TComplexReturnType,
                 TNamedArgs,
                 TIncrement,
                 TIncrementOpt,

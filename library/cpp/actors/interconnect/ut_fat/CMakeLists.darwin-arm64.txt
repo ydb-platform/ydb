@@ -8,12 +8,27 @@
 
 
 add_executable(library-cpp-actors-interconnect-ut_fat)
+target_link_libraries(library-cpp-actors-interconnect-ut_fat PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  cpp-actors-core
+  cpp-actors-interconnect
+  actors-interconnect-mock
+  interconnect-ut-lib
+  interconnect-ut-protos
+  cpp-testing-unittest
+  cpp-deprecated-atomic
+)
 target_link_options(library-cpp-actors-interconnect-ut_fat PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(library-cpp-actors-interconnect-ut_fat PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut_fat/main.cpp
 )
 set_property(
   TARGET
@@ -47,5 +62,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(library-cpp-actors-interconnect-ut_fat
+  system_allocator
 )
 vcs_info(library-cpp-actors-interconnect-ut_fat)

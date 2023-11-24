@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(grpc)
 
 add_executable(ydb-core-grpc_streaming-ut)
 target_compile_options(ydb-core-grpc_streaming-ut PRIVATE
@@ -13,6 +14,17 @@ target_compile_options(ydb-core-grpc_streaming-ut PRIVATE
 )
 target_include_directories(ydb-core-grpc_streaming-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_streaming
+)
+target_link_libraries(ydb-core-grpc_streaming-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  ydb-core-grpc_streaming
+  cpp-grpc-client
+  grpc_streaming-ut-grpc
+  core-testlib-default
 )
 target_link_options(ydb-core-grpc_streaming-ut PRIVATE
   -ldl
@@ -23,6 +35,9 @@ target_link_options(ydb-core-grpc_streaming-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-core-grpc_streaming-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_streaming/grpc_streaming_ut.cpp
 )
 set_property(
   TARGET
@@ -56,5 +71,16 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-grpc_streaming-ut
+  PROPERTY
+  TIMEOUT
+  300
+)
+target_allocator(ydb-core-grpc_streaming-ut
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-core-grpc_streaming-ut)

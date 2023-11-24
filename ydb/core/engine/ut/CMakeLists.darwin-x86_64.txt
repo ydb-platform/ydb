@@ -14,12 +14,31 @@ target_compile_options(ydb-core-engine-ut PRIVATE
 target_include_directories(ydb-core-engine-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/engine
 )
+target_link_libraries(ydb-core-engine-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  ydb-core-engine
+  core-engine-minikql
+  kqp-ut-common
+  test-libs-table
+  mkql_proto-ut-helpers
+  udf-service-exception_policy
+  yql-sql-pg_dummy
+)
 target_link_options(ydb-core-engine-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-core-engine-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat_host_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/kikimr_program_builder_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_proto_ut.cpp
 )
 set_property(
   TARGET
@@ -53,5 +72,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-engine-ut
+  PROPERTY
+  TIMEOUT
+  150
+)
+target_allocator(ydb-core-engine-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-engine-ut)

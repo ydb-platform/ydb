@@ -8,6 +8,13 @@
 
 
 add_executable(ydb-library-security-ut)
+target_link_libraries(ydb-library-security-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  ydb-library-security
+)
 target_link_options(ydb-library-security-ut PRIVATE
   -ldl
   -lrt
@@ -17,6 +24,9 @@ target_link_options(ydb-library-security-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-library-security-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/security/ut/util_ut.cpp
 )
 set_property(
   TARGET
@@ -50,5 +60,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-security-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-security-ut)

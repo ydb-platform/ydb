@@ -6,10 +6,31 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(lib)
+add_subdirectory(protos)
 
 add_executable(ydb-library-yql-public-purecalc-ut)
 target_compile_options(ydb-library-yql-public-purecalc-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(ydb-library-yql-public-purecalc-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  yql-public-purecalc
+  purecalc-io_specs-protobuf
+  purecalc-ut-protos
+)
+target_sources(ydb-library-yql-public-purecalc-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/fake_spec.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_schema.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_sexpr.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_sql.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_udf.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_user_data.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_eval.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_pool.cpp
 )
 set_property(
   TARGET
@@ -43,5 +64,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-public-purecalc-ut
+  system_allocator
 )
 vcs_info(ydb-library-yql-public-purecalc-ut)

@@ -8,12 +8,21 @@
 
 
 add_executable(ydb-library-security-ut)
+target_link_libraries(ydb-library-security-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  ydb-library-security
+)
 target_link_options(ydb-library-security-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-library-security-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/security/ut/util_ut.cpp
 )
 set_property(
   TARGET
@@ -47,5 +56,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-security-ut
+  system_allocator
 )
 vcs_info(ydb-library-security-ut)

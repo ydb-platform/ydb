@@ -11,6 +11,17 @@ add_executable(ydb-public-sdk-cpp-client-ydb_coordination-ut)
 target_include_directories(ydb-public-sdk-cpp-client-ydb_coordination-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_coordination
 )
+target_link_libraries(ydb-public-sdk-cpp-client-ydb_coordination-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  cpp-client-ydb_coordination
+  api-grpc
+)
+target_sources(ydb-public-sdk-cpp-client-ydb_coordination-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_coordination/coordination_ut.cpp
+)
 set_property(
   TARGET
   ydb-public-sdk-cpp-client-ydb_coordination-ut
@@ -43,5 +54,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-public-sdk-cpp-client-ydb_coordination-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-public-sdk-cpp-client-ydb_coordination-ut
+  system_allocator
 )
 vcs_info(ydb-public-sdk-cpp-client-ydb_coordination-ut)

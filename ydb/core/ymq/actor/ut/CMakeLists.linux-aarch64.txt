@@ -11,6 +11,18 @@ add_executable(ydb-core-ymq-actor-ut)
 target_compile_options(ydb-core-ymq-actor-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
+target_link_libraries(ydb-core-ymq-actor-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  contrib-libs-yaml-cpp
+  core-mind-address_classification
+  core-testlib-default
+  core-ymq-actor
+  core-ymq-base
+  core-ymq-http
+)
 target_link_options(ydb-core-ymq-actor-ut PRIVATE
   -ldl
   -lrt
@@ -20,6 +32,13 @@ target_link_options(ydb-core-ymq-actor-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-core-ymq-actor-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/ut/attributes_md5_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/ut/infly_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/ut/message_delay_stats_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/ut/sha256_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/ut/metering_ut.cpp
 )
 set_property(
   TARGET
@@ -53,5 +72,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-ymq-actor-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-ymq-actor-ut)

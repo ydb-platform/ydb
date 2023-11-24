@@ -14,12 +14,27 @@ target_compile_options(ydb-library-ycloud-impl-ut PRIVATE
 target_include_directories(ydb-library-ycloud-impl-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl
 )
+target_link_libraries(ydb-library-ycloud-impl-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  library-ycloud-impl
+  library-cpp-retry
+  core-testlib-default
+)
 target_link_options(ydb-library-ycloud-impl-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-library-ycloud-impl-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/access_service_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/service_account_service_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/ycloud/impl/user_account_service_ut.cpp
 )
 set_property(
   TARGET
@@ -53,5 +68,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-library-ycloud-impl-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-library-ycloud-impl-ut
+  system_allocator
 )
 vcs_info(ydb-library-ycloud-impl-ut)

@@ -14,6 +14,16 @@ target_compile_options(ydb-core-client-metadata-ut PRIVATE
 target_include_directories(ydb-core-client-metadata-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/client/metadata
 )
+target_link_libraries(ydb-core-client-metadata-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  core-client-metadata
+  udf-service-stub
+  yql-sql-pg_dummy
+)
 target_link_options(ydb-core-client-metadata-ut PRIVATE
   -ldl
   -lrt
@@ -23,6 +33,9 @@ target_link_options(ydb-core-client-metadata-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-core-client-metadata-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/metadata/ut/functions_metadata_ut.cpp
 )
 set_property(
   TARGET
@@ -56,5 +69,9 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-client-metadata-ut
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-core-client-metadata-ut)

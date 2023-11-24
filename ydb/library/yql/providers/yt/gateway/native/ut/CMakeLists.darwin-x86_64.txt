@@ -11,12 +11,28 @@ add_executable(ydb-library-yql-providers-yt-gateway-native-ut)
 target_compile_options(ydb-library-yql-providers-yt-gateway-native-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
+target_link_libraries(ydb-library-yql-providers-yt-gateway-native-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  yt-gateway-native
+  yt-gateway-file
+  yql-core-ut_common
+  cpp-testing-mock_server
+  cpp-testing-common
+  udf-service-terminate_policy
+  yql-sql-pg
+)
 target_link_options(ydb-library-yql-providers-yt-gateway-native-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-library-yql-providers-yt-gateway-native-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/ut/yql_yt_native_folders_ut.cpp
 )
 set_property(
   TARGET
@@ -50,5 +66,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-providers-yt-gateway-native-ut
+  system_allocator
 )
 vcs_info(ydb-library-yql-providers-yt-gateway-native-ut)

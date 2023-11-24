@@ -14,6 +14,18 @@ target_compile_options(ydb-library-yql-providers-yt-comp_nodes-ut PRIVATE
 target_include_directories(ydb-library-yql-providers-yt-comp_nodes-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes
 )
+target_link_libraries(ydb-library-yql-providers-yt-comp_nodes-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  providers-yt-comp_nodes
+  library-cpp-random_provider
+  library-cpp-time_provider
+  minikql-comp_nodes-llvm
+  udf-service-exception_policy
+  yql-sql-pg_dummy
+)
 target_link_options(ydb-library-yql-providers-yt-comp_nodes-ut PRIVATE
   -ldl
   -lrt
@@ -23,6 +35,9 @@ target_link_options(ydb-library-yql-providers-yt-comp_nodes-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-library-yql-providers-yt-comp_nodes-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/ut/yql_mkql_output_ut.cpp
 )
 set_property(
   TARGET
@@ -56,5 +71,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-providers-yt-comp_nodes-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-library-yql-providers-yt-comp_nodes-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-yql-providers-yt-comp_nodes-ut)

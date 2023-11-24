@@ -8,10 +8,19 @@
 
 
 add_executable(yaml_config-validator-ut-validator_builder)
+target_link_libraries(yaml_config-validator-ut-validator_builder PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  library-yaml_config-validator
+)
 target_link_options(yaml_config-validator-ut-validator_builder PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
+)
+target_sources(yaml_config-validator-ut-validator_builder PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/validator/ut/validator_builder/validator_builder_ut.cpp
 )
 set_property(
   TARGET
@@ -45,5 +54,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(yaml_config-validator-ut-validator_builder
+  system_allocator
 )
 vcs_info(yaml_config-validator-ut-validator_builder)

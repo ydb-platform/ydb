@@ -11,6 +11,22 @@ add_executable(ydb-core-mind-bscontroller-ut_selfheal)
 target_compile_options(ydb-core-mind-bscontroller-ut_selfheal PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
+target_link_libraries(ydb-core-mind-bscontroller-ut_selfheal PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  blobstorage-dsproxy-mock
+  blobstorage-pdisk-mock
+  core-mind-bscontroller
+  core-tx-scheme_board
+  udf-service-stub
+  yql-sql-pg_dummy
+)
+target_sources(ydb-core-mind-bscontroller-ut_selfheal PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/main.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/self_heal_actor_ut.cpp
+)
 set_property(
   TARGET
   ydb-core-mind-bscontroller-ut_selfheal
@@ -43,5 +59,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-mind-bscontroller-ut_selfheal
+  system_allocator
 )
 vcs_info(ydb-core-mind-bscontroller-ut_selfheal)

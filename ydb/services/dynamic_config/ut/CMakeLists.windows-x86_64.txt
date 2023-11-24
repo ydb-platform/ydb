@@ -14,6 +14,22 @@ target_compile_options(ydb-services-dynamic_config-ut PRIVATE
 target_include_directories(ydb-services-dynamic_config-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/dynamic_config
 )
+target_link_libraries(ydb-services-dynamic_config-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  ydb-services-dynamic_config
+  library-cpp-getopt
+  cpp-grpc-client
+  cpp-regex-pcre
+  library-cpp-svnversion
+  core-testlib-default
+  ydb-services-cms
+)
+target_sources(ydb-services-dynamic_config-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/dynamic_config/dynamic_config_ut.cpp
+)
 set_property(
   TARGET
   ydb-services-dynamic_config-ut
@@ -46,5 +62,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-services-dynamic_config-ut
+  system_allocator
 )
 vcs_info(ydb-services-dynamic_config-ut)

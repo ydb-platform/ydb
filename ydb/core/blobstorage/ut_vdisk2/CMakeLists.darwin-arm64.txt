@@ -8,12 +8,28 @@
 
 
 add_executable(ydb-core-blobstorage-ut_vdisk2)
+target_link_libraries(ydb-core-blobstorage-ut_vdisk2 PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  cpp-testing-unittest
+  core-blobstorage-backpressure
+  core-blobstorage-groupinfo
+  blobstorage-pdisk-mock
+  core-blobstorage-vdisk
+  blobstorage-vdisk-common
+  core-tx-scheme_board
+  udf-service-stub
+)
 target_link_options(ydb-core-blobstorage-ut_vdisk2 PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-core-blobstorage-ut_vdisk2 PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk2/huge.cpp
 )
 set_property(
   TARGET
@@ -47,5 +63,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-ut_vdisk2
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-core-blobstorage-ut_vdisk2
+  system_allocator
 )
 vcs_info(ydb-core-blobstorage-ut_vdisk2)

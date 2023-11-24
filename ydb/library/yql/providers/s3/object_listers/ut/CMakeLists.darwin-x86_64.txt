@@ -11,12 +11,22 @@ add_executable(ydb-library-yql-providers-s3-object_listers-ut)
 target_include_directories(ydb-library-yql-providers-s3-object_listers-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/object_listers
 )
+target_link_libraries(ydb-library-yql-providers-s3-object_listers-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  providers-s3-object_listers
+)
 target_link_options(ydb-library-yql-providers-s3-object_listers-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-library-yql-providers-s3-object_listers-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/object_listers/yql_s3_path_ut.cpp
 )
 set_property(
   TARGET
@@ -50,5 +60,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-providers-s3-object_listers-ut
+  system_allocator
 )
 vcs_info(ydb-library-yql-providers-s3-object_listers-ut)

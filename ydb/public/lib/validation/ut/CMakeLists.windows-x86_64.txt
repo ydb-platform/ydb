@@ -12,6 +12,17 @@ add_executable(ydb-public-lib-validation-ut)
 target_include_directories(ydb-public-lib-validation-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/validation
 )
+target_link_libraries(ydb-public-lib-validation-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  cpp-testing-unittest
+  validation-ut-protos
+)
+target_sources(ydb-public-lib-validation-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/validation/ut.cpp
+)
 set_property(
   TARGET
   ydb-public-lib-validation-ut
@@ -44,5 +55,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-public-lib-validation-ut
+  system_allocator
 )
 vcs_info(ydb-public-lib-validation-ut)

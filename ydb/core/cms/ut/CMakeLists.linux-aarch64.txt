@@ -14,6 +14,16 @@ target_compile_options(ydb-core-cms-ut PRIVATE
 target_include_directories(ydb-core-cms-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/cms
 )
+target_link_libraries(ydb-core-cms-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  ydb-core-cms
+  library-cpp-getopt
+  library-cpp-svnversion
+  core-testlib-default
+)
 target_link_options(ydb-core-cms-ut PRIVATE
   -ldl
   -lrt
@@ -23,6 +33,14 @@ target_link_options(ydb-core-cms-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-core-cms-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/cluster_info_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_tenants_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_ut_common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/downtime_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ut_helpers.cpp
 )
 set_property(
   TARGET
@@ -56,5 +74,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-cms-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-core-cms-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-cms-ut)

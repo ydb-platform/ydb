@@ -11,12 +11,24 @@ add_executable(ydb-core-testlib-actors-ut)
 target_include_directories(ydb-core-testlib-actors-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/testlib/actors
 )
+target_link_libraries(ydb-core-testlib-actors-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  core-testlib-actors
+  library-cpp-getopt
+  library-cpp-svnversion
+  cpp-regex-pcre
+)
 target_link_options(ydb-core-testlib-actors-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-core-testlib-actors-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/actors/test_runtime_ut.cpp
 )
 set_property(
   TARGET
@@ -50,5 +62,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-testlib-actors-ut
+  system_allocator
 )
 vcs_info(ydb-core-testlib-actors-ut)

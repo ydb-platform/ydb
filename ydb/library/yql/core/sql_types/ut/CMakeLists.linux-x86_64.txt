@@ -11,6 +11,14 @@ add_executable(ydb-library-yql-core-sql_types-ut)
 target_include_directories(ydb-library-yql-core-sql_types-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/sql_types
 )
+target_link_libraries(ydb-library-yql-core-sql_types-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  yql-core-sql_types
+)
 target_link_options(ydb-library-yql-core-sql_types-ut PRIVATE
   -ldl
   -lrt
@@ -20,6 +28,9 @@ target_link_options(ydb-library-yql-core-sql_types-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-library-yql-core-sql_types-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/sql_types/match_recognize_ut.cpp
 )
 set_property(
   TARGET
@@ -53,5 +64,9 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-core-sql_types-ut
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-library-yql-core-sql_types-ut)

@@ -11,12 +11,24 @@ add_executable(ydb-public-lib-ydb_cli-common-ut)
 target_include_directories(ydb-public-lib-ydb_cli-common-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common
 )
+target_link_libraries(ydb-public-lib-ydb_cli-common-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  common
+)
 target_link_options(ydb-public-lib-ydb_cli-common-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-public-lib-ydb_cli-common-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/normalize_path_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/csv_parser_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/pg_dump_parser_ut.cpp
 )
 set_property(
   TARGET
@@ -50,5 +62,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-public-lib-ydb_cli-common-ut
+  system_allocator
 )
 vcs_info(ydb-public-lib-ydb_cli-common-ut)

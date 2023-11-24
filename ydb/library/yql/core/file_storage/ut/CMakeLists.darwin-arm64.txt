@@ -11,12 +11,27 @@ add_executable(ydb-library-yql-core-file_storage-ut)
 target_include_directories(ydb-library-yql-core-file_storage-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage
 )
+target_link_libraries(ydb-library-yql-core-file_storage-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  yql-core-file_storage
+  cpp-http-server
+  cpp-threading-future
+  cpp-deprecated-atomic
+  yql-utils-test_http_server
+)
 target_link_options(ydb-library-yql-core-file_storage-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-library-yql-core-file_storage-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/file_storage_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/sized_cache_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/storage_ut.cpp
 )
 set_property(
   TARGET
@@ -50,5 +65,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-core-file_storage-ut
+  system_allocator
 )
 vcs_info(ydb-library-yql-core-file_storage-ut)

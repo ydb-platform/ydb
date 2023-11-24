@@ -14,6 +14,18 @@ target_compile_options(ydb-library-yql-dq-actors-spilling-ut PRIVATE
 target_include_directories(ydb-library-yql-dq-actors-spilling-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/spilling
 )
+target_link_libraries(ydb-library-yql-dq-actors-spilling-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  dq-actors-spilling
+  cpp-testing-unittest
+  cpp-actors-testlib
+  ydb-library-services
+  yql-sql-pg_dummy
+  udf-service-exception_policy
+)
 target_link_options(ydb-library-yql-dq-actors-spilling-ut PRIVATE
   -ldl
   -lrt
@@ -23,6 +35,9 @@ target_link_options(ydb-library-yql-dq-actors-spilling-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-library-yql-dq-actors-spilling-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/spilling/spilling_file_ut.cpp
 )
 set_property(
   TARGET
@@ -56,5 +71,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-dq-actors-spilling-ut
+  PROPERTY
+  TIMEOUT
+  180
+)
+target_allocator(ydb-library-yql-dq-actors-spilling-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-yql-dq-actors-spilling-ut)

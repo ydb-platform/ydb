@@ -11,6 +11,20 @@ add_executable(ydb-core-blobstorage-nodewarden-ut_sequence)
 target_compile_options(ydb-core-blobstorage-nodewarden-ut_sequence PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
+target_link_libraries(ydb-core-blobstorage-nodewarden-ut_sequence PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  core-blobstorage-base
+  core-blobstorage-crypto
+  core-blobstorage-nodewarden
+  core-blobstorage-pdisk
+  core-testlib-default
+)
+target_sources(ydb-core-blobstorage-nodewarden-ut_sequence PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/ut_sequence/dsproxy_config_retrieval.cpp
+)
 set_property(
   TARGET
   ydb-core-blobstorage-nodewarden-ut_sequence
@@ -43,5 +57,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-nodewarden-ut_sequence
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-core-blobstorage-nodewarden-ut_sequence
+  system_allocator
 )
 vcs_info(ydb-core-blobstorage-nodewarden-ut_sequence)

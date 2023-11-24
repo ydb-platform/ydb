@@ -14,12 +14,25 @@ target_compile_options(ydb-library-yql-minikql-arrow-ut PRIVATE
 target_include_directories(ydb-library-yql-minikql-arrow-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/arrow
 )
+target_link_libraries(ydb-library-yql-minikql-arrow-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  yql-minikql-arrow
+  yql-public-udf
+  udf-service-exception_policy
+  yql-sql-pg_dummy
+  minikql-invoke_builtins-llvm
+)
 target_link_options(ydb-library-yql-minikql-arrow-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-library-yql-minikql-arrow-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/arrow/mkql_functions_ut.cpp
 )
 set_property(
   TARGET
@@ -53,5 +66,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-minikql-arrow-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-library-yql-minikql-arrow-ut
+  system_allocator
 )
 vcs_info(ydb-library-yql-minikql-arrow-ut)

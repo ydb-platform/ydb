@@ -8,12 +8,26 @@
 
 
 add_executable(ydb-core-blobstorage-storagepoolmon-ut)
+target_link_libraries(ydb-core-blobstorage-storagepoolmon-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  library-cpp-getopt
+  library-cpp-svnversion
+  core-blobstorage-storagepoolmon
+  core-testlib-default
+  core-testlib-actors
+  core-testlib-basics
+)
 target_link_options(ydb-core-blobstorage-storagepoolmon-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-core-blobstorage-storagepoolmon-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/storagepoolmon/ut/storagepoolmon_ut.cpp
 )
 set_property(
   TARGET
@@ -47,5 +61,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-storagepoolmon-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-core-blobstorage-storagepoolmon-ut
+  system_allocator
 )
 vcs_info(ydb-core-blobstorage-storagepoolmon-ut)

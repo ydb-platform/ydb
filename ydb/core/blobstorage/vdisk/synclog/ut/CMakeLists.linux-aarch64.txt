@@ -11,6 +11,18 @@ add_executable(ydb-core-blobstorage-vdisk-synclog-ut)
 target_include_directories(ydb-core-blobstorage-vdisk-synclog-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog
 )
+target_link_libraries(ydb-core-blobstorage-vdisk-synclog-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  blobstorage-vdisk-synclog
+  library-cpp-getopt
+  library-cpp-svnversion
+  cpp-testing-unittest
+  ydb-core-base
+  ydb-core-blobstorage
+)
 target_link_options(ydb-core-blobstorage-vdisk-synclog-ut PRIVATE
   -ldl
   -lrt
@@ -20,6 +32,15 @@ target_link_options(ydb-core-blobstorage-vdisk-synclog-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-core-blobstorage-vdisk-synclog-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdata_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdsk_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmem_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgimpl_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgwriter_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/codecs_ut.cpp
 )
 set_property(
   TARGET
@@ -53,5 +74,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-vdisk-synclog-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-core-blobstorage-vdisk-synclog-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-blobstorage-vdisk-synclog-ut)

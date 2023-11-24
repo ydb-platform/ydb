@@ -8,10 +8,20 @@
 
 
 add_executable(static_validator-ut-example_configs)
+target_link_libraries(static_validator-ut-example_configs PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  library-yaml_config-static_validator
+  library-yaml_config-validator
+)
 target_link_options(static_validator-ut-example_configs PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
+)
+target_sources(static_validator-ut-example_configs PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/static_validator/ut/example_configs/test.cpp
 )
 set_property(
   TARGET
@@ -45,5 +55,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(static_validator-ut-example_configs
+  system_allocator
 )
 vcs_info(static_validator-ut-example_configs)

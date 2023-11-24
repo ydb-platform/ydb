@@ -11,6 +11,24 @@ add_executable(ydb-library-yql-utils-ut)
 target_include_directories(ydb-library-yql-utils-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils
 )
+target_link_libraries(ydb-library-yql-utils-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  library-yql-utils
+)
+target_sources(ydb-library-yql-utils-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/aws_credentials_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/fp_bits_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/md5_stream_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/multi_resource_lock_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/parse_double_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/range_walker_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/retry_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/url_builder_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/utf8_ut.cpp
+)
 set_property(
   TARGET
   ydb-library-yql-utils-ut
@@ -43,5 +61,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-utils-ut
+  system_allocator
 )
 vcs_info(ydb-library-yql-utils-ut)

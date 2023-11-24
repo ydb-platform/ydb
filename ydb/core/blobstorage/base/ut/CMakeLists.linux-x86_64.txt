@@ -8,6 +8,19 @@
 
 
 add_executable(ydb-core-blobstorage-base-ut)
+target_link_libraries(ydb-core-blobstorage-base-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-gtest
+  cpp-testing-gtest_main
+  core-blobstorage-base
+  library-cpp-getopt
+  library-cpp-svnversion
+  ydb-core-erasure
+  ydb-core-protos
+)
 target_link_options(ydb-core-blobstorage-base-ut PRIVATE
   -ldl
   -lrt
@@ -17,6 +30,11 @@ target_link_options(ydb-core-blobstorage-base-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-core-blobstorage-base-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/batched_vec_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/bufferwithgaps_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/ptr_ut.cpp
 )
 add_test(
   NAME
@@ -37,5 +55,9 @@ set_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-blobstorage-base-ut
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-core-blobstorage-base-ut)

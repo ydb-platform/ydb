@@ -11,6 +11,14 @@ add_executable(client-extensions-discovery_mutator-ut)
 target_include_directories(client-extensions-discovery_mutator-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/extensions/discovery_mutator
 )
+target_link_libraries(client-extensions-discovery_mutator-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  client-extensions-discovery_mutator
+  cpp-client-ydb_table
+)
 target_link_options(client-extensions-discovery_mutator-ut PRIVATE
   -ldl
   -lrt
@@ -20,6 +28,9 @@ target_link_options(client-extensions-discovery_mutator-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(client-extensions-discovery_mutator-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/extensions/discovery_mutator/discovery_mutator_ut.cpp
 )
 set_property(
   TARGET
@@ -53,5 +64,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  client-extensions-discovery_mutator-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(client-extensions-discovery_mutator-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(client-extensions-discovery_mutator-ut)

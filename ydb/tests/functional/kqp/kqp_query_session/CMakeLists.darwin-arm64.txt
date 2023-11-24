@@ -8,12 +8,24 @@
 
 
 add_executable(ydb-tests-functional-kqp-kqp_query_session)
+target_link_libraries(ydb-tests-functional-kqp-kqp_query_session PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  cpp-threading-local_executor
+  public-lib-ut_helpers
+  cpp-client-ydb_discovery
+  cpp-client-draft
+)
 target_link_options(ydb-tests-functional-kqp-kqp_query_session PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-tests-functional-kqp-kqp_query_session PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/tests/functional/kqp/kqp_query_session/main.cpp
 )
 set_property(
   TARGET
@@ -47,6 +59,16 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-tests-functional-kqp-kqp_query_session
+  PROPERTY
+  TIMEOUT
+  60
+)
+target_allocator(ydb-tests-functional-kqp-kqp_query_session
+  system_allocator
 )
 vcs_info(ydb-tests-functional-kqp-kqp_query_session)
 add_dependencies(ydb-tests-functional-kqp-kqp_query_session ydb_py_protos)

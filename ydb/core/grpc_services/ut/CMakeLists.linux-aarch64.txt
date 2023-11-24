@@ -11,6 +11,18 @@ add_executable(ydb-core-grpc_services-ut)
 target_include_directories(ydb-core-grpc_services-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services
 )
+target_link_libraries(ydb-core-grpc_services-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  ydb-core-grpc_services
+  library-cpp-getopt
+  cpp-regex-pcre
+  library-cpp-svnversion
+  core-client-scheme_cache_lib
+  core-testlib-default
+)
 target_link_options(ydb-core-grpc_services-ut PRIVATE
   -ldl
   -lrt
@@ -20,6 +32,10 @@ target_link_options(ydb-core-grpc_services-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-core-grpc_services-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_calls_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/operation_helpers_ut.cpp
 )
 set_property(
   TARGET
@@ -53,5 +69,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-grpc_services-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-grpc_services-ut)

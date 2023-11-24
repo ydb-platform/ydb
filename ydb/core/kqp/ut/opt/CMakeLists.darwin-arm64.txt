@@ -16,12 +16,33 @@ target_include_directories(ydb-core-kqp-ut-opt PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
 )
+target_link_libraries(ydb-core-kqp-ut-opt PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  ydb-core-kqp
+  kqp-ut-common
+  yql-sql-pg
+  yql-parser-pg_wrapper
+  re2_udf
+)
 target_link_options(ydb-core-kqp-ut-opt PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-core-kqp-ut-opt PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_agg_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_extract_predicate_unpack_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_kv_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_merge_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_ne_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_not_null_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_ranges_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_sort_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_sqlin_ut.cpp
 )
 set_property(
   TARGET
@@ -55,5 +76,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-kqp-ut-opt
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-core-kqp-ut-opt
+  system_allocator
 )
 vcs_info(ydb-core-kqp-ut-opt)

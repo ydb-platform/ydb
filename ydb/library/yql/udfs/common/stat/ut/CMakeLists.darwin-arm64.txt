@@ -14,12 +14,24 @@ target_compile_options(ydb-library-yql-udfs-common-stat-ut PRIVATE
 target_include_directories(ydb-library-yql-udfs-common-stat-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/static
 )
+target_link_libraries(ydb-library-yql-udfs-common-stat-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  common-stat-static
+  minikql-comp_nodes-llvm
+  udf-service-exception_policy
+  yql-sql-pg_dummy
+)
 target_link_options(ydb-library-yql-udfs-common-stat-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-library-yql-udfs-common-stat-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/stat_udf_ut.cpp
 )
 set_property(
   TARGET
@@ -53,5 +65,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-udfs-common-stat-ut
+  PROPERTY
+  TIMEOUT
+  300
+)
+target_allocator(ydb-library-yql-udfs-common-stat-ut
+  system_allocator
 )
 vcs_info(ydb-library-yql-udfs-common-stat-ut)

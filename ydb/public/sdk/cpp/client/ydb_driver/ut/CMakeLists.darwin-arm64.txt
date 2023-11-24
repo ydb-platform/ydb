@@ -11,12 +11,22 @@ add_executable(ydb-public-sdk-cpp-client-ydb_driver-ut)
 target_include_directories(ydb-public-sdk-cpp-client-ydb_driver-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_driver
 )
+target_link_libraries(ydb-public-sdk-cpp-client-ydb_driver-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  cpp-client-ydb_driver
+  cpp-client-ydb_table
+)
 target_link_options(ydb-public-sdk-cpp-client-ydb_driver-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-public-sdk-cpp-client-ydb_driver-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_driver/driver_ut.cpp
 )
 set_property(
   TARGET
@@ -50,5 +60,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-public-sdk-cpp-client-ydb_driver-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-public-sdk-cpp-client-ydb_driver-ut
+  system_allocator
 )
 vcs_info(ydb-public-sdk-cpp-client-ydb_driver-ut)

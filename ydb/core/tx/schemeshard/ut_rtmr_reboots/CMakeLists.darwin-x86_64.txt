@@ -14,12 +14,29 @@ target_compile_options(ydb-core-tx-schemeshard-ut_rtmr_reboots PRIVATE
 target_include_directories(ydb-core-tx-schemeshard-ut_rtmr_reboots PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard
 )
+target_link_libraries(ydb-core-tx-schemeshard-ut_rtmr_reboots PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  core-tx-schemeshard
+  library-cpp-getopt
+  cpp-regex-pcre
+  library-cpp-svnversion
+  core-testlib-default
+  ydb-core-tx
+  tx-schemeshard-ut_helpers
+  udf-service-exception_policy
+)
 target_link_options(ydb-core-tx-schemeshard-ut_rtmr_reboots PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-core-tx-schemeshard-ut_rtmr_reboots PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_rtmr_reboots/ut_rtmr_reboots.cpp
 )
 set_property(
   TARGET
@@ -53,5 +70,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-schemeshard-ut_rtmr_reboots
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-core-tx-schemeshard-ut_rtmr_reboots
+  system_allocator
 )
 vcs_info(ydb-core-tx-schemeshard-ut_rtmr_reboots)

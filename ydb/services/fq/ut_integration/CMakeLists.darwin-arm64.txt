@@ -14,12 +14,36 @@ target_compile_options(ydb-services-fq-ut_integration PRIVATE
 target_include_directories(ydb-services-fq-ut_integration PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/fq
 )
+target_link_libraries(ydb-services-fq-ut_integration PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  ydb-services-fq
+  library-cpp-getopt
+  cpp-grpc-client
+  cpp-regex-pcre
+  library-cpp-svnversion
+  fq-libs-control_plane_storage
+  fq-libs-db_id_async_resolver_impl
+  fq-libs-db_schema
+  fq-libs-private_client
+  core-testlib-default
+  providers-common-db_id_async_resolver
+  clickhouse_client_udf
+  library-yql-utils
+  public-lib-fq
+  ydb-services-ydb
+)
 target_link_options(ydb-services-fq-ut_integration PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-services-fq-ut_integration PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/fq/ut_integration/ut_utils.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/fq/ut_integration/fq_ut.cpp
 )
 set_property(
   TARGET
@@ -53,5 +77,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-services-fq-ut_integration
+  system_allocator
 )
 vcs_info(ydb-services-fq-ut_integration)

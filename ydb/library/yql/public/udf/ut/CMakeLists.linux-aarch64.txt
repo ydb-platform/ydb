@@ -14,6 +14,16 @@ target_compile_options(ydb-library-yql-public-udf-ut PRIVATE
 target_include_directories(ydb-library-yql-public-udf-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf
 )
+target_link_libraries(ydb-library-yql-public-udf-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  yql-public-udf
+  library-yql-utils
+  udf-service-exception_policy
+  yql-sql-pg_dummy
+)
 target_link_options(ydb-library-yql-public-udf-ut PRIVATE
   -ldl
   -lrt
@@ -23,6 +33,11 @@ target_link_options(ydb-library-yql-public-udf-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-library-yql-public-udf-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_counter_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_value_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_value_builder_ut.cpp
 )
 set_property(
   TARGET
@@ -56,5 +71,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-public-udf-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-yql-public-udf-ut)

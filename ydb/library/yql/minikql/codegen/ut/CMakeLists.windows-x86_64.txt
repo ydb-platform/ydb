@@ -6,6 +6,12 @@
 # original buildsystem will not be accepted.
 
 
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
 add_executable(ydb-library-yql-minikql-codegen-ut)
 target_compile_options(ydb-library-yql-minikql-codegen-ut PRIVATE
@@ -13,6 +19,18 @@ target_compile_options(ydb-library-yql-minikql-codegen-ut PRIVATE
 )
 target_include_directories(ydb-library-yql-minikql-codegen-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen
+)
+target_link_libraries(ydb-library-yql-minikql-codegen-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  yql-minikql-codegen
+  library-cpp-resource
+)
+target_sources(ydb-library-yql-minikql-codegen-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/codegen_ut.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/925fda4cf8bf8097eb12d1681cec1fd0.cpp
 )
 set_property(
   TARGET
@@ -46,5 +64,98 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+add_custom_command(
+  OUTPUT
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/Funcs_optimized.bc
+  DEPENDS
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/Funcs_merged.bc
+  COMMAND
+  ${LLVMOPT}
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/Funcs_merged.bc
+  -o
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/Funcs_optimized.bc
+  -O2
+  -globalopt
+  -globaldce
+  -internalize
+  -internalize-public-api-list=fib#sum_sqr#sum_sqr2#sum_sqr_128#sum_sqr_128_ir#str_size
+)
+add_custom_command(
+  OUTPUT
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/Funcs_merged.bc
+  DEPENDS
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/fib.cpp.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr.cpp.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr2.cpp.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/str.cpp.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.cpp.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit_win.ll.bc
+  COMMAND
+  ${LLVMLINK}
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/fib.cpp.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr.cpp.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr2.cpp.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/str.cpp.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.cpp.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit_win.ll.bc
+  -o
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/Funcs_merged.bc
+)
+add_custom_command(
+  OUTPUT
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit_win.ll.bc
+  DEPENDS
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit_win.ll
+  COMMAND
+  ${LLVMAS}
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit_win.ll
+  -o
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit_win.ll.bc
+)
+llvm_compile_cxx(ydb-library-yql-minikql-codegen-ut
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/fib.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/fib.cpp.bc
+  ${CLANGPLUSPLUS}
+  -Wno-unknown-warning-option
+  -emit-llvm
+)
+llvm_compile_cxx(ydb-library-yql-minikql-codegen-ut
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr.cpp.bc
+  ${CLANGPLUSPLUS}
+  -Wno-unknown-warning-option
+  -emit-llvm
+)
+llvm_compile_cxx(ydb-library-yql-minikql-codegen-ut
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr2.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/sum_sqr2.cpp.bc
+  ${CLANGPLUSPLUS}
+  -Wno-unknown-warning-option
+  -emit-llvm
+)
+llvm_compile_cxx(ydb-library-yql-minikql-codegen-ut
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/str.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/str.cpp.bc
+  ${CLANGPLUSPLUS}
+  -Wno-unknown-warning-option
+  -emit-llvm
+)
+llvm_compile_cxx(ydb-library-yql-minikql-codegen-ut
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.cpp.bc
+  ${CLANGPLUSPLUS}
+  -Wno-unknown-warning-option
+  -emit-llvm
+)
+resources(ydb-library-yql-minikql-codegen-ut
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/925fda4cf8bf8097eb12d1681cec1fd0.cpp
+  INPUTS
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/Funcs_optimized.bc
+  KEYS
+  /llvm_bc/Funcs
+)
+target_allocator(ydb-library-yql-minikql-codegen-ut
+  system_allocator
 )
 vcs_info(ydb-library-yql-minikql-codegen-ut)

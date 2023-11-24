@@ -14,6 +14,19 @@ target_compile_options(ydb-services-keyvalue-ut PRIVATE
 target_include_directories(ydb-services-keyvalue-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/keyvalue
 )
+target_link_libraries(ydb-services-keyvalue-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  ydb-services-keyvalue
+  library-cpp-logger
+  ydb-core-protos
+  core-testlib-default
+)
+target_sources(ydb-services-keyvalue-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/keyvalue/grpc_service_ut.cpp
+)
 set_property(
   TARGET
   ydb-services-keyvalue-ut
@@ -46,5 +59,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-services-keyvalue-ut
+  PROPERTY
+  TIMEOUT
+  100
+)
+target_allocator(ydb-services-keyvalue-ut
+  system_allocator
 )
 vcs_info(ydb-services-keyvalue-ut)

@@ -8,12 +8,23 @@
 
 
 add_executable(ydb-tests-functional-kqp-kqp_indexes)
+target_link_libraries(ydb-tests-functional-kqp-kqp_indexes PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  cpp-threading-local_executor
+  cpp-client-ydb_table
+  cpp-client-draft
+)
 target_link_options(ydb-tests-functional-kqp-kqp_indexes PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-tests-functional-kqp-kqp_indexes PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/tests/functional/kqp/kqp_indexes/main.cpp
 )
 set_property(
   TARGET
@@ -47,6 +58,9 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-tests-functional-kqp-kqp_indexes
+  system_allocator
 )
 vcs_info(ydb-tests-functional-kqp-kqp_indexes)
 add_dependencies(ydb-tests-functional-kqp-kqp_indexes ydb_py_protos)

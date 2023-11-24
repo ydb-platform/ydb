@@ -14,6 +14,16 @@ target_compile_options(ydb-core-tx-coordinator-ut PRIVATE
 target_include_directories(ydb-core-tx-coordinator-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator
 )
+target_link_libraries(ydb-core-tx-coordinator-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  core-tx-coordinator
+  core-testlib-default
+  ydb-core-tx
+  api-grpc
+)
 target_link_options(ydb-core-tx-coordinator-ut PRIVATE
   -ldl
   -lrt
@@ -23,6 +33,10 @@ target_link_options(ydb-core-tx-coordinator-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-core-tx-coordinator-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator_volatile_ut.cpp
 )
 set_property(
   TARGET
@@ -56,5 +70,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-coordinator-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-core-tx-coordinator-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-tx-coordinator-ut)

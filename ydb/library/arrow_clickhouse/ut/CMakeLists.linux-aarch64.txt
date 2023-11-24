@@ -11,6 +11,13 @@ add_executable(ydb-library-arrow_clickhouse-ut)
 target_include_directories(ydb-library-arrow_clickhouse-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse
 )
+target_link_libraries(ydb-library-arrow_clickhouse-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  ydb-library-arrow_clickhouse
+)
 target_link_options(ydb-library-arrow_clickhouse-ut PRIVATE
   -ldl
   -lrt
@@ -20,6 +27,9 @@ target_link_options(ydb-library-arrow_clickhouse-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-library-arrow_clickhouse-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse/ut_aggregator.cpp
 )
 set_property(
   TARGET
@@ -53,5 +63,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-library-arrow_clickhouse-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-library-arrow_clickhouse-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-arrow_clickhouse-ut)

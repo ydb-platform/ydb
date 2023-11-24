@@ -11,6 +11,14 @@ add_executable(ydb-public-lib-operation_id-ut)
 target_include_directories(ydb-public-lib-operation_id-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/operation_id
 )
+target_link_libraries(ydb-public-lib-operation_id-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  public-lib-operation_id
+  cpp-testing-unittest
+)
 target_link_options(ydb-public-lib-operation_id-ut PRIVATE
   -ldl
   -lrt
@@ -20,6 +28,9 @@ target_link_options(ydb-public-lib-operation_id-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-public-lib-operation_id-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/operation_id/operation_id_ut.cpp
 )
 set_property(
   TARGET
@@ -53,5 +64,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-public-lib-operation_id-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-public-lib-operation_id-ut)

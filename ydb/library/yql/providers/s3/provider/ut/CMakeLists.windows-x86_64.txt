@@ -11,6 +11,16 @@ add_executable(ydb-library-yql-providers-s3-provider-ut)
 target_include_directories(ydb-library-yql-providers-s3-provider-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/provider
 )
+target_link_libraries(ydb-library-yql-providers-s3-provider-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  providers-s3-provider
+)
+target_sources(ydb-library-yql-providers-s3-provider-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/provider/yql_s3_listing_strategy_ut.cpp
+)
 set_property(
   TARGET
   ydb-library-yql-providers-s3-provider-ut
@@ -43,5 +53,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-providers-s3-provider-ut
+  system_allocator
 )
 vcs_info(ydb-library-yql-providers-s3-provider-ut)

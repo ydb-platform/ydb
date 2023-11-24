@@ -8,6 +8,13 @@
 
 
 add_executable(yaml_config-validator-ut-validator_checks)
+target_link_libraries(yaml_config-validator-ut-validator_checks PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  library-yaml_config-validator
+)
 target_link_options(yaml_config-validator-ut-validator_checks PRIVATE
   -ldl
   -lrt
@@ -17,6 +24,9 @@ target_link_options(yaml_config-validator-ut-validator_checks PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(yaml_config-validator-ut-validator_checks PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/validator/ut/validator_checks/validator_checks_ut.cpp
 )
 set_property(
   TARGET
@@ -50,5 +60,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(yaml_config-validator-ut-validator_checks
+  cpp-malloc-jemalloc
 )
 vcs_info(yaml_config-validator-ut-validator_checks)

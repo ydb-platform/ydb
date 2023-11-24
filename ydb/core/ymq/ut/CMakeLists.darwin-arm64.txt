@@ -8,12 +8,26 @@
 
 
 add_executable(ydb-core-ymq-ut)
+target_link_libraries(ydb-core-ymq-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  core-ymq-base
+  core-ymq-http
+  library-http_proxy-error
+  yql-sql-pg_dummy
+  udf-service-exception_policy
+)
 target_link_options(ydb-core-ymq-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-core-ymq-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/ut/queue_id_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/ut/params_ut.cpp
 )
 set_property(
   TARGET
@@ -47,5 +61,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-ymq-ut
+  system_allocator
 )
 vcs_info(ydb-core-ymq-ut)

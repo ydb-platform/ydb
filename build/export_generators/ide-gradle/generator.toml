@@ -30,7 +30,6 @@ peers_closure="list"
 peers_closure_coords="list"
 excludes_rules="list"
 exclude="list"
-env="list"
 jar_source_set="list"
 
 [attrs.root]

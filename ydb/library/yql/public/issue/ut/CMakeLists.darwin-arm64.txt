@@ -11,12 +11,25 @@ add_executable(ydb-library-yql-public-issue-ut)
 target_include_directories(ydb-library-yql-public-issue-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue
 )
+target_link_libraries(ydb-library-yql-public-issue-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  yql-public-issue
+  cpp-unicode-normalization
+)
 target_link_options(ydb-library-yql-public-issue-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-library-yql-public-issue-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_issue_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_issue_manager_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_issue_utils_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_warning_ut.cpp
 )
 set_property(
   TARGET
@@ -50,5 +63,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-public-issue-ut
+  system_allocator
 )
 vcs_info(ydb-library-yql-public-issue-ut)

@@ -11,6 +11,18 @@ add_executable(ydb-core-blobstorage-vdisk-syncer-ut)
 target_include_directories(ydb-core-blobstorage-vdisk-syncer-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer
 )
+target_link_libraries(ydb-core-blobstorage-vdisk-syncer-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  blobstorage-vdisk-syncer
+  library-cpp-getopt
+  library-cpp-svnversion
+  ydb-core-base
+  ydb-core-blobstorage
+)
 target_link_options(ydb-core-blobstorage-vdisk-syncer-ut PRIVATE
   -ldl
   -lrt
@@ -20,6 +32,11 @@ target_link_options(ydb-core-blobstorage-vdisk-syncer-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-core-blobstorage-vdisk-syncer-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncquorum_ut.cpp
 )
 set_property(
   TARGET
@@ -53,5 +70,16 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-vdisk-syncer-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-core-blobstorage-vdisk-syncer-ut
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-core-blobstorage-vdisk-syncer-ut)

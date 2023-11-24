@@ -11,6 +11,17 @@ add_executable(library-cpp-actors-helpers-ut)
 target_include_directories(library-cpp-actors-helpers-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/helpers
 )
+target_link_libraries(library-cpp-actors-helpers-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  cpp-actors-helpers
+  cpp-actors-interconnect
+  cpp-actors-testlib
+  cpp-actors-core
+)
 target_link_options(library-cpp-actors-helpers-ut PRIVATE
   -ldl
   -lrt
@@ -20,6 +31,9 @@ target_link_options(library-cpp-actors-helpers-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(library-cpp-actors-helpers-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/helpers/selfping_actor_ut.cpp
 )
 set_property(
   TARGET
@@ -53,5 +67,16 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  library-cpp-actors-helpers-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(library-cpp-actors-helpers-ut
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(library-cpp-actors-helpers-ut)

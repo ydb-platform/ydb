@@ -11,6 +11,13 @@ add_executable(ydb-library-yaml_config-ut)
 target_include_directories(ydb-library-yaml_config-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config
 )
+target_link_libraries(ydb-library-yaml_config-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  ydb-library-yaml_config
+)
 target_link_options(ydb-library-yaml_config-ut PRIVATE
   -ldl
   -lrt
@@ -20,6 +27,10 @@ target_link_options(ydb-library-yaml_config-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-library-yaml_config-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/console_dumper_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/yaml_config_ut.cpp
 )
 set_property(
   TARGET
@@ -53,5 +64,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yaml_config-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-yaml_config-ut)

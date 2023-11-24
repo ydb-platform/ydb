@@ -11,12 +11,26 @@ add_executable(ydb-public-lib-json_value-ut)
 target_include_directories(ydb-public-lib-json_value-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/json_value
 )
+target_link_libraries(ydb-public-lib-json_value-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  public-lib-json_value
+  library-cpp-json
+  cpp-testing-unittest
+  cpp-client-ydb_proto
+  cpp-client-ydb_params
+)
 target_link_options(ydb-public-lib-json_value-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-public-lib-json_value-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/json_value/ydb_json_value_ut.cpp
 )
 set_property(
   TARGET
@@ -50,5 +64,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-public-lib-json_value-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-public-lib-json_value-ut
+  system_allocator
 )
 vcs_info(ydb-public-lib-json_value-ut)

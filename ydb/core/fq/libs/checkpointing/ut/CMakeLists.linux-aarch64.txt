@@ -14,6 +14,16 @@ target_compile_options(ydb-core-fq-libs-checkpointing-ut PRIVATE
 target_include_directories(ydb-core-fq-libs-checkpointing-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpointing
 )
+target_link_libraries(ydb-core-fq-libs-checkpointing-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  fq-libs-checkpointing
+  cpp-testing-unittest
+  core-testlib-actors
+  testlib-basics-default
+)
 target_link_options(ydb-core-fq-libs-checkpointing-ut PRIVATE
   -ldl
   -lrt
@@ -23,6 +33,9 @@ target_link_options(ydb-core-fq-libs-checkpointing-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-core-fq-libs-checkpointing-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/ut/checkpoint_coordinator_ut.cpp
 )
 set_property(
   TARGET
@@ -56,5 +69,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-fq-libs-checkpointing-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-fq-libs-checkpointing-ut)

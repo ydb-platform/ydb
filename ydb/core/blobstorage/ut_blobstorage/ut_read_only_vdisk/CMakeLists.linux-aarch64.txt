@@ -11,6 +11,14 @@ add_executable(ut_blobstorage-ut_read_only_vdisk)
 target_include_directories(ut_blobstorage-ut_read_only_vdisk PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
 )
+target_link_libraries(ut_blobstorage-ut_read_only_vdisk PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  blobstorage-ut_blobstorage-lib
+  ydb-core-load_test
+)
 target_link_options(ut_blobstorage-ut_read_only_vdisk PRIVATE
   -ldl
   -lrt
@@ -20,6 +28,9 @@ target_link_options(ut_blobstorage-ut_read_only_vdisk PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ut_blobstorage-ut_read_only_vdisk PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/read_only_vdisk.cpp
 )
 set_property(
   TARGET
@@ -53,5 +64,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ut_blobstorage-ut_read_only_vdisk
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ut_blobstorage-ut_read_only_vdisk
+  cpp-malloc-jemalloc
 )
 vcs_info(ut_blobstorage-ut_read_only_vdisk)

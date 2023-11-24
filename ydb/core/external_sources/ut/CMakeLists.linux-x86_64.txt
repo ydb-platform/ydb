@@ -11,6 +11,16 @@ add_executable(ydb-core-external_sources-ut)
 target_include_directories(ydb-core-external_sources-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/external_sources
 )
+target_link_libraries(ydb-core-external_sources-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  ydb-core-external_sources
+  udf-service-stub
+  yql-sql-pg_dummy
+)
 target_link_options(ydb-core-external_sources-ut PRIVATE
   -ldl
   -lrt
@@ -20,6 +30,10 @@ target_link_options(ydb-core-external_sources-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-core-external_sources-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/external_sources/object_storage_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/external_sources/external_data_source.cpp
 )
 set_property(
   TARGET
@@ -53,5 +67,9 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-external_sources-ut
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-core-external_sources-ut)

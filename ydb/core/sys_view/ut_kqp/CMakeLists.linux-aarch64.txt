@@ -14,6 +14,19 @@ target_compile_options(ydb-core-sys_view-ut_kqp PRIVATE
 target_include_directories(ydb-core-sys_view-ut_kqp PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/sys_view
 )
+target_link_libraries(ydb-core-sys_view-ut_kqp PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  ydb-core-sys_view
+  cpp-testing-unittest
+  cpp-yson-node
+  kqp-ut-common
+  persqueue-ut-common
+  core-testlib-default
+  cpp-client-draft
+)
 target_link_options(ydb-core-sys_view-ut_kqp PRIVATE
   -ldl
   -lrt
@@ -23,6 +36,12 @@ target_link_options(ydb-core-sys_view-ut_kqp PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-core-sys_view-ut_kqp PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_kqp.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_counters.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_labeled.cpp
 )
 set_property(
   TARGET
@@ -56,5 +75,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-sys_view-ut_kqp
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-core-sys_view-ut_kqp
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-sys_view-ut_kqp)

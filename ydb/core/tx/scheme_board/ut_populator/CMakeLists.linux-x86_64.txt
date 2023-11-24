@@ -14,6 +14,19 @@ target_compile_options(ydb-core-tx-scheme_board-ut_populator PRIVATE
 target_include_directories(ydb-core-tx-scheme_board-ut_populator PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board
 )
+target_link_libraries(ydb-core-tx-scheme_board-ut_populator PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  core-tx-scheme_board
+  cpp-testing-unittest
+  core-testlib-default
+  core-tx-schemeshard
+  tx-schemeshard-ut_helpers
+  core-tx-tx_allocator
+)
 target_link_options(ydb-core-tx-scheme_board-ut_populator PRIVATE
   -ldl
   -lrt
@@ -23,6 +36,10 @@ target_link_options(ydb-core-tx-scheme_board-ut_populator PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-core-tx-scheme_board-ut_populator PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/populator_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/ut_helpers.cpp
 )
 set_property(
   TARGET
@@ -56,5 +73,16 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-scheme_board-ut_populator
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-core-tx-scheme_board-ut_populator
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-core-tx-scheme_board-ut_populator)

@@ -14,6 +14,16 @@ target_compile_options(ydb-core-sys_view-query_stats-ut PRIVATE
 target_include_directories(ydb-core-sys_view-query_stats-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/query_stats
 )
+target_link_libraries(ydb-core-sys_view-query_stats-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  core-sys_view-query_stats
+  cpp-testing-unittest
+  core-testlib-default
+)
 target_link_options(ydb-core-sys_view-query_stats-ut PRIVATE
   -ldl
   -lrt
@@ -23,6 +33,9 @@ target_link_options(ydb-core-sys_view-query_stats-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-core-sys_view-query_stats-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/query_stats/query_stats_ut.cpp
 )
 set_property(
   TARGET
@@ -56,5 +69,16 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-sys_view-query_stats-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-core-sys_view-query_stats-ut
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-core-sys_view-query_stats-ut)

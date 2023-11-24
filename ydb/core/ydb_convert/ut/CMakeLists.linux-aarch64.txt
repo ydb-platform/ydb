@@ -11,6 +11,15 @@ add_executable(ydb-core-ydb_convert-ut)
 target_include_directories(ydb-core-ydb_convert-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert
 )
+target_link_libraries(ydb-core-ydb_convert-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  ydb-core-ydb_convert
+  cpp-testing-unittest
+  core-testlib-default
+)
 target_link_options(ydb-core-ydb_convert-ut PRIVATE
   -ldl
   -lrt
@@ -20,6 +29,11 @@ target_link_options(ydb-core-ydb_convert-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-core-ydb_convert-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/compression_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/table_description_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/ydb_convert_ut.cpp
 )
 set_property(
   TARGET
@@ -53,5 +67,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-ydb_convert-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-ydb_convert-ut)

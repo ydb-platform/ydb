@@ -14,6 +14,17 @@ target_compile_options(ydb-core-viewer-ut PRIVATE
 target_include_directories(ydb-core-viewer-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/viewer
 )
+target_link_libraries(ydb-core-viewer-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  ydb-core-viewer
+  core-testlib-default
+)
+target_sources(ydb-core-viewer-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/viewer_ut.cpp
+)
 set_property(
   TARGET
   ydb-core-viewer-ut
@@ -46,5 +57,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-viewer-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-core-viewer-ut
+  system_allocator
 )
 vcs_info(ydb-core-viewer-ut)

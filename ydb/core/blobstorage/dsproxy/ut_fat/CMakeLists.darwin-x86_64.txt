@@ -8,12 +8,33 @@
 
 
 add_executable(ydb-core-blobstorage-dsproxy-ut_fat)
+target_link_libraries(ydb-core-blobstorage-dsproxy-ut_fat PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  cpp-actors-protos
+  cpp-actors-util
+  library-cpp-getopt
+  library-cpp-svnversion
+  ydb-core-base
+  core-blobstorage-base
+  core-blobstorage-dsproxy
+  core-blobstorage-groupinfo
+  core-blobstorage-pdisk
+  core-blobstorage-vdisk
+  blobstorage-vdisk-common
+  core-testlib-default
+)
 target_link_options(ydb-core-blobstorage-dsproxy-ut_fat PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-core-blobstorage-dsproxy-ut_fat PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut_fat/dsproxy_ut.cpp
 )
 set_property(
   TARGET
@@ -47,5 +68,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-dsproxy-ut_fat
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-core-blobstorage-dsproxy-ut_fat
+  system_allocator
 )
 vcs_info(ydb-core-blobstorage-dsproxy-ut_fat)

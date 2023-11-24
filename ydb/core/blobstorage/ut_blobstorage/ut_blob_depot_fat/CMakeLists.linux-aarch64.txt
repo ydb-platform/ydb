@@ -11,6 +11,13 @@ add_executable(blobstorage-ut_blobstorage-ut_blob_depot_fat)
 target_include_directories(blobstorage-ut_blobstorage-ut_blob_depot_fat PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
 )
+target_link_libraries(blobstorage-ut_blobstorage-ut_blob_depot_fat PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  blobstorage-ut_blobstorage-lib
+)
 target_link_options(blobstorage-ut_blobstorage-ut_blob_depot_fat PRIVATE
   -ldl
   -lrt
@@ -20,6 +27,11 @@ target_link_options(blobstorage-ut_blobstorage-ut_blob_depot_fat PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(blobstorage-ut_blobstorage-ut_blob_depot_fat PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_fat.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_test_functions.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_event_managers.cpp
 )
 set_property(
   TARGET
@@ -53,5 +65,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  blobstorage-ut_blobstorage-ut_blob_depot_fat
+  PROPERTY
+  TIMEOUT
+  3600
+)
+target_allocator(blobstorage-ut_blobstorage-ut_blob_depot_fat
+  cpp-malloc-jemalloc
 )
 vcs_info(blobstorage-ut_blobstorage-ut_blob_depot_fat)

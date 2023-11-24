@@ -14,12 +14,26 @@ target_compile_options(ydb-services-cms-ut PRIVATE
 target_include_directories(ydb-services-cms-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/cms
 )
+target_link_libraries(ydb-services-cms-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  ydb-services-cms
+  library-cpp-getopt
+  cpp-grpc-client
+  cpp-regex-pcre
+  library-cpp-svnversion
+  core-testlib-default
+)
 target_link_options(ydb-services-cms-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-services-cms-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/services/cms/cms_ut.cpp
 )
 set_property(
   TARGET
@@ -53,5 +67,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-services-cms-ut
+  system_allocator
 )
 vcs_info(ydb-services-cms-ut)

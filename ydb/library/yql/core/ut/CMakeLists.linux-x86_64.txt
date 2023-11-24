@@ -14,6 +14,28 @@ target_compile_options(ydb-library-yql-core-ut PRIVATE
 target_include_directories(ydb-library-yql-core-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core
 )
+target_link_libraries(ydb-library-yql-core-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  library-yql-core
+  library-cpp-yson
+  library-yql-ast
+  yql-core-facade
+  yql-core-services
+  yql-public-udf
+  udf-service-exception_policy
+  yql-core-type_ann
+  yql-core-ut_common
+  providers-common-provider
+  common-schema-parser
+  providers-result-provider
+  yt-gateway-file
+  providers-yt-provider
+  yql-sql-pg
+)
 target_link_options(ydb-library-yql-core-ut PRIVATE
   -ldl
   -lrt
@@ -24,6 +46,18 @@ target_link_options(ydb-library-yql-core-ut PRIVATE
   -lrt
   -ldl
   -lutil
+)
+target_sources(ydb-library-yql-core-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_csv_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_execution_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_expr_constraint_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_expr_discover_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_expr_optimize_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_expr_providers_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_expr_type_annotation_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_library_compiler_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_opt_utils_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/ut/yql_udf_index_ut.cpp
 )
 set_property(
   TARGET
@@ -57,5 +91,16 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-library-yql-core-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-library-yql-core-ut
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-library-yql-core-ut)

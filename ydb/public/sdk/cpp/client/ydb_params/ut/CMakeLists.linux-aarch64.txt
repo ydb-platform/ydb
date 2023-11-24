@@ -11,6 +11,14 @@ add_executable(ydb-public-sdk-cpp-client-ydb_params-ut)
 target_include_directories(ydb-public-sdk-cpp-client-ydb_params-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_params
 )
+target_link_libraries(ydb-public-sdk-cpp-client-ydb_params-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  cpp-client-ydb_params
+  public-lib-yson_value
+)
 target_link_options(ydb-public-sdk-cpp-client-ydb_params-ut PRIVATE
   -ldl
   -lrt
@@ -20,6 +28,9 @@ target_link_options(ydb-public-sdk-cpp-client-ydb_params-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-public-sdk-cpp-client-ydb_params-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_params/params_ut.cpp
 )
 set_property(
   TARGET
@@ -53,5 +64,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-public-sdk-cpp-client-ydb_params-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-public-sdk-cpp-client-ydb_params-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-public-sdk-cpp-client-ydb_params-ut)

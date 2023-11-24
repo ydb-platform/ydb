@@ -14,6 +14,17 @@ target_compile_options(ydb-library-yql-dq-opt-ut PRIVATE
 target_include_directories(ydb-library-yql-dq-opt-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/opt
 )
+target_link_libraries(ydb-library-yql-dq-opt-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  yql-dq-opt
+  yql-sql-pg
+  yql-parser-pg_wrapper
+  udf-service-stub
+)
 target_link_options(ydb-library-yql-dq-opt-ut PRIVATE
   -ldl
   -lrt
@@ -23,6 +34,9 @@ target_link_options(ydb-library-yql-dq-opt-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-library-yql-dq-opt-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_cbo_ut.cpp
 )
 set_property(
   TARGET
@@ -56,5 +70,9 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-yql-dq-opt-ut
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-library-yql-dq-opt-ut)

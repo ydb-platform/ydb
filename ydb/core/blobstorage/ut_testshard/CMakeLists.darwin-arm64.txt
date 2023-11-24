@@ -8,12 +8,41 @@
 
 
 add_executable(ydb-core-blobstorage-ut_testshard)
+target_link_libraries(ydb-core-blobstorage-ut_testshard PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  ydb-core-base
+  ydb-core-blob_depot
+  core-blobstorage-backpressure
+  blobstorage-dsproxy-mock
+  core-blobstorage-nodewarden
+  blobstorage-pdisk-mock
+  blobstorage-testing-group_overseer
+  blobstorage-vdisk-common
+  ydb-core-mind
+  core-mind-bscontroller
+  core-mind-hive
+  core-sys_view-service
+  ydb-core-test_tablet
+  core-tx-scheme_board
+  core-tx-tx_allocator
+  core-tx-mediator
+  core-tx-coordinator
+  ydb-core-util
+  udf-service-stub
+  yql-sql-pg_dummy
+  cpp-testing-unittest
+)
 target_link_options(ydb-core-blobstorage-ut_testshard PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-core-blobstorage-ut_testshard PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_testshard/main.cpp
 )
 set_property(
   TARGET
@@ -47,5 +76,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-blobstorage-ut_testshard
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-core-blobstorage-ut_testshard
+  system_allocator
 )
 vcs_info(ydb-core-blobstorage-ut_testshard)

@@ -14,12 +14,27 @@ target_compile_options(ydb-core-tx-schemeshard-ut_index PRIVATE
 target_include_directories(ydb-core-tx-schemeshard-ut_index PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard
 )
+target_link_libraries(ydb-core-tx-schemeshard-ut_index PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  core-tx-schemeshard
+  ydb-core-base
+  ydb-core-scheme
+  core-testlib-default
+  tx-schemeshard-ut_helpers
+  lib-deprecated-kicli
+)
 target_link_options(ydb-core-tx-schemeshard-ut_index PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-core-tx-schemeshard-ut_index PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_index/ut_async_index.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_index/ut_unique_index.cpp
 )
 set_property(
   TARGET
@@ -53,5 +68,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-tx-schemeshard-ut_index
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-core-tx-schemeshard-ut_index
+  system_allocator
 )
 vcs_info(ydb-core-tx-schemeshard-ut_index)

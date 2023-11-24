@@ -8,12 +8,22 @@
 
 
 add_executable(ydb-library-testlib-ut)
+target_link_libraries(ydb-library-testlib-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-gtest
+  cpp-testing-gtest_main
+)
 target_link_options(ydb-library-testlib-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb-library-testlib-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/testlib/ut/gtest_compat_ut.cpp
 )
 add_test(
   NAME
@@ -34,5 +44,8 @@ set_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-library-testlib-ut
+  system_allocator
 )
 vcs_info(ydb-library-testlib-ut)

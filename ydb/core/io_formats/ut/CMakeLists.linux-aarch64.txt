@@ -14,6 +14,15 @@ target_compile_options(ydb-core-io_formats-ut PRIVATE
 target_include_directories(ydb-core-io_formats-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/io_formats
 )
+target_link_libraries(ydb-core-io_formats-ut PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  ydb-core-io_formats
+  udf-service-exception_policy
+  yql-sql-pg_dummy
+)
 target_link_options(ydb-core-io_formats-ut PRIVATE
   -ldl
   -lrt
@@ -23,6 +32,9 @@ target_link_options(ydb-core-io_formats-ut PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-core-io_formats-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/io_formats/ut_csv.cpp
 )
 set_property(
   TARGET
@@ -56,5 +68,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-io_formats-ut
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-io_formats-ut)

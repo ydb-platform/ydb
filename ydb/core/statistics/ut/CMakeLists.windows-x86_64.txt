@@ -14,6 +14,19 @@ target_compile_options(ydb-core-statistics-ut PRIVATE
 target_include_directories(ydb-core-statistics-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/statistics
 )
+target_link_libraries(ydb-core-statistics-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  ydb-core-statistics
+  cpp-testing-unittest
+  core-testlib-default
+)
+target_sources(ydb-core-statistics-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/ut/ut_common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/statistics/ut/ut_statistics.cpp
+)
 set_property(
   TARGET
   ydb-core-statistics-ut
@@ -46,5 +59,15 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-statistics-ut
+  PROPERTY
+  TIMEOUT
+  600
+)
+target_allocator(ydb-core-statistics-ut
+  system_allocator
 )
 vcs_info(ydb-core-statistics-ut)

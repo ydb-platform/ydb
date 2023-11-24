@@ -11,6 +11,16 @@ add_executable(ydb-core-tx-scheme_board-ut_double_indexed)
 target_include_directories(ydb-core-tx-scheme_board-ut_double_indexed PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board
 )
+target_link_libraries(ydb-core-tx-scheme_board-ut_double_indexed PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-testing-unittest_main
+  core-tx-scheme_board
+  cpp-testing-unittest
+  yql-sql-pg_dummy
+  udf-service-exception_policy
+)
 target_link_options(ydb-core-tx-scheme_board-ut_double_indexed PRIVATE
   -ldl
   -lrt
@@ -20,6 +30,9 @@ target_link_options(ydb-core-tx-scheme_board-ut_double_indexed PRIVATE
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydb-core-tx-scheme_board-ut_double_indexed PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/double_indexed_ut.cpp
 )
 set_property(
   TARGET
@@ -53,5 +66,8 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+target_allocator(ydb-core-tx-scheme_board-ut_double_indexed
+  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-tx-scheme_board-ut_double_indexed)

@@ -245,6 +245,9 @@ public:
                 if (alterData->GetAuditSettings()) {
                     event->Record.MutableAuditSettings()->CopyFrom(*alterData->GetAuditSettings());
                 }
+                if (alterData->GetServerlessComputeResourcesMode()) {
+                    event->Record.SetServerlessComputeResourcesMode(*alterData->GetServerlessComputeResourcesMode());
+                }
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "Send configure request to schemeshard: " << tabletID <<
                                 " opId: " << OperationId <<

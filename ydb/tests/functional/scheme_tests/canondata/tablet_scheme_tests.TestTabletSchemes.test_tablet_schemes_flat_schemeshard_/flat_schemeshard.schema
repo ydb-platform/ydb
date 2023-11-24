@@ -1413,6 +1413,11 @@
                 "ColumnId": 30,
                 "ColumnName": "AuditSettings",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 31,
+                "ColumnName": "ServerlessComputeResourcesMode",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -1448,7 +1453,8 @@
                     27,
                     28,
                     29,
-                    30
+                    30,
+                    31
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2164,6 +2170,11 @@
                 "ColumnId": 10,
                 "ColumnName": "AuditSettings",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "ServerlessComputeResourcesMode",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -2179,7 +2190,8 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -713,6 +713,10 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
         entry->MutableAuditSettings()->CopyFrom(*auditSettings);
     }
 
+    if (const auto& serverlessComputeResourcesMode = subDomainInfo->GetServerlessComputeResourcesMode()) {
+        entry->SetServerlessComputeResourcesMode(*serverlessComputeResourcesMode);
+    }
+    
     if (TTabletId sharedHive = subDomainInfo->GetSharedHive()) {
         entry->SetSharedHive(sharedHive.GetValue());
     }

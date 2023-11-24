@@ -1164,6 +1164,19 @@ TCheckFunc PartitionKeys(TVector<TString> lastShardKeys) {
     };
 }
 
+TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());
+
+        const auto& domainDesc = record.GetPathDescription().GetDomainDescription();
+        if (serverlessComputeResourcesMode) {
+            UNIT_ASSERT_VALUES_EQUAL(domainDesc.GetServerlessComputeResourcesMode(), serverlessComputeResourcesMode);
+        } else {
+            UNIT_ASSERT(!domainDesc.HasServerlessComputeResourcesMode());
+        }
+    };
+}
+
 #undef DESCRIBE_ASSERT_EQUAL
 
 } // NLs

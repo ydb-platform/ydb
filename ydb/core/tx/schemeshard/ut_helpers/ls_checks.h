@@ -149,6 +149,7 @@ namespace NLs {
     TCheckFunc KesusConfigIs(ui64 self_check_period_millis, ui64 session_grace_period_millis);
     TCheckFunc DatabaseQuotas(ui64 dataStreamShards);
     TCheckFunc SharedHive(ui64 sharedHiveId);
+    TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode);
     
     template<class TCheck>
     void PerformAllChecks(const NKikimrScheme::TEvDescribeSchemeResult& result, TCheck&& check) {

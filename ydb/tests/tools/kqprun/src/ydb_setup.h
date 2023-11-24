@@ -23,6 +23,12 @@ struct TExecutionMeta {
 };
 
 
+struct TQueryMeta {
+    TString Ast;
+    TString Plan;
+};
+
+
 struct TRequestResult {
     Ydb::StatusIds::StatusCode Status;
     NYql::TIssues Issues;
@@ -43,7 +49,9 @@ public:
 
     TRequestResult SchemeQueryRequest(const TString& query, TSchemeMeta& meta) const;
 
-    TRequestResult ScriptQueryRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, TString& operation) const;
+    TRequestResult ScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, TString& operation) const;
+
+    TRequestResult QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta) const;
 
     TRequestResult GetScriptExecutionOperationRequest(const TString& operation, TExecutionMeta& meta) const;
 

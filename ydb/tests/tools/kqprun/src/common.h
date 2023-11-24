@@ -12,6 +12,7 @@ namespace NKqpRun {
 struct TYdbSetupSettings {
     TString DomainName = "Root";
 
+    bool TraceOpt = false;
     TMaybe<TString> LogOutputFile;
 
     TString YqlToken;

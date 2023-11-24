@@ -1,6 +1,7 @@
 #pragma once
 
 #include "public.h"
+#include "peer_discovery.h"
 
 #include <yt/yt/core/actions/callback.h>
 
@@ -17,14 +18,14 @@ IChannelPtr CreateBalancingChannel(
     IChannelFactoryPtr channelFactory,
     TString endpointDescription,
     NYTree::IAttributeDictionaryPtr endpointAttributes,
-    TDiscoverRequestHook discoverRequestHook = {});
+    IPeerDiscoveryPtr peerDiscovery = CreateDefaultPeerDiscovery(TDiscoverRequestHook{}));
 
 IRoamingChannelProviderPtr CreateBalancingChannelProvider(
     TBalancingChannelConfigPtr config,
     IChannelFactoryPtr channelFactory,
     TString endpointDescription,
     NYTree::IAttributeDictionaryPtr endpointAttributes,
-    TDiscoverRequestHook discoverRequestHook = {});
+    IPeerDiscoveryPtr peerDiscovery = CreateDefaultPeerDiscovery(TDiscoverRequestHook{}));
 
 ////////////////////////////////////////////////////////////////////////////////
 

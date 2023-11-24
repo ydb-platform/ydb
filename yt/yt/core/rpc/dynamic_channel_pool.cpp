@@ -46,7 +46,7 @@ public:
         TString endpointDescription,
         IAttributeDictionaryPtr endpointAttributes,
         std::string serviceName,
-        TDiscoverRequestHook discoverRequestHook)
+        IPeerDiscoveryPtr peerDiscovery)
         : Config_(std::move(config))
         , ChannelFactory_(std::move(channelFactory))
         , EndpointDescription_(std::move(endpointDescription))
@@ -56,7 +56,7 @@ public:
                 .Item("service").Value(serviceName)
             .EndMap()))
         , ServiceName_(std::move(serviceName))
-        , DiscoverRequestHook_(std::move(discoverRequestHook))
+        , PeerDiscovery_(std::move(peerDiscovery))
         , Logger(RpcClientLogger.WithTag(
             "ChannelId: %v, Endpoint: %v, Service: %v",
             TGuid::Create(),
@@ -191,7 +191,7 @@ private:
     const TString EndpointDescription_;
     const IAttributeDictionaryPtr EndpointAttributes_;
     const std::string ServiceName_;
-    const TDiscoverRequestHook DiscoverRequestHook_;
+    IPeerDiscoveryPtr PeerDiscovery_;
 
     const NLogging::TLogger Logger;
 
@@ -306,17 +306,15 @@ private:
             YT_LOG_DEBUG("Querying peer (Address: %v)", address);
 
             auto channel = owner->ChannelFactory_->CreateChannel(address);
-            auto proxy = owner->CreateGenericProxy(channel);
-            proxy.SetDefaultTimeout(owner->Config_->DiscoverTimeout);
-
-            auto req = proxy.Discover();
-            if (owner->DiscoverRequestHook_) {
-                owner->DiscoverRequestHook_.Run(req.Get());
-            }
+            auto request = owner->PeerDiscovery_->Discover(
+                channel,
+                owner->Config_->DiscoverTimeout,
+                /*replyDelay*/ TDuration::Zero(),
+                owner->ServiceName_);
 
             // NB: Via prevents stack overflow due to QueryPeer -> OnResponse -> DoRun loop in
             // case when Invoke() is immediately set.
-            req->Invoke().Subscribe(BIND(
+            request.Subscribe(BIND(
                 &TDiscoverySession::OnResponse,
                 MakeStrong(this),
                 address)
@@ -325,7 +323,7 @@ private:
 
         void OnResponse(
             const TString& address,
-            const TGenericProxy::TErrorOrRspDiscoverPtr& rspOrError)
+            const TErrorOr<TPeerDiscoveryResponse> rspOrError)
         {
             auto owner = Owner_.Lock();
             if (!owner) {
@@ -337,11 +335,9 @@ private:
             YT_LOG_DEBUG_IF(authError, "Peer has reported authentication error on discovery (Address: %v)",
                 address);
             if (rspOrError.IsOK() || authError) {
-                // const auto& rsp = rspOrError.Value();
-                // bool up = rsp->up();
-                // auto suggestedAddresses = FromProto<std::vector<TString>>(rsp->suggested_addresses());
-                bool up = authError ? true : rspOrError.Value()->up();
-                auto suggestedAddresses = authError ? std::vector<TString>() : FromProto<std::vector<TString>>(rspOrError.Value()->suggested_addresses());
+                NProto::TRspDiscover resp;
+                auto suggestedAddresses = FromProto<std::vector<TString>>(resp.suggested_addresses());
+                bool up = authError ? true : rspOrError.Value().IsUp;
 
                 if (!suggestedAddresses.empty()) {
                     YT_LOG_DEBUG("Peers suggested (SuggestorAddress: %v, SuggestedAddresses: %v)",
@@ -537,31 +533,22 @@ private:
             auto peerPollingPeriod = owner->Config_->PeerPollingPeriod + RandomDuration(owner->Config_->PeerPollingPeriodSplay);
 
             auto channel = owner->ChannelFactory_->CreateChannel(PeerAddress_);
-            auto proxy = owner->CreateGenericProxy(channel);
-
             auto requestTimeout = peerPollingPeriod + owner->Config_->PeerPollingRequestTimeout;
-            auto req = proxy.Discover();
-            req->set_reply_delay(peerPollingPeriod.GetValue());
-            req->SetTimeout(requestTimeout);
-            if (owner->DiscoverRequestHook_) {
-                owner->DiscoverRequestHook_.Run(req.Get());
-            }
-
+            auto req = owner->PeerDiscovery_->Discover(channel, requestTimeout, /*replyDelay*/ peerPollingPeriod, owner->ServiceName_);
             YT_LOG_DEBUG("Polling peer (PollingPeriod: %v, RequestTimeout: %v)",
                 peerPollingPeriod,
                 requestTimeout);
 
             owner.Reset();
 
-            req->Invoke()
-                .Subscribe(BIND([=, this, this_ = MakeStrong(this)] (const TGenericProxy::TErrorOrRspDiscoverPtr& rspOrError) {
+            req.Subscribe(BIND([=, this, this_ = MakeStrong(this)] (const TErrorOr<TPeerDiscoveryResponse>& rspOrError) {
                     auto owner = Owner_.Lock();
                     if (!owner) {
                         return;
                     }
 
                     if (rspOrError.IsOK()) {
-                        auto isUp = rspOrError.Value()->up();
+                        auto isUp = rspOrError.Value().IsUp;
                         if (isUp) {
                             YT_LOG_DEBUG("Peer is up");
                             owner->UnbanPeer(PeerAddress_);
@@ -857,13 +844,6 @@ private:
             evicted);
     }
 
-    TGenericProxy CreateGenericProxy(IChannelPtr peerChannel)
-    {
-        auto serviceDescriptor = TServiceDescriptor(ServiceName_)
-            .SetProtocolVersion(GenericProtocolVersion);
-        return TGenericProxy(std::move(peerChannel), serviceDescriptor);
-    }
-
     IChannelPtr CreateChannel(const TString& address)
     {
         return CreateFailureDetectingChannel(
@@ -879,16 +859,16 @@ TDynamicChannelPool::TDynamicChannelPool(
     TDynamicChannelPoolConfigPtr config,
     IChannelFactoryPtr channelFactory,
     TString endpointDescription,
-    IAttributeDictionaryPtr endpointAttributes,
+    NYTree::IAttributeDictionaryPtr endpointAttributes,
     std::string serviceName,
-    TDiscoverRequestHook discoverRequestHook)
+    IPeerDiscoveryPtr peerDiscovery)
     : Impl_(New<TImpl>(
         std::move(config),
         std::move(channelFactory),
         std::move(endpointDescription),
         std::move(endpointAttributes),
         std::move(serviceName),
-        std::move(discoverRequestHook)))
+        std::move(peerDiscovery)))
 { }
 
 TDynamicChannelPool::~TDynamicChannelPool() = default;

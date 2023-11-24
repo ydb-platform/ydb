@@ -78,6 +78,7 @@ DECLARE_REFCOUNTED_CLASS(TAttachmentsInputStream)
 DECLARE_REFCOUNTED_CLASS(TAttachmentsOutputStream)
 
 DECLARE_REFCOUNTED_STRUCT(IViablePeerRegistry)
+DECLARE_REFCOUNTED_STRUCT(IPeerDiscovery)
 DECLARE_REFCOUNTED_CLASS(TDynamicChannelPool)
 
 template <

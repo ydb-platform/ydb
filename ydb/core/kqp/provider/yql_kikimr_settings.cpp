@@ -68,6 +68,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, OptEnableCostBasedOptimization);
+    REGISTER_SETTING(*this, MaxDPccpDPTableSize);
 
     REGISTER_SETTING(*this, MaxTasksPerStage);
 

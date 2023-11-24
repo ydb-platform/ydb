@@ -62,6 +62,8 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
     NCommon::TConfSetting<bool, false> OptEnableCostBasedOptimization;
+    NCommon::TConfSetting<ui32, false> MaxDPccpDPTableSize;
+
 
     NCommon::TConfSetting<ui32, false> MaxTasksPerStage;
 

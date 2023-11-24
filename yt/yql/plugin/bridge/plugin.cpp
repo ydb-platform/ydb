@@ -27,7 +27,7 @@ std::optional<TString> ToString(const char* str, size_t strLength)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const auto RequiredAbiVersion = 0;
+constexpr auto RequiredAbiVersion = 0;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -44,7 +44,10 @@ public:
         #undef XX
 
         if (RequiredAbiVersion != BridgeGetAbiVersion()) {
-            THROW_ERROR_EXCEPTION("YQL plugin ABI version mismatch; expected version %v, actual version %v", RequiredAbiVersion, BridgeGetAbiVersion());
+            THROW_ERROR_EXCEPTION(
+                "YQL plugin ABI version mismatch; expected version %v, actual version %v",
+                RequiredAbiVersion,
+                BridgeGetAbiVersion());
         }
     }
 

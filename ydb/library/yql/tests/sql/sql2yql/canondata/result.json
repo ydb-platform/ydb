@@ -7657,6 +7657,13 @@
             "uri": "https://{canondata_backend}/1937027/b5576dd03b65095c35e7cb4954821e4f66817b94/resource.tar.gz#test_sql2yql.test_join-lookupjoin_semi_subq_/sql.yql"
         }
     ],
+    "test_sql2yql.test[join-lookupjoin_take_skip]": [
+        {
+            "checksum": "0d9a5940582e119c4bf0d2c99b796fb5",
+            "size": 4430,
+            "uri": "https://{canondata_backend}/1936997/a4fb1650ba6f8c54af3ca9cd217fe3accf7ae1bc/resource.tar.gz#test_sql2yql.test_join-lookupjoin_take_skip_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[join-lookupjoin_unused_keys]": [
         {
             "checksum": "90e5e5d306d0f031da197bdbdba1a06c",
@@ -24714,6 +24721,13 @@
             "checksum": "5c37585c41665849a2e44a610266ae94",
             "size": 291,
             "uri": "https://{canondata_backend}/1599023/4bd7e6892a9762eec433e60bda88f20cddadc74c/resource.tar.gz#test_sql_format.test_join-lookupjoin_semi_subq_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[join-lookupjoin_take_skip]": [
+        {
+            "checksum": "92f33c391aa47d33cf72fb866e2bcb1f",
+            "size": 512,
+            "uri": "https://{canondata_backend}/1936997/a4fb1650ba6f8c54af3ca9cd217fe3accf7ae1bc/resource.tar.gz#test_sql_format.test_join-lookupjoin_take_skip_/formatted.sql"
         }
     ],
     "test_sql_format.test[join-lookupjoin_unused_keys]": [

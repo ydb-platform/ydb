@@ -11,14 +11,6 @@ add_executable(ydb-core-metering-ut)
 target_include_directories(ydb-core-metering-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/metering
 )
-target_link_libraries(ydb-core-metering-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-metering
-)
 target_link_options(ydb-core-metering-ut PRIVATE
   -ldl
   -lrt
@@ -28,10 +20,6 @@ target_link_options(ydb-core-metering-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-core-metering-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/metering/stream_ru_calculator_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/metering/time_grid_ut.cpp
 )
 set_property(
   TARGET
@@ -65,9 +53,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-core-metering-ut
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-core-metering-ut)

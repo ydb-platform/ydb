@@ -8,33 +8,12 @@
 
 
 add_executable(ydb-core-blobstorage-ut_mirror3of4)
-target_link_libraries(ydb-core-blobstorage-ut_mirror3of4 PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  actors-interconnect-mock
-  cpp-testing-unittest
-  core-blobstorage-backpressure
-  core-blobstorage-base
-  core-blobstorage-dsproxy
-  core-blobstorage-groupinfo
-  blobstorage-pdisk-mock
-  core-blobstorage-vdisk
-  blobstorage-vdisk-common
-  blobstorage-vdisk-repl
-  core-tx-scheme_board
-  ydb-core-util
-)
 target_link_options(ydb-core-blobstorage-ut_mirror3of4 PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(ydb-core-blobstorage-ut_mirror3of4 PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_mirror3of4/main.cpp
 )
 set_property(
   TARGET
@@ -68,15 +47,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-core-blobstorage-ut_mirror3of4
-  PROPERTY
-  TIMEOUT
-  600
-)
-target_allocator(ydb-core-blobstorage-ut_mirror3of4
-  system_allocator
 )
 vcs_info(ydb-core-blobstorage-ut_mirror3of4)

@@ -14,22 +14,6 @@ target_compile_options(ydb-services-persqueue_v1-ut-new_schemecache_ut PRIVATE
 target_include_directories(ydb-services-persqueue_v1-ut-new_schemecache_ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1
 )
-target_link_libraries(ydb-services-persqueue_v1-ut-new_schemecache_ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-services-persqueue_v1
-  library-cpp-getopt
-  library-cpp-svnversion
-  library-persqueue-tests
-  core-testlib-default
-  api-grpc
-  cpp-client-resources
-  ydb_persqueue_core-ut-ut_utils
-  cpp-client-ydb_table
-)
 target_link_options(ydb-services-persqueue_v1-ut-new_schemecache_ut PRIVATE
   -ldl
   -lrt
@@ -39,11 +23,6 @@ target_link_options(ydb-services-persqueue_v1-ut-new_schemecache_ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-services-persqueue_v1-ut-new_schemecache_ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue_new_schemecache_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue_common_new_schemecache_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/rate_limiter_test_setup.cpp
 )
 set_property(
   TARGET
@@ -77,16 +56,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-services-persqueue_v1-ut-new_schemecache_ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-target_allocator(ydb-services-persqueue_v1-ut-new_schemecache_ut
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-services-persqueue_v1-ut-new_schemecache_ut)

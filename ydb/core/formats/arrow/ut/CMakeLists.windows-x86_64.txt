@@ -16,25 +16,6 @@ target_include_directories(ydb-core-formats-arrow-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow
   ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse
 )
-target_link_libraries(ydb-core-formats-arrow-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-formats-arrow
-  libs-apache-arrow
-  ydb-library-arrow_kernels
-  ydb-core-base
-  udf-service-exception_policy
-  yql-sql-pg_dummy
-)
-target_sources(ydb-core-formats-arrow-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ut_arrow.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ut_program_step.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ut/ut_dictionary.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ut/ut_size_calcer.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ut/ut_column_filter.cpp
-)
 set_property(
   TARGET
   ydb-core-formats-arrow-ut
@@ -67,8 +48,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-core-formats-arrow-ut
-  system_allocator
 )
 vcs_info(ydb-core-formats-arrow-ut)

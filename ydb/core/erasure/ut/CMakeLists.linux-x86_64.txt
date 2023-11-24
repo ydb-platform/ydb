@@ -11,15 +11,6 @@ add_executable(ydb-core-erasure-ut)
 target_include_directories(ydb-core-erasure-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/erasure
 )
-target_link_libraries(ydb-core-erasure-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-erasure
-  cpp-digest-crc32c
-)
 target_link_options(ydb-core-erasure-ut PRIVATE
   -ldl
   -lrt
@@ -29,10 +20,6 @@ target_link_options(ydb-core-erasure-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-core-erasure-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/erasure/erasure_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/erasure/erasure_new_ut.cpp
 )
 set_property(
   TARGET
@@ -66,16 +53,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-core-erasure-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-target_allocator(ydb-core-erasure-ut
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-core-erasure-ut)

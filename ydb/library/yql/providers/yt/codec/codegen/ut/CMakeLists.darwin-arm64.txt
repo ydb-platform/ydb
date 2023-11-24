@@ -14,26 +14,12 @@ target_compile_options(ydb-library-yql-providers-yt-codec-codegen-ut PRIVATE
 target_include_directories(ydb-library-yql-providers-yt-codec-codegen-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/codegen
 )
-target_link_libraries(ydb-library-yql-providers-yt-codec-codegen-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  yt-codec-codegen
-  minikql-computation-llvm
-  udf-service-exception_policy
-  library-yql-sql
-  yql-sql-pg_dummy
-  providers-yt-codec
-)
 target_link_options(ydb-library-yql-providers-yt-codec-codegen-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(ydb-library-yql-providers-yt-codec-codegen-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/codegen/ut/yt_codec_cg_ut.cpp
 )
 set_property(
   TARGET
@@ -67,8 +53,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-library-yql-providers-yt-codec-codegen-ut
-  system_allocator
 )
 vcs_info(ydb-library-yql-providers-yt-codec-codegen-ut)

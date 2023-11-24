@@ -11,23 +11,12 @@ add_executable(library-cpp-actors-cppcoro-ut)
 target_include_directories(library-cpp-actors-cppcoro-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/cppcoro
 )
-target_link_libraries(library-cpp-actors-cppcoro-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  cpp-actors-cppcoro
-  cpp-actors-testlib
-)
 target_link_options(library-cpp-actors-cppcoro-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(library-cpp-actors-cppcoro-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/cppcoro/task_ut.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/cppcoro/task_actor_ut.cpp
 )
 set_property(
   TARGET
@@ -61,8 +50,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(library-cpp-actors-cppcoro-ut
-  system_allocator
 )
 vcs_info(library-cpp-actors-cppcoro-ut)

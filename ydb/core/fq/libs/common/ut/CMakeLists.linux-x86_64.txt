@@ -14,17 +14,6 @@ target_compile_options(ydb-core-fq-libs-common-ut PRIVATE
 target_include_directories(ydb-core-fq-libs-common-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common
 )
-target_link_libraries(ydb-core-fq-libs-common-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  fq-libs-common
-  udf-service-stub
-  yql-sql-pg_dummy
-  ydb-services-ydb
-)
 target_link_options(ydb-core-fq-libs-common-ut PRIVATE
   -ldl
   -lrt
@@ -34,12 +23,6 @@ target_link_options(ydb-core-fq-libs-common-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-core-fq-libs-common-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/cache_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/entity_id_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/rows_proto_splitter_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/util_ut.cpp
 )
 set_property(
   TARGET
@@ -73,9 +56,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-core-fq-libs-common-ut
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-core-fq-libs-common-ut)

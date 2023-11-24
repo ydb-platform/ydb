@@ -11,22 +11,12 @@ add_executable(ydb-core-tablet_flat-ut_util)
 target_include_directories(ydb-core-tablet_flat-ut_util PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat
 )
-target_link_libraries(ydb-core-tablet_flat-ut_util PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  ydb-core-tablet_flat
-)
 target_link_options(ydb-core-tablet_flat-ut_util PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(ydb-core-tablet_flat-ut_util PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/util_pool_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/util_string_ut.cpp
 )
 set_property(
   TARGET
@@ -60,15 +50,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-core-tablet_flat-ut_util
-  PROPERTY
-  TIMEOUT
-  600
-)
-target_allocator(ydb-core-tablet_flat-ut_util
-  system_allocator
 )
 vcs_info(ydb-core-tablet_flat-ut_util)

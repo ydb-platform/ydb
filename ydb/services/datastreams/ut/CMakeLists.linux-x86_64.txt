@@ -14,19 +14,6 @@ target_compile_options(ydb-services-datastreams-ut PRIVATE
 target_include_directories(ydb-services-datastreams-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/datastreams
 )
-target_link_libraries(ydb-services-datastreams-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-services-datastreams
-  library-cpp-getopt
-  cpp-grpc-client
-  library-cpp-svnversion
-  core-testlib-default
-  cpp-client-ydb_topic
-)
 target_link_options(ydb-services-datastreams-ut PRIVATE
   -ldl
   -lrt
@@ -36,9 +23,6 @@ target_link_options(ydb-services-datastreams-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-services-datastreams-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/datastreams/datastreams_ut.cpp
 )
 set_property(
   TARGET
@@ -72,16 +56,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-services-datastreams-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-target_allocator(ydb-services-datastreams-ut
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-services-datastreams-ut)

@@ -11,16 +11,6 @@ add_executable(ydb-core-blobstorage-vdisk-defrag-ut)
 target_include_directories(ydb-core-blobstorage-vdisk-defrag-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/defrag
 )
-target_link_libraries(ydb-core-blobstorage-vdisk-defrag-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  blobstorage-vdisk-defrag
-  library-cpp-getopt
-  library-cpp-svnversion
-  blobstorage-vdisk-hulldb
-)
 target_link_options(ydb-core-blobstorage-vdisk-defrag-ut PRIVATE
   -ldl
   -lrt
@@ -30,9 +20,6 @@ target_link_options(ydb-core-blobstorage-vdisk-defrag-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-core-blobstorage-vdisk-defrag-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/defrag/defrag_actor_ut.cpp
 )
 set_property(
   TARGET
@@ -66,8 +53,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-core-blobstorage-vdisk-defrag-ut
-  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-blobstorage-vdisk-defrag-ut)

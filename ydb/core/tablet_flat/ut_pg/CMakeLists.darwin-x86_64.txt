@@ -16,27 +16,12 @@ target_include_directories(ydb-core-tablet_flat-ut_pg PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
 )
-target_link_libraries(ydb-core-tablet_flat-ut_pg PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-tablet_flat
-  ydb-core-scheme
-  test-libs-table
-  udf-service-exception_policy
-  yql-sql-pg
-  yql-parser-pg_wrapper
-)
 target_link_options(ydb-core-tablet_flat-ut_pg PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(ydb-core-tablet_flat-ut_pg PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut_pg/flat_database_pg_ut.cpp
 )
 set_property(
   TARGET
@@ -70,8 +55,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-core-tablet_flat-ut_pg
-  system_allocator
 )
 vcs_info(ydb-core-tablet_flat-ut_pg)

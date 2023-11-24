@@ -14,24 +14,12 @@ target_compile_options(ydb-core-scheme-ut PRIVATE
 target_include_directories(ydb-core-scheme-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/scheme
 )
-target_link_libraries(ydb-core-scheme-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  ydb-core-scheme
-  udf-service-stub
-  yql-sql-pg_dummy
-)
 target_link_options(ydb-core-scheme-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(ydb-core-scheme-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_borders_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_tablecell_ut.cpp
 )
 set_property(
   TARGET
@@ -65,8 +53,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-core-scheme-ut
-  system_allocator
 )
 vcs_info(ydb-core-scheme-ut)

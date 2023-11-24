@@ -11,17 +11,6 @@ add_executable(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut)
 target_include_directories(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/compstrat
 )
-target_link_libraries(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  vdisk-hulldb-compstrat
-  ydb-core-base
-  blobstorage-vdisk-common
-  blobstorage-vdisk-hulldb
-  vdisk-hulldb-test
-)
 target_link_options(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut PRIVATE
   -ldl
   -lrt
@@ -31,9 +20,6 @@ target_link_options(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_ut.cpp
 )
 set_property(
   TARGET
@@ -67,15 +53,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-core-blobstorage-vdisk-hulldb-compstrat-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-target_allocator(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut
-  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut)

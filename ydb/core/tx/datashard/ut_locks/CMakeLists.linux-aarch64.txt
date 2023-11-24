@@ -14,23 +14,6 @@ target_compile_options(ydb-core-tx-datashard-ut_locks PRIVATE
 target_include_directories(ydb-core-tx-datashard-ut_locks PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard
 )
-target_link_libraries(ydb-core-tx-datashard-ut_locks PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  core-tx-datashard
-  tx-datashard-ut_common
-  library-cpp-getopt
-  cpp-regex-pcre
-  library-cpp-svnversion
-  kqp-ut-common
-  core-testlib-default
-  ydb-core-tx
-  udf-service-exception_policy
-  public-lib-yson_value
-  cpp-client-ydb_result
-)
 target_link_options(ydb-core-tx-datashard-ut_locks PRIVATE
   -ldl
   -lrt
@@ -40,9 +23,6 @@ target_link_options(ydb-core-tx-datashard-ut_locks PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-core-tx-datashard-ut_locks PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_locks.cpp
 )
 set_property(
   TARGET
@@ -76,15 +56,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-core-tx-datashard-ut_locks
-  PROPERTY
-  TIMEOUT
-  600
-)
-target_allocator(ydb-core-tx-datashard-ut_locks
-  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-tx-datashard-ut_locks)

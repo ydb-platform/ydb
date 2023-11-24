@@ -12,14 +12,6 @@ target_include_directories(library-cpp-actors-dnsresolver-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/dnsresolver
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/include
 )
-target_link_libraries(library-cpp-actors-dnsresolver-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  cpp-actors-dnsresolver
-  cpp-actors-testlib
-)
 target_link_options(library-cpp-actors-dnsresolver-ut PRIVATE
   -ldl
   -lrt
@@ -29,11 +21,6 @@ target_link_options(library-cpp-actors-dnsresolver-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(library-cpp-actors-dnsresolver-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/dnsresolver/dnsresolver_caching_ut.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/dnsresolver/dnsresolver_ondemand_ut.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/dnsresolver/dnsresolver_ut.cpp
 )
 set_property(
   TARGET
@@ -67,8 +54,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(library-cpp-actors-dnsresolver-ut
-  cpp-malloc-jemalloc
 )
 vcs_info(library-cpp-actors-dnsresolver-ut)

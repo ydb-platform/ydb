@@ -14,23 +14,6 @@ target_compile_options(ydb-services-bg_tasks-ut PRIVATE
 target_include_directories(ydb-services-bg_tasks-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks
 )
-target_link_libraries(ydb-services-bg_tasks-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  ydb-services-bg_tasks
-  library-cpp-getopt
-  cpp-regex-pcre
-  library-cpp-svnversion
-  ydb-core-testlib
-  public-lib-yson_value
-  cpp-client-ydb_table
-  services-bg_tasks-abstract
-  cpp-testing-unittest
-  yql-parser-pg_wrapper
-  yql-sql-pg
-)
 target_link_options(ydb-services-bg_tasks-ut PRIVATE
   -ldl
   -lrt
@@ -40,10 +23,6 @@ target_link_options(ydb-services-bg_tasks-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-services-bg_tasks-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ut/ut_tasks.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/ut/task_emulator.cpp
 )
 set_property(
   TARGET
@@ -77,8 +56,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-services-bg_tasks-ut
-  cpp-malloc-jemalloc
 )
 vcs_info(ydb-services-bg_tasks-ut)

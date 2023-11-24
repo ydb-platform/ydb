@@ -11,25 +11,12 @@ add_executable(ydb-public-sdk-cpp-client-ydb_value-ut)
 target_include_directories(ydb-public-sdk-cpp-client-ydb_value-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_value
 )
-target_link_libraries(ydb-public-sdk-cpp-client-ydb_value-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  cpp-client-ydb_value
-  public-lib-json_value
-  public-lib-yson_value
-  cpp-client-ydb_params
-)
 target_link_options(ydb-public-sdk-cpp-client-ydb_value-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(ydb-public-sdk-cpp-client-ydb_value-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_value/value_ut.cpp
 )
 set_property(
   TARGET
@@ -63,15 +50,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-public-sdk-cpp-client-ydb_value-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-target_allocator(ydb-public-sdk-cpp-client-ydb_value-ut
-  system_allocator
 )
 vcs_info(ydb-public-sdk-cpp-client-ydb_value-ut)

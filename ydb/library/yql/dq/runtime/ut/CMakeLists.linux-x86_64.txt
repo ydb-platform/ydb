@@ -14,17 +14,6 @@ target_compile_options(ydb-library-yql-dq-runtime-ut PRIVATE
 target_include_directories(ydb-library-yql-dq-runtime-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/runtime
 )
-target_link_libraries(ydb-library-yql-dq-runtime-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  yql-dq-runtime
-  cpp-testing-unittest
-  udf-service-exception_policy
-  yql-sql-pg_dummy
-)
 target_link_options(ydb-library-yql-dq-runtime-ut PRIVATE
   -ldl
   -lrt
@@ -34,11 +23,6 @@ target_link_options(ydb-library-yql-dq-runtime-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-library-yql-dq-runtime-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_arrow_helpers_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_output_channel_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/runtime/ut/ut_helper.cpp
 )
 set_property(
   TARGET
@@ -72,9 +56,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-library-yql-dq-runtime-ut
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-library-yql-dq-runtime-ut)

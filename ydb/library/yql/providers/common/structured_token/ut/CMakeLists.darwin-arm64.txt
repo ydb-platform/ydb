@@ -11,22 +11,12 @@ add_executable(yql-providers-common-structured_token-ut)
 target_include_directories(yql-providers-common-structured_token-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/structured_token
 )
-target_link_libraries(yql-providers-common-structured_token-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  providers-common-structured_token
-)
 target_link_options(yql-providers-common-structured_token-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(yql-providers-common-structured_token-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/structured_token/ut/yql_structured_token_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/structured_token/ut/yql_token_builder_ut.cpp
 )
 set_property(
   TARGET
@@ -60,8 +50,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(yql-providers-common-structured_token-ut
-  system_allocator
 )
 vcs_info(yql-providers-common-structured_token-ut)

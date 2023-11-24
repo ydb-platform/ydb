@@ -14,16 +14,6 @@ target_compile_options(ydb-core-kqp-runtime-ut PRIVATE
 target_include_directories(ydb-core-kqp-runtime-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime
 )
-target_link_libraries(ydb-core-kqp-runtime-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  core-kqp-runtime
-  cpp-testing-unittest
-  testlib-basics-default
-  udf-service-exception_policy
-)
 target_link_options(ydb-core-kqp-runtime-ut PRIVATE
   -ldl
   -lrt
@@ -33,9 +23,6 @@ target_link_options(ydb-core-kqp-runtime-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-core-kqp-runtime-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_scan_data_ut.cpp
 )
 set_property(
   TARGET
@@ -69,15 +56,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-core-kqp-runtime-ut
-  PROPERTY
-  TIMEOUT
-  180
-)
-target_allocator(ydb-core-kqp-runtime-ut
-  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-kqp-runtime-ut)

@@ -11,20 +11,10 @@ add_executable(ydb-library-dynumber-ut)
 target_include_directories(ydb-library-dynumber-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/dynumber
 )
-target_link_libraries(ydb-library-dynumber-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-library-dynumber
-)
 target_link_options(ydb-library-dynumber-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-)
-target_sources(ydb-library-dynumber-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/dynumber/ut/dynumber_ut.cpp
 )
 set_property(
   TARGET
@@ -58,8 +48,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-library-dynumber-ut
-  system_allocator
 )
 vcs_info(ydb-library-dynumber-ut)

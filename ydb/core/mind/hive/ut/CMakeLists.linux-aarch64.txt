@@ -14,19 +14,6 @@ target_compile_options(ydb-core-mind-hive-ut PRIVATE
 target_include_directories(ydb-core-mind-hive-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive
 )
-target_link_libraries(ydb-core-mind-hive-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  core-mind-hive
-  library-cpp-getopt
-  library-cpp-svnversion
-  cpp-actors-helpers
-  ydb-core-base
-  ydb-core-mind
-  core-testlib-default
-)
 target_link_options(ydb-core-mind-hive-ut PRIVATE
   -ldl
   -lrt
@@ -36,13 +23,6 @@ target_link_options(ydb-core-mind-hive-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-core-mind-hive-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/object_distribution_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/sequencer_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/storage_pool_info_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/hive_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/hive_impl_ut.cpp
 )
 set_property(
   TARGET
@@ -76,15 +56,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-core-mind-hive-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-target_allocator(ydb-core-mind-hive-ut
-  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-mind-hive-ut)

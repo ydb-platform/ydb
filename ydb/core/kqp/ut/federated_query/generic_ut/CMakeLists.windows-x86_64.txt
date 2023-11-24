@@ -14,22 +14,6 @@ target_compile_options(ydb-core-kqp-ut-federated_query-generic_ut PRIVATE
 target_include_directories(ydb-core-kqp-ut-federated_query-generic_ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp
 )
-target_link_libraries(ydb-core-kqp-ut-federated_query-generic_ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-kqp
-  libs-apache-arrow
-  contrib-libs-fmt
-  kqp-ut-common
-  ut-federated_query-common
-  connector-libcpp-ut_helpers
-  yql-sql-pg_dummy
-)
-target_sources(ydb-core-kqp-ut-federated_query-generic_ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/generic_ut/kqp_generic_provider_ut.cpp
-)
 set_property(
   TARGET
   ydb-core-kqp-ut-federated_query-generic_ut
@@ -62,8 +46,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-core-kqp-ut-federated_query-generic_ut
-  system_allocator
 )
 vcs_info(ydb-core-kqp-ut-federated_query-generic_ut)

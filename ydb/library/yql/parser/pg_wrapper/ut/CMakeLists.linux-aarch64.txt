@@ -111,20 +111,6 @@ target_include_directories(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
 )
-target_link_libraries(ydb-library-yql-parser-pg_wrapper-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  yql-parser-pg_wrapper
-  yql-minikql-arrow
-  yql-public-udf
-  udf-service-exception_policy
-  minikql-comp_nodes-llvm
-  yql-parser-pg_catalog
-  yql-minikql-codegen
-  library-cpp-resource
-)
 target_link_options(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   -ldl
   -lrt
@@ -134,14 +120,6 @@ target_link_options(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/codegen_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/error_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/parser_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/sort_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/type_cache_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/ut/mkql_test_factory.cpp
 )
 set_property(
   TARGET
@@ -175,15 +153,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-library-yql-parser-pg_wrapper-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-target_allocator(ydb-library-yql-parser-pg_wrapper-ut
-  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-yql-parser-pg_wrapper-ut)

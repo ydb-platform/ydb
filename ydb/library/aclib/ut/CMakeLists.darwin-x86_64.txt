@@ -11,20 +11,10 @@ add_executable(ydb-library-aclib-ut)
 target_include_directories(ydb-library-aclib-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/aclib
 )
-target_link_libraries(ydb-library-aclib-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-library-aclib
-)
 target_link_options(ydb-library-aclib-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-)
-target_sources(ydb-library-aclib-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/aclib/aclib_ut.cpp
 )
 set_property(
   TARGET
@@ -58,8 +48,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-library-aclib-ut
-  system_allocator
 )
 vcs_info(ydb-library-aclib-ut)

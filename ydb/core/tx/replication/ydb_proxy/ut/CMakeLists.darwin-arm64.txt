@@ -14,24 +14,12 @@ target_compile_options(ydb-core-tx-replication-ydb_proxy-ut PRIVATE
 target_include_directories(ydb-core-tx-replication-ydb_proxy-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy
 )
-target_link_libraries(ydb-core-tx-replication-ydb_proxy-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  tx-replication-ydb_proxy
-  cpp-testing-unittest
-  core-testlib-default
-  cpp-client-ydb_topic
-)
 target_link_options(ydb-core-tx-replication-ydb_proxy-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(ydb-core-tx-replication-ydb_proxy-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy/ydb_proxy_ut.cpp
 )
 set_property(
   TARGET
@@ -65,15 +53,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-core-tx-replication-ydb_proxy-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-target_allocator(ydb-core-tx-replication-ydb_proxy-ut
-  system_allocator
 )
 vcs_info(ydb-core-tx-replication-ydb_proxy-ut)

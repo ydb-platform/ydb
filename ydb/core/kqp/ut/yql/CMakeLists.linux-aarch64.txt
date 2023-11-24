@@ -14,16 +14,6 @@ target_compile_options(ydb-core-kqp-ut-yql PRIVATE
 target_include_directories(ydb-core-kqp-ut-yql PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp
 )
-target_link_libraries(ydb-core-kqp-ut-yql PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  ydb-core-kqp
-  kqp-ut-common
-  yql-sql-pg
-  yql-parser-pg_wrapper
-)
 target_link_options(ydb-core-kqp-ut-yql PRIVATE
   -ldl
   -lrt
@@ -33,11 +23,6 @@ target_link_options(ydb-core-kqp-ut-yql PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-core-kqp-ut-yql PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/yql/kqp_pragma_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/yql/kqp_scripting_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/yql/kqp_yql_ut.cpp
 )
 set_property(
   TARGET
@@ -71,15 +56,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-core-kqp-ut-yql
-  PROPERTY
-  TIMEOUT
-  600
-)
-target_allocator(ydb-core-kqp-ut-yql
-  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-kqp-ut-yql)

@@ -14,26 +14,12 @@ target_compile_options(ydb-library-yql-minikql-dom-ut PRIVATE
 target_include_directories(ydb-library-yql-minikql-dom-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/dom
 )
-target_link_libraries(ydb-library-yql-minikql-dom-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  yql-minikql-dom
-  minikql-computation-llvm
-  udf-service-exception_policy
-  yql-sql-pg_dummy
-)
 target_link_options(ydb-library-yql-minikql-dom-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(ydb-library-yql-minikql-dom-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/dom/ut/yson_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/dom/ut/json_ut.cpp
 )
 set_property(
   TARGET
@@ -67,8 +53,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-library-yql-minikql-dom-ut
-  system_allocator
 )
 vcs_info(ydb-library-yql-minikql-dom-ut)

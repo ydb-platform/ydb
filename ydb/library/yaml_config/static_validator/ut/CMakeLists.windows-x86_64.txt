@@ -9,17 +9,6 @@
 add_subdirectory(example_configs)
 
 add_executable(ydb-library-yaml_config-static_validator-ut)
-target_link_libraries(ydb-library-yaml_config-static_validator-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  library-yaml_config-static_validator
-  library-yaml_config-validator
-)
-target_sources(ydb-library-yaml_config-static_validator-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/static_validator/ut/test.cpp
-)
 set_property(
   TARGET
   ydb-library-yaml_config-static_validator-ut
@@ -52,8 +41,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-library-yaml_config-static_validator-ut
-  system_allocator
 )
 vcs_info(ydb-library-yaml_config-static_validator-ut)

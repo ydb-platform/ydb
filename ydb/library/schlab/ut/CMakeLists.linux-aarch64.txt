@@ -8,13 +8,6 @@
 
 
 add_executable(ydb-library-schlab-ut)
-target_link_libraries(ydb-library-schlab-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  library-schlab-schoot
-)
 target_link_options(ydb-library-schlab-ut PRIVATE
   -ldl
   -lrt
@@ -24,9 +17,6 @@ target_link_options(ydb-library-schlab-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-library-schlab-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/ut/schlab_ut.cpp
 )
 set_property(
   TARGET
@@ -60,8 +50,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-library-schlab-ut
-  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-schlab-ut)

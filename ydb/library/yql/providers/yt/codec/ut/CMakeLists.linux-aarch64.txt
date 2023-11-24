@@ -14,21 +14,6 @@ target_compile_options(ydb-library-yql-providers-yt-codec-ut PRIVATE
 target_include_directories(ydb-library-yql-providers-yt-codec-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/codec
 )
-target_link_libraries(ydb-library-yql-providers-yt-codec-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  providers-yt-codec
-  cpp-yson-node
-  minikql-computation-llvm
-  udf-service-exception_policy
-  library-yql-sql
-  yql-sql-pg_dummy
-  providers-common-codec
-  providers-common-mkql
-  yt-lib-yson_helpers
-)
 target_link_options(ydb-library-yql-providers-yt-codec-ut PRIVATE
   -ldl
   -lrt
@@ -38,9 +23,6 @@ target_link_options(ydb-library-yql-providers-yt-codec-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-library-yql-providers-yt-codec-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec_io_ut.cpp
 )
 set_property(
   TARGET
@@ -74,8 +56,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-library-yql-providers-yt-codec-ut
-  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-yql-providers-yt-codec-ut)

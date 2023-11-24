@@ -14,29 +14,12 @@ target_compile_options(yql-providers-dq-global_worker_manager-ut PRIVATE
 target_include_directories(yql-providers-dq-global_worker_manager-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/global_worker_manager
 )
-target_link_libraries(yql-providers-dq-global_worker_manager-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  providers-dq-global_worker_manager
-  cpp-actors-testlib
-  udf-service-stub
-  yql-sql-pg_dummy
-  dq-actors-yt
-  providers-dq-actors
-  dq-actors-compute
-)
 target_link_options(yql-providers-dq-global_worker_manager-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(yql-providers-dq-global_worker_manager-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/global_worker_manager/global_worker_manager_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/global_worker_manager/workers_storage_ut.cpp
 )
 set_property(
   TARGET
@@ -70,8 +53,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(yql-providers-dq-global_worker_manager-ut
-  system_allocator
 )
 vcs_info(yql-providers-dq-global_worker_manager-ut)

@@ -11,14 +11,6 @@ add_executable(library-cpp-actors-http-ut)
 target_include_directories(library-cpp-actors-http-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/http
 )
-target_link_libraries(library-cpp-actors-http-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  cpp-actors-http
-  cpp-actors-testlib
-)
 set_property(
   TARGET
   library-cpp-actors-http-ut
@@ -51,8 +43,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(library-cpp-actors-http-ut
-  system_allocator
 )
 vcs_info(library-cpp-actors-http-ut)

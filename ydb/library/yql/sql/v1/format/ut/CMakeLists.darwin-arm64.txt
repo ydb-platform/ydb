@@ -11,21 +11,12 @@ add_executable(ydb-library-yql-sql-v1-format-ut)
 target_include_directories(ydb-library-yql-sql-v1-format-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/format
 )
-target_link_libraries(ydb-library-yql-sql-v1-format-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  sql-v1-format
-)
 target_link_options(ydb-library-yql-sql-v1-format-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(ydb-library-yql-sql-v1-format-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/format/sql_format_ut.cpp
 )
 set_property(
   TARGET
@@ -59,8 +50,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-library-yql-sql-v1-format-ut
-  system_allocator
 )
 vcs_info(ydb-library-yql-sql-v1-format-ut)

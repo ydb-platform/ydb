@@ -14,35 +14,12 @@ target_compile_options(ydb-library-yql-minikql-jsonpath-ut PRIVATE
 target_include_directories(ydb-library-yql-minikql-jsonpath-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath
 )
-target_link_libraries(ydb-library-yql-minikql-jsonpath-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  yql-minikql-jsonpath
-  library-cpp-json
-  ydb-library-binary_json
-  library-yql-minikql
-  minikql-computation-llvm
-  yql-minikql-dom
-  minikql-invoke_builtins-llvm
-  udf-service-exception_policy
-  core-issue-protos
-  yql-sql-pg_dummy
-)
 target_link_options(ydb-library-yql-minikql-jsonpath-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(ydb-library-yql-minikql-jsonpath-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ut/common_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ut/examples_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ut/lax_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ut/strict_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ut/test_base.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/ut/lib_id_ut.cpp
 )
 set_property(
   TARGET
@@ -76,8 +53,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-library-yql-minikql-jsonpath-ut
-  system_allocator
 )
 vcs_info(ydb-library-yql-minikql-jsonpath-ut)

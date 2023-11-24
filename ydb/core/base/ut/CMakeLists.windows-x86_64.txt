@@ -11,23 +11,6 @@ add_executable(ydb-core-base-ut)
 target_include_directories(ydb-core-base-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/base
 )
-target_link_libraries(ydb-core-base-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-base
-  library-cpp-getopt
-  library-cpp-svnversion
-)
-target_sources(ydb-core-base-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/ut/path_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/blobstorage_grouptype_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/localdb_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/logoblob_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/statestorage_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/statestorage_guardian_impl_ut.cpp
-)
 set_property(
   TARGET
   ydb-core-base-ut
@@ -60,15 +43,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-core-base-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-target_allocator(ydb-core-base-ut
-  system_allocator
 )
 vcs_info(ydb-core-base-ut)

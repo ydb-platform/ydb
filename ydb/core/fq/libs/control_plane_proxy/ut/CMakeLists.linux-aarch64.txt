@@ -14,23 +14,6 @@ target_compile_options(ydb-core-fq-libs-control_plane_proxy-ut PRIVATE
 target_include_directories(ydb-core-fq-libs-control_plane_proxy-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_proxy
 )
-target_link_libraries(ydb-core-fq-libs-control_plane_proxy-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  fq-libs-control_plane_proxy
-  cpp-testing-unittest
-  ydb-core-base
-  libs-actors-logging
-  fq-libs-control_plane_storage
-  fq-libs-test_connection
-  libs-quota_manager-ut_helpers
-  libs-rate_limiter-control_plane_service
-  core-testlib-default
-  ydb-library-folder_service
-  library-folder_service-mock
-)
 target_link_options(ydb-core-fq-libs-control_plane_proxy-ut PRIVATE
   -ldl
   -lrt
@@ -40,9 +23,6 @@ target_link_options(ydb-core-fq-libs-control_plane_proxy-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-core-fq-libs-control_plane_proxy-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_proxy/ut/control_plane_proxy_ut.cpp
 )
 set_property(
   TARGET
@@ -76,8 +56,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-core-fq-libs-control_plane_proxy-ut
-  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-fq-libs-control_plane_proxy-ut)

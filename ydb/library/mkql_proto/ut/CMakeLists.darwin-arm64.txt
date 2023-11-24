@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(helpers)
 
 add_executable(ydb-library-mkql_proto-ut)
 target_compile_options(ydb-library-mkql_proto-ut PRIVATE
@@ -15,24 +14,12 @@ target_compile_options(ydb-library-mkql_proto-ut PRIVATE
 target_include_directories(ydb-library-mkql_proto-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/mkql_proto
 )
-target_link_libraries(ydb-library-mkql_proto-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  ydb-library-mkql_proto
-  mkql_proto-ut-helpers
-  udf-service-exception_policy
-  ydb-core-yql_testlib
-)
 target_link_options(ydb-library-mkql_proto-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(ydb-library-mkql_proto-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/mkql_proto/mkql_proto_ut.cpp
 )
 set_property(
   TARGET
@@ -66,15 +53,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-library-mkql_proto-ut
-  PROPERTY
-  TIMEOUT
-  150
-)
-target_allocator(ydb-library-mkql_proto-ut
-  cpp-malloc-jemalloc
 )
 vcs_info(ydb-library-mkql_proto-ut)

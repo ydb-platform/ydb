@@ -15,25 +15,12 @@ target_include_directories(ydb-library-arrow_kernels-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels
   ${CMAKE_SOURCE_DIR}/ydb/library/arrow_clickhouse
 )
-target_link_libraries(ydb-library-arrow_kernels-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  ydb-library-arrow_kernels
-  libs-apache-arrow
-)
 target_link_options(ydb-library-arrow_kernels-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(ydb-library-arrow_kernels-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels/ut_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels/ut_arithmetic.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels/ut_math.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/arrow_kernels/ut_round.cpp
 )
 set_property(
   TARGET
@@ -67,15 +54,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-library-arrow_kernels-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-target_allocator(ydb-library-arrow_kernels-ut
-  system_allocator
 )
 vcs_info(ydb-library-arrow_kernels-ut)

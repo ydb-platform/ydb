@@ -8,18 +8,6 @@
 
 
 add_executable(ydb-core-ymq-http-ut)
-target_link_libraries(ydb-core-ymq-http-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-ymq-http
-  yql-sql-pg_dummy
-  udf-service-exception_policy
-)
-target_sources(ydb-core-ymq-http-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/ut/xml_builder_ut.cpp
-)
 set_property(
   TARGET
   ydb-core-ymq-http-ut
@@ -52,8 +40,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-core-ymq-http-ut
-  system_allocator
 )
 vcs_info(ydb-core-ymq-http-ut)

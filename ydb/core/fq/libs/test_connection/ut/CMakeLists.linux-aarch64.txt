@@ -14,16 +14,6 @@ target_compile_options(ydb-core-fq-libs-test_connection-ut PRIVATE
 target_include_directories(ydb-core-fq-libs-test_connection-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_proxy
 )
-target_link_libraries(ydb-core-fq-libs-test_connection-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  fq-libs-control_plane_proxy
-  cpp-testing-unittest
-  yql-sql-pg_dummy
-  udf-service-exception_policy
-)
 target_link_options(ydb-core-fq-libs-test_connection-ut PRIVATE
   -ldl
   -lrt
@@ -33,9 +23,6 @@ target_link_options(ydb-core-fq-libs-test_connection-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-core-fq-libs-test_connection-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/test_connection/ut/test_connection_ut.cpp
 )
 set_property(
   TARGET
@@ -69,8 +56,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-core-fq-libs-test_connection-ut
-  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-fq-libs-test_connection-ut)

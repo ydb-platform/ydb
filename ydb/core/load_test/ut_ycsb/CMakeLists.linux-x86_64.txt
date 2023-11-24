@@ -14,23 +14,6 @@ target_compile_options(ydb-core-load_test-ut_ycsb PRIVATE
 target_include_directories(ydb-core-load_test-ut_ycsb PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/load_test
 )
-target_link_libraries(ydb-core-load_test-ut_ycsb PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-load_test
-  library-cpp-getopt
-  cpp-regex-pcre
-  library-cpp-svnversion
-  kqp-ut-common
-  core-testlib-default
-  ydb-core-tx
-  udf-service-exception_policy
-  public-lib-yson_value
-  cpp-client-ydb_result
-)
 target_link_options(ydb-core-load_test-ut_ycsb PRIVATE
   -ldl
   -lrt
@@ -40,9 +23,6 @@ target_link_options(ydb-core-load_test-ut_ycsb PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-core-load_test-ut_ycsb PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/load_test/ut_ycsb.cpp
 )
 set_property(
   TARGET
@@ -76,16 +56,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-core-load_test-ut_ycsb
-  PROPERTY
-  TIMEOUT
-  600
-)
-target_allocator(ydb-core-load_test-ut_ycsb
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-core-load_test-ut_ycsb)

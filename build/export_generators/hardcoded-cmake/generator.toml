@@ -14,6 +14,7 @@ target_sources_custom="list"
 target_ragel_lexers="list"
 target_yasm_source="list"
 add_global_library_for="list"
+env="list"
 
 [[rules]]
 attrs=["vcs_info", "target_joined_source", "target_sources_custom", "target_ragel_lexers", "target_yasm_source", "add_global_library_for"]

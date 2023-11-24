@@ -11,16 +11,6 @@ add_executable(ydb-library-naming_conventions-ut)
 target_include_directories(ydb-library-naming_conventions-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/naming_conventions
 )
-target_link_libraries(ydb-library-naming_conventions-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-library-naming_conventions
-)
-target_sources(ydb-library-naming_conventions-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/naming_conventions/ut/naming_conventions_ut.cpp
-)
 set_property(
   TARGET
   ydb-library-naming_conventions-ut
@@ -53,8 +43,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-library-naming_conventions-ut
-  system_allocator
 )
 vcs_info(ydb-library-naming_conventions-ut)

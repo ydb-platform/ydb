@@ -14,25 +14,12 @@ target_compile_options(ydb-services-persqueue_cluster_discovery-ut PRIVATE
 target_include_directories(ydb-services-persqueue_cluster_discovery-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_cluster_discovery
 )
-target_link_libraries(ydb-services-persqueue_cluster_discovery-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-services-persqueue_cluster_discovery
-  cpp-actors-http
-  core-testlib-default
-  api-grpc
-)
 target_link_options(ydb-services-persqueue_cluster_discovery-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(ydb-services-persqueue_cluster_discovery-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_cluster_discovery/cluster_discovery_service_ut.cpp
 )
 set_property(
   TARGET
@@ -66,15 +53,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-services-persqueue_cluster_discovery-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-target_allocator(ydb-services-persqueue_cluster_discovery-ut
-  system_allocator
 )
 vcs_info(ydb-services-persqueue_cluster_discovery-ut)

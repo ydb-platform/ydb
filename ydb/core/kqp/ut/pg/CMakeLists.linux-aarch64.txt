@@ -16,18 +16,6 @@ target_include_directories(ydb-core-kqp-ut-pg PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
 )
-target_link_libraries(ydb-core-kqp-ut-pg PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  ydb-core-kqp
-  kqp-ut-common
-  udf-service-exception_policy
-  yql-sql-pg
-  yql-parser-pg_wrapper
-  public-lib-ut_helpers
-)
 target_link_options(ydb-core-kqp-ut-pg PRIVATE
   -ldl
   -lrt
@@ -37,9 +25,6 @@ target_link_options(ydb-core-kqp-ut-pg PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-core-kqp-ut-pg PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/pg/kqp_pg_ut.cpp
 )
 set_property(
   TARGET
@@ -73,8 +58,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-core-kqp-ut-pg
-  cpp-malloc-jemalloc
 )
 vcs_info(ydb-core-kqp-ut-pg)

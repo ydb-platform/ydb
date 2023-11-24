@@ -14,31 +14,12 @@ target_compile_options(ydb-core-fq-libs-checkpoint_storage-ut PRIVATE
 target_include_directories(ydb-core-fq-libs-checkpoint_storage-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage
 )
-target_link_libraries(ydb-core-fq-libs-checkpoint_storage-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  fq-libs-checkpoint_storage
-  library-cpp-retry
-  cpp-testing-unittest
-  libs-actors-logging
-  libs-checkpoint_storage-events
-  core-testlib-default
-  ydb-library-security
-  cpp-client-ydb_table
-)
 target_link_options(ydb-core-fq-libs-checkpoint_storage-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(ydb-core-fq-libs-checkpoint_storage-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/ut/gc_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/ut/storage_service_ydb_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/ut/ydb_state_storage_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/ut/ydb_checkpoint_storage_ut.cpp
 )
 set_property(
   TARGET
@@ -72,8 +53,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-core-fq-libs-checkpoint_storage-ut
-  system_allocator
 )
 vcs_info(ydb-core-fq-libs-checkpoint_storage-ut)

@@ -11,37 +11,12 @@ add_executable(library-cpp-actors-core-ut)
 target_include_directories(library-cpp-actors-core-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core
 )
-target_link_libraries(library-cpp-actors-core-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  cpp-actors-core
-  cpp-actors-interconnect
-  cpp-actors-testlib
-)
 target_link_options(library-cpp-actors-core-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(library-cpp-actors-core-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/actor_coroutine_ut.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/benchmark_ut.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/actor_ut.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/actorsystem_ut.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/performance_ut.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/ask_ut.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/balancer_ut.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/event_pb_payload_ut.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/event_pb_ut.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/executor_pool_basic_ut.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/executor_pool_united_ut.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/log_ut.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/mon_ut.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/scheduler_actor_ut.cpp
 )
 set_property(
   TARGET
@@ -75,15 +50,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  library-cpp-actors-core-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-target_allocator(library-cpp-actors-core-ut
-  system_allocator
 )
 vcs_info(library-cpp-actors-core-ut)

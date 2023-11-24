@@ -11,15 +11,6 @@ add_executable(ydb-library-yql-public-issue-ut)
 target_include_directories(ydb-library-yql-public-issue-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue
 )
-target_link_libraries(ydb-library-yql-public-issue-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  yql-public-issue
-  cpp-unicode-normalization
-)
 target_link_options(ydb-library-yql-public-issue-ut PRIVATE
   -ldl
   -lrt
@@ -29,12 +20,6 @@ target_link_options(ydb-library-yql-public-issue-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-library-yql-public-issue-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_issue_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_issue_manager_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_issue_utils_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_warning_ut.cpp
 )
 set_property(
   TARGET
@@ -68,9 +53,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-library-yql-public-issue-ut
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-library-yql-public-issue-ut)

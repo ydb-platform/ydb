@@ -14,25 +14,12 @@ target_compile_options(ydb-library-yql-udfs-common-topfreq-ut PRIVATE
 target_include_directories(ydb-library-yql-udfs-common-topfreq-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/topfreq/static
 )
-target_link_libraries(ydb-library-yql-udfs-common-topfreq-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  common-topfreq-static
-  minikql-comp_nodes-llvm
-  udf-service-exception_policy
-  yql-sql-pg_dummy
-)
 target_link_options(ydb-library-yql-udfs-common-topfreq-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(ydb-library-yql-udfs-common-topfreq-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/topfreq/topfreq_udf_ut.cpp
 )
 set_property(
   TARGET
@@ -66,8 +53,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-library-yql-udfs-common-topfreq-ut
-  system_allocator
 )
 vcs_info(ydb-library-yql-udfs-common-topfreq-ut)

@@ -11,23 +11,12 @@ add_executable(ydb-library-yql-parser-lexer_common-ut)
 target_include_directories(ydb-library-yql-parser-lexer_common-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/lexer_common
 )
-target_link_libraries(ydb-library-yql-parser-lexer_common-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  yql-parser-lexer_common
-  sql-v1-lexer
-)
 target_link_options(ydb-library-yql-parser-lexer_common-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-)
-target_sources(ydb-library-yql-parser-lexer_common-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/lexer_common/ut/hints_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/lexer_common/ut/parse_hints_ut.cpp
 )
 set_property(
   TARGET
@@ -61,8 +50,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-library-yql-parser-lexer_common-ut
-  system_allocator
 )
 vcs_info(ydb-library-yql-parser-lexer_common-ut)

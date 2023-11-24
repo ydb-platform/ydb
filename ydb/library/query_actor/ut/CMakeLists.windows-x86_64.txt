@@ -14,18 +14,6 @@ target_compile_options(ydb-library-query_actor-ut PRIVATE
 target_include_directories(ydb-library-query_actor-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/query_actor
 )
-target_link_libraries(ydb-library-query_actor-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-library-query_actor
-  ydb-core-testlib
-  yql-sql-pg_dummy
-)
-target_sources(ydb-library-query_actor-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/query_actor/query_actor_ut.cpp
-)
 set_property(
   TARGET
   ydb-library-query_actor-ut
@@ -58,8 +46,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-library-query_actor-ut
-  system_allocator
 )
 vcs_info(ydb-library-query_actor-ut)

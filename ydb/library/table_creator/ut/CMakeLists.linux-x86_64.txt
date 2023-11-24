@@ -14,19 +14,6 @@ target_compile_options(ydb-library-table_creator-ut PRIVATE
 target_include_directories(ydb-library-table_creator-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/table_creator
 )
-target_link_libraries(ydb-library-table_creator-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-library-table_creator
-  cpp-testing-unittest
-  core-testlib-default
-  udf-service-exception_policy
-  yql-sql-pg_dummy
-  cpp-client-ydb_driver
-)
 target_link_options(ydb-library-table_creator-ut PRIVATE
   -ldl
   -lrt
@@ -36,9 +23,6 @@ target_link_options(ydb-library-table_creator-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-library-table_creator-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/table_creator/table_creator_ut.cpp
 )
 set_property(
   TARGET
@@ -72,9 +56,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-library-table_creator-ut
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-library-table_creator-ut)

@@ -14,15 +14,6 @@ target_compile_options(ydb-public-lib-deprecated-kicli-ut PRIVATE
 target_include_directories(ydb-public-lib-deprecated-kicli-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/deprecated/kicli
 )
-target_link_libraries(ydb-public-lib-deprecated-kicli-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest_main
-  lib-deprecated-kicli
-  ydb-core-client
-  core-testlib-default
-)
 target_link_options(ydb-public-lib-deprecated-kicli-ut PRIVATE
   -ldl
   -lrt
@@ -32,9 +23,6 @@ target_link_options(ydb-public-lib-deprecated-kicli-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-public-lib-deprecated-kicli-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/deprecated/kicli/cpp_ut.cpp
 )
 set_property(
   TARGET
@@ -68,15 +56,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-set_yunittest_property(
-  TEST
-  ydb-public-lib-deprecated-kicli-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-target_allocator(ydb-public-lib-deprecated-kicli-ut
-  cpp-malloc-jemalloc
 )
 vcs_info(ydb-public-lib-deprecated-kicli-ut)

@@ -11,14 +11,6 @@ add_executable(ydb-library-yql-ast-ut)
 target_include_directories(ydb-library-yql-ast-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast
 )
-target_link_libraries(ydb-library-yql-ast-ut PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  library-yql-ast
-)
 target_link_options(ydb-library-yql-ast-ut PRIVATE
   -ldl
   -lrt
@@ -28,13 +20,6 @@ target_link_options(ydb-library-yql-ast-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-)
-target_sources(ydb-library-yql-ast-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_check_args_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_builder_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_type_string_ut.cpp
 )
 set_property(
   TARGET
@@ -68,9 +53,5 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
-)
-target_allocator(ydb-library-yql-ast-ut
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-library-yql-ast-ut)

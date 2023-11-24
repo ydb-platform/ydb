@@ -35,7 +35,7 @@ public:
     //! Path to TVM secret. Used if ClientSelfSecret is unset.
     std::optional<TString> ClientSelfSecretPath;
 
-    THashMap<TString, ui32> ClientDstMap;
+    THashMap<TString, TTvmId> ClientDstMap;
 
     bool ClientEnableServiceTicketChecking = false;
 

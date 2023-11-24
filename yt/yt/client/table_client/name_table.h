@@ -105,7 +105,6 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 void ToProto(NProto::TNameTableExt* protoNameTable, const TNameTablePtr& nameTable);
-void ToProto(NProto::TNameTableExt* protoNameTable, const TNameTablePtr& nameTable);
 void FromProto(TNameTablePtr* nameTable, const NProto::TNameTableExt& protoNameTable);
 
 ////////////////////////////////////////////////////////////////////////////////

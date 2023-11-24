@@ -5,6 +5,6 @@
 
 namespace NFq {
     NYql::IMdbEndpointGenerator::TPtr MakeMdbEndpointGeneratorLegacy();
-    NYql::IMdbEndpointGenerator::TPtr MakeMdbEndpointGeneratorGeneric(bool transformHost, bool useNativeProtocolForClickHouse = false);
+    NYql::IMdbEndpointGenerator::TPtr MakeMdbEndpointGeneratorGeneric(bool transformHost);
     NYql::IMdbEndpointGenerator::TPtr MakeMdbEndpointGeneratorNoop();
 }

@@ -2,11 +2,11 @@
 
 const char * auto_config_build[]
 {
-    "VERSION_FULL", "ClickHouse 23.8.8.1",
-    "VERSION_DESCRIBE", "v23.8.8.1-lts",
-    "VERSION_INTEGER", "23008008",
+    "VERSION_FULL", "ClickHouse 23.8.9.1",
+    "VERSION_DESCRIBE", "v23.8.9.1-lts",
+    "VERSION_INTEGER", "23008009",
     "SYSTEM", "Linux",
-    "VERSION_GITHASH", "812b95e14ba8cf744bf1d70e6de607cf130a79fa",
+    "VERSION_GITHASH", "5e012a03bf208d0a713c721fd43c228a7dbebf1d",
     "VERSION_REVISION", "54477",
     "BUILD_TYPE", "MinSizeRel",
     "SYSTEM_PROCESSOR", "x86_64",

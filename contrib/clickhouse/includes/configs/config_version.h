@@ -8,13 +8,13 @@
 #define VERSION_NAME "ClickHouse"
 #define VERSION_MAJOR 23
 #define VERSION_MINOR 8
-#define VERSION_PATCH 8
-#define VERSION_STRING "23.8.8.1"
+#define VERSION_PATCH 9
+#define VERSION_STRING "23.8.9.1"
 #define VERSION_STRING_SHORT "23.8"
 /* #undef VERSION_OFFICIAL */
-#define VERSION_FULL "ClickHouse 23.8.8.1"
-#define VERSION_DESCRIBE "v23.8.8.1-lts"
-#define VERSION_INTEGER 23008008
+#define VERSION_FULL "ClickHouse 23.8.9.1"
+#define VERSION_DESCRIBE "v23.8.9.1-lts"
+#define VERSION_INTEGER 23008009
 
 /// These fields are frequently changing and we don't want to have them in the header file to allow caching.
 extern const char * VERSION_GITHASH;

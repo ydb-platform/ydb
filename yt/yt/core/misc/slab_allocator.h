@@ -1,14 +1,10 @@
 #pragma once
 
-#include "common.h"
-#include "error.h"
-#include "memory_usage_tracker.h"
+#include "public.h"
 
 #include <yt/yt/core/misc/atomic_ptr.h>
 
 #include <yt/yt/library/profiling/sensor.h>
-
-#include <library/cpp/ytalloc/api/ytalloc.h>
 
 #include <library/cpp/yt/memory/free_list.h>
 
@@ -18,8 +14,7 @@ namespace NYT {
 
 /////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TSmallArena)
-
+DECLARE_REFCOUNTED_CLASS(TSmallArena);
 class TLargeArena;
 
 /////////////////////////////////////////////////////////////////////////////
@@ -35,6 +30,8 @@ public:
     static void Free(void* ptr);
 
     bool IsReallocationNeeded() const;
+    static bool IsReallocationNeeded(const void* ptr);
+
     bool ReallocateArenasIfNeeded();
 
     static constexpr size_t SegmentSize = 64_KB;
@@ -48,13 +45,10 @@ private:
         void operator() (TLargeArena* arena);
     };
 
-    using TLargeArenaPtr = std::unique_ptr<TLargeArena, TLargeArenaDeleter>;
-
-    TAtomicPtr<TSmallArena> SmallArenas_[NYTAlloc::SmallRankCount];
-    TLargeArenaPtr LargeArena_;
+    static constexpr int SmallRankCount = 23;
+    std::array<TAtomicPtr<TSmallArena>, SmallRankCount> SmallArenas_;
+    std::unique_ptr<TLargeArena, TLargeArenaDeleter> LargeArena_;
 };
-
-bool IsReallocationNeeded(const void* ptr);
 
 /////////////////////////////////////////////////////////////////////////////
 

@@ -1,5 +1,7 @@
 #include "slab_allocator.h"
 
+#include "memory_usage_tracker.h"
+
 #include <yt/yt/core/misc/atomic_ptr.h>
 
 #include <yt/yt/library/profiling/sensor.h>
@@ -10,9 +12,58 @@ namespace NYT {
 
 /////////////////////////////////////////////////////////////////////////////
 
-static_assert(TSlabAllocator::SegmentSize >= NYTAlloc::LargeAllocationSizeThreshold, "Segment size violation");
+namespace {
 
-static_assert(TSlabAllocator::AcquireMemoryGranularity % 2 == 0, "Must be divisible by 2");
+// Maps small chunk ranks to size in bytes.
+constexpr auto SmallRankToSize = std::to_array<size_t>({
+    0,
+    16, 32, 48, 64, 96, 128,
+    192, 256, 384, 512, 768, 1024, 1536, 2048,
+    3072, 4096, 6144, 8192, 12288, 16384, 24576, 32768
+});
+
+// Helper array for mapping size to small chunk rank.
+constexpr auto SizeToSmallRank1 = std::to_array<ui64>({
+    1, 1, 1, 2, 2, // 16, 32
+    3, 3, 4, 4, // 48, 64
+    5, 5, 5, 5, 6, 6, 6, 6, // 96, 128
+    7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, // 192, 256
+    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, // 384
+    10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, // 512
+});
+
+// Helper array for mapping size to small chunk rank.
+constexpr auto SizeToSmallRank2 = std::to_array<ui8>({
+    10, 10, 11, 12, // 512, 512, 768, 1022
+    13, 13, 14, 14, // 1536, 2048
+    15, 15, 15, 15, 16, 16, 16, 16, // 3072, 4096
+    17, 17, 17, 17, 17, 17, 17, 17, 18, 18, 18, 18, 18, 18, 18, 18, // 6144, 8192
+    19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, // 12288
+    20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, // 16384
+    21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21,
+    21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, // 22576
+    22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22,
+    22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, // 32768
+});
+
+constexpr size_t LargeAllocationSizeThreshold = 32_KB;
+
+constexpr size_t SizeToSmallRank(size_t size)
+{
+    if (size <= 512) {
+        return SizeToSmallRank1[(size + 7) >> 3];
+    } else {
+        if (size <= LargeAllocationSizeThreshold) {
+            return SizeToSmallRank2[(size - 1) >> 8];
+        } else {
+            return 0;
+        }
+    }
+}
+
+} // namespace
+
+/////////////////////////////////////////////////////////////////////////////
 
 struct TArenaCounters
 {
@@ -30,6 +81,8 @@ struct TArenaCounters
     NProfiling::TGauge AliveItems;
     NProfiling::TGauge ArenaSize;
 };
+
+/////////////////////////////////////////////////////////////////////////////
 
 class TSmallArena final
     : public TRefTracked<TSmallArena>
@@ -50,7 +103,7 @@ public:
         IMemoryUsageTrackerPtr memoryTracker,
         const NProfiling::TProfiler& profiler)
         : TArenaCounters(profiler.WithTag("rank", ToString(rank)))
-        , ObjectSize_(NYTAlloc::SmallRankToSize[rank])
+        , ObjectSize_(SmallRankToSize[rank])
         , ObjectCount_(segmentSize / ObjectSize_)
         , MemoryTracker_(std::move(memoryTracker))
     {
@@ -88,7 +141,7 @@ public:
         auto* segment = Segments_.ExtractAll();
         while (segment) {
             auto* next = segment->Next.load(std::memory_order::acquire);
-            NYTAlloc::Free(segment);
+            ::free(segment);
             segment = next;
             ++segmentCount;
         }
@@ -185,7 +238,7 @@ private:
         TRefCountedTrackerFacade::AllocateSpace(GetRefCountedTypeCookie<TSmallArena>(), totalSize);
 #endif
 
-        auto* ptr = NYTAlloc::Allocate(totalSize);
+        auto* ptr = ::malloc(totalSize);
 
         // Save segments in list to free them in destructor.
         Segments_.Put(static_cast<TFreeListItem*>(ptr));
@@ -205,7 +258,7 @@ private:
     }
 };
 
-DEFINE_REFCOUNTED_TYPE(TSmallArena)
+DEFINE_REFCOUNTED_TYPE(TSmallArena);
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -299,7 +352,6 @@ public:
                 MemoryTracker_->Release(releasedMemory);
                 auto arenaSize = AcquiredMemory_.fetch_sub(releasedMemory) - releasedMemory;
                 ArenaSize.Update(arenaSize);
-
                 return;
             }
         }
@@ -315,26 +367,15 @@ private:
     };
 
     const IMemoryUsageTrackerPtr MemoryTracker_;
+
     // One ref from allocator plus refs from allocated objects.
-    std::atomic<size_t> RefCount_ = 1;
+    std::atomic<int> RefCount_ = 1;
+
     std::atomic<size_t> OverheadMemory_ = 0;
     std::atomic<size_t> AcquiredMemory_ = 0;
 };
 
 /////////////////////////////////////////////////////////////////////////////
-
-TSlabAllocator::TSlabAllocator(
-    const NProfiling::TProfiler& profiler,
-    IMemoryUsageTrackerPtr memoryTracker)
-    : Profiler_(profiler)
-{
-    for (size_t rank = 1; rank < NYTAlloc::SmallRankCount; ++rank) {
-        // There is no std::make_unique overload with custom deleter.
-        SmallArenas_[rank].Store(New<TSmallArena>(rank, TSlabAllocator::SegmentSize, memoryTracker, Profiler_));
-    }
-
-    LargeArena_.reset(new TLargeArena(memoryTracker, profiler));
-}
 
 namespace {
 
@@ -350,6 +391,7 @@ TSmallArena* GetSmallArenaFromTag(uintptr_t tag)
 
 uintptr_t MakeTagFromArena(TLargeArena* arena)
 {
+
     auto result = reinterpret_cast<uintptr_t>(arena);
     YT_ASSERT((result & 1ULL) == 0);
     return result | 1ULL;
@@ -374,6 +416,25 @@ uintptr_t* GetHeaderFromPtr(void* ptr)
 
 } // namespace
 
+/////////////////////////////////////////////////////////////////////////////
+
+TSlabAllocator::TSlabAllocator(
+    const NProfiling::TProfiler& profiler,
+    IMemoryUsageTrackerPtr memoryTracker)
+    : Profiler_(profiler)
+{
+    static_assert(SmallRankCount == SmallRankToSize.size(), "Wrong SmallRankCount");
+    static_assert(SegmentSize >= LargeAllocationSizeThreshold, "Segment size violation");
+    static_assert(AcquireMemoryGranularity % 2 == 0, "AcquireMemoryGranularity must be divisible by 2");
+
+    for (size_t rank = 1; rank < SmallRankCount; ++rank) {
+        // There is no std::make_unique overload with custom deleter.
+        SmallArenas_[rank].Store(New<TSmallArena>(rank, TSlabAllocator::SegmentSize, memoryTracker, Profiler_));
+    }
+
+    LargeArena_.reset(new TLargeArena(memoryTracker, profiler));
+}
+
 void TSlabAllocator::TLargeArenaDeleter::operator() (TLargeArena* arena)
 {
     arena->Unref();
@@ -385,8 +446,8 @@ void* TSlabAllocator::Allocate(size_t size)
 
     uintptr_t tag = 0;
     void* ptr = nullptr;
-    if (size < NYTAlloc::LargeAllocationSizeThreshold) {
-        auto rank = NYTAlloc::SizeToSmallRank(size);
+    if (size < LargeAllocationSizeThreshold) {
+        auto rank = SizeToSmallRank(size);
 
         auto arena = SmallArenas_[rank].Acquire();
         YT_VERIFY(arena);
@@ -413,7 +474,7 @@ void* TSlabAllocator::Allocate(size_t size)
 
 bool TSlabAllocator::IsReallocationNeeded() const
 {
-    for (size_t rank = 1; rank < NYTAlloc::SmallRankCount; ++rank) {
+    for (size_t rank = 1; rank < SmallRankCount; ++rank) {
         auto arena = SmallArenas_[rank].Acquire();
         if (arena->IsReallocationNeeded()) {
             return true;
@@ -422,10 +483,16 @@ bool TSlabAllocator::IsReallocationNeeded() const
     return false;
 }
 
+bool TSlabAllocator::IsReallocationNeeded(const void* ptr)
+{
+    auto tag = *GetHeaderFromPtr(ptr);
+    return !TryGetLargeArenaFromTag(tag) && GetSmallArenaFromTag(tag)->IsReallocationNeeded();
+}
+
 bool TSlabAllocator::ReallocateArenasIfNeeded()
 {
     bool hasReallocatedArenas = false;
-    for (size_t rank = 1; rank < NYTAlloc::SmallRankCount; ++rank) {
+    for (size_t rank = 1; rank < SmallRankCount; ++rank) {
         auto arena = SmallArenas_[rank].Acquire();
         if (arena->IsReallocationNeeded()) {
             SmallArenas_[rank].SwapIfCompare(
@@ -449,12 +516,6 @@ void TSlabAllocator::Free(void* ptr)
         auto* arenaPtr = GetSmallArenaFromTag(tag);
         arenaPtr->Free(header);
     }
-}
-
-bool IsReallocationNeeded(const void* ptr)
-{
-    auto tag = *GetHeaderFromPtr(ptr);
-    return !TryGetLargeArenaFromTag(tag) && GetSmallArenaFromTag(tag)->IsReallocationNeeded();
 }
 
 /////////////////////////////////////////////////////////////////////////////

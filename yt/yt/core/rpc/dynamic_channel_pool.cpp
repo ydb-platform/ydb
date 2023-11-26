@@ -239,7 +239,7 @@ private:
         void Run()
         {
             YT_LOG_DEBUG("Starting peer discovery");
-            TDispatcher::Get()->GetLightInvoker()->Invoke(BIND(&TDiscoverySession::DoRun, MakeStrong(this)));
+            TDispatcher::Get()->GetLightInvoker()->Invoke(BIND_NO_PROPAGATE(&TDiscoverySession::DoRun, MakeStrong(this)));
         }
 
         void OnPeerDiscovered(const TString& address)
@@ -474,7 +474,7 @@ private:
         void Run()
         {
             YT_LOG_DEBUG("Starting peer poller");
-            TDispatcher::Get()->GetLightInvoker()->Invoke(BIND(&TPeerPoller::DoRun, MakeStrong(this)));
+            TDispatcher::Get()->GetLightInvoker()->Invoke(BIND_NO_PROPAGATE(&TPeerPoller::DoRun, MakeStrong(this)));
         }
 
         void Stop()

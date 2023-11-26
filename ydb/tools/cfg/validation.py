@@ -4,8 +4,6 @@ import copy
 
 import jsonschema
 
-from cloud.blockstore.config import diagnostics_pb2, storage_pb2
-from cloud.storage.core.protos import authorization_mode_pb2
 from ydb.tools.cfg import utils
 from ydb.tools.cfg.types import (Erasure, FailDomainType, LogLevels, NodeType,
                                  PDiskCategory)
@@ -494,18 +492,6 @@ NBS_SCHEMA = {
         'storage': {
             'type': 'object',
             'properties': {
-                'authorization_mode': {
-                    'type': 'string',
-                    'enum': authorization_mode_pb2.EAuthorizationMode.keys(),
-                },
-                'channel_allocation_mode': {
-                    'type': 'string',
-                    'enum': storage_pb2.EChannelAllocationMode.keys(),
-                },
-                'volume_preemption_type': {
-                    'type': 'string',
-                    'enum': storage_pb2.EVolumePreemptionType.keys(),
-                }
             }
         },
         'disk_registry_proxy': {
@@ -537,15 +523,6 @@ NBS_SCHEMA = {
                         },
                     },
                 }
-            }
-        },
-        'diagnostics': {
-            'type': 'object',
-            'properties': {
-                'host_name_scheme': {
-                    'type': 'string',
-                    'enum': diagnostics_pb2.EHostNameScheme.keys(),
-                },
             }
         },
         'discovery': {

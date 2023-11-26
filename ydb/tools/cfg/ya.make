@@ -23,8 +23,6 @@ IF (PYTHON2)
 ENDIF()
 
 PEERDIR(
-    cloud/blockstore/config
-    cloud/filestore/config
     contrib/python/protobuf
     contrib/python/PyYAML
     contrib/python/jsonschema

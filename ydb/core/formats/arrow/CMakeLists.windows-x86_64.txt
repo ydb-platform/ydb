@@ -53,4 +53,5 @@ target_sources(core-formats-arrow PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/size_calcer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ssa_program_optimizer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/special_keys.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/simple_arrays_cache.cpp
 )

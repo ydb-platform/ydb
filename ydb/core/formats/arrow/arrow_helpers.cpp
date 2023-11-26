@@ -7,6 +7,7 @@
 #include "serializer/batch_only.h"
 #include "serializer/abstract.h"
 #include "serializer/stream.h"
+#include "simple_arrays_cache.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/library/services/services.pb.h>
@@ -131,10 +132,9 @@ std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::
     columns.reserve(schema->num_fields());
 
     for (auto& field : schema->fields()) {
-        auto result = arrow::MakeArrayOfNull(field->type(), rowsCount);
-        Y_VERIFY_OK(result.status());
-        columns.emplace_back(*result);
-        Y_ABORT_UNLESS(columns.back());
+        auto result = NArrow::TThreadSimpleArraysCache::GetNull(field->type(), rowsCount);
+        columns.emplace_back(result);
+        Y_ABORT_UNLESS(result);
     }
     return arrow::RecordBatch::Make(schema, 0, columns);
 }

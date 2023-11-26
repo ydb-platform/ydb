@@ -413,19 +413,7 @@ public:
             return Data;
         }
 
-        std::shared_ptr<arrow::RecordBatch> BuildRecordBatch(const TColumnLoader& loader) const {
-            if (NullRowsCount) {
-                Y_ABORT_UNLESS(!Data);
-                return NArrow::MakeEmptyBatch(loader.GetExpectedSchema(), NullRowsCount);
-            } else {
-                auto result = loader.Apply(Data);
-                if (!result.ok()) {
-                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "cannot unpack batch")("error", result.status().ToString())("loader", loader.DebugString());
-                    return nullptr;
-                }
-                return *result;
-            }
-        }
+        std::shared_ptr<arrow::RecordBatch> BuildRecordBatch(const TColumnLoader& loader) const;
     };
 
     class TPreparedColumn {

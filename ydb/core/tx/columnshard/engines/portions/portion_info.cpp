@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <util/system/tls.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
+#include <ydb/core/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NOlap {
 
@@ -220,60 +221,23 @@ std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() c
     return (*res)->column(0);
 }
 
-namespace {
-
-class TThreadSimpleArraysCache {
-private:
-    THashMap<TString, std::shared_ptr<arrow::Array>> Arrays;
-    const ui64 MaxOneArrayMemorySize = 10 * 1024 * 1024;
-
-    template <class TInitializeActor>
-    std::shared_ptr<arrow::Array> InitializePosition(const TString& key, const ui32 recordsCount, const TInitializeActor actor) {
-        auto it = Arrays.find(key);
-        if (it == Arrays.end() || it->second->length() < recordsCount) {
-            auto arrNew = actor(recordsCount);
-            if (NArrow::GetArrayMemorySize(arrNew->data()) < MaxOneArrayMemorySize) {
-                if (it == Arrays.end()) {
-                    Arrays.emplace(key, arrNew);
-                } else {
-                    it->second = arrNew;
-                }
-            }
-            return arrNew;
-        } else {
-            return it->second->Slice(0, recordsCount);
+std::shared_ptr<arrow::RecordBatch> TPortionInfo::TAssembleBlobInfo::BuildRecordBatch(const TColumnLoader& loader) const {
+    if (NullRowsCount) {
+        Y_ABORT_UNLESS(!Data);
+        return NArrow::MakeEmptyBatch(loader.GetExpectedSchema(), NullRowsCount);
+    } else {
+        auto result = loader.Apply(Data);
+        if (!result.ok()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "cannot unpack batch")("error", result.status().ToString())("loader", loader.DebugString());
+            return nullptr;
         }
+        return *result;
     }
-
-public:
-    std::shared_ptr<arrow::Array> GetNull(const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount) {
-        AFL_VERIFY(type);
-        AFL_VERIFY(recordsCount);
-        const TString key = type->ToString();
-        const auto initializer = [type](const ui32 recordsCount) {
-            return NArrow::TStatusValidator::GetValid(arrow::MakeArrayOfNull(type, recordsCount));
-        };
-        return InitializePosition(type->ToString(), recordsCount, initializer);
-    }
-    std::shared_ptr<arrow::Array> GetConst(const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& scalar, const ui32 recordsCount) {
-        AFL_VERIFY(type);
-        AFL_VERIFY(scalar);
-        AFL_VERIFY(recordsCount);
-        AFL_VERIFY(scalar->type->id() == type->id())("scalar", scalar->type->ToString())("field", type->ToString());
-
-        const auto initializer = [scalar](const ui32 recordsCount) {
-            return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*scalar, recordsCount));
-        };
-        return InitializePosition(type->ToString() + "::" + scalar->ToString(), recordsCount, initializer);
-    }
-};
-
 }
 
 std::shared_ptr<arrow::Table> TPortionInfo::TPreparedBatchData::AssembleTable(const TAssembleOptions& options) const {
     std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
     std::vector<std::shared_ptr<arrow::Field>> fields;
-    static thread_local TThreadSimpleArraysCache simpleArraysCache;
     for (auto&& i : Columns) {
         if (!options.IsAcceptedColumn(i.GetColumnId())) {
             continue;
@@ -283,9 +247,9 @@ std::shared_ptr<arrow::Table> TPortionInfo::TPreparedBatchData::AssembleTable(co
             auto type = i.GetField()->type();
             std::shared_ptr<arrow::Array> arr;
             if (scalar) {
-                arr = simpleArraysCache.GetConst(type, scalar, RowsCount);
+                arr = NArrow::TThreadSimpleArraysCache::GetConst(type, scalar, RowsCount);
             } else {
-                arr = simpleArraysCache.GetNull(type, RowsCount);
+                arr = NArrow::TThreadSimpleArraysCache::GetNull(type, RowsCount);
             }
             columns.emplace_back(std::make_shared<arrow::ChunkedArray>(arr));
         } else {

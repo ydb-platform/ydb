@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
 
         TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), rows.front().Columns(), {}, rows.front().Columns());
 
-        scanData.AddData(*batch, {}, factory);
+        scanData.AddData(batch, {}, factory);
 
         std::vector<NUdf::TUnboxedValue> container;
         container.resize(20);
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         resultCols.push_back(resCol);
         TKqpScanComputeContext::TScanData scanData({}, TTableRange({}), rows.front().Columns(), {}, resultCols);
 
-        scanData.AddData(*batch, {}, factory);
+        scanData.AddData(batch, {}, factory);
 
         std::vector<NUdf::TUnboxedValue> container;
         container.resize(1);
@@ -353,7 +353,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         TVector<TDataRow> rows = TestRows();
         std::shared_ptr<arrow::RecordBatch> anotherEmptyBatch = VectorToBatch(rows, rows.front().MakeArrowSchema());
 
-        auto bytes = scanData.AddData(*anotherEmptyBatch, {}, factory);
+        auto bytes = scanData.AddData(anotherEmptyBatch, {}, factory);
         UNIT_ASSERT(bytes > 0);
         std::vector<NUdf::TUnboxedValue*> containerPtr;
         for (const auto& row: rows) {

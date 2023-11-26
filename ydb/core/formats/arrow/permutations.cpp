@@ -109,7 +109,8 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<ar
     return out;
 }
 
-std::shared_ptr<arrow::UInt64Array> MakeFilterPermutation(const std::vector<ui64>& indexes) {
+template <class TIndex>
+std::shared_ptr<arrow::UInt64Array> MakeFilterPermutationImpl(const std::vector<TIndex>& indexes) {
     if (indexes.empty()) {
         return {};
     }
@@ -125,6 +126,14 @@ std::shared_ptr<arrow::UInt64Array> MakeFilterPermutation(const std::vector<ui64
     std::shared_ptr<arrow::UInt64Array> out;
     TStatusValidator::Validate(builder.Finish(&out));
     return out;
+}
+
+std::shared_ptr<arrow::UInt64Array> MakeFilterPermutation(const std::vector<ui32>& indexes) {
+    return MakeFilterPermutationImpl(indexes);
+}
+
+std::shared_ptr<arrow::UInt64Array> MakeFilterPermutation(const std::vector<ui64>& indexes) {
+    return MakeFilterPermutationImpl(indexes);
 }
 
 std::shared_ptr<arrow::RecordBatch> CopyRecords(const std::shared_ptr<arrow::RecordBatch>& source, const std::vector<ui64>& indexes) {
@@ -305,12 +314,13 @@ ui64 TShardedRecordBatch::GetMemorySize() const {
     return NArrow::GetBatchMemorySize(RecordBatch);
 }
 
-TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch): RecordBatch(batch) {
+TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch)
+    : RecordBatch(batch)
+{
     AFL_VERIFY(RecordBatch);
-    SplittedByShards = {RecordBatch};
 }
 
-TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch, std::vector<std::shared_ptr<arrow::RecordBatch>>&& splittedByShards)
+TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch, std::vector<std::vector<ui32>>&& splittedByShards)
     : RecordBatch(batch)
     , SplittedByShards(std::move(splittedByShards))
 {
@@ -356,7 +366,7 @@ NKikimr::NArrow::TShardedRecordBatch TShardingSplitIndex::Apply(const ui32 shard
         Y_ABORT_UNLESS(false);
     }
     auto resultBatch = NArrow::TStatusValidator::GetValid(input->RemoveColumn(input->schema()->GetFieldIndex(hashColumnName)));
-    return TShardedRecordBatch(resultBatch, splitter->Apply(resultBatch));
+    return TShardedRecordBatch(resultBatch, splitter->DetachRemapping());
 }
 
 std::shared_ptr<arrow::UInt64Array> TShardingSplitIndex::BuildPermutation() const {

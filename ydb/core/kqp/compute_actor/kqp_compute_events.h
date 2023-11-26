@@ -36,7 +36,7 @@ struct TEvKqpCompute {
         ui32 Generation;
         TVector<TOwnedCellVec> Rows;
         std::shared_ptr<arrow::RecordBatch> ArrowBatch;
-        std::vector<std::shared_ptr<arrow::RecordBatch>> SplittedBatches;
+        std::vector<std::vector<ui32>> SplittedBatches;
         
         TOwnedCellVec LastKey;
         TDuration CpuTime;
@@ -50,12 +50,6 @@ struct TEvKqpCompute {
         ui32 GetRowsCount() const {
             if (ArrowBatch) {
                 return ArrowBatch->num_rows();
-            } else if (SplittedBatches.size()) {
-                ui32 recordsCount = 0;
-                for (auto&& i : SplittedBatches) {
-                    recordsCount += i->num_rows();
-                }
-                return recordsCount;
             } else {
                 return Rows.size();
             }
@@ -113,9 +107,6 @@ struct TEvKqpCompute {
                 auto schema = NArrow::DeserializeSchema(batch.GetSchema());
                 ev->ArrowBatch = NArrow::DeserializeBatch(batch.GetBatch(), schema);
             }
-            for (auto&& i : pbEv->Record.GetSplittedArrowBatches()) {
-                ev->SplittedBatches.emplace_back(NArrow::TStatusValidator::GetValid(NArrow::NSerialization::TFullDataDeserializer().Deserialize(i)));
-            }
             return ev.Release();
         }
 
@@ -154,9 +145,6 @@ struct TEvKqpCompute {
                         protoArrowBatch->SetBatch(NArrow::SerializeBatchNoCompression(ArrowBatch));
                         break;
                     }
-                }
-                for (auto&& i : SplittedBatches) {
-                    Remote->Record.AddSplittedArrowBatches(NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(i));
                 }
             }
         }

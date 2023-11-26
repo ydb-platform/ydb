@@ -39,40 +39,29 @@ struct TEvScanExchange {
 
     class TEvSendData: public NActors::TEventLocal<TEvSendData, EvSendData> {
     private:
-        YDB_ACCESSOR_DEF(std::shared_ptr<arrow::RecordBatch>, ArrowBatch);
+        YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, ArrowBatch);
         YDB_ACCESSOR_DEF(TVector<TOwnedCellVec>, Rows);
-        YDB_ACCESSOR(ui64, TabletId, 0);
+        YDB_READONLY(ui64, TabletId, 0);
+        YDB_ACCESSOR_DEF(std::vector<ui32>, DataIndexes);
     public:
         ui32 GetRowsCount() const {
             return ArrowBatch ? ArrowBatch->num_rows() : Rows.size();
         }
 
-        TEvSendData(const ui64 tabletId, const std::shared_ptr<arrow::RecordBatch>& batch)
-            : ArrowBatch(batch)
+        TEvSendData(const std::shared_ptr<arrow::RecordBatch>& arrowBatch, const ui64 tabletId)
+            : ArrowBatch(arrowBatch)
             , TabletId(tabletId)
         {
+            Y_ABORT_UNLESS(ArrowBatch);
+            Y_ABORT_UNLESS(ArrowBatch->num_rows());
         }
 
-        TEvSendData(TEvKqpCompute::TEvScanData& msg, const ui64 tabletId)
-            : TabletId(tabletId) {
-            switch (msg.GetDataFormat()) {
-                case NKikimrDataEvents::FORMAT_CELLVEC:
-                case NKikimrDataEvents::FORMAT_UNSPECIFIED:
-                    Rows = std::move(msg.Rows);
-                    Y_ABORT_UNLESS(Rows.size());
-                    break;
-                case NKikimrDataEvents::FORMAT_ARROW:
-                    ArrowBatch = msg.ArrowBatch;
-                    Y_ABORT_UNLESS(ArrowBatch);
-                    Y_ABORT_UNLESS(ArrowBatch->num_rows());
-                    break;
-            }
-
-        }
-
-        TEvSendData(std::shared_ptr<arrow::RecordBatch> arrowBatch, const ui64 tabletId)
+        TEvSendData(const std::shared_ptr<arrow::RecordBatch>& arrowBatch, const ui64 tabletId, std::vector<ui32>&& dataIndexes)
             : ArrowBatch(arrowBatch)
-            , TabletId(tabletId) {
+            , TabletId(tabletId)
+            , DataIndexes(std::move(dataIndexes))
+        {
+            Y_ABORT_UNLESS(ArrowBatch);
             Y_ABORT_UNLESS(ArrowBatch->num_rows());
         }
 

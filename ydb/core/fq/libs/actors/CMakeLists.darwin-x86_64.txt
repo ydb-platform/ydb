@@ -32,11 +32,13 @@ target_link_libraries(fq-libs-actors PUBLIC
   fq-libs-common
   libs-compute-common
   libs-compute-ydb
+  libs-config-protos
   fq-libs-control_plane_storage
   libs-control_plane_storage-events
   fq-libs-db_id_async_resolver_impl
   fq-libs-db_schema
   fq-libs-events
+  fq-libs-exceptions
   fq-libs-grpc
   fq-libs-private_client
   libs-rate_limiter-utils

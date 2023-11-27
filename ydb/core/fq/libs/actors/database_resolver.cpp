@@ -1,7 +1,9 @@
 #include "database_resolver.h"
 
-#include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/common/cache.h>
+#include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
+#include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/fq/libs/exceptions/exceptions.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
@@ -158,14 +160,17 @@ private:
                                                                                                  << ", description: " << description.ToDebugString());
                         DatabaseId2Description[std::make_pair(params.Id, params.DatabaseType)] = description;
                         result.ConstructInPlace(description);
+                    } catch (const TCodeLineException& ex) {
+                        errorMessage = TStringBuilder()
+                            << "response parser error: " << params.ToDebugString() << Endl
+                            << ex.GetRawMessage();
                     } catch (...) {
                         errorMessage = TStringBuilder()
-                            << "response parser error: "
-                            << ", params: " << params.ToDebugString() << Endl
+                            << "response parser error: " << params.ToDebugString() << Endl
                             << CurrentExceptionMessage();
                     }
                 } else {
-                    errorMessage = TStringBuilder() << "JSON parser error: " << ", params: " << params.ToDebugString();
+                    errorMessage = TStringBuilder() << "JSON parser error: " << params.ToDebugString();
                 }
             }
         } else {
@@ -285,7 +290,7 @@ public:
             }
 
             if (aliveHosts.empty()) {
-                ythrow yexception() << "No ALIVE ClickHouse hosts found";
+                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE ClickHouse hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {
@@ -310,9 +315,17 @@ public:
             TVector<TString> aliveHosts;
 
             for (const auto& host : databaseInfo.GetMap().at("hosts").GetArraySafe()) {
-                // all host services must be alive
+                const auto& hostMap = host.GetMap();
+
+                if (!hostMap.contains("services")) {
+                    // indicates that cluster is down
+                    continue;
+                }
+
+                // all services of a particular host must be alive
                 bool alive = true;
-                for (const auto& service: host.GetMap().at("services").GetArraySafe()) {
+
+                for (const auto& service: hostMap.at("services").GetArraySafe()) {
                     if (service["health"].GetString() != "ALIVE") {
                         alive = false;
                         break;
@@ -325,7 +338,7 @@ public:
             }
             
             if (aliveHosts.empty()) {
-                ythrow yexception() << "No ALIVE PostgreSQL hosts found";
+                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE PostgreSQL hosts found";
             }
 
             NYql::IMdbEndpointGenerator::TParams params = {

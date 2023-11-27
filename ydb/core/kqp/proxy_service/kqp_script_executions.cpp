@@ -1,6 +1,7 @@
 #include "kqp_script_executions.h"
 #include "kqp_script_executions_impl.h"
 
+#include <ydb/core/fq/libs/common/rows_proto_splitter.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
@@ -44,6 +45,7 @@ namespace {
 constexpr TDuration LEASE_DURATION = TDuration::Seconds(30);
 constexpr TDuration DEADLINE_OFFSET = TDuration::Minutes(20);
 constexpr TDuration BRO_RUN_INTERVAL = TDuration::Minutes(60);
+constexpr ui64 MAX_NUMBER_ROWS_IN_BATCH = 10000;
 
 TString SerializeIssues(const NYql::TIssues& issues) {
     NYql::TIssue root;
@@ -355,7 +357,7 @@ struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExec
         }
 
         // Start request
-        RunScriptActorId = Register(CreateRunScriptActor(ExecutionId, Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1, LeaseDuration, QueryServiceConfig, Counters));
+        RunScriptActorId = Register(CreateRunScriptActor(ExecutionId, Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1, LeaseDuration, resultsTtl, QueryServiceConfig, Counters));
         Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, Event->Get()->Record, operationTtl, resultsTtl, LeaseDuration, MaxRunTime));
     }
 
@@ -632,6 +634,7 @@ private:
         hFunc(TEvents::TEvWakeup, Handle);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
+        IgnoreFunc(NActors::TEvInterconnect::TEvNodeConnected);
         hFunc(TEvScriptExecutionFinished, Handle);
     )
 
@@ -877,6 +880,11 @@ private:
 };
 
 class TForgetScriptExecutionOperationQueryActor : public TQueryBase {
+    struct TResultSetDescription {
+        ui64 NumberRows;
+        i32 ResultSetId;
+    };
+
 public:
     TForgetScriptExecutionOperationQueryActor(const TString& executionId, const TString& database)
         : ExecutionId(executionId)
@@ -893,9 +901,10 @@ public:
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id;
 
-            DELETE
+            SELECT result_set_id, COUNT(row_id) AS number_rows
             FROM `.metadata/result_sets`
-            WHERE database = $database AND execution_id = $execution_id;
+            WHERE database = $database AND execution_id = $execution_id
+            GROUP BY result_set_id;
 
             DELETE
             FROM `.metadata/script_execution_leases`
@@ -912,10 +921,81 @@ public:
                 .Build();
 
         RunDataQuery(sql, &params);
+        SetQueryResultHandler(&TForgetScriptExecutionOperationQueryActor::OnGetResultsInfo);
     }
 
-    void OnQueryResult() override {
-        Finish();
+    void OnGetResultsInfo() {
+        if (ResultSets.size() != 1) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+            return;
+        }
+
+        NYdb::TResultSetParser result(ResultSets[0]);
+        if (result.RowsCount() == 0) {
+            Finish();
+            return;
+        }
+
+        ResultSetsDescription.reserve(result.RowsCount());
+        while (result.TryNextRow()) {
+            TMaybe<i32> resultSetId = result.ColumnParser("result_set_id").GetOptionalInt32();
+            if (!resultSetId) {
+                continue;
+            }
+
+            ui64 numberRows = result.ColumnParser("number_rows").GetUint64();
+
+            ResultSetsDescription.emplace_back(TResultSetDescription{numberRows, *resultSetId});
+        }
+
+        DeleteScriptResults();
+    }
+
+    void DeleteScriptResults() {
+        while (!ResultSetsDescription.empty() && ResultSetsDescription.back().NumberRows == 0) {
+            ResultSetsDescription.pop_back();
+        }
+
+        if (ResultSetsDescription.empty()) {
+            Finish();
+            return;
+        }
+
+        TResultSetDescription& resultSet = ResultSetsDescription.back();
+        resultSet.NumberRows -= std::min(MAX_NUMBER_ROWS_IN_BATCH, resultSet.NumberRows);
+
+        TString sql = R"(
+            -- TForgetScriptExecutionOperationQueryActor::DeleteScriptResults
+            DECLARE $database AS Text;
+            DECLARE $execution_id AS Text;
+            DECLARE $result_set_id AS Int32;
+            DECLARE $last_row_id AS Uint64;
+
+            DELETE
+            FROM `.metadata/result_sets`
+            WHERE database = $database
+              AND execution_id = $execution_id
+              AND result_set_id = $result_set_id
+              AND row_id >= $last_row_id; 
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$database")
+                .Utf8(Database)
+                .Build()
+            .AddParam("$execution_id")
+                .Utf8(ExecutionId)
+                .Build()
+            .AddParam("$result_set_id")
+                .Int32(resultSet.ResultSetId)
+                .Build()
+            .AddParam("$last_row_id")
+                .Uint64(resultSet.NumberRows)
+                .Build();
+
+        RunDataQuery(sql, &params);
+        SetQueryResultHandler(&TForgetScriptExecutionOperationQueryActor::DeleteScriptResults);
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
@@ -925,6 +1005,7 @@ public:
 private:
     TString ExecutionId;
     TString Database;
+    std::vector<TResultSetDescription> ResultSetsDescription;
 };
 
 class TForgetScriptExecutionOperationActor : public TActorBootstrapped<TForgetScriptExecutionOperationActor> {
@@ -1667,8 +1748,8 @@ private:
 
 class TSaveScriptExecutionResultQuery : public TQueryBase {
 public:
-    TSaveScriptExecutionResultQuery(const TString& database, const TString& executionId, i32 resultSetId, TInstant expireAt, i64 firstRow, std::vector<TString>&& serializedRows)
-        : Database(database), ExecutionId(executionId), ResultSetId(resultSetId), ExpireAt(expireAt), FirstRow(firstRow), SerializedRows(std::move(serializedRows))
+    TSaveScriptExecutionResultQuery(const TString& database, const TString& executionId, i32 resultSetId, TMaybe<TInstant> expireAt, i64 firstRow, Ydb::ResultSet&& resultSet)
+        : Database(database), ExecutionId(executionId), ResultSetId(resultSetId), ExpireAt(expireAt), FirstRow(firstRow), ResultSet(std::move(resultSet))
     {
     }
 
@@ -1678,7 +1759,7 @@ public:
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $result_set_id AS Int32;
-            DECLARE $expire_at AS Timestamp;
+            DECLARE $expire_at AS Optional<Timestamp>;
             DECLARE $items AS List<Struct<row_id:Int64,result_set:String>>;
 
             UPSERT INTO `.metadata/result_sets`
@@ -1699,7 +1780,7 @@ public:
                 .Int32(ResultSetId)
                 .Build()
             .AddParam("$expire_at")
-                .Timestamp(ExpireAt)
+                .OptionalTimestamp(ExpireAt)
                 .Build();
 
         auto& param = params
@@ -1709,14 +1790,14 @@ public:
                 .BeginList();
 
         auto row = FirstRow;
-        for(auto& serializedRow : SerializedRows) {
+        for(auto& rowValue : ResultSet.rows()) {
             param
                     .AddListItem()
                     .BeginStruct()
                         .AddMember("row_id")
                             .Int64(row++)
                         .AddMember("result_set")
-                            .String(serializedRow)
+                            .String(rowValue.SerializeAsString())
                     .EndStruct();
         }
         param
@@ -1742,20 +1823,49 @@ private:
     const TString Database;
     const TString ExecutionId;
     const i32 ResultSetId;
-    const TInstant ExpireAt;
+    const TMaybe<TInstant> ExpireAt;
     const i64 FirstRow;
-    const std::vector<TString> SerializedRows;
+    const Ydb::ResultSet ResultSet;
 };
 
 class TSaveScriptExecutionResultActor : public TActorBootstrapped<TSaveScriptExecutionResultActor> {
+    static constexpr ui64 PROGRAM_SIZE_LIMIT = 10_MB;
+    static constexpr ui64 PROGRAM_BASE_SIZE = 1_MB;  // Depends on MAX_NUMBER_ROWS_IN_BATCH
+
 public:
-    TSaveScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetId, TInstant expireAt, i64 firstRow, std::vector<TString>&& serializedRows)
-        : ReplyActorId(replyActorId), Database(database), ExecutionId(executionId), ResultSetId(resultSetId), ExpireAt(expireAt), FirstRow(firstRow), SerializedRows(std::move(serializedRows))
-    {
+    TSaveScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetId, TMaybe<TInstant> expireAt, i64 firstRow, Ydb::ResultSet&& resultSet)
+        : ReplyActorId(replyActorId)
+        , Database(database)
+        , ExecutionId(executionId)
+        , ResultSetId(resultSetId)
+        , ExpireAt(expireAt)
+        , FirstRow(firstRow)
+        , RowsSplitter(std::move(resultSet), PROGRAM_SIZE_LIMIT, PROGRAM_BASE_SIZE, MAX_NUMBER_ROWS_IN_BATCH)
+    {}
+
+    void StartSaveResultQuery() {
+        if (ResultSets.empty()) {
+            Reply(Ydb::StatusIds::SUCCESS);
+            return;
+        }
+
+        i64 numberRows = ResultSets.back().rows_size();
+        Register(new TSaveScriptExecutionResultQuery(Database, ExecutionId, ResultSetId, ExpireAt, FirstRow, std::move(ResultSets.back())));
+
+        FirstRow += numberRows;
+        ResultSets.pop_back();
     }
 
     void Bootstrap() {
-        Register(new TSaveScriptExecutionResultQuery(Database, ExecutionId, ResultSetId, ExpireAt, FirstRow, std::move(SerializedRows)));
+        NFq::TSplittedResultSets splittedResultSets = RowsSplitter.Split();
+        if (!splittedResultSets.Success) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, std::move(splittedResultSets.Issues));
+            return;
+        }
+
+        ResultSets = std::move(splittedResultSets.ResultSets);
+        std::reverse(ResultSets.begin(), ResultSets.end());
+        StartSaveResultQuery();
 
         Become(&TSaveScriptExecutionResultActor::StateFunc);
     }
@@ -1765,7 +1875,16 @@ public:
     )
 
     void Handle(TEvSaveScriptResultFinished::TPtr& ev) {
-        Send(ev->Forward(ReplyActorId));
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            Reply(ev->Get()->Status, std::move(ev->Get()->Issues));
+            return;
+        }
+
+        StartSaveResultQuery();
+    }
+
+    void Reply(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
+        Send(ReplyActorId, new TEvSaveScriptResultFinished(status, std::move(issues)));
         PassAway();
     }
 
@@ -1774,9 +1893,10 @@ private:
     const TString Database;
     const TString ExecutionId;
     const i32 ResultSetId;
-    const TInstant ExpireAt;
-    const i64 FirstRow;
-    std::vector<TString> SerializedRows;
+    const TMaybe<TInstant> ExpireAt;
+    i64 FirstRow;
+    NFq::TRowsProtoSplitter RowsSplitter;
+    TVector<Ydb::ResultSet> ResultSets;
 };
 
 std::optional<std::pair<TDuration, TDuration>> GetTtlFromSerializedMeta(const TString& serializedMeta) {
@@ -2267,9 +2387,7 @@ public:
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Metainformation is corrupted");
             return;
         }
-
-        Request->Get()->OperationTtl = ttl->first;
-        Request->Get()->ResultsTtl = ttl->second;
+        OperationTtl = ttl->first;
 
         if (operationStatus) {
             FinalStatusAlreadySaved = true;
@@ -2295,7 +2413,6 @@ public:
             DECLARE $stats AS JsonDocument;
             DECLARE $ast AS Text;
             DECLARE $operation_ttl AS Interval;
-            DECLARE $results_ttl AS Interval;
             DECLARE $customer_supplied_id AS Text;
             DECLARE $user_token AS Text;
             DECLARE $script_sinks AS Optional<JsonDocument>;
@@ -2320,10 +2437,6 @@ public:
             WHERE database = $database AND execution_id = $execution_id;
 
             DELETE FROM `.metadata/script_execution_leases`
-            WHERE database = $database AND execution_id = $execution_id;
-
-            UPDATE `.metadata/result_sets`
-            SET expire_at = IF($results_ttl > CAST(0 AS Interval), CurrentUtcTimestamp() + $results_ttl, NULL)
             WHERE database = $database AND execution_id = $execution_id;
         )";
 
@@ -2366,10 +2479,7 @@ public:
                 .Utf8(Request->Get()->QueryAst.value_or(""))
                 .Build()
             .AddParam("$operation_ttl")
-                .Interval(static_cast<i64>(Request->Get()->OperationTtl.MicroSeconds()))
-                .Build()
-            .AddParam("$results_ttl")
-                .Interval(static_cast<i64>(Request->Get()->ResultsTtl.MicroSeconds()))
+                .Interval(static_cast<i64>(OperationTtl.MicroSeconds()))
                 .Build()
             .AddParam("$customer_supplied_id")
                 .Utf8(CustomerSuppliedId)
@@ -2426,6 +2536,7 @@ private:
     bool FinalStatusAlreadySaved = false;
     bool ApplicateScriptExternalEffectRequired = false;
 
+    TDuration OperationTtl;
     TString CustomerSuppliedId;
     TString UserToken;
     TMaybe<TString> SerializedSinks;
@@ -2617,12 +2728,12 @@ NActors::IActor* CreateScriptLeaseUpdateActor(const TActorId& runScriptActorId, 
     return new TScriptLeaseUpdateActor(runScriptActorId, database, executionId, leaseDuration, counters);
 }
 
-NActors::IActor* CreateSaveScriptExecutionResultMetaActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, const TString& serializedMeta) {
-    return new TSaveScriptExecutionResultMetaActor(replyActorId, database, executionId, serializedMeta);
+NActors::IActor* CreateSaveScriptExecutionResultMetaActor(const NActors::TActorId& runScriptActorId, const TString& database, const TString& executionId, const TString& serializedMeta) {
+    return new TSaveScriptExecutionResultMetaActor(runScriptActorId, database, executionId, serializedMeta);
 }
 
-NActors::IActor* CreateSaveScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetId, TInstant expireAt, i64 firstRow, std::vector<TString>&& serializedRows) {
-    return new TSaveScriptExecutionResultActor(replyActorId, database, executionId, resultSetId, expireAt, firstRow, std::move(serializedRows));
+NActors::IActor* CreateSaveScriptExecutionResultActor(const NActors::TActorId& runScriptActorId, const TString& database, const TString& executionId, i32 resultSetId, TMaybe<TInstant> expireAt, i64 firstRow, Ydb::ResultSet&& resultSet) {
+    return new TSaveScriptExecutionResultActor(runScriptActorId, database, executionId, resultSetId, expireAt, firstRow, std::move(resultSet));
 }
 
 NActors::IActor* CreateGetScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetIndex, i64 offset, i64 limit) {

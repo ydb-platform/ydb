@@ -56,6 +56,9 @@ namespace NKikimr::NKqp {
         NYql::TAttr dateTimeFormat;
         dateTimeFormat.SetName("DateTimeFormat");
         dateTimeFormat.SetValue("string");
+        appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableConnector()->SetUseSsl(false);
+        appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableConnector()->MutableEndpoint()->set_host("localhost");
+        appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableConnector()->MutableEndpoint()->set_port(1234);
         appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableDefaultSettings()->Add(std::move(dateTimeFormat));
         return appConfig;
     }

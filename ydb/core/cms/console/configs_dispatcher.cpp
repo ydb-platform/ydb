@@ -49,6 +49,7 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::NameserviceConfigItem,
     (ui32)NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem,
     (ui32)NKikimrConsole::TConfigItem::NodeBrokerConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::QueryServiceConfigItem,
     (ui32)NKikimrConsole::TConfigItem::SchemeShardConfigItem,
     (ui32)NKikimrConsole::TConfigItem::SharedCacheConfigItem,
     (ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem,

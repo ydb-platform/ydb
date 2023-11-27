@@ -4,9 +4,12 @@ SRCS(
     external_data_source.cpp
     external_source_factory.cpp
     object_storage.cpp
+    validation_functions.cpp
 )
 
 PEERDIR(
+    library/cpp/actors/http
+    library/cpp/regex/pcre
     library/cpp/scheme
     ydb/core/base
     ydb/core/protos

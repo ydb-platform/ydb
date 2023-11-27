@@ -72,7 +72,7 @@ bool ValidateAuth(const NKikimrSchemeOp::TAuth& auth, const NKikimr::NExternalSo
 bool Validate(const NKikimrSchemeOp::TExternalDataSourceDescription& desc, const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& factory, TString& errStr) {
     try {
         auto source = factory->GetOrCreate(desc.GetSourceType());
-        source->ValidateProperties(desc.GetProperties().SerializeAsString());
+        source->ValidateExternalDataSource(desc.SerializeAsString());
         return ValidateLocationAndInstallation(desc.GetLocation(), desc.GetInstallation(), errStr)
             && ValidateAuth(desc.GetAuth(), source, errStr)
             && ValidateProperties(desc.GetProperties(), errStr);

@@ -6591,6 +6591,7 @@ void TSchemeShard::SubscribeConsoleConfigs(const TActorContext &ctx) {
             (ui32)NKikimrConsole::TConfigItem::CompactionConfigItem,
             (ui32)NKikimrConsole::TConfigItem::SchemeShardConfigItem,
             (ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem,
+            (ui32)NKikimrConsole::TConfigItem::QueryServiceConfigItem,
         }),
         IEventHandle::FlagTrackDelivery
     );
@@ -6627,6 +6628,11 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         LoadTableProfiles(&appConfig.GetTableProfilesConfig(), ctx);
     } else {
         LoadTableProfiles(nullptr, ctx);
+    }
+
+    if (appConfig.HasQueryServiceConfig()) {
+        const auto& hostnamePatterns = appConfig.GetQueryServiceConfig().GetHostnamePatterns();
+        ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()));
     }
 
     if (IsSchemeShardConfigured()) {

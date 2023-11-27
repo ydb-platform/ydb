@@ -1031,6 +1031,7 @@ message TQueryServiceConfig {
     optional uint64 ScriptResultsTtlDefaultSeconds = 3 [default = 2592000];  // default = 1 month; 0 = infinity
     optional uint64 ScriptResultSizeLimit = 4 [default = 0]; // 0 = infinity
     optional uint64 ScriptResultRowsLimit = 5 [default = 0]; // 0 = infinity
+    repeated string HostnamePatterns = 13; // List of hostname regexps for external data sources; disabled if empty
 
     optional NYql.TS3GatewayConfig S3 = 6;
     optional NYql.THttpGatewayConfig HttpGateway = 7;

@@ -31,6 +31,7 @@ TString TDomainInfo::ToString() const {
         << " DomainKey: " << DomainKey
         << " ResourcesDomainKey: " << ResourcesDomainKey
         << " Params { " << Params.ShortDebugString() << " }"
+        << " ServerlessComputeResourcesMode: " << ServerlessComputeResourcesMode
     << " }";
 }
 

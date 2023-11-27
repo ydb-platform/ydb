@@ -213,10 +213,12 @@ private:
             if (database->SchemeBoardResult) {
                 const auto& domain = database->SchemeBoardResult->DescribeSchemeResult.GetPathDescription().GetDomainDescription();
                 if (domain.HasResourcesDomainKey() && !skipResourceCheck && DynamicNode) {
-                    TSubDomainKey subdomainKey(domain.GetResourcesDomainKey());
-                    if (!SubDomainKeys.contains(subdomainKey)) {
+                    const TSubDomainKey resourceDomainKey(domain.GetResourcesDomainKey());
+                    const TSubDomainKey domainKey(domain.GetDomainKey());
+                    if (!SubDomainKeys.contains(resourceDomainKey) && !SubDomainKeys.contains(domainKey)) {
                         TStringBuilder error;
                         error << "Unexpected node to perform query on database: " << databaseName
+                              << ", domain: " << domain.GetDomainKey().ShortDebugString()
                               << ", resource domain: " << domain.GetResourcesDomainKey().ShortDebugString();
                         LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, error);
                         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);

@@ -923,18 +923,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
-        THashSet<TString> expectedResults = {
-            "key one",
-            "very long value 2 / key two",
-            "very long key one",
-            "very long value 8 / very long value 7 / very long value 6"
-        };
-        while(!expectedResults.empty()) {
-            UNIT_ASSERT(iterator.Next(item));
-            TString val{item.AsStringRef()};
-            UNIT_ASSERT(expectedResults.contains(val));
-            expectedResults.erase(val);
-        }
+        UNIT_ASSERT(iterator.Next(item));
+        UNBOXED_VALUE_STR_EQUAL(item, "key one");
+        UNIT_ASSERT(iterator.Next(item));
+        UNBOXED_VALUE_STR_EQUAL(item, "very long value 2 / key two");
+        UNIT_ASSERT(iterator.Next(item));
+        UNBOXED_VALUE_STR_EQUAL(item, "very long key one");
+        UNIT_ASSERT(iterator.Next(item));
+        UNBOXED_VALUE_STR_EQUAL(item, "very long value 8 / very long value 7 / very long value 6");
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
@@ -1002,18 +998,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
-        THashSet<TString> expectedResults = {
-            "very long value 1 / key one / very long value 1 / key one",
-            "very long value 3 / key two / very long value 2 / key two",
-            "very long value 4 / very long key one / very long value 4 / very long key one",
-            "very long value 9 / very long key two / very long value 5 / very long key two"
-        };
-        while (!expectedResults.empty()) {
-            UNIT_ASSERT(iterator.Next(item));
-            TString val{item.AsStringRef()};
-            UNIT_ASSERT(expectedResults.contains(val));
-            expectedResults.erase(val);
-        }
+        UNIT_ASSERT(iterator.Next(item));
+        UNBOXED_VALUE_STR_EQUAL(item, "very long value 1 / key one / very long value 1 / key one");
+        UNIT_ASSERT(iterator.Next(item));
+        UNBOXED_VALUE_STR_EQUAL(item, "very long value 3 / key two / very long value 2 / key two");
+        UNIT_ASSERT(iterator.Next(item));
+        UNBOXED_VALUE_STR_EQUAL(item, "very long value 4 / very long key one / very long value 4 / very long key one");
+        UNIT_ASSERT(iterator.Next(item));
+        UNBOXED_VALUE_STR_EQUAL(item, "very long value 9 / very long key two / very long value 5 / very long key two");
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
@@ -1078,17 +1070,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
-        THashSet<TString> expectedResults = {
-                "key one / value 2 / value 1 / value 5 / value 4",
-                "key two / value 4 / value 3 / value 3 / value 2",
-        };
         NUdf::TUnboxedValue item;
-        while (!expectedResults.empty()) {
-            UNIT_ASSERT(iterator.Next(item));
-            TString val{item.AsStringRef()};
-            UNIT_ASSERT(expectedResults.contains(val));
-            expectedResults.erase(val);
-        }
+        UNIT_ASSERT(iterator.Next(item));
+        UNBOXED_VALUE_STR_EQUAL(item, "key one / value 2 / value 1 / value 5 / value 4");
+        UNIT_ASSERT(iterator.Next(item));
+        UNBOXED_VALUE_STR_EQUAL(item, "key two / value 4 / value 3 / value 3 / value 2");
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }

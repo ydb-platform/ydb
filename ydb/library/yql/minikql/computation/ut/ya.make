@@ -21,7 +21,6 @@ SRCS(
     mkql_computation_pattern_cache_ut.cpp
     mkql_validate_ut.cpp
     mkql_value_builder_ut.cpp
-    mkql_spiller_adapter_ut.cpp
     presort_ut.cpp
 )
 

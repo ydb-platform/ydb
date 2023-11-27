@@ -45,7 +45,6 @@ target_sources(minikql-computation-no_llvm PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_pack.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_spiller.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_custom_list.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_llvm_base.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_validate.cpp

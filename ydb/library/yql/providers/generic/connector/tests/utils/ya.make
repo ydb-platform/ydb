@@ -4,10 +4,13 @@ STYLE_PYTHON()
 
 PY_SRCS(
     clickhouse.py
+    comparator.py
     database.py
     dqrun.py
+    kqprun.py
     log.py
     postgresql.py
+    runner.py
     schema.py
     settings.py
 )

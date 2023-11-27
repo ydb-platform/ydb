@@ -3,12 +3,14 @@ import utils.postgresql
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
 
-from utils.settings import Settings
+from utils.comparator import data_outs_equal
 from utils.log import make_logger
+from utils.runner import Runner
+from utils.settings import Settings
+
 import clickhouse
 import postgresql
 import test_cases.join
-import utils.dqrun as dqrun
 
 LOGGER = make_logger(__name__)
 
@@ -16,7 +18,7 @@ LOGGER = make_logger(__name__)
 def join(
     tmp_path: Path,
     settings: Settings,
-    dqrun_runner: dqrun.Runner,
+    runner: Runner,
     clickhouse_client: clickhouse.Client,
     postgresql_client: utils.postgresql.Client,
     test_case: test_cases.join.TestCase,
@@ -44,11 +46,13 @@ def join(
                 raise Exception(f'invalid data source: {test_case.data_source_kind}')
 
     # run join
-    dss = test_case.data_sources
-    ds_head, ds_tail = dss[0], dss[1:]
-
     yql_script = test_case.make_sql(settings)
 
-    result = dqrun_runner.run(test_dir=tmp_path, script=yql_script, generic_settings=test_case.generic_settings)
+    result = runner.run(test_dir=tmp_path, script=yql_script, generic_settings=test_case.generic_settings)
 
-    assert test_case.data_out == result.data_out_with_types, (test_case.data_out, result.data_out_with_types)
+    assert result.returncode == 0, result.stderr
+
+    assert data_outs_equal(test_case.data_out, result.data_out_with_types), (
+        test_case.data_out,
+        result.data_out_with_types,
+    )

@@ -40,6 +40,7 @@ PEERDIR(
 DEPENDS(
     ydb/library/yql/providers/generic/connector/app
     ydb/library/yql/tools/dqrun
+    ydb/tests/tools/kqprun
 )
 
 END()

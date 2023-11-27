@@ -89,6 +89,7 @@ void RunMain(int argc, const char* argv[]) {
 
     TString scriptQueryAction = "execute";
     TString planOutputFormat = "pretty";
+    TString resultOutputFormat = "rows";
 
     TVector<TString> udfsPaths;
     TString udfsDirectory;
@@ -149,7 +150,12 @@ void RunMain(int argc, const char* argv[]) {
         .RequiredArgument("STR")
         .DefaultValue(planOutputFormat)
         .StoreResult(&planOutputFormat);
-    options.AddLongOption("results-limit", "Rows limit for script execution results")
+    options.AddLongOption("result-format", "Script query result format, one of { rows | full }")
+        .Optional()
+        .RequiredArgument("STR")
+        .DefaultValue(resultOutputFormat)
+        .StoreResult(&resultOutputFormat);
+    options.AddLongOption("result-rows-limit", "Rows limit for script execution results")
         .Optional()
         .RequiredArgument("INT")
         .DefaultValue(runnerOptions.ResultsRowsLimit)
@@ -193,6 +199,11 @@ void RunMain(int argc, const char* argv[]) {
     THolder<TFileOutput> schemeQueryAstFileHolder = SetupDefaultFileOutput(schemeQueryAstFile, runnerOptions.SchemeQueryAstOutput);
     THolder<TFileOutput> scriptQueryAstFileHolder = SetupDefaultFileOutput(scriptQueryAstFile, runnerOptions.ScriptQueryAstOutput);
     THolder<TFileOutput> scriptQueryPlanFileHolder = SetupDefaultFileOutput(scriptQueryPlanFile, runnerOptions.ScriptQueryPlanOutput);
+
+    runnerOptions.ResultOutputFormat =
+              (resultOutputFormat == TStringBuf("rows")) ? NKqpRun::TRunnerOptions::EResultOutputFormat::RowsJson
+            : (resultOutputFormat == TStringBuf("full")) ? NKqpRun::TRunnerOptions::EResultOutputFormat::FullJson
+            : NKqpRun::TRunnerOptions::EResultOutputFormat::RowsJson;
 
     runnerOptions.PlanOutputFormat =
               (planOutputFormat == TStringBuf("pretty")) ? NYdb::NConsoleClient::EOutputFormat::Pretty

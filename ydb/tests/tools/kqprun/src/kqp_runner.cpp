@@ -71,7 +71,7 @@ public:
                 return false;
             }
 
-            Options_.ResultOutput->Write(NYdb::FormatResultSetJson(resultSet, NYdb::EBinaryStringEncoding::Unicode));
+            PrintScriptResult(resultSet);
         }
 
         return true;
@@ -127,6 +127,18 @@ private:
 
             NYdb::NConsoleClient::TQueryPlanPrinter printer(Options_.PlanOutputFormat, true, *Options_.ScriptQueryPlanOutput);
             printer.Print(plan);
+        }
+    }
+
+    void PrintScriptResult(const Ydb::ResultSet& resultSet) const {
+        switch (Options_.ResultOutputFormat) {
+        case TRunnerOptions::EResultOutputFormat::RowsJson:
+            Options_.ResultOutput->Write(NYdb::FormatResultSetJson(resultSet, NYdb::EBinaryStringEncoding::Unicode));
+            break;
+
+        case TRunnerOptions::EResultOutputFormat::FullJson:
+            resultSet.PrintJSON(*Options_.ResultOutput);
+            break;
         }
     }
 

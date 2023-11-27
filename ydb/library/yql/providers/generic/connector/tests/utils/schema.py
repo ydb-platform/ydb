@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import datetime
-from typing import TypeAlias, List, Any, Optional, Sequence
+from typing import TypeAlias, List, Any, Optional, Sequence, Dict
 
 from yt import yson
 from yt.yson.yson_types import YsonEntity
@@ -60,6 +60,18 @@ class Column:
 
         return cls(name=name, ydb_type=ydb_type, data_source_type=None)
 
+    @classmethod
+    def from_json(cls, src: Dict):
+        name = src["name"]
+
+        if "optional_type" in src["type"]:
+            primitive_type = ydb_value.Type(type_id=src["type"]["optional_type"]["item"]["type_id"])
+            ydb_type = ydb_value.Type(optional_type=ydb_value.OptionalType(item=primitive_type))
+        else:
+            ydb_type = ydb_value.Type(type_id=src["type"]["type_id"])
+
+        return cls(name=name, ydb_type=ydb_type, data_source_type=None)
+
     @staticmethod
     def __parse_primitive_type(src: str) -> ydb_value.Type.PrimitiveTypeId:
         match src:
@@ -101,31 +113,22 @@ class Column:
     _epoch_start_date = datetime.date(1970, 1, 1)
     _epoch_start_datetime = datetime.datetime(1970, 1, 1)
 
-    def __is_valid_optional_value(self, value):
-        return any(
-            map(
-                lambda x: isinstance(value, x),
-                (
-                    list,
-                    YsonEntity,
-                ),
-            )
-        )
-
     def cast(self, value: str) -> Any:
         match self.ydb_type.WhichOneof('type'):
             case 'type_id':
                 return self.__cast_primitive_type(self.ydb_type.type_id, value)
             case 'optional_type':
-                assert self.__is_valid_optional_value(value), (self.ydb_type, value)
-
-                if isinstance(value, YsonEntity):
+                if value is None:  # kqprun return None if value is not presented
+                    return None
+                elif isinstance(value, YsonEntity):  # dqrun return YsonEntity if value is not presented
                     if value == None:  # noqa
                         return None
 
                     raise ValueError(f'unexpected YSONEntity: {value}')
-                else:
+                elif isinstance(value, list):  # dqrun return list with presented value
                     return self.__cast_primitive_type(self.ydb_type.optional_type.item.type_id, value[0])
+                else:  # kqprun return presented value
+                    return self.__cast_primitive_type(self.ydb_type.optional_type.item.type_id, value)
 
             case _:
                 raise Exception(f'invalid type: {self.ydb_type}')
@@ -314,6 +317,10 @@ class Schema:
     @classmethod
     def from_yson(cls, src: YsonList):
         return cls(columns=ColumnList(*map(Column.from_yson, src)))
+
+    @classmethod
+    def from_json(cls, src: Dict):
+        return cls(columns=ColumnList(*map(Column.from_json, src)))
 
     def yql_column_list(self, kind: EDataSourceKind.ValueType) -> str:
         return ", ".join(map(lambda col: col.format_for_data_source(kind), self.columns))

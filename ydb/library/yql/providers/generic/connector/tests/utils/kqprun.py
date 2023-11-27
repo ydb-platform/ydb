@@ -6,7 +6,7 @@ import jinja2
 
 import yatest.common
 
-from yt import yson
+import json
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
@@ -19,46 +19,32 @@ from ydb.library.yql.providers.generic.connector.tests.utils.settings import Set
 LOGGER = make_logger(__name__)
 
 
-class GatewaysConfRenderer:
+class SchemeRenderer:
     template_: Final = '''
-Generic {
-    Connector {
-        Endpoint {
-            host: "{{settings.connector.grpc_host}}"
-            port: {{settings.connector.grpc_port}}
-        }
-        UseSsl: false
-    }
 
-{% set CLICKHOUSE = 'CLICKHOUSE' %}
-{% set POSTGRESQL = 'POSTGRESQL' %}
+{% macro create_data_source(kind, data_source, host, port, login, password, protocol, database, schema) -%}
 
-{% macro data_source(kind, cluster, host, port, username, password, protocol, database, schema) -%}
-    ClusterMapping {
-        Kind: {{kind}}
-        Name: "{{cluster}}"
-        DatabaseName: "{{database}}"
-        Endpoint {
-            host: "{{host}}"
-            port: {{port}}
-        }
-        Credentials {
-            basic {
-                username: "{{username}}"
-                password: "{{password}}"
-            }
-        }
-        UseSsl: false
-        Protocol: {{protocol}}
+CREATE OBJECT {{data_source}}_local_password (TYPE SECRET) WITH (value = "{{password}}");
 
-        {% if kind == POSTGRESQL and schema %}
-        DataSourceOptions: {
-            key: "schema"
-            value: "{{schema}}"
-        }
-        {% endif %}
-    }
+CREATE EXTERNAL DATA SOURCE {{data_source}} WITH (
+    SOURCE_TYPE="{{kind}}",
+    LOCATION="{{host}}:{{port}}",
+    DATABASE_NAME="{{database}}",
+    AUTH_METHOD="BASIC",
+    LOGIN="{{login}}",
+    PASSWORD_SECRET_NAME="{{data_source}}_local_password",
+    USE_TLS="FALSE",
+    PROTOCOL="{{protocol}}"
+
+    {% if kind == POSTGRESQL and schema %}
+        ,SCHEMA="{{schema}}"
+    {% endif %}
+);
+
 {%- endmacro -%}
+
+{% set CLICKHOUSE = 'ClickHouse' %}
+{% set POSTGRESQL = 'PostgreSQL' %}
 
 {% set NATIVE = 'NATIVE' %}
 {% set HTTP = 'HTTP' %}
@@ -73,7 +59,7 @@ Generic {
 {% set CLICKHOUSE_PROTOCOL = HTTP %}
 {% endif %}
 
-{{ data_source(
+{{ create_data_source(
     CLICKHOUSE,
     settings.clickhouse.cluster_name,
     settings.clickhouse.host,
@@ -87,7 +73,7 @@ Generic {
 {% endfor %}
 
 {% for cluster in generic_settings.postgresql_clusters %}
-{{ data_source(
+{{ create_data_source(
     POSTGRESQL,
     settings.postgresql.cluster_name,
     settings.postgresql.host,
@@ -100,6 +86,38 @@ Generic {
 }}
 {% endfor %}
 
+'''
+
+    def __init__(self):
+        self.template = jinja2.Environment(loader=jinja2.BaseLoader, undefined=jinja2.DebugUndefined).from_string(
+            self.template_
+        )
+        self.template.globals['EProtocol'] = EProtocol
+
+    def render(self, file_path: Path, settings: Settings, generic_settings: GenericSettings) -> None:
+        content = self.template.render(dict(settings=settings, generic_settings=generic_settings))
+        with open(file_path, 'w') as f:
+            f.write(content)
+
+
+class AppConfigRenderer:
+    template_: Final = '''
+
+FeatureFlags {
+  EnableExternalDataSources: true
+  EnableScriptExecutionOperations: true
+}
+
+QueryServiceConfig {
+  Generic {
+    Connector {
+        Endpoint {
+            host: "{{settings.connector.grpc_host}}"
+            port: {{settings.connector.grpc_port}}
+        }
+        UseSsl: false
+    }
+
     DefaultSettings {
         Name: "DateTimeFormat"
         {% if generic_settings.date_time_format == EDateTimeFormat.STRING_FORMAT %}
@@ -108,84 +126,32 @@ Generic {
         Value: "YQL"
         {% endif %}
     }
-
+  }
 }
 
-Dq {
-    DefaultSettings {
-        Name: "EnableComputeActor"
-        Value: "1"
-    }
-
-    DefaultSettings {
-        Name: "ComputeActorType"
-        Value: "async"
-    }
-
-    DefaultSettings {
-        Name: "AnalyzeQuery"
-        Value: "true"
-    }
-
-    DefaultSettings {
-        Name: "MaxTasksPerStage"
-        Value: "200"
-    }
-
-    DefaultSettings {
-        Name: "MaxTasksPerOperation"
-        Value: "200"
-    }
-
-    DefaultSettings {
-        Name: "EnableInsert"
-        Value: "true"
-    }
-
-    DefaultSettings {
-        Name: "_EnablePrecompute"
-        Value: "true"
-    }
-
-    DefaultSettings {
-        Name: "UseAggPhases"
-        Value: "true"
-    }
-
-    DefaultSettings {
-        Name: "HashJoinMode"
-        Value: "grace"
-    }
-
-    DefaultSettings {
-        Name: "UseFastPickleTransport"
-        Value: "true"
-    }
-}
 '''
 
     def __init__(self):
         self.template = jinja2.Environment(loader=jinja2.BaseLoader, undefined=jinja2.DebugUndefined).from_string(
             self.template_
         )
-        self.template.globals['EProtocol'] = EProtocol
         self.template.globals['EDateTimeFormat'] = EDateTimeFormat
 
     def render(self, file_path: Path, settings: Settings, generic_settings: GenericSettings) -> None:
         content = self.template.render(dict(settings=settings, generic_settings=generic_settings))
-        LOGGER.debug(content)
         with open(file_path, 'w') as f:
             f.write(content)
 
 
-class DqRunner(Runner):
+class KqpRunner(Runner):
     def __init__(
         self,
-        dqrun_path: Path,
+        kqprun_path: Path,
         settings: Settings,
     ):
-        self.gateways_conf_renderer = GatewaysConfRenderer()
-        self.dqrun_path = dqrun_path
+        self.scheme_renderer = SchemeRenderer()
+        self.app_conf_renderer = AppConfigRenderer()
+        self.kqprun_path = kqprun_path
         self.settings = settings
 
     def run(self, test_dir: Path, script: str, generic_settings: GenericSettings) -> Result:
@@ -197,17 +163,18 @@ class DqRunner(Runner):
             f.write(script)
 
         # Create config
-        gateways_conf_path = test_dir.joinpath('gateways.conf')
-        self.gateways_conf_renderer.render(gateways_conf_path, self.settings, generic_settings)
-        fs_conf_path = test_dir.joinpath('fs.conf')
-        with open(fs_conf_path, "w") as f:
-            pass
+        app_conf_path = test_dir.joinpath('app_confif.conf')
+        self.app_conf_renderer.render(app_conf_path, settings=self.settings, generic_settings=generic_settings)
 
-        # Run dqrun
-        result_path = test_dir.joinpath('result.yson')
+        # Create scheme
+        scheme_path = test_dir.joinpath('scheme.txt')
+        self.scheme_renderer.render(scheme_path, settings=self.settings, generic_settings=generic_settings)
+
+        # Run kqprun
+        result_path = test_dir.joinpath('result.json')
 
         # For debug add option --trace-opt to args
-        cmd = f'{self.dqrun_path} -s -p {script_path} --fs-cfg={fs_conf_path} --gateways-cfg={gateways_conf_path} --result-file={result_path} --format="binary" -v 7'
+        cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} --result-file={result_path} --result-format=full'
         out = subprocess.run(cmd, shell=True, capture_output=True)
 
         data_out = None
@@ -217,13 +184,24 @@ class DqRunner(Runner):
         if out.returncode == 0:
             # Parse output
             with open(result_path, 'r') as f:
-                result = yson.loads(f.read().encode('ascii'))
+                result = json.loads(f.read().encode('ascii'), strict=False)
 
-            # Dqrun's data output is missing type information (everything is a string),
+            # Kqprun's data output is missing type information (everything is a string),
             # so we have to recover schema and transform the results to make them comparable with the inputs
-            data_out = result[0]['Write'][0]['Data']
-            schema = Schema.from_yson(result[0]['Write'][0]['Type'][1][1])
-            data_out_with_types = [schema.cast_row(row) for row in data_out]
+            data_out = result["rows"]
+            schema = Schema.from_json(result["columns"])
+
+            data_out_with_types = []
+            for row in data_out:
+                row_values = []
+                for item in row['items']:
+                    name, value = list(item.items())[0]
+                    if name == 'null_flag_value':
+                        row_values.append(None)
+                    else:
+                        row_values.append(value)
+
+                data_out_with_types.append(schema.cast_row(row_values))
 
             LOGGER.debug('Schema: %s', schema)
             LOGGER.debug('Data out: %s', data_out)
@@ -237,11 +215,11 @@ class DqRunner(Runner):
                 LOGGER.error(line)
 
         unique_suffix = test_dir.name
-        err_file = yatest.common.output_path(f'dqrun-{unique_suffix}.err')
+        err_file = yatest.common.output_path(f'kqprun-{unique_suffix}.err')
         with open(err_file, "w") as f:
             f.write(out.stderr.decode('utf-8'))
 
-        out_file = yatest.common.output_path(f'dqrun-{unique_suffix}.out')
+        out_file = yatest.common.output_path(f'kqprun-{unique_suffix}.out')
         with open(out_file, "w") as f:
             f.write(out.stdout.decode('utf-8'))
 

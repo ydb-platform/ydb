@@ -73,18 +73,18 @@ class TestCase:
 
     @property
     def generic_settings(self) -> GenericSettings:
-        clickhouse_clusters = []
-        postgresql_clusters = []
+        clickhouse_clusters = set()
+        postgresql_clusters = set()
 
         for data_source in self.data_sources:
             match data_source.kind:
                 case EDataSourceKind.CLICKHOUSE:
-                    clickhouse_clusters.append(
+                    clickhouse_clusters.add(
                         GenericSettings.ClickHouseCluster(database=data_source.database.name, protocol=EProtocol.NATIVE)
                     )
 
                 case EDataSourceKind.POSTGRESQL:
-                    postgresql_clusters.append(
+                    postgresql_clusters.add(
                         GenericSettings.PostgreSQLCluster(database=data_source.database.name, schema=None)
                     )
                 case _:

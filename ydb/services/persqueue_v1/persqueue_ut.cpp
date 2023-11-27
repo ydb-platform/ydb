@@ -615,11 +615,13 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(readStream->Read(&resp));
             Cerr << "Got read response " << resp << "\n";
             UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
-            UNIT_ASSERT(resp.read_response().partition_data_size() == 1);
-            UNIT_ASSERT(resp.read_response().partition_data(0).batches_size() == 1);
-            UNIT_ASSERT(resp.read_response().partition_data(0).batches(0).message_data_size() >= 1);
-            UNIT_ASSERT(resp.read_response().partition_data(0).batches(0).message_data(0).offset() == i);
-            i += resp.read_response().partition_data(0).batches(0).message_data_size();
+            UNIT_ASSERT_VALUES_EQUAL(resp.read_response().partition_data_size(), 1);
+            UNIT_ASSERT_GE(resp.read_response().partition_data(0).batches_size(), 1);
+            for (const auto& batch : resp.read_response().partition_data(0).batches()) {
+                UNIT_ASSERT_GE(batch.message_data_size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(batch.message_data(0).offset(), i);
+                i += batch.message_data_size();
+            }
         }
 
         // send commit, await commitDone

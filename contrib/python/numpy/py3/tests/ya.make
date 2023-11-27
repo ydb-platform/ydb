@@ -83,6 +83,7 @@ TEST_SRCS(
     numpy/core/tests/test_nep50_promotions.py
     numpy/core/tests/test_numeric.py
     numpy/core/tests/test_numerictypes.py
+    numpy/core/tests/test_numpy_2_0_compat.py
     numpy/core/tests/test_overrides.py
     numpy/core/tests/test_print.py
     numpy/core/tests/test_protocols.py
@@ -129,9 +130,11 @@ TEST_SRCS(
     #numpy/f2py/tests/test_common.py
     #numpy/f2py/tests/test_compile_function.py
     #numpy/f2py/tests/test_crackfortran.py
+    #numpy/f2py/tests/test_data.py
     #numpy/f2py/tests/test_docs.py
     #numpy/f2py/tests/test_f2cmap.py
     #numpy/f2py/tests/test_f2py2e.py
+    #numpy/f2py/tests/test_isoc.py
     #numpy/f2py/tests/test_kind.py
     #numpy/f2py/tests/test_mixed.py
     #numpy/f2py/tests/test_module_doc.py

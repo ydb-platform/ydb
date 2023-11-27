@@ -4,7 +4,7 @@ LICENSE(BSD-3-Clause)
 
 PROVIDES(numpy)
 
-VERSION(1.25.2)
+VERSION(1.26.2)
 
 NO_COMPILER_WARNINGS()
 NO_EXTENDED_SOURCE_SEARCH()
@@ -63,6 +63,14 @@ PY_SRCS(
     numpy/__config__.py
     numpy/__init__.py
     numpy/__init__.pyi
+    numpy/_core/__init__.py
+    numpy/_core/__init__.pyi
+    numpy/_core/_dtype.py
+    numpy/_core/_dtype_ctypes.py
+    numpy/_core/_internal.py
+    numpy/_core/_multiarray_umath.py
+    numpy/_core/multiarray.py
+    numpy/_core/umath.py
     numpy/_distributor_init.py
     numpy/_globals.py
     numpy/_pyinstaller/__init__.py
@@ -83,9 +91,9 @@ PY_SRCS(
     numpy/_typing/_shape.py
     numpy/_typing/_ufunc.pyi
     numpy/_utils/__init__.py
+    numpy/_utils/_convertions.py
     numpy/_utils/_inspect.py
     numpy/_utils/_pep440.py
-    numpy/_version.py
     numpy/array_api/__init__.py
     numpy/array_api/_array_object.py
     numpy/array_api/_constants.py

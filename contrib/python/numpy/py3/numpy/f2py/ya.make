@@ -9,9 +9,13 @@ PEERDIR(
 PY_SRCS(
     NAMESPACE numpy.f2py
     __init__.py
-    __init__.pyi
     __main__.py
     __version__.py
+    _backends/__init__.py
+    _backends/_backend.py
+    _backends/_distutils.py
+    _backends/_meson.py
+    _isocbind.py
     auxfuncs.py
     capi_maps.py
     cb_rules.py

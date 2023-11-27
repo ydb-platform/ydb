@@ -4670,16 +4670,23 @@ std::vector<ui32> UnusedState(const TExprNode& init, const TExprNode& update, co
 }
 
 template<size_t Consumers>
-std::vector<ui32> UnusedArgs(const std::array<const TExprNode*, Consumers>& consumers) {
-    const auto size = (*std::min_element(consumers.cbegin(), consumers.cend(), [](const TExprNode* l, const TExprNode* r) { return l->Head().ChildrenSize() < r->Head().ChildrenSize(); }))->Head().ChildrenSize();
+std::vector<ui32> UnusedArgs(const std::array<TExprNode::TChildrenType, Consumers>& consumers) {
+    const auto size = (*std::min_element(consumers.cbegin(), consumers.cend(), [](const TExprNode::TChildrenType& l, const TExprNode::TChildrenType& r) { return l.size() < r.size(); })).size();
     std::vector<ui32> unused;
     unused.reserve(size);
     for (auto j = 0U; j < size; ++j) {
-        if (std::all_of(consumers.cbegin(), consumers.cend(), [j](const TExprNode* lambda) { return lambda->Head().Child(j)->Unique(); })) {
+        if (std::all_of(consumers.cbegin(), consumers.cend(), [j](const TExprNode::TChildrenType& args) { return args[j]->Unique(); })) {
             unused.emplace_back(j);
         }
     }
     return unused;
+}
+
+template<size_t Consumers>
+std::vector<ui32> UnusedArgs(const std::array<const TExprNode*, Consumers>& consumers) {
+    std::array<TExprNode::TChildrenType, Consumers> consumersArgs;
+    std::transform(consumers.cbegin(), consumers.cend(), consumersArgs.begin(), [](const TExprNode* lambda) { return lambda->Head().Children(); });
+    return UnusedArgs(consumersArgs);
 }
 
 TExprNode::TListType&& DropUnused(TExprNode::TListType&& list, const std::vector<ui32>& unused, ui32 skip = 0U) {
@@ -4747,6 +4754,19 @@ TExprNode::TPtr UnpickleInput(TExprNode::TPtr originalLambda, TListExpandMap& li
 
 TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& ctx) {
     const auto originalKeySize = node->Child(2U)->ChildrenSize() - 1U;
+    if (const auto unused = UnusedArgs<3U>({node->Child(2)->Head().Children(), node->Child(3)->Head().Children().subspan(originalKeySize), node->Child(4)->Head().Children().subspan(originalKeySize)}); !unused.empty()) {
+        YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " with " << unused.size() << " unused arguments.";
+        return ctx.Builder(node->Pos())
+            .Callable(node->Content())
+                .Add(0, MakeWideMapForDropUnused(node->HeadPtr(), unused, ctx))
+                .Add(1, node->ChildPtr(1))
+                .Add(2, DropUnusedArgs(*node->Child(2), unused, ctx))
+                .Add(3, DropUnusedArgs(*node->Child(3), unused, ctx, originalKeySize))
+                .Add(4, DropUnusedArgs(*node->Child(4), unused, ctx, originalKeySize))
+                .Add(5, node->ChildPtr(5))
+            .Seal().Build();
+    }
+
     const auto originalStateSize = node->Child(3U)->ChildrenSize() - 1U;
     const auto originalItemSize = node->Child(2U)->Head().ChildrenSize();
     TTupleExpandMap tupleExpandMap(originalKeySize);

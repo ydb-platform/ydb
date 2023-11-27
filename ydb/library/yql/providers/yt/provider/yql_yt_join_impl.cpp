@@ -2990,8 +2990,7 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
     const auto disableOptimizers = state->Configuration->DisableOptimizers.Get().GetOrElse(TSet<TString>());
 
     bool empty = false;
-    if (leftTablesReady
-        && 0ul == Accumulate(leftTables, 0ul, [] (ui64 sum, const TYtPathInfo::TPtr& p) { return sum + p->Table->Stat->RecordsCount; })
+    if (leftLeaf.Section.Ref().GetConstraint<TEmptyConstraintNode>() != nullptr
         && AllOf(leftTables, [](const TYtPathInfo::TPtr& p) { return !p->Table->Meta->IsDynamic; })
     ) {
         if (joinType == "Inner" || joinType == "Left" || joinType == "LeftOnly" || joinType == "LeftSemi" || joinType == "RightSemi" || joinType == "Cross") {
@@ -3000,8 +2999,7 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
         }
     }
     if (!empty
-        && rightTablesReady
-        && 0ul == Accumulate(rightTables, 0ul, [] (ui64 sum, const TYtPathInfo::TPtr& p) { return sum + p->Table->Stat->RecordsCount; })
+        && rightLeaf.Section.Ref().GetConstraint<TEmptyConstraintNode>() != nullptr
         && AllOf(rightTables, [](const TYtPathInfo::TPtr& p) { return !p->Table->Meta->IsDynamic; })
     ) {
         if (joinType == "Inner" || joinType == "Right" || joinType == "RightOnly" || joinType == "RightSemi" || joinType == "LeftSemi" || joinType == "Cross") {

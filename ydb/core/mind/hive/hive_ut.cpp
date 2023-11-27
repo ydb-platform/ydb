@@ -4419,6 +4419,84 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_LE(movedToFirstNode, TABLETS_PER_NODE / 2);
     }
 
+    Y_UNIT_TEST(TestHiveBalancerWithImmovableTablets) {
+        static constexpr ui64 TABLETS_PER_NODE = 10;
+        TTestBasicRuntime runtime(3, false);
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            app.HiveConfig.SetTabletKickCooldownPeriod(0);
+            app.HiveConfig.SetResourceChangeReactionPeriod(0);
+        });
+        const int nodeBase = runtime.GetNodeId(0);
+        TActorId senderA = runtime.AllocateEdgeActor();
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
+
+        auto getDistribution = [hiveTablet, nodeBase, senderA, &runtime]() -> std::array<std::vector<ui64>, 3> {
+            std::array<std::vector<ui64>, 3> nodeTablets = {};
+            {
+                runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvRequestHiveInfo());
+                TAutoPtr<IEventHandle> handle;
+                TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+                for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) {
+                    UNIT_ASSERT_C(((int)tablet.GetNodeID() - nodeBase >= 0) && (tablet.GetNodeID() - nodeBase < 3),
+                            "nodeId# " << tablet.GetNodeID() << " nodeBase# " << nodeBase);
+                    nodeTablets[tablet.GetNodeID() - nodeBase].push_back(tablet.GetTabletID());
+                }
+            }
+            return nodeTablets;
+        };
+
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        // wait for creation of nodes
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, 2);
+            runtime.DispatchEvents(options);
+        }
+
+        // every 3rd tablet is tied to the first node
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        for (size_t i = 0; i < 3 * TABLETS_PER_NODE; ++i) {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS));
+            ev->Record.SetObjectId(i);
+            if (i % 3 == 0) {
+                ev->Record.AddAllowedNodeIDs(nodeBase);
+            }
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+
+        // Check initial distribution
+        auto initialDistribution = getDistribution();
+        for (size_t i = 0; i < 3; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(initialDistribution[i].size(), TABLETS_PER_NODE);
+        }
+
+        // report metrics for all tablets on first node, and two tablets on second node
+        std::vector<ui64> tabletsWithMetrics = initialDistribution[0];
+        tabletsWithMetrics.push_back(initialDistribution[1][0]);
+        tabletsWithMetrics.push_back(initialDistribution[1][1]);
+        for (auto tabletId : tabletsWithMetrics) {
+            THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+            NKikimrHive::TTabletMetrics* cpu = metrics->Record.AddTabletMetrics();
+            cpu->SetTabletID(tabletId);
+            cpu->MutableResourceUsage()->SetCPU(500'000);
+
+            runtime.SendToPipe(hiveTablet, senderA, metrics.Release());
+        }
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvRestartComplete);
+            runtime.DispatchEvents(options, TDuration::Seconds(10));
+        }
+
+        // Check that a tablet was moved from the second node to the third
+        auto newDistribution = getDistribution();
+        UNIT_ASSERT_VALUES_EQUAL(newDistribution[0].size(), TABLETS_PER_NODE);
+        UNIT_ASSERT_VALUES_EQUAL(newDistribution[1].size(), TABLETS_PER_NODE - 1);
+    }
 
     Y_UNIT_TEST(TestUpdateTabletsObjectUpdatesMetrics) {
         TTestBasicRuntime runtime(1, false);

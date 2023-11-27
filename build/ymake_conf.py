@@ -703,30 +703,8 @@ class Build(object):
         CuDNN(cuda).print_()
 
         if self.ignore_local_files or host.is_windows or is_positive('NO_SVN_DEPENDS'):
-            emit_with_ignore_comment('SVN_DEPENDS')
             emit_with_ignore_comment('SVN_DEPENDS_CACHE__NO_UID__')
         else:
-            def find_svn():
-                for i in range(0, 3):
-                    for path in (['.svn', 'wc.db'], ['.svn', 'entries'], ['.git', 'logs', 'HEAD']):
-                        path_parts = [os.pardir] * i + path
-                        full_path = os.path.join(self.arcadia.root, *path_parts)
-                        # HACK(somov): No "normpath" here. ymake fails with the "source file name is outside the build tree" error
-                        # when .svn/wc.db found in "trunk" instead of "arcadia". But $ARCADIA_ROOT/../.svn/wc.db is ok.
-                        if os.path.exists(full_path):
-                            out_path = os.path.join('${ARCADIA_ROOT}', *path_parts)
-                            return '${input;hide:"%s"}' % out_path
-
-                # Special processing for arc repository since .arc may be a symlink.
-                dot_arc = os.path.realpath(os.path.join(self.arcadia.root, '.arc'))
-                full_path = os.path.join(dot_arc, 'TREE')
-                if os.path.exists(full_path):
-                    out_path = os.path.join('${ARCADIA_ROOT}', os.path.relpath(full_path, self.arcadia.root))
-                    return '${input;hide:"%s"}' % out_path
-
-                return ''
-
-            emit_with_ignore_comment('SVN_DEPENDS', find_svn())
             emit_with_ignore_comment('SVN_DEPENDS_CACHE__NO_UID__', '${hide;kv:"disable_cache"}')
 
     @staticmethod

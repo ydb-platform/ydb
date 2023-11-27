@@ -92,11 +92,11 @@
         "5433628204": "http://devtools-registry.s3.yandex.net/5433628204",
         "5433626802": "http://devtools-registry.s3.yandex.net/5433626802",
         "5433622361": "http://devtools-registry.s3.yandex.net/5433622361",
-        "5378636820": "http://devtools-registry.s3.yandex.net/5378636820",
-        "5378630516": "http://devtools-registry.s3.yandex.net/5378630516",
-        "5378641122": "http://devtools-registry.s3.yandex.net/5378641122",
-        "5378631351": "http://devtools-registry.s3.yandex.net/5378631351",
-        "5378634187": "http://devtools-registry.s3.yandex.net/5378634187",
+        "5443071926": "http://devtools-registry.s3.yandex.net/5443071926",
+        "5443066470": "http://devtools-registry.s3.yandex.net/5443066470",
+        "5443068824": "http://devtools-registry.s3.yandex.net/5443068824",
+        "5443067977": "http://devtools-registry.s3.yandex.net/5443067977",
+        "5443068659": "http://devtools-registry.s3.yandex.net/5443068659",
         "2980468199": "http://devtools-registry.s3.yandex.net/2980468199"
     },
     "resources_descriptions": {
@@ -191,11 +191,11 @@
         "5433628204": "yexport for darwin",
         "5433626802": "yexport for darwin-arm64",
         "5433622361": "yexport for linux",
-        "5378636820": "ymake for darwin",
-        "5378630516": "ymake for darwin-arm64",
-        "5378641122": "ymake for linux",
-        "5378631351": "ymake for linux-aarch64",
-        "5378634187": "ymake.exe for win32-clang-cl",
+        "5443071926": "ymake for darwin",
+        "5443066470": "ymake for darwin-arm64",
+        "5443068824": "ymake for linux",
+        "5443067977": "ymake for linux-aarch64",
+        "5443068659": "ymake.exe for win32-clang-cl",
         "2980468199": "ytexec for linux"
     },
     "tasks": {}

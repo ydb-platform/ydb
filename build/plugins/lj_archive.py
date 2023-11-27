@@ -4,13 +4,13 @@ def onlj_archive(unit, *args):
     Precompile .lua files using LuaJIT and archive both sources and results using sources names as keys
     """
 
-    def iter_luas(l):
-        for a in l:
+    def iter_luas(data):
+        for a in data:
             if a.endswith('.lua'):
                 yield a
 
-    def iter_objs(l):
-        for a in l:
+    def iter_objs(data):
+        for a in data:
             s = a[:-3] + 'raw'
             unit.on_luajit_objdump(['OUT', s, a])
             yield s
@@ -28,13 +28,13 @@ def onlj_21_archive(unit, *args):
     Precompile .lua files using LuaJIT 2.1 and archive both sources and results using sources names as keys
     """
 
-    def iter_luas(l):
-        for a in l:
+    def iter_luas(data):
+        for a in data:
             if a.endswith('.lua'):
                 yield a
 
-    def iter_objs(l):
-        for a in l:
+    def iter_objs(data):
+        for a in data:
             s = a[:-3] + 'raw'
             unit.on_luajit_21_objdump(['OUT', s, a])
             yield s

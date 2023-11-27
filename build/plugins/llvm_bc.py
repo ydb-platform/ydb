@@ -1,5 +1,3 @@
-import sys
-
 from _common import rootrel_arc_src, sort_by_keywords, skip_build_root
 
 

@@ -18,9 +18,12 @@ def extract_macro_calls(unit, macro_value_name, macro_calls_delim):
     if not unit.get(macro_value_name):
         return []
 
-    return list(filter(
-        None, map(split_args, unit.get(macro_value_name).replace('$' + macro_value_name, '').split(macro_calls_delim))
-    ))
+    return list(
+        filter(
+            None,
+            map(split_args, unit.get(macro_value_name).replace('$' + macro_value_name, '').split(macro_calls_delim)),
+        )
+    )
 
 
 def extract_macro_calls2(unit, macro_value_name):
@@ -69,7 +72,9 @@ def on_run_jbuild_program(unit, *args):
         args += ['FAKE_OUT', fake_out]
 
     prev = unit.get(['RUN_JAVA_PROGRAM_VALUE']) or ''
-    new_val = (prev + ' ' + six.ensure_str(base64.b64encode(six.ensure_binary(json.dumps(list(args)), encoding='utf-8')))).strip()
+    new_val = (
+        prev + ' ' + six.ensure_str(base64.b64encode(six.ensure_binary(json.dumps(list(args)), encoding='utf-8')))
+    ).strip()
     unit.set(['RUN_JAVA_PROGRAM_VALUE', new_val])
 
 
@@ -83,7 +88,9 @@ def ongenerate_script(unit, *args):
     if len(kv.get('TEMPLATE', [])) > len(kv.get('OUT', [])):
         ymake.report_configure_error('To many arguments for TEMPLATE parameter')
     prev = unit.get(['GENERATE_SCRIPT_VALUE']) or ''
-    new_val = (prev + ' ' + six.ensure_str(base64.b64encode(six.ensure_binary(json.dumps(list(args)), encoding='utf-8')))).strip()
+    new_val = (
+        prev + ' ' + six.ensure_str(base64.b64encode(six.ensure_binary(json.dumps(list(args)), encoding='utf-8')))
+    ).strip()
     unit.set(['GENERATE_SCRIPT_VALUE', new_val])
 
 
@@ -138,7 +145,7 @@ def onjava_module(unit, *args):
         '18',
         '19',
         '20',
-        '21'
+        '21',
     ):
         data['ENABLE_PREVIEW'] = extract_macro_calls(unit, 'ENABLE_PREVIEW_VALUE', args_delim)
 
@@ -208,7 +215,6 @@ def onjava_module(unit, *args):
         data['WITH_JDK'] = extract_macro_calls(unit, 'WITH_JDK_VALUE', args_delim)
 
     if not data['EXTERNAL_JAR']:
-        has_processor = extract_macro_calls(unit, 'GENERATE_VCS_JAVA_INFO_NODEP', args_delim)
         # IMPORTANT before switching vcs_info.py to python3 the value was always evaluated to $YMAKE_PYTHON but no
         # code in java dart parser extracts its value only checks this key for existance.
         data['EMBED_VCS'] = [['yes']]
@@ -241,7 +247,7 @@ def onjava_module(unit, *args):
         if external:
             unit.onpeerdir(external)
 
-    data = {k:v for k, v in six.iteritems(data) if v}
+    data = {k: v for k, v in six.iteritems(data) if v}
 
     dart = 'JAVA_DART: ' + six.ensure_str(base64.b64encode(six.ensure_binary(json.dumps(data)))) + '\n' + DELIM + '\n'
     unit.set_property(['JAVA_DART_DATA', dart])
@@ -288,7 +294,7 @@ def on_check_java_srcdir(unit, *args):
     if 'SKIP_CHECK_SRCDIR' in args:
         return
     for arg in args:
-        if not '$' in arg:
+        if '$' not in arg:
             arc_srcdir = os.path.join(unit.get('MODDIR'), arg)
             abs_srcdir = unit.resolve(os.path.join("$S/", arc_srcdir))
             if not os.path.exists(abs_srcdir) or not os.path.isdir(abs_srcdir):
@@ -352,7 +358,7 @@ def extract_words(words, keys):
         if w in keys:
             k = w
         else:
-            if not k in kv:
+            if k not in kv:
                 kv[k] = []
             kv[k].append(w)
 
@@ -361,7 +367,7 @@ def extract_words(words, keys):
 
 def parse_words(words):
     kv = extract_words(words, {'OUT', 'TEMPLATE'})
-    if not 'TEMPLATE' in kv:
+    if 'TEMPLATE' not in kv:
         kv['TEMPLATE'] = ['template.tmpl']
     ws = []
     for item in ('OUT', 'TEMPLATE'):
@@ -438,6 +444,7 @@ def _maven_coords_for_project(unit, project_dir):
     pom_path = unit.resolve(os.path.join('$S', project_dir, 'pom.xml'))
     if os.path.exists(pom_path):
         import xml.etree.ElementTree as et
+
         with open(pom_path, 'rb') as f:
             root = et.fromstring(f.read())
         for xpath in ('./{http://maven.apache.org/POM/4.0.0}artifactId', './artifactId'):

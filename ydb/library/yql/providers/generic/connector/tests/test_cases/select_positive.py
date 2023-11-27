@@ -470,14 +470,6 @@ class Factory:
         for i, col in enumerate(schema.columns):
             ch_type = col.data_source_type.ch
 
-            # FIXME: YQ-2300
-            if isinstance(ch_type, clickhouse.FixedString):
-                continue
-
-            # FIXME: YQ-2301
-            if isinstance(ch_type, clickhouse.DateTime64):
-                continue
-
             # copy type and example value to new TestCase
             schema_nullable.columns.append(
                 Column(
@@ -859,6 +851,44 @@ class Factory:
 
         return [tc]
 
+    def _select_upper_case_column_postgresql(self) -> Sequence[TestCase]:
+        '''
+        In this test case set we check SELECT COL1 from a pg table.
+        https://st.yandex-team.ru/YQ-2264
+        '''
+
+        schema = Schema(
+            columns=ColumnList(
+                Column(
+                    name='"COL1"',
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT32),
+                    data_source_type=DataSourceType(pg=postgresql.Integer()),
+                ),
+            )
+        )
+
+        tc = TestCase(
+            name='upper_case_column_postgresql',
+            schema=schema,
+            select_what=SelectWhat(SelectWhat.Item(name='COL1')),
+            select_where=None,
+            data_in=[
+                [
+                    3,
+                ]
+            ],
+            data_out_=[
+                [
+                    3,
+                ],
+            ],
+            data_source_kind=EDataSourceKind.POSTGRESQL,
+            database=Database.make_for_data_source_kind(EDataSourceKind.POSTGRESQL),
+            pragmas=dict(),
+        )
+
+        return [tc]
+
     def make_test_cases(self) -> Sequence[TestCase]:
         protocols = {
             EDataSourceKind.CLICKHOUSE: [EProtocol.NATIVE, EProtocol.HTTP],
@@ -874,6 +904,7 @@ class Factory:
                 self._constant_clickhouse(),
                 self._count_postgresql(),
                 self._count_clickhouse(),
+                self._select_upper_case_column_postgresql(),
             )
         )
 

@@ -95,7 +95,10 @@ Y_UNIT_TEST_SUITE(KqpService) {
                 }
 
                 Cerr << "finished sessions close....." << Endl;
-
+                auto counters = kikimr->GetTestServer().GetRuntime()->GetAppData(0).Counters;
+                do {
+                    Sleep(WaitDuration);
+                } while (counters->GetNamedCounter("name", "table.query.compilation.active_count", false)->Val() != 0);
                 return;
             }
 

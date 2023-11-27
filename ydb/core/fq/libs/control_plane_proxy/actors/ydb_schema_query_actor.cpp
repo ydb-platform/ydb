@@ -311,7 +311,8 @@ public:
 
     void SaveIssues(const TString& message, const TStatus& status) {
         auto issue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, message);
-        for (const auto& subIssue : status.GetIssues()) {
+        auto path = Request->Get()->ComputeDatabase->connection().database();
+        for (const auto& subIssue : RemoveDatabaseFromIssues(status.GetIssues(), path)) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
         }
 

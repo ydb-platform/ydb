@@ -4,6 +4,7 @@
 #include <array>
 
 #include <google/protobuf/repeated_field.h>
+#include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
 
 #include <library/cpp/iterator/mapped.h>
@@ -72,5 +73,9 @@ TMaybe<TString> GetPassword(const FederatedQuery::ConnectionSetting& setting);
 EYdbComputeAuth GetYdbComputeAuthMethod(const FederatedQuery::ConnectionSetting& setting);
 
 FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection);
+
+TString RemoveDatabaseFromStr(TString str, const TString& substr);
+
+NYql::TIssues RemoveDatabaseFromIssues(const NYql::TIssues& issues, const TString& str);
 
 }  // namespace NFq

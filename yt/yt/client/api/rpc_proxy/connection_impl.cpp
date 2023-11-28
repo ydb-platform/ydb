@@ -339,7 +339,7 @@ NApi::IClientPtr TConnection::CreateClient(const TClientOptions& options)
         DiscoveryToken_.Store(*options.Token);
     }
 
-    if (Config_->ClusterUrl || Config_->ProxyEndpoints) {
+    if (Config_->EnableProxyDiscovery && (Config_->ClusterUrl || Config_->ProxyEndpoints)) {
         UpdateProxyListExecutor_->Start();
     }
 
@@ -360,7 +360,9 @@ void TConnection::Terminate()
 {
     YT_LOG_DEBUG("Terminating connection");
     ChannelPool_->Terminate(TError("Connection terminated"));
-    YT_UNUSED_FUTURE(UpdateProxyListExecutor_->Stop());
+    if (Config_->EnableProxyDiscovery) {
+        YT_UNUSED_FUTURE(UpdateProxyListExecutor_->Stop());
+    }
 }
 
 const TConnectionConfigPtr& TConnection::GetConfig()

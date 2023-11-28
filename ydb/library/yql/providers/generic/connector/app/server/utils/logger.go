@@ -26,6 +26,7 @@ func AnnotateLogger(logger log.Logger, method string, dsi *api_common.TDataSourc
 			log.UInt32("port", dsi.Endpoint.Port),
 			log.String("database", dsi.Database),
 			log.Bool("use_tls", dsi.UseTls),
+			log.String("protocol", dsi.Protocol.String()),
 			// TODO: can we print just a login without a password?
 		)
 	}

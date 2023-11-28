@@ -18,15 +18,15 @@ namespace NFq {
 
     // TMdbEndpointGeneratorLegacy implements behavior required by YQL legacy ClickHouse provider
     class TMdbEndpointGeneratorLegacy: public NYql::IMdbEndpointGenerator {
-        TEndpoint ToEndpoint(const NYql::EDatabaseType databaseType, const TString& mdbHost, bool useTls) const override {
+        TEndpoint ToEndpoint(const NYql::IMdbEndpointGenerator::TParams& params) const override {
             // Inherited from here
             // https://a.yandex-team.ru/arcadia/ydb/core/fq/libs/actors/database_resolver.cpp?rev=r11819335#L27
-            if (databaseType == NYql::EDatabaseType::ClickHouse) {
-                auto port = useTls ? CLICKHOUSE_HTTP_SECURE_PORT : CLICKHOUSE_HTTP_INSECURE_PORT;
-                return TEndpoint(ReplaceDomain(mdbHost), port);
+            if (params.DatabaseType == NYql::EDatabaseType::ClickHouse) {
+                auto port = params.UseTls ? CLICKHOUSE_HTTP_SECURE_PORT : CLICKHOUSE_HTTP_INSECURE_PORT;
+                return TEndpoint(ReplaceDomain(params.MdbHost), port);
             }
 
-            ythrow yexception() << TStringBuilder() << "Unexpected database type: " << int(databaseType);
+            ythrow yexception() << "Unexpected database type: " << ToString(params.DatabaseType);
         }
     };
 
@@ -39,48 +39,58 @@ namespace NFq {
     // that interacts with data sources through a separate Connector service
     class TMdbEndpointGeneratorGeneric: public NYql::IMdbEndpointGenerator {
     public:
-        TMdbEndpointGeneratorGeneric(bool transformHost, bool useNativeProtocolForClickHouse = false)
-            : TransformHost(transformHost), UseNativeProtocolForClickHouse(useNativeProtocolForClickHouse)
+        TMdbEndpointGeneratorGeneric(bool transformHost)
+            : TransformHost(transformHost)
         {
         }
 
-        TEndpoint ToEndpoint(const NYql::EDatabaseType databaseType, const TString& mdbHost, bool useTls) const override {
-            auto fixedHost = TransformHost ? ReplaceDomain(mdbHost) : mdbHost;
+        TEndpoint ToEndpoint(const NYql::IMdbEndpointGenerator::TParams& params) const override {
+            auto fixedHost = TransformHost ? ReplaceDomain(params.MdbHost) : params.MdbHost;
 
-            switch (databaseType) {
+            switch (params.DatabaseType) {
                 case NYql::EDatabaseType::ClickHouse: {
                     // https://cloud.yandex.ru/docs/managed-clickhouse/operations/connect
                     ui32 port;
-                    if (UseNativeProtocolForClickHouse) {
-                        port = useTls ? CLICKHOUSE_NATIVE_SECURE_PORT : CLICKHOUSE_NATIVE_INSECURE_PORT;
-                    } else {
-                        port = useTls ? CLICKHOUSE_HTTP_SECURE_PORT : CLICKHOUSE_HTTP_INSECURE_PORT;
+
+                    switch (params.Protocol) {
+                        case NYql::NConnector::NApi::EProtocol::NATIVE:
+                            port = params.UseTls ? CLICKHOUSE_NATIVE_SECURE_PORT : CLICKHOUSE_NATIVE_INSECURE_PORT;
+                            break;
+                        case NYql::NConnector::NApi::EProtocol::HTTP:
+                            port = params.UseTls ? CLICKHOUSE_HTTP_SECURE_PORT : CLICKHOUSE_HTTP_INSECURE_PORT;
+                            break;
+                        default:
+                            ythrow yexception() << "Unexpected protocol for ClickHouse: " << NYql::NConnector::NApi::EProtocol_Name(params.Protocol);
                     }
 
                     return TEndpoint(fixedHost, port);
                 }
                 case NYql::EDatabaseType::PostgreSQL:
                     // https://cloud.yandex.ru/docs/managed-postgresql/operations/connect
-                    return TEndpoint(fixedHost, POSTGRESQL_PORT);
+                    switch (params.Protocol) {
+                        case NYql::NConnector::NApi::EProtocol::NATIVE:
+                            return TEndpoint(fixedHost, POSTGRESQL_PORT);
+                        default:
+                            ythrow yexception() << "Unexpected protocol for PostgreSQL: " << NYql::NConnector::NApi::EProtocol_Name(params.Protocol);
+                    }
                 default:
-                    ythrow yexception() << TStringBuilder() << "Unexpected database type: " << int(databaseType);
+                    ythrow yexception() << "Unexpected database type: " << ToString(params.DatabaseType);
             };
         }
 
     private:
         bool TransformHost;
-        bool UseNativeProtocolForClickHouse;
     };
 
     NYql::IMdbEndpointGenerator::TPtr
-    MakeMdbEndpointGeneratorGeneric(bool transformHost, bool useNativeProtocolForClickHouse) {
-        return std::make_shared<TMdbEndpointGeneratorGeneric>(transformHost, useNativeProtocolForClickHouse);
+    MakeMdbEndpointGeneratorGeneric(bool transformHost) {
+        return std::make_shared<TMdbEndpointGeneratorGeneric>(transformHost);
     }
 
     // TMdbEndpointGeneratorNoop just does nothing
     class TMdbEndpointGeneratorNoop: public NYql::IMdbEndpointGenerator {
-        TEndpoint ToEndpoint(const NYql::EDatabaseType, const TString& mdbHost, bool) const override {
-            return TEndpoint(mdbHost, 0);
+        TEndpoint ToEndpoint(const NYql::IMdbEndpointGenerator::TParams& params) const override {
+            return TEndpoint(params.MdbHost, 0);
         }
     };
 

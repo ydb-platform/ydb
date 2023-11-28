@@ -22,7 +22,12 @@ using namespace NActors;
 using namespace NYql;
 
 using TDatabaseDescription = NYql::TDatabaseResolverResponse::TDatabaseDescription;
-using TParser = std::function<TDatabaseDescription(NJson::TJsonValue& body, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator, bool useTls)>;
+using TParser = std::function<TDatabaseDescription(
+        NJson::TJsonValue& body,
+        const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
+        bool useTls,
+        NConnector::NApi::EProtocol protocol
+)>;
 using TParsers = THashMap<NYql::EDatabaseType, TParser>;
 
 struct TResolveParams {
@@ -144,7 +149,11 @@ private:
                 TParsers::const_iterator parserIt;
                 if (parseJsonOk && (parserIt = Parsers.find(params.DatabaseType)) != Parsers.end()) {
                     try {
-                        auto description = parserIt->second(databaseInfo, MdbEndpointGenerator, params.DatabaseAuth.UseTls);
+                        auto description = parserIt->second(
+                            databaseInfo,
+                            MdbEndpointGenerator,
+                            params.DatabaseAuth.UseTls,
+                            params.DatabaseAuth.Protocol);
                         LOG_D("ResponseProcessor::Handle(HttpIncomingResponse): got description" << ": params: " << params.ToDebugString()
                                                                                                  << ", description: " << description.ToDebugString());
                         DatabaseId2Description[std::make_pair(params.Id, params.DatabaseType)] = description;
@@ -223,7 +232,7 @@ public:
             .SetErrorTtl(TDuration::Minutes(1))
             .SetMaxSize(1000000))
     {
-        auto ydbParser = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr&, bool) {
+        auto ydbParser = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr&, bool, NConnector::NApi::EProtocol) {
             bool secure = false;
             TString endpoint = databaseInfo.GetMap().at("endpoint").GetStringRobust();
             TString prefix("/?database=");
@@ -245,10 +254,14 @@ public:
             return TDatabaseDescription{endpoint, "", 0, database, secure};
         };
         Parsers[NYql::EDatabaseType::Ydb] = ydbParser;
-        Parsers[NYql::EDatabaseType::DataStreams] = [ydbParser](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator, bool useTls)
+        Parsers[NYql::EDatabaseType::DataStreams] = [ydbParser](
+            NJson::TJsonValue& databaseInfo,
+            const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
+            bool useTls,
+            NConnector::NApi::EProtocol protocol)
         {
             bool isDedicatedDb  = databaseInfo.GetMap().contains("storageConfig");
-            auto ret = ydbParser(databaseInfo, mdbEndpointGenerator, useTls);
+            auto ret = ydbParser(databaseInfo, mdbEndpointGenerator, useTls, protocol);
             // TODO: Take explicit field from MVP
             if (!isDedicatedDb && ret.Endpoint.StartsWith("ydb.")) {
                 // Replace "ydb." -> "yds."
@@ -256,7 +269,12 @@ public:
             }
             return ret;
         };
-        Parsers[NYql::EDatabaseType::ClickHouse] = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator, bool useTls) {
+        Parsers[NYql::EDatabaseType::ClickHouse] = [](
+            NJson::TJsonValue& databaseInfo,
+            const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
+            bool useTls,
+            NConnector::NApi::EProtocol protocol
+            ) {
             NYql::IMdbEndpointGenerator::TEndpoint endpoint;
             TVector<TString> aliveHosts;
 
@@ -270,16 +288,24 @@ public:
                 ythrow yexception() << "No ALIVE ClickHouse hosts found";
             }
 
-            endpoint = mdbEndpointGenerator->ToEndpoint(
-                NYql::EDatabaseType::ClickHouse,
-                aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
-                useTls
-            );
+            NYql::IMdbEndpointGenerator::TParams params = {
+                .DatabaseType = NYql::EDatabaseType::ClickHouse,
+                .MdbHost = aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
+                .UseTls = useTls,
+                .Protocol = protocol,
+            };
+
+            endpoint = mdbEndpointGenerator->ToEndpoint(params);
 
             return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
         };
 
-        Parsers[NYql::EDatabaseType::PostgreSQL] = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator, bool useTls) {
+        Parsers[NYql::EDatabaseType::PostgreSQL] = [](
+            NJson::TJsonValue& databaseInfo,
+            const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
+            bool useTls,
+            NConnector::NApi::EProtocol protocol
+            ) {
             NYql::IMdbEndpointGenerator::TEndpoint endpoint;
             TVector<TString> aliveHosts;
 
@@ -302,11 +328,14 @@ public:
                 ythrow yexception() << "No ALIVE PostgreSQL hosts found";
             }
 
-            endpoint = mdbEndpointGenerator->ToEndpoint(
-                NYql::EDatabaseType::PostgreSQL,
-                aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
-                useTls
-            );
+            NYql::IMdbEndpointGenerator::TParams params = {
+                .DatabaseType = NYql::EDatabaseType::PostgreSQL,
+                .MdbHost = aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
+                .UseTls = useTls,
+                .Protocol = protocol,
+            };
+
+            endpoint = mdbEndpointGenerator->ToEndpoint(params);
 
             return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
         };

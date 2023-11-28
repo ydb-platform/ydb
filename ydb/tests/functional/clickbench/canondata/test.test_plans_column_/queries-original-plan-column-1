@@ -98,24 +98,9 @@
                                                                     }
                                                                 },
                                                                 {
-                                                                    "Assign": {
-                                                                        "Column": {
-                                                                            "Id": 108
-                                                                        },
-                                                                        "Function": {
-                                                                            "Arguments": [
-                                                                                {
-                                                                                    "Id": 107
-                                                                                }
-                                                                            ],
-                                                                            "Id": 18
-                                                                        }
-                                                                    }
-                                                                },
-                                                                {
                                                                     "Filter": {
                                                                         "Predicate": {
-                                                                            "Id": 108
+                                                                            "Id": 107
                                                                         }
                                                                     }
                                                                 },
@@ -124,7 +109,7 @@
                                                                         "Aggregates": [
                                                                             {
                                                                                 "Column": {
-                                                                                    "Id": 109
+                                                                                    "Id": 108
                                                                                 },
                                                                                 "Function": {
                                                                                     "Id": 2
@@ -137,7 +122,7 @@
                                                                     "Projection": {
                                                                         "Columns": [
                                                                             {
-                                                                                "Id": 109
+                                                                                "Id": 108
                                                                             }
                                                                         ]
                                                                     }

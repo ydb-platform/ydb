@@ -131,21 +131,6 @@
                                                                                                         "Column": {
                                                                                                             "Id": 108
                                                                                                         },
-                                                                                                        "Function": {
-                                                                                                            "Arguments": [
-                                                                                                                {
-                                                                                                                    "Id": 107
-                                                                                                                }
-                                                                                                            ],
-                                                                                                            "Id": 18
-                                                                                                        }
-                                                                                                    }
-                                                                                                },
-                                                                                                {
-                                                                                                    "Assign": {
-                                                                                                        "Column": {
-                                                                                                            "Id": 109
-                                                                                                        },
                                                                                                         "Constant": {
                                                                                                             "Int32": 0
                                                                                                         }
@@ -154,7 +139,7 @@
                                                                                                 {
                                                                                                     "Assign": {
                                                                                                         "Column": {
-                                                                                                            "Id": 110
+                                                                                                            "Id": 109
                                                                                                         },
                                                                                                         "Function": {
                                                                                                             "Arguments": [
@@ -162,11 +147,21 @@
                                                                                                                     "Id": 16
                                                                                                                 },
                                                                                                                 {
-                                                                                                                    "Id": 109
+                                                                                                                    "Id": 108
                                                                                                                 }
                                                                                                             ],
                                                                                                             "FunctionType": 2,
                                                                                                             "KernelIdx": 1
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Assign": {
+                                                                                                        "Column": {
+                                                                                                            "Id": 110
+                                                                                                        },
+                                                                                                        "Constant": {
+                                                                                                            "Int32": 0
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -178,10 +173,14 @@
                                                                                                         "Function": {
                                                                                                             "Arguments": [
                                                                                                                 {
+                                                                                                                    "Id": 62
+                                                                                                                },
+                                                                                                                {
                                                                                                                     "Id": 110
                                                                                                                 }
                                                                                                             ],
-                                                                                                            "Id": 18
+                                                                                                            "FunctionType": 2,
+                                                                                                            "KernelIdx": 2
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -190,8 +189,17 @@
                                                                                                         "Column": {
                                                                                                             "Id": 112
                                                                                                         },
-                                                                                                        "Constant": {
-                                                                                                            "Int32": 0
+                                                                                                        "Function": {
+                                                                                                            "Arguments": [
+                                                                                                                {
+                                                                                                                    "Id": 109
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "Id": 111
+                                                                                                                }
+                                                                                                            ],
+                                                                                                            "FunctionType": 2,
+                                                                                                            "KernelIdx": 3
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -203,72 +211,21 @@
                                                                                                         "Function": {
                                                                                                             "Arguments": [
                                                                                                                 {
-                                                                                                                    "Id": 62
+                                                                                                                    "Id": 107
                                                                                                                 },
                                                                                                                 {
                                                                                                                     "Id": 112
                                                                                                                 }
                                                                                                             ],
                                                                                                             "FunctionType": 2,
-                                                                                                            "KernelIdx": 2
-                                                                                                        }
-                                                                                                    }
-                                                                                                },
-                                                                                                {
-                                                                                                    "Assign": {
-                                                                                                        "Column": {
-                                                                                                            "Id": 114
-                                                                                                        },
-                                                                                                        "Function": {
-                                                                                                            "Arguments": [
-                                                                                                                {
-                                                                                                                    "Id": 113
-                                                                                                                }
-                                                                                                            ],
-                                                                                                            "Id": 18
-                                                                                                        }
-                                                                                                    }
-                                                                                                },
-                                                                                                {
-                                                                                                    "Assign": {
-                                                                                                        "Column": {
-                                                                                                            "Id": 115
-                                                                                                        },
-                                                                                                        "Function": {
-                                                                                                            "Arguments": [
-                                                                                                                {
-                                                                                                                    "Id": 111
-                                                                                                                },
-                                                                                                                {
-                                                                                                                    "Id": 114
-                                                                                                                }
-                                                                                                            ],
-                                                                                                            "Id": 11
-                                                                                                        }
-                                                                                                    }
-                                                                                                },
-                                                                                                {
-                                                                                                    "Assign": {
-                                                                                                        "Column": {
-                                                                                                            "Id": 116
-                                                                                                        },
-                                                                                                        "Function": {
-                                                                                                            "Arguments": [
-                                                                                                                {
-                                                                                                                    "Id": 108
-                                                                                                                },
-                                                                                                                {
-                                                                                                                    "Id": 115
-                                                                                                                }
-                                                                                                            ],
-                                                                                                            "Id": 11
+                                                                                                            "KernelIdx": 4
                                                                                                         }
                                                                                                     }
                                                                                                 },
                                                                                                 {
                                                                                                     "Filter": {
                                                                                                         "Predicate": {
-                                                                                                            "Id": 116
+                                                                                                            "Id": 113
                                                                                                         }
                                                                                                     }
                                                                                                 },

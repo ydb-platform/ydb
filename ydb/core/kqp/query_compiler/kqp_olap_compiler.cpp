@@ -164,6 +164,10 @@ public:
         }
         return true;
     }
+
+    TKernelRequestBuilder& GetKernelRequestBuilder() const {
+        return *YqlKernelRequestBuilder;
+    }
 private:
     const TTypeAnnotationNode* ConvertToBlockType(const TTypeAnnotationNode* type) {
         if (!type->IsBlock()) {
@@ -540,14 +544,16 @@ TProgram::TAssignment* CompileYqlKernelAnyComparison(const TKqpOlapFilterCompare
     cmpFunc->SetKernelIdx(idx);
     cmpFunc->AddArguments()->SetId(leftColumnId);
     cmpFunc->AddArguments()->SetId(rightColumnId);
-    return ConvertSafeCastToColumn(command->GetColumn().GetId(), "Boolean", ctx);
+    return command;
 }
 
 TProgram::TAssignment* CompileComparison(const TKqpOlapFilterCompare& comparison, TKqpOlapCompileContext& ctx)
 {
-    if constexpr (NKikimr::NSsa::RuntimeVersion >= 4) {
+    if constexpr (NKikimr::NSsa::RuntimeVersion >= 4U) {
         if (ctx.CheckYqlCompatibleArgsTypes(comparison)) {
             return CompileYqlKernelAnyComparison(comparison, ctx);
+        } else {
+            return ConvertSafeCastToColumn(CompileSimpleArrowComparison(comparison, ctx)->GetColumn().GetId(), "Uint8", ctx);
         }
     }
 
@@ -561,24 +567,40 @@ TProgram::TAssignment* CompileComparison(const TKqpOlapFilterCompare& comparison
     }
 }
 
-TProgram::TAssignment* CompileExists(const TKqpOlapFilterExists& exists,
-    TKqpOlapCompileContext& ctx)
+TProgram::TAssignment* InvertResult(TProgram::TAssignment* command, TKqpOlapCompileContext& ctx)
 {
-    ui32 columnId = GetOrCreateColumnId(exists.Column(), ctx);
+    auto *const notCommand = ctx.CreateAssignCmd();
+    auto *const notFunc = notCommand->MutableFunction();
 
-    TProgram::TAssignment* command = ctx.CreateAssignCmd();
-    auto* isNullFunc = command->MutableFunction();
+    notFunc->SetId(TProgram::TAssignment::FUNC_BINARY_NOT);
+    notFunc->AddArguments()->SetId(command->GetColumn().GetId());
+    return notCommand;
+}
+
+template<bool Empty = false>
+TProgram::TAssignment* CompileExists(const TKqpOlapFilterExists& exists, TKqpOlapCompileContext& ctx)
+{
+    const ui32 columnId = GetOrCreateColumnId(exists.Column(), ctx);
+    auto *const command = ctx.CreateAssignCmd();
+    auto *const isNullFunc = command->MutableFunction();
 
     isNullFunc->SetId(TProgram::TAssignment::FUNC_IS_NULL);
     isNullFunc->AddArguments()->SetId(columnId);
 
-    TProgram::TAssignment *notCommand = ctx.CreateAssignCmd();
-    auto *notFunc = notCommand->MutableFunction();
+    if constexpr (Empty) {
+        if constexpr (NSsa::RuntimeVersion >= 4U) {
+            return ConvertSafeCastToColumn(command->GetColumn().GetId(), "Uint8", ctx);
+        } else {
+            return command;
+        }
+    }
 
-    notFunc->SetId(TProgram::TAssignment::FUNC_BINARY_NOT);
-    notFunc->AddArguments()->SetId(command->GetColumn().GetId());
-
-    return notCommand;
+    auto *const notCommand = InvertResult(command, ctx);
+    if constexpr (NSsa::RuntimeVersion >= 4U) {
+        return ConvertSafeCastToColumn(notCommand->GetColumn().GetId(), "Uint8", ctx);
+    } else {
+        return notCommand;
+    }
 }
 
 TProgram::TAssignment* CompileJsonExists(const TKqpOlapJsonExists& jsonExistsCallable, TKqpOlapCompileContext& ctx) {
@@ -603,15 +625,14 @@ TProgram::TAssignment* CompileJsonExists(const TKqpOlapJsonExists& jsonExistsCal
     return command;
 }
 
-TProgram::TAssignment* BuildLogicalProgram(const TExprNode::TChildrenType& args, ui32 function,
-    TKqpOlapCompileContext& ctx)
+template<typename TFunc>
+TProgram::TAssignment* BuildLogicalProgram(const TExprNode::TChildrenType& args, const TFunc function, TKqpOlapCompileContext& ctx)
 {
-    ui32 childrenCount = args.size();
-
+    const auto childrenCount = args.size();
     if (childrenCount == 1) {
         // NOT operation is handled separately, thus only one available situation here:
         // this is binary operation with only one node, just build this node and return.
-        return CompileCondition(TExprBase(args[0]), ctx);
+        return CompileCondition(TExprBase(args.front()), ctx);
     }
 
     TProgram::TAssignment* left = nullptr;
@@ -630,55 +651,79 @@ TProgram::TAssignment* BuildLogicalProgram(const TExprNode::TChildrenType& args,
         right = BuildLogicalProgram(rightArgs, function, ctx);
     }
 
-    TProgram::TAssignment *logicalOp = ctx.CreateAssignCmd();
-    auto *logicalFunc = logicalOp->MutableFunction();
-
-    logicalFunc->SetId(function);
+    auto *const logicalOp = ctx.CreateAssignCmd();
+    auto *const logicalFunc = logicalOp->MutableFunction();
     logicalFunc->AddArguments()->SetId(left->GetColumn().GetId());
     logicalFunc->AddArguments()->SetId(right->GetColumn().GetId());
+
+    if constexpr (std::is_same<TFunc, TKernelRequestBuilder::EBinaryOp>()) {
+        const auto block = ctx.ExprCtx().MakeType<TBlockExprType>(ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
+        const auto idx = ctx.GetKernelRequestBuilder().AddBinaryOp(function, block, block, block);
+        logicalFunc->SetKernelIdx(idx);
+        logicalFunc->SetFunctionType(TProgram::YQL_KERNEL);
+    } else {
+        logicalFunc->SetFunctionType(function);
+    }
 
     return logicalOp;
 }
 
 TProgram::TAssignment* CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx) {
-    if (auto maybeCompare = condition.Maybe<TKqpOlapFilterCompare>()) {
+    if (const auto maybeCompare = condition.Maybe<TKqpOlapFilterCompare>()) {
         return CompileComparison(maybeCompare.Cast(), ctx);
     }
 
-    if (auto maybeExists = condition.Maybe<TKqpOlapFilterExists>()) {
+    if (const auto maybeExists = condition.Maybe<TKqpOlapFilterExists>()) {
         return CompileExists(maybeExists.Cast(), ctx);
     }
 
-    if (auto maybeJsonExists = condition.Maybe<TKqpOlapJsonExists>()) {
+    if (const auto maybeJsonExists = condition.Maybe<TKqpOlapJsonExists>()) {
         return CompileJsonExists(maybeJsonExists.Cast(), ctx);
     }
 
-    if (auto maybeNot = condition.Maybe<TKqpOlapNot>()) {
+    if (const auto maybeNot = condition.Maybe<TKqpOlapNot>()) {
+        if (const auto maybeExists = maybeNot.Cast().Value().Maybe<TKqpOlapFilterExists>()) {
+            return CompileExists<true>(maybeExists.Cast(), ctx);
+        }
+
         // Not is a special way in case it has only one child
-        TProgram::TAssignment *value = CompileCondition(maybeNot.Cast().Value(), ctx);
+        auto *const value = CompileCondition(maybeNot.Cast().Value(), ctx);
+        auto *const notOp = ctx.CreateAssignCmd();
+        auto *const notFunc = notOp->MutableFunction();
 
-        TProgram::TAssignment *notOp = ctx.CreateAssignCmd();
-        auto *notFunc = notOp->MutableFunction();
-
-        notFunc->SetId(TProgram::TAssignment::FUNC_BINARY_NOT);
         notFunc->AddArguments()->SetId(value->GetColumn().GetId());
+
+        if constexpr (NSsa::RuntimeVersion >= 4U) {
+            const auto block = ctx.ExprCtx().MakeType<TBlockExprType>(ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
+            const auto idx = ctx.GetKernelRequestBuilder().AddUnaryOp(TKernelRequestBuilder::EUnaryOp::Not, block, block);
+            notFunc->SetKernelIdx(idx);
+            notFunc->SetFunctionType(TProgram::YQL_KERNEL);
+        } else
+            notFunc->SetId(TProgram::TAssignment::FUNC_BINARY_NOT);
 
         return notOp;
     }
 
     ui32 function = TProgram::TAssignment::FUNC_UNSPECIFIED;
+    TKernelRequestBuilder::EBinaryOp op;
 
     if (condition.Maybe<TKqpOlapAnd>()) {
         function = TProgram::TAssignment::FUNC_BINARY_AND;
+        op = TKernelRequestBuilder::EBinaryOp::And;
     } else if (condition.Maybe<TKqpOlapOr>()) {
         function = TProgram::TAssignment::FUNC_BINARY_OR;
+        op = TKernelRequestBuilder::EBinaryOp::Or;
     } else if (condition.Maybe<TKqpOlapXor>()) {
         function = TProgram::TAssignment::FUNC_BINARY_XOR;
+        op = TKernelRequestBuilder::EBinaryOp::Xor;
     } else {
-        YQL_ENSURE(false, "Unsuppoted logical operation: " << condition.Ptr()->Content());
+        YQL_ENSURE(false, "Unsuppoted logical operation: " << condition.Ref().Content());
     }
 
-    return BuildLogicalProgram(condition.Ptr()->Children(), function, ctx);
+    if constexpr (NSsa::RuntimeVersion >= 4U)
+        return BuildLogicalProgram(condition.Ref().Children(), op, ctx);
+    else
+        return BuildLogicalProgram(condition.Ref().Children(), function, ctx);
 }
 
 void CompileFilter(const TKqpOlapFilter& filterNode, TKqpOlapCompileContext& ctx) {

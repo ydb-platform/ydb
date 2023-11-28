@@ -42,6 +42,11 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
     outerServer.InitilizeAddress();
     innerServer.InitilizeAddress();
 
+    auto finally = Finally([&] {
+        outerServer.TearDown();
+        innerServer.TearDown();
+    });
+
     auto workerPool = NConcurrency::CreateThreadPool(4, "Worker");
 
     outerServer.InitializeServer(

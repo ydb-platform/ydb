@@ -1411,8 +1411,10 @@ TEST_P(TFairShareSchedulerTest, TwoLevelFairness)
     auto threadPool = CreateNewTwoLevelFairShareThreadPool(
         numThreads,
         "MyFairSharePool",
-        /*poolWeightProvider*/ nullptr,
-        /*verboseLogging*/ true);
+        {
+            /*poolWeightProvider*/ nullptr,
+            /*verboseLogging*/ true
+        });
 
     std::vector<TDuration> progresses(numWorkers);
     std::vector<TDuration> pools(numPools);

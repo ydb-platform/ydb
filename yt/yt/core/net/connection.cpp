@@ -484,6 +484,7 @@ public:
             WriteDirection_.Operation.reset();
         }
 
+        Poller_->Unarm(FD_, this);
         YT_VERIFY(TryClose(FD_, false));
         FD_ = -1;
 
@@ -971,7 +972,7 @@ private:
         } else if (!result.Value().Retry) {
             operation->SetResult();
         } else if (needRetry) {
-            Poller_->Retry(this, false);
+            Poller_->Retry(this);
         }
 
         if (needUnregister) {

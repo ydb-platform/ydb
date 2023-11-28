@@ -106,8 +106,7 @@ struct IPoller
     virtual void Arm(TFileDescriptor fd, const IPollablePtr& pollable, EPollControl control) = 0;
 
     //! Schedule call of #IPollable::OnEvent with EPollControl::Retry.
-    //! From OnEvent could be called with wakeup = false to not wake new thread.
-    virtual void Retry(const IPollablePtr& pollable, bool wakeup = true) = 0;
+    virtual void Retry(const IPollablePtr& pollable) = 0;
 
     //! Unarms the poller.
     virtual void Unarm(TFileDescriptor fd, const IPollablePtr& pollable) = 0;

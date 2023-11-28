@@ -2,7 +2,7 @@
 
 From this repository you can build YDB Server and YDB CLI (Command Line Interface utility) executables.
 
-## Build Requirements
+## Build Requirementz
 
 Only x86_64 architecture is currently supported.
 YDB server can be built for Ubuntu 18.04, 20.04 and 22.04. Other Linux distributions are likely to work, but additional effort may be needed.

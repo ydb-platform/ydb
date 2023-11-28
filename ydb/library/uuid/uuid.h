@@ -3,6 +3,7 @@
 #include <util/system/yassert.h>
 
 #include <cctype>
+#include <cstring>
 #include <utility>
 
 class IOutputStream;

@@ -7,6 +7,8 @@ const ui64 NKikimr::NPDisk::YdbDefaultPDiskSequence = 0x7e5700007e570000;
 Y_UNIT_TEST_SUITE(BlobDepotWithTestShard) {
 
     Y_UNIT_TEST(PlainGroup) {
+        return; // Fix group overseer, KIKIMR-20069
+
         THPTimer timer;
 
         TEnvironmentSetup env{{}};

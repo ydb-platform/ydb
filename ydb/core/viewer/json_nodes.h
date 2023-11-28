@@ -258,7 +258,7 @@ public:
         if (itSysInfo != SysInfo.end() && itSysInfo->second.SystemStateInfoSize() > 0) {
             const auto& sysState(itSysInfo->second.GetSystemStateInfo(0));
             if (Storage && With == EWith::SpaceProblems) {
-                if (sysState.GetMaxDiskUsage() < 0.85) {
+                if (!sysState.HasMaxDiskUsage() || sysState.GetMaxDiskUsage() < 0.85) {
                     return false;
                 }
             }

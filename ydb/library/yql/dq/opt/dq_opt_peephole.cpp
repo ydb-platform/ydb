@@ -292,6 +292,8 @@ TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
     const bool payloads = !rightPayloads.empty();
     rightInput = MakeDictForJoin<true>(PrepareListForJoin(std::move(rightInput), keyTypes, rightKeyColumnNodes, rightPayloads, payloads, false, true, ctx), payloads, withRightSide, ctx);
     leftInput = AddConvertedKeys(std::move(leftInput), ctx, leftKeyColumnNodes, keyTypesLeft, itemTypeLeft);
+    auto [_, rightKeyColumnNodesCopy] = JoinKeysToAtoms(ctx, mapJoin, leftTableLabel, rightTableLabel);
+
     return Build<TCoExtractMembers>(ctx, pos)
         .Input<TCoFlatMap>()
             .Input(std::move(rightInput))
@@ -302,6 +304,7 @@ TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
                     .RightDict("dict")
                     .JoinKind(mapJoin.JoinType())
                     .LeftKeysColumns(ctx.NewList(pos, std::move(leftKeyColumnNodes)))
+                    .RightKeysColumns(ctx.NewList(pos, std::move(rightKeyColumnNodesCopy)))
                     .LeftRenames(ctx.NewList(pos, std::move(leftRenames)))
                     .RightRenames(ctx.NewList(pos, std::move(rightRenames)))
                 .Build()

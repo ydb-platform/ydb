@@ -9,6 +9,7 @@ namespace NYql::NDq {
 
 using namespace NNodes;
 
+
 /**
  * Compute statistics for map join
  * FIX: Currently we treat all join the same from the cost perspective, need to refine cost function
@@ -27,8 +28,20 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
         return;
     }
 
+    YQL_CLOG(TRACE, CoreDq) << "Right side of the map join: " << rightArg.Raw()->Dump();
+
+    TVector<TString> leftJoinKeys;
+    TVector<TString> rightJoinKeys;
+
+    for (size_t i=0; i<join.LeftKeysColumns().Size(); i++) {
+        leftJoinKeys.push_back(join.LeftKeysColumns().Item(i).StringValue());
+    }
+    for (size_t i=0; i<join.RightKeysColumns().Size(); i++) {
+        rightJoinKeys.push_back(join.RightKeysColumns().Item(i).StringValue());
+    }
+
     typeCtx->SetStats(join.Raw(), std::make_shared<TOptimizerStatistics>(
-                                      ComputeJoinStats(*leftStats, *rightStats, MapJoin)));
+                                      ComputeJoinStats(*leftStats, *rightStats, leftJoinKeys, rightJoinKeys, MapJoin)));
 }
 
 /**
@@ -49,8 +62,18 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
         return;
     }
 
+    TVector<TString> leftJoinKeys;
+    TVector<TString> rightJoinKeys;
+
+    for (size_t i=0; i<join.LeftKeysColumns().Size(); i++) {
+        leftJoinKeys.push_back(join.LeftKeysColumns().Item(i).StringValue());
+    }
+    for (size_t i=0; i<join.RightKeysColumns().Size(); i++) {
+        rightJoinKeys.push_back(join.RightKeysColumns().Item(i).StringValue());
+    }
+
     typeCtx->SetStats(join.Raw(), std::make_shared<TOptimizerStatistics>(
-                                      ComputeJoinStats(*leftStats, *rightStats, GraceJoin)));
+                                      ComputeJoinStats(*leftStats, *rightStats, leftJoinKeys, rightJoinKeys, GraceJoin)));
 }
 
 /**
@@ -94,7 +117,7 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
 
         double selectivity = ComputePredicateSelectivity(flatmap.Lambda().Body(), inputStats);
 
-        auto outputStats = TOptimizerStatistics(inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->Cost );
+        auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->Cost );
 
         typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats) );
     }
@@ -135,7 +158,7 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
     
     double selectivity = ComputePredicateSelectivity(filterBody, inputStats);
 
-    auto outputStats = TOptimizerStatistics(inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->Cost);
+    auto outputStats = TOptimizerStatistics(inputStats->Type, inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->Cost);
 
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats) );
 }

@@ -2451,9 +2451,9 @@
     ],
     "test.test[join-lookupjoin_semi_2o--Debug]": [
         {
-            "checksum": "1f9981f85091ddd820e57e9bf74e7de5",
-            "size": 2895,
-            "uri": "https://{canondata_backend}/995452/1bbbc95795bf855675e4ef6b7b15d2ab4c6ee367/resource.tar.gz#test.test_join-lookupjoin_semi_2o--Debug_/opt.yql"
+            "checksum": "64f200e4e8720ee054f9aeb2ba5b4f4c",
+            "size": 2904,
+            "uri": "https://{canondata_backend}/1773845/c865fc3a6f63b56097b2e5205cf04a3ce881c52d/resource.tar.gz#test.test_join-lookupjoin_semi_2o--Debug_/opt.yql"
         }
     ],
     "test.test[join-lookupjoin_semi_2o--Plan]": [
@@ -2472,9 +2472,9 @@
     ],
     "test.test[join-mapjoin_left_null_column--Debug]": [
         {
-            "checksum": "d35159fc6691ac1a229cdda0dfc4be0d",
-            "size": 3216,
-            "uri": "https://{canondata_backend}/995452/1bbbc95795bf855675e4ef6b7b15d2ab4c6ee367/resource.tar.gz#test.test_join-mapjoin_left_null_column--Debug_/opt.yql"
+            "checksum": "d5d1f8254d9624f59025bbc7abaa35b8",
+            "size": 3224,
+            "uri": "https://{canondata_backend}/1773845/c865fc3a6f63b56097b2e5205cf04a3ce881c52d/resource.tar.gz#test.test_join-mapjoin_left_null_column--Debug_/opt.yql"
         }
     ],
     "test.test[join-mapjoin_left_null_column--Plan]": [
@@ -4714,14 +4714,14 @@
         {
             "checksum": "cec4d1db686e561cada1094e26e47a24",
             "size": 6092,
-            "uri": "https://{canondata_backend}/1784117/983ca2360ac31c365938bcff5f15cccb51a3c68c/resource.tar.gz#test.test_tpch-q15-default.txt-Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1925842/983ca2360ac31c365938bcff5f15cccb51a3c68c/resource.tar.gz#test.test_tpch-q15-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[tpch-q15-default.txt-Plan]": [
         {
             "checksum": "da4939e401c68b6ddb9a3f316a073be2",
             "size": 10685,
-            "uri": "https://{canondata_backend}/1784117/983ca2360ac31c365938bcff5f15cccb51a3c68c/resource.tar.gz#test.test_tpch-q15-default.txt-Plan_/plan.txt"
+            "uri": "https://{canondata_backend}/1925842/983ca2360ac31c365938bcff5f15cccb51a3c68c/resource.tar.gz#test.test_tpch-q15-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[tpch-q15-default.txt-Results]": [

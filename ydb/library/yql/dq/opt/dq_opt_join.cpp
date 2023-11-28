@@ -1309,6 +1309,14 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                                 .Seal()
                                 .List(4)
                                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                        for (ui32 i = 0U; i < rightKeys.size(); ++i) {
+                                            parent.Atom(i, ctx.GetIndexAsString(rightKeys[i]), TNodeFlags::Default);
+                                        }
+                                        return parent;
+                                    })
+                                .Seal()
+                                .List(5)
+                                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                                         for (ui32 i = 0U; i < leftNames.size(); ++i) {
                                             parent.Atom(2*i, ctx.GetIndexAsString(i), TNodeFlags::Default);
                                             parent.Atom(2*i + 1, ctx.GetIndexAsString(i), TNodeFlags::Default);
@@ -1316,7 +1324,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                                         return parent;
                                     })
                                 .Seal()
-                                .List(5)
+                                .List(6)
                                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                                         for (ui32 i = 0U; i < rightNames.size(); ++i) {
                                             parent.Atom(2*i, ctx.GetIndexAsString(i), TNodeFlags::Default);
@@ -1349,6 +1357,14 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                                 .Seal()
                                 .List(4)
                                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                        for (ui32 i = 0U; i < leftKeys.size(); ++i) {
+                                            parent.Atom(i, ctx.GetIndexAsString(leftKeys[i]), TNodeFlags::Default);
+                                        }
+                                        return parent;
+                                    })
+                                .Seal()
+                                .List(5)
+                                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                                         for (ui32 i = 0U; i < rightNames.size(); ++i) {
                                             parent.Atom(2*i, ctx.GetIndexAsString(i), TNodeFlags::Default);
                                             parent.Atom(2*i + 1, ctx.GetIndexAsString(i + leftNames.size()), TNodeFlags::Default);
@@ -1356,7 +1372,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                                         return parent;
                                     })
                                 .Seal()
-                                .List(5)
+                                .List(6)
                                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                                         for (ui32 i = 0U; i < leftNames.size(); ++i) {
                                             parent.Atom(2*i, ctx.GetIndexAsString(i), TNodeFlags::Default);

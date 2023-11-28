@@ -29,31 +29,6 @@ namespace NYql::NDq {
 
 using namespace NYql::NNodes;
 
-
-/**
- * Join column is a struct that records the relation label and 
- * attribute name, used in join conditions
-*/
-struct TJoinColumn {
-    TString RelName;
-    TString AttributeName;
-
-    TJoinColumn(TString relName, TString attributeName) : RelName(relName), 
-        AttributeName(attributeName) {}
-
-    bool operator == (const TJoinColumn& other) const {
-        return RelName == other.RelName && AttributeName == other.AttributeName;
-    }
-
-    struct HashFunction
-    {
-        size_t operator()(const TJoinColumn& c) const
-        {
-            return THash<TString>{}(c.RelName) ^ THash<TString>{}(c.AttributeName);
-        }
-    };
-};
-
 bool operator < (const TJoinColumn& c1, const TJoinColumn& c2) {
     if (c1.RelName < c2.RelName){
         return true;
@@ -247,7 +222,7 @@ std::shared_ptr<TJoinOptimizerNode> MakeJoin(std::shared_ptr<IBaseOptimizerNode>
     EJoinImplType joinImpl) {
 
     auto res = std::make_shared<TJoinOptimizerNode>(left, right, joinConditions, "Inner");
-    res->Stats = std::make_shared<TOptimizerStatistics>( ComputeJoinStats(*left->Stats, *right->Stats, joinImpl));
+    res->Stats = std::make_shared<TOptimizerStatistics>( ComputeJoinStats(*left->Stats, *right->Stats, joinConditions, joinImpl));
     return res;
 }
 
@@ -1072,7 +1047,7 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join) {
     if (join->RightArg->Kind == EOptimizerNodeKind::JoinNodeType) {
         ComputeStatistics(static_pointer_cast<TJoinOptimizerNode>(join->RightArg));
     }
-    join->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*join->LeftArg->Stats, *join->RightArg->Stats, EJoinImplType::DictJoin));
+    join->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*join->LeftArg->Stats, *join->RightArg->Stats, join->JoinConditions, EJoinImplType::DictJoin));
 }
 
 /**
@@ -1082,7 +1057,7 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join) {
 */
 std::shared_ptr<TJoinOptimizerNode> OptimizeSubtree(const std::shared_ptr<TJoinOptimizerNode>& joinTree, ui32 maxDPccpDPTableSize) {
     if (!joinTree->Reorderable()) {
-        joinTree->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*joinTree->LeftArg->Stats, *joinTree->RightArg->Stats, EJoinImplType::DictJoin));
+        joinTree->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*joinTree->LeftArg->Stats, *joinTree->RightArg->Stats, joinTree->JoinConditions, EJoinImplType::DictJoin));
         return joinTree;
     }
 
@@ -1208,7 +1183,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(const TExprBase& node, TExprContext& ctx, 
         if (join->RightArg->Kind == EOptimizerNodeKind::JoinNodeType) {
             join->RightArg = OptimizeSubtree(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), maxDPccpDPTableSize);
         }
-        join->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*join->LeftArg->Stats, *join->RightArg->Stats, EJoinImplType::DictJoin));
+        join->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*join->LeftArg->Stats, *join->RightArg->Stats, join->JoinConditions, EJoinImplType::DictJoin));
     }
 
     // Optimize the root

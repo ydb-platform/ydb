@@ -1518,8 +1518,9 @@
                 {"Index": 1, "Name": "RightDict", "Type": "TExprBase"},
                 {"Index": 2, "Name": "JoinKind", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "LeftKeysColumns", "Type": "TCoAtomList"},
-                {"Index": 4, "Name": "LeftRenames", "Type": "TCoAtomList"},
-                {"Index": 5, "Name": "RightRenames", "Type": "TCoAtomList"}
+                {"Index": 4, "Name": "RightKeysColumns", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "LeftRenames", "Type": "TCoAtomList"},
+                {"Index": 6, "Name": "RightRenames", "Type": "TCoAtomList"}
             ]
         },
         {

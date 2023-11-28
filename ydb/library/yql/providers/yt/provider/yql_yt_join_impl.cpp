@@ -1703,10 +1703,11 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
         const bool needPayload = joinType->IsAtom({"Inner", "Left"});
 
         // don't produce nulls
+        TExprNode::TListType remappedMembers;
+        TExprNode::TListType remappedMembersToSkipNull;
+
         TExprNode::TPtr smallKeySelector;
         if (!isCross) {
-            TExprNode::TListType remappedMembers;
-            TExprNode::TListType remappedMembersToSkipNull;
             tableContent = RemapNonConvertibleItems(tableContent, smallLabel, *rightKeyColumns, outputKeyType, remappedMembers, remappedMembersToSkipNull, ctx);
             if (!remappedMembersToSkipNull.empty()) {
                 tableContent = ctx.NewCallable(pos, "SkipNullMembers", { tableContent, ctx.NewList(pos, std::move(remappedMembersToSkipNull)) });
@@ -1883,8 +1884,9 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
                                 .Arg(1, "dict")
                                 .Add(2, joinType)
                                 .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
-                                .Add(4, ctx.NewList(pos, std::move(leftRenameNodes)))
-                                .Add(5, ctx.NewList(pos, std::move(rightRenameNodes)))
+                                .Add(4, ctx.NewList(pos, std::move(remappedMembers)))
+                                .Add(5, ctx.NewList(pos, std::move(leftRenameNodes)))
+                                .Add(6, ctx.NewList(pos, std::move(rightRenameNodes)))
                             .Seal()
                         .Seal()
                     .Seal()
@@ -1896,8 +1898,9 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
                         .Add(1, dict)
                         .Add(2, joinType)
                         .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
-                        .Add(4, ctx.NewList(pos, std::move(leftRenameNodes)))
-                        .Add(5, ctx.NewList(pos, std::move(rightRenameNodes)))
+                        .Add(4, ctx.NewList(pos, std::move(remappedMembers)))
+                        .Add(5, ctx.NewList(pos, std::move(leftRenameNodes)))
+                        .Add(6, ctx.NewList(pos, std::move(rightRenameNodes)))
                     .Seal()
                     .Build();
             }

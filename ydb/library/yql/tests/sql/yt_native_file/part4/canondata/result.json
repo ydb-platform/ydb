@@ -2283,9 +2283,9 @@
     ],
     "test.test[join-mapjoin_dup_key--Debug]": [
         {
-            "checksum": "c18a349168f306c60a8e8df72041c872",
-            "size": 2325,
-            "uri": "https://{canondata_backend}/1937027/b2b2e339d1731355b04f7a42a585329c3bc93458/resource.tar.gz#test.test_join-mapjoin_dup_key--Debug_/opt.yql"
+            "checksum": "56b68742c193bbfac9c78e138f8e01be",
+            "size": 2342,
+            "uri": "https://{canondata_backend}/1903885/357a4fea0449e98db159f5a087a2bdeb6fb084ab/resource.tar.gz#test.test_join-mapjoin_dup_key--Debug_/opt.yql"
         }
     ],
     "test.test[join-mapjoin_dup_key--Plan]": [
@@ -2304,9 +2304,9 @@
     ],
     "test.test[join-mapjoin_with_anonymous--Debug]": [
         {
-            "checksum": "b650762d853850d03da8d775bc774ec7",
-            "size": 3025,
-            "uri": "https://{canondata_backend}/1773845/4175f39a505b153d67edfa8f510ce5f8374a0bf8/resource.tar.gz#test.test_join-mapjoin_with_anonymous--Debug_/opt.yql"
+            "checksum": "6ba412b13b3ac405f60039850aebf4c6",
+            "size": 3047,
+            "uri": "https://{canondata_backend}/1903885/357a4fea0449e98db159f5a087a2bdeb6fb084ab/resource.tar.gz#test.test_join-mapjoin_with_anonymous--Debug_/opt.yql"
         }
     ],
     "test.test[join-mapjoin_with_anonymous--Plan]": [
@@ -4184,9 +4184,9 @@
     ],
     "test.test[sampling-mapjoin_right_sample-default.txt-Debug]": [
         {
-            "checksum": "1420b856d968fd1517cde027ef4cc4c7",
-            "size": 2412,
-            "uri": "https://{canondata_backend}/1871182/3929b8a840fb48e36816b5c322ab881c6e5a7107/resource.tar.gz#test.test_sampling-mapjoin_right_sample-default.txt-Debug_/opt.yql"
+            "checksum": "7bb4043f46133bad675c58a49853b2f7",
+            "size": 2432,
+            "uri": "https://{canondata_backend}/1903885/357a4fea0449e98db159f5a087a2bdeb6fb084ab/resource.tar.gz#test.test_sampling-mapjoin_right_sample-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[sampling-mapjoin_right_sample-default.txt-Plan]": [

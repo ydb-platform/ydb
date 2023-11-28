@@ -335,6 +335,10 @@ namespace NTypeAnnImpl {
             }
         }
 
+        if (!EnsureTupleOfAtoms(*input->Child(4), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         const TStructExprType* rightStructType = nullptr;
         const TTupleExprType* rightTupleType = nullptr;
         if (joinKind != "LeftSemi" && joinKind != "LeftOnly") {
@@ -357,8 +361,8 @@ namespace NTypeAnnImpl {
             }
         }
 
-        auto& leftRenames = *input->Child(4);
-        auto& rightRenames = *input->Child(5);
+        auto& leftRenames = *input->Child(5);
+        auto& rightRenames = *input->Child(6);
         if (!EnsureTupleOfAtoms(leftRenames, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -470,17 +474,9 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus MapJoinCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (input->ChildrenSize() == 7U) {
-            // Drop unused argument: right key.
-            auto children = input->ChildrenList();
-            auto it = children.cbegin();
-            std::advance(it, 4U);
-            children.erase(it);
-            output = ctx.Expr.ChangeChildren(*input, std::move(children));
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        if (!EnsureArgsCount(*input, 6, ctx.Expr)) {
+        Y_UNUSED(output);
+        
+        if (!EnsureArgsCount(*input, 7, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 

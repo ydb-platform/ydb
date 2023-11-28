@@ -2969,13 +2969,13 @@ TExprNode::TPtr MakeWideMapJoinCore(const TExprNode& mapjoin, TExprNode::TPtr&& 
     });
 
     TExprNode::TListType leftRenames;
-    leftRenames.reserve(mapjoin.Child(4)->ChildrenSize());
+    leftRenames.reserve(mapjoin.Child(5)->ChildrenSize());
     bool split = false;
-    mapjoin.Child(4)->ForEachChild([&](const TExprNode& item){
+    mapjoin.Child(5)->ForEachChild([&](const TExprNode& item){
         leftRenames.emplace_back(ctx.NewAtom(item.Pos(), *GetFieldPosition(*((split = !split) ? inStructType : outStructType), item.Content())));
     });
 
-    auto rightRenames = mapjoin.Child(5)->ChildrenList();
+    auto rightRenames = mapjoin.Child(6)->ChildrenList();
 
     for (auto i = 1U; i < rightRenames.size(); ++++i)
         rightRenames[i] = ctx.NewAtom(rightRenames[i]->Pos(), *GetFieldPosition(*outStructType, rightRenames[i]->Content()));
@@ -2984,8 +2984,8 @@ TExprNode::TPtr MakeWideMapJoinCore(const TExprNode& mapjoin, TExprNode::TPtr&& 
 
     children.front() = std::move(input);
     children[3] = ctx.ChangeChildren(*children[3], std::move(indexes));
-    children[4] = ctx.ChangeChildren(*children[4], std::move(leftRenames));
-    children[5] = ctx.ChangeChildren(*children[5], std::move(rightRenames));
+    children[5] = ctx.ChangeChildren(*children[5], std::move(leftRenames));
+    children[6] = ctx.ChangeChildren(*children[6], std::move(rightRenames));
 
     return ctx.ChangeChildren(mapjoin, std::move(children));
 }

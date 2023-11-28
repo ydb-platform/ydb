@@ -44,6 +44,7 @@
   ".github/workflows/nightly_run.yaml":"ydb/github_toplevel/.github/workflows/nightly_run.yaml",
   ".github/workflows/pr_check.yml":"ydb/github_toplevel/.github/workflows/pr_check.yml",
   ".github/workflows/prewarm-ccache.yml":"ydb/github_toplevel/.github/workflows/prewarm-ccache.yml",
+  ".github/workflows/prewarm-debug.yaml":"ydb/github_toplevel/.github/workflows/prewarm-debug.yaml",
   ".gitignore":"ydb/github_toplevel/.gitignore",
   "AUTHORS":"ydb/github_toplevel/AUTHORS",
   "BUILD.md":"ydb/github_toplevel/BUILD.md",

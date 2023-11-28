@@ -41,6 +41,9 @@ runs:
         case "${{ inputs.build_preset }}" in
           relwithdebinfo)
             ;;
+          debug)
+            folder+="-debug"
+            ;;
           release-asan)
             folder+="-asan"
             ;;

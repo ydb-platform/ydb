@@ -191,7 +191,9 @@ void ConvertSimpleValueImpl(const TUnversionedValue& value, TCheckedInDebugSkiff
         context->TmpBuffer->Clear();
         {
             TBufferOutput out(*context->TmpBuffer);
-            NYson::TYsonWriter ysonWriter(&out);
+            // Set enableRaw=true in YSON writer to avoid the costs of parsing YSON
+            // Asume it was validated by now.
+            NYson::TYsonWriter ysonWriter(&out, NYson::EYsonFormat::Binary, NYson::EYsonType::Node, true);
             context->UnversionedValueYsonConverter->WriteValue(value, &ysonWriter);
         }
         writer->WriteYson32(TStringBuf(context->TmpBuffer->data(), context->TmpBuffer->size()));

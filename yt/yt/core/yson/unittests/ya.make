@@ -51,4 +51,6 @@ IF (OS_DARWIN)
     TAG(ya:fat ya:force_sandbox ya:exotic_platform)
 ENDIF()
 
+ENV(ASAN_OPTIONS="detect_leaks=0")
+
 END()

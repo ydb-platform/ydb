@@ -173,7 +173,7 @@ bool TAssembleFilter::DoExecute() {
     if (!UseFilter) {
         filters.emplace_back(std::make_shared<TRestoreMergeData>(Context));
     }
-    if (FilterColumnIds.contains((ui32)TIndexInfo::ESpecialColumn::PLAN_STEP)) {
+    if (FilterColumns->GetColumnIds().contains((ui32)TIndexInfo::ESpecialColumn::PLAN_STEP)) {
         const bool needSnapshotsFilter = ReadMetadata->GetSnapshot() < RecordsMaxSnapshot;
         if (needSnapshotsFilter) {
             filters.emplace_back(std::make_shared<TSnapshotFilter>(Context));
@@ -193,7 +193,7 @@ bool TAssembleFilter::DoExecute() {
         filters.emplace_back(std::make_shared<TProgramStepFilter>(i));
     }
 
-    TFilterContext filterContext(BuildBatchConstructor(FilterColumnIds), Context);
+    TFilterContext filterContext(BuildBatchConstructor(FilterColumns->GetFilteredSchemaVerified()), Context);
 
     for (auto&& f : filters) {
         f->Execute(filterContext, UseFilter);
@@ -212,11 +212,11 @@ bool TAssembleFilter::DoExecute() {
     }
 
     OriginalCount = filterContext.GetOriginalCountVerified();
-    auto fullTable = filterContext.AppendToResult(FilterColumnIds);
+    auto fullTable = filterContext.AppendToResult(FilterColumns->GetColumnIds());
     AFL_VERIFY(AppliedFilter->IsTotalAllowFilter() || AppliedFilter->Size() == OriginalCount)("original", OriginalCount)("af_count", AppliedFilter->Size());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "not_skip_data")
         ("original_count", OriginalCount)("filtered_count", batch->num_rows())("use_filter", UseFilter)
-        ("filter_columns", FilterColumnIds.size())("af_count", AppliedFilter->Size())("ef_count", EarlyFilter ? EarlyFilter->Size() : 0);
+        ("filter_columns", FilterColumns->GetColumnIds().size())("af_count", AppliedFilter->Size())("ef_count", EarlyFilter ? EarlyFilter->Size() : 0);
 
     FilteredBatch = NArrow::ToBatch(fullTable, true);
     return true;

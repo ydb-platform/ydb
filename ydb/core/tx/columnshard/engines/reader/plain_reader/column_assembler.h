@@ -16,7 +16,7 @@ private:
 protected:
     std::shared_ptr<arrow::RecordBatch> Result;
     const NColumnShard::TCounterGuard TaskGuard;
-    const std::set<ui32> FetchColumnIds;
+    const std::shared_ptr<TColumnsSet> FetchColumns;
     virtual bool DoExecute() override;
 public:
     virtual TString GetTaskClassIdentifier() const override {
@@ -24,7 +24,7 @@ public:
     }
 
     TAssembleBatch(const std::shared_ptr<TSpecialReadContext>& context, const std::shared_ptr<TPortionInfo>& portionInfo,
-        const std::shared_ptr<IDataSource>& source, const std::set<ui32>& columnIds, const THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo>& blobs, const std::shared_ptr<NArrow::TColumnFilter>& filter);
+        const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TColumnsSet>& columns, const THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo>& blobs, const std::shared_ptr<NArrow::TColumnFilter>& filter);
 };
 
 class TAssembleFFBatch: public TAssembleBatch {

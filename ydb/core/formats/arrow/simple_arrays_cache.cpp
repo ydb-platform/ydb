@@ -5,10 +5,6 @@ namespace NKikimr::NArrow {
 
 std::shared_ptr<arrow::Array> TThreadSimpleArraysCache::GetNullImpl(const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount) {
     AFL_VERIFY(type);
-    if (!recordsCount) {
-        return NArrow::TStatusValidator::GetValid(arrow::MakeArrayOfNull(type, recordsCount));
-    }
-    AFL_VERIFY(recordsCount);
     const TString key = type->ToString();
     const auto initializer = [type](const ui32 recordsCount) {
         return NArrow::TStatusValidator::GetValid(arrow::MakeArrayOfNull(type, recordsCount));
@@ -20,10 +16,6 @@ std::shared_ptr<arrow::Array> TThreadSimpleArraysCache::GetConstImpl(const std::
     AFL_VERIFY(type);
     AFL_VERIFY(scalar);
     AFL_VERIFY(scalar->type->id() == type->id())("scalar", scalar->type->ToString())("field", type->ToString());
-    if (!recordsCount) {
-        return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*scalar, recordsCount));
-    }
-
     const auto initializer = [scalar](const ui32 recordsCount) {
         return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*scalar, recordsCount));
     };

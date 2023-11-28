@@ -6,6 +6,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
+#include <library/cpp/actors/core/log.h>
 
 namespace NKikimr::NArrow {
 
@@ -15,21 +16,23 @@ private:
     const ui64 MaxOneArrayMemorySize = 10 * 1024 * 1024;
 
     template <class TInitializeActor>
-    std::shared_ptr<arrow::Array> InitializePosition(const TString& key, const ui32 recordsCount, const TInitializeActor actor) {
+    std::shared_ptr<arrow::Array> InitializePosition(const TString& key, const ui32 recordsCountExt, const TInitializeActor actor) {
+        const ui32 recordsCount = (recordsCountExt < 1024) ? 1024 : recordsCountExt;
         auto it = Arrays.find(key);
         if (it == Arrays.end() || it->second->length() < recordsCount) {
             auto arrNew = actor(recordsCount);
             if (NArrow::GetArrayMemorySize(arrNew->data()) < MaxOneArrayMemorySize) {
                 if (it == Arrays.end()) {
-                    Arrays.emplace(key, arrNew);
+                    it = Arrays.emplace(key, arrNew).first;
                 } else {
                     it->second = arrNew;
                 }
+            } else {
+                AFL_VERIFY(recordsCountExt == recordsCount)("ext", recordsCountExt)("count", recordsCount);
+                return arrNew;
             }
-            return arrNew;
-        } else {
-            return it->second->Slice(0, recordsCount);
         }
+        return it->second->Slice(0, recordsCountExt);
     }
 
     std::shared_ptr<arrow::Array> GetNullImpl(const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount);

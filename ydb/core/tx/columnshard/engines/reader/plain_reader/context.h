@@ -54,11 +54,12 @@ public:
         Y_ABORT_UNLESS(ReadMetadata);
         Y_ABORT_UNLESS(ReadMetadata->SelectInfo);
 
-        SpecColumns = std::make_shared<TColumnsSet>(TIndexInfo::GetSpecialColumnIdsSet(), ReadMetadata->GetIndexInfo());
-        EFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetEarlyFilterColumnIds(), ReadMetadata->GetIndexInfo());
+        auto readSchema = ReadMetadata->GetLoadSchema(ReadMetadata->GetSnapshot());
+        SpecColumns = std::make_shared<TColumnsSet>(TIndexInfo::GetSpecialColumnIdsSet(), ReadMetadata->GetIndexInfo(), readSchema);
+        EFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetEarlyFilterColumnIds(), ReadMetadata->GetIndexInfo(), readSchema);
         *EFColumns = *EFColumns + *SpecColumns;
         if (ReadMetadata->HasProcessingColumnIds()) {
-            FFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetProcessingColumnIds(), ReadMetadata->GetIndexInfo());
+            FFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetProcessingColumnIds(), ReadMetadata->GetIndexInfo(), readSchema);
             AFL_VERIFY(!FFColumns->Contains(*SpecColumns))("info", FFColumns->DebugString());
             *FFColumns = *FFColumns + *EFColumns;
         } else {
@@ -66,7 +67,7 @@ public:
         }
         ProgramInputColumns = FFColumns;
 
-        PKColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetPKColumnIds(), ReadMetadata->GetIndexInfo());
+        PKColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetPKColumnIds(), ReadMetadata->GetIndexInfo(), readSchema);
         MergeColumns = std::make_shared<TColumnsSet>(*PKColumns + *SpecColumns);
 
         TrivialEFFlag = EFColumns->ColumnsOnly(ReadMetadata->GetIndexInfo().ArrowSchemaSnapshot()->field_names());

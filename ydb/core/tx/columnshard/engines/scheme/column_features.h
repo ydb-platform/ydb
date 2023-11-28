@@ -98,6 +98,10 @@ public:
         return ColumnId;
     }
 
+    const std::shared_ptr<arrow::Field>& GetField() const {
+        return ExpectedSchema->field(0);
+    }
+
     const std::shared_ptr<arrow::Schema>& GetExpectedSchema() const {
         return ExpectedSchema;
     }

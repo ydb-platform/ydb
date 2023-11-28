@@ -8,7 +8,7 @@ bool TAssembleBatch::DoExecute() {
     /// It's not OK to apply predicate before replacing key duplicates otherwise.
     /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
 
-    auto batchConstructor = BuildBatchConstructor(FetchColumnIds);
+    auto batchConstructor = BuildBatchConstructor(FetchColumns->GetFilteredSchemaVerified());
 
     Y_ABORT_UNLESS(batchConstructor.GetColumnsCount());
 
@@ -29,11 +29,11 @@ bool TAssembleFFBatch::DoApply(IDataReader& /*owner*/) const {
 }
 
 TAssembleBatch::TAssembleBatch(const std::shared_ptr<TSpecialReadContext>& context, const std::shared_ptr<TPortionInfo>& portionInfo,
-    const std::shared_ptr<IDataSource>& source, const std::set<ui32>& columnIds, const THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo>& blobs, const std::shared_ptr<NArrow::TColumnFilter>& filter)
+    const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TColumnsSet>& columns, const THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo>& blobs, const std::shared_ptr<NArrow::TColumnFilter>& filter)
     : TBase(context, portionInfo, source, std::move(blobs))
     , Filter(filter)
     , TaskGuard(Context->GetCommonContext()->GetCounters().GetAssembleTasksGuard())
-    , FetchColumnIds(columnIds)
+    , FetchColumns(columns)
 {
     TBase::SetPriority(TBase::EPriority::High);
 }

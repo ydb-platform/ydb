@@ -17,7 +17,7 @@ std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnId(const ui32 col
 
 std::set<ui32> ISnapshotSchema::GetPkColumnsIds() const {
     std::set<ui32> result;
-    for (auto&& field : GetSchema()->fields()) {
+    for (auto&& field : GetIndexInfo().GetReplaceKey()->fields()) {
         result.emplace(GetColumnId(field->name()));
     }
     return result;

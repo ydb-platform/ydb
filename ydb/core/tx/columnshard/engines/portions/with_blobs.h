@@ -77,8 +77,8 @@ private:
     }
 
 public:
-    static std::vector<TPortionInfoWithBlobs> RestorePortions(const std::vector<TPortionInfo>& portions, const THashMap<TBlobRange, TString>& blobs);
-    static TPortionInfoWithBlobs RestorePortion(const TPortionInfo& portions, const THashMap<TBlobRange, TString>& blobs);
+    static std::vector<TPortionInfoWithBlobs> RestorePortions(const std::vector<TPortionInfo>& portions, THashMap<TBlobRange, TString>& blobs);
+    static TPortionInfoWithBlobs RestorePortion(const TPortionInfo& portions, THashMap<TBlobRange, TString>& blobs);
 
     std::shared_ptr<arrow::RecordBatch> GetBatch(const ISnapshotSchema::TPtr& data, const ISnapshotSchema& result, const std::set<std::string>& columnNames = {}) const;
 

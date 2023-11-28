@@ -16,7 +16,7 @@ var _ metrics.Registry = (*Registry)(nil)
 var _ metrics.MetricsStreamer = (*Registry)(nil)
 
 type Registry struct {
-	rg *prometheus.Registry
+	rg PrometheusRegistry
 
 	m             *sync.Mutex
 	subregistries map[string]*Registry

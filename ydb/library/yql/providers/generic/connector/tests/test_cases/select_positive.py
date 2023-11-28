@@ -561,9 +561,7 @@ class Factory:
                 ],
                 (
                     EDataSourceKind.CLICKHOUSE,
-                    # NOTE: In PostgreSQL column names are case-insensitive unless they are double-quoted.
-                    # FIXME: YQ-2264
-                    # EDataSourceKind.POSTGRESQL,
+                    # doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                 ),
             ),
             # SELECT col1 FROM table
@@ -596,9 +594,7 @@ class Factory:
                 ],
                 (
                     EDataSourceKind.CLICKHOUSE,
-                    # NOTE: In PostgreSQL column names are case-insensitive unless they are double-quoted.
-                    # FIXME: YQ-2264
-                    # EDataSourceKind.POSTGRESQL,
+                    # doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                 ),
             ),
             # SELECT col2, col1 FROM table
@@ -620,9 +616,7 @@ class Factory:
                 ],
                 (
                     EDataSourceKind.CLICKHOUSE,
-                    # NOTE: In PostgreSQL column names are case-insensitive unless they are double-quoted.
-                    # FIXME: YQ-2264
-                    # EDataSourceKind.POSTGRESQL,
+                    # doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                 ),
             ),
             # Select the same column multiple times with different aliases

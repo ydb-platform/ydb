@@ -5,15 +5,12 @@ import copy
 import jsonschema
 
 from ydb.tools.cfg import utils
-from ydb.tools.cfg.types import (Erasure, FailDomainType, LogLevels, NodeType,
-                                 PDiskCategory)
+from ydb.tools.cfg.types import Erasure, FailDomainType, LogLevels, NodeType, PDiskCategory
 
 KQP_SCHEMA = {
     'type': 'object',
     'properties': {
-        'enable': {
-            'type': 'boolean'
-        },
+        'enable': {'type': 'boolean'},
     },
 }
 
@@ -45,12 +42,12 @@ PROFILES = {
                             'type': 'string',
                         },
                     },
-                    "additionalProperties": False
+                    "additionalProperties": False,
                 },
-                "minItems": 3
+                "minItems": 3,
             }
-        }
-    }
+        },
+    },
 }
 
 
@@ -90,7 +87,7 @@ EXECUTOR_SCHEMA = {
             'type': 'integer',
             'min': 1,
         },
-    }
+    },
 }
 
 SYS_SCHEMA = {
@@ -109,15 +106,15 @@ SYS_SCHEMA = {
                 'io': copy.deepcopy(EXECUTOR_SCHEMA),
                 'ic': copy.deepcopy(EXECUTOR_SCHEMA),
             },
-            'additionalProperties': False
+            'additionalProperties': False,
         },
         'scheduler': {
             'type': 'object',
             'properties': {
                 'resolution': {'type': 'integer'},
                 'spin_threshold': {'type': 'integer'},
-                'progress_threshold': {'type': 'integer'}
-            }
+                'progress_threshold': {'type': 'integer'},
+            },
         },
         'use_auto_config': {'type': 'boolean'},
         'cpu_count': {'type': 'integer'},
@@ -126,7 +123,7 @@ SYS_SCHEMA = {
             'enum': NodeType.all_node_type_names(),
         },
     },
-    'additionalProperties': False
+    'additionalProperties': False,
 }
 
 TRACING_SCHEMA = dict(
@@ -143,15 +140,13 @@ TRACING_SCHEMA = dict(
         'root_ca',
         'service_name',
     ],
-    additionalProperties=False
+    additionalProperties=False,
 )
 
 FAILURE_INJECTION_CONFIG_SCHEMA = {
     "type": "object",
-    "properties": {
-        'approximate_termination_interval': dict(type='integer')
-    },
-    "additionalProperties": False
+    "properties": {'approximate_termination_interval': dict(type='integer')},
+    "additionalProperties": False,
 }
 
 DRIVE_SCHEMA = {
@@ -161,30 +156,18 @@ DRIVE_SCHEMA = {
         'path': dict(type='string', minLength=1),
         'shared_with_os': dict(type='boolean'),
         'expected_slot_count': dict(type='integer'),
-        'kind': dict(type='integer')
+        'kind': dict(type='integer'),
     },
-    "required": [
-        "type",
-        "path"
-    ],
-    "additionalProperties": False
+    "required": ["type", "path"],
+    "additionalProperties": False,
 }
 
 HOST_SCHEMA = {
     "type": "object",
     "properties": {
-        "name": {
-            "type": "string",
-            "minLength": 1
-        },
-        "drives": {
-            "type": "array",
-            "items": copy.deepcopy(DRIVE_SCHEMA)
-        },
-        'host_config_id': {
-            'type': "integer",
-            'minLength': 1
-        },
+        "name": {"type": "string", "minLength": 1},
+        "drives": {"type": "array", "items": copy.deepcopy(DRIVE_SCHEMA)},
+        'host_config_id': {'type': "integer", 'minLength': 1},
         "ic_port": {
             "type": "integer",
         },
@@ -197,29 +180,22 @@ HOST_SCHEMA = {
 LOG_SCHEMA = {
     'type': "object",
     "properties": {
-        "default": {
-            "type": "integer",
-            "min": int(min(LogLevels)),
-            "max": int(max(LogLevels))
-        },
+        "default": {"type": "integer", "min": int(min(LogLevels)), "max": int(max(LogLevels))},
         "entries": {
             "type": "array",
             "items": {
                 "type": "object",
                 "properties": {
-                    "name": {
-                        "type": "string",
-                        "minLength": 1
-                    },
+                    "name": {"type": "string", "minLength": 1},
                     "level": {
                         "type": "integer",
                         "min": int(min(LogLevels)),
                         "max": int(max(LogLevels)),
-                    }
-                }
-            }
-        }
-    }
+                    },
+                },
+            },
+        },
+    },
 }
 
 STORAGE_POOL = {
@@ -230,23 +206,13 @@ STORAGE_POOL = {
             'minLength': 1,
             'enum': Erasure.all_erasure_type_names(),
         },
-        'generation': {
-            'type': 'integer',
-            'min': 0
-        },
-        'encryption_mode': {
-            'type': 'integer',
-            'min': 0,
-            'max': 1
-        },
+        'generation': {'type': 'integer', 'min': 0},
+        'encryption_mode': {'type': 'integer', 'min': 0, 'max': 1},
         'num_groups': {
             'type': 'integer',
             'min': 1,
         },
-        'storage_pool_id': {
-            'type': 'integer',
-            'min': 1
-        },
+        'storage_pool_id': {'type': 'integer', 'min': 1},
         "fail_domain_type": {
             "type": "string",
             "minLength": 1,
@@ -273,7 +239,7 @@ STORAGE_POOL = {
                 'kind': dict(type='integer'),
             },
             'required': ['type'],
-            'additionalProperties': False
+            'additionalProperties': False,
         },
         'vdisk_kind': {
             'type': 'string',
@@ -300,11 +266,7 @@ STORAGE_POOL_KIND = {
             "minLength": 1,
             "enum": Erasure.all_erasure_type_names(),
         },
-        'encryption_mode': {
-            'type': 'integer',
-            'min': 0,
-            'max': 1
-        },
+        'encryption_mode': {'type': 'integer', 'min': 0, 'max': 1},
         "filter_properties": {
             "type": "object",
             "properties": {
@@ -318,7 +280,7 @@ STORAGE_POOL_KIND = {
                 'kind': dict(type='integer'),
             },
             "required": ["type"],
-            "additionalProperties": False
+            "additionalProperties": False,
         },
         "fail_domain_type": {
             "type": "string",
@@ -330,11 +292,7 @@ STORAGE_POOL_KIND = {
             'minLength': 1,
         },
     },
-    "required": [
-        "kind",
-        "erasure",
-        "filter_properties"
-    ],
+    "required": ["kind", "erasure", "filter_properties"],
 }
 
 STORAGE_POOL_INSTANCE = {
@@ -351,7 +309,7 @@ STORAGE_POOL_INSTANCE = {
         'generation': {
             'type': 'integer',
             'min': 0,
-        }
+        },
     },
     'required': [
         'kind',
@@ -363,12 +321,8 @@ STORAGE_POOL_INSTANCE = {
 
 SHARED_CACHE_SCHEMA = {
     'type': 'object',
-    'properties': {
-        'memory_limit': {
-            'type': 'integer'
-        }
-    },
-    'additionalProperties': False
+    'properties': {'memory_limit': {'type': 'integer'}},
+    'additionalProperties': False,
 }
 
 TENANT_SCHEMA = {
@@ -386,12 +340,9 @@ TENANT_SCHEMA = {
                     'count': {
                         'type': 'integer',
                     },
-                    'kind': {
-                        'type': 'string',
-                        'minLength': 1
-                    }
-                }
-            }
+                    'kind': {'type': 'string', 'minLength': 1},
+                },
+            },
         },
         'compute_units': {
             'type': 'array',
@@ -406,56 +357,35 @@ TENANT_SCHEMA = {
                         'type': 'string',
                         'minLength': 1,
                     },
-                    'zone': {
-                        'type': 'string',
-                        'minLength': 1
-                    },
+                    'zone': {'type': 'string', 'minLength': 1},
                     'required': ['count', 'kind', 'zone'],
-                    'additionalProperties': False
-                }
-            }
+                    'additionalProperties': False,
+                },
+            },
         },
         'overridden_configs': {
             'type': 'object',
-        }
-    }
+        },
+    },
 }
 
 DOMAIN_SCHEMA = {
     'type': 'object',
     'properties': {
-        'domain_name': {
-            'type': 'string',
-            'minLength': 1
-        },
+        'domain_name': {'type': 'string', 'minLength': 1},
         'plan_resolution': {
             'type': 'integer',
             'min': 1,
         },
-        'domain_id': {
-            'type': 'integer',
-            'min': 1
-        },
+        'domain_id': {'type': 'integer', 'min': 1},
         'mediators': {
             'type': 'integer',
             'min': 1,
         },
-        'coordinators': {
-            'type': 'integer',
-            'min': 1
-        },
-        'allocators': {
-            'type': 'integer',
-            'min': 1
-        },
-        'storage_pool_kinds': {
-            'type': 'array',
-            'items': copy.deepcopy(STORAGE_POOL_KIND)
-        },
-        'storage_pools': {
-            'type': 'array',
-            'items': copy.deepcopy(STORAGE_POOL_INSTANCE)
-        },
+        'coordinators': {'type': 'integer', 'min': 1},
+        'allocators': {'type': 'integer', 'min': 1},
+        'storage_pool_kinds': {'type': 'array', 'items': copy.deepcopy(STORAGE_POOL_KIND)},
+        'storage_pools': {'type': 'array', 'items': copy.deepcopy(STORAGE_POOL_INSTANCE)},
         'databases': {
             'type': 'array',
             'items': copy.deepcopy(TENANT_SCHEMA),
@@ -463,21 +393,18 @@ DOMAIN_SCHEMA = {
         'config_cookie': {
             'type': 'string',
         },
-        'dynamic_slots': {
-            'type': 'integer',
-            'min': 1
-        },
+        'dynamic_slots': {'type': 'integer', 'min': 1},
         'bind_slots_to_numa_nodes': {'type': 'boolean'},
         'console_initializers': {
             'type': 'array',
             'items': {
                 'type': 'string',
                 'enum': utils.get_resources_list('resources/console_initializers/'),
-            }
+            },
         },
     },
     'required': ['domain_name'],
-    'additionalProperties': False
+    'additionalProperties': False,
 }
 
 NBS_SCHEMA = {
@@ -489,11 +416,7 @@ NBS_SCHEMA = {
         'log': copy.deepcopy(LOG_SCHEMA),
         'domain': {'type': 'string'},
         'subdomain': {'type': 'string'},
-        'storage': {
-            'type': 'object',
-            'properties': {
-            }
-        },
+        'storage': {'type': 'object', 'properties': {}},
         'disk_registry_proxy': {
             'type': 'object',
         },
@@ -522,47 +445,25 @@ NBS_SCHEMA = {
                             },
                         },
                     },
-                }
-            }
+                },
+            },
         },
-        'discovery': {
-            'type': 'object'
-        },
-        'ydbstats': {
-            'type': 'object'
-        },
-        'auth': {
-            'type': 'object'
-        },
-        'names': {
-            'type': 'object'
-        },
+        'discovery': {'type': 'object'},
+        'ydbstats': {'type': 'object'},
+        'auth': {'type': 'object'},
+        'names': {'type': 'object'},
         'client': {
             'type': 'object',
             'properties': {
-                'auth_config': {
-                    'type': 'object'
-                },
-                'client_config': {
-                    'type': 'object'
-                },
-                'log_config': {
-                    'type': 'object'
-                },
-                'monitoring_config': {
-                    'type': 'object'
-                },
-                'throttling_enabled': {
-                    'type': 'boolean'
-                },
-                'throttling_enabled_s_s_d': {
-                    'type': 'boolean'
-                },
-                'throttling_disabled_s_s_d_nonrepl': {
-                    'type': 'boolean'
-                },
+                'auth_config': {'type': 'object'},
+                'client_config': {'type': 'object'},
+                'log_config': {'type': 'object'},
+                'monitoring_config': {'type': 'object'},
+                'throttling_enabled': {'type': 'boolean'},
+                'throttling_enabled_s_s_d': {'type': 'boolean'},
+                'throttling_disabled_s_s_d_nonrepl': {'type': 'boolean'},
             },
-            'additionalProperties': False
+            'additionalProperties': False,
         },
         'http_proxy': {
             'type': 'object',
@@ -603,7 +504,7 @@ NBS_SCHEMA = {
                     'type': 'boolean',
                 },
             },
-            'additionalProperties': False
+            'additionalProperties': False,
         },
         'breakpad': {
             'type': 'object',
@@ -612,7 +513,7 @@ NBS_SCHEMA = {
                     'type': 'boolean',
                 },
             },
-            'additionalProperties': False
+            'additionalProperties': False,
         },
         'breakpad_sender': {
             'type': 'object',
@@ -624,46 +525,23 @@ NBS_SCHEMA = {
                     'type': 'string',
                 },
             },
-            'additionalProperties': False
+            'additionalProperties': False,
         },
         'logbroker': {
             'type': 'object',
             'properties': {
-                'address': {
-                    'type': 'string'
-                },
-                'port': {
-                    'type': 'integer'
-                },
-                'database': {
-                    'type': 'string'
-                },
-                'use_logbroker_c_d_s': {
-                    'type': 'boolean'
-                },
-                'ca_cert_filename': {
-                    'type': 'string'
-                },
-                'topic': {
-                    'type': 'string'
-                },
-                'source_id': {
-                    'type': 'string'
-                },
-                'metadata_server_address': {
-                    'type': 'string'
-                }
+                'address': {'type': 'string'},
+                'port': {'type': 'integer'},
+                'database': {'type': 'string'},
+                'use_logbroker_c_d_s': {'type': 'boolean'},
+                'ca_cert_filename': {'type': 'string'},
+                'topic': {'type': 'string'},
+                'source_id': {'type': 'string'},
+                'metadata_server_address': {'type': 'string'},
             },
-            'additionalProperties': False
+            'additionalProperties': False,
         },
-        'notify': {
-            'type': 'object',
-            'properties': {
-                'endpoint': {
-                    'type': 'string'
-                }
-            }
-        },
+        'notify': {'type': 'object', 'properties': {'endpoint': {'type': 'string'}}},
         "iam": {
             'type': 'object',
         },
@@ -691,9 +569,9 @@ NBS_SCHEMA = {
                                         'type': 'array',
                                         'items': {
                                             'type': 'string',
-                                        }
+                                        },
                                     }
-                                }
+                                },
                             },
                             'Blacklist': {
                                 'type': 'object',
@@ -702,18 +580,18 @@ NBS_SCHEMA = {
                                         'type': 'array',
                                         'items': {
                                             'type': 'string',
-                                        }
+                                        },
                                     }
-                                }
+                                },
                             },
                         },
                     },
                 },
             },
-            'additionalProperties': False
+            'additionalProperties': False,
         },
     },
-    'additionalProperties': False
+    'additionalProperties': False,
 }
 
 NFS_SCHEMA = {
@@ -725,18 +603,10 @@ NFS_SCHEMA = {
         'log': copy.deepcopy(LOG_SCHEMA),
         'domain': {'type': 'string'},
         'subdomain': {'type': 'string'},
-        'names': {
-            'type': 'object'
-        },
-        'storage': {
-            'type': 'object'
-        },
-        'diagnostics': {
-            'type': 'object'
-        },
-        'auth': {
-            'type': 'object'
-        },
+        'names': {'type': 'object'},
+        'storage': {'type': 'object'},
+        'diagnostics': {'type': 'object'},
+        'auth': {'type': 'object'},
         'server': {
             'type': 'object',
             'properties': {
@@ -745,8 +615,8 @@ NFS_SCHEMA = {
                 },
                 'port': {
                     'type': 'integer',
-                }
-            }
+                },
+            },
         },
         'vhost': {
             'type': 'object',
@@ -756,8 +626,8 @@ NFS_SCHEMA = {
                 },
                 'port': {
                     'type': 'integer',
-                }
-            }
+                },
+            },
         },
         'http_proxy': {
             'type': 'object',
@@ -772,10 +642,10 @@ NFS_SCHEMA = {
                     'type': 'integer',
                 },
             },
-            'additionalProperties': False
+            'additionalProperties': False,
         },
     },
-    'additionalProperties': False
+    'additionalProperties': False,
 }
 
 SQS_SCHEMA = {
@@ -787,8 +657,8 @@ SQS_SCHEMA = {
         'subdomain': {'type': 'string'},
         'http_server': {
             'type': 'object',
-        }
-    }
+        },
+    },
 }
 
 SOLOMON_SCHEMA = {
@@ -805,10 +675,10 @@ SOLOMON_SCHEMA = {
                     'name': {'type': 'string'},
                     'channels_profile': {'type': 'integer'},
                     'partitions': {'type': 'integer'},
-                }
-            }
-        }
-    }
+                },
+            },
+        },
+    },
 }
 
 CMS_LIMITS_SCHEMA = {
@@ -816,7 +686,7 @@ CMS_LIMITS_SCHEMA = {
     'properties': {
         'disabled_nodes_limit': {'type': 'integer'},
         'disabled_nodes_ratio_limit': {'type': 'integer'},
-    }
+    },
 }
 
 CMS_SCHEMA = {
@@ -837,9 +707,9 @@ CMS_SCHEMA = {
                 'broken_timeout_min': {'type': 'integer'},
                 'broken_prep_timeout_min': {'type': 'integer'},
                 'faulty_prep_timeout_min': {'type': 'integer'},
-            }
-        }
-    }
+            },
+        },
+    },
 }
 
 STATE_STORAGE = {
@@ -847,21 +717,11 @@ STATE_STORAGE = {
     'properties': {
         'allow_incorrect': {'type': 'boolean'},
         'node_ids': {'type': 'array', 'items': {'type': 'integer'}},
-        'node_set': {
-            'type': 'array',
-            'items': {
-                'type': 'string'
-            }
-        }
-    }
+        'node_set': {'type': 'array', 'items': {'type': 'string'}},
+    },
 }
 
-METERING_SCHEMA = {
-    'type': 'object',
-    'properties': {
-        'metering_file': {'type': 'string'}
-    }
-}
+METERING_SCHEMA = {'type': 'object', 'properties': {'metering_file': {'type': 'string'}}}
 
 YQL_SCHEMA = {
     'type': 'object',
@@ -882,8 +742,8 @@ YQL_SCHEMA = {
         'impersonation_service_endpoint': {'type': 'string'},
         'secure_task_service': {'type': 'boolean'},
         'secure_impersonation_service': {'type': 'boolean'},
-        'hmac_secret_file': {'type': 'string'}
-    }
+        'hmac_secret_file': {'type': 'string'},
+    },
 }
 
 YQ_SCHEMA = {
@@ -904,7 +764,7 @@ YQ_SCHEMA = {
                 'use_local_metadata_service': {'type': 'boolean'},
                 'enable_forward_analytics': {'type': 'boolean'},
                 'enable_permissions': {'type': 'boolean'},
-            }
+            },
         },
         'analytics': {
             'type': 'object',
@@ -926,8 +786,8 @@ YQ_SCHEMA = {
                 'impersonation_service_endpoint': {'type': 'string'},
                 'secure_task_service': {'type': 'boolean'},
                 'secure_impersonation_service': {'type': 'boolean'},
-                'hmac_secret_file': {'type': 'string'}
-            }
+                'hmac_secret_file': {'type': 'string'},
+            },
         },
         'streaming': {
             'type': 'object',
@@ -947,27 +807,24 @@ YQ_SCHEMA = {
                     'properties': {
                         'enabled': {'type': 'boolean'},
                         'period_millis': {'type': 'integer'},
-                        'max_in_flight': {'type': 'integer'}
-                    }
-                }
-            }
+                        'max_in_flight': {'type': 'integer'},
+                    },
+                },
+            },
         },
         'token_accessor': {
             'type': 'object',
-            'properties': {
-                'endpoint': {'type': 'string'},
-                'use_ssl': {'type': 'boolean'}
-            }
+            'properties': {'endpoint': {'type': 'string'}, 'use_ssl': {'type': 'boolean'}},
         },
         'folder_service': {
             'type': 'object',
             'properties': {
                 'enable': {'type': 'boolean'},
                 'endpoint': {'type': 'string'},
-                'path_to_root_ca': {'type': 'string'}
-            }
-        }
-    }
+                'path_to_root_ca': {'type': 'string'},
+            },
+        },
+    },
 }
 
 TEMPLATE_SCHEMA = {
@@ -988,21 +845,19 @@ TEMPLATE_SCHEMA = {
             'items': {
                 'type': 'object',
                 'properties': {
-                    'generation': {
-                        'type': 'integer', 'min': 0
-                    },
+                    'generation': {'type': 'integer', 'min': 0},
                     'drives': {
                         'type': 'array',
                         'items': copy.deepcopy(DRIVE_SCHEMA),
-                    }
-                }
-            }
+                    },
+                },
+            },
         },
         'static_bs_group_hosts': {
             'type': 'array',
             'items': {
                 'type': 'string',
-            }
+            },
         },
         'use_cluster_uuid': {
             'type': 'boolean',
@@ -1014,32 +869,16 @@ TEMPLATE_SCHEMA = {
             'type': 'string',
             'minLength': 1,
         },
-        'accepted_cluster_uuids': {
-            'type': 'array',
-            'items': {
-                'type': 'string',
-                'minLength': 1
-            }
-        },
+        'accepted_cluster_uuids': {'type': 'array', 'items': {'type': 'string', 'minLength': 1}},
         'security_settings': {
             'type': 'object',
             'properties': {
                 'enforce_user_token_requirement': {
                     'type': 'boolean',
                 },
-                'monitoring_allowed_sids': {
-                    'type': 'array',
-                    'items': {
-                        'type': 'string'
-                    }
-                },
-                'administration_allowed_sids': {
-                    'type': 'array',
-                    'items': {
-                        'type': 'string'
-                    }
-                },
-            }
+                'monitoring_allowed_sids': {'type': 'array', 'items': {'type': 'string'}},
+                'administration_allowed_sids': {'type': 'array', 'items': {'type': 'string'}},
+            },
         },
         "static_erasure": {
             "type": "string",
@@ -1067,24 +906,15 @@ TEMPLATE_SCHEMA = {
             'minItems': 1,
             'checkNameServiceDuplicates': True,
         },
-        'auth': {
-            'type': 'object'
-        },
+        'auth': {'type': 'object'},
         'log': copy.deepcopy(LOG_SCHEMA),
         'grpc': {'type': 'object'},
         'kqp': copy.deepcopy(KQP_SCHEMA),
         'ic': {'type': 'object'},
         'pq': {'type': 'object'},
-        'storage_pools': {
-            'type': 'array',
-            'items': copy.deepcopy(STORAGE_POOL)
-        },
+        'storage_pools': {'type': 'array', 'items': copy.deepcopy(STORAGE_POOL)},
         'profiles': copy.deepcopy(PROFILES),
-        'domains': {
-            'type': 'array',
-            'items': copy.deepcopy(DOMAIN_SCHEMA),
-            'minItems': 1
-        },
+        'domains': {'type': 'array', 'items': copy.deepcopy(DOMAIN_SCHEMA), 'minItems': 1},
         'nbs': copy.deepcopy(NBS_SCHEMA),
         'nbs_control': copy.deepcopy(NBS_SCHEMA),
         'nfs': copy.deepcopy(NFS_SCHEMA),
@@ -1100,43 +930,28 @@ TEMPLATE_SCHEMA = {
         'resource_broker': {'type': 'object'},
         'state_storages': {
             'type': 'array',
-            'items': {
-                'type': 'object',
-                'properties': {},
-                'additionalProperties': True
-            }
+            'items': {'type': 'object', 'properties': {}, 'additionalProperties': True},
         },
         'metering': copy.deepcopy(METERING_SCHEMA),
         'yql_analytics': copy.deepcopy(YQL_SCHEMA),
-        'yq': copy.deepcopy(YQ_SCHEMA)
+        'yq': copy.deepcopy(YQ_SCHEMA),
     },
-    "required": [
-        "static_erasure",
-        "hosts"
-    ],
+    "required": ["static_erasure", "hosts"],
 }
 
 
 def _host_and_ic_port(host):
-    return "%s:%s" % (
-        host['name'], str(
-            host.get('ic_port', 19001)
-        )
-    )
+    return "%s:%s" % (host['name'], str(host.get('ic_port', 19001)))
 
 
 def checkNameServiceDuplicates(validator, allow_duplicates, instance, schema):
-    names = collections.Counter(
-        [
-            _host_and_ic_port(host)
-            for host in instance
-        ]
-    )
+    names = collections.Counter([_host_and_ic_port(host) for host in instance])
 
     for name, count in names.items():
         if count > 1:
             yield jsonschema.ValidationError(
-                "Names of items contains non-unique elements %r: %s. " % (
+                "Names of items contains non-unique elements %r: %s. "
+                % (
                     instance,
                     name,
                 )
@@ -1145,20 +960,17 @@ def checkNameServiceDuplicates(validator, allow_duplicates, instance, schema):
 
 _Validator = jsonschema.Draft4Validator
 _Validator = jsonschema.validators.extend(
-    _Validator, {
+    _Validator,
+    {
         'checkNameServiceDuplicates': checkNameServiceDuplicates,
-    }
+    },
 )
 
 
 class Validator(_Validator):
-
     def __init__(self, schema):
         format_checker = jsonschema.FormatChecker()
-        super(Validator, self).__init__(
-            schema,
-            format_checker=format_checker
-        )
+        super(Validator, self).__init__(schema, format_checker=format_checker)
 
 
 def validate(template):

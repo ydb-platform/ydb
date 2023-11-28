@@ -8,32 +8,50 @@ import subprocess
 import tempfile
 
 import yaml
-from contrib.ydb.core.fq.libs.config.protos.fq_config_pb2 import \
-    TConfig as TFederatedQueryConfig
+from contrib.ydb.core.fq.libs.config.protos.fq_config_pb2 import TConfig as TFederatedQueryConfig
 from google.protobuf import json_format
 
-from contrib.ydb.core.protos import (auth_pb2, blobstorage_vdisk_config_pb2,
-                                     cms_pb2, config_pb2, feature_flags_pb2,
-                                     netclassifier_pb2, pqconfig_pb2,
-                                     resource_broker_pb2)
+from contrib.ydb.core.protos import (
+    auth_pb2,
+    blobstorage_vdisk_config_pb2,
+    cms_pb2,
+    config_pb2,
+    feature_flags_pb2,
+    netclassifier_pb2,
+    pqconfig_pb2,
+    resource_broker_pb2,
+)
 from ydb.tools.cfg import base, types, utils
-from ydb.tools.cfg.templates import (dynamic_cfg_new_style,
-                                     kikimr_cfg_for_dynamic_node,
-                                     kikimr_cfg_for_dynamic_slot,
-                                     kikimr_cfg_for_static_node,
-                                     kikimr_cfg_for_static_node_new_style)
+from ydb.tools.cfg.templates import (
+    dynamic_cfg_new_style,
+    kikimr_cfg_for_dynamic_node,
+    kikimr_cfg_for_dynamic_slot,
+    kikimr_cfg_for_static_node,
+    kikimr_cfg_for_static_node_new_style,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class StaticConfigGenerator(object):
     def __init__(
-            self, template, binary_path, output_dir, database=None,
-            node_broker_port=2135, ic_port=19001, walle_provider=None,
-            grpc_port=2135, mon_port=8765, cfg_home='/Berkanavt/kikimr',
-            sqs_port=8771, enable_cores=False, enable_cms_config_cache=False,
-            local_binary_path=None, skip_location=False,
-            **kwargs
+        self,
+        template,
+        binary_path,
+        output_dir,
+        database=None,
+        node_broker_port=2135,
+        ic_port=19001,
+        walle_provider=None,
+        grpc_port=2135,
+        mon_port=8765,
+        cfg_home='/Berkanavt/kikimr',
+        sqs_port=8771,
+        enable_cores=False,
+        enable_cms_config_cache=False,
+        local_binary_path=None,
+        skip_location=False,
+        **kwargs
     ):
         self.__proto_configs = {}
         self.__binary_path = binary_path
@@ -81,16 +99,23 @@ class StaticConfigGenerator(object):
             'pqcd.txt': None,
             'failure_injection.txt': None,
         }
-        self.__optional_config_files = set((
-            'rb.txt',
-            'metering.txt',
-            'audit.txt',
-            'fq.txt',
-            'failure_injection.txt',
-        ))
+        self.__optional_config_files = set(
+            (
+                'rb.txt',
+                'metering.txt',
+                'audit.txt',
+                'fq.txt',
+                'failure_injection.txt',
+            )
+        )
         self._enable_cms_config_cache = template.get('enable_cms_config_cache', enable_cms_config_cache)
         if 'tracing' in template:
-            self.__tracing = (template['tracing']['host'], template['tracing']['port'], template['tracing']['root_ca'], template['tracing']['service_name'])
+            self.__tracing = (
+                template['tracing']['host'],
+                template['tracing']['port'],
+                template['tracing']['root_ca'],
+                template['tracing']['service_name'],
+            )
         else:
             self.__tracing = None
         self.__write_mbus_settings_to_kikimr_cfg = False
@@ -129,11 +154,17 @@ class StaticConfigGenerator(object):
 
     @property
     def feature_flags_txt(self):
-        return self.__proto_config('feature_flags.txt', feature_flags_pb2.TFeatureFlags, self.__cluster_details.get_service("features"))
+        return self.__proto_config(
+            'feature_flags.txt', feature_flags_pb2.TFeatureFlags, self.__cluster_details.get_service("features")
+        )
 
     @property
     def failure_injection_txt(self):
-        return self.__proto_config('failure_injection.txt', config_pb2.TFailureInjectionConfig, self.__cluster_details.get_service("failure_injection_config"))
+        return self.__proto_config(
+            'failure_injection.txt',
+            config_pb2.TFailureInjectionConfig,
+            self.__cluster_details.get_service("failure_injection_config"),
+        )
 
     @property
     def failure_injection_txt_enabled(self):
@@ -145,11 +176,17 @@ class StaticConfigGenerator(object):
 
     @property
     def netclassifier_txt(self):
-        return self.__proto_config("netclassifier.txt", netclassifier_pb2.TNetClassifierConfig, self.__cluster_details.get_service("netclassifier"))
+        return self.__proto_config(
+            "netclassifier.txt",
+            netclassifier_pb2.TNetClassifierConfig,
+            self.__cluster_details.get_service("netclassifier"),
+        )
 
     @property
     def pqcd_txt(self):
-        return self.__proto_config("pqcd.txt", pqconfig_pb2.TPQClusterDiscoveryConfig, self.__cluster_details.get_service("pqclusterdiscovery"))
+        return self.__proto_config(
+            "pqcd.txt", pqconfig_pb2.TPQClusterDiscoveryConfig, self.__cluster_details.get_service("pqclusterdiscovery")
+        )
 
     @property
     def ic_txt(self):
@@ -161,7 +198,9 @@ class StaticConfigGenerator(object):
 
     @property
     def dyn_ns_txt(self):
-        return self.__proto_config('dyn_ns.txt',  config_pb2.TDynamicNameserviceConfig, self.__cluster_details.dynamicnameservice_config)
+        return self.__proto_config(
+            'dyn_ns.txt', config_pb2.TDynamicNameserviceConfig, self.__cluster_details.dynamicnameservice_config
+        )
 
     @property
     def log_txt(self):
@@ -173,7 +212,9 @@ class StaticConfigGenerator(object):
 
     @property
     def vdisks_txt(self):
-        return self.__proto_config('vdisks.txt', blobstorage_vdisk_config_pb2.TAllVDiskKinds, self.__cluster_details.vdisk_config)
+        return self.__proto_config(
+            'vdisks.txt', blobstorage_vdisk_config_pb2.TAllVDiskKinds, self.__cluster_details.vdisk_config
+        )
 
     @property
     def sqs_txt(self):
@@ -185,7 +226,9 @@ class StaticConfigGenerator(object):
 
     @property
     def rb_txt(self):
-        return self.__proto_config('rb.txt', resource_broker_pb2.TResourceBrokerConfig, self.__cluster_details.get_service('resource_broker'))
+        return self.__proto_config(
+            'rb.txt', resource_broker_pb2.TResourceBrokerConfig, self.__cluster_details.get_service('resource_broker')
+        )
 
     @property
     def rb_txt_enabled(self):
@@ -193,7 +236,9 @@ class StaticConfigGenerator(object):
 
     @property
     def metering_txt(self):
-        return self.__proto_config('metering.txt', config_pb2.TMeteringConfig, self.__cluster_details.get_service("metering"))
+        return self.__proto_config(
+            'metering.txt', config_pb2.TMeteringConfig, self.__cluster_details.get_service("metering")
+        )
 
     @property
     def metering_txt_enabled(self):
@@ -232,9 +277,14 @@ class StaticConfigGenerator(object):
     def kikimr_cfg(self):
         if self.__is_dynamic_node:
             return kikimr_cfg_for_dynamic_node(
-                self.__node_broker_port, self._database,
-                self.__ic_port, self.__mon_port,
-                self.__kikimr_home, self.__sqs_port, self.sqs_txt.EnableSqs, self._enable_cores,
+                self.__node_broker_port,
+                self._database,
+                self.__ic_port,
+                self.__mon_port,
+                self.__kikimr_home,
+                self.__sqs_port,
+                self.sqs_txt.EnableSqs,
+                self._enable_cores,
                 self.__cluster_details.default_log_level,
                 mon_address=self.__cluster_details.monitor_address,
                 cert_params=self.__cluster_details.ic_cert_params,
@@ -242,7 +292,7 @@ class StaticConfigGenerator(object):
                 rb_txt_enabled=self.rb_txt_enabled,
                 metering_txt_enabled=self.metering_txt_enabled,
                 audit_txt_enabled=self.audit_txt_enabled,
-                fq_txt_enabled=self.fq_txt_enabled
+                fq_txt_enabled=self.fq_txt_enabled,
             )
 
         if self.__cluster_details.use_new_style_kikimr_cfg:
@@ -258,8 +308,11 @@ class StaticConfigGenerator(object):
             )
 
         return kikimr_cfg_for_static_node(
-            self._database, self.__ic_port,
-            self.__mon_port, self.__kikimr_home, self.pq_txt.Enabled,
+            self._database,
+            self.__ic_port,
+            self.__mon_port,
+            self.__kikimr_home,
+            self.pq_txt.Enabled,
             self._enable_cores,
             self.__cluster_details.default_log_level,
             mon_address=self.__cluster_details.monitor_address,
@@ -368,10 +421,7 @@ class StaticConfigGenerator(object):
                 system_tablets_info[tablet_type] = []
 
             system_tablets_info[tablet_type].append(
-                {
-                    "info": {"tablet_id": tablet["info"]["tablet_id"]},
-                    "node": tablet["node"]
-                }
+                {"info": {"tablet_id": tablet["info"]["tablet_id"]}, "node": tablet["node"]}
             )
 
         del normalized_config["bootstrap_config"]["tablet"]
@@ -510,13 +560,9 @@ class StaticConfigGenerator(object):
 
         for channel_id in range(int(number_of_channels)):
             channel = tablet.Info.Channels.add(
-                Channel=channel_id,
-                ChannelErasureName=str(self.__cluster_details.static_erasure)
+                Channel=channel_id, ChannelErasureName=str(self.__cluster_details.static_erasure)
             )
-            channel.History.add(
-                FromGeneration=0,
-                GroupID=0
-            )
+            channel.History.add(FromGeneration=0, GroupID=0)
 
     @property
     def __tablet_types(self):
@@ -548,11 +594,7 @@ class StaticConfigGenerator(object):
 
         for tablet_type, tablet_count in self.__system_tablets:
             for index in range(int(tablet_count)):
-                self.__add_tablet(
-                    tablet_type,
-                    index,
-                    self.__cluster_details.system_tablets_node_ids
-                )
+                self.__add_tablet(tablet_type, index, self.__cluster_details.system_tablets_node_ids)
 
         if self.__cluster_details.shared_cache_memory_limit is not None:
             boot_txt = self.__proto_configs["boot.txt"]
@@ -683,13 +725,17 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.nw_cache_file_path is not None:
             self.__proto_configs['bs.txt'].CacheFilePath = self.__cluster_details.nw_cache_file_path
 
-    def _read_generated_bs_config(self, static_erasure, min_fail_domains, static_pdisk_type, fail_domain_type, bs_format_config):
+    def _read_generated_bs_config(
+        self, static_erasure, min_fail_domains, static_pdisk_type, fail_domain_type, bs_format_config
+    ):
         result = config_pb2.TBlobStorageConfig()
 
         with tempfile.NamedTemporaryFile(delete=True) as t_file:
             utils.write_proto_to_file(t_file.name, bs_format_config)
 
-            rx_begin, rx_end, dx_begin, dx_end = types.DistinctionLevels[types.FailDomainType.from_string(fail_domain_type)]
+            rx_begin, rx_end, dx_begin, dx_end = types.DistinctionLevels[
+                types.FailDomainType.from_string(fail_domain_type)
+            ]
 
             cmd_base = [
                 self.__local_binary_path,
@@ -697,25 +743,42 @@ class StaticConfigGenerator(object):
                 "bs",
                 "genconfig",
                 "static",
-                "--bs-format-file", t_file.name,
-                "--erasure", static_erasure,
-                "--avdomain", "1",
-                "--faildomains", min_fail_domains,
-                "--vdisks", "1",
-                "--pdisktype", static_pdisk_type,
+                "--bs-format-file",
+                t_file.name,
+                "--erasure",
+                static_erasure,
+                "--avdomain",
+                "1",
+                "--faildomains",
+                min_fail_domains,
+                "--vdisks",
+                "1",
+                "--pdisktype",
+                static_pdisk_type,
             ]
 
             try:
-                output = subprocess.check_output(cmd_base + [
-                    "--ring-level-begin", str(rx_begin),
-                    "--ring-level-end", str(rx_end),
-                    "--domain-level-begin", str(dx_begin),
-                    "--domain-level-end", str(dx_end),
-                ])
+                output = subprocess.check_output(
+                    cmd_base
+                    + [
+                        "--ring-level-begin",
+                        str(rx_begin),
+                        "--ring-level-end",
+                        str(rx_end),
+                        "--domain-level-begin",
+                        str(dx_begin),
+                        "--domain-level-end",
+                        str(dx_end),
+                    ]
+                )
             except subprocess.CalledProcessError:
-                output = subprocess.check_output(cmd_base + [
-                    "--dx", fail_domain_type,
-                ])
+                output = subprocess.check_output(
+                    cmd_base
+                    + [
+                        "--dx",
+                        fail_domain_type,
+                    ]
+                )
 
         utils.read_message_from_string(output, result)
 
@@ -745,15 +808,13 @@ class StaticConfigGenerator(object):
                 profile.Channel.add(
                     ErasureSpecies=str(self.__cluster_details.static_erasure),
                     PDiskCategory=chosen_category,
-                    VDiskCategory=str(types.VDiskCategory.Default)
+                    VDiskCategory=str(types.VDiskCategory.Default),
                 )
 
         for user_profile in self.__cluster_details.tablet_profiles:
-
             profile = channels_config.Profile.add()
             profile.ProfileId = next(profile_id)
             for user_profile_channel in user_profile.channels:
-
                 params = {
                     'ErasureSpecies': str(user_profile_channel.erasure),
                     'PDiskCategory': user_profile_channel.pdisk_type,
@@ -775,9 +836,8 @@ class StaticConfigGenerator(object):
                     n_to_select_candidate = nodes_count
                 else:
                     raise RuntimeError(
-                        "Unable to configure state storage, n to select %d > length of hosts %d" % (
-                            n_to_select_candidate, nodes_count
-                        )
+                        "Unable to configure state storage, n to select %d > length of hosts %d"
+                        % (n_to_select_candidate, nodes_count)
                     )
             return n_to_select_candidate
 
@@ -809,9 +869,7 @@ class StaticConfigGenerator(object):
             domain_id = domain_description.domain_id
             domain_name = domain_description.domain_name
             domain = domains_config.Domain.add(
-                Name=domain_name,
-                DomainId=domain_id,
-                PlanResolution=domain_description.plan_resolution
+                Name=domain_name, DomainId=domain_id, PlanResolution=domain_description.plan_resolution
             )
             domain.SSId.append(domain_id)
             domain.HiveUid.append(domain_id)
@@ -824,24 +882,18 @@ class StaticConfigGenerator(object):
             domain.SchemeRoot = schemeroot
 
             domain.ExplicitCoordinators.extend(
-                [tablet_types.FLAT_TX_COORDINATOR.tablet_id_for(i)
-                 for i in range(int(domain_description.coordinators))]
+                [tablet_types.FLAT_TX_COORDINATOR.tablet_id_for(i) for i in range(int(domain_description.coordinators))]
             )
             domain.ExplicitMediators.extend(
-                [tablet_types.TX_MEDIATOR.tablet_id_for(i)
-                 for i in range(int(domain_description.mediators))]
+                [tablet_types.TX_MEDIATOR.tablet_id_for(i) for i in range(int(domain_description.mediators))]
             )
             domain.ExplicitAllocators.extend(
-                [tablet_types.TX_ALLOCATOR.tablet_id_for(i)
-                 for i in range(int(domain_description.allocators))]
+                [tablet_types.TX_ALLOCATOR.tablet_id_for(i) for i in range(int(domain_description.allocators))]
             )
 
             self._configure_statestorages(domains_config, domain_id)
 
-            domains_config.HiveConfig.add(
-                HiveUid=domain_id,
-                Hive=tablet_types.FLAT_HIVE.tablet_id_for(0)
-            )
+            domains_config.HiveConfig.add(HiveUid=domain_id, Hive=tablet_types.FLAT_HIVE.tablet_id_for(0))
 
             for pool_kind in domain_description.storage_pool_kinds.values():
                 pool_type = domain.StoragePoolTypes.add(Kind=pool_kind.kind)
@@ -868,14 +920,10 @@ class StaticConfigGenerator(object):
                 if 'type' in pool_kind.filter_properties:
                     pdisk_type = pool_kind.filter_properties['type']
                     pdisk_category = int(types.PDiskCategory.from_string(pdisk_type))
-                    pdisk_filter.Property.add(
-                        Type=pdisk_category
-                    )
+                    pdisk_filter.Property.add(Type=pdisk_category)
 
                     if "SharedWithOs" in pool_kind.filter_properties:
-                        pdisk_filter.Property.add(
-                            SharedWithOs=pool_kind.filter_properties["SharedWithOs"]
-                        )
+                        pdisk_filter.Property.add(SharedWithOs=pool_kind.filter_properties["SharedWithOs"])
 
     def _get_base_statestorage(self, domains_cfg, ss):
         ssid = ss.get('ssid', None)
@@ -934,8 +982,7 @@ class StaticConfigGenerator(object):
         rack_sizes = collections.Counter()
         for node in self.__cluster_details.hosts:
             rack_sizes[node.rack] += 1
-            racks[node.rack].append(
-                node)
+            racks[node.rack].append(node)
 
         chosen_racks = []
         dc_limit = n_to_select == 9
@@ -985,9 +1032,7 @@ class StaticConfigGenerator(object):
             return
 
         if self.__cluster_details.allow_incorrect_state_storage:
-            logger.warning(
-                "Using unsafe option: "
-                "state storage in the cluster is probably broken")
+            logger.warning("Using unsafe option: " "state storage in the cluster is probably broken")
             state_storage_cfg.Ring.NToSelect = self.__n_to_select
             state_storage_cfg.Ring.Node.extend(self.__cluster_details.state_storage_node_ids)
             return
@@ -1050,7 +1095,6 @@ class StaticConfigGenerator(object):
                     node.Location.Body = int(host.body)
 
         if self.__cluster_details.use_cluster_uuid:
-
             accepted_uuids = self.__cluster_details.accepted_cluster_uuids
             cluster_uuid = self.__cluster_details.cluster_uuid
             cluster_uuid = 'ydb:{}'.format(utils.uuid()) if cluster_uuid is None else cluster_uuid
@@ -1063,7 +1107,8 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.sys_preset_name is not None:
             utils.read_from_resource(
                 self.__proto_configs['sys.txt'],
-                'sys', self.__cluster_details.sys_preset_name,
+                'sys',
+                self.__cluster_details.sys_preset_name,
             )
         elif self.__cluster_details.use_auto_config:
             sys_config = self.__proto_configs['sys.txt']
@@ -1083,7 +1128,12 @@ class StaticConfigGenerator(object):
     def __generate_tracing_txt(self):
         pb = config_pb2.TAppConfig()
         if self.__tracing:
-            pb.TracingConfig.Host, pb.TracingConfig.Port, pb.TracingConfig.RootCA, pb.TracingConfig.ServiceName = self.__tracing
+            (
+                pb.TracingConfig.Host,
+                pb.TracingConfig.Port,
+                pb.TracingConfig.RootCA,
+                pb.TracingConfig.ServiceName,
+            ) = self.__tracing
         self.__proto_configs['tracing.txt'] = pb
 
     def __generate_sys_txt_advanced(self):
@@ -1102,7 +1152,7 @@ class StaticConfigGenerator(object):
                 'Threads': 16,
                 'SpinThreshold': 1,
                 'Name': "User",
-                'ExecutorUser': 'UserExecutor'
+                'ExecutorUser': 'UserExecutor',
             },
             {
                 'Type': sys_config.TExecutor.EType.Value('BASIC'),
@@ -1123,7 +1173,7 @@ class StaticConfigGenerator(object):
                 'SpinThreshold': 10,
                 'Name': "IC",
                 'TimePerMailboxMicroSecs': 100,
-                'ExecutorUser': 'Interconnect'
+                'ExecutorUser': 'Interconnect',
             },
         ]
         scheduler = {
@@ -1176,5 +1226,6 @@ class StaticConfigGenerator(object):
     def dynamic_server_common_args(self):
         if self.__cluster_details.use_new_style_kikimr_cfg:
             return dynamic_cfg_new_style(self._enable_cores)
-        return kikimr_cfg_for_dynamic_slot(self._enable_cores, self._enable_cms_config_cache,
-                                           cert_params=self.__cluster_details.ic_cert_params)
+        return kikimr_cfg_for_dynamic_slot(
+            self._enable_cores, self._enable_cms_config_cache, cert_params=self.__cluster_details.ic_cert_params
+        )

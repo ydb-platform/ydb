@@ -4,21 +4,24 @@ import itertools
 import os
 
 from contrib.ydb.core.protos import blobstorage_config_pb2 as bs_config
-from contrib.ydb.core.protos import \
-    blobstorage_pdisk_config_pb2 as pdisk_config
+from contrib.ydb.core.protos import blobstorage_pdisk_config_pb2 as pdisk_config
 from contrib.ydb.core.protos import flat_scheme_op_pb2 as flat_scheme_op
 from contrib.ydb.core.protos import msgbus_pb2 as msgbus
 from contrib.ydb.core.protos import tx_proxy_pb2 as tx_proxy
 from ydb.tools.cfg import base, static, utils
-from ydb.tools.cfg.types import (DistinctionLevels, Erasure, FailDomainType,
-                                 PDiskCategory)
+from ydb.tools.cfg.types import DistinctionLevels, Erasure, FailDomainType, PDiskCategory
 
 
 class DynamicConfigGenerator(object):
     def __init__(
-            self, template, binary_path, output_dir, grpc_endpoint=None,
-            local_binary_path=None, walle_provider=None,
-            **kwargs
+        self,
+        template,
+        binary_path,
+        output_dir,
+        grpc_endpoint=None,
+        local_binary_path=None,
+        walle_provider=None,
+        **kwargs
     ):
         self._template = template
         self._binary_path = binary_path
@@ -29,7 +32,9 @@ class DynamicConfigGenerator(object):
         self._grpc_endpoint = grpc_endpoint
         self.__define_storage_pools_request = None
         self.__configure_request = None
-        self.__static_config = static.StaticConfigGenerator(template, binary_path, output_dir, walle_provider=walle_provider, local_binary_path=local_binary_path)
+        self.__static_config = static.StaticConfigGenerator(
+            template, binary_path, output_dir, walle_provider=walle_provider, local_binary_path=local_binary_path
+        )
 
     @property
     def grpc_endpoint(self):
@@ -49,16 +54,23 @@ class DynamicConfigGenerator(object):
                 "config",
                 "invoke",
                 "--proto-file",
-                os.path.join(
-                    self._output_dir,
-                    proto_file
-                )
+                os.path.join(self._output_dir, proto_file),
             ]
         )
 
     def __add_storage_pool(
-            self, box_id, storage_pool_id, erasure, filter_properties, num_groups, fail_domain_type, kind=None,
-            name=None, vdisk_kind='Default', encryption_mode=0, generation=0,
+        self,
+        box_id,
+        storage_pool_id,
+        erasure,
+        filter_properties,
+        num_groups,
+        fail_domain_type,
+        kind=None,
+        name=None,
+        vdisk_kind='Default',
+        encryption_mode=0,
+        generation=0,
     ):
         cmd = self.__define_storage_pools_request.Command.add()
         cmd.DefineStoragePool.BoxId = box_id
@@ -104,10 +116,7 @@ class DynamicConfigGenerator(object):
                 "db",
                 "schema",
                 "execute",
-                os.path.join(
-                    self._output_dir,
-                    proto_file
-                ),
+                os.path.join(self._output_dir, proto_file),
             ]
         )
 
@@ -122,10 +131,7 @@ class DynamicConfigGenerator(object):
                 "execute",
                 "--domain=%s" % domain_name,
                 "--retry=10",
-                os.path.join(
-                    self._output_dir,
-                    proto_file
-                ),
+                os.path.join(self._output_dir, proto_file),
             ]
         )
 
@@ -140,34 +146,29 @@ class DynamicConfigGenerator(object):
             for init_id, filename in enumerate(domain.console_initializers, 1):
                 commands.append(self.__cms_init_cmd('Configure-%s-init-%d.txt' % (name, init_id), name))
 
-        return '\n'.join(
-            commands
-        )
+        return '\n'.join(commands)
 
     def init_storage_commands(self):
         return '\n'.join(
             [
                 "set -eu",
                 self.__init_storage_command("DefineBox.txt"),
-                self.__init_storage_command("DefineStoragePools.txt")
+                self.__init_storage_command("DefineStoragePools.txt"),
             ]
         )
 
     def init_compute_commands(self):
         commands = ["set -eu"]
-        return '\n'.join(
-            commands
-        )
+        return '\n'.join(commands)
 
     def init_root_storage(self):
         commands = ["set -eu"]
         commands += [
             self.__bind_storage_with_root('BindRootStorageRequest-%s.txt' % domain.domain_name)
-            for domain in self._cluster_details.domains if len(domain.storage_pools)
+            for domain in self._cluster_details.domains
+            if len(domain.storage_pools)
         ]
-        return '\n'.join(
-            commands
-        )
+        return '\n'.join(commands)
 
     @property
     def cms_init_cmd(self):
@@ -207,7 +208,8 @@ class DynamicConfigGenerator(object):
 
             if at_least_one_host_config_defined:
                 raise RuntimeError(
-                    "At least one host config defined manually, but you still use drives directly attached to hosts")
+                    "At least one host config defined manually, but you still use drives directly attached to hosts"
+                )
 
             host_config_id = next(host_config_id_iter)
             cmd = define_box_request.Command.add()
@@ -236,19 +238,13 @@ class DynamicConfigGenerator(object):
 
         if self._cluster_details.storage_pools_deprecated:
             for storage_pool in self._cluster_details.storage_pools_deprecated:
-                self.__add_storage_pool(
-                    storage_pool_id=next(storage_pool_id),
-                    **storage_pool.to_dict()
-                )
+                self.__add_storage_pool(storage_pool_id=next(storage_pool_id), **storage_pool.to_dict())
 
         # for tablets in domain lets make pools
         # but it is not supposed to make tablets in domain directly
         for domain in self._cluster_details.domains:
             for storage_pool in domain.storage_pools:
-                self.__add_storage_pool(
-                    storage_pool_id=next(storage_pool_id),
-                    **storage_pool.to_dict()
-                )
+                self.__add_storage_pool(storage_pool_id=next(storage_pool_id), **storage_pool.to_dict())
 
         return self.__define_storage_pools_request
 
@@ -283,7 +279,9 @@ class DynamicConfigGenerator(object):
 
         if domain.config_cookie:
             action.AddConfigItem.ConfigItem.Cookie = domain.config_cookie
-            configure_request.ConfigureRequest.Actions.add().RemoveConfigItems.CookieFilter.Cookies.append(domain.config_cookie)
+            configure_request.ConfigureRequest.Actions.add().RemoveConfigItems.CookieFilter.Cookies.append(
+                domain.config_cookie
+            )
 
         action = configure_request.ConfigureRequest.Actions.add()
         action.AddConfigItem.ConfigItem.UsageScope.TenantAndNodeTypeFilter.Tenant = "dynamic"
@@ -306,8 +304,7 @@ class DynamicConfigGenerator(object):
     @staticmethod
     def _construct_create_tenant_request(domain, tenant):
         console_request = msgbus.TConsoleRequest()
-        console_request.CreateTenantRequest.Request.path = os.path.join(
-            '/', domain.domain_name, tenant.name)
+        console_request.CreateTenantRequest.Request.path = os.path.join('/', domain.domain_name, tenant.name)
 
         if tenant.shared:
             resources = console_request.CreateTenantRequest.Request.shared_resources
@@ -337,8 +334,7 @@ class DynamicConfigGenerator(object):
         for domain in self._cluster_details.domains:
             for tenant in domain.tenants:
                 tenants_count += 1
-                files['CreateTenant-%d.txt' % next(tn_id)] = self._construct_create_tenant_request(
-                    domain, tenant)
+                files['CreateTenant-%d.txt' % next(tn_id)] = self._construct_create_tenant_request(domain, tenant)
         return tenants_count, files
 
     def get_create_tenant_commands(self):
@@ -346,10 +342,7 @@ class DynamicConfigGenerator(object):
         commands = []
         for domain in self._cluster_details.domains:
             for _ in domain.tenants:
-                commands.append(
-                    self.__cms_init_cmd(
-                        'CreateTenant-%d.txt' % next(tn_id),
-                        domain.domain_name))
+                commands.append(self.__cms_init_cmd('CreateTenant-%d.txt' % next(tn_id), domain.domain_name))
         commands.append('exit 0')
         return "\n".join(commands)
 
@@ -358,9 +351,10 @@ class DynamicConfigGenerator(object):
         all_configs = self.get_storage_requests()
         all_configs.update(
             {
-                'BindRootStorageRequest-%s.txt' % domain.domain_name: utils.message_to_string(
-                    self.make_bind_root_storage_request(domain))
-                for domain in self._cluster_details.domains if len(domain.storage_pools)
+                'BindRootStorageRequest-%s.txt'
+                % domain.domain_name: utils.message_to_string(self.make_bind_root_storage_request(domain))
+                for domain in self._cluster_details.domains
+                if len(domain.storage_pools)
             }
         )
         all_configs.update(

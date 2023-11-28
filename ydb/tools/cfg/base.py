@@ -26,7 +26,11 @@ DEFAULT_BOX_ID = 1
 VDISKS_DEFAULT_CONFIG = {
     'vdisk_kinds': [
         {'kind': 'Log', 'base_kind': 'Default', 'config': {'fresh_use_dreg': True, 'allow_keep_flags': False}},
-        {'kind': 'LocalMode', 'base_kind': 'Default', 'config': {'hull_comp_level0_max_ssts_at_once': 2, 'hull_comp_sorted_parts_num': 1}},
+        {
+            'kind': 'LocalMode',
+            'base_kind': 'Default',
+            'config': {'hull_comp_level0_max_ssts_at_once': 2, 'hull_comp_sorted_parts_num': 1},
+        },
     ]
 }
 
@@ -42,9 +46,7 @@ GRPC_DEFAULT_CONFIG = {
     'keep_alive_probe_interval_sec': 10,
 }
 
-DYNAMIC_NAME_SERVICE = {
-    'max_static_node_id': 50000
-}
+DYNAMIC_NAME_SERVICE = {'max_static_node_id': 50000}
 
 IC_DEFAULT_CONFIG = {
     'start_tcp': True,
@@ -67,19 +69,22 @@ class KiKiMRDrive(object):
 
     def __eq__(self, other):
         return (
-            self.type == other.type and
-            self.path == other.path and
-            self.shared_with_os == other.shared_with_os and
-            self.expected_slot_count == other.expected_slot_count and
-            self.kind == other.kind
+            self.type == other.type
+            and self.path == other.path
+            and self.shared_with_os == other.shared_with_os
+            and self.expected_slot_count == other.expected_slot_count
+            and self.kind == other.kind
         )
 
     def __hash__(self):
-        return hash('\0'.join(map(str, (self.type, self.path, self.shared_with_os, self.expected_slot_count, self.kind))))
+        return hash(
+            '\0'.join(map(str, (self.type, self.path, self.shared_with_os, self.expected_slot_count, self.kind)))
+        )
 
 
 Domain = collections.namedtuple(
-    '_Domain', [
+    '_Domain',
+    [
         'domain_name',
         'domain_id',
         'plan_resolution',
@@ -92,38 +97,34 @@ Domain = collections.namedtuple(
         'tenants',
         'console_initializers',
         'bind_slots_to_numa_nodes',
-        'config_cookie'
-    ]
+        'config_cookie',
+    ],
 )
 
 KiKiMRHost = collections.namedtuple(
-    '_KiKiMRHost', [
-        'hostname',
-        'node_id',
-        'drives',
-        'ic_port',
-        'body',
-        'datacenter',
-        'rack',
-        'host_config_id'
-    ]
+    '_KiKiMRHost', ['hostname', 'node_id', 'drives', 'ic_port', 'body', 'datacenter', 'rack', 'host_config_id']
 )
 
 DEFAULT_PLAN_RESOLUTION = 10
-DEFAULT_DOMAIN = {
-    'domain_name': 'Root',
-    'domain_id': 1,
-    'plan_resolution': DEFAULT_PLAN_RESOLUTION
-}
+DEFAULT_DOMAIN = {'domain_name': 'Root', 'domain_id': 1, 'plan_resolution': DEFAULT_PLAN_RESOLUTION}
 
 DEFAULT_RESOURCE_BROKER_CPU_LIMIT = 20
-DEFAULT_RESOURCE_BROKER_MEMORY_LIMIT = 16 * (1024 ** 3)
+DEFAULT_RESOURCE_BROKER_MEMORY_LIMIT = 16 * (1024**3)
 
 
 class StoragePool(object):
     def __init__(
-            self, box_id, erasure, num_groups, filter_properties,
-            fail_domain_type, kind, name, vdisk_kind, encryption_mode, generation=0
+        self,
+        box_id,
+        erasure,
+        num_groups,
+        filter_properties,
+        fail_domain_type,
+        kind,
+        name,
+        vdisk_kind,
+        encryption_mode,
+        generation=0,
     ):
         self._dict_items = {}
         self.box_id = box_id
@@ -151,10 +152,7 @@ class StoragePool(object):
 
 
 class StoragePoolKind(object):
-    def __init__(
-            self, box_id, erasure, filter_properties,
-            fail_domain_type, kind, vdisk_kind, encryption_mode
-    ):
+    def __init__(self, box_id, erasure, filter_properties, fail_domain_type, kind, vdisk_kind, encryption_mode):
         self._dict_items = {}
         self.box_id = box_id
         self.erasure = erasure
@@ -178,36 +176,32 @@ class StoragePoolKind(object):
 
 
 Subdomain = collections.namedtuple(
-    '_Subdomain', [
+    '_Subdomain',
+    [
         'domain',
         'name',
         'plan_resolution',
         'mediators',
         'coordinators',
         'storage_pools',
-    ]
+    ],
 )
 
 DynamicSlot = collections.namedtuple(
-    '_DynamicSlot', [
+    '_DynamicSlot',
+    [
         'domain',
         'id',
-    ]
+    ],
 )
 
 Profile = collections.namedtuple(
-    '_Profile', [
+    '_Profile',
+    [
         'channels',
-    ]
+    ],
 )
-Channel = collections.namedtuple(
-    '_Channel', [
-        'erasure',
-        'pdisk_type',
-        'vdisk_kind',
-        'storage_pool_kind'
-    ]
-)
+Channel = collections.namedtuple('_Channel', ['erasure', 'pdisk_type', 'vdisk_kind', 'storage_pool_kind'])
 
 
 class StorageUnit(object):
@@ -224,19 +218,15 @@ class ComputeUnit(object):
 
 
 class Tenant(object):
-    def __init__(self, name, storage_units, compute_units=None, overridden_configs=None, shared=False, plan_resolution=None):
+    def __init__(
+        self, name, storage_units, compute_units=None, overridden_configs=None, shared=False, plan_resolution=None
+    ):
         self.name = name
         self.overridden_configs = overridden_configs
-        self.storage_units = tuple(
-            StorageUnit(**storage_unit_template)
-            for storage_unit_template in storage_units
-        )
+        self.storage_units = tuple(StorageUnit(**storage_unit_template) for storage_unit_template in storage_units)
         self.compute_units = tuple()
         if compute_units:
-            self.compute_units = tuple(
-                ComputeUnit(**compute_unit_template)
-                for compute_unit_template in compute_units
-            )
+            self.compute_units = tuple(ComputeUnit(**compute_unit_template) for compute_unit_template in compute_units)
         self.shared = shared
         self.plan_resolution = plan_resolution
 
@@ -274,14 +264,11 @@ def normalize_domain(domain_name):
 
 class ClusterDetailsProvider(object):
     def __init__(self, template, walle_provider, database=None):
-        self.__cluster_description = _ClusterDescription.from_template(
-            template)
+        self.__cluster_description = _ClusterDescription.from_template(template)
         self.__cluster_description.validate()
 
         if database is not None:
-            self.__cluster_description = self.get_subjective_description(
-                self.__cluster_description,
-                database)
+            self.__cluster_description = self.get_subjective_description(self.__cluster_description, database)
 
         self._use_walle = self.__cluster_description.get('use_walle', True)
         if not walle_provider:
@@ -318,17 +305,18 @@ class ClusterDetailsProvider(object):
                 if get_full_tenant_name(domain_of_tenant, current_tenant.get('name')) != tenant:
                     continue
 
-                overridden_configurations = current_tenant.get(
-                    'overridden_configs', {})
-                for service in ('nfs', 'nfs_control', 'nbs', 'nbs_control', ):
+                overridden_configurations = current_tenant.get('overridden_configs', {})
+                for service in (
+                    'nfs',
+                    'nfs_control',
+                    'nbs',
+                    'nbs_control',
+                ):
                     if service in overridden_configurations:
-                        overridden_configurations[service]['domain'] = domain_template.get(
-                            'domain_name')
-                        overridden_configurations[service]['subdomain'] = current_tenant.get(
-                            'name')
+                        overridden_configurations[service]['domain'] = domain_template.get('domain_name')
+                        overridden_configurations[service]['subdomain'] = current_tenant.get('name')
 
-        subjective_description = _ClusterDescription(
-            dict(objective_description))
+        subjective_description = _ClusterDescription(dict(objective_description))
         subjective_description.update(overridden_configurations)
         subjective_description.validate()
         return subjective_description
@@ -400,19 +388,11 @@ class ClusterDetailsProvider(object):
             return self._hosts
         futures = []
         for node_id, host_description in enumerate(self.__cluster_description.get('hosts'), 1):
-            futures.append(
-                self._thread_pool.submit(
-                    self.__collect_host_info,
-                    node_id,
-                    host_description
-                )
-            )
+            futures.append(self._thread_pool.submit(self.__collect_host_info, node_id, host_description))
 
         r = []
         for f in futures:
-            r.append(
-                f.result()
-            )
+            r.append(f.result())
 
         if self._hosts is None:
             self._hosts = r
@@ -420,9 +400,7 @@ class ClusterDetailsProvider(object):
 
     @property
     def system_tablets_node_ids(self):
-        return [
-            host.node_id for host in self.static_bs_group_hosts
-        ]
+        return [host.node_id for host in self.static_bs_group_hosts]
 
     @property
     def state_storages(self):
@@ -434,8 +412,7 @@ class ClusterDetailsProvider(object):
         if node_ids:
             return node_ids
 
-        state_storage_node_set = set(self.__cluster_description.get(
-            'state_storage', {}).get('node_set', []))
+        state_storage_node_set = set(self.__cluster_description.get('state_storage', {}).get('node_set', []))
         if len(state_storage_node_set) < 1:
             return [host.node_id for host in self.static_bs_group_hosts]
         node_ids = []
@@ -450,8 +427,7 @@ class ClusterDetailsProvider(object):
 
     @property
     def static_bs_group_hosts(self):
-        static_bs_group_filter = self.__cluster_description.get(
-            'static_bs_group_hosts', [])
+        static_bs_group_filter = self.__cluster_description.get('static_bs_group_hosts', [])
         matched = []
         for host in self.hosts:
             if host.hostname in static_bs_group_filter or len(static_bs_group_filter) == 0:
@@ -491,9 +467,7 @@ class ClusterDetailsProvider(object):
                 HostConfig(
                     host_config_id=host_config['host_config_id'],
                     generation=host_config.get('generation', 0),
-                    drives=tuple(
-                        KiKiMRDrive(**drive) for drive in host_config_drives
-                    )
+                    drives=tuple(KiKiMRDrive(**drive) for drive in host_config_drives),
                 )
             )
         return converted_host_configs
@@ -512,17 +486,14 @@ class ClusterDetailsProvider(object):
             for channel in profile.get('channels', []):
                 erasure = channel.get('erasure', str(self.static_erasure))
                 pdisk_type = channel.get('pdisk_type')
-                pdisk_type = None if pdisk_type is None else types.PDiskCategory.from_string(
-                    pdisk_type)
-                channel_storage_pool_kind = channel.get(
-                    'storage_pool_kind', None)
+                pdisk_type = None if pdisk_type is None else types.PDiskCategory.from_string(pdisk_type)
+                channel_storage_pool_kind = channel.get('storage_pool_kind', None)
                 if channel_storage_pool_kind is not None and pdisk_type is None:
                     pdisk_type = None
                     for storage_pool_kind in storage_pool_kinds:
                         if channel_storage_pool_kind == storage_pool_kind.kind:
                             f_properties = storage_pool_kind.filter_properties
-                            pdisk_type = types.PDiskCategory.from_string(
-                                f_properties['type'])
+                            pdisk_type = types.PDiskCategory.from_string(f_properties['type'])
 
                     assert pdisk_type is not None
 
@@ -534,13 +505,7 @@ class ClusterDetailsProvider(object):
                         storage_pool_kind=channel_storage_pool_kind,
                     )
                 )
-            all_profiles.append(
-                Profile(
-                    channels=tuple(
-                        profile_channels
-                    )
-                )
-            )
+            all_profiles.append(Profile(channels=tuple(profile_channels)))
         return tuple(all_profiles)
 
     # Domains Stuff
@@ -552,8 +517,7 @@ class ClusterDetailsProvider(object):
             box_id=storage_description.get("box_id", DEFAULT_BOX_ID),
             erasure=storage_description.get('erasure'),
             filter_properties=storage_description.get('filter_properties', {}),
-            fail_domain_type=storage_description.get(
-                'fail_domain_type', DEFAULT_FAIL_DOMAIN_TYPE),
+            fail_domain_type=storage_description.get('fail_domain_type', DEFAULT_FAIL_DOMAIN_TYPE),
             vdisk_kind=storage_description.get('vdisk_kind', 'Default'),
             encryption_mode=storage_description.get('encryption_mode', 0),
         )
@@ -572,8 +536,7 @@ class ClusterDetailsProvider(object):
 
     @property
     def domains(self):
-        cl_desc_domains = self.__cluster_description.get(
-            'domains', [DEFAULT_DOMAIN])
+        cl_desc_domains = self.__cluster_description.get('domains', [DEFAULT_DOMAIN])
         domains = []
         for domain_id, domain in enumerate(cl_desc_domains, 1):
             domain_name = domain.get('domain_name')
@@ -582,12 +545,12 @@ class ClusterDetailsProvider(object):
                 pool_kind.get('kind'): self.__storage_pool_kind(pool_kind)
                 for pool_kind in domain.get('storage_pool_kinds', [])
             }
-            assert len(set(storage_pool_kinds.keys())) == len(storage_pool_kinds.keys()), \
-                "required unique kind value in storage_pool_kinds items"
+            assert len(set(storage_pool_kinds.keys())) == len(
+                storage_pool_kinds.keys()
+            ), "required unique kind value in storage_pool_kinds items"
 
             storage_pools = [
-                self.__storage_pool(storage_pool_kinds,
-                                    pool_instance, domain_name)
+                self.__storage_pool(storage_pool_kinds, pool_instance, domain_name)
                 for pool_instance in domain.get('storage_pools', [])
             ]
 
@@ -595,14 +558,10 @@ class ClusterDetailsProvider(object):
                 Domain(
                     domain_name=domain_name,
                     domain_id=domain.get('domain_id', domain_id),
-                    mediators=domain.get(
-                        'mediators', self.__coordinators_count_optimal),
-                    coordinators=domain.get(
-                        'coordinators', self.__mediators_count_optimal),
-                    allocators=domain.get(
-                        'allocators', self.__allocators_count_optimal),
-                    plan_resolution=domain.get(
-                        'plan_resolution', DEFAULT_PLAN_RESOLUTION),
+                    mediators=domain.get('mediators', self.__coordinators_count_optimal),
+                    coordinators=domain.get('coordinators', self.__mediators_count_optimal),
+                    allocators=domain.get('allocators', self.__allocators_count_optimal),
+                    plan_resolution=domain.get('plan_resolution', DEFAULT_PLAN_RESOLUTION),
                     dynamic_slots=domain.get('dynamic_slots', 0),
                     storage_pool_kinds=storage_pool_kinds,
                     storage_pools=storage_pools,
@@ -619,8 +578,7 @@ class ClusterDetailsProvider(object):
         tenants = domain_description.get('databases', [])
         prepared_tenants = []
         for tenant in tenants:
-            prepared_tenants.append(
-                Tenant(**tenant))
+            prepared_tenants.append(Tenant(**tenant))
         return prepared_tenants
 
     # Static BlobStorage Group Stuff
@@ -636,10 +594,7 @@ class ClusterDetailsProvider(object):
     @property
     def fail_domain_type(self):
         return types.FailDomainType.from_string(
-            str(
-                self.__cluster_description.get(
-                    'fail_domain_type', DEFAULT_FAIL_DOMAIN_TYPE)
-            )
+            str(self.__cluster_description.get('fail_domain_type', DEFAULT_FAIL_DOMAIN_TYPE))
         )
 
     @property
@@ -648,8 +603,7 @@ class ClusterDetailsProvider(object):
 
     @property
     def static_erasure(self):
-        return types.Erasure.from_string(
-            self.__cluster_description['static_erasure'])
+        return types.Erasure.from_string(self.__cluster_description['static_erasure'])
 
     # Auth txt
     @property
@@ -780,14 +734,12 @@ class ClusterDetailsProvider(object):
                     box_id=DEFAULT_BOX_ID,
                     erasure=storage_pool.get('erasure'),
                     num_groups=storage_pool.get('num_groups'),
-                    filter_properties=storage_pool.get(
-                        'filter_properties', {}),
-                    fail_domain_type=storage_pool.get(
-                        'fail_domain_type', DEFAULT_FAIL_DOMAIN_TYPE),
+                    filter_properties=storage_pool.get('filter_properties', {}),
+                    fail_domain_type=storage_pool.get('fail_domain_type', DEFAULT_FAIL_DOMAIN_TYPE),
                     kind=storage_pool.get('kind', None),
                     vdisk_kind=storage_pool.get('vdisk_kind', 'Default'),
                     encryption_mode=storage_pool.get('encryption_mode', 0),
-                    generation=storage_pool.get('generation', 0)
+                    generation=storage_pool.get('generation', 0),
                 )
             )
 
@@ -802,14 +754,11 @@ class ClusterDetailsProvider(object):
     def __storage_pool(self, storage_pool_kinds, storage_pool_instance, domain_name):
         kind_name = storage_pool_instance.get('kind')
 
-        assert kind_name in storage_pool_kinds, \
-            "databse storage pools should use pool kinds from storage_pool_kinds section"
+        assert (
+            kind_name in storage_pool_kinds
+        ), "databse storage pools should use pool kinds from storage_pool_kinds section"
 
-        storage_pool_name = "/{domain}:{kind}".format(
-            domain=domain_name,
-            kind=kind_name
-
-        )
+        storage_pool_name = "/{domain}:{kind}".format(domain=domain_name, kind=kind_name)
 
         return StoragePool(
             name=storage_pool_name,
@@ -823,12 +772,7 @@ class ClusterDetailsProvider(object):
         slots = []
         for domain_description in self.__cluster_description.get('domains', []):
             for slot_id in range(1, int(domain_description.get('dynamic_slots', 0) + 1)):
-                slots.append(
-                    DynamicSlot(
-                        domain=domain_description.get('domain_name'),
-                        id=slot_id
-                    )
-                )
+                slots.append(DynamicSlot(domain=domain_description.get('domain_name'), id=slot_id))
         return slots
 
     @property

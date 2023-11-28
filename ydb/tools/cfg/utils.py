@@ -43,12 +43,7 @@ def write_to_file(file_path, value):
 
 
 def write_proto_to_file(file_path, proto):
-    write_to_file(
-        file_path,
-        message_to_string(
-            proto
-        )
-    )
+    write_to_file(file_path, message_to_string(proto))
 
 
 def read_message_from_string(value, message):
@@ -70,8 +65,7 @@ def get_resource_data(*args):
 
 def read_from_resource(message, *args):
     for key, value in resource.iteritems(get_resource_prefix(*args)):
-        return read_message_from_string(
-            value, message)
+        return read_message_from_string(value, message)
     raise RuntimeError()
 
 
@@ -83,12 +77,7 @@ def get_resources_list(prefix=''):
 
 
 def capitalize_name(initial_name):
-    return ''.join(
-        map(
-            lambda name_part: name_part.capitalize(),
-            initial_name.split('_')
-        )
-    )
+    return ''.join(map(lambda name_part: name_part.capitalize(), initial_name.split('_')))
 
 
 def to_lower(s):
@@ -97,11 +86,7 @@ def to_lower(s):
 
 def get_canonical_name(name):
     chars = set(string.punctuation)
-    return to_lower(
-        "".join(
-            filter(lambda x: x not in chars, name)
-        )
-    )
+    return to_lower("".join(filter(lambda x: x not in chars, name)))
 
 
 def apply_config_changes(target, changes, fix_names=None):
@@ -122,7 +107,10 @@ def apply_config_changes(target, changes, fix_names=None):
             if fixed_change_name is None:
                 fixed_change_name = in_proto_field_names.get(get_canonical_name(change_name))
 
-            assert fixed_change_name is not None, "Cannot find suitable field %s, proto descriptor: %s" % (change_name, target.DESCRIPTOR.full_name)
+            assert fixed_change_name is not None, "Cannot find suitable field %s, proto descriptor: %s" % (
+                change_name,
+                target.DESCRIPTOR.full_name,
+            )
 
             if isinstance(change_value, list):
                 for item in change_value:
@@ -150,7 +138,8 @@ def apply_config_changes(target, changes, fix_names=None):
                 setattr(target, fixed_change_name, change_value)
         except Exception as e:
             raise RuntimeError(
-                "Cannot apply config change: change_name: %s, change_value %s. Reason: %s" % (
+                "Cannot apply config change: change_name: %s, change_value %s. Reason: %s"
+                % (
                     change_name,
                     str(change_value),
                     str(e),

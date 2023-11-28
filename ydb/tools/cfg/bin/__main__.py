@@ -7,35 +7,30 @@ from logging import config as logging_config
 
 import yaml
 
-from ydb.tools.cfg.configurator_setup import (get_parser,
-                                              parse_optional_arguments)
+from ydb.tools.cfg.configurator_setup import get_parser, parse_optional_arguments
 from ydb.tools.cfg.dynamic import DynamicConfigGenerator
 from ydb.tools.cfg.static import StaticConfigGenerator
 from ydb.tools.cfg.utils import write_to_file
 
-logging_config.dictConfig({
-    'version': 1,
-    'formatters': {
-        'base': {
-            'format': '%(asctime)s - %(processName)s - %(name)s - %(levelname)s - %(message)s',
+logging_config.dictConfig(
+    {
+        'version': 1,
+        'formatters': {
+            'base': {
+                'format': '%(asctime)s - %(processName)s - %(name)s - %(levelname)s - %(message)s',
+            },
         },
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'level': 'INFO',
-            'formatter': 'base',
-            'stream': sys.stdout,
+        'handlers': {
+            'console': {
+                'class': 'logging.StreamHandler',
+                'level': 'INFO',
+                'formatter': 'base',
+                'stream': sys.stdout,
+            },
         },
-    },
-    'root': {
-        'formatter': 'base',
-        'level': 'INFO',
-        'handlers': (
-            'console',
-        )
-    },
-})
+        'root': {'formatter': 'base', 'level': 'INFO', 'handlers': ('console',)},
+    }
+)
 
 
 logger = logging.getLogger()
@@ -52,19 +47,11 @@ def cfg_generate(args):
     with open(args.cluster_description, 'r') as yaml_template:
         cluster_template = yaml.safe_load(yaml_template)
 
-    generator = cfg_cls(
-        cluster_template,
-        args.binary_path,
-        args.output_dir,
-        **kwargs
-    )
+    generator = cfg_cls(cluster_template, args.binary_path, args.output_dir, **kwargs)
 
     all_configs = generator.get_all_configs()
     for cfg_name, cfg_value in all_configs.items():
-        write_to_file(
-            os.path.join(args.output_dir, cfg_name),
-            cfg_value
-        )
+        write_to_file(os.path.join(args.output_dir, cfg_name), cfg_value)
 
 
 def main():

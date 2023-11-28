@@ -24,14 +24,14 @@ def py3_ensure_bytes(value):
 
 @enum.unique
 class LogLevels(enum.IntEnum):
-    EMERG = 0,
-    ALERT = 1,
-    CRIT = 2,
-    ERROR = 3,
-    WARN = 4,
-    NOTICE = 5,
-    INFO = 6,
-    DEBUG = 7,
+    EMERG = (0,)
+    ALERT = (1,)
+    CRIT = (2,)
+    ERROR = (3,)
+    WARN = (4,)
+    NOTICE = (5,)
+    INFO = (6,)
+    DEBUG = (7,)
     TRACE = 8
 
 
@@ -48,7 +48,7 @@ class TabletTypes(enum.Enum):
     FLAT_TX_COORDINATOR = _tablet_type(13, 0x800001, service_name='TX_COORDINATOR')
     FLAT_HIVE = _tablet_type(14, 0xA001, is_unique=True, service_name='HIVE')
     FLAT_BS_CONTROLLER = _tablet_type(15, 0x1001, is_unique=True, service_name='BS_CONTROLLER')
-    FLAT_SCHEMESHARD = _tablet_type(16, 0x1000008587a0, is_unique=True, service_name='FLAT_TX_SCHEMESHARD')
+    FLAT_SCHEMESHARD = _tablet_type(16, 0x1000008587A0, is_unique=True, service_name='FLAT_TX_SCHEMESHARD')
     TX_ALLOCATOR = _tablet_type(23, 0x820001, service_name='TX_ALLOCATOR')
     FLAT_TX_PROXY = _tablet_type(17, 0x820001, service_name='TX_PROXY')
     FLAT_DATASHARD = _tablet_type(18, 999, service_name='DATASHARD')
@@ -110,7 +110,7 @@ class TabletTypesFixed(enum.Enum):
     FLAT_TX_COORDINATOR = _tablet_type(13, 0x800001, service_name='TX_COORDINATOR')
     FLAT_HIVE = _tablet_type(14, 0xA001, is_unique=True, service_name='HIVE')
     FLAT_BS_CONTROLLER = _tablet_type(15, 0x1001, is_unique=True, service_name='BS_CONTROLLER')
-    FLAT_SCHEMESHARD = _tablet_type(16, 0x8587a0, is_unique=True, service_name='FLAT_TX_SCHEMESHARD')
+    FLAT_SCHEMESHARD = _tablet_type(16, 0x8587A0, is_unique=True, service_name='FLAT_TX_SCHEMESHARD')
     TX_ALLOCATOR = _tablet_type(23, 0x820001, service_name='TX_ALLOCATOR')
     FLAT_TX_PROXY = _tablet_type(17, 0x820001, service_name='TX_PROXY')
     FLAT_DATASHARD = _tablet_type(18, 999, service_name='DATASHARD')

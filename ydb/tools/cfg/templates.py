@@ -173,21 +173,28 @@ DEFAULT_KIKIMR_MBUS_MAX_MESSAGE_SIZE = 140000000
 
 
 def local_vars(
-        tenant, node_broker_port=None,
-        ic_port=19001, mon_port=8765, grpc_port=2135,
-        mbus_port=2134,
-        kikimr_home='/Berkanavt/kikimr',
-        kikimr_binaries_base_path='/Berkanavt/kikimr',
-        pq_enable=False, sqs_port=8771, sqs_enable=False,
-        enable_cores=False, default_log_level=3, mon_address="",
-        cert_params=None,
-        rb_txt_enabled=False,
-        metering_txt_enabled=False,
-        audit_txt_enabled=False,
-        yql_txt_enabled=False,
-        fq_txt_enabled=False,
-        new_style_kikimr_cfg=False,
-        mbus_enabled=False,
+    tenant,
+    node_broker_port=None,
+    ic_port=19001,
+    mon_port=8765,
+    grpc_port=2135,
+    mbus_port=2134,
+    kikimr_home='/Berkanavt/kikimr',
+    kikimr_binaries_base_path='/Berkanavt/kikimr',
+    pq_enable=False,
+    sqs_port=8771,
+    sqs_enable=False,
+    enable_cores=False,
+    default_log_level=3,
+    mon_address="",
+    cert_params=None,
+    rb_txt_enabled=False,
+    metering_txt_enabled=False,
+    audit_txt_enabled=False,
+    yql_txt_enabled=False,
+    fq_txt_enabled=False,
+    new_style_kikimr_cfg=False,
+    mbus_enabled=False,
 ):
     cur_vars = []
     if enable_cores:
@@ -206,9 +213,7 @@ def local_vars(
     if node_broker_port:
         cur_vars.append(('kikimr_node_broker_port', node_broker_port))
 
-    cur_vars.append(
-        ('kikimr_mon_address', mon_address)
-    )
+    cur_vars.append(('kikimr_mon_address', mon_address))
 
     if default_log_level:
         cur_vars.extend(
@@ -264,11 +269,7 @@ def local_vars(
         cur_vars.append(("kikimr_mbus_infly_bytes", DEFAULT_KIKIMR_MBUS_INFLY_BYTES))
         cur_vars.append(("kikimr_mbus_max_message_size", DEFAULT_KIKIMR_MBUS_MAX_MESSAGE_SIZE))
 
-    return '\n'.join(
-        [
-            '%s="%s"' % (cur_var[0], cur_var[1]) for cur_var in cur_vars
-        ]
-    )
+    return '\n'.join(['%s="%s"' % (cur_var[0], cur_var[1]) for cur_var in cur_vars])
 
 
 def tenant_argument(tenant=None):
@@ -280,55 +281,87 @@ def pq_enable_argument(pq_enable=False):
 
 
 def sqs_arguments(sqs_enable=False):
-    return '' if not sqs_enable else '\n'.join(
-        [
-            'kikimr_arg="${kikimr_arg}${kikimr_sqs_file:+ --sqs-file ${kikimr_sqs_file}}"',
-            'kikimr_arg="${kikimr_arg}${kikimr_sqs_port:+ --sqs-port ${kikimr_sqs_port}}"'
-        ]
+    return (
+        ''
+        if not sqs_enable
+        else '\n'.join(
+            [
+                'kikimr_arg="${kikimr_arg}${kikimr_sqs_file:+ --sqs-file ${kikimr_sqs_file}}"',
+                'kikimr_arg="${kikimr_arg}${kikimr_sqs_port:+ --sqs-port ${kikimr_sqs_port}}"',
+            ]
+        )
     )
 
 
 def rb_arguments(rb_txt_enabled=False):
-    return [] if not rb_txt_enabled else [
-        'kikimr_arg="${kikimr_arg}${kikimr_rb_file:+ --rb-file ${kikimr_rb_file}}"',
-    ]
+    return (
+        []
+        if not rb_txt_enabled
+        else [
+            'kikimr_arg="${kikimr_arg}${kikimr_rb_file:+ --rb-file ${kikimr_rb_file}}"',
+        ]
+    )
 
 
 def metering_arguments(metering_txt_enabled=False):
-    return [] if not metering_txt_enabled else [
-        'kikimr_arg="${kikimr_arg}${kikimr_metering_file:+ --metering-file ${kikimr_metering_file}}"',
-    ]
+    return (
+        []
+        if not metering_txt_enabled
+        else [
+            'kikimr_arg="${kikimr_arg}${kikimr_metering_file:+ --metering-file ${kikimr_metering_file}}"',
+        ]
+    )
 
 
 def audit_arguments(audit_txt_enabled=False):
-    return [] if not audit_txt_enabled else [
-        'kikimr_arg="${kikimr_arg}${kikimr_audit_file:+ --audit-file ${kikimr_audit_file}}"',
-    ]
+    return (
+        []
+        if not audit_txt_enabled
+        else [
+            'kikimr_arg="${kikimr_arg}${kikimr_audit_file:+ --audit-file ${kikimr_audit_file}}"',
+        ]
+    )
 
 
 def yql_arguments(yql_txt_enabled=False):
-    return [] if not yql_txt_enabled else [
-        'kikimr_arg="${kikimr_arg}${kikimr_yql_file:+ --yql-file ${kikimr_yql_file}}"',
-    ]
+    return (
+        []
+        if not yql_txt_enabled
+        else [
+            'kikimr_arg="${kikimr_arg}${kikimr_yql_file:+ --yql-file ${kikimr_yql_file}}"',
+        ]
+    )
 
 
 def cms_config_cache_argument_for_dynamic_nodes(enable_cms_config_cache=False):
-    return '' if not enable_cms_config_cache else 'kikimr_arg="${kikimr_arg} --cms-config-cache-file ${kikimr_home}_${kikimr_ic_port}/cache/cached_cfg.txt"'
+    return (
+        ''
+        if not enable_cms_config_cache
+        else 'kikimr_arg="${kikimr_arg} --cms-config-cache-file ${kikimr_home}_${kikimr_ic_port}/cache/cached_cfg.txt"'
+    )
 
 
 def cms_config_cache_argument_for_static_nodes(enable_cms_config_cache=False):
-    return '' if not enable_cms_config_cache else 'kikimr_arg="${kikimr_arg} --cms-config-cache-file ${kikimr_home}/cache/cached_cfg.txt"'
+    return (
+        ''
+        if not enable_cms_config_cache
+        else 'kikimr_arg="${kikimr_arg} --cms-config-cache-file ${kikimr_home}/cache/cached_cfg.txt"'
+    )
 
 
 def mbus_arguments(enable_mbus=False):
-    return [] if not enable_mbus else [
-        'kikimr_arg="${kikimr_arg}${kikimr_mbus_enable:+ ${kikimr_mbus_enable}}"',
-        'kikimr_arg="${kikimr_arg}${kikimr_mbus_port:+ --mbus-port ${kikimr_mbus_port}}"',
-        'kikimr_arg="${kikimr_arg}${kikimr_mbus_enable:+ --mbus-worker-count=4}"',
-        'kikimr_arg="${kikimr_arg}${kikimr_mbus_infly:+ --mbus-max-in-flight ${kikimr_mbus_infly}}"',
-        'kikimr_arg="${kikimr_arg}${kikimr_mbus_infly_bytes:+ --mbus-max-in-flight-by-size ${kikimr_mbus_infly_bytes}}"',
-        'kikimr_arg="${kikimr_arg}${kikimr_mbus_max_message_size:+ --mbus-max-message-size ${kikimr_mbus_max_message_size}}"',
-    ]
+    return (
+        []
+        if not enable_mbus
+        else [
+            'kikimr_arg="${kikimr_arg}${kikimr_mbus_enable:+ ${kikimr_mbus_enable}}"',
+            'kikimr_arg="${kikimr_arg}${kikimr_mbus_port:+ --mbus-port ${kikimr_mbus_port}}"',
+            'kikimr_arg="${kikimr_arg}${kikimr_mbus_enable:+ --mbus-worker-count=4}"',
+            'kikimr_arg="${kikimr_arg}${kikimr_mbus_infly:+ --mbus-max-in-flight ${kikimr_mbus_infly}}"',
+            'kikimr_arg="${kikimr_arg}${kikimr_mbus_infly_bytes:+ --mbus-max-in-flight-by-size ${kikimr_mbus_infly_bytes}}"',
+            'kikimr_arg="${kikimr_arg}${kikimr_mbus_max_message_size:+ --mbus-max-message-size ${kikimr_mbus_max_message_size}}"',
+        ]
+    )
 
 
 def dynamic_cfg_new_style(
@@ -354,47 +387,53 @@ def kikimr_cfg_for_static_node_new_style(
     new_style_kikimr_cfg=True,
     mbus_enabled=False,
 ):
-
     return "\n".join(
         [
             local_vars(
-                tenant, ic_port=ic_port,
+                tenant,
+                ic_port=ic_port,
                 mon_address=mon_address,
-                mon_port=mon_port, kikimr_home=kikimr_home,
+                mon_port=mon_port,
+                kikimr_home=kikimr_home,
                 enable_cores=enable_cores,
                 cert_params=cert_params,
                 default_log_level=None,
                 kikimr_binaries_base_path=None,
                 new_style_kikimr_cfg=new_style_kikimr_cfg,
-                mbus_enabled=mbus_enabled
+                mbus_enabled=mbus_enabled,
             ),
             NEW_STYLE_CONFIG,
-        ] + mbus_arguments(mbus_enabled)
+        ]
+        + mbus_arguments(mbus_enabled)
     )
 
 
 def kikimr_cfg_for_static_node(
-        tenant=None,
-        ic_port=19001, mon_port=8765, kikimr_home='/Berkanavt/kikimr',
-        pq_enable=False,
-        enable_cores=False,
-        default_log_level=3,
-        kikimr_binaries_base_path='/Berkanavt/kikimr',
-        mon_address="",
-        cert_params=None,
-        enable_cms_config_cache=False,
-        rb_txt_enabled=False,
-        metering_txt_enabled=False,
-        audit_txt_enabled=False,
-        yql_txt_enabled=False,
-        fq_txt_enabled=False,
-        mbus_enabled=False
+    tenant=None,
+    ic_port=19001,
+    mon_port=8765,
+    kikimr_home='/Berkanavt/kikimr',
+    pq_enable=False,
+    enable_cores=False,
+    default_log_level=3,
+    kikimr_binaries_base_path='/Berkanavt/kikimr',
+    mon_address="",
+    cert_params=None,
+    enable_cms_config_cache=False,
+    rb_txt_enabled=False,
+    metering_txt_enabled=False,
+    audit_txt_enabled=False,
+    yql_txt_enabled=False,
+    fq_txt_enabled=False,
+    mbus_enabled=False,
 ):
     return '\n'.join(
         [
             local_vars(
-                tenant, ic_port=ic_port,
-                mon_port=mon_port, kikimr_home=kikimr_home,
+                tenant,
+                ic_port=ic_port,
+                mon_port=mon_port,
+                kikimr_home=kikimr_home,
                 kikimr_binaries_base_path=kikimr_binaries_base_path,
                 pq_enable=pq_enable,
                 enable_cores=enable_cores,
@@ -406,7 +445,7 @@ def kikimr_cfg_for_static_node(
                 audit_txt_enabled=audit_txt_enabled,
                 yql_txt_enabled=yql_txt_enabled,
                 fq_txt_enabled=fq_txt_enabled,
-                mbus_enabled=mbus_enabled
+                mbus_enabled=mbus_enabled,
             ),
             NODE_ID_LOCAL_VAR,
             CUSTOM_CONFIG_INJECTOR,
@@ -415,35 +454,43 @@ def kikimr_cfg_for_static_node(
             NODE_ID_ARGUMENT,
             tenant_argument(tenant),
             pq_enable_argument(pq_enable),
-        ] + rb_arguments(rb_txt_enabled) \
-        + metering_arguments(metering_txt_enabled) \
-        + audit_arguments(audit_txt_enabled) \
-        + yql_arguments(yql_txt_enabled) \
-        + ([cms_config_cache_argument_for_static_nodes(enable_cms_config_cache)] if enable_cms_config_cache else []) \
+        ]
+        + rb_arguments(rb_txt_enabled)
+        + metering_arguments(metering_txt_enabled)
+        + audit_arguments(audit_txt_enabled)
+        + yql_arguments(yql_txt_enabled)
+        + ([cms_config_cache_argument_for_static_nodes(enable_cms_config_cache)] if enable_cms_config_cache else [])
         + mbus_arguments(mbus_enabled)
     )
 
 
 def kikimr_cfg_for_dynamic_node(
-        node_broker_port=2135, tenant=None,
-        ic_port=19001, mon_port=8765,
-        kikimr_home='/Berkanavt/kikimr', sqs_port=8771, sqs_enable=False,
-        enable_cores=False,
-        default_log_level=3,
-        kikimr_binaries_base_path='/Berkanavt/kikimr',
-        mon_address="", cert_params=None,
-        enable_cms_config_cache=False,
-        rb_txt_enabled=False,
-        metering_txt_enabled=False,
-        audit_txt_enabled=False,
-        yql_txt_enabled=False,
-        fq_txt_enabled=False
+    node_broker_port=2135,
+    tenant=None,
+    ic_port=19001,
+    mon_port=8765,
+    kikimr_home='/Berkanavt/kikimr',
+    sqs_port=8771,
+    sqs_enable=False,
+    enable_cores=False,
+    default_log_level=3,
+    kikimr_binaries_base_path='/Berkanavt/kikimr',
+    mon_address="",
+    cert_params=None,
+    enable_cms_config_cache=False,
+    rb_txt_enabled=False,
+    metering_txt_enabled=False,
+    audit_txt_enabled=False,
+    yql_txt_enabled=False,
+    fq_txt_enabled=False,
 ):
     return "\n".join(
         [
             local_vars(
-                tenant, node_broker_port=node_broker_port,
-                ic_port=ic_port, mon_port=mon_port,
+                tenant,
+                node_broker_port=node_broker_port,
+                ic_port=ic_port,
+                mon_port=mon_port,
                 kikimr_home=kikimr_home,
                 kikimr_binaries_base_path=kikimr_binaries_base_path,
                 sqs_port=sqs_port,
@@ -464,9 +511,10 @@ def kikimr_cfg_for_dynamic_node(
             NODE_BROKER_ARGUMENT,
             tenant_argument(tenant),
             sqs_arguments(sqs_enable),
-        ] + rb_arguments(rb_txt_enabled) \
-        + metering_arguments(metering_txt_enabled) \
-        + audit_arguments(audit_txt_enabled) \
+        ]
+        + rb_arguments(rb_txt_enabled)
+        + metering_arguments(metering_txt_enabled)
+        + audit_arguments(audit_txt_enabled)
         + ([cms_config_cache_argument_for_dynamic_nodes(enable_cms_config_cache)] if enable_cms_config_cache else [])
     )
 
@@ -484,11 +532,7 @@ def expected_vars(**kwargs):
 
     kikimr_patched.extend(BASE_VARS)
 
-    return '\n'.join(
-        [
-            '%s="%s"' % (var[0], var[1]) for var in kikimr_patched if var[0] not in exclude_options
-        ]
-    )
+    return '\n'.join(['%s="%s"' % (var[0], var[1]) for var in kikimr_patched if var[0] not in exclude_options])
 
 
 def kikimr_cfg_for_dynamic_slot(
@@ -515,9 +559,11 @@ def kikimr_cfg_for_dynamic_slot(
                 mon_port=None,
                 home=None,
                 syslog_service_tag=None,
-                exclude_options=['kikimr_system_file']
+                exclude_options=['kikimr_system_file'],
             ),
-        ] + ['kikimr_%s=%s' % (key, value) for key, value in zip(['ca', 'cert', 'key'], cert_params or []) if value] + [
+        ]
+        + ['kikimr_%s=%s' % (key, value) for key, value in zip(['ca', 'cert', 'key'], cert_params or []) if value]
+        + [
             CUSTOM_CONFIG_INJECTOR,
             CUSTOM_SYS_CONFIG_INJECTOR,
             # arguments
@@ -525,9 +571,10 @@ def kikimr_cfg_for_dynamic_slot(
             NODE_BROKER_ARGUMENT,
             SYS_LOG_SERVICE_TAG,
             tenant_argument(True),
-        ] + rb_arguments(rb_txt_enabled) \
-        + metering_arguments(metering_txt_enabled) \
-        + audit_arguments(audit_txt_enabled) \
-        + yql_arguments(yql_txt_enabled) \
+        ]
+        + rb_arguments(rb_txt_enabled)
+        + metering_arguments(metering_txt_enabled)
+        + audit_arguments(audit_txt_enabled)
+        + yql_arguments(yql_txt_enabled)
         + ([cms_config_cache_argument_for_dynamic_nodes(enable_cms_config_cache)] if enable_cms_config_cache else [])
     )

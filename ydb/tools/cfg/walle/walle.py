@@ -4,7 +4,7 @@ import zlib
 from abc import ABCMeta, abstractmethod
 
 
-class HostsFetcherInterface():
+class HostsFetcherInterface:
     __metaclass__ = ABCMeta
 
     @abstractmethod

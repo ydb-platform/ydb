@@ -272,6 +272,9 @@ public:
                 // Replace "ydb." -> "yds."
                 ret.Endpoint[2] = 's';
             }
+            if (isDedicatedDb) {
+                ret.Endpoint = "u-" + ret.Endpoint;
+            }
             return ret;
         };
         Parsers[NYql::EDatabaseType::ClickHouse] = [](

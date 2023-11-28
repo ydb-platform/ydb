@@ -100,3 +100,7 @@ END()
 RECURSE(
     logging
 )
+
+RECURSE_FOR_TESTS(
+    ut
+)

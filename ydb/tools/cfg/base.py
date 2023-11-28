@@ -266,7 +266,7 @@ def normalize_domain(domain_name):
 class ClusterDetailsProvider(object):
     def __init__(self, template, walle_provider, validator=None, database=None):
         if not validator:
-            validator = validation.Validator()
+            validator = validation.default_validator()
 
         self.__validator = validator
 

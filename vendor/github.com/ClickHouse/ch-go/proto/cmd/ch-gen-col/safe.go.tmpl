@@ -24,7 +24,11 @@ func (c *{{ .Type }}) DecodeColumn(r *Reader, rows int) error {
 	{{- if .SingleByte }}
 	data, err := r.ReadRaw(rows)
 	{{- else }}
+	{{- if .FixedStr }}
+	const size = {{ .Bytes }}
+	{{- else }}
 	const size = {{ .Bits }} / 8
+	{{- end }}
 	data, err := r.ReadRaw(rows * size)
 	{{- end }}
 	if err != nil {
@@ -51,10 +55,12 @@ func (c *{{ .Type }}) DecodeColumn(r *Reader, rows int) error {
 	_ = data[len(data)-size]
 	for i := 0; i <= len(data)-size; i += size {
 		v = append(v,
-			{{- if .IsFloat }}
+		{{- if .IsFloat }}
 			math.{{ .Name }}frombits(binary.LittleEndian.{{ .BinFunc }}(data[i:i+size])),
 		{{- else if .Cast }}
 			{{ .ElemType }}({{ .BinGet }}(data[i : i+size])),
+		{{- else if .FixedStr }}
+		    *(*{{ .ElemType }})(data[i : i+size]),
 		{{- else }}
 			{{ .BinGet }}(data[i : i+size]),
 		{{- end }}
@@ -88,7 +94,11 @@ func (c {{ .Type }}) EncodeColumn(b *Buffer) {
 		b.Buf[i+start] = {{ .UnsignedType }}(v[i])
 	}
 	{{- else }}
+	{{- if .FixedStr }}
+	const size = {{ .Bytes }}
+	{{- else }}
 	const size = {{ .Bits }} / 8
+	{{- end }}
 	offset := len(b.Buf)
 	b.Buf = append(b.Buf, make([]byte, size*len(v))...)
 	for _, vv := range v {
@@ -96,6 +106,8 @@ func (c {{ .Type }}) EncodeColumn(b *Buffer) {
 			b.Buf[offset : offset+size],
 		{{- if .IsFloat }}
 			math.{{ .Name }}bits(vv),
+		{{- else if .FixedStr }}
+            vv[:],
 		{{- else if .Cast }}
 			{{ .UnsignedType }}(vv),
 		{{- else }}

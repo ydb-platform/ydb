@@ -42,6 +42,20 @@ SRCS(
     col_enum8_gen.go
     col_enum8_unsafe_gen.go
     col_fixed_str.go
+    col_fixedstr128_gen.go
+    col_fixedstr128_unsafe_gen.go
+    col_fixedstr16_gen.go
+    col_fixedstr16_unsafe_gen.go
+    col_fixedstr256_gen.go
+    col_fixedstr256_unsafe_gen.go
+    col_fixedstr32_gen.go
+    col_fixedstr32_unsafe_gen.go
+    col_fixedstr512_gen.go
+    col_fixedstr512_unsafe_gen.go
+    col_fixedstr64_gen.go
+    col_fixedstr64_unsafe_gen.go
+    col_fixedstr8_gen.go
+    col_fixedstr8_unsafe_gen.go
     col_float32_gen.go
     col_float32_unsafe_gen.go
     col_float64_gen.go
@@ -149,6 +163,13 @@ GO_TEST_SRCS(
     col_enum16_gen_test.go
     col_enum8_gen_test.go
     col_fixed_str_test.go
+    col_fixedstr128_gen_test.go
+    col_fixedstr16_gen_test.go
+    col_fixedstr256_gen_test.go
+    col_fixedstr32_gen_test.go
+    col_fixedstr512_gen_test.go
+    col_fixedstr64_gen_test.go
+    col_fixedstr8_gen_test.go
     col_float32_gen_test.go
     col_float64_gen_test.go
     col_int128_gen_test.go

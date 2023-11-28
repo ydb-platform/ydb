@@ -23,7 +23,11 @@ func (c *{{ .Type }}) DecodeColumn(r *Reader, rows int) error {
 	s := *(*slice)(unsafe.Pointer(c))
 	{{- end }}
 	{{- if not .SingleByte }}
+	{{- if .FixedStr }}
+	const size = {{ .Bytes }}
+	{{- else }}
 	const size = {{ .Bits }} / 8
+	{{- end }}
 	s.Len *= size
 	s.Cap *= size
 	{{- end }}
@@ -48,7 +52,11 @@ func (c {{ .Type }}) EncodeColumn(b *Buffer) {
 	{{- if .SingleByte }}
 	b.Buf = append(b.Buf, make([]byte, len(v))...)
 	{{- else }}
+	{{- if .FixedStr }}
+	const size = {{ .Bytes }}
+	{{- else }}
 	const size = {{ .Bits }} / 8
+	{{- end }}
 	b.Buf = append(b.Buf, make([]byte, size*len(v))...)
 	{{- end }}
 	s := *(*slice)(unsafe.Pointer(&v))

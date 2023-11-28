@@ -112,6 +112,48 @@ func inferGenerated(t ColumnType) Column {
 		return new(ColUInt256).Nullable()
 	case ColumnTypeUInt256:
 		return new(ColUInt256)
+	case ColumnTypeArray.Sub(ColumnTypeFixedString.With("8")):
+		return new(ColFixedStr8).Array()
+	case ColumnTypeNullable.Sub(ColumnTypeFixedString.With("8")):
+		return new(ColFixedStr8).Nullable()
+	case ColumnTypeFixedString.With("8"):
+		return new(ColFixedStr8)
+	case ColumnTypeArray.Sub(ColumnTypeFixedString.With("16")):
+		return new(ColFixedStr16).Array()
+	case ColumnTypeNullable.Sub(ColumnTypeFixedString.With("16")):
+		return new(ColFixedStr16).Nullable()
+	case ColumnTypeFixedString.With("16"):
+		return new(ColFixedStr16)
+	case ColumnTypeArray.Sub(ColumnTypeFixedString.With("32")):
+		return new(ColFixedStr32).Array()
+	case ColumnTypeNullable.Sub(ColumnTypeFixedString.With("32")):
+		return new(ColFixedStr32).Nullable()
+	case ColumnTypeFixedString.With("32"):
+		return new(ColFixedStr32)
+	case ColumnTypeArray.Sub(ColumnTypeFixedString.With("64")):
+		return new(ColFixedStr64).Array()
+	case ColumnTypeNullable.Sub(ColumnTypeFixedString.With("64")):
+		return new(ColFixedStr64).Nullable()
+	case ColumnTypeFixedString.With("64"):
+		return new(ColFixedStr64)
+	case ColumnTypeArray.Sub(ColumnTypeFixedString.With("128")):
+		return new(ColFixedStr128).Array()
+	case ColumnTypeNullable.Sub(ColumnTypeFixedString.With("128")):
+		return new(ColFixedStr128).Nullable()
+	case ColumnTypeFixedString.With("128"):
+		return new(ColFixedStr128)
+	case ColumnTypeArray.Sub(ColumnTypeFixedString.With("256")):
+		return new(ColFixedStr256).Array()
+	case ColumnTypeNullable.Sub(ColumnTypeFixedString.With("256")):
+		return new(ColFixedStr256).Nullable()
+	case ColumnTypeFixedString.With("256"):
+		return new(ColFixedStr256)
+	case ColumnTypeArray.Sub(ColumnTypeFixedString.With("512")):
+		return new(ColFixedStr512).Array()
+	case ColumnTypeNullable.Sub(ColumnTypeFixedString.With("512")):
+		return new(ColFixedStr512).Nullable()
+	case ColumnTypeFixedString.With("512"):
+		return new(ColFixedStr512)
 	default:
 		return nil
 	}

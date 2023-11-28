@@ -231,6 +231,27 @@ PY_SRCS(
     numpy/dtypes.pyi
     numpy/exceptions.py
     numpy/exceptions.pyi
+    numpy/f2py/__init__.py
+    numpy/f2py/__main__.py
+    numpy/f2py/__version__.py
+    numpy/f2py/_backends/__init__.py
+    numpy/f2py/_backends/_backend.py
+    numpy/f2py/_backends/_distutils.py
+    numpy/f2py/_backends/_meson.py
+    numpy/f2py/_isocbind.py
+    numpy/f2py/auxfuncs.py
+    numpy/f2py/capi_maps.py
+    numpy/f2py/cb_rules.py
+    numpy/f2py/cfuncs.py
+    numpy/f2py/common_rules.py
+    numpy/f2py/crackfortran.py
+    numpy/f2py/diagnose.py
+    numpy/f2py/f2py2e.py
+    numpy/f2py/f90mod_rules.py
+    numpy/f2py/func2subr.py
+    numpy/f2py/rules.py
+    numpy/f2py/symbolic.py
+    numpy/f2py/use_rules.py
     numpy/fft/__init__.py
     numpy/fft/__init__.pyi
     numpy/fft/_pocketfft.py
@@ -545,7 +566,6 @@ RESOURCE_FILES(
 END()
 
 RECURSE(
-    numpy/f2py
     numpy/random
 )
 

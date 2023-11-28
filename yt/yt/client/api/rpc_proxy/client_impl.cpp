@@ -2031,6 +2031,13 @@ TFuture<void> TClient::AlterQuery(
     ThrowUnimplemented("AlterQuery");
 }
 
+TFuture<TBundleConfigDescriptor> TClient::GetBundleConfig(
+    const TString& /*bundleName*/,
+    const TGetBundleConfigOptions& /*options*/)
+{
+    ThrowUnimplemented("GetBundleConfig");
+}
+
 TFuture<void> TClient::SetUserPassword(
     const TString& /*user*/,
     const TString& /*currentPasswordSha256*/,

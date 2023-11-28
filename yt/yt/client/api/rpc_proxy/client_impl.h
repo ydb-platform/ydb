@@ -482,6 +482,10 @@ public:
         const TString& passwordSha256,
         const TListUserTokensOptions& options) override;
 
+    TFuture<TBundleConfigDescriptor> GetBundleConfig(
+        const TString& bundleName,
+        const TGetBundleConfigOptions& options = {}) override;
+
 private:
     const TConnectionPtr Connection_;
     const NRpc::TDynamicChannelPoolPtr ChannelPool_;

@@ -13,6 +13,7 @@ SRCS(
     api/client_cache.cpp
     api/delegating_client.cpp
     api/etc_client.cpp
+    api/bundle_controller_client.cpp
     api/journal_client.cpp
     api/operation_client.cpp
     api/security_client.cpp

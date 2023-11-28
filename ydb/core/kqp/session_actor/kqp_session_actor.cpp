@@ -446,7 +446,9 @@ public:
         YQL_ENSURE(QueryState);
         auto ev = QueryState->BuildCompileRequest(CompilationCookie);
         LOG_D("Sending CompileQuery request");
-        Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId);
+
+        Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
+            QueryState->KqpSessionSpan.GetTraceId());
         Become(&TKqpSessionActor::ExecuteState);
     }
 
@@ -467,7 +469,8 @@ public:
         // table versions are not the same. need the query recompilation.
         if (!QueryState->EnsureTableVersions(*response)) {
             auto ev = QueryState->BuildReCompileRequest(CompilationCookie);
-            Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId);
+            Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
+                QueryState->KqpSessionSpan.GetTraceId());
             return;
         }
 
@@ -1487,7 +1490,7 @@ public:
         }
 
         response->SetQueryDiagnostics(QueryState->ReplayMessage);
-        
+
         // Result for scan query is sent directly to target actor.
         Y_ABORT_UNLESS(response->GetArena());
         if (QueryState->PreparedQuery && !QueryState->IsStreamResult()) {
@@ -1601,15 +1604,19 @@ public:
         }
 
         if (status == Ydb::StatusIds::SUCCESS) {
-            if (QueryState && QueryState->KqpSessionSpan) {
-                QueryState->KqpSessionSpan.EndOk();
+            if (QueryState) {
+                if (QueryState->KqpSessionSpan) {
+                    QueryState->KqpSessionSpan.EndOk();
+                }
+                LWTRACK(KqpSessionReplySuccess, QueryState->Orbit, record.GetArena() ? record.GetArena()->SpaceUsed() : 0);
             }
-            LWTRACK(KqpSessionReplySuccess, QueryState->Orbit, record.GetArena() ? record.GetArena()->SpaceUsed() : 0);
         } else {
-            if (QueryState && QueryState->KqpSessionSpan) {
-                QueryState->KqpSessionSpan.EndError(response.DebugString());
+            if (QueryState) {
+                if (QueryState->KqpSessionSpan) {
+                    QueryState->KqpSessionSpan.EndError(response.DebugString());
+                }
+                LWTRACK(KqpSessionReplyError, QueryState->Orbit, TStringBuilder() << status);
             }
-            LWTRACK(KqpSessionReplyError, QueryState->Orbit, TStringBuilder() << status);
         }
 
         Counters->ReportResponseStatus(Settings.DbCounters, record.ByteSize(), record.GetYdbStatus());
@@ -2027,7 +2034,7 @@ public:
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
-                hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);                
+                hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvCloseSessionResponse, HandleCleanup);

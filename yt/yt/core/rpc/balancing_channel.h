@@ -18,14 +18,14 @@ IChannelPtr CreateBalancingChannel(
     IChannelFactoryPtr channelFactory,
     TString endpointDescription,
     NYTree::IAttributeDictionaryPtr endpointAttributes,
-    IPeerDiscoveryPtr peerDiscovery = CreateDefaultPeerDiscovery(TDiscoverRequestHook{}));
+    IPeerDiscoveryPtr peerDiscovery = CreateDefaultPeerDiscovery());
 
 IRoamingChannelProviderPtr CreateBalancingChannelProvider(
     TBalancingChannelConfigPtr config,
     IChannelFactoryPtr channelFactory,
     TString endpointDescription,
     NYTree::IAttributeDictionaryPtr endpointAttributes,
-    IPeerDiscoveryPtr peerDiscovery = CreateDefaultPeerDiscovery(TDiscoverRequestHook{}));
+    IPeerDiscoveryPtr peerDiscovery = CreateDefaultPeerDiscovery());
 
 ////////////////////////////////////////////////////////////////////////////////
 

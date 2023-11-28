@@ -6,13 +6,15 @@
 
 namespace NYT::NRpc {
 
+using NYT::FromProto;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TDefaultPeerDiscovery
     : public IPeerDiscovery
 {
 public:
-    TDefaultPeerDiscovery(TDiscoverRequestHook hook)
+    explicit TDefaultPeerDiscovery(TDiscoverRequestHook hook)
         : Hook_(std::move(hook))
     { }
 
@@ -35,14 +37,14 @@ public:
     }
 
 private:
-    TDiscoverRequestHook Hook_;
+    const TDiscoverRequestHook Hook_;
 
     static TPeerDiscoveryResponse ConvertResponse(const TIntrusivePtr<TTypedClientResponse<NProto::TRspDiscover>>& rsp)
     {
-        TPeerDiscoveryResponse response;
-        response.Addresses = NYT::FromProto<std::vector<TString>>(rsp->suggested_addresses());
-        response.IsUp = rsp->up();
-        return response;
+        return TPeerDiscoveryResponse{
+            .IsUp = rsp->up(),
+            .Addresses = FromProto<std::vector<TString>>(rsp->suggested_addresses()),
+        };
     }
 };
 

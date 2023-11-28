@@ -335,8 +335,7 @@ private:
             YT_LOG_DEBUG_IF(authError, "Peer has reported authentication error on discovery (Address: %v)",
                 address);
             if (rspOrError.IsOK() || authError) {
-                NProto::TRspDiscover resp;
-                auto suggestedAddresses = FromProto<std::vector<TString>>(resp.suggested_addresses());
+                auto suggestedAddresses = authError ? std::vector<TString>() : rspOrError.Value().Addresses;
                 bool up = authError ? true : rspOrError.Value().IsUp;
 
                 if (!suggestedAddresses.empty()) {

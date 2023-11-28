@@ -244,7 +244,7 @@ TConnection::TConnection(TConnectionConfigPtr config, TConnectionOptions options
         MakeEndpointDescription(Config_, ConnectionId_),
         MakeEndpointAttributes(Config_, ConnectionId_),
         TApiServiceProxy::GetDescriptor().ServiceName,
-        CreateDefaultPeerDiscovery(TDiscoverRequestHook())))
+        CreateDefaultPeerDiscovery()))
 {
     if (options.ConnectionInvoker) {
         ConnectionInvoker_ = options.ConnectionInvoker;

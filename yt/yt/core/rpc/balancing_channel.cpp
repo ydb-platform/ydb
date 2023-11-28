@@ -189,7 +189,7 @@ public:
                 .Item("addresses").Value(Config_->Addresses)
                 .Items(*endpointAttributes)
             .EndMap()))
-        , PeerDiscovery_(peerDiscovery)
+        , PeerDiscovery_(std::move(peerDiscovery))
     { }
 
     const TString& GetEndpointDescription() const override

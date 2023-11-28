@@ -13,6 +13,8 @@
 
 #define TypeName PG_TypeName
 #define SortBy PG_SortBy
+#define Sort PG_Sort
+#define Unique PG_Unique
 #undef SIZEOF_SIZE_T
 extern "C" {
 #include "postgres.h"
@@ -35,6 +37,7 @@ extern "C" {
 #include "storage/latch.h"
 #include "storage/proc.h"
 #include "miscadmin.h"
+#include "tcop/tcopprot.h"
 #include "thread_inits.h"
 #undef Abs
 #undef Min
@@ -264,4 +267,5 @@ extern "C" void setup_pg_thread_cleanup() {
 
     InitializeSession();
     work_mem = MAX_KILOBYTES; // a way to postpone spilling for tuple stores
+    assign_max_stack_depth(1024, nullptr);
 };

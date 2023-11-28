@@ -383,12 +383,22 @@ private:
         // profile stats
         ADD_COUNTER(BuildCpuTimeUs)
 
+        ui64 ingressBytes = 0;
         for (const auto& ingress : s.GetIngress()) {
+            ingressBytes += ingress.GetBytes();
             TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Ingress" + ingress.GetName() + "Bytes"), ingress.GetBytes());
         }
+        if (ingressBytes) {
+            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "IngressBytes"), ingressBytes);
+        }
 
+        ui64 egressBytes = 0;
         for (const auto& egress : s.GetEgress()) {
+            egressBytes += egress.GetBytes();
             TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Egress" + egress.GetName() + "Bytes"), egress.GetBytes());
+        }
+        if (egressBytes) {
+            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "EgressBytes"), egressBytes);
         }
 
         if (auto v = x.GetMkqlMaxMemoryUsage()) {

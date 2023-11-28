@@ -89,6 +89,7 @@ private:
             FFunc(TEvConsole::EvAlterTenantRequest, ForwardToTenantsManager);
             FFunc(TEvConsole::EvCheckConfigUpdatesRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvConfigNotificationResponse, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvIsYamlReadOnlyRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvConfigureRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetAllConfigsRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetAllMetadataRequest, ForwardToConfigsManager);

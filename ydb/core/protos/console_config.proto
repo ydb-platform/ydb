@@ -128,6 +128,7 @@ message TConfigItem {
         CompConveyorConfigItem = 72;
         QueryServiceConfigItem = 73;
         InsertConveyorConfigItem = 74;
+        AllowEditYamlInUiItem = 75;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;
@@ -283,6 +284,14 @@ message TGetAllConfigsRequest {
 message TGetAllConfigsResponse {
     reserved 1;
     optional Ydb.DynamicConfig.GetConfigResult Response = 2;
+}
+
+message TIsYamlReadOnlyRequest {
+    optional bytes UserToken = 1;
+}
+
+message TIsYamlReadOnlyResponse {
+    optional bool ReadOnly = 1;
 }
 
 message TGetNodeLabelsRequest {

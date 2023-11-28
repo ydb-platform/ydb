@@ -65,8 +65,14 @@ public:
             ApiHandlers["/api/console/yamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvGetAllConfigsRequest,
                                                                                              NConsole::TEvConsole::TEvGetAllConfigsResponse, true, true>>;
 
+            ApiHandlers["/api/console/readonly"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvIsYamlReadOnlyRequest,
+                                                                                             NConsole::TEvConsole::TEvIsYamlReadOnlyResponse, true, true>>;
+
             ApiHandlers["/api/console/removevolatileyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvRemoveVolatileConfigRequest,
                                                                                          NConsole::TEvConsole::TEvRemoveVolatileConfigResponse, true, true>>;
+
+            ApiHandlers["/api/console/configureyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvReplaceYamlConfigRequest,
+                                                                                            NConsole::TEvConsole::TEvReplaceYamlConfigResponse, true, true>>;
 
             ApiHandlers["/api/console/configurevolatileyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvAddVolatileConfigRequest,
                                                                                             NConsole::TEvConsole::TEvAddVolatileConfigResponse, true, true>>;

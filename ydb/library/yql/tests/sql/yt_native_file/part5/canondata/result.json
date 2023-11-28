@@ -2660,9 +2660,9 @@
     ],
     "test.test[join-mergejoin_with_different_key_names--Debug]": [
         {
-            "checksum": "cf69297c22b2775b8c2548f0d88a1964",
-            "size": 7997,
-            "uri": "https://{canondata_backend}/1936273/0acf964c75c65d637b5e42aede4cb228a47132fc/resource.tar.gz#test.test_join-mergejoin_with_different_key_names--Debug_/opt.yql"
+            "checksum": "34a353bc2edb4d2d2298b797a8bb9cff",
+            "size": 7980,
+            "uri": "https://{canondata_backend}/1924537/e92f29984818b3263df1bdb38087134e330299ca/resource.tar.gz#test.test_join-mergejoin_with_different_key_names--Debug_/opt.yql"
         }
     ],
     "test.test[join-mergejoin_with_different_key_names--Plan]": [

@@ -3460,9 +3460,9 @@
     ],
     "test.test[EquiJoinOrdered-JoinOrderedOpt2Key2-Debug]": [
         {
-            "checksum": "f402f4ea72fe9fbb7a953071a29cde70",
-            "size": 17057,
-            "uri": "https://{canondata_backend}/1936842/5ec728eb38b21f2ebf6fcbd440711eeb6da6a428/resource.tar.gz#test.test_EquiJoinOrdered-JoinOrderedOpt2Key2-Debug_/opt.yql"
+            "checksum": "8fc8335dcb05aa9bf084b249ea5ad48e",
+            "size": 16984,
+            "uri": "https://{canondata_backend}/995452/de79e3ba669e27014d9c3fb8659c721e7f64b879/resource.tar.gz#test.test_EquiJoinOrdered-JoinOrderedOpt2Key2-Debug_/opt.yql"
         },
         {
             "checksum": "4dd68f5100e1caefe7d069c1231b7925",

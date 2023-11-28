@@ -2309,9 +2309,9 @@
     ],
     "test.test[EquiJoinAny-MergeAnyAll-Debug]": [
         {
-            "checksum": "69a1a8fd35b5fb71042def56d05c67f4",
-            "size": 14865,
-            "uri": "https://{canondata_backend}/1942278/95ffb5252ba8a2116c74e3fefbd5933ff4dab873/resource.tar.gz#test.test_EquiJoinAny-MergeAnyAll-Debug_/opt.yql"
+            "checksum": "d7bc4d241c80afc5a78d3d8c123d5249",
+            "size": 14695,
+            "uri": "https://{canondata_backend}/1775059/4fd6fc1ec0a79ec1976a3fb817bf3b53df6309a1/resource.tar.gz#test.test_EquiJoinAny-MergeAnyAll-Debug_/opt.yql"
         },
         {
             "checksum": "ff8e0b78e3292421a664fdf22102be42",

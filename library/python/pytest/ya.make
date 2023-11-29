@@ -22,7 +22,7 @@ PEERDIR(
     library/python/testing/yatest_lib
 )
 
-IF (NOT OPENSOURCE AND NOT OS_ANDROID AND NOT OS_IOS)
+IF (NOT OPENSOURCE AND NOT OS_ANDROID AND NOT OS_IOS AND NOT MAPSMOBI_BUILD_TARGET)
     # FIXME: should be fixed properly in YA-1499
     PEERDIR(contrib/tools/gprof2dot)
 ENDIF()

@@ -7,6 +7,7 @@ from typing import Callable
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Pattern
 from typing import Tuple
 from typing import Union
 from urllib.parse import parse_qsl
@@ -391,7 +392,7 @@ def multipart_matcher(
 
 
 def header_matcher(
-    headers: Dict[str, str], strict_match: bool = False
+    headers: Dict[str, Union[str, Pattern[str]]], strict_match: bool = False
 ) -> Callable[..., Any]:
     """
     Matcher to match 'headers' argument in request using the responses library.

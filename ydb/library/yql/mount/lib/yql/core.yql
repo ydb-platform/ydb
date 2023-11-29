@@ -442,6 +442,42 @@ def signature(script, name):
     (lambda '() (Apply SpreadMembersImpl list fields (Bool '1)))))
 )))
 
+(let ListFromTupleImpl (lambda '(tuple) (block '(
+    (let n (MatchType tuple 'Tuple (lambda '() (Length (TupleTypeComponents (TypeHandle (TypeOf tuple))))) (lambda '() (Uint32 '0))))
+    (let lambdaCode (LambdaCode (lambda '(tupleCode) (block '(
+        (let items (Map (ListFromRange (Uint32 '0) n) (lambda '(i) 
+            (FuncCode (String 'Nth) tupleCode (AtomCode (SafeCast i (DataType 'String)))))))
+        (return (FuncCode (String 'AsList) items))
+    )))))
+    (return (Apply (EvaluateCode lambdaCode) tuple))
+))))
+
+(let ListToTupleImpl (lambda '(list n) (block '(
+    (let list (Ensure list (== (Length list) n) (String '"Mismatch length of list")))
+    (let lambdaCode (LambdaCode (lambda '(listCode) (block '(
+        (let indexDictCode (FuncCode (String 'ToIndexDict) listCode))
+        (let items (Map (ListFromRange (Uint32 '0) n) (lambda '(i) 
+            (FuncCode (String 'Unwrap) (FuncCode (String 'Lookup) indexDictCode (ReprCode i))))))
+        (return (ListCode items))
+    )))))
+    (return (Apply (EvaluateCode lambdaCode) list))))
+))
+
+(let ListFromTuple (lambda '(tuple) 
+    (MatchType tuple 
+        'Null (lambda '() (Null))
+        'Optional (lambda '() (Map tuple (lambda '(unpacked) (Apply ListFromTupleImpl unpacked))))
+        (lambda '() (Apply ListFromTupleImpl tuple)))
+))
+
+(let ListToTuple (lambda '(list n) 
+    (MatchType list 
+        'Null (lambda '() (Null))
+        'EmptyList (lambda '() (Ensure '() (== n (Uint32 '0)) (String '"Expected empty tuple") ))
+        'Optional (lambda '() (Map list (lambda '(unpacked) (Apply ListToTupleImpl unpacked n))))
+        (lambda '() (Apply ListToTupleImpl list n)))
+))
+
 (export Equals)
 (export Unequals)
 (export FindIndex)
@@ -477,4 +513,6 @@ def signature(script, name):
 (export ForceRenameMembers)
 (export SpreadMembers)
 (export ForceSpreadMembers)
+(export ListFromTuple)
+(export ListToTuple)
 )

@@ -3242,6 +3242,8 @@ struct TBuiltinFuncData {
             {"forcerenamemembers", { "ForceRenameMembers", 2, 2}},
             {"spreadmembers", { "SpreadMembers", 2, 2}},
             {"forcespreadmembers", { "ForceSpreadMembers", 2, 2}},
+            {"listfromtuple", { "ListFromTuple", 1, 1}},
+            {"listtotuple", { "ListToTuple", 2, 2}},
         };
         return coreFuncs;
     }

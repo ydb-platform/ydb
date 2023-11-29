@@ -136,6 +136,15 @@ private:
         : ColumnId(columnId) {
     }
 public:
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "compression=" << (Compression ? Compression->DebugString() : "NO") << ";";
+        sb << "encoding=" << (DictionaryEncoding ? DictionaryEncoding->DebugString() : "NO") << ";";
+        sb << "loader=" << (Loader ? Loader->DebugString() : "NO") << ";";
+        return sb;
+    }
+
     NArrow::NTransformation::ITransformer::TPtr GetSaveTransformer() const;
     static std::optional<TColumnFeatures> BuildFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo, const TIndexInfo& indexInfo);
     static TColumnFeatures BuildFromIndexInfo(const ui32 columnId, const TIndexInfo& indexInfo);

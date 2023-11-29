@@ -292,6 +292,14 @@ class TVersionedIndex {
     std::map<ui64, ISnapshotSchema::TPtr> SnapshotByVersion;
     ui64 LastSchemaVersion = 0;
 public:
+    TString DebugString() const {
+        TStringBuilder sb;
+        for (auto&& i : Snapshots) {
+            sb << i.first << ":" << i.second->DebugString() << ";";
+        }
+        return sb;
+    }
+
     ISnapshotSchema::TPtr GetSchema(const ui64 version) const {
         auto it = SnapshotByVersion.find(version);
         return it == SnapshotByVersion.end() ? nullptr : it->second;

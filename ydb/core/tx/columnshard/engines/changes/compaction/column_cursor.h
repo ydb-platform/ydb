@@ -20,6 +20,7 @@ private:
     const TColumnRecord* CurrentColumnChunk = nullptr;
     std::shared_ptr<arrow::Array> CurrentArray;
     std::shared_ptr<TColumnLoader> ColumnLoader;
+    const ui64 PortionId;
 
     const std::shared_ptr<arrow::Array>& GetCurrentArray();
 
@@ -36,11 +37,13 @@ public:
 
     bool Fetch(TMergedColumn& column);
 
-    TPortionColumnCursor(const std::vector<IPortionColumnChunk::TPtr>& columnChunks, const std::vector<const TColumnRecord*>& records, const std::shared_ptr<TColumnLoader> loader)
+    TPortionColumnCursor(const std::vector<IPortionColumnChunk::TPtr>& columnChunks, const std::vector<const TColumnRecord*>& records, const std::shared_ptr<TColumnLoader>& loader, const ui64 portionId)
         : BlobChunks(columnChunks)
         , ColumnChunks(records)
         , ColumnLoader(loader)
+        , PortionId(portionId)
     {
+        Y_UNUSED(PortionId);
         Y_ABORT_UNLESS(BlobChunks.size());
         Y_ABORT_UNLESS(ColumnChunks.size() == BlobChunks.size());
         CurrentBlobChunk = BlobChunks.front();

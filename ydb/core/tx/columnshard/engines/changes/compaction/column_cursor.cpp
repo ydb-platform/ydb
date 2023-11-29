@@ -8,7 +8,7 @@ bool TPortionColumnCursor::Fetch(TMergedColumn& column) {
     Y_ABORT_UNLESS(RecordIndexStart);
     ui32 currentStartPortionIdx = *RecordIndexStart;
     ui32 currentFinishPortionIdx = RecordIndexFinish;
-
+//    NActors::TLogContextGuard lg(NActors::TLogContextBuilder::Build()("portion_id", PortionId));
     while (currentStartPortionIdx - ChunkRecordIndexStartPosition >= CurrentColumnChunk->GetMeta().GetNumRowsVerified()) {
         if (!NextChunk()) {
             return false;
@@ -18,11 +18,11 @@ bool TPortionColumnCursor::Fetch(TMergedColumn& column) {
     ui32 currentStart = currentStartPortionIdx - ChunkRecordIndexStartPosition;
     while (currentFinishPortionIdx - ChunkRecordIndexStartPosition >= CurrentColumnChunk->GetMeta().GetNumRowsVerified()) {
         const ui32 currentFinish = CurrentColumnChunk->GetMeta().GetNumRowsVerified();
-        if (currentStart == 0) {
-            column.AppendBlob(CurrentBlobChunk->GetData(), *CurrentColumnChunk);
-        } else {
+//        if (currentStart == 0) {
+//            column.AppendBlob(CurrentBlobChunk->GetData(), *CurrentColumnChunk);
+//        } else {
             column.AppendSlice(GetCurrentArray(), currentStart, currentFinish - currentStart);
-        }
+//        }
         currentStart = 0;
         if (!NextChunk()) {
             return false;

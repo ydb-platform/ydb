@@ -12,7 +12,7 @@ extern "C" {
 
 ssize_t BridgeGetAbiVersion()
 {
-    return 0;
+    return 1; // EYqlPluginAbiVersion::AbortQuery
 }
 
 TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOptions)
@@ -109,6 +109,17 @@ TBridgeQueryResult* BridgeGetProgress(TBridgeYqlPlugin* plugin, const char* quer
     auto result = nativePlugin->GetProgress(NYT::TGuid::FromString(queryId));
     FillString(bridgeResult->Plan, bridgeResult->PlanLength, result.Plan);
     FillString(bridgeResult->Progress, bridgeResult->ProgressLength, result.Progress);
+
+    return bridgeResult;
+}
+
+TBridgeAbortResult* BridgeAbort(TBridgeYqlPlugin* plugin, const char* queryId)
+{
+    auto* nativePlugin = reinterpret_cast<IYqlPlugin*>(plugin);
+    auto* bridgeResult = new TBridgeAbortResult;
+
+    auto result = nativePlugin->GetProgress(NYT::TGuid::FromString(queryId));
+    FillString(bridgeResult->YsonError, bridgeResult->YsonErrorLength, result.YsonError);
 
     return bridgeResult;
 }

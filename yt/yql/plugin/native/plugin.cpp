@@ -72,6 +72,9 @@ struct TQueryPlan
 
 struct TActiveQuery
 {
+    NYql::TProgramPtr Program;
+    bool Compiled = false;
+
     TProgressMerger ProgressMerger;
     std::optional<TString> Plan;
 };
@@ -242,9 +245,19 @@ public:
         YQL_LOG(INFO) << "YQL plugin initialized";
     }
 
-    TQueryResult GuardedRun(TQueryId queryId, TString impersonationUser, TString queryText, TYsonString settings, std::vector<TQueryFile> files)
+    TQueryResult GuardedRun(
+        TQueryId queryId,
+        TString impersonationUser,
+        TString queryText,
+        TYsonString settings,
+        std::vector<TQueryFile> files)
     {
         auto program = ProgramFactory_->Create("-memory-", queryText);
+        {
+            auto guard = WriterGuard(ProgressSpinLock);
+            ActiveQueriesProgress_[queryId].Program = program;
+        }
+
         program->AddCredentials({{"impersonation_user_yt", NYql::TCredential("yt", "", impersonationUser)}});
         program->SetOperationAttrsYson(PatchQueryAttributes(OperationAttributes_, settings));
 
@@ -289,6 +302,11 @@ public:
             };
         }
 
+        {
+            auto guard = WriterGuard(ProgressSpinLock);
+            ActiveQueriesProgress_[queryId].Compiled = true;
+        }
+
         NYql::TProgram::TStatus status = NYql::TProgram::TStatus::Error;
         status = program->RunWithConfig(impersonationUser, pipelineConfigurator);
 
@@ -325,7 +343,12 @@ public:
         };
     }
 
-    TQueryResult Run(TQueryId queryId, TString impersonationUser, TString queryText, TYsonString settings, std::vector<TQueryFile> files) noexcept override
+    TQueryResult Run(
+        TQueryId queryId,
+        TString impersonationUser,
+        TString queryText,
+        TYsonString settings,
+        std::vector<TQueryFile> files) noexcept override
     {
         try {
             return GuardedRun(queryId, impersonationUser, queryText, settings, files);
@@ -356,6 +379,35 @@ public:
                 .YsonError = MessageToYtErrorYson(Format("No progress for queryId: %v", queryId)),
             };
         }
+    }
+
+    TAbortResult Abort(TQueryId queryId) noexcept override
+    {
+        NYql::TProgramPtr program;
+        {
+            auto guard = WriterGuard(ProgressSpinLock);
+            if (!ActiveQueriesProgress_.contains(queryId)) {
+                return TAbortResult{
+                    .YsonError = MessageToYtErrorYson(Format("Query %v is not found", queryId)),
+                };
+            }
+            if (!ActiveQueriesProgress_[queryId].Compiled) {
+                return TAbortResult{
+                    .YsonError = MessageToYtErrorYson(Format("Query %v is compiled", queryId)),
+                };
+            }
+            program = ActiveQueriesProgress_[queryId].Program;
+        }
+
+        try {
+            program->Abort().GetValueSync();
+        } catch (...) {
+            return TAbortResult{
+                .YsonError = MessageToYtErrorYson(Format("Failed to abort query %v: %v", queryId, CurrentExceptionMessage())),
+            };
+        }
+
+        return {};
     }
 
 private:

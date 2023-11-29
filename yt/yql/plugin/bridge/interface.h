@@ -82,9 +82,16 @@ struct TBridgeQueryFile
     EQueryFileContentType Type;
 };
 
+struct TBridgeAbortResult
+{
+    const char* YsonError = nullptr;
+    ssize_t YsonErrorLength = 0;
+};
+
 using TFuncBridgeFreeQueryResult = void(TBridgeQueryResult* result);
 using TFuncBridgeRun = TBridgeQueryResult*(TBridgeYqlPlugin* plugin, const char* queryId, const char* impersonationUser, const char* queryText, const char* settings, const TBridgeQueryFile* files, int fileCount);
 using TFuncBridgeGetProgress = TBridgeQueryResult*(TBridgeYqlPlugin* plugin, const char* queryId);
+using TFuncBridgeAbort = TBridgeAbortResult*(TBridgeYqlPlugin* plugin, const char* queryId);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -94,6 +101,7 @@ using TFuncBridgeGetProgress = TBridgeQueryResult*(TBridgeYqlPlugin* plugin, con
     XX(BridgeFreeQueryResult) \
     XX(BridgeRun) \
     XX(BridgeGetProgress) \
-    XX(BridgeGetAbiVersion)
+    XX(BridgeGetAbiVersion) \
+    XX(BridgeAbort)
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -233,9 +233,9 @@ struct TDataProviderInfo {
 
     std::function<bool()> HasActiveProcesses;
 
-    std::function<void(const TString& sessionId)> CloseSession;
+    std::function<NThreading::TFuture<void>(const TString& sessionId)> CloseSession;
 
-    std::function<void(const TString& sessionId)> CleanupSession;
+    std::function<NThreading::TFuture<void>(const TString& sessionId)> CleanupSession;
 
     std::function<TString(const TString& url, const TString& alias)> TokenResolver;
 };

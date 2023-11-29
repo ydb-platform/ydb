@@ -356,12 +356,14 @@ public:
         }
     }
 
-    void CloseSession(TCloseSessionOptions&& options) final {
+    NThreading::TFuture<void> CloseSession(TCloseSessionOptions&& options) final {
         Sessions.erase(options.SessionId());
+        return MakeFuture();
     }
 
-    void CleanupSession(TCleanupSessionOptions&& options) final {
+    NThreading::TFuture<void> CleanupSession(TCleanupSessionOptions&& options) final {
         Y_UNUSED(options);
+        return MakeFuture();
     }
 
     template<typename T>

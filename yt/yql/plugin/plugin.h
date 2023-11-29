@@ -57,6 +57,12 @@ struct TQueryFile
     EQueryFileContentType Type;
 };
 
+struct TAbortResult
+{
+    //! YSON representation of a YT error.
+    std::optional<TString> YsonError;
+};
+
 //! This interface encapsulates YT <-> YQL integration.
 //! There are two major implementation: one of them is based
 //! on YQL code and another wraps the pure C bridge interface, which
@@ -66,7 +72,13 @@ struct TQueryFile
 */
 struct IYqlPlugin
 {
-    virtual TQueryResult Run(TQueryId queryId, TString impersonationUser, TString queryText, TYsonString settings, std::vector<TQueryFile> files) noexcept = 0;
+    virtual TQueryResult Run(
+        TQueryId queryId,
+        TString impersonationUser,
+        TString queryText,
+        TYsonString settings,
+        std::vector<TQueryFile> files) noexcept = 0;
+    virtual TAbortResult Abort(TQueryId queryId) noexcept = 0;
     virtual TQueryResult GetProgress(TQueryId queryId) noexcept = 0;
 
     virtual ~IYqlPlugin() = default;

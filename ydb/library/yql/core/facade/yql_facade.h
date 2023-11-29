@@ -186,7 +186,7 @@ public:
     bool HasActiveProcesses();
     bool NeedWaitForActiveProcesses();
 
-    void Abort();
+    NThreading::TFuture<void> Abort();
 
     inline TIssues Issues() {
         if (ExprCtx_) {
@@ -362,8 +362,8 @@ private:
 
     NThreading::TFuture<void> OpenSession(const TString& username);
 
-    void CleanupLastSession();
-    void CloseLastSession();
+    NThreading::TFuture<void> CleanupLastSession();
+    NThreading::TFuture<void> CloseLastSession();
 
     TFutureStatus RemoteKikimrValidate(const TString& cluster);
     TFutureStatus RemoteKikimrOptimize(const TString& cluster, const IPipelineConfigurator* pipelineConf);
@@ -384,6 +384,7 @@ private:
     const TIntrusivePtr<ITimeProvider> TimeProvider_;
     const ui64 NextUniqueId_;
     TVector<TDataProviderInitializer> DataProvidersInit_;
+    TAdaptiveLock DataProvidersLock_;
     TVector<TDataProviderInfo> DataProviders_;
     TYqlOperationOptions OperationOptions_;
     TCredentials::TPtr Credentials_;

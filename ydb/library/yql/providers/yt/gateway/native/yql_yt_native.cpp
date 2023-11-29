@@ -230,7 +230,7 @@ public:
         }
     }
 
-    void CloseSession(TCloseSessionOptions&& options) final {
+    TFuture<void> CloseSession(TCloseSessionOptions&& options) final {
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
         try {
             with_lock(Mutex_) {
@@ -242,12 +242,14 @@ public:
                     session.Drop();
                 }
             }
-        } catch (const yexception& e) {
-            YQL_CLOG(ERROR, ProviderYt) << e.what();
+        } catch (...) {
+            return MakeErrorFuture<void>(std::current_exception());;
         }
+
+        return MakeFuture();
     }
 
-    void CleanupSession(TCleanupSessionOptions&& options) final {
+    TFuture<void> CleanupSession(TCleanupSessionOptions&& options) final {
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
         try {
             if (auto session = GetSession(options.SessionId(), false)) {
@@ -258,8 +260,10 @@ public:
                 }
             }
         } catch (...) {
-            YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+            return MakeErrorFuture<void>(std::current_exception());;
         }
+
+        return MakeFuture();
     }
 
     TFuture<TFinalizeResult> Finalize(TFinalizeOptions&& options) final {

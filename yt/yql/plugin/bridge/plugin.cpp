@@ -87,7 +87,12 @@ public:
         BridgePlugin_ = BridgeCreateYqlPlugin(&bridgeOptions);
     }
 
-    TQueryResult Run(TQueryId queryId, TString impersonationUser, TString queryText, NYson::TYsonString settings, std::vector<TQueryFile> files) noexcept override
+    TQueryResult Run(
+        TQueryId queryId,
+        TString impersonationUser,
+        TString queryText,
+        NYson::TYsonString settings,
+        std::vector<TQueryFile> files) noexcept override
     {
         auto settingsString = settings ? settings.ToString() : "{}";
         auto queryIdStr = ToString(queryId);

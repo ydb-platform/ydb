@@ -301,9 +301,11 @@ TProgram::TProgram(
 
 TProgram::~TProgram() {
     try {
-        CloseLastSession();
+        CloseLastSession().GetValueSync();
         // stop all non complete execution before deleting TExprCtx
-        DataProviders_.clear();
+        with_lock (DataProvidersLock_) {
+            DataProviders_.clear();
+        }
     } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;
     }
@@ -682,13 +684,15 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
     }
     TypeCtx_->IsReadOnly = true;
 
-    for (const auto& dp : DataProviders_) {
-        if (!dp.RemoteClusterProvider || !dp.RemoteValidate) {
-            continue;
-        }
+    with_lock (DataProvidersLock_) {
+        for (const auto& dp : DataProviders_) {
+            if (!dp.RemoteClusterProvider || !dp.RemoteValidate) {
+                continue;
+            }
 
-        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
-            return dp.RemoteValidate(*cluster, SourceSyntax_, SourceCode_, *ExprCtx_);
+            if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
+                return dp.RemoteValidate(*cluster, SourceSyntax_, SourceCode_, *ExprCtx_);
+            }
         }
     }
 
@@ -749,15 +753,17 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
     }
     TypeCtx_->IsReadOnly = true;
 
-    for (const auto& dp : DataProviders_) {
-        if (!dp.RemoteClusterProvider || !dp.RemoteOptimize) {
-            continue;
-        }
+    with_lock (DataProvidersLock_) {
+        for (const auto& dp : DataProviders_) {
+            if (!dp.RemoteClusterProvider || !dp.RemoteOptimize) {
+                continue;
+            }
 
-        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
-            return dp.RemoteOptimize(*cluster,
-                SourceSyntax_, SourceCode_, nullptr,
-                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_);
+            if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
+                return dp.RemoteOptimize(*cluster,
+                    SourceSyntax_, SourceCode_, nullptr,
+                    TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_);
+            }
         }
     }
 
@@ -813,15 +819,17 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     }
     TypeCtx_->IsReadOnly = true;
 
-    for (const auto& dp : DataProviders_) {
-        if (!dp.RemoteClusterProvider || !dp.RemoteOptimize) {
-            continue;
-        }
+    with_lock (DataProvidersLock_) {
+        for (const auto& dp : DataProviders_) {
+            if (!dp.RemoteClusterProvider || !dp.RemoteOptimize) {
+                continue;
+            }
 
-        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
-            return dp.RemoteOptimize(*cluster,
-                SourceSyntax_, SourceCode_, &pipelineConf,
-                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_);
+            if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
+                return dp.RemoteOptimize(*cluster,
+                    SourceSyntax_, SourceCode_, &pipelineConf,
+                    TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_);
+            }
         }
     }
 
@@ -944,16 +952,18 @@ TProgram::TFutureStatus TProgram::RunAsync(
     }
     TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
 
-    for (const auto& dp : DataProviders_) {
-        if (!dp.RemoteClusterProvider || !dp.RemoteRun) {
-            continue;
-        }
+    with_lock (DataProvidersLock_) {
+        for (const auto& dp : DataProviders_) {
+            if (!dp.RemoteClusterProvider || !dp.RemoteRun) {
+                continue;
+            }
 
-        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
-            return dp.RemoteRun(*cluster, SourceSyntax_, SourceCode_,
-                OutputFormat_, ResultFormat_, nullptr,
-                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_, ExternalDiagnostics_,
-                ResultProviderConfig_);
+            if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
+                return dp.RemoteRun(*cluster, SourceSyntax_, SourceCode_,
+                    OutputFormat_, ResultFormat_, nullptr,
+                    TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_, ExternalDiagnostics_,
+                    ResultProviderConfig_);
+            }
         }
     }
 
@@ -1018,16 +1028,18 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     }
     TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
 
-    for (const auto& dp : DataProviders_) {
-        if (!dp.RemoteClusterProvider || !dp.RemoteRun) {
-            continue;
-        }
+    with_lock (DataProvidersLock_) {
+        for (const auto& dp : DataProviders_) {
+            if (!dp.RemoteClusterProvider || !dp.RemoteRun) {
+                continue;
+            }
 
-        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
-            return dp.RemoteRun(*cluster, SourceSyntax_, SourceCode_,
-                OutputFormat_, ResultFormat_, &pipelineConf,
-                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_, ExternalDiagnostics_,
-                ResultProviderConfig_);
+            if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
+                return dp.RemoteRun(*cluster, SourceSyntax_, SourceCode_,
+                    OutputFormat_, ResultFormat_, &pipelineConf,
+                    TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_, ExternalDiagnostics_,
+                    ResultProviderConfig_);
+            }
         }
     }
 
@@ -1428,39 +1440,51 @@ TProgram::TFutureStatus TProgram::ContinueAsync() {
     return AsyncTransformWithFallback(true);
 }
 
-void TProgram::Abort()
+NThreading::TFuture<void> TProgram::Abort()
 {
-    CloseLastSession();
+    return CloseLastSession();
 }
 
-void TProgram::CleanupLastSession() {
+NThreading::TFuture<void> TProgram::CleanupLastSession() {
     YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
 
     TString sessionId = GetSessionId();
     if (sessionId.empty()) {
-        return;
+        return MakeFuture();
     }
 
-    for (const auto& dp : DataProviders_) {
-        if (dp.CleanupSession) {
-            dp.CleanupSession(sessionId);
+    TVector<NThreading::TFuture<void>> cleanupFutures;
+    with_lock (DataProvidersLock_) {
+        cleanupFutures.reserve(DataProviders_.size());
+        for (const auto& dp : DataProviders_) {
+            if (dp.CleanupSession) {
+                cleanupFutures.push_back(dp.CleanupSession(sessionId));
+            }
         }
     }
+
+    return NThreading::WaitAll(cleanupFutures);
 }
 
-void TProgram::CloseLastSession() {
+NThreading::TFuture<void> TProgram::CloseLastSession() {
     YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
 
     TString sessionId = TakeSessionId();
     if (sessionId.empty()) {
-        return;
+        return MakeFuture();
     }
 
-    for (const auto& dp : DataProviders_) {
-        if (dp.CloseSession) {
-            dp.CloseSession(sessionId);
+    TVector<NThreading::TFuture<void>> closeFutures;
+    with_lock (DataProvidersLock_) {
+        closeFutures.reserve(DataProviders_.size());
+        for (const auto& dp : DataProviders_) {
+            if (dp.CloseSession) {
+                closeFutures.push_back(dp.CloseSession(sessionId));
+            }
         }
     }
+
+    return NThreading::WaitAll(closeFutures);
 }
 
 TString TProgram::ResultsAsString() const {
@@ -1523,7 +1547,9 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         }
 
         providerNames.insert(dp.Names.begin(), dp.Names.end());
-        DataProviders_.emplace_back(dp);
+        with_lock (DataProvidersLock_) {
+            DataProviders_.emplace_back(dp);
+        }
         if (dp.Source) {
             typeAnnotationContext->AddDataSource(dp.Names, dp.Source);
         }
@@ -1592,11 +1618,13 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
 TFuture<void> TProgram::OpenSession(const TString& username)
 {
     TVector<TFuture<void>> openFutures;
-    for (const auto& dp : DataProviders_) {
-        if (dp.OpenSession) {
-            auto future = dp.OpenSession(SessionId_, username, ProgressWriter_, OperationOptions_,
-                RandomProvider_, TimeProvider_);
-            openFutures.push_back(future);
+    with_lock (DataProvidersLock_) {
+        for (const auto& dp : DataProviders_) {
+            if (dp.OpenSession) {
+                auto future = dp.OpenSession(SessionId_, username, ProgressWriter_, OperationOptions_,
+                    RandomProvider_, TimeProvider_);
+                openFutures.push_back(future);
+            }
         }
     }
 
@@ -1627,20 +1655,26 @@ void TProgram::Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanP
 }
 
 bool TProgram::HasActiveProcesses() {
-    for (const auto& dp : DataProviders_) {
-        if (dp.HasActiveProcesses && dp.HasActiveProcesses()) {
-            return true;
+    with_lock (DataProvidersLock_) {
+        for (const auto& dp : DataProviders_) {
+            if (dp.HasActiveProcesses && dp.HasActiveProcesses()) {
+                return true;
+            }
         }
     }
+
     return false;
 }
 
 bool TProgram::NeedWaitForActiveProcesses() {
-    for (const auto& dp : DataProviders_) {
-        if (dp.HasActiveProcesses && dp.HasActiveProcesses() && dp.WaitForActiveProcesses) {
-            return true;
+    with_lock (DataProvidersLock_) {
+        for (const auto& dp : DataProviders_) {
+            if (dp.HasActiveProcesses && dp.HasActiveProcesses() && dp.WaitForActiveProcesses) {
+                return true;
+            }
         }
     }
+
     return false;
 }
 

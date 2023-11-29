@@ -286,7 +286,7 @@ def get_stdout_and_code(command):
     try:
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         stdout, _ = process.communicate()
-        return stdout, process.returncode
+        return six.ensure_str(stdout), process.returncode
     except Exception as e:
         logger.info("While run: `%s`", e)
         return None, None

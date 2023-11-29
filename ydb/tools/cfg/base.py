@@ -279,7 +279,7 @@ class ClusterDetailsProvider(object):
 
         self._use_walle = self.__cluster_description.get("use_walle", True)
         if not walle_provider:
-            walle_provider = walle.NopHostsFetcher()
+            walle_provider = walle.NopHostsInformationProvider()
         self._walle = walle_provider
         self.__translated_storage_pools_deprecated = None
         self.__translated_hosts = None

@@ -73,10 +73,6 @@ public:
         , OffsetColumnId_(NameTable_->GetId(OffsetColumnName_))
         , SubConsumerColumnFilter_{PartitionIndexColumnId_, OffsetColumnId_}
         , DecrementOffset_(decrementOffset)
-        , SubConsumerSchema_(New<TTableSchema>(std::vector<TColumnSchema>{
-            TColumnSchema(TString(PartitionIndexColumnName_), EValueType::Uint64, ESortOrder::Ascending),
-            TColumnSchema(TString(OffsetColumnName_), EValueType::Uint64),
-        }, /*strict*/ true, /*uniqueKeys*/ true))
     {
         if (RowPrefix_.GetCount() == 0) {
             RowPrefixCondition_ = "1 = 1";
@@ -338,8 +334,6 @@ private:
     //! should be set to true.
     bool DecrementOffset_ = false;
 
-    TTableSchemaPtr SubConsumerSchema_;
-
     std::vector<TPartitionInfo> DoCollectPartitions(
         const IClientPtr& client,
         const TString& selectQuery,
@@ -370,7 +364,6 @@ private:
 
         std::vector<ui64> partitionIndices;
         for (auto row : selectRowsResult.Rowset->GetRows()) {
-
             YT_VERIFY(row.GetCount() == 2);
 
             const auto& partitionIndexValue = row[*partitionIndexRowsetColumnId];
@@ -514,7 +507,8 @@ public:
     }
 
 private:
-    TYPath Path_;
+    const TYPath Path_;
+
     static const TNameTablePtr NameTable_;
     static const int QueueClusterColumnId_;
     static const int QueuePathColumnId_;

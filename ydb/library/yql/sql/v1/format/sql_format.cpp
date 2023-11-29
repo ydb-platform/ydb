@@ -236,8 +236,6 @@ public:
     }
 
     TString Process(const NProtoBuf::Message& msg, bool& addLine) {
-        addLine = true;
-        IsSimpleStatement.emplace_back();
         Scopes.push_back(EScope::Default);
         MarkedTokens.reserve(ParsedTokens.size());
         MarkTokens(msg);
@@ -251,13 +249,8 @@ public:
             const auto text = Comments[LastComment].Content;
             AddComment(text);
         }
+        addLine = AddLine.GetOrElse(true);
 
-        Y_ENSURE(IsSimpleStatement.size() == 1);
-        if (IsSimpleStatement.front() && *IsSimpleStatement.front()) {
-            addLine = false;
-        }
-
-        IsSimpleStatement.pop_back();
         return SB;
     }
 
@@ -328,6 +321,10 @@ private:
         if (descr == TToken::GetDescriptor()) {
             const auto& token = dynamic_cast<const TToken&>(msg);
             MarkToken(token);
+        } else if (descr == TRule_sql_stmt_core::GetDescriptor()) {
+            if (AddLine.Empty()) {
+                AddLine = !IsSimpleStatement(dynamic_cast<const TRule_sql_stmt_core&>(msg)).GetOrElse(false);
+            }
         } else if (descr == TRule_lambda_body::GetDescriptor()) {
             Y_ENSURE(TokenIndex >= 1);
             auto prevIndex = TokenIndex - 1;
@@ -474,30 +471,41 @@ private:
         }
     }
 
-    void MarkAsSimple() {
-        Y_ENSURE(!IsSimpleStatement.empty());
-        if (!IsSimpleStatement.back()) {
-            IsSimpleStatement.back() = true;
+    TMaybe<bool> IsSimpleStatement(const TRule_sql_stmt_core& msg) {
+        switch (msg.Alt_case()) {
+            case TRule_sql_stmt_core::kAltSqlStmtCore1: // pragma
+            case TRule_sql_stmt_core::kAltSqlStmtCore5: // drop table
+            case TRule_sql_stmt_core::kAltSqlStmtCore6: // use
+            case TRule_sql_stmt_core::kAltSqlStmtCore8: // commit
+            case TRule_sql_stmt_core::kAltSqlStmtCore11: // rollback
+            case TRule_sql_stmt_core::kAltSqlStmtCore12: // declare
+            case TRule_sql_stmt_core::kAltSqlStmtCore13: // import
+            case TRule_sql_stmt_core::kAltSqlStmtCore14: // export
+            case TRule_sql_stmt_core::kAltSqlStmtCore30: // drop external data source
+            case TRule_sql_stmt_core::kAltSqlStmtCore32: // drop replication
+                return true;
+            case TRule_sql_stmt_core::kAltSqlStmtCore3: { // named nodes
+                const auto& stmt = msg.GetAlt_sql_stmt_core3().GetRule_named_nodes_stmt1();
+                if (stmt.GetBlock3().HasAlt1()) {
+                    return true;
+                }
+                break;
+            }
+            case TRule_sql_stmt_core::kAltSqlStmtCore16: { // do
+                const auto& stmt = msg.GetAlt_sql_stmt_core16().GetRule_do_stmt1();
+                if (stmt.GetBlock2().HasAlt1()) {
+                    return true;
+                }
+                break;
+            }
+            case TRule_sql_stmt_core::kAltSqlStmtCore18: // if
+            case TRule_sql_stmt_core::kAltSqlStmtCore19: // for
+                return false;
+            default:
+                break;
         }
-    }
 
-    void MarkAsComplex() {
-        Y_ENSURE(!IsSimpleStatement.empty());
-        if (!IsSimpleStatement.back()) {
-            IsSimpleStatement.back() = false;
-        }
-    }
-
-    void HandleNestedStmt(const TRule_sql_stmt_core& msg, bool& addLine) {
-        addLine = true;
-        IsSimpleStatement.emplace_back();
-        Visit(msg);
-        Y_ENSURE(!IsSimpleStatement.empty());
-        if (IsSimpleStatement.back() && *IsSimpleStatement.back()) {
-            addLine = false;
-        }
-
-        IsSimpleStatement.pop_back();
+        return {};
     }
 
     template <typename T>
@@ -511,15 +519,13 @@ private:
         VisitRepeated(msg.GetBlock1());
         if (msg.HasBlock2()) {
             const auto& b = msg.GetBlock2();
-            bool addLine;
-            HandleNestedStmt(b.GetRule_sql_stmt_core1(), addLine);
+            Visit(b.GetRule_sql_stmt_core1());
             for (auto block : b.GetBlock2()) {
                 VisitRepeated(block.GetBlock1());
-                if (addLine) {
+                if (!IsSimpleStatement(block.GetRule_sql_stmt_core2()).GetOrElse(false)) {
                     Out('\n');
                 }
-
-                HandleNestedStmt(block.GetRule_sql_stmt_core2(), addLine);
+                Visit(block.GetRule_sql_stmt_core2());
             }
 
             VisitRepeated(b.GetBlock3());
@@ -527,7 +533,6 @@ private:
     }
 
     void VisitPragma(const TRule_pragma_stmt& msg) {
-        MarkAsSimple();
         PosFromToken(msg.GetToken1());
         NewLine();
         VisitKeyword(msg.GetToken1());
@@ -619,7 +624,6 @@ private:
         Visit(msg.GetToken2());
         switch (msg.GetBlock3().Alt_case()) {
         case TRule_named_nodes_stmt::TBlock3::kAlt1: {
-            MarkAsSimple();
             const auto& alt = msg.GetBlock3().GetAlt1();
             Visit(alt);
             break;
@@ -703,14 +707,12 @@ private:
     }
 
     void VisitDropTable(const TRule_drop_table_stmt& msg) {
-        MarkAsSimple();
         PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_drop_table_stmt::GetDescriptor(), msg);
     }
 
     void VisitUse(const TRule_use_stmt& msg) {
-        MarkAsSimple();
         PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_use_stmt::GetDescriptor(), msg);
@@ -745,7 +747,6 @@ private:
     }
 
     void VisitCommit(const TRule_commit_stmt& msg) {
-        MarkAsSimple();
         PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_commit_stmt::GetDescriptor(), msg);
@@ -878,28 +879,24 @@ private:
     }
 
     void VisitRollback(const TRule_rollback_stmt& msg) {
-        MarkAsSimple();
         PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_rollback_stmt::GetDescriptor(), msg);
     }
 
     void VisitDeclare(const TRule_declare_stmt& msg) {
-        MarkAsSimple();
         PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_declare_stmt::GetDescriptor(), msg);
     }
 
     void VisitImport(const TRule_import_stmt& msg) {
-        MarkAsSimple();
         PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_import_stmt::GetDescriptor(), msg);
     }
 
     void VisitExport(const TRule_export_stmt& msg) {
-        MarkAsSimple();
         PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_export_stmt::GetDescriptor(), msg);
@@ -935,7 +932,6 @@ private:
         VisitKeyword(msg.GetToken1());
         switch (msg.GetBlock2().Alt_case()) {
         case TRule_do_stmt_TBlock2::kAlt1: { // CALL
-            MarkAsSimple();
             const auto& alt = msg.GetBlock2().GetAlt1().GetRule_call_action1();
             Visit(alt.GetBlock1());
             AfterInvokeExpr = true;
@@ -988,7 +984,6 @@ private:
     }
 
     void VisitIf(const TRule_if_stmt& msg) {
-        MarkAsComplex();
         if (msg.HasBlock1()) {
             PosFromToken(msg.GetBlock1().GetToken1());
         } else {
@@ -1017,7 +1012,6 @@ private:
     }
 
     void VisitFor(const TRule_for_stmt& msg) {
-        MarkAsComplex();
         if (msg.HasBlock1()) {
             PosFromToken(msg.GetBlock1().GetToken1());
         } else {
@@ -1195,7 +1189,6 @@ private:
     }
 
     void VisitDropExternalDataSource(const TRule_drop_external_data_source_stmt& msg) {
-        MarkAsSimple();
         PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_drop_external_data_source_stmt::GetDescriptor(), msg);
@@ -1208,7 +1201,6 @@ private:
     }
 
     void VisitDropAsyncReplication(const TRule_drop_replication_stmt& msg) {
-        MarkAsSimple();
         PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_drop_replication_stmt::GetDescriptor(), msg);
@@ -2047,7 +2039,7 @@ private:
     ui32 LastComment = 0;
     i32 CurrentIndent = 0;
     TVector<EScope> Scopes;
-    TVector<TMaybe<bool>> IsSimpleStatement;
+    TMaybe<bool> AddLine;
     ui64 InsideType = 0;
     bool AfterNamespace = false;
     bool AfterBracket = false;
@@ -2269,7 +2261,7 @@ public:
                 if (!currentQuery.EndsWith("\n")) {
                     finalFormattedQuery << "\n";
                 }
-                
+
                 continue;
             }
 
@@ -2290,6 +2282,10 @@ public:
                 return false;
             }
 
+            if (addLine && !finalFormattedQuery.Empty()) {
+                finalFormattedQuery << "\n";
+            }
+
             finalFormattedQuery << currentFormattedQuery;
             if (parsedTokens.back().Name != "SEMICOLON") {
                 if (hasTrailingComments 
@@ -2298,10 +2294,6 @@ public:
                     finalFormattedQuery << "\n";
                 }
                 finalFormattedQuery << ";\n";
-            }
-
-            if (addLine) {
-                finalFormattedQuery << "\n";
             }
         }
 

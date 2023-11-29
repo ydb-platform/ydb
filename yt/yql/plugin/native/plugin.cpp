@@ -393,7 +393,7 @@ public:
             }
             if (!ActiveQueriesProgress_[queryId].Compiled) {
                 return TAbortResult{
-                    .YsonError = MessageToYtErrorYson(Format("Query %v is compiled", queryId)),
+                    .YsonError = MessageToYtErrorYson(Format("Query %v is not compiled", queryId)),
                 };
             }
             program = ActiveQueriesProgress_[queryId].Program;

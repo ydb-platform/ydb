@@ -144,6 +144,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
             chunkGroups[batchIdx][f->name()] = mColumn.BuildResult();
             batchesRecordsCount += batchResult->num_rows();
             columnRecordsCount += mColumn.GetRecordsCount();
+            AFL_VERIFY(batchResult->num_rows() == mColumn.GetRecordsCount());
             ++batchIdx;
         }
         AFL_VERIFY(columnRecordsCount == batchesRecordsCount)("f_name", f->name())("mCount", columnRecordsCount)("bCount", batchesRecordsCount);

@@ -54,7 +54,7 @@ ui32 TColumnPortion::AppendSlice(const std::shared_ptr<arrow::Array>& a, const u
     ui32 i = startIndex;
     for (; i < startIndex + length; ++i) {
         ui64 recordSize = 0;
-        NArrow::Append(*Builder, *a, i, &recordSize);
+        AFL_VERIFY(NArrow::Append(*Builder, *a, i, &recordSize))("a", a->ToString())("a_type", a->type()->ToString())("builder_type", Builder->type()->ToString());
         CurrentChunkRawSize += recordSize;
         PredictedPackedBytes += Context.GetColumnStat().GetPackedRecordSize();
         if (++CurrentPortionRecords == Context.GetPortionRowsCountLimit()) {
@@ -69,7 +69,7 @@ ui32 TColumnPortion::AppendSlice(const std::shared_ptr<arrow::Array>& a, const u
     return startIndex + length - i;
 }
 
-void TColumnPortion::FlushBuffer() {
+bool TColumnPortion::FlushBuffer() {
     if (Builder->length()) {
         auto newArrayChunk = NArrow::TStatusValidator::GetValid(Builder->Finish());
         Chunks.emplace_back(std::make_shared<TChunkPreparation>(Context.GetSaver().Apply(newArrayChunk, Context.GetField()), newArrayChunk, Context.GetColumnId(), Context.GetSchemaInfo()));
@@ -77,6 +77,9 @@ void TColumnPortion::FlushBuffer() {
         CurrentChunkRawSize = 0;
         PredictedPackedBytes = 0;
         PackedSize += Chunks.back()->GetPackedSize();
+        return true;
+    } else {
+        return false;
     }
 }
 

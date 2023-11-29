@@ -40,4 +40,11 @@ std::vector<NKikimr::NOlap::NCompaction::TColumnPortionResult> TMergedColumn::Bu
     return result;
 }
 
+void TMergedColumn::NewPortion() {
+    if (Portions.size()) {
+        Portions.back().FlushBuffer();
+    }
+    Portions.emplace_back(TColumnPortion(Context));
+}
+
 }

@@ -48,8 +48,8 @@ void IDataSource::InitFetchingPlan(const TFetchingPlan& fetchingPlan, const std:
     }
 }
 
-void IDataSource::RegisterInterval(TFetchingInterval* interval) {
-    AFL_VERIFY(Intervals.emplace(interval->GetIntervalIdx(), interval).second);
+void IDataSource::RegisterInterval(TFetchingInterval& interval) {
+    AFL_VERIFY(Intervals.emplace(interval.GetIntervalIdx(), &interval).second);
 }
 
 void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds,

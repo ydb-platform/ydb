@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
             "field", NConstruction::TStringPoolFiller(8, 100));
 
-        auto batch = NConstruction::TRecordBatchConstructor({ key1Column, key2Column, column }).BuildBatch(2048);
+        auto batch = NConstruction::TRecordBatchConstructor({ key1Column, key2Column, column }).BuildBatch(20048);
         TString blobData = NArrow::SerializeBatchNoCompression(batch);
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId);
@@ -258,13 +258,13 @@ Y_UNIT_TEST_SUITE(Normalizers) {
 
         {
             auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
-            UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2048);
+            UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 20048);
         }
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
 
         {
             auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
-            UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2048);
+            UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 20048);
         }
     }
 

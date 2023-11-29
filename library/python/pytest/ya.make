@@ -22,7 +22,8 @@ PEERDIR(
     library/python/testing/yatest_lib
 )
 
-IF (NOT OPENSOURCE)
+IF (NOT OPENSOURCE AND NOT OS_ANDROID AND NOT OS_IOS)
+    # FIXME: should be fixed properly in YA-1499
     PEERDIR(contrib/tools/gprof2dot)
 ENDIF()
 

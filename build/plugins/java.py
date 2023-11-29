@@ -466,14 +466,21 @@ def on_setup_maven_export_coords_if_need(unit, *args):
     unit.set(['MAVEN_EXPORT_COORDS_GLOBAL', _maven_coords_for_project(unit, args[0])])
 
 
+def _get_classpath(unit, dir):
+    if dir.startswith(CONTRIB_JAVA_PREFIX):
+        return '\\"{}\\"'.format(_maven_coords_for_project(unit, dir).rstrip(':'))
+    else:
+        return 'project(\\":{}\\")'.format(dir.replace('/', ':'))
+
+
 def on_setup_project_coords_if_needed(unit, *args):
     if not unit.enabled('EXPORT_GRADLE'):
         return
 
     project_dir = args[0]
     if project_dir.startswith(CONTRIB_JAVA_PREFIX):
-        value = '\\"{}\\"'.format(_maven_coords_for_project(unit, project_dir).rstrip(':'))
+        value = '\\"{}\\"'.format(_get_classpath(unit, project_dir).rstrip(':'))
     else:
         value = 'project(\\":{}\\")'.format(project_dir.replace('/', ':'))
-    unit.set(['EXPORT_GRADLE_PROJECT_COORDS', value])
-    unit.set(['EXPORT_GRADLE_PROJECT_COORDS_GLOBAL', value])
+    unit.set(['EXPORT_GRADLE_CLASSPATH', value])
+    unit.set(['EXPORT_GRADLE_CLASSPATH_GLOBAL', value])

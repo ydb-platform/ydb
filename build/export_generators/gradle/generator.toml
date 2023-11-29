@@ -26,11 +26,16 @@ app_main_class="str"
 publish="flag"
 publish_group="str"
 publish_version="str"
-applied_excludes="list"
 peers_closure="list"
 peers_closure_coords="list"
 excludes_rules="list"
-exclude="list"
+
+kotlin_version="str"
+with_kotlin="bool"
+with_kotlinc_plugin_allopen="bool"
+with_kotlinc_plugin_lombok="bool"
+with_kotlinc_plugin_noarg="bool"
+with_kotlinc_plugin_serialization="bool"
 
 [attrs.root]
 
@@ -38,6 +43,10 @@ exclude="list"
 
 [attrs.induced]
 consumer_classpath="list"
+"consumer.classpath"="list"
+"consumer.jar"="list"
+"consumer.type"="list"
+"consumer.prebuilt"="flag"
 
 [merge]
 test=[

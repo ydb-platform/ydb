@@ -36,6 +36,20 @@ Y_UNIT_TEST_SUITE(SHA){
         UNIT_ASSERT_VALUES_EQUAL(memcmp(precalculatedDigest.data(), digest.data(), digest.size()), 0);
     }
 
+    Y_UNIT_TEST(Sha224Value) {
+        // bash$ echo -n $SomeAlignedShaTestData | sha224sum
+        const TStringBuf precalculatedDigest =
+            "\xD4\x8B\x12\xA8\x0B\x29\x01\x92"
+            "\xC1\xF9\x2A\x71\x17\x99\x9C\x83"
+            "\xDB\xC5\xBB\x7B\xBE\xC1\xF1\xD9"
+            "\x97\x75\x38\xCB"sv;
+
+        auto digest = NOpenSsl::NSha224::Calc(SomeAlignedShaTestData.data(), SomeAlignedShaTestData.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(precalculatedDigest.size(), digest.size());
+        UNIT_ASSERT_VALUES_EQUAL(memcmp(precalculatedDigest.data(), digest.data(), digest.size()), 0);
+    }
+
     Y_UNIT_TEST(FragmentedEqualNotFragmented) {
         const char* head = SomeAlignedShaTestData.data();
         const char* current = head;

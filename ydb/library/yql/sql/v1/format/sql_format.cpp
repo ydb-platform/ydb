@@ -360,6 +360,11 @@ private:
             ForceExpandedColumn = paren.GetColumn();
             ForceExpandedLine = paren.GetLine();
             suppressExpr = true;
+        } else if (descr == TRule_case_expr::GetDescriptor()) {
+            const auto& value = dynamic_cast<const TRule_case_expr&>(msg);
+            auto& token = value.GetToken1();
+            ForceExpandedColumn = token.GetColumn();
+            ForceExpandedLine = token.GetLine();
         }
 
         const bool expr = (descr == TRule_expr::GetDescriptor() || descr == TRule_in_expr::GetDescriptor());
@@ -2007,7 +2012,7 @@ private:
     void VisitExistsExpr(const TRule_exists_expr& msg) {
         VisitKeyword(msg.GetToken1());
         VisitToken(msg.GetToken2());
-        
+
         NewLine();
         PushCurrentIndent();
 
@@ -2017,6 +2022,39 @@ private:
         NewLine();
 
         VisitToken(msg.GetToken4());
+    }
+
+    void VisitCaseExpr(const TRule_case_expr& msg) {
+        VisitKeyword(msg.GetToken1());
+        if (msg.HasBlock2()) {
+            Visit(msg.GetBlock2());
+        }
+        NewLine();
+        PushCurrentIndent();
+
+        for (const auto& block : msg.GetBlock3()) {
+            Visit(block);
+            NewLine();
+        }
+
+        Y_ENSURE(msg.HasBlock4());
+        const auto& block = msg.GetBlock4();
+        VisitKeyword(block.GetToken1());
+        Visit(block.GetRule_expr2());
+        PopCurrentIndent();
+        NewLine();
+        Visit(msg.GetToken5());
+    }
+
+    void VisitWhenExpr(const TRule_when_expr& msg) {
+        VisitKeyword(msg.GetToken1());
+        Visit(msg.GetRule_expr2());
+
+        NewLine();
+        PushCurrentIndent();
+        VisitKeyword(msg.GetToken3());
+        Visit(msg.GetRule_expr4());
+        PopCurrentIndent();
     }
 
     void PushCurrentIndent() {
@@ -2120,6 +2158,8 @@ TStaticData::TStaticData()
         {TRule_key_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitKeyExpr)},
         {TRule_define_action_or_subquery_body::GetDescriptor(), MakeFunctor(&TVisitor::VisitDefineActionOrSubqueryBody)},
         {TRule_exists_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitExistsExpr)},
+        {TRule_case_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitCaseExpr)},
+        {TRule_when_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitWhenExpr)},
 
         {TRule_pragma_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitPragma)},
         {TRule_select_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitSelect)},

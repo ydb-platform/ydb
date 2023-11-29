@@ -45,7 +45,7 @@ public:
 
         if (RequiredAbiVersion != BridgeGetAbiVersion()) {
             THROW_ERROR_EXCEPTION(
-                "YQL plugin ABI version mismatch; expected version %v, actual version %v",
+                "YQL plugin ABI version mismatch: expected version %v, actual version %v",
                 RequiredAbiVersion,
                 BridgeGetAbiVersion());
         }

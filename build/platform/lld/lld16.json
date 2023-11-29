@@ -1,8 +1,7 @@
 {
     "by_platform": {
         "darwin-arm64": {
-            "_origin": "https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.5/clang+llvm-16.0.5-arm64-apple-darwin22.0.tar.xz",
-            "uri": "sbr:5451200437"
+            "uri": "sbr:5465946272"
         },
         "darwin-x86_64": {
             "uri": "sbr:5453803895"

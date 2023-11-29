@@ -94,6 +94,7 @@ struct TProtobufRepeatedElement
 
 struct TProtobufMapElement
 {
+    TProtobufScalarElement KeyElement;
     TProtobufElement Element;
 };
 

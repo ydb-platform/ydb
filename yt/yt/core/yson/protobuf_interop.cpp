@@ -661,11 +661,15 @@ TProtobufElement TProtobufField::GetElement(bool insideRepeated) const
 {
     if (IsRepeated() && !insideRepeated) {
         return std::make_unique<TProtobufRepeatedElement>(TProtobufRepeatedElement{
-            GetElement(true)
+            GetElement(/*insideRepeated*/ true)
         });
     } else if (IsYsonMap()) {
+        auto element = GetYsonMapKeyField()->GetElement(/*insideRepeated*/ false);
+        auto* keyElement = std::get_if<std::unique_ptr<TProtobufScalarElement>>(&element);
+        YT_VERIFY(keyElement);
         return std::make_unique<TProtobufMapElement>(TProtobufMapElement{
-            GetYsonMapValueField()->GetElement(false)
+            .KeyElement = std::move(**keyElement),
+            .Element = GetYsonMapValueField()->GetElement(/*insideRepeated*/ false)
         });
     } else if (IsYsonString()) {
         return std::make_unique<TProtobufAnyElement>();
@@ -889,7 +893,7 @@ protected:
         }
     }
 
-    void ValidateString(TStringBuf data, TString fieldFullName)
+    void ValidateString(TStringBuf data, TStringBuf fieldFullName)
     {
         auto config = GetProtobufInteropConfig();
         if (config->Utf8Check == EUtf8Check::Disable || IsUtf(data)) {

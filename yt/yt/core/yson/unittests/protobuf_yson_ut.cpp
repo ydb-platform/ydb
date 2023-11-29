@@ -2153,21 +2153,27 @@ TEST(TResolveProtobufElementByYPath, Repeated)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TestMapByYPath(const TYPath& path)
+template <typename ValueElementType>
+void TestMapByYPath(const TYPath& path, int expectedUnderlyingKeyProtoType)
 {
     auto result = ResolveProtobufElementByYPath(ReflectProtobufMessageType<NYT::NYson::NProto::TMessage>(), path);
-    EXPECT_TRUE(std::holds_alternative<std::unique_ptr<TProtobufMapElement>>(result.Element));
+
     EXPECT_EQ(path, result.HeadPath);
     EXPECT_EQ("", result.TailPath);
+
+    auto* map = std::get_if<std::unique_ptr<TProtobufMapElement>>(&result.Element);
+    ASSERT_TRUE(map);
+    EXPECT_EQ(static_cast<int>((*map)->KeyElement.Type), expectedUnderlyingKeyProtoType);
+    EXPECT_TRUE(std::holds_alternative<std::unique_ptr<ValueElementType>>((*map)->Element));
 }
 
 TEST(TResolveProtobufElementByYPath, Map)
 {
-    TestMapByYPath("/string_to_int32_map");
-    TestMapByYPath("/int32_to_int32_map");
-    TestMapByYPath("/nested_message_map");
-    TestMapByYPath("/nested_message_map/abc/nested_message_map");
-    TestMapByYPath("/nested_message1/nested_message_map");
+    TestMapByYPath<TProtobufScalarElement>("/string_to_int32_map", FieldDescriptor::TYPE_STRING);
+    TestMapByYPath<TProtobufScalarElement>("/int32_to_int32_map", FieldDescriptor::TYPE_INT32);
+    TestMapByYPath<TProtobufMessageElement>("/nested_message_map", FieldDescriptor::TYPE_STRING);
+    TestMapByYPath<TProtobufMessageElement>("/nested_message_map/abc/nested_message_map", FieldDescriptor::TYPE_STRING);
+    TestMapByYPath<TProtobufMessageElement>("/nested_message1/nested_message_map", FieldDescriptor::TYPE_STRING);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

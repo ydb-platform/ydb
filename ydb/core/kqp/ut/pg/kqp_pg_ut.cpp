@@ -3062,6 +3062,46 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             }
         }
     }
+
+    Y_UNIT_TEST(MkqlTerminate) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
+         {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE t (id INT PRIMARY KEY, data1 UUID[], data2 UUID[][]);
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            TString binval;
+            for (int i = 0; i < 4; i++) {
+                binval.push_back(0);
+            }
+            auto p1Value = TPgValue(TPgValue::VK_TEXT, "1", TPgType("pgunknown"));
+            auto p2Value = TPgValue(TPgValue::VK_BINARY, binval, TPgType("pgunknown"));
+            auto params = TParamsBuilder()
+                .AddParam("$p1")
+                    .Pg(p1Value)
+                    .Build()
+                .AddParam("$p2")
+                    .Pg(p2Value)
+                    .Build()
+                .Build();
+
+            auto result = db.ExecuteQuery(R"(
+                INSERT INTO t (id, data2) VALUES ($1, $2);
+            )", NYdb::NQuery::TTxControl::NoTx(), params, settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetIssues().ToString().Contains("invalid byte sequence for encoding \"UTF8\": 0x00"));
+        }
+    }
 }
 
 } // namespace NKqp

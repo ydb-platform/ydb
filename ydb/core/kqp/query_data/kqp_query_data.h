@@ -176,7 +176,7 @@ public:
     std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> GetInternalBindingValue(const NKqpProto::TKqpPhyParamBinding& paramBinding);
 };
 
-class TQueryData {
+class TQueryData : NMiniKQL::ITerminator {
 private:
     using TTypedUnboxedValue = std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue>;
     using TNamedUnboxedValue = std::pair<const TString, TTypedUnboxedValue>;
@@ -277,6 +277,8 @@ public:
             return false;
         };
     }
+
+    void Terminate(const char* message) const final;
 };
 
 

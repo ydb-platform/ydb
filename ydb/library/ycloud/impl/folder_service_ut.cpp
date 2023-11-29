@@ -1,6 +1,6 @@
 #include <library/cpp/actors/core/event.h>
 #include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/grpc/server/grpc_server.h>
+#include <ydb/library/grpc/server/grpc_server.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/retry/retry.h>

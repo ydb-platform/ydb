@@ -16,12 +16,12 @@ TKeyValueGRpcService::TKeyValueGRpcService(NActors::TActorSystem* actorSystem, T
 
 TKeyValueGRpcService::~TKeyValueGRpcService() = default;
 
-void TKeyValueGRpcService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) {
+void TKeyValueGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
     CQ = cq;
     SetupIncomingRequests(std::move(logger));
 }
 
-void TKeyValueGRpcService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+void TKeyValueGRpcService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) {
     Limiter = limiter;
 }
 
@@ -33,7 +33,7 @@ void TKeyValueGRpcService::DecRequest() {
     Limiter->Dec();
 }
 
-void TKeyValueGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TKeyValueGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
 #ifdef SETUP_METHOD
@@ -49,7 +49,7 @@ void TKeyValueGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         this,                                                                                                \
         &Service_,                                                                                           \
         CQ,                                                                                                  \
-        [this](NGrpc::IRequestContextBase* reqCtx) {                                                         \
+        [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                                         \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                               \
             ActorSystem->Send(GRpcRequestProxyId, new TGrpcRequestOperationCall<                             \
                 Ydb::KeyValue::Y_CAT(methodName, Request),                                          \

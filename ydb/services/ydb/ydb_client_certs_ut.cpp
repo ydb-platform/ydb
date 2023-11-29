@@ -18,7 +18,7 @@
 #include <ydb/public/api/grpc/draft/dummy.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 
 #include <google/protobuf/any.h>
 
@@ -523,7 +523,7 @@ Y_UNIT_TEST(TestRegisterNodeViaDiscovery_ServerWithCertVerification_ClientDoesNo
 }
 
 NClient::TKikimr GetKikimr(const TString& addr, const NTest::TCertAndKey& caCert, const NTest::TCertAndKey& clientServerCert) {
-    NGrpc::TGRpcClientConfig grpcConfig(addr, TDuration::Seconds(15));
+    NYdbGrpc::TGRpcClientConfig grpcConfig(addr, TDuration::Seconds(15));
     grpcConfig.EnableSsl = true;
     grpcConfig.SslCredentials = {.pem_root_certs = caCert.Certificate.c_str(),
                                  .pem_private_key = clientServerCert.PrivateKey.c_str(),

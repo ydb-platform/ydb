@@ -23,7 +23,7 @@ namespace NKikimr::NPublicHttp {
         return Request.get();
     }
 
-    NGrpc::TAuthState& TGrpcRequestContextWrapper::GetAuthState() {
+    NYdbGrpc::TAuthState& TGrpcRequestContextWrapper::GetAuthState() {
         return AuthState;
     }
 

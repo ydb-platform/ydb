@@ -8,7 +8,7 @@
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 
 namespace NYdb {
 
@@ -45,7 +45,7 @@ struct TPlainStatus {
     }
 
     TPlainStatus(
-        const NGrpc::TGrpcStatus& grpcStatus, const std::string& endpoint = std::string(),
+        const NYdbGrpc::TGrpcStatus& grpcStatus, const std::string& endpoint = std::string(),
         std::multimap<TStringType, TStringType>&& metadata = {});
 
     template<class T>

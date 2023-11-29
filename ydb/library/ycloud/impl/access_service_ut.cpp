@@ -2,7 +2,7 @@
 #include <library/cpp/actors/core/event_local.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
-#include <library/cpp/grpc/server/grpc_server.h>
+#include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>

@@ -29,7 +29,7 @@
 namespace NYql::NDqs {
     using namespace NActors;
     using namespace NActors::NDnsResolver;
-    using namespace NGrpc;
+    using namespace NYdbGrpc;
 
     class TYqlLogBackend: public TLogBackend {
         void WriteData(const TLogRecord& rec) override {

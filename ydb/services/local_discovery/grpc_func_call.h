@@ -24,7 +24,7 @@ public:
             TGRpcRequestWrapperImpl<
                 TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, true, TGrpcRequestFunctionCall<TReq, TResp>>>;
 
-    TGrpcRequestFunctionCall(NGrpc::IRequestContextBase* ctx,
+    TGrpcRequestFunctionCall(NYdbGrpc::IRequestContextBase* ctx,
         TFuncCallback cb, TRequestAuxSettings auxSettings = {})
         : TBase(ctx)
         , PassMethod(cb)

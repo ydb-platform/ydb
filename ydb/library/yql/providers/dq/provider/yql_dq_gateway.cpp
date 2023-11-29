@@ -9,7 +9,7 @@
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/threading/task_scheduler/task_scheduler.h>
 
@@ -48,7 +48,7 @@ public:
     }
 
     template<typename RespType>
-    void OnResponse(TPromise<TResult> promise, TString sessionId, NGrpc::TGrpcStatus&& status, RespType&& resp, const THashMap<TString, TString>& modulesMapping, bool alwaysFallback = false)
+    void OnResponse(TPromise<TResult> promise, TString sessionId, NYdbGrpc::TGrpcStatus&& status, RespType&& resp, const THashMap<TString, TString>& modulesMapping, bool alwaysFallback = false)
     {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
         YQL_CLOG(TRACE, ProviderDq) << "TDqGateway::callback";
@@ -179,7 +179,7 @@ public:
         const auto fallbackPolicy = settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default);
         const auto alwaysFallback = EFallbackPolicy::Always == fallbackPolicy;
         auto self = weak_from_this();
-        auto callback = [self, promise, sessionId, alwaysFallback, modulesMapping](NGrpc::TGrpcStatus&& status, TResponse&& resp) mutable {
+        auto callback = [self, promise, sessionId, alwaysFallback, modulesMapping](NYdbGrpc::TGrpcStatus&& status, TResponse&& resp) mutable {
             auto this_ = self.lock();
             if (!this_) {
                 YQL_CLOG(DEBUG, ProviderDq) << "Gateway was closed: " << sessionId;
@@ -325,12 +325,12 @@ public:
             }
         }
 
-        NGrpc::TCallMeta meta;
+        NYdbGrpc::TCallMeta meta;
         meta.Timeout = OpenSessionTimeout;
 
         auto promise = NewPromise<void>();
         auto self = weak_from_this();
-        auto callback = [self, promise, sessionId](NGrpc::TGrpcStatus&& status, Yql::DqsProto::OpenSessionResponse&& resp) mutable {
+        auto callback = [self, promise, sessionId](NYdbGrpc::TGrpcStatus&& status, Yql::DqsProto::OpenSessionResponse&& resp) mutable {
             Y_UNUSED(resp);
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
             auto this_ = self.lock();
@@ -368,7 +368,7 @@ public:
         Yql::DqsProto::CloseSessionRequest request;
         request.SetSession(sessionId);
 
-        auto callback = [](NGrpc::TGrpcStatus&& status, Yql::DqsProto::CloseSessionResponse&& resp) {
+        auto callback = [](NYdbGrpc::TGrpcStatus&& status, Yql::DqsProto::CloseSessionResponse&& resp) {
             Y_UNUSED(resp);
             Y_UNUSED(status);
         };
@@ -409,7 +409,7 @@ public:
         Yql::DqsProto::QueryStatusRequest request;
         request.SetSession(sessionId);
         auto self = weak_from_this();
-        auto callback = [self, sessionId](NGrpc::TGrpcStatus&& status, Yql::DqsProto::QueryStatusResponse&& resp) {
+        auto callback = [self, sessionId](NYdbGrpc::TGrpcStatus&& status, Yql::DqsProto::QueryStatusResponse&& resp) {
             auto this_ = self.lock();
             if (!this_) {
                 return;
@@ -447,7 +447,7 @@ public:
     void SchedulePingSessionRequest(const TString& sessionId) {
         auto self = weak_from_this();
         auto callback = [self, sessionId](
-            NGrpc::TGrpcStatus&& status,
+            NYdbGrpc::TGrpcStatus&& status,
             Yql::DqsProto::PingSessionResponse&&) mutable
         {
             auto this_ = self.lock();
@@ -495,9 +495,9 @@ public:
     }
 
 private:
-    NGrpc::TGRpcClientConfig GrpcConf;
-    NGrpc::TGRpcClientLow GrpcClient;
-    std::unique_ptr<NGrpc::TServiceConnection<Yql::DqsProto::DqService>> Service;
+    NYdbGrpc::TGRpcClientConfig GrpcConf;
+    NYdbGrpc::TGRpcClientLow GrpcClient;
+    std::unique_ptr<NYdbGrpc::TServiceConnection<Yql::DqsProto::DqService>> Service;
 
     TMutex ProgressMutex;
     TMutex Mutex;

@@ -19,7 +19,7 @@ target_link_libraries(providers-dq-service PUBLIC
   cpp-actors-dnsresolver
   cpp-actors-interconnect
   library-cpp-build_info
-  cpp-grpc-server
+  library-grpc-server
   grpc-server-actors
   library-cpp-svnversion
   cpp-threading-future

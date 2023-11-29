@@ -22,7 +22,7 @@ target_link_libraries(ydb-services-ydb-ut PUBLIC
   ydb-services-ydb
   libs-apache-arrow
   library-cpp-getopt
-  cpp-grpc-client
+  library-grpc-client
   cpp-regex-pcre
   library-cpp-svnversion
   kqp-ut-common

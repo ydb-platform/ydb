@@ -6,13 +6,13 @@
 
 #include <ydb/library/yql/providers/dq/actors/execution_helpers.h>
 
-#include <library/cpp/grpc/server/actors/logger.h>
+#include <ydb/library/grpc/server/actors/logger.h>
 
 #include <utility>
 
 namespace NYql {
     using namespace NActors;
-    using namespace NGrpc;
+    using namespace NYdbGrpc;
     using namespace NYql::NDqs;
 
     class TGrpcExternalListener: public IExternalListener {

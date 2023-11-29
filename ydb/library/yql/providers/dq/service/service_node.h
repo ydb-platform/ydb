@@ -42,7 +42,7 @@ namespace NYql {
         TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
         THolder<NActors::TActorSystem> ActorSystem;
         TVector<NActors::TActorId> ActorIds;
-        THolder<NGrpc::TGRpcServer> Server;
-        TIntrusivePtr<NGrpc::IGRpcService> Service;
+        THolder<NYdbGrpc::TGRpcServer> Server;
+        TIntrusivePtr<NYdbGrpc::IGRpcService> Service;
     };
 }

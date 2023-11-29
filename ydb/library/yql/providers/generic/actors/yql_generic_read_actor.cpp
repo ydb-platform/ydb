@@ -58,12 +58,12 @@ namespace NYql::NDq {
             };
 
             struct TEvListSplitsFinished: public TEventLocal<TEvListSplitsFinished, EvListSplitsFinished> {
-                explicit TEvListSplitsFinished(NGrpc::TGrpcStatus&& status)
+                explicit TEvListSplitsFinished(NYdbGrpc::TGrpcStatus&& status)
                     : Status(std::move(status))
                 {
                 }
 
-                NGrpc::TGrpcStatus Status;
+                NYdbGrpc::TGrpcStatus Status;
             };
 
             struct TEvReadSplitsIterator: public TEventLocal<TEvReadSplitsIterator, EvReadSplitsIterator> {
@@ -85,12 +85,12 @@ namespace NYql::NDq {
             };
 
             struct TEvReadSplitsFinished: public TEventLocal<TEvReadSplitsFinished, EvReadSplitsFinished> {
-                explicit TEvReadSplitsFinished(NGrpc::TGrpcStatus&& status)
+                explicit TEvReadSplitsFinished(NYdbGrpc::TGrpcStatus&& status)
                     : Status(std::move(status))
                 {
                 }
 
-                NGrpc::TGrpcStatus Status;
+                NYdbGrpc::TGrpcStatus Status;
             };
         };
 

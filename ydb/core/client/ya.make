@@ -1,7 +1,7 @@
 LIBRARY()
 
 PEERDIR(
-    library/cpp/grpc/server
+    ydb/library/grpc/server
     ydb/core/base
     ydb/core/client/scheme_cache_lib
     ydb/core/client/server

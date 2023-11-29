@@ -87,7 +87,7 @@ private:
     std::vector<TSubSession> SubSessions;
     size_t SubsessionIndex = 0;
 
-    // NGrpc::IQueueClientContextPtr DumpCountersContext;
+    // NYdbGrpc::IQueueClientContextPtr DumpCountersContext;
 
     // Exiting.
     bool Closing = false;

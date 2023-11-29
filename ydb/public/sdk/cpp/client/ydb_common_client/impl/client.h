@@ -66,7 +66,7 @@ public:
 
 protected:
     template<typename TService, typename TRequest, typename TResponse>
-    using TAsyncRequest = typename NGrpc::TSimpleRequestProcessor<
+    using TAsyncRequest = typename NYdbGrpc::TSimpleRequestProcessor<
         typename TService::Stub,
         TRequest,
         TResponse>::TAsyncRequest;

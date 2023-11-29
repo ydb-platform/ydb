@@ -27,9 +27,9 @@ namespace NDriverClient {
             TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(Address);
             switch (endpoint.ServerType) {
             case TCommandConfig::EServerType::GRpc:
-                ClientConfig = NGrpc::TGRpcClientConfig(endpoint.Address);
+                ClientConfig = NYdbGrpc::TGRpcClientConfig(endpoint.Address);
                 if (endpoint.EnableSsl.Defined()) {
-                    auto *p = std::get_if<NGrpc::TGRpcClientConfig>(&ClientConfig.GetRef());
+                    auto *p = std::get_if<NYdbGrpc::TGRpcClientConfig>(&ClientConfig.GetRef());
                     p->EnableSsl = endpoint.EnableSsl.GetRef();
                 }
                 break;

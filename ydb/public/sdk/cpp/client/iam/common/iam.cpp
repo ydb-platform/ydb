@@ -2,7 +2,7 @@
 
 #include <library/cpp/http/simple/http_client.h>
 
-using namespace NGrpc;
+using namespace NYdbGrpc;
 
 namespace NYdb {
 

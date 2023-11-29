@@ -2,7 +2,7 @@
 
 #include <ydb/public/api/grpc/ydb_coordination_v1.grpc.pb.h>
 
-#include <library/cpp/grpc/server/grpc_server.h>
+#include <ydb/library/grpc/server/grpc_server.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
 
@@ -24,7 +24,7 @@ public:
     using ::NKikimr::NGRpcService::TGrpcServiceBase<Ydb::Coordination::V1::CoordinationService>::TGrpcServiceBase;
 
 private:
-    void SetupIncomingRequests(NGrpc::TLoggerPtr logger);
+    void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
 };
 
 }

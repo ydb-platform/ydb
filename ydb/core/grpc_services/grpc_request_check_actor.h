@@ -36,9 +36,9 @@ public:
     void OnAccessDenied(const TEvTicketParser::TError& error, const TActorContext& ctx) {
         LOG_INFO(ctx, NKikimrServices::GRPC_SERVER, error.ToString());
         if (error.Retryable) {
-            GrpcRequestBaseCtx_->UpdateAuthState(NGrpc::TAuthState::AS_UNAVAILABLE);
+            GrpcRequestBaseCtx_->UpdateAuthState(NYdbGrpc::TAuthState::AS_UNAVAILABLE);
         } else {
-            GrpcRequestBaseCtx_->UpdateAuthState(NGrpc::TAuthState::AS_FAIL);
+            GrpcRequestBaseCtx_->UpdateAuthState(NYdbGrpc::TAuthState::AS_FAIL);
         }
         GrpcRequestBaseCtx_->RaiseIssue(NYql::TIssue{error.Message});
         ReplyBackAndDie();
@@ -212,7 +212,7 @@ public:
             const NYql::TIssues issues;
             ReplyUnavailableAndDie(issues);
         } else {
-            GrpcRequestBaseCtx_->UpdateAuthState(NGrpc::TAuthState::AS_OK);
+            GrpcRequestBaseCtx_->UpdateAuthState(NYdbGrpc::TAuthState::AS_OK);
             GrpcRequestBaseCtx_->SetInternalToken(TBase::GetParsedToken());
             Continue();
         }

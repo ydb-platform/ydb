@@ -15,12 +15,12 @@ TRateLimiterGRpcService::TRateLimiterGRpcService(NActors::TActorSystem* actorSys
 
 TRateLimiterGRpcService::~TRateLimiterGRpcService() = default;
 
-void TRateLimiterGRpcService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) {
+void TRateLimiterGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
     CQ = cq;
     SetupIncomingRequests(std::move(logger));
 }
 
-void TRateLimiterGRpcService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+void TRateLimiterGRpcService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) {
     Limiter = limiter;
 }
 
@@ -32,7 +32,7 @@ void TRateLimiterGRpcService::DecRequest() {
     Limiter->Dec();
 }
 
-void TRateLimiterGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TRateLimiterGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
     using namespace NGRpcService;
 
@@ -49,7 +49,7 @@ void TRateLimiterGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         this,                                                                                \
         &Service_,                                                                           \
         CQ,                                                                                  \
-        [this](NGrpc::IRequestContextBase* reqCtx) {                                         \
+        [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                         \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());               \
             ActorSystem->Send(GRpcRequestProxyId,                                            \
                 new NGRpcService::TGrpcRequestOperationCall<                                 \

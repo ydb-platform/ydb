@@ -20,7 +20,7 @@ using namespace NThreading;
 using namespace NActors;
 
 struct TNodeInfo {
-    NGrpc::TGRpcClientConfig ClientConfig;
+    NYdbGrpc::TGRpcClientConfig ClientConfig;
     ui32 NodeId;
 };
 
@@ -51,7 +51,7 @@ class TAbstractNodeResolver: public IServiceNodeResolver {
 public:
     TAbstractNodeResolver()
         : ClientLow(1)
-        , ChannelPool(NGrpc::TTcpKeepAliveSettings{true, 30, 5, 10})
+        , ChannelPool(NYdbGrpc::TTcpKeepAliveSettings{true, 30, 5, 10})
     { }
 
     ~TAbstractNodeResolver()
@@ -73,9 +73,9 @@ public:
             return MakeFuture(NCommon::ResultFromError<TConnectionResult>("Unable to create grpc request context"));
         }
 
-        std::unique_ptr<NGrpc::TServiceConnection<Yql::DqsProto::DqService>> conn;
+        std::unique_ptr<NYdbGrpc::TServiceConnection<Yql::DqsProto::DqService>> conn;
         ChannelPool.GetStubsHolderLocked(
-            nodeInfo->ClientConfig.Locator, nodeInfo->ClientConfig, [&conn, this](NGrpc::TStubsHolder& holder) mutable {
+            nodeInfo->ClientConfig.Locator, nodeInfo->ClientConfig, [&conn, this](NYdbGrpc::TStubsHolder& holder) mutable {
             conn.reset(ClientLow.CreateGRpcServiceConnection<Yql::DqsProto::DqService>(holder).release());
         });
 
@@ -87,8 +87,8 @@ public:
     }
 
 protected:
-    NGrpc::TGRpcClientLow ClientLow;
-    NGrpc::TChannelPool ChannelPool;
+    NYdbGrpc::TGRpcClientLow ClientLow;
+    NYdbGrpc::TChannelPool ChannelPool;
 };
 
 class TNodeUpdater: public TActor<TNodeUpdater> {
@@ -170,7 +170,7 @@ public:
         TVector<TNodeInfo> locations;
         locations.reserve(hostPort.size());
         for (auto it = hostPort.rbegin(); it != hostPort.rend(); ++it) {
-            locations.push_back({NGrpc::TGRpcClientConfig(std::get<1>(*it), TDuration::Seconds(15)), std::get<2>(*it)});
+            locations.push_back({NYdbGrpc::TGRpcClientConfig(std::get<1>(*it), TDuration::Seconds(15)), std::get<2>(*it)});
         }
 
         if (locations.empty()) {
@@ -244,7 +244,7 @@ public:
     }
 
     TMaybe<TNodeInfo> GetNode() override {
-        auto clientConfig = NGrpc::TGRpcClientConfig{Nodes[CurrentNodeIndex]};
+        auto clientConfig = NYdbGrpc::TGRpcClientConfig{Nodes[CurrentNodeIndex]};
         CurrentNodeIndex = (CurrentNodeIndex + 1) % Nodes.size();
 
         return TNodeInfo{clientConfig, 0};
@@ -254,13 +254,13 @@ public:
     }
 
 private:
-    TVector<NGrpc::TGRpcClientConfig> Nodes;
+    TVector<NYdbGrpc::TGRpcClientConfig> Nodes;
     int CurrentNodeIndex = 0;
 };
 
 TSingleNodeResolver::TSingleNodeResolver()
     : ClientLow(1)
-    , ChannelPool(NGrpc::TTcpKeepAliveSettings{true, 30, 5, 10})
+    , ChannelPool(NYdbGrpc::TTcpKeepAliveSettings{true, 30, 5, 10})
 { }
 
 TSingleNodeResolver::~TSingleNodeResolver()
@@ -269,16 +269,16 @@ TSingleNodeResolver::~TSingleNodeResolver()
 }
 
 TFuture<IServiceNodeResolver::TConnectionResult> TSingleNodeResolver::GetConnection() {
-    auto clientConfig = NGrpc::TGRpcClientConfig(LeaderHostPort);
+    auto clientConfig = NYdbGrpc::TGRpcClientConfig(LeaderHostPort);
 
     auto context = ClientLow.CreateContext();
     if (!context) {
         return MakeFuture(NCommon::ResultFromError<IServiceNodeResolver::TConnectionResult>("Unable to create grpc request context"));
     }
 
-    std::unique_ptr<NGrpc::TServiceConnection<Yql::DqsProto::DqService>> conn;
+    std::unique_ptr<NYdbGrpc::TServiceConnection<Yql::DqsProto::DqService>> conn;
     ChannelPool.GetStubsHolderLocked(
-        clientConfig.Locator, clientConfig, [&conn, this](NGrpc::TStubsHolder& holder) mutable {
+        clientConfig.Locator, clientConfig, [&conn, this](NYdbGrpc::TStubsHolder& holder) mutable {
         conn.reset(ClientLow.CreateGRpcServiceConnection<Yql::DqsProto::DqService>(holder).release());
     });
 

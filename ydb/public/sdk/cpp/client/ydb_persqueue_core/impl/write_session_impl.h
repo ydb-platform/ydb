@@ -339,16 +339,16 @@ private:
     void DoCdsRequest(TDuration delay = TDuration::Zero());
     void OnCdsResponse(TStatus& status, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult& result);
     void OnConnect(TPlainStatus&& st, typename IProcessor::TPtr&& processor,
-            const NGrpc::IQueueClientContextPtr& connectContext);
-    void OnConnectTimeout(const NGrpc::IQueueClientContextPtr& connectTimeoutContext);
+            const NYdbGrpc::IQueueClientContextPtr& connectContext);
+    void OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext);
     void ResetForRetryImpl();
     THandleResult RestartImpl(const TPlainStatus& status);
     void DoConnect(const TDuration& delay, const TString& endpoint);
     void InitImpl();
     void ReadFromProcessor(); // Assumes that we're under lock.
     void WriteToProcessorImpl(TClientMessage&& req); // Assumes that we're under lock.
-    void OnReadDone(NGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
-    void OnWriteDone(NGrpc::TGrpcStatus&& status, size_t connectionGeneration);
+    void OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
+    void OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration);
     TProcessSrvMessageResult ProcessServerMessageImpl();
     TMemoryUsageChange OnMemoryUsageChangedImpl(i64 diff);
     void CompressImpl(TBlock&& block);
@@ -391,10 +391,10 @@ private:
     bool UpdateTokenInProgress = false;
     TInstant LastTokenUpdate = TInstant::Zero();
     std::shared_ptr<TWriteSessionEventsQueue> EventsQueue;
-    NGrpc::IQueueClientContextPtr ClientContext; // Common client context.
-    NGrpc::IQueueClientContextPtr ConnectContext;
-    NGrpc::IQueueClientContextPtr ConnectTimeoutContext;
-    NGrpc::IQueueClientContextPtr ConnectDelayContext;
+    NYdbGrpc::IQueueClientContextPtr ClientContext; // Common client context.
+    NYdbGrpc::IQueueClientContextPtr ConnectContext;
+    NYdbGrpc::IQueueClientContextPtr ConnectTimeoutContext;
+    NYdbGrpc::IQueueClientContextPtr ConnectDelayContext;
     size_t ConnectionGeneration = 0;
     size_t ConnectionAttemptsDone = 0;
     TAdaptiveLock Lock;

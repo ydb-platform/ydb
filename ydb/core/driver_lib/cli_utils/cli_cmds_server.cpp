@@ -1410,7 +1410,7 @@ protected:
 private:
     NClient::TKikimr GetKikimr(const TString& addr) {
         TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
-        NGrpc::TGRpcClientConfig grpcConfig(endpoint.Address, TDuration::Seconds(5));
+        NYdbGrpc::TGRpcClientConfig grpcConfig(endpoint.Address, TDuration::Seconds(5));
         grpcConfig.LoadBalancingPolicy = "round_robin";
         if (endpoint.EnableSsl.Defined()) {
             grpcConfig.EnableSsl = endpoint.EnableSsl.GetRef();

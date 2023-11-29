@@ -368,16 +368,16 @@ private:
     void InitWriter();
 
     void OnConnect(TPlainStatus&& st, typename IProcessor::TPtr&& processor,
-                const NGrpc::IQueueClientContextPtr& connectContext);
-    void OnConnectTimeout(const NGrpc::IQueueClientContextPtr& connectTimeoutContext);
+                const NYdbGrpc::IQueueClientContextPtr& connectContext);
+    void OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext);
     void ResetForRetryImpl();
     THandleResult RestartImpl(const TPlainStatus& status);
     void Connect(const TDuration& delay);
     void InitImpl();
     void ReadFromProcessor(); // Assumes that we're under lock.
     void WriteToProcessorImpl(TClientMessage&& req); // Assumes that we're under lock.
-    void OnReadDone(NGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
-    void OnWriteDone(NGrpc::TGrpcStatus&& status, size_t connectionGeneration);
+    void OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
+    void OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration);
     TProcessSrvMessageResult ProcessServerMessageImpl();
     TMemoryUsageChange OnMemoryUsageChangedImpl(i64 diff);
     void CompressImpl(TBlock&& block);
@@ -406,7 +406,7 @@ private:
     void UpdateTimedCountersImpl();
 
     void ConnectToPreferredPartitionLocation(const TDuration& delay);
-    void OnDescribePartition(const TStatus& status, const Ydb::Topic::DescribePartitionResult& proto, const NGrpc::IQueueClientContextPtr& describePartitionContext);
+    void OnDescribePartition(const TStatus& status, const Ydb::Topic::DescribePartitionResult& proto, const NYdbGrpc::IQueueClientContextPtr& describePartitionContext);
 
     TMaybe<TEndpointKey> GetPreferredEndpointImpl(ui32 partitionId, ui64 partitionNodeId);
 
@@ -424,11 +424,11 @@ private:
     bool UpdateTokenInProgress = false;
     TInstant LastTokenUpdate = TInstant::Zero();
     std::shared_ptr<TWriteSessionEventsQueue> EventsQueue;
-    NGrpc::IQueueClientContextPtr ClientContext; // Common client context.
-    NGrpc::IQueueClientContextPtr ConnectContext;
-    NGrpc::IQueueClientContextPtr ConnectTimeoutContext;
-    NGrpc::IQueueClientContextPtr ConnectDelayContext;
-    NGrpc::IQueueClientContextPtr DescribePartitionContext;
+    NYdbGrpc::IQueueClientContextPtr ClientContext; // Common client context.
+    NYdbGrpc::IQueueClientContextPtr ConnectContext;
+    NYdbGrpc::IQueueClientContextPtr ConnectTimeoutContext;
+    NYdbGrpc::IQueueClientContextPtr ConnectDelayContext;
+    NYdbGrpc::IQueueClientContextPtr DescribePartitionContext;
     size_t ConnectionGeneration = 0;
     size_t ConnectionAttemptsDone = 0;
     TAdaptiveLock Lock;

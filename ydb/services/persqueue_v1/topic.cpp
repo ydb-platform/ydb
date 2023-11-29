@@ -26,7 +26,7 @@ TGRpcTopicService::TGRpcTopicService(NActors::TActorSystem *system,
 {
 }
 
-void TGRpcTopicService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
+void TGRpcTopicService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrpc::TLoggerPtr logger) {
     CQ_ = cq;
 
     ServicesInitializer(ActorSystem_, SchemeCache, Counters_).Execute();
@@ -41,7 +41,7 @@ void TGRpcTopicService::DoUpdateOffsetsInTransaction(std::unique_ptr<IRequestOpC
     TActivationContext::AsActorContext().Register(new TUpdateOffsetsInTransactionActor(p.release()));
 }
 
-void TGRpcTopicService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
 
@@ -90,7 +90,7 @@ void TGRpcTopicService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #endif
 #define ADD_REQUEST(NAME, SVC, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Topic::IN, Ydb::Topic::OUT, NGRpcService::V1::TGRpcTopicService>>(this, this->GetService(), CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
+        [this](NYdbGrpc::IRequestContextBase *ctx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::Topic::V1::SVC::AsyncService::Request ## NAME, \
@@ -127,7 +127,7 @@ void TGRpcTopicService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #define ADD_REQUEST_LIMIT(NAME, CB, LIMIT_TYPE) \
     MakeIntrusive<TGRpcRequest<Ydb::Topic::NAME##Request, Ydb::Topic::NAME##Response, TGRpcTopicService>>     \
         (this, this->GetService(), CQ_,                                                                       \
-            [this](NGrpc::IRequestContextBase *ctx) {                                                         \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                         \
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                              \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                          \
                     new TGrpcRequestOperationCall<Ydb::Topic::NAME##Request, Ydb::Topic::NAME##Response>      \

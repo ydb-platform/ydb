@@ -175,7 +175,7 @@ public:
         ReplyWithYdbStatus(Ydb::StatusIds::GENERIC_ERROR);
     }
 
-    void SetStreamingNotify(NGrpc::IRequestContextBase::TOnNextReply&&) override {
+    void SetStreamingNotify(NYdbGrpc::IRequestContextBase::TOnNextReply&&) override {
         Y_ABORT("Unimplemented for local rpc");
     }
 

@@ -30,7 +30,7 @@
 #include <ydb/core/http_proxy/auth_factory.h>
 #include <ydb/library/accessor/accessor.h>
 
-#include <library/cpp/grpc/server/grpc_server.h>
+#include <ydb/library/grpc/server/grpc_server.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -265,7 +265,7 @@ namespace Tests {
         TServer& operator =(TServer&& server) = default;
         virtual ~TServer();
 
-        void EnableGRpc(const NGrpc::TServerOptions& options);
+        void EnableGRpc(const NYdbGrpc::TServerOptions& options);
         void EnableGRpc(ui16 port);
         void SetupRootStoragePools(const TActorId sender) const;
 
@@ -288,7 +288,7 @@ namespace Tests {
         const NScheme::TTypeRegistry* GetTypeRegistry();
         const NMiniKQL::IFunctionRegistry* GetFunctionRegistry();
         const NYdb::TDriver& GetDriver() const;
-        const NGrpc::TGRpcServer& GetGRpcServer() const;
+        const NYdbGrpc::TGRpcServer& GetGRpcServer() const;
 
         ui32 StaticNodes() const {
             return Settings->NodeCount;
@@ -309,7 +309,7 @@ namespace Tests {
         TIntrusivePtr<NBus::TBusMessageQueue> Bus;
         const NBus::TBusServerSessionConfig BusServerSessionConfig; //BusServer hold const & on config
         TAutoPtr<NMsgBusProxy::IMessageBusServer> BusServer;
-        std::unique_ptr<NGrpc::TGRpcServer> GRpcServer;
+        std::unique_ptr<NYdbGrpc::TGRpcServer> GRpcServer;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> GRpcServerRootCounters;
         NFq::IYqSharedResources::TPtr YqSharedResources;
     };

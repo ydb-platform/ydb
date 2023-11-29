@@ -1,13 +1,13 @@
 #pragma once
 
-#include <library/cpp/grpc/server/grpc_server.h>
+#include <ydb/library/grpc/server/grpc_server.h>
 
 namespace NKikimr {
 
 // Parameterize YDB binary with grpc services registry
 class TGrpcServiceFactory {
 private:
-    using TServicePtr = TIntrusivePtr<NGrpc::IGRpcService>;
+    using TServicePtr = TIntrusivePtr<NYdbGrpc::IGRpcService>;
     using TFactoryMethod = std::function<
             TServicePtr(
                 NActors::TActorSystem*,

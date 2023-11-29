@@ -22,9 +22,9 @@ constexpr TDuration GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY = TDuration::Seconds(1
 constexpr TDuration INITIAL_DEFERRED_CALL_DELAY = TDuration::MilliSeconds(10); // The delay before first deferred service call
 constexpr TDuration GET_ENDPOINTS_TIMEOUT = TDuration::Seconds(10); // Time wait for ListEndpoints request, after this time we pass error to client
 
-using NGrpc::TCallMeta;
-using NGrpc::IQueueClientContextPtr;
-using NGrpc::IQueueClientContextProvider;
+using NYdbGrpc::TCallMeta;
+using NYdbGrpc::IQueueClientContextPtr;
+using NYdbGrpc::IQueueClientContextProvider;
 
 class ICredentialsProvider;
 
@@ -71,16 +71,16 @@ public:
     void Stop(bool wait = false);
 
     template<typename TService>
-    using TServiceConnection = NGrpc::TServiceConnection<TService>;
+    using TServiceConnection = NYdbGrpc::TServiceConnection<TService>;
 
-    static void SetGrpcKeepAlive(NGrpc::TGRpcClientConfig& config, const TDuration& timeout, bool permitWithoutCalls);
+    static void SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config, const TDuration& timeout, bool permitWithoutCalls);
 
     template<typename TService>
     std::pair<std::unique_ptr<TServiceConnection<TService>>, TEndpointKey> GetServiceConnection(
         TDbDriverStatePtr dbState, const TEndpointKey& preferredEndpoint,
         TRpcRequestSettings::TEndpointPolicy endpointPolicy)
     {
-        auto clientConfig = NGrpc::TGRpcClientConfig(dbState->DiscoveryEndpoint);
+        auto clientConfig = NYdbGrpc::TGRpcClientConfig(dbState->DiscoveryEndpoint);
         const auto& sslCredentials = dbState->SslCredentials;
         clientConfig.SslCredentials = {.pem_root_certs = sslCredentials.CaCert, .pem_private_key = sslCredentials.PrivateKey, .pem_cert_chain = sslCredentials.Cert};
         clientConfig.EnableSsl = sslCredentials.IsEnabled;
@@ -117,7 +117,7 @@ public:
         std::unique_ptr<TServiceConnection<TService>> conn;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
         ChannelPool_.GetStubsHolderLocked(
-            clientConfig.Locator, clientConfig, [&conn, this](NGrpc::TStubsHolder& holder) mutable {
+            clientConfig.Locator, clientConfig, [&conn, this](NYdbGrpc::TStubsHolder& holder) mutable {
             conn.reset(GRpcClientLow_.CreateGRpcServiceConnection<TService>(holder).release());
         });
 #else
@@ -128,7 +128,7 @@ public:
 
     template<class TService, class TRequest, class TResponse>
     using TSimpleRpc =
-        typename NGrpc::TSimpleRequestProcessor<
+        typename NYdbGrpc::TSimpleRequestProcessor<
             typename TService::Stub,
             TRequest,
             TResponse>::TAsyncRequest;
@@ -142,7 +142,7 @@ public:
         const TRpcRequestSettings& requestSettings,
         std::shared_ptr<IQueueClientContext> context = nullptr)
     {
-        using NGrpc::TGrpcStatus;
+        using NYdbGrpc::TGrpcStatus;
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         Y_ABORT_UNLESS(dbState);
 
@@ -217,13 +217,13 @@ public:
                 dbState->StatCollector.IncGRpcInFlight();
                 dbState->StatCollector.IncGRpcInFlightByHost(endpoint.GetEndpoint());
 
-                NGrpc::TAdvancedResponseCallback<TResponse> responseCbLow =
+                NYdbGrpc::TAdvancedResponseCallback<TResponse> responseCbLow =
                     [this, context, userResponseCb = std::move(userResponseCb), endpoint, dbState]
                     (const grpc::ClientContext& ctx, TGrpcStatus&& grpcStatus, TResponse&& response) mutable -> void {
                         dbState->StatCollector.DecGRpcInFlight();
                         dbState->StatCollector.DecGRpcInFlightByHost(endpoint.GetEndpoint());
 
-                        if (NGrpc::IsGRpcStatusGood(grpcStatus)) {
+                        if (NYdbGrpc::IsGRpcStatusGood(grpcStatus)) {
                             std::multimap<TStringType, TStringType> metadata;
 
                             for (const auto& [name, value] : ctx.GetServerInitialMetadata()) {
@@ -389,14 +389,14 @@ public:
     void StartReadStream(
         const TRequest& request,
         TCallback responseCb,
-        TStreamRpc<TService, TRequest, TResponse, NGrpc::TStreamRequestReadProcessor> rpc,
+        TStreamRpc<TService, TRequest, TResponse, NYdbGrpc::TStreamRequestReadProcessor> rpc,
         TDbDriverStatePtr dbState,
         const TRpcRequestSettings& requestSettings,
         std::shared_ptr<IQueueClientContext> context = nullptr)
     {
-        using NGrpc::TGrpcStatus;
+        using NYdbGrpc::TGrpcStatus;
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
-        using TProcessor = typename NGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
+        using TProcessor = typename NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
 
         if (!TryCreateContext(context)) {
             responseCb(TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped"), nullptr);
@@ -485,14 +485,14 @@ public:
     template<class TService, class TRequest, class TResponse, class TCallback>
     void StartBidirectionalStream(
         TCallback connectedCallback,
-        TStreamRpc<TService, TRequest, TResponse, NGrpc::TStreamRequestReadWriteProcessor> rpc,
+        TStreamRpc<TService, TRequest, TResponse, NYdbGrpc::TStreamRequestReadWriteProcessor> rpc,
         TDbDriverStatePtr dbState,
         const TRpcRequestSettings& requestSettings,
         std::shared_ptr<IQueueClientContext> context = nullptr)
     {
-        using NGrpc::TGrpcStatus;
+        using NYdbGrpc::TGrpcStatus;
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
-        using TProcessor = typename NGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr;
+        using TProcessor = typename NYdbGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr;
 
         if (!TryCreateContext(context)) {
             connectedCallback(TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped"), nullptr);
@@ -704,7 +704,7 @@ private:
 
     std::atomic_int64_t QueuedRequests_;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    NGrpc::TChannelPool ChannelPool_;
+    NYdbGrpc::TChannelPool ChannelPool_;
 #endif
     // State for default database, token pair
     TDbDriverStatePtr DefaultState_;
@@ -715,7 +715,7 @@ private:
     IDiscoveryMutatorApi::TMutatorCb DiscoveryMutatorCb;
 
     // Must be the last member (first called destructor)
-    NGrpc::TGRpcClientLow GRpcClientLow_;
+    NYdbGrpc::TGRpcClientLow GRpcClientLow_;
     TLog Log;
 };
 

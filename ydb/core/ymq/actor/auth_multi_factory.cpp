@@ -188,7 +188,7 @@ public:
         Authorize();
     }
 
-    static const TErrorClass& GetErrorClass(const NGrpc::TGrpcStatus& status) {
+    static const TErrorClass& GetErrorClass(const NYdbGrpc::TGrpcStatus& status) {
         if (status.InternalError) {
             return NErrors::INTERNAL_FAILURE;
         }
@@ -208,7 +208,7 @@ public:
         }
     }
 
-    static bool IsTemporaryError(const NGrpc::TGrpcStatus& status) {
+    static bool IsTemporaryError(const NYdbGrpc::TGrpcStatus& status) {
         return status.InternalError
             || status.GRpcStatusCode == grpc::StatusCode::UNKNOWN
             || status.GRpcStatusCode == grpc::StatusCode::DEADLINE_EXCEEDED
@@ -220,7 +220,7 @@ public:
         return TActivationContext::Now() < StartTime_ + CLOUD_AUTH_TIMEOUT;
     }
 
-    bool CanRetry(const NGrpc::TGrpcStatus& status) const {
+    bool CanRetry(const NYdbGrpc::TGrpcStatus& status) const {
         return CanRetry() && IsTemporaryError(status);
     }
 

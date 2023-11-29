@@ -12,7 +12,7 @@
 
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/http/http.h>
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/http/server/http.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
@@ -110,7 +110,7 @@ public:
 class THttpRequestProcessors {
 public:
     using TService = Ydb::DataStreams::V1::DataStreamsService;
-    using TServiceConnection = NGrpc::TServiceConnection<TService>;
+    using TServiceConnection = NYdbGrpc::TServiceConnection<TService>;
 
 public:
     void Initialize();

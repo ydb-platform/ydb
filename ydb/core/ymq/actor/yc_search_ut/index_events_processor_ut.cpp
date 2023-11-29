@@ -22,7 +22,7 @@ public:
         auto settings = TServerSettings(mbusPort);
         settings.SetDomainName("Root");
         Server = MakeHolder<TServer>(settings);
-        Server->EnableGRpc(NGrpc::TServerOptions().SetHost("localhost").SetPort(grpcPort));
+        Server->EnableGRpc(NYdbGrpc::TServerOptions().SetHost("localhost").SetPort(grpcPort));
         auto driverConfig = TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << grpcPort);
 
         Driver = MakeHolder<TDriver>(driverConfig);

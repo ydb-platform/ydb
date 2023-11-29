@@ -28,7 +28,7 @@ public:
         result->FolderId = folderId;
         result->CloudId = cloudId;
 
-        result->Status = NGrpc::TGrpcStatus();
+        result->Status = NYdbGrpc::TGrpcStatus();
         Send(ev->Sender, result.release());
     }
 

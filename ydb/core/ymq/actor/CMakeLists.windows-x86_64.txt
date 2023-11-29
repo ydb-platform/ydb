@@ -45,7 +45,7 @@ target_link_libraries(core-ymq-actor PUBLIC
   cpp-actors-core
   cpp-containers-intrusive_rb_tree
   cpp-digest-md5
-  cpp-grpc-client
+  library-grpc-client
   library-cpp-logger
   cpp-lwtrace-mon
   cpp-monlib-dynamic_counters

@@ -3,7 +3,7 @@
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 #include <ydb/library/services/services.pb.h>
 #include <util/string/ascii.h>
 #include "grpc_service_settings.h"
@@ -11,16 +11,16 @@
 #define BLOG_GRPC_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::GRPC_CLIENT, stream)
 #define BLOG_GRPC_DC(context, stream) LOG_DEBUG_S(context, NKikimrServices::GRPC_CLIENT, stream)
 
-inline IOutputStream& operator <<(IOutputStream& out, const NGrpc::TGrpcStatus& status) {
+inline IOutputStream& operator <<(IOutputStream& out, const NYdbGrpc::TGrpcStatus& status) {
     return out << status.GRpcStatusCode << " " << status.Msg;
 }
 
 template <typename TGrpcService>
 class TGrpcServiceClient  {
-    using TServiceConnection = NGrpc::TServiceConnection<TGrpcService>;
+    using TServiceConnection = NYdbGrpc::TServiceConnection<TGrpcService>;
 
-    NGrpc::TGRpcClientConfig Config;
-    NGrpc::TGRpcClientLow Client;
+    NYdbGrpc::TGRpcClientConfig Config;
+    NYdbGrpc::TGRpcClientLow Client;
     std::unique_ptr<TServiceConnection> Connection;
 
     TString Prefix(const TString& requestId = {}) const {
@@ -82,7 +82,7 @@ public:
         }
 
         const TRequestType& request = ev->Get()->Request;
-        NGrpc::TCallMeta meta;
+        NYdbGrpc::TCallMeta meta;
         meta.Timeout = Config.Timeout;
         if (auto token = ev->Get()->Token) {
             if (!AsciiHasPrefixIgnoreCase(token, "Bearer "sv)) {
@@ -94,8 +94,8 @@ public:
             meta.Aux.push_back({"x-request-id", requestId});
         }
 
-        NGrpc::TResponseCallback<TResponseType> callback =
-            [actorSystem = NActors::TActivationContext::ActorSystem(), prefix = Prefix(requestId), request = ev](NGrpc::TGrpcStatus&& status, TResponseType&& response) -> void {
+        NYdbGrpc::TResponseCallback<TResponseType> callback =
+            [actorSystem = NActors::TActivationContext::ActorSystem(), prefix = Prefix(requestId), request = ev](NYdbGrpc::TGrpcStatus&& status, TResponseType&& response) -> void {
                 if (status.Ok()) {
                     BLOG_GRPC_DC(*actorSystem, prefix << "Response " << Trim(TCallType::Obfuscate(response)));
                 } else {
@@ -114,8 +114,8 @@ public:
         Connection->DoRequest(request, std::move(callback), TCallType::Request, meta);
     }
 
-    static NGrpc::TGRpcClientConfig InitGrpcConfig(const NCloud::TGrpcClientSettings& settings) {
-        NGrpc::TGRpcClientConfig config(settings.Endpoint, DEFAULT_TIMEOUT, DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, 0, settings.CertificateRootCA);
+    static NYdbGrpc::TGRpcClientConfig InitGrpcConfig(const NCloud::TGrpcClientSettings& settings) {
+        NYdbGrpc::TGRpcClientConfig config(settings.Endpoint, DEFAULT_TIMEOUT, NYdbGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, 0, settings.CertificateRootCA);
         config.EnableSsl = settings.EnableSsl;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIME_MS] = settings.GrpcKeepAliveTimeMs;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIMEOUT_MS] = settings.GrpcKeepAliveTimeoutMs;

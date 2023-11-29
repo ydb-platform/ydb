@@ -3,7 +3,7 @@
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event.h>
 #include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 
 namespace NKikimr {
 
@@ -17,7 +17,7 @@ namespace NKikimr {
         TString CacheKey;
         TInstant UpdateTimestamp;
         TResponseRecord Response;
-        NGrpc::TGrpcStatus Status;
+        NYdbGrpc::TGrpcStatus Status;
         TVector<THolder<NActors::IEventHandle>> Waiters;
         TRequestRecord* Request = nullptr;
         TString RequestId;

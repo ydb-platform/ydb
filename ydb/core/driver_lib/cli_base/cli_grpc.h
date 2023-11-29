@@ -4,7 +4,7 @@
 
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 #include <ydb/public/lib/deprecated/client/grpc_client.h>
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
@@ -28,13 +28,13 @@ int DoGRpcRequest(const NGRpcProxy::TGRpcClientConfig &clientConfig,
         return -2;
     }
 
-    NGrpc::TCallMeta meta;
+    NYdbGrpc::TCallMeta meta;
     if (securityToken) {
         meta.Aux.push_back({NYdb::YDB_AUTH_TICKET_HEADER, securityToken});
     }
 
-    NGrpc::TResponseCallback<TResponse> responseCb =
-        [&res, &response](NGrpc::TGrpcStatus &&grpcStatus, TResponse &&resp) -> void {
+    NYdbGrpc::TResponseCallback<TResponse> responseCb =
+        [&res, &response](NYdbGrpc::TGrpcStatus &&grpcStatus, TResponse &&resp) -> void {
         res = (int)grpcStatus.GRpcStatusCode;
         if (!res) {
             response.CopyFrom(resp.operation());
@@ -44,13 +44,13 @@ int DoGRpcRequest(const NGRpcProxy::TGRpcClientConfig &clientConfig,
     };
 
     {
-        NGrpc::TGRpcClientLow clientLow;
+        NYdbGrpc::TGRpcClientLow clientLow;
         auto connection = clientLow.CreateGRpcServiceConnection<TService>(clientConfig);
         connection->DoRequest(request, responseCb, function, meta);
     }
 
-    NGrpc::TResponseCallback<Ydb::Operations::GetOperationResponse> operationCb =
-        [&res, &response](NGrpc::TGrpcStatus &&grpcStatus, Ydb::Operations::GetOperationResponse &&resp) -> void {
+    NYdbGrpc::TResponseCallback<Ydb::Operations::GetOperationResponse> operationCb =
+        [&res, &response](NYdbGrpc::TGrpcStatus &&grpcStatus, Ydb::Operations::GetOperationResponse &&resp) -> void {
         res = (int)grpcStatus.GRpcStatusCode;
         if (!res) {
             response.CopyFrom(resp.operation());
@@ -61,7 +61,7 @@ int DoGRpcRequest(const NGRpcProxy::TGRpcClientConfig &clientConfig,
 
     while (!res && !response.ready()) {
         Sleep(TDuration::MilliSeconds(100));
-        NGrpc::TGRpcClientLow clientLow;
+        NYdbGrpc::TGRpcClientLow clientLow;
         auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Operation::V1::OperationService>(clientConfig);
         Ydb::Operations::GetOperationRequest request;
         request.set_id(response.id());

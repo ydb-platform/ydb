@@ -60,7 +60,7 @@ void TDeferredAction::OnAlarm() {
 
 void TDeferredAction::OnError() {
     Y_ABORT_UNLESS(Connection_);
-    NGrpc::TGrpcStatus status = {"Deferred timer interrupted", -1, true};
+    NYdbGrpc::TGrpcStatus status = {"Deferred timer interrupted", -1, true};
     DbDriverState_->StatCollector.IncDiscoveryFailDueTransportError();
 
     auto resp = new TGRpcErrorResponse<Ydb::Operations::Operation>(
@@ -75,7 +75,7 @@ void TDeferredAction::OnError() {
 TPeriodicAction::TPeriodicAction(
     TPeriodicCb&& userCb,
     TGRpcConnectionsImpl* connection,
-    std::shared_ptr<NGrpc::IQueueClientContext> context,
+    std::shared_ptr<NYdbGrpc::IQueueClientContext> context,
     TDuration period)
     : TAlarmActionBase(std::move(userCb), connection, std::move(context))
     , Period_(period)

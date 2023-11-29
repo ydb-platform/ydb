@@ -114,13 +114,13 @@ public:
             Server_->GetRuntime()->SetLogPriority(NKikimrServices::YQ_CONTROL_PLANE_PROXY, NActors::NLog::PRI_DEBUG);
         }
 
-        NGrpc::TServerOptions grpcOption;
+        NYdbGrpc::TServerOptions grpcOption;
         if (TestSettings::AUTH) {
             grpcOption.SetUseAuth(true);
         }
         grpcOption.SetPort(grpc);
         if (TestSettings::SSL) {
-            NGrpc::TSslData sslData;
+            NYdbGrpc::TSslData sslData;
             sslData.Cert = TestSettings::GetServerCrt();
             sslData.Key = TestSettings::GetServerKey();
             sslData.Root =TestSettings::GetCaCrt();

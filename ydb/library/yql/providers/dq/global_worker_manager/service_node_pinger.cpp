@@ -287,10 +287,10 @@ private:
 
                 if (!lastPingTime || errors > 1 || oks < 2 || !result.NodeId) {
                     // GRPC ping
-                    NGrpc::TCallMeta meta;
+                    NYdbGrpc::TCallMeta meta;
                     meta.Timeout = timeout;
                     result.Connection->DoRequest<Yql::DqsProto::RegisterNodeRequest, Yql::DqsProto::RegisterNodeResponse>(
-                        req, [=] (NGrpc::TGrpcStatus&& status, Yql::DqsProto::RegisterNodeResponse&& resp) {
+                        req, [=] (NYdbGrpc::TGrpcStatus&& status, Yql::DqsProto::RegisterNodeResponse&& resp) {
                             if (!status.Ok()) {
                                 YQL_CLOG(DEBUG, ProviderDq) << "Error on service node ping " << status.Msg;
                                 if (auto resolver = maybeResolver.lock()) {

@@ -46,9 +46,9 @@ class TYqlResultPartIterator::TReaderImpl {
 public:
     using TSelf = TYqlResultPartIterator::TReaderImpl;
     using TResponse = Ydb::Scripting::ExecuteYqlPartialResponse;
-    using TStreamProcessorPtr = NGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
-    using TReadCallback = NGrpc::IStreamRequestReadProcessor<TResponse>::TReadCallback;
-    using TGRpcStatus = NGrpc::TGrpcStatus;
+    using TStreamProcessorPtr = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
+    using TReadCallback = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TReadCallback;
+    using TGRpcStatus = NYdbGrpc::TGrpcStatus;
 
     TReaderImpl(TStreamProcessorPtr streamProcessor, const TString& endpoint)
         : StreamProcessor_(streamProcessor)

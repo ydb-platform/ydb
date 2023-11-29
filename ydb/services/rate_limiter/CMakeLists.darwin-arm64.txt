@@ -12,7 +12,7 @@ add_library(ydb-services-rate_limiter)
 target_link_libraries(ydb-services-rate_limiter PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-grpc-server
+  library-grpc-server
   ydb-core-grpc_services
   core-kesus-tablet
   api-grpc

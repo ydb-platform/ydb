@@ -33,9 +33,9 @@ PEERDIR(
     library/cpp/actors/protos
     library/cpp/actors/util
     library/cpp/getopt/small
-    library/cpp/grpc/client
-    library/cpp/grpc/server
-    library/cpp/grpc/server/actors
+    ydb/library/grpc/client
+    ydb/library/grpc/server
+    ydb/library/grpc/server/actors
     library/cpp/logger
     library/cpp/malloc/api
     library/cpp/messagebus

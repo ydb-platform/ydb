@@ -107,9 +107,9 @@ private:
     void Handle(TRefreshTokenImpl::TPtr& event, const TActorContext& ctx) {
         const auto record = event->Get();
         ctx.Send(record->GetFromId(), new TGRpcRequestProxy::TEvRefreshTokenResponse {
-            record->GetAuthState().State == NGrpc::TAuthState::EAuthState::AS_OK,
+            record->GetAuthState().State == NYdbGrpc::TAuthState::EAuthState::AS_OK,
             record->GetInternalToken(),
-            record->GetAuthState().State == NGrpc::TAuthState::EAuthState::AS_UNAVAILABLE,
+            record->GetAuthState().State == NYdbGrpc::TAuthState::EAuthState::AS_UNAVAILABLE,
             NYql::TIssues()});
     }
 
@@ -152,12 +152,12 @@ private:
 
         auto state = requestBaseCtx->GetAuthState();
 
-        if (state.State == NGrpc::TAuthState::AS_FAIL) {
+        if (state.State == NYdbGrpc::TAuthState::AS_FAIL) {
             requestBaseCtx->ReplyUnauthenticated();
             return;
         }
 
-        if (state.State == NGrpc::TAuthState::AS_UNAVAILABLE) {
+        if (state.State == NYdbGrpc::TAuthState::AS_UNAVAILABLE) {
             Counters->IncDatabaseUnavailableCounter();
             const TString error = "Unable to resolve token";
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE, error);
@@ -173,7 +173,7 @@ private:
         // remove this along with AllowYdbRequestsWithoutDatabase flag
         bool skipCheckConnectRigths = false;
 
-        if (state.State == NGrpc::TAuthState::AS_NOT_PERFORMED) {
+        if (state.State == NYdbGrpc::TAuthState::AS_NOT_PERFORMED) {
             const auto& maybeDatabaseName = requestBaseCtx->GetDatabaseName();
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
                 databaseName = CanonizePath(maybeDatabaseName.GetRef());
@@ -359,9 +359,9 @@ void TGRpcRequestProxyImpl::ReplayEvents(const TString& databaseName, const TAct
 void TGRpcRequestProxyImpl::HandleRefreshToken(TRefreshTokenImpl::TPtr& ev, const TActorContext& ctx) {
     const auto record = ev->Get();
     ctx.Send(record->GetFromId(), new TGRpcRequestProxy::TEvRefreshTokenResponse {
-        record->GetAuthState().State == NGrpc::TAuthState::EAuthState::AS_OK,
+        record->GetAuthState().State == NYdbGrpc::TAuthState::EAuthState::AS_OK,
         record->GetInternalToken(),
-        record->GetAuthState().State == NGrpc::TAuthState::EAuthState::AS_UNAVAILABLE,
+        record->GetAuthState().State == NYdbGrpc::TAuthState::EAuthState::AS_UNAVAILABLE,
         NYql::TIssues()});
 }
 
@@ -405,8 +405,8 @@ void TGRpcRequestProxyImpl::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) 
 
 bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
     const auto& state = ctx.GetAuthState();
-    return state.State == NGrpc::TAuthState::AS_OK ||
-           state.State == NGrpc::TAuthState::AS_FAIL && state.NeedAuth == false ||
+    return state.State == NYdbGrpc::TAuthState::AS_OK ||
+           state.State == NYdbGrpc::TAuthState::AS_FAIL && state.NeedAuth == false ||
            state.NeedAuth == false && !ctx.GetYdbToken();
 }
 

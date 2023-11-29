@@ -23,10 +23,13 @@ def onllvm_bc(unit, *args):
             llvm_compile([rel_path, bc_path])
         bcs.append(bc_path)
     unit.onllvm_link([merged_bc] + bcs)
-    opt_opts = ['-O2', '-globalopt', '-globaldce']
+    passes = ['default<O2>', 'globalopt', 'globaldce']
+    opt_opts = []
     if symbols:
+        passes += ['internalize']
         # XXX: '#' used instead of ',' to overcome ymake tendency to split everything by comma
-        opt_opts += ['-internalize', '-internalize-public-api-list=' + '#'.join(symbols)]
+        opt_opts += ['-internalize-public-api-list=' + '#'.join(symbols)]
+    opt_opts += ['-passes={}'.format('${__COMMA__}'.join(passes))]
     unit.onllvm_opt([merged_bc, out_bc] + opt_opts)
     if 'GENERATE_MACHINE_CODE' in kwds:
         unit.onllvm_llc([out_bc, '-O2'])

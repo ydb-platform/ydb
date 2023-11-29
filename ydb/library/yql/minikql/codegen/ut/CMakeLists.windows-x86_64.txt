@@ -75,11 +75,8 @@ add_custom_command(
   ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/Funcs_merged.bc
   -o
   ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/Funcs_optimized.bc
-  -O2
-  -globalopt
-  -globaldce
-  -internalize
   -internalize-public-api-list=fib#sum_sqr#sum_sqr2#sum_sqr_128#sum_sqr_128_ir#str_size
+  -passes=default<O2>,globalopt,globaldce,internalize
 )
 add_custom_command(
   OUTPUT

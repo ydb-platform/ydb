@@ -58,11 +58,8 @@ add_custom_command(
   ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/Math_merged.udfs.bc
   -o
   ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/Math_optimized.udfs.bc
-  -O2
-  -globalopt
-  -globaldce
-  -internalize
   -internalize-public-api-list=PiIR#EIR#EpsIR#AbsIR#AcosIR#AsinIR#AsinhIR#AtanIR#CbrtIR#CeilIR#CosIR#CoshIR#ErfIR#ErfInvIR#ErfcInvIR#ExpIR#Exp2IR#FabsIR#FloorIR#LgammaIR#RintIR#SinIR#SinhIR#SqrtIR#TanIR#TanhIR#TgammaIR#TruncIR#IsFiniteIR#IsInfIR#IsNaNIR#Atan2IR#FmodIR#HypotIR#RemainderIR#PowIR#LdexpIR#LogIR#Log2IR#Log10IR#SigmoidIR#FuzzyEqualsIR#RoundIR#ModIR#RemIR
+  -passes=default<O2>,globalopt,globaldce,internalize
 )
 add_custom_command(
   OUTPUT
@@ -138,11 +135,8 @@ add_custom_command(
   ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/Math_merged.bc
   -o
   ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/Math_optimized.bc
-  -O2
-  -globalopt
-  -globaldce
-  -internalize
   -internalize-public-api-list=PiIR#EIR#EpsIR#AbsIR#AcosIR#AsinIR#AsinhIR#AtanIR#CbrtIR#CeilIR#CosIR#CoshIR#ErfIR#ErfInvIR#ErfcInvIR#ExpIR#Exp2IR#FabsIR#FloorIR#LgammaIR#RintIR#SinIR#SinhIR#SqrtIR#TanIR#TanhIR#TgammaIR#TruncIR#IsFiniteIR#IsInfIR#IsNaNIR#Atan2IR#FmodIR#HypotIR#RemainderIR#PowIR#LdexpIR#LogIR#Log2IR#Log10IR#SigmoidIR#FuzzyEqualsIR#RoundIR#ModIR#RemIR
+  -passes=default<O2>,globalopt,globaldce,internalize
 )
 add_custom_command(
   OUTPUT

@@ -92,7 +92,7 @@ if __name__ == '__main__':
     try:
         ret_code = main()
     except Exception as e:
-        print >> sys.stderr, "\n[Error]: " + str(e)
+        print("\n[Error]: " + str(e), file=sys.stderr)
         ret_code = 1
     exit(ret_code)
 

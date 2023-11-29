@@ -55,6 +55,34 @@ int main() {
 }
 ```
 
+You can parse delimited numbers:
+```C++
+  const std::string input =   "234532.3426362,7869234.9823,324562.645";
+  double result;
+  auto answer = fast_float::from_chars(input.data(), input.data()+input.size(), result);
+  if(answer.ec != std::errc()) {
+    // check error
+  }
+  // we have result == 234532.3426362.
+  if(answer.ptr[0] != ',') {
+    // unexpected delimiter
+  }
+  answer = fast_float::from_chars(answer.ptr + 1, input.data()+input.size(), result);
+  if(answer.ec != std::errc()) {
+    // check error
+  }
+  // we have result == 7869234.9823.
+  if(answer.ptr[0] != ',') {
+    // unexpected delimiter
+  }
+  answer = fast_float::from_chars(answer.ptr + 1, input.data()+input.size(), result);
+  if(answer.ec != std::errc()) {
+    // check error
+  }
+  // we have result == 324562.645.
+```
+
+
 
 Like the C++17 standard, the `fast_float::from_chars` functions take an optional last argument of
 the type `fast_float::chars_format`. It is a bitset value: we check whether
@@ -115,7 +143,7 @@ int main() {
 }
 ```
 
-## Using commas as decimal separator
+## Advanced options:  using commas as decimal separator, JSON and Fortran
 
 
 The C++ standard stipulate that `from_chars` has to be locale-independent. In
@@ -140,33 +168,72 @@ int main() {
 }
 ```
 
-You can parse delimited numbers:
+You can also parse Fortran-like inputs:
+
 ```C++
-  const std::string input =   "234532.3426362,7869234.9823,324562.645";
-  double result;
-  auto answer = fast_float::from_chars(input.data(), input.data()+input.size(), result);
-  if(answer.ec != std::errc()) {
-    // check error
-  }
-  // we have result == 234532.3426362.
-  if(answer.ptr[0] != ',') {
-    // unexpected delimiter
-  }
-  answer = fast_float::from_chars(answer.ptr + 1, input.data()+input.size(), result);
-  if(answer.ec != std::errc()) {
-    // check error
-  }
-  // we have result == 7869234.9823.
-  if(answer.ptr[0] != ',') {
-    // unexpected delimiter
-  }
-  answer = fast_float::from_chars(answer.ptr + 1, input.data()+input.size(), result);
-  if(answer.ec != std::errc()) {
-    // check error
-  }
-  // we have result == 324562.645.
+#include "fast_float/fast_float.h"
+#include <iostream>
+
+int main() {
+    const std::string input =  "1d+4";
+    double result;
+    fast_float::parse_options options{ fast_float::chars_format::fortran };
+    auto answer = fast_float::from_chars_advanced(input.data(), input.data()+input.size(), result, options);
+    if((answer.ec != std::errc()) || ((result != 10000))) { std::cerr << "parsing failure\n"; return EXIT_FAILURE; }
+    std::cout << "parsed the number " << result << std::endl;
+    return EXIT_SUCCESS;
+}
 ```
 
+You may also enforce the JSON format ([RFC 8259](https://datatracker.ietf.org/doc/html/rfc8259#section-6)):
+
+
+```C++
+#include "fast_float/fast_float.h"
+#include <iostream>
+
+int main() {
+    const std::string input =  "+.1"; // not valid
+    double result;
+    fast_float::parse_options options{ fast_float::chars_format::json };
+    auto answer = fast_float::from_chars_advanced(input.data(), input.data()+input.size(), result, options);
+    if(answer.ec == std::errc()) { std::cerr << "should have failed\n"; return EXIT_FAILURE; }
+    return EXIT_SUCCESS;
+}
+```
+
+By default the JSON format does not allow `inf`:
+
+```C++
+
+#include "fast_float/fast_float.h"
+#include <iostream>
+
+int main() {
+    const std::string input =  "inf"; // not valid in JSON
+    double result;
+    fast_float::parse_options options{ fast_float::chars_format::json };
+    auto answer = fast_float::from_chars_advanced(input.data(), input.data()+input.size(), result, options);
+    if(answer.ec == std::errc()) { std::cerr << "should have failed\n"; return EXIT_FAILURE; }
+}
+```
+
+
+You can allow it with a non-standard `json_or_infnan` variant:
+
+```C++
+#include "fast_float/fast_float.h"
+#include <iostream>
+
+int main() {
+    const std::string input =  "inf"; // not valid in JSON but we allow it with json_or_infnan
+    double result;
+    fast_float::parse_options options{ fast_float::chars_format::json_or_infnan };
+    auto answer = fast_float::from_chars_advanced(input.data(), input.data()+input.size(), result, options);
+    if(answer.ec != std::errc() || (!std::isinf(result))) { std::cerr << "should have parsed infinity\n"; return EXIT_FAILURE; }
+    return EXIT_SUCCESS;
+}
+``````
 
 ## Relation With Other Work
 
@@ -264,7 +331,7 @@ the command line help.
 
 You may directly download automatically generated single-header files:
 
-https://github.com/fastfloat/fast_float/releases/download/v5.2.0/fast_float.h
+https://github.com/fastfloat/fast_float/releases/download/v5.3.0/fast_float.h
 
 ## Credit
 

@@ -30,6 +30,8 @@ void CollectTaskRunnerStatisticsByStage(NYson::TYsonWriter& writer, const TOpera
     THashMap<TString, TOperationStatistics> taskRunnerStage;
     THashMap<TString, TOperationStatistics> taskRunnerInput;
     THashMap<TString, TOperationStatistics> taskRunnerOutput;
+    THashMap<TString, TOperationStatistics> taskRunnerSource;
+    THashMap<TString, TOperationStatistics> taskRunnerSink;
 
     for (const auto& entry : taskRunner.Entries) {
         TString prefix, name;
@@ -39,6 +41,8 @@ void CollectTaskRunnerStatisticsByStage(NYson::TYsonWriter& writer, const TOpera
         }
         auto maybeInput = labels.find("Input");
         auto maybeOutput = labels.find("Output");
+        auto maybeSource = labels.find("Source");
+        auto maybeSink = labels.find("Sink");
         auto maybeStage = labels.find("Stage");
         if (maybeStage == labels.end()) {
             maybeStage = labels.find("Task");
@@ -55,7 +59,15 @@ void CollectTaskRunnerStatisticsByStage(NYson::TYsonWriter& writer, const TOpera
             auto newEntry = entry; newEntry.Name = name;
             taskRunnerOutput[maybeStage->second].Entries.push_back(newEntry);
         }
-        if (maybeInput == labels.end() && maybeOutput == labels.end()) {
+        if (maybeSource != labels.end()) {
+            auto newEntry = entry; newEntry.Name = name;
+            taskRunnerSource[maybeStage->second].Entries.push_back(newEntry);
+        }
+        if (maybeSink != labels.end()) {
+            auto newEntry = entry; newEntry.Name = name;
+            taskRunnerSink[maybeStage->second].Entries.push_back(newEntry);
+        }
+        if (maybeInput == labels.end() && maybeOutput == labels.end() && maybeSource == labels.end() && maybeSink == labels.end()) {
             auto newEntry = entry; newEntry.Name = name;
             taskRunnerStage[maybeStage->second].Entries.push_back(newEntry);
         }
@@ -65,6 +77,8 @@ void CollectTaskRunnerStatisticsByStage(NYson::TYsonWriter& writer, const TOpera
     for (const auto& [stageId, stat] : taskRunnerStage) {
         const auto& inputStat = taskRunnerInput[stageId];
         const auto& outputStat = taskRunnerOutput[stageId];
+        const auto& sourceStat = taskRunnerSource[stageId];
+        const auto& sinkStat = taskRunnerSink[stageId];
 
         writer.OnKeyedItem("Stage=" + stageId);
         {
@@ -75,6 +89,12 @@ void CollectTaskRunnerStatisticsByStage(NYson::TYsonWriter& writer, const TOpera
 
             writer.OnKeyedItem("Output");
             NCommon::WriteStatistics(writer, totalOnly, {{0, outputStat}});
+
+            writer.OnKeyedItem("Source");
+            NCommon::WriteStatistics(writer, totalOnly, {{0, sourceStat}});
+
+            writer.OnKeyedItem("Sink");
+            NCommon::WriteStatistics(writer, totalOnly, {{0, sinkStat}});
 
             writer.OnKeyedItem("Task");
             NCommon::WriteStatistics(writer, totalOnly, {{0, stat}});

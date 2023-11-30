@@ -2176,10 +2176,10 @@ TScanConveyorInitializer::TScanConveyorInitializer(const TKikimrRunConfig& runCo
 void TScanConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     NConveyor::TConfig serviceConfig;
     if (Config.HasScanConveyorConfig()) {
+        AFL_NOTICE(NKikimrServices::TX_CONVEYOR)("event", "initialization")("config", Config.GetScanConveyorConfig().DebugString());
         Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetScanConveyorConfig()));
-    }
-    if (!serviceConfig.HasDefaultFractionOfThreadsCount()) {
-        serviceConfig.SetDefaultFractionOfThreadsCount(0.33);
+    } else {
+        AFL_NOTICE(NKikimrServices::TX_CONVEYOR)("event", "initialization")("config", "no_section");
     }
 
     if (serviceConfig.IsEnabled()) {

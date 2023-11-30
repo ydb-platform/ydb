@@ -10,8 +10,9 @@ PY_SRCS(
     select_missing_database.py
     select_missing_table.py
     select_pg_schema.py
-    select_positive.py
-    select_pushdown.py
+    select_positive_clickhouse.py
+    select_positive_common.py
+    select_positive_postgresql.py
 )
 
 PEERDIR(

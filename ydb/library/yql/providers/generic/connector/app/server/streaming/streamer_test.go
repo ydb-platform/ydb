@@ -14,11 +14,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/ydb/library/go/core/log"
-	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/config"
-	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/clickhouse"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/rdbms"
+	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/rdbms/clickhouse"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
@@ -213,14 +212,13 @@ func (tc testCaseStreaming) execute(t *testing.T) {
 
 	typeMapper := clickhouse.NewTypeMapper()
 
-	handlerFactory := &rdbms.HandlerFactoryMock{
+	dataSourcePreset := &rdbms.Preset{
 		SQLFormatter:      clickhouse.NewSQLFormatter(),
 		ConnectionManager: connectionManager,
 		TypeMapper:        typeMapper,
 	}
 
-	handler, err := handlerFactory.Make(logger, api_common.EDataSourceKind_CLICKHOUSE)
-	require.NoError(t, err)
+	dataSource := rdbms.NewDataSource(logger, dataSourcePreset)
 
 	columnarBufferFactory, err := paging.NewColumnarBufferFactory(
 		logger,
@@ -244,7 +242,7 @@ func (tc testCaseStreaming) execute(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	streamer := NewStreamer(logger, stream, request, split, sink, handler)
+	streamer := NewStreamer(logger, stream, request, split, sink, dataSource)
 
 	err = streamer.Run()
 

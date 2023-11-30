@@ -6,22 +6,22 @@ import (
 	"sync"
 
 	"github.com/ydb-platform/ydb/library/go/core/log"
+	data_source "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/datasource"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
-	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/rdbms"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
 type Streamer struct {
-	stream  api_service.Connector_ReadSplitsServer
-	request *api_service_protos.TReadSplitsRequest
-	handler rdbms.Handler
-	split   *api_service_protos.TSplit
-	sink    paging.Sink
-	logger  log.Logger
-	ctx     context.Context // clone of a stream context
-	cancel  context.CancelFunc
+	stream     api_service.Connector_ReadSplitsServer
+	request    *api_service_protos.TReadSplitsRequest
+	dataSource data_source.DataSource
+	split      *api_service_protos.TSplit
+	sink       paging.Sink
+	logger     log.Logger
+	ctx        context.Context // clone of a stream context
+	cancel     context.CancelFunc
 }
 
 func (s *Streamer) writeDataToStream() error {
@@ -83,7 +83,7 @@ func (s *Streamer) Run() error {
 	go func() {
 		defer wg.Done()
 
-		s.handler.ReadSplit(s.ctx, s.logger, s.split, s.sink)
+		s.dataSource.ReadSplit(s.ctx, s.logger, s.split, s.sink)
 	}()
 
 	// pass received blocks into the GRPC channel
@@ -100,18 +100,18 @@ func NewStreamer(
 	request *api_service_protos.TReadSplitsRequest,
 	split *api_service_protos.TSplit,
 	sink paging.Sink,
-	handler rdbms.Handler,
+	dataSource data_source.DataSource,
 ) *Streamer {
 	ctx, cancel := context.WithCancel(stream.Context())
 
 	return &Streamer{
-		logger:  logger,
-		stream:  stream,
-		split:   split,
-		request: request,
-		handler: handler,
-		sink:    sink,
-		ctx:     ctx,
-		cancel:  cancel,
+		logger:     logger,
+		stream:     stream,
+		split:      split,
+		request:    request,
+		dataSource: dataSource,
+		sink:       sink,
+		ctx:        ctx,
+		cancel:     cancel,
 	}
 }

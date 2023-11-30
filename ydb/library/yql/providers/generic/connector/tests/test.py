@@ -7,11 +7,11 @@ from utils.settings import Settings
 import clickhouse
 import join
 import postgresql
-from test_cases.collection import TestCaseCollection
+from test_cases.collection import Collection
 import test_cases.join
 import test_cases.select_missing_database
 import test_cases.select_missing_table
-import test_cases.select_positive
+import test_cases.select_positive_common
 import utils.clickhouse
 from utils.runner import Runner
 from conftest import configure_runner
@@ -21,33 +21,44 @@ import utils.postgresql
 
 
 # Global collection of test cases dependent on environment
-tc_collection = TestCaseCollection(Settings.from_env())
+tc_collection = Collection(Settings.from_env())
 
 runners = (dqrun.DqRunner, kqprun.KqpRunner)
 runners_ids = ("dqrun", "kqprun")
 
 
 @pytest.mark.parametrize("runner_type", runners, ids=runners_ids)
-@pytest.mark.parametrize("test_case", tc_collection.get('select_positive'), ids=tc_collection.ids('select_positive'))
+@pytest.mark.parametrize(
+    "test_case", tc_collection.get('select_positive_postgresql'), ids=tc_collection.ids('select_positive_postgresql')
+)
+@pytest.mark.usefixtures("settings")
+@pytest.mark.usefixtures("postgresql_client")
+def test_select_positive_postgresql(
+    tmp_path: Path,
+    settings: Settings,
+    runner_type: Runner,
+    postgresql_client: utils.postgresql.Client,
+    test_case: test_cases.select_positive_common.TestCase,
+):
+    runner = configure_runner(runner=runner_type, settings=settings)
+    postgresql.select_positive(tmp_path, settings, runner, postgresql_client, test_case)
+
+
+@pytest.mark.parametrize("runner_type", runners, ids=runners_ids)
+@pytest.mark.parametrize(
+    "test_case", tc_collection.get('select_positive_clickhouse'), ids=tc_collection.ids('select_positive_clickhouse')
+)
 @pytest.mark.usefixtures("settings")
 @pytest.mark.usefixtures("clickhouse_client")
-@pytest.mark.usefixtures("postgresql_client")
-def test_select_positive(
+def test_select_positive_clickhouse(
     tmp_path: Path,
     settings: Settings,
     runner_type: Runner,
     clickhouse_client: utils.clickhouse.Client,
-    postgresql_client: utils.postgresql.Client,
-    test_case: test_cases.select_positive.TestCase,
+    test_case: test_cases.select_positive_common.TestCase,
 ):
     runner = configure_runner(runner=runner_type, settings=settings)
-    match test_case.data_source_kind:
-        case EDataSourceKind.CLICKHOUSE:
-            clickhouse.select_positive(tmp_path, settings, runner, clickhouse_client, test_case)
-        case EDataSourceKind.POSTGRESQL:
-            postgresql.select_positive(tmp_path, settings, runner, postgresql_client, test_case)
-        case _:
-            raise Exception(f'invalid data source: {test_case.data_source_kind}')
+    clickhouse.select_positive(tmp_path, settings, runner, clickhouse_client, test_case)
 
 
 @pytest.mark.parametrize("runner_type", runners, ids=runners_ids)
@@ -135,7 +146,7 @@ def test_select_datetime(
     runner_type: dqrun.Runner,
     clickhouse_client: utils.clickhouse.Client,
     postgresql_client: utils.postgresql.Client,
-    test_case: test_cases.select_positive.TestCase,
+    test_case: test_cases.select_positive_common.TestCase,
 ):
     runner = configure_runner(runner=runner_type, settings=settings)
     match test_case.data_source_kind:
@@ -150,38 +161,13 @@ def test_select_datetime(
 @pytest.mark.parametrize("runner_type", runners, ids=runners_ids)
 @pytest.mark.parametrize("test_case", tc_collection.get('select_pg_schema'), ids=tc_collection.ids('select_pg_schema'))
 @pytest.mark.usefixtures("settings")
-@pytest.mark.usefixtures("clickhouse_client")
 @pytest.mark.usefixtures("postgresql_client")
 def test_select_pg_schema(
     tmp_path: Path,
     settings: Settings,
     runner_type: dqrun.Runner,
-    clickhouse_client: utils.clickhouse.Client,
     postgresql_client: utils.postgresql.Client,
-    test_case: test_cases.select_positive.TestCase,
+    test_case: test_cases.select_positive_common.TestCase,
 ):
     runner = configure_runner(runner=runner_type, settings=settings)
     postgresql.select_pg_schema(tmp_path, settings, runner, postgresql_client, test_case)
-
-
-@pytest.mark.parametrize("runner_type", runners, ids=runners_ids)
-@pytest.mark.parametrize("test_case", tc_collection.get('select_pushdown'), ids=tc_collection.ids('select_pushdown'))
-@pytest.mark.usefixtures("settings")
-@pytest.mark.usefixtures("clickhouse_client")
-@pytest.mark.usefixtures("postgresql_client")
-def test_select_pushdown(
-    tmp_path: Path,
-    settings: Settings,
-    runner_type: dqrun.Runner,
-    clickhouse_client: utils.clickhouse.Client,
-    postgresql_client: utils.postgresql.Client,
-    test_case: test_cases.select_positive.TestCase,
-):
-    runner = configure_runner(runner=runner_type, settings=settings)
-    match test_case.data_source_kind:
-        case EDataSourceKind.CLICKHOUSE:
-            clickhouse.select_positive(tmp_path, settings, runner, clickhouse_client, test_case)
-        case EDataSourceKind.POSTGRESQL:
-            postgresql.select_positive(tmp_path, settings, runner, postgresql_client, test_case)
-        case _:
-            raise Exception(f'invalid data source: {test_case.data_source_kind}')

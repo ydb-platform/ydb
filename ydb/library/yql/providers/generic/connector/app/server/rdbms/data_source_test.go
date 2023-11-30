@@ -10,7 +10,7 @@ import (
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
-	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/postgresql"
+	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/rdbms/postgresql"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
@@ -51,9 +51,9 @@ func TestReadSplit(t *testing.T) {
 
 		connectionManager := &utils.ConnectionManagerMock{}
 
-		p := &handlerPreset{
-			connectionManager: connectionManager,
-			sqlFormatter:      postgresql.NewSQLFormatter(), // TODO: parametrize
+		preset := &Preset{
+			ConnectionManager: connectionManager,
+			SQLFormatter:      postgresql.NewSQLFormatter(), // TODO: parametrize
 		}
 
 		connection := &utils.ConnectionMock{}
@@ -82,8 +82,8 @@ func TestReadSplit(t *testing.T) {
 		sink.On("AddRow", col1, col2).Return(nil).Times(2)
 		sink.On("Finish").Return().Once()
 
-		handler := newHandler(logger, p)
-		handler.ReadSplit(ctx, logger, split, sink)
+		dataSource := NewDataSource(logger, preset)
+		dataSource.ReadSplit(ctx, logger, split, sink)
 
 		mock.AssertExpectationsForObjects(t, connectionManager, connection, rows, sink)
 	})
@@ -93,9 +93,9 @@ func TestReadSplit(t *testing.T) {
 
 		connectionManager := &utils.ConnectionManagerMock{}
 
-		p := &handlerPreset{
-			connectionManager: connectionManager,
-			sqlFormatter:      postgresql.NewSQLFormatter(), // TODO: parametrize
+		preset := &Preset{
+			ConnectionManager: connectionManager,
+			SQLFormatter:      postgresql.NewSQLFormatter(), // TODO: parametrize
 		}
 
 		connection := &utils.ConnectionMock{}
@@ -128,8 +128,8 @@ func TestReadSplit(t *testing.T) {
 		})).Return().Once()
 		sink.On("Finish").Return().Once()
 
-		handler := newHandler(logger, p)
-		handler.ReadSplit(ctx, logger, split, sink)
+		datasource := NewDataSource(logger, preset)
+		datasource.ReadSplit(ctx, logger, split, sink)
 
 		mock.AssertExpectationsForObjects(t, connectionManager, connection, rows, sink)
 	})

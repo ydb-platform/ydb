@@ -3,6 +3,7 @@ GO_LIBRARY()
 SRCS(
     cmd.go
     config.go
+    data_source_factory.go
     doc.go
     grpc_metrics.go
     httppuller.go
@@ -16,9 +17,8 @@ SRCS(
 END()
 
 RECURSE(
-    clickhouse
+    datasource
     paging
-    postgresql
     rdbms
     streaming
     utils

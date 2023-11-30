@@ -11,8 +11,8 @@ import (
 	"github.com/ydb-platform/ydb/library/go/core/metrics/solomon"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/config"
+	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/datasource"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
-	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/rdbms"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/streaming"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service"
@@ -24,7 +24,7 @@ import (
 
 type serviceConnector struct {
 	api_service.UnimplementedConnectorServer
-	handlerFactory     rdbms.HandlerFactory
+	dataSourceFactory  *dataSourceFactory
 	memoryAllocator    memory.Allocator
 	readLimiterFactory *paging.ReadLimiterFactory
 	cfg                *config.TServerConfig
@@ -52,7 +52,7 @@ func (s *serviceConnector) DescribeTable(
 		}, nil
 	}
 
-	handler, err := s.handlerFactory.Make(logger, request.DataSourceInstance.Kind)
+	dataSource, err := s.dataSourceFactory.Make(logger, request.DataSourceInstance.Kind)
 	if err != nil {
 		logger.Error("request handling failed", log.Error(err))
 
@@ -61,7 +61,7 @@ func (s *serviceConnector) DescribeTable(
 		}, nil
 	}
 
-	out, err := handler.DescribeTable(ctx, logger, request)
+	out, err := dataSource.DescribeTable(ctx, logger, request)
 	if err != nil {
 		logger.Error("request handling failed", log.Error(err))
 
@@ -187,15 +187,15 @@ func (s *serviceConnector) doReadSplits(
 		return fmt.Errorf("validate read splits request: %w", err)
 	}
 
-	handler, err := s.handlerFactory.Make(logger, request.DataSourceInstance.Kind)
+	dataSource, err := s.dataSourceFactory.Make(logger, request.DataSourceInstance.Kind)
 	if err != nil {
-		return fmt.Errorf("make handler: %w", err)
+		return fmt.Errorf("make data source: %w", err)
 	}
 
 	for i, split := range request.Splits {
 		splitLogger := log.With(logger, log.Int("split_id", i))
 
-		err = s.readSplit(splitLogger, stream, request, split, handler)
+		err = s.readSplit(splitLogger, stream, request, split, dataSource)
 		if err != nil {
 			return fmt.Errorf("read split %d: %w", i, err)
 		}
@@ -209,7 +209,7 @@ func (s *serviceConnector) readSplit(
 	stream api_service.Connector_ReadSplitsServer,
 	request *api_service_protos.TReadSplitsRequest,
 	split *api_service_protos.TSplit,
-	handler rdbms.Handler,
+	dataSource datasource.DataSource,
 ) error {
 	logger.Debug("split reading started", utils.SelectToFields(split.Select)...)
 
@@ -219,7 +219,7 @@ func (s *serviceConnector) readSplit(
 		s.readLimiterFactory,
 		request.Format,
 		split.Select.What,
-		handler.TypeMapper())
+		dataSource.TypeMapper())
 	if err != nil {
 		return fmt.Errorf("new columnar buffer factory: %w", err)
 	}
@@ -244,7 +244,7 @@ func (s *serviceConnector) readSplit(
 		request,
 		split,
 		sink,
-		handler,
+		dataSource,
 	)
 
 	if err := streamer.Run(); err != nil {
@@ -351,7 +351,7 @@ func newServiceConnector(
 	reflection.Register(grpcServer)
 
 	s := &serviceConnector{
-		handlerFactory:     rdbms.NewHandlerFactory(queryLoggerFactory),
+		dataSourceFactory:  newDataSourceFacotry(queryLoggerFactory),
 		memoryAllocator:    memory.DefaultAllocator,
 		readLimiterFactory: paging.NewReadLimiterFactory(cfg.ReadLimit),
 		logger:             logger,

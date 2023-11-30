@@ -12,7 +12,7 @@ from utils.settings import Settings
 
 import test_cases.select_missing_database
 import test_cases.select_missing_table
-import test_cases.select_positive
+import test_cases.select_positive_common
 import utils.dqrun as dqrun
 
 LOGGER = make_logger(__name__)
@@ -70,7 +70,7 @@ def select_positive(
     settings: Settings,
     dqrun_runner: dqrun.Runner,
     client: Client,
-    test_case: test_cases.select_positive.TestCase,
+    test_case: test_cases.select_positive_common.TestCase,
 ):
     prepare_table(
         client=client,

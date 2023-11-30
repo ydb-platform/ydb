@@ -5,31 +5,40 @@ import (
 	"fmt"
 
 	"github.com/ydb-platform/ydb/library/go/core/log"
+	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/datasource"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
-type handlerImpl struct {
+type Preset struct {
+	SQLFormatter      utils.SQLFormatter
+	ConnectionManager utils.ConnectionManager
+	TypeMapper        utils.TypeMapper
+}
+
+var _ datasource.DataSource = (*dataSourceImpl)(nil)
+
+type dataSourceImpl struct {
 	typeMapper        utils.TypeMapper
 	sqlFormatter      utils.SQLFormatter
 	connectionManager utils.ConnectionManager
 	logger            log.Logger
 }
 
-func (h *handlerImpl) DescribeTable(
+func (ds *dataSourceImpl) DescribeTable(
 	ctx context.Context,
 	logger log.Logger,
 	request *api_service_protos.TDescribeTableRequest,
 ) (*api_service_protos.TDescribeTableResponse, error) {
-	query, args := utils.MakeDescribeTableQuery(logger, h.sqlFormatter, request)
+	query, args := utils.MakeDescribeTableQuery(logger, ds.sqlFormatter, request)
 
-	conn, err := h.connectionManager.Make(ctx, logger, request.DataSourceInstance)
+	conn, err := ds.connectionManager.Make(ctx, logger, request.DataSourceInstance)
 	if err != nil {
 		return nil, fmt.Errorf("make connection: %w", err)
 	}
 
-	defer h.connectionManager.Release(logger, conn)
+	defer ds.connectionManager.Release(logger, conn)
 
 	rows, err := conn.Query(ctx, query, args...)
 	if err != nil {
@@ -43,7 +52,7 @@ func (h *handlerImpl) DescribeTable(
 		typeName   string
 	)
 
-	sb := &schemaBuilder{typeMapper: h.typeMapper, typeMappingSettings: request.TypeMappingSettings}
+	sb := &schemaBuilder{typeMapper: ds.typeMapper, typeMappingSettings: request.TypeMappingSettings}
 
 	for rows.Next() {
 		if err := rows.Scan(&columnName, &typeName); err != nil {
@@ -67,23 +76,23 @@ func (h *handlerImpl) DescribeTable(
 	return &api_service_protos.TDescribeTableResponse{Schema: schema}, nil
 }
 
-func (h *handlerImpl) doReadSplit(
+func (ds *dataSourceImpl) doReadSplit(
 	ctx context.Context,
 	logger log.Logger,
 	split *api_service_protos.TSplit,
 	sink paging.Sink,
 ) error {
-	query, args, err := utils.MakeReadSplitQuery(logger, h.sqlFormatter, split.Select)
+	query, args, err := utils.MakeReadSplitQuery(logger, ds.sqlFormatter, split.Select)
 	if err != nil {
 		return fmt.Errorf("make read split query: %w", err)
 	}
 
-	conn, err := h.connectionManager.Make(ctx, logger, split.Select.DataSourceInstance)
+	conn, err := ds.connectionManager.Make(ctx, logger, split.Select.DataSourceInstance)
 	if err != nil {
 		return fmt.Errorf("make connection: %w", err)
 	}
 
-	defer h.connectionManager.Release(logger, conn)
+	defer ds.connectionManager.Release(logger, conn)
 
 	rows, err := conn.Query(ctx, query, args...)
 	if err != nil {
@@ -114,13 +123,13 @@ func (h *handlerImpl) doReadSplit(
 	return nil
 }
 
-func (h *handlerImpl) ReadSplit(
+func (ds *dataSourceImpl) ReadSplit(
 	ctx context.Context,
 	logger log.Logger,
 	split *api_service_protos.TSplit,
 	sink paging.Sink,
 ) {
-	err := h.doReadSplit(ctx, logger, split, sink)
+	err := ds.doReadSplit(ctx, logger, split, sink)
 	if err != nil {
 		sink.AddError(err)
 	}
@@ -128,16 +137,16 @@ func (h *handlerImpl) ReadSplit(
 	sink.Finish()
 }
 
-func (h *handlerImpl) TypeMapper() utils.TypeMapper { return h.typeMapper }
+func (ds *dataSourceImpl) TypeMapper() utils.TypeMapper { return ds.typeMapper }
 
-func newHandler(
+func NewDataSource(
 	logger log.Logger,
-	preset *handlerPreset,
-) Handler {
-	return &handlerImpl{
+	preset *Preset,
+) datasource.DataSource {
+	return &dataSourceImpl{
 		logger:            logger,
-		sqlFormatter:      preset.sqlFormatter,
-		connectionManager: preset.connectionManager,
-		typeMapper:        preset.typeMapper,
+		sqlFormatter:      preset.SQLFormatter,
+		connectionManager: preset.ConnectionManager,
+		typeMapper:        preset.TypeMapper,
 	}
 }

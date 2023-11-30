@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
-	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/clickhouse"
-	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/postgresql"
+	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/rdbms/clickhouse"
+	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/rdbms/postgresql"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	"google.golang.org/protobuf/proto"
 )

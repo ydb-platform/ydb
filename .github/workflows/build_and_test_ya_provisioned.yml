@@ -50,7 +50,7 @@ on:
         description: "link threads count"
       runner_label:
         type: string
-        default: "ya-make"
+        default: "auto-provisioned"
         description: "runner label"
       cache_tests:
         type: boolean
@@ -86,17 +86,15 @@ on:
         description: "link threads count"
       runner_label:
         type: string
-        default: "ya-make"
+        default: "auto-provisioned"
       cache_tests:
         type: boolean
         default: false
         description: "Use cache for tests"
-
 jobs:
   main:
     uses: ./.github/workflows/build_and_test_ya.yml
     with:
-      runner_kind: provisioned
       runner_label: ${{ inputs.runner_label }}
       build_target: ${{ inputs.build_target }}
       build_preset: ${{ inputs.build_preset }}

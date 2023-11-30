@@ -110,6 +110,6 @@ jobs:
       test_size: "small,medium"
       test_type: "unittest,py3test,py2test,pytest"
       test_threads: 52
-      runner_label: ya-make
+      runner_label: auto-provisioned
       cache_tests: true
     secrets: inherit

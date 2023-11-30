@@ -132,7 +132,6 @@ jobs:
       - provide-runner
       - prepare-vm
     with:
-      runner_kind: self-hosted
       runner_label: ${{ needs.provide-runner.outputs.label }}
       build_target: ${{ inputs.build_target }}
       build_preset: ${{ inputs.build_preset }}

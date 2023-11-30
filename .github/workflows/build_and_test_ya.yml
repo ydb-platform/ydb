@@ -9,10 +9,6 @@ on:
         description: "limit build and test to specific target"
       build_preset:
         type: string
-      runner_kind:
-        type: string
-        required: true
-        description: "self-hosted or provisioned"
       runner_label:
         type: string
         default: "linux"
@@ -50,7 +46,7 @@ on:
 jobs:
   main:
     name: Build and test ${{ inputs.build_preset }}
-    runs-on: [ self-hosted, "${{ inputs.runner_kind }}", "${{ inputs.runner_label }}" ]
+    runs-on: [ self-hosted, "${{ inputs.runner_label }}" ]
     steps:
     - name: Checkout PR
       uses: actions/checkout@v3

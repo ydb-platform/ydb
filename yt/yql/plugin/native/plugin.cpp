@@ -268,6 +268,8 @@ public:
             }
         });
 
+        program->SetResultType(NYql::IDataProvider::EResultFormat::Skiff);
+
         NSQLTranslation::TTranslationSettings sqlSettings;
         sqlSettings.ClusterMapping = Clusters_;
         sqlSettings.ModuleMapping = Modules_;

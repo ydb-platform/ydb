@@ -5,7 +5,7 @@
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <library/cpp/getopt/last_getopt.h>
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 
@@ -16,7 +16,7 @@
 #include <util/generic/guid.h>
 #include <util/string/split.h>
 
-using namespace NGrpc;
+using namespace NYdbGrpc;
 using namespace Yql::DqsProto;
 using namespace NYql;
 
@@ -294,7 +294,7 @@ void OpenSession(TServiceConnection<DqService>& service, const TString& sessionI
     request.SetUsername(username);
 
     auto promise = NThreading::NewPromise<void>();
-    auto callback = [promise](NGrpc::TGrpcStatus&& status, Yql::DqsProto::OpenSessionResponse&& resp) mutable {
+    auto callback = [promise](NYdbGrpc::TGrpcStatus&& status, Yql::DqsProto::OpenSessionResponse&& resp) mutable {
         Y_UNUSED(resp);
         if (status.Ok()) {
             promise.SetValue();
@@ -312,7 +312,7 @@ void CloseSession(TServiceConnection<DqService>& service, const TString& session
     Yql::DqsProto::CloseSessionRequest request;
     request.SetSession(sessionId);
 
-    auto callback = [](NGrpc::TGrpcStatus&& status, Yql::DqsProto::CloseSessionResponse&& resp) {
+    auto callback = [](NYdbGrpc::TGrpcStatus&& status, Yql::DqsProto::CloseSessionResponse&& resp) {
         Y_UNUSED(resp);
         Y_UNUSED(status);
     };
@@ -328,7 +328,7 @@ Yql::DqsProto::RoutesResponse Routes(TServiceConnection<DqService>& service, con
     request.SetNodeId(nodeId);
 
     auto promise = NThreading::NewPromise<Yql::DqsProto::RoutesResponse>();
-    auto callback = [promise](NGrpc::TGrpcStatus&& status, Yql::DqsProto::RoutesResponse&& resp) mutable {
+    auto callback = [promise](NYdbGrpc::TGrpcStatus&& status, Yql::DqsProto::RoutesResponse&& resp) mutable {
         Y_UNUSED(resp);
         if (status.Ok()) {
             promise.SetValue(resp);
@@ -355,7 +355,7 @@ Yql::DqsProto::BenchmarkResponse Bench(TServiceConnection<DqService>& service, c
 
     auto promise = NThreading::NewPromise<Yql::DqsProto::BenchmarkResponse>();
 
-    auto callback = [promise](NGrpc::TGrpcStatus&& status, Yql::DqsProto::BenchmarkResponse&& resp) mutable
+    auto callback = [promise](NYdbGrpc::TGrpcStatus&& status, Yql::DqsProto::BenchmarkResponse&& resp) mutable
     {
         Y_UNUSED(resp);
         if (status.Ok()) {

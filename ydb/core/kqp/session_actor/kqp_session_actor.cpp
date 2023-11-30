@@ -320,7 +320,12 @@ public:
         Cleanup();
     }
 
-    void HandleReady(TEvKqp::TEvQueryRequest::TPtr& ev, const NActors::TActorContext& ctx) {
+    void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        if (CurrentStateFunc() != &TThis::ReadyState) {
+            ReplyBusy(ev);
+            return;
+        }
+
         ui64 proxyRequestId = ev->Cookie;
         YQL_ENSURE(ev->Get()->GetSessionId() == SessionId,
                 "Invalid session, expected: " << SessionId << ", got: " << ev->Get()->GetSessionId());
@@ -415,7 +420,7 @@ public:
                 return ForwardRequest(ev);
 
             case NKikimrKqp::QUERY_ACTION_TOPIC:
-                return AddOffsetsToTransaction(ctx);
+                return AddOffsetsToTransaction();
         }
 
         QueryState->UpdateTempTablesState(TempTablesState);
@@ -423,7 +428,7 @@ public:
         CompileQuery();
     }
 
-    void AddOffsetsToTransaction(const NActors::TActorContext& ctx) {
+    void AddOffsetsToTransaction() {
         YQL_ENSURE(QueryState);
         if (!PrepareQueryTransaction()) {
             return;
@@ -433,34 +438,39 @@ public:
 
         auto navigate = QueryState->BuildSchemeCacheNavigate();
 
-        Become(&TKqpSessionActor::TopicOpsState);
-        ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
+        Become(&TKqpSessionActor::ExecuteState);
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
     }
 
     void CompileQuery() {
         YQL_ENSURE(QueryState);
         auto ev = QueryState->BuildCompileRequest(CompilationCookie);
         LOG_D("Sending CompileQuery request");
-        Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId);
-        Become(&TKqpSessionActor::CompileState);
-    }
 
-    void HandleCompile(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        ReplyBusy(ev);
+        Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
+            QueryState->KqpSessionSpan.GetTraceId());
+        Become(&TKqpSessionActor::ExecuteState);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto* response = ev->Get();
         YQL_ENSURE(response->Request);
+        YQL_ENSURE(QueryState);
         // outdated response from scheme cache.
         // ignoring that.
         if (response->Request->Cookie < QueryId)
             return;
 
+        if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_TOPIC) {
+            ProcessTopicOps(ev);
+            return;
+        }
+
         // table versions are not the same. need the query recompilation.
         if (!QueryState->EnsureTableVersions(*response)) {
             auto ev = QueryState->BuildReCompileRequest(CompilationCookie);
-            Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId);
+            Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
+                QueryState->KqpSessionSpan.GetTraceId());
             return;
         }
 
@@ -473,7 +483,6 @@ public:
         if (ev->Cookie < QueryId) {
             return;
         }
-
 
         YQL_ENSURE(QueryState);
         TTimerGuard timer(this);
@@ -1045,11 +1054,13 @@ public:
     }
 
     void SendToSchemeExecuter(const TKqpPhyTxHolder::TConstPtr& tx) {
-        auto userToken = QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>();
-        const TString requestType = QueryState ? QueryState->GetRequestType() : TString();
+        YQL_ENSURE(QueryState);
+
+        auto userToken = QueryState->UserToken;
+        const TString requestType = QueryState->GetRequestType();
         bool temporary = GetTemporaryTableInfo(tx).has_value();
 
-        auto executerActor = CreateKqpSchemeExecuter(tx, SelfId(), requestType, Settings.Database, userToken,
+        auto executerActor = CreateKqpSchemeExecuter(tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken,
             temporary, *TempTablesState.SessionId, QueryState->UserRequestContext);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
@@ -1083,10 +1094,6 @@ public:
 
     template<typename T>
     void HandleNoop(T&) {
-    }
-
-    void HandleExecute(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        ReplyBusy(ev);
     }
 
     bool MergeLocksWithTxResult(const NKikimrKqp::TExecuterTxResult& result) {
@@ -1272,20 +1279,10 @@ public:
                 msg.GetStatusCode(),
                 "Request timeout exceeded");
             Send(ExecuterId, abortEv.Release(), IEventHandle::FlagTrackDelivery);
+        } else {
+            const auto& issues = ev->Get()->GetIssues();
+            ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), logMsg, MessageFromIssues(issues));
         }
-    }
-
-    void HandleCompile(TEvKqp::TEvAbortExecution::TPtr& ev) {
-        auto& msg = ev->Get()->Record;
-
-        TString logMsg = TStringBuilder() << "got TEvAbortExecution in " << CurrentStateFuncName();
-        LOG_I(logMsg << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode()));
-
-        const auto& issues = ev->Get()->GetIssues();
-
-        YQL_ENSURE(!ExecuterId);
-
-        ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), logMsg, MessageFromIssues(issues));
     }
 
     void CollectSystemViewQueryStats(const NKqpProto::TKqpStatsQuery* stats, TDuration queryDuration,
@@ -1493,7 +1490,7 @@ public:
         }
 
         response->SetQueryDiagnostics(QueryState->ReplayMessage);
-        
+
         // Result for scan query is sent directly to target actor.
         Y_ABORT_UNLESS(response->GetArena());
         if (QueryState->PreparedQuery && !QueryState->IsStreamResult()) {
@@ -1607,15 +1604,19 @@ public:
         }
 
         if (status == Ydb::StatusIds::SUCCESS) {
-            if (QueryState && QueryState->KqpSessionSpan) {
-                QueryState->KqpSessionSpan.EndOk();
+            if (QueryState) {
+                if (QueryState->KqpSessionSpan) {
+                    QueryState->KqpSessionSpan.EndOk();
+                }
+                LWTRACK(KqpSessionReplySuccess, QueryState->Orbit, record.GetArena() ? record.GetArena()->SpaceUsed() : 0);
             }
-            LWTRACK(KqpSessionReplySuccess, QueryState->Orbit, record.GetArena() ? record.GetArena()->SpaceUsed() : 0);
         } else {
-            if (QueryState && QueryState->KqpSessionSpan) {
-                QueryState->KqpSessionSpan.EndError(response.DebugString());
+            if (QueryState) {
+                if (QueryState->KqpSessionSpan) {
+                    QueryState->KqpSessionSpan.EndError(response.DebugString());
+                }
+                LWTRACK(KqpSessionReplyError, QueryState->Orbit, TStringBuilder() << status);
             }
-            LWTRACK(KqpSessionReplyError, QueryState->Orbit, TStringBuilder() << status);
         }
 
         Counters->ReportResponseStatus(Settings.DbCounters, record.ByteSize(), record.GetYdbStatus());
@@ -1666,13 +1667,6 @@ public:
         LOG_I("Session closed due to explicit close event");
         Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
         CleanupAndPassAway();
-    }
-
-    void HandleCompile(TEvKqp::TEvCloseSessionRequest::TPtr&) {
-        YQL_ENSURE(QueryState);
-        ReplyQueryError(Ydb::StatusIds::BAD_SESSION,
-                "Request cancelled due to explicit session close request");
-        Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
     }
 
     void HandleExecute(TEvKqp::TEvCloseSessionRequest::TPtr&) {
@@ -1738,10 +1732,6 @@ public:
             QueryState->TxCtx->Locks.Clear();
             QueryState->TxCtx->Finish();
         }
-    }
-
-    void HandleCleanup(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        ReplyBusy(ev);
     }
 
     void CleanupAndPassAway() {
@@ -1921,9 +1911,6 @@ public:
         FillTxInfo(response);
 
         ExecuterId = TActorId{};
-        if (CurrentStateFunc() == &TThis::CompileState && ydbStatus == Ydb::StatusIds::TIMEOUT) {
-            FillSystemViewQueryStats(nullptr);
-        }
         Cleanup(IsFatalError(ydbStatus));
     }
 
@@ -1960,12 +1947,13 @@ public:
     STFUNC(ReadyState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                HFunc(TEvKqp::TEvQueryRequest, HandleReady);
-
-                hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
-                hFunc(TEvKqp::TEvCloseSessionRequest, HandleReady);
+                // common event handles for all states.
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
+                hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
+                hFunc(TEvKqp::TEvQueryRequest, Handle);
+
+                hFunc(TEvKqp::TEvCloseSessionRequest, HandleReady);
                 hFunc(TEvKqp::TEvCancelQueryRequest, Handle);
 
                 // forgotten messages from previous aborted request
@@ -1975,36 +1963,10 @@ public:
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
                 // message from KQP proxy in case of our reply just after kqp proxy timer tick
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
+                hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);
+
             default:
                 UnexpectedEvent("ReadyState", ev);
-            }
-        } catch (const TRequestFail& ex) {
-            ReplyQueryError(ex.Status, ex.what(), ex.Issues);
-        } catch (const yexception& ex) {
-            InternalError(ex.what());
-        }
-    }
-
-    STATEFN(CompileState) {
-        try {
-            switch (ev->GetTypeRewrite()) {
-                hFunc(TEvKqp::TEvQueryRequest, HandleCompile);
-                hFunc(TEvKqp::TEvCompileResponse, Handle);
-
-                hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
-                hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleCompile);
-                hFunc(TEvKqp::TEvCloseSessionRequest, HandleCompile);
-                hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
-                hFunc(TEvKqp::TEvContinueShutdown, Handle);
-                hFunc(NGRpcService::TEvClientLost, HandleClientLost);
-                hFunc(TEvKqp::TEvCancelQueryRequest, Handle);
-
-                // forgotten messages from previous aborted request
-                hFunc(TEvKqpExecuter::TEvTxResponse, HandleNoop);
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-                hFunc(TEvents::TEvUndelivered, HandleNoop);
-            default:
-                UnexpectedEvent("CompileState", ev);
             }
         } catch (const TRequestFail& ex) {
             ReplyQueryError(ex.Status, ex.what(), ex.Issues);
@@ -2016,24 +1978,27 @@ public:
     STATEFN(ExecuteState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvKqp::TEvQueryRequest, HandleExecute);
+                // common event handles for all states.
+                hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
+                hFunc(TEvKqp::TEvContinueShutdown, Handle);
+                hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
+                hFunc(TEvKqp::TEvQueryRequest, Handle);
+                hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
+
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleExecute);
 
                 hFunc(TEvKqpExecuter::TEvStreamData, HandleExecute);
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleExecute);
 
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleExecute);
-                hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
 
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleExecute);
-                hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
-                hFunc(TEvKqp::TEvContinueShutdown, Handle);
                 hFunc(NGRpcService::TEvClientLost, HandleClientLost);
                 hFunc(TEvKqp::TEvCancelQueryRequest, Handle);
 
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, Handle);
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
 
                 // always come from WorkerActor
@@ -2052,13 +2017,15 @@ public:
     STATEFN(CleanupState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvKqp::TEvQueryRequest, HandleCleanup);
-                hFunc(TEvKqpExecuter::TEvTxResponse, HandleCleanup);
-
-                hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
-                hFunc(TEvKqp::TEvCloseSessionRequest, HandleCleanup);
+                // common event handles for all states.
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
+                hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
+                hFunc(TEvKqp::TEvQueryRequest, Handle);
+
+                hFunc(TEvKqpExecuter::TEvTxResponse, HandleCleanup);
+
+                hFunc(TEvKqp::TEvCloseSessionRequest, HandleCleanup);
                 hFunc(NGRpcService::TEvClientLost, HandleNoop);
                 hFunc(TEvKqp::TEvCancelQueryRequest, HandleNoop);
 
@@ -2067,6 +2034,7 @@ public:
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
+                hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvCloseSessionResponse, HandleCleanup);
@@ -2087,28 +2055,6 @@ public:
         }
     }
 
-    STATEFN(TopicOpsState) {
-        try {
-            switch (ev->GetTypeRewrite()) {
-                hFunc(TEvKqp::TEvQueryRequest, HandleTopicOps);
-
-                hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTopicOps);
-                hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleTopicOps);
-
-                hFunc(TEvKqp::TEvCloseSessionRequest, HandleTopicOps);
-                hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
-                hFunc(TEvKqp::TEvContinueShutdown, Handle);
-            default:
-                UnexpectedEvent("TopicOpsState", ev);
-            }
-        } catch (const TRequestFail& ex) {
-            ReplyQueryError(ex.Status, ex.what(), ex.Issues);
-        } catch (const yexception& ex) {
-            InternalError(ex.what());
-        }
-    }
-
 private:
 
     TString CurrentStateFuncName() const {
@@ -2117,10 +2063,6 @@ private:
             return "ReadyState";
         } else if (func == &TThis::ExecuteState) {
             return "ExecuteState";
-        } else if (func == &TThis::TopicOpsState) {
-            return "TopicOpsState";
-        } else if (func == &TThis::CompileState) {
-            return "CompileState";
         } else if (func == &TThis::CleanupState) {
             return "CleanupState";
         } else {
@@ -2142,11 +2084,7 @@ private:
         }
     }
 
-    void HandleTopicOps(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        ReplyBusy(ev);
-    }
-
-    void HandleTopicOps(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    void ProcessTopicOps(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         YQL_ENSURE(ev->Get()->Request);
         if (ev->Get()->Request->Cookie < QueryId) {
             return;
@@ -2174,19 +2112,19 @@ private:
         }
 
         if (HasTopicWriteOperations() && !HasTopicWriteId()) {
-            Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
+            Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
         } else {
             ReplySuccess();
         }
     }
 
-    void HandleTopicOps(TEvKqp::TEvCloseSessionRequest::TPtr&) {
-        YQL_ENSURE(QueryState);
-        ReplyQueryError(Ydb::StatusIds::BAD_SESSION, "Request cancelled due to explicit session close request");
-        Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
-    }
+    void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
+        if (CurrentStateFunc() != &TThis::ExecuteState || ev->Cookie < QueryId) {
+            return;
+        }
 
-    void HandleTopicOps(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
+        YQL_ENSURE(QueryState);
+        YQL_ENSURE(QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_TOPIC);
         SetTopicWriteId(NLongTxService::TLockHandle(ev->Get()->TxId, TActivationContext::ActorSystem()));
         ReplySuccess();
     }

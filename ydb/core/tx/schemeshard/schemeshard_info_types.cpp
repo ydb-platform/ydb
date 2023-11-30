@@ -51,6 +51,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     NKikimrSchemeOp::TTableDescription& op,
     const NScheme::TTypeRegistry& typeRegistry,
     const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
+    bool pgTypesEnabled,
     TString& errStr, const THashSet<TString>& localSequences)
 {
     TAlterDataPtr alterData = new TTableInfo::TAlterTableInfo();
@@ -162,6 +163,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
                 if (!typeDesc) {
                     errStr = Sprintf("Type '%s' specified for column '%s' is not supported by storage", col.GetType().data(), colName.data());
+                    return nullptr;
+                }
+                if (!pgTypesEnabled) {
+                    errStr = Sprintf("Type '%s' specified for column '%s', but support for pg types is disabled (EnableTablePgTypes feature flag is off)", col.GetType().data(), colName.data());
                     return nullptr;
                 }
                 typeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);

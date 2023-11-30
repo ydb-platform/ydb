@@ -13,7 +13,7 @@ ADDINCL(
     yt/yt/library/numeric
 )
 
-INCLUDE(${ARCADIA_ROOT}/yt/opensource_tests.inc)
+INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(
     yt/yt/library/numeric

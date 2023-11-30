@@ -77,7 +77,7 @@ SRCS(
     proto/ref_counted_tracker_ut.proto
 )
 
-INCLUDE(${ARCADIA_ROOT}/yt/opensource_tests.inc)
+INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(
     yt/yt/core

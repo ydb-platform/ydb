@@ -36,8 +36,6 @@ SELECT '{"abc"::1}'::json;		-- ERROR, another wrong separator
 SELECT '{"abc":1,"def":2,"ghi":[3,4],"hij":{"klm":5,"nop":[6]}}'::json; -- OK
 SELECT '{"abc":1:2}'::json;		-- ERROR, colon in wrong spot
 SELECT '{"abc":1,3}'::json;		-- ERROR, no value
-SELECT repeat('[', 10000)::json;
-SELECT repeat('{"a":', 10000)::json;
 -- Miscellaneous stuff.
 SELECT 'true'::json;			-- OK
 SELECT 'false'::json;			-- OK

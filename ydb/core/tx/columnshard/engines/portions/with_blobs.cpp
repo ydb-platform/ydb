@@ -92,7 +92,7 @@ std::shared_ptr<arrow::RecordBatch> TPortionInfoWithBlobs::GetBatch(const ISnaps
     }
 }
 
-NKikimr::NOlap::TPortionInfoWithBlobs TPortionInfoWithBlobs::RestorePortion(const TPortionInfo& portion, const THashMap<TBlobRange, TString>& blobs) {
+NKikimr::NOlap::TPortionInfoWithBlobs TPortionInfoWithBlobs::RestorePortion(const TPortionInfo& portion, THashMap<TBlobRange, TString>& blobs) {
     TPortionInfoWithBlobs result(portion);
     const auto pred = [](const TColumnRecord& l, const TColumnRecord& r) {
         return l.GetAddress() < r.GetAddress();
@@ -116,12 +116,13 @@ NKikimr::NOlap::TPortionInfoWithBlobs TPortionInfoWithBlobs::RestorePortion(cons
             auto itBlob = blobs.find(d->BlobRange);
             Y_ABORT_UNLESS(itBlob != blobs.end());
             builder.RestoreChunk(std::make_shared<TSimpleOrderedColumnChunk>(*d, itBlob->second));
+            blobs.erase(itBlob);
         }
     }
     return result;
 }
 
-std::vector<NKikimr::NOlap::TPortionInfoWithBlobs> TPortionInfoWithBlobs::RestorePortions(const std::vector<TPortionInfo>& portions, const THashMap<TBlobRange, TString>& blobs) {
+std::vector<NKikimr::NOlap::TPortionInfoWithBlobs> TPortionInfoWithBlobs::RestorePortions(const std::vector<TPortionInfo>& portions, THashMap<TBlobRange, TString>& blobs) {
     std::vector<TPortionInfoWithBlobs> result;
     for (auto&& i : portions) {
         result.emplace_back(RestorePortion(i, blobs));

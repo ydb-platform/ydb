@@ -1,4 +1,3 @@
-/* skip double format */
 select 
 Pg::string_agg(x,','p)
 from (values ('a'p),('b'p),('c'p)) as a(x);

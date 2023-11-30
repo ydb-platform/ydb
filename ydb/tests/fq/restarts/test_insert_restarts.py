@@ -13,6 +13,12 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
 
 
 class TestS3(object):
+    def get_issues_depth(self, issues):
+        deepest_path_size = 0
+        for issue in issues:
+            deepest_path_size = max(self.get_issues_depth(issue.issues), deepest_path_size)
+        return deepest_path_size + 1
+
     def run_atomic_upload_check_query(self, client, bucket, connection, prefix, format):
         if len(list(bucket.objects.filter(Prefix=prefix))) == 0:
             return 0
@@ -90,13 +96,20 @@ class TestS3(object):
         client.wait_query(query_id, statuses=[fq.QueryMeta.COMPLETED, fq.QueryMeta.ABORTED_BY_SYSTEM, fq.QueryMeta.FAILED], timeout=timeout)
 
         final_number_rows = self.run_atomic_upload_check_query(client, bucket, "ibucket", "insert/", "csv_with_names")
-        final_status = client.describe_query(query_id).result.query.meta.status
+        query = client.describe_query(query_id).result.query
+        final_status = query.meta.status
 
         if final_status == fq.QueryMeta.COMPLETED:
             assert final_number_rows == number_rows, "Invalid result in bucket for COMPLETED final status"
         elif final_status == fq.QueryMeta.ABORTED_BY_SYSTEM:
+            assert self.get_issues_depth(query.issue) <= 3, str(query.issue)
+            assert self.get_issues_depth(query.transient_issue) <= 3, str(query.transient_issue)
+            assert "Query failed with code UNAVAILABLE at" in query.issue[0].message, query.issue[0].message
             assert final_number_rows == 0, "Incomplete final result in bucket"
         else:
+            assert self.get_issues_depth(query.issue) <= 3, str(query.issue)
+            assert self.get_issues_depth(query.transient_issue) <= 3, str(query.transient_issue)
+            assert "Query failed with code UNAVAILABLE at" in query.issue[0].message, query.issue[0].message
             assert final_number_rows == 0 or final_number_rows == number_rows
 
         assert len(list(bucket.multipart_uploads.all())) == 0, "Unexpected uncommited upload in bucket"

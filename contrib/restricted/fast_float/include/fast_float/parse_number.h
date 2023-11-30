@@ -164,7 +164,13 @@ from_chars_result_t<UC> from_chars_advanced(UC const * first, UC const * last,
   }
   parsed_number_string_t<UC> pns = parse_number_string<UC>(first, last, options);
   if (!pns.valid) {
-    return detail::parse_infnan(first, last, value);
+    if (options.format & chars_format::no_infnan) {
+      answer.ec = std::errc::invalid_argument;
+      answer.ptr = first;
+      return answer;
+    } else {
+      return detail::parse_infnan(first, last, value);
+    }
   }
 
   answer.ec = std::errc(); // be optimistic

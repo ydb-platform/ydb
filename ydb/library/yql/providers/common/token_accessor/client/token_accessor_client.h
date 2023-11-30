@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/providers/common/token_accessor/grpc/token_accessor_pb.grpc.pb.h>
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 #include <util/datetime/base.h>
@@ -19,8 +19,8 @@ std::shared_ptr<NYdb::ICredentialsProvider> CreateTokenAccessorCredentialsProvid
 );
 
 std::shared_ptr<NYdb::ICredentialsProvider> CreateTokenAccessorCredentialsProvider(
-    std::shared_ptr<NGrpc::TGRpcClientLow> client,
-    std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> connection,
+    std::shared_ptr<NYdbGrpc::TGRpcClientLow> client,
+    std::shared_ptr<NYdbGrpc::TServiceConnection<TokenAccessorService>> connection,
     const TString& serviceAccountId,
     const TString& serviceAccountIdSignature,
     const TDuration& refreshPeriod = TDuration::Hours(1),

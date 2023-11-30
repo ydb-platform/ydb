@@ -2579,9 +2579,9 @@
     ],
     "test.test[EquiJoinMap-JoinMap-Debug]": [
         {
-            "checksum": "d898d53a6c8bc753bb387aa5ee267477",
-            "size": 11342,
-            "uri": "https://{canondata_backend}/1871002/f4a0c13366cf282b8f245d4ad386f0ea871fb4d4/resource.tar.gz#test.test_EquiJoinMap-JoinMap-Debug_/opt.yql"
+            "checksum": "d4c24d241eb73bd0fc03e2d82087b468",
+            "size": 11370,
+            "uri": "https://{canondata_backend}/1942525/56ab242c36f63ffdebf5ab3621cf76b5a6e1582b/resource.tar.gz#test.test_EquiJoinMap-JoinMap-Debug_/opt.yql"
         },
         {
             "checksum": "2d03e58540254763262f2e979bc02598",
@@ -2700,9 +2700,9 @@
     ],
     "test.test[EquiJoinMap-JoinMapOpt1-Debug]": [
         {
-            "checksum": "c71583e21bb202a6724f8c20649d867b",
-            "size": 11761,
-            "uri": "https://{canondata_backend}/1871002/f4a0c13366cf282b8f245d4ad386f0ea871fb4d4/resource.tar.gz#test.test_EquiJoinMap-JoinMapOpt1-Debug_/opt.yql"
+            "checksum": "2e5b0d0714819d2dd282cd2cbc1b186f",
+            "size": 11789,
+            "uri": "https://{canondata_backend}/1942525/56ab242c36f63ffdebf5ab3621cf76b5a6e1582b/resource.tar.gz#test.test_EquiJoinMap-JoinMapOpt1-Debug_/opt.yql"
         },
         {
             "checksum": "2d03e58540254763262f2e979bc02598",
@@ -3139,9 +3139,9 @@
     ],
     "test.test[EquiJoinOrdered-JoinOrderedOpt12Key2-Debug]": [
         {
-            "checksum": "ae3260a5444b1c4103688c3e74235d34",
-            "size": 16779,
-            "uri": "https://{canondata_backend}/1942525/5782268524b17fa5e42aa80fbf7cb4ebc984c6d0/resource.tar.gz#test.test_EquiJoinOrdered-JoinOrderedOpt12Key2-Debug_/opt.yql"
+            "checksum": "9f73e93f844696696fd857c55fcb4efd",
+            "size": 16711,
+            "uri": "https://{canondata_backend}/1781765/157ffc59b1acb69b4013a6bc0e040f7546b220e0/resource.tar.gz#test.test_EquiJoinOrdered-JoinOrderedOpt12Key2-Debug_/opt.yql"
         },
         {
             "checksum": "8945382ad95d62da1ff0a2b13d55db55",

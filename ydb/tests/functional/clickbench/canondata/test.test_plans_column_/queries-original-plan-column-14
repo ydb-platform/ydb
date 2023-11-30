@@ -102,24 +102,9 @@
                                                                                     }
                                                                                 },
                                                                                 {
-                                                                                    "Assign": {
-                                                                                        "Column": {
-                                                                                            "Id": 108
-                                                                                        },
-                                                                                        "Function": {
-                                                                                            "Arguments": [
-                                                                                                {
-                                                                                                    "Id": 107
-                                                                                                }
-                                                                                            ],
-                                                                                            "Id": 18
-                                                                                        }
-                                                                                    }
-                                                                                },
-                                                                                {
                                                                                     "Filter": {
                                                                                         "Predicate": {
-                                                                                            "Id": 108
+                                                                                            "Id": 107
                                                                                         }
                                                                                     }
                                                                                 },

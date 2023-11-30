@@ -22,9 +22,9 @@ class TTablePartIterator::TReaderImpl {
 public:
     using TSelf = TTablePartIterator::TReaderImpl;
     using TResponse = Ydb::Table::ReadTableResponse;
-    using TStreamProcessorPtr = NGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
-    using TReadCallback = NGrpc::IStreamRequestReadProcessor<TResponse>::TReadCallback;
-    using TGRpcStatus = NGrpc::TGrpcStatus;
+    using TStreamProcessorPtr = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
+    using TReadCallback = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TReadCallback;
+    using TGRpcStatus = NYdbGrpc::TGrpcStatus;
     using TBatchReadResult = std::pair<TResponse, TGRpcStatus>;
 
     TReaderImpl(TStreamProcessorPtr streamProcessor, const TString& endpoint);
@@ -44,9 +44,9 @@ class TScanQueryPartIterator::TReaderImpl {
 public:
     using TSelf = TScanQueryPartIterator::TReaderImpl;
     using TResponse = Ydb::Table::ExecuteScanQueryPartialResponse;
-    using TStreamProcessorPtr = NGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
-    using TReadCallback = NGrpc::IStreamRequestReadProcessor<TResponse>::TReadCallback;
-    using TGRpcStatus = NGrpc::TGrpcStatus;
+    using TStreamProcessorPtr = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
+    using TReadCallback = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TReadCallback;
+    using TGRpcStatus = NYdbGrpc::TGrpcStatus;
     using TBatchReadResult = std::pair<TResponse, TGRpcStatus>;
 
     TReaderImpl(TStreamProcessorPtr streamProcessor, const TString& endpoint);

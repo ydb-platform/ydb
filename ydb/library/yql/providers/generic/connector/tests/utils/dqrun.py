@@ -1,7 +1,6 @@
 from pathlib import Path
-from dataclasses import dataclass
 import subprocess
-from typing import Final, List, Optional
+from typing import Final
 
 import jinja2
 
@@ -12,8 +11,9 @@ from yt import yson
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 
+from ydb.library.yql.providers.generic.connector.tests.utils.runner import Result, Runner
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
-from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schema, YsonList
+from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schema
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings, GenericSettings
 
 LOGGER = make_logger(__name__)
@@ -173,20 +173,12 @@ Dq {
 
     def render(self, file_path: Path, settings: Settings, generic_settings: GenericSettings) -> None:
         content = self.template.render(dict(settings=settings, generic_settings=generic_settings))
+        LOGGER.debug(content)
         with open(file_path, 'w') as f:
             f.write(content)
 
 
-@dataclass
-class Result:
-    data_out: Optional[YsonList]
-    data_out_with_types: Optional[List]
-    schema: Optional[Schema]
-    stdout: str
-    stderr: str
-
-
-class Runner:
+class DqRunner(Runner):
     def __init__(
         self,
         dqrun_path: Path,
@@ -259,4 +251,5 @@ class Runner:
             schema=schema,
             stdout=out.stdout.decode('utf-8'),
             stderr=out.stderr.decode('utf-8'),
+            returncode=out.returncode,
         )

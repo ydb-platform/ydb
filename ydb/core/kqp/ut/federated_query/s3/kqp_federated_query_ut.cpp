@@ -19,6 +19,8 @@
 
 #include <fmt/format.h>
 
+#include <library/cpp/testing/hook/hook.h>
+
 
 namespace NKikimr {
 namespace NKqp {
@@ -41,19 +43,7 @@ const TString TEST_SCHEMA = R"(["StructType";[["key";["DataType";"Utf8";];];["va
 
 const TString TEST_SCHEMA_IDS = R"(["StructType";[["key";["DataType";"Utf8";];];];])";
 
-bool InitAwsApi() {
-    Aws::InitAPI(Aws::SDKOptions());
-    return true;
-}
-
-bool EnsureAwsApiInited() {
-    static const bool inited = InitAwsApi();
-    return inited;
-}
-
 Aws::S3::S3Client MakeS3Client() {
-    EnsureAwsApiInited();
-
     Aws::Client::ClientConfiguration s3ClientConfig;
     s3ClientConfig.endpointOverride = GetEnv("S3_ENDPOINT");
     s3ClientConfig.scheme = Aws::Http::Scheme::HTTP;
@@ -170,6 +160,13 @@ TString GetBucketLocation(const TStringBuf bucket) {
     return TStringBuilder() << GetEnv("S3_ENDPOINT") << '/' << bucket << '/';
 }
 
+Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
+    Aws::InitAPI(Aws::SDKOptions());
+}
+
+Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
+    Aws::ShutdownAPI(Aws::SDKOptions());
+}
 
 Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     Y_UNIT_TEST(ExecuteScriptWithExternalTableResolve) {

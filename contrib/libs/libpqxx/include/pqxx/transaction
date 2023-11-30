@@ -1,0 +1,6 @@
+/** pqxx::transaction class.
+ *
+ * pqxx::transaction represents a standard database transaction.
+ */
+// Actual definitions in .hxx file so editors and such recognize file type.
+#include "pqxx/transaction.hxx"

@@ -58,7 +58,7 @@ PEERDIR(
     library/cpp/actors/core
     library/cpp/containers/intrusive_rb_tree
     library/cpp/digest/md5
-    library/cpp/grpc/client
+    ydb/library/grpc/client
     library/cpp/logger
     library/cpp/lwtrace/mon
     library/cpp/monlib/dynamic_counters

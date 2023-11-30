@@ -4,6 +4,7 @@
 #include "partition_writer.h"
 #include "persqueue_utils.h"
 #include "write_request_info.h"
+#include "partition_writer_cache_actor.h"
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
@@ -55,7 +56,6 @@ class TWriteSessionActor
     using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
 
     using TWriteRequestInfo = TWriteRequestInfoImpl<TEvWrite>;
-    using TPartitionWriter = TPartitionWriterImpl<TEvWrite>;
 
     // Codec ID size in bytes
     static constexpr ui32 CODEC_ID_SIZE = 1;
@@ -164,7 +164,7 @@ private:
     void MakeAndSentInitResponse(const TMaybe<ui64>& maxSeqNo, const TActorContext& ctx);
 
     void Handle(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr& ev, const TActorContext& ctx);
-    void ProcessWriteResponse(const NKikimrClient::TPersQueuePartitionResponse& response, TPartitionWriter& writer, const TActorContext& ctx);
+    void ProcessWriteResponse(const NKikimrClient::TPersQueuePartitionResponse& response, const TActorContext& ctx);
     void Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const NActors::TActorContext& ctx);
@@ -179,16 +179,14 @@ private:
     void CheckFinish(const NActors::TActorContext& ctx);
 
     void PrepareRequest(THolder<TEvWrite>&& ev, const TActorContext& ctx);
-    void SendRequest(TPartitionWriter& writer, typename TWriteRequestInfo::TPtr&& request, const TActorContext& ctx);
+    void SendWriteRequest(typename TWriteRequestInfo::TPtr&& request, const TActorContext& ctx);
 
     void SetupCounters();
     void SetupCounters(const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId);
 
 private:
-    TPartitionWriter* FindPartitionWriter(const TString& sessionId, const TString& txId);
-    void InitPartitionWriter(const TString& sessionId, const TString& txId,
-                             const TActorContext& ctx);
-    bool AnyRequests() const;
+    void CreatePartitionWriterCache(const TActorContext& ctx);
+    void DestroyPartitionWriterCache(const TActorContext& ctx);
 
     std::unique_ptr<TEvStreamWriteRequest> Request;
 
@@ -232,6 +230,10 @@ private:
     // Request that is waiting for quota
     typename TWriteRequestInfo::TPtr PendingQuotaRequest;
 
+    // Requests that is sent to partition actor, but not accepted
+    std::deque<typename TWriteRequestInfo::TPtr> SentRequests;
+    // Accepted requests
+    std::deque<typename TWriteRequestInfo::TPtr> AcceptedRequests;
 
     bool WritesDone;
 
@@ -301,7 +303,7 @@ private:
 
     TDeque<ui64> SeqNoInflight;
 
-    THashMap<std::pair<TString, TString>, TPartitionWriter> Writers;
+    TActorId PartitionWriterCache;
 };
 
 }

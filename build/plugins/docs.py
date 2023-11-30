@@ -51,4 +51,6 @@ def onprocess_docs(unit, *args):
 def onprocess_mkdocs(unit, *args):
     variables = get_variables(unit)
     if variables:
-        unit.set(['_DOCS_VARS_FLAG', ' '.join(['--var {}={}'.format(k, v) for k, v in sorted(six.iteritems(variables))])])
+        unit.set(
+            ['_DOCS_VARS_FLAG', ' '.join(['--var {}={}'.format(k, v) for k, v in sorted(six.iteritems(variables))])]
+        )

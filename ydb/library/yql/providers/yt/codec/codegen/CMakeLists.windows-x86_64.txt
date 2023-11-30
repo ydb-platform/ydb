@@ -73,11 +73,8 @@ add_custom_command(
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_merged.bc
   -o
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_optimized.bc
-  -O2
-  -globalopt
-  -globaldce
-  -internalize
   -internalize-public-api-list=WriteJust#WriteNothing#WriteBool#Write8#Write16#Write32#Write64#Write120#WriteDecimal32#WriteDecimal64#WriteDecimal128#WriteFloat#WriteDouble#WriteString#ReadBool#ReadInt8#ReadUint8#ReadInt16#ReadUint16#ReadInt32#ReadUint32#ReadInt64#ReadUint64#ReadInt120#ReadDecimal32#ReadDecimal64#ReadDecimal128#ReadFloat#ReadDouble#ReadOptional#ReadVariantData#SkipFixedData#SkipVarData#ReadTzDate#ReadTzDatetime#ReadTzTimestamp#WriteTzDate#WriteTzDatetime#WriteTzTimestamp#GetWrittenBytes#FillZero
+  -passes=default<O2>,globalopt,globaldce,internalize
 )
 add_custom_command(
   OUTPUT

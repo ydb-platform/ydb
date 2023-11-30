@@ -13,7 +13,7 @@ target_link_libraries(ydb-services-datastreams PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-grpc-server
+  library-grpc-server
   ydb-core-base
   core-client-server
   ydb-core-grpc_services

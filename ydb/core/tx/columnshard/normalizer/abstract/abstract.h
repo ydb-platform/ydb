@@ -106,7 +106,9 @@ namespace NKikimr::NOlap {
         }
 
         TString DebugString() const {
-            return TStringBuilder() << "normalizers_count=" << Normalizers.size() << ";current_normalizer=" << CurrentNormalizerIndex;
+            return TStringBuilder() << "normalizers_count=" << Normalizers.size()
+                                    << ";current_normalizer_idx=" << CurrentNormalizerIndex
+                                    << ";current_normalizer=" << (CurrentNormalizerIndex < Normalizers.size()) ? Normalizers[CurrentNormalizerIndex]->GetName() : "";
         }
 
         const INormalizerComponent::TPtr& GetNormalizer() const;

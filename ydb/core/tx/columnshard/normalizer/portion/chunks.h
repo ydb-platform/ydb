@@ -106,5 +106,5 @@ namespace NKikimr::NOlap {
     private:
         NColumnShard::TBlobGroupSelector DsGroupSelector;
         TAtomic ActiveTasksCount = 0;
-    };     
+    };
 }

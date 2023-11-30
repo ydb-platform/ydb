@@ -18,8 +18,6 @@
 #include <util/system/thread.h>
 #include <util/system/event.h>
 
-#include <atomic>
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////

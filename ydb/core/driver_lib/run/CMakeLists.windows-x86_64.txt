@@ -24,8 +24,8 @@ target_link_libraries(run PUBLIC
   cpp-actors-protos
   cpp-actors-util
   cpp-getopt-small
-  cpp-grpc-client
-  cpp-grpc-server
+  library-grpc-client
+  library-grpc-server
   grpc-server-actors
   library-cpp-logger
   cpp-malloc-api

@@ -16,8 +16,8 @@ struct TCrossClusterReference
     TString Cluster;
     NYPath::TYPath Path;
 
-    bool operator ==(const TCrossClusterReference& other) const;
-    bool operator <(const TCrossClusterReference& other) const;
+    bool operator==(const TCrossClusterReference& other) const;
+    bool operator<(const TCrossClusterReference& other) const;
 
     operator NYPath::TRichYPath() const;
 

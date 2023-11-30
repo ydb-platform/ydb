@@ -309,6 +309,7 @@ bool TQueryData::AddUVParam(const TString& name, NKikimr::NMiniKQL::TType* type,
 
 bool TQueryData::AddTypedValueParam(const TString& name, const Ydb::TypedValue& param) {
     auto guard = TypeEnv().BindAllocator();
+    const TBindTerminator bind(this);
     auto [typeFromProto, value] = ImportValueFromProto(
         param.type(), param.value(), TypeEnv(), AllocState->HolderFactory);
     return AddUVParam(name, typeFromProto, value);
@@ -490,6 +491,18 @@ void TQueryData::Clear() {
 
         AllocState->Reset();
     }
+}
+
+void TQueryData::Terminate(const char* message) const {
+    TStringBuf reason = (message ? TStringBuf(message) : TStringBuf("(unknown)"));
+    TString fullMessage = TStringBuilder() <<
+        "Terminate was called, reason(" << reason.size() << "): " << reason << Endl;
+    AllocState->HolderFactory.CleanupModulesOnTerminate();
+    if (std::current_exception()) {
+        throw;
+    }
+
+    ythrow yexception() << fullMessage;
 }
 
 } // namespace NKikimr::NKqp

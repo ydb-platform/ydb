@@ -11,6 +11,7 @@ import shlex
 import _common
 import lib.test_const as consts
 import _requirements as reqs
+
 try:
     from StringIO import StringIO
 except ImportError:
@@ -151,7 +152,9 @@ def validate_test(unit, kw):
         if tag.startswith('sb:'):
             sb_tags.append(tag)
         elif ':' in tag and not tag.startswith('ya:') and tag.split(':')[0] not in skip_set:
-            errors.append("Only [[imp]]sb:[[rst]] and [[imp]]ya:[[rst]] prefixes are allowed in system tags: {}".format(tag))
+            errors.append(
+                "Only [[imp]]sb:[[rst]] and [[imp]]ya:[[rst]] prefixes are allowed in system tags: {}".format(tag)
+            )
 
     if is_fat:
         if size != consts.TestSize.Large:
@@ -450,7 +453,14 @@ def onadd_ytest(unit, *args):
     }
     flat_args, spec_args = _common.sort_by_keywords(keywords, args)
 
-    is_implicit_data_needed = flat_args[1] in ("unittest.py", "gunittest", "g_benchmark", "go.test", "boost.test", "fuzz.test")
+    is_implicit_data_needed = flat_args[1] in (
+        "unittest.py",
+        "gunittest",
+        "g_benchmark",
+        "go.test",
+        "boost.test",
+        "fuzz.test",
+    )
     if is_implicit_data_needed and unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
         unit.ondata_files(_common.get_norm_unit_path(unit))
 
@@ -641,10 +651,10 @@ def onadd_check(unit, *args):
         fork_mode = unit.get('TEST_FORK_MODE') or ''
     elif check_type == "ktlint":
         test_timeout = '120'
-        ktlint_binary =  '$(KTLINT_OLD)/run.bat' if unit.get('_USE_KTLINT_OLD') == 'yes' else '$(KTLINT)/run.bat'
+        ktlint_binary = '$(KTLINT_OLD)/run.bat' if unit.get('_USE_KTLINT_OLD') == 'yes' else '$(KTLINT)/run.bat'
         extra_test_dart_data['KTLINT_BINARY'] = ktlint_binary
     elif check_type == "JAVA_STYLE":
-        if ymake_java_test and not unit.get('ALL_SRCDIRS') or '':
+        if ymake_java_test and not unit.get('ALL_SRCDIRS'):
             return
         if len(flat_args) < 2:
             raise Exception("Not enough arguments for JAVA_STYLE check")
@@ -1084,7 +1094,6 @@ def _dump_test(
     yt_spec=None,
     data_files=None,
 ):
-
     if test_type == "PY_TEST":
         script_rel_path = "py.test"
     else:

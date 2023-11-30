@@ -28,6 +28,7 @@
 #include <yt/yt/core/rpc/caching_channel_factory.h>
 #include <yt/yt/core/rpc/dynamic_channel_pool.h>
 #include <yt/yt/core/rpc/dispatcher.h>
+#include <yt/yt/core/rpc/peer_discovery.h>
 
 #include <yt/yt/core/ytree/fluent.h>
 
@@ -243,7 +244,7 @@ TConnection::TConnection(TConnectionConfigPtr config, TConnectionOptions options
         MakeEndpointDescription(Config_, ConnectionId_),
         MakeEndpointAttributes(Config_, ConnectionId_),
         TApiServiceProxy::GetDescriptor().ServiceName,
-        TDiscoverRequestHook()))
+        CreateDefaultPeerDiscovery()))
 {
     if (options.ConnectionInvoker) {
         ConnectionInvoker_ = options.ConnectionInvoker;
@@ -338,7 +339,7 @@ NApi::IClientPtr TConnection::CreateClient(const TClientOptions& options)
         DiscoveryToken_.Store(*options.Token);
     }
 
-    if (Config_->ClusterUrl || Config_->ProxyEndpoints) {
+    if (Config_->EnableProxyDiscovery && (Config_->ClusterUrl || Config_->ProxyEndpoints)) {
         UpdateProxyListExecutor_->Start();
     }
 
@@ -359,7 +360,9 @@ void TConnection::Terminate()
 {
     YT_LOG_DEBUG("Terminating connection");
     ChannelPool_->Terminate(TError("Connection terminated"));
-    YT_UNUSED_FUTURE(UpdateProxyListExecutor_->Stop());
+    if (Config_->EnableProxyDiscovery) {
+        YT_UNUSED_FUTURE(UpdateProxyListExecutor_->Stop());
+    }
 }
 
 const TConnectionConfigPtr& TConnection::GetConfig()

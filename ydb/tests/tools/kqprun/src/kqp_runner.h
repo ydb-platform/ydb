@@ -13,6 +13,8 @@ public:
 
     bool ExecuteScript(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId) const;
 
+    bool ExecuteQuery(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const;
+
     bool WriteScriptResults() const;
 
 private:

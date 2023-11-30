@@ -527,6 +527,7 @@ public:
         NKikimrSchemeOp::TTableDescription& descr,
         const NScheme::TTypeRegistry& typeRegistry,
         const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
+        bool pgTypesEnabled,
         TString& errStr, const THashSet<TString>& localSequences = {});
 
     static ui32 ShardsToCreate(const NKikimrSchemeOp::TTableDescription& descr) {
@@ -2133,6 +2134,17 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
     void ApplyAuditSettings(const TMaybeAuditSettings& diff);
 
+    using TMaybeServerlessComputeResourcesMode = TMaybe<EServerlessComputeResourcesMode, NMaybe::TPolicyUndefinedFail>;
+
+    const TMaybeServerlessComputeResourcesMode& GetServerlessComputeResourcesMode() const {
+        return ServerlessComputeResourcesMode;
+    }
+
+    void SetServerlessComputeResourcesMode(EServerlessComputeResourcesMode serverlessComputeResourcesMode) {
+        Y_ABORT_UNLESS(serverlessComputeResourcesMode, "Can't set ServerlessComputeResourcesMode to unspecified");
+        ServerlessComputeResourcesMode = serverlessComputeResourcesMode;
+    }
+
 private:
     bool InitiatedAsGlobal = false;
     NKikimrSubDomains::TProcessingParams ProcessingParams;
@@ -2162,7 +2174,8 @@ private:
 
     TPathId ResourcesDomainId;
     TTabletId SharedHive = InvalidTabletId;
-
+    TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
+    
     NLoginProto::TSecurityState SecurityState;
     ui64 SecurityStateVersion = 0;
 

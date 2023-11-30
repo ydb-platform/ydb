@@ -50,15 +50,7 @@ public:
     TFetchingPlan GetColumnsFetchingPlan(const bool exclusiveSource) const;
 
     bool IsReverse() const;
-
-    void Abort() {
-        for (auto&& i : FetchingIntervals) {
-            i.second->Abort();
-        }
-        FetchingIntervals.clear();
-        BorderPoints.clear();
-        Y_ABORT_UNLESS(IsFinished());
-    }
+    void Abort();
 
     bool IsFinished() const {
         return BorderPoints.empty() && FetchingIntervals.empty();

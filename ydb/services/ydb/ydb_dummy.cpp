@@ -16,7 +16,7 @@ using namespace Draft::Dummy;
 
 using TEvInfiniteRequest = TGRpcRequestWrapper<0, InfiniteRequest, InfiniteResponse, true>;
 
-static void HandlePing(NGrpc::IRequestContextBase* ctx) {
+static void HandlePing(NYdbGrpc::IRequestContextBase* ctx) {
     auto req = static_cast<const PingRequest*>(ctx->GetRequest());
     auto resp = google::protobuf::Arena::CreateMessage<PingResponse>(ctx->GetArena());
     if (req->copy()) {
@@ -117,12 +117,12 @@ TGRpcYdbDummyService::TGRpcYdbDummyService(NActors::TActorSystem* system, TIntru
     , GRpcRequestProxyId_(proxyActorId)
 { }
 
-void TGRpcYdbDummyService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) {
+void TGRpcYdbDummyService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
     CQ_ = cq;
     SetupIncomingRequests(std::move(logger));
 }
 
-void TGRpcYdbDummyService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+void TGRpcYdbDummyService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) {
     Limiter_ = limiter;
 }
 
@@ -135,7 +135,7 @@ void TGRpcYdbDummyService::DecRequest() {
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
-void TGRpcYdbDummyService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcYdbDummyService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
 #ifdef ADD_REQUEST
@@ -143,7 +143,7 @@ void TGRpcYdbDummyService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Draft::Dummy::IN, Draft::Dummy::OUT, TGRpcYdbDummyService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
+        [this](NYdbGrpc::IRequestContextBase *ctx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Draft::Dummy::DummyService::AsyncService::Request ## NAME, \

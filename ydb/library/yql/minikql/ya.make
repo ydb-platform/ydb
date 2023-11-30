@@ -86,7 +86,6 @@ END()
 
 RECURSE(
     arrow
-    benchmark
     codegen
     comp_nodes
     computation
@@ -99,5 +98,6 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    benchmark
     ut
 )

@@ -58,7 +58,10 @@ public:
                 case NKikimrSchemeOp::TAlterLogin::kRemoveUser: {
                     const auto& removeUser = alterLogin.GetRemoveUser();
                     const TString& user = removeUser.GetUser();
-                    auto response = context.SS->LoginProvider.RemoveUser({.User = user});
+                    auto response = context.SS->LoginProvider.RemoveUser({
+                        .User = user,
+                        .MissingOk = removeUser.GetMissingOk()
+                    });
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {

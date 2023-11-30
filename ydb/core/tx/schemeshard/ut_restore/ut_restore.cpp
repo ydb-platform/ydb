@@ -731,7 +731,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
 
     Y_UNIT_TEST(ExportImportPg) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -847,15 +847,11 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         TestCreateTable(runtime, ++txId, "/MyRoot", scheme);
         env.TestWaitNotification(runtime, txId);
 
-        ui32 total = 0;
-        ui32 overloads = 0;
+        ui32 requests = 0;
+        ui32 responses = 0;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsResponse) {
-                ++total;
-                const auto& record = ev->Get<TEvDataShard::TEvS3UploadRowsResponse>()->Record;
-                overloads += ui32(record.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
-            }
-
+            requests += ui32(ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsRequest);
+            responses += ui32(ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsResponse);
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
@@ -865,12 +861,11 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         const auto data = GenerateTestData("", 1000);
         const ui32 batchSize = 32;
         RestoreNoWait(runtime, ++txId, portManager.GetPort(), s3Mock, {data}, batchSize);
-
         env.TestWaitNotification(runtime, txId);
-        UNIT_ASSERT(overloads > 0);
 
         const ui32 expected = data.Data.size() / batchSize + ui32(bool(data.Data.size() % batchSize));
-        UNIT_ASSERT_VALUES_EQUAL(expected, total - overloads);
+        UNIT_ASSERT(requests > expected);
+        UNIT_ASSERT_VALUES_EQUAL(responses, expected);
 
         auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint32", "0"});
         NKqp::CompareYson(data.YsonStr, content);

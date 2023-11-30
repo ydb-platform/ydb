@@ -27,7 +27,7 @@ SRCS(
     proto/protobuf_yson_casing_ext_ut.proto
 )
 
-INCLUDE(${ARCADIA_ROOT}/yt/opensource_tests.inc)
+INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(
     yt/yt/core
@@ -50,5 +50,7 @@ IF (OS_DARWIN)
     SIZE(LARGE)
     TAG(ya:fat ya:force_sandbox ya:exotic_platform)
 ENDIF()
+
+ENV(ASAN_OPTIONS="detect_leaks=0")
 
 END()

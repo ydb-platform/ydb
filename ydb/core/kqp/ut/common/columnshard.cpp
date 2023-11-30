@@ -54,6 +54,12 @@ namespace NKqp {
         helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
     }
 
+    void TTestHelper::BulkUpsert(const TColumnTable& table, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {
+        Y_UNUSED(opStatus);
+        NKikimr::Tests::NCS::THelper helper(Kikimr.GetTestServer());
+        helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
+    }
+
     void TTestHelper::ReadData(const TString& query, const TString& expected, const EStatus opStatus /*= EStatus::SUCCESS*/) {
         auto it = TableClient.StreamExecuteScanQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString()); // Means stream successfully get

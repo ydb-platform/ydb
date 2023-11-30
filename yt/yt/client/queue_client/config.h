@@ -34,7 +34,6 @@ DEFINE_REFCOUNTED_TYPE(TPartitionReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-
 //! Automatic trimming configuration for a single queue.
 //!
 //! All rows up to the smallest offset among vital consumers are considered trimmable.

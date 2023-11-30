@@ -174,12 +174,6 @@ struct TEvCancelScriptExecutionOperationResponse : public NActors::TEventLocal<T
 };
 
 struct TEvScriptExecutionFinished : public NActors::TEventLocal<TEvScriptExecutionFinished, TKqpScriptExecutionEvents::EvScriptExecutionFinished> {
-    explicit TEvScriptExecutionFinished(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {})
-        : OperationAlreadyFinalized(false)
-        , Status(status)
-        , Issues(std::move(issues))
-    {}
-
     TEvScriptExecutionFinished(bool operationAlreadyFinalized, Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {})
         : OperationAlreadyFinalized(operationAlreadyFinalized)
         , Status(status)
@@ -277,8 +271,6 @@ struct TEvScriptFinalizeRequest : public NActors::TEventLocal<TEvScriptFinalizeR
     std::optional<TString> QueryPlan;
     std::optional<TString> QueryAst;
     std::optional<ui64> LeaseGeneration;
-    TDuration OperationTtl;
-    TDuration ResultsTtl;
 };
 
 struct TEvScriptFinalizeResponse : public NActors::TEventLocal<TEvScriptFinalizeResponse, TKqpScriptExecutionEvents::EvScriptFinalizeResponse> {

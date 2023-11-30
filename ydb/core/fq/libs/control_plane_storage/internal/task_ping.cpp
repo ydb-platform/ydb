@@ -184,7 +184,7 @@ TPingTaskParams ConstructHardPingTask(
                 builder << " at " << Now();
 
                 // in case of problems with finalization, do not change the issues
-                if (query.meta().status() == FederatedQuery::QueryMeta::FAILING) {
+                if (query.meta().status() == FederatedQuery::QueryMeta::FAILING || query.meta().status() == FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM || query.meta().status() == FederatedQuery::QueryMeta::ABORTING_BY_USER) {
                     if (issues) {
                         transientIssues->AddIssues(*issues);
                     }

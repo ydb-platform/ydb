@@ -23,6 +23,7 @@ const (
 	KindDate
 	KindEnum
 	KindDecimal
+	KindFixedStr
 )
 
 type Variant struct {
@@ -59,10 +60,16 @@ func (v Variant) Type() string {
 }
 
 func (v Variant) ColumnType() string {
+	if v.Kind == KindFixedStr {
+		return fmt.Sprintf(`ColumnTypeFixedString.With("%d")`, v.Bytes())
+	}
 	return "ColumnType" + v.Name()
 }
 
 func (v Variant) New() string {
+	if v.Kind == KindFixedStr {
+		return "newByte" + strconv.Itoa(v.Bytes())
+	}
 	if v.Big() {
 		return v.ElemType() + "FromInt"
 	}
@@ -70,6 +77,9 @@ func (v Variant) New() string {
 }
 
 func (v Variant) Name() string {
+	if v.Kind == KindFixedStr {
+		return "FixedStr" + strconv.Itoa(v.Bytes())
+	}
 	if v.Kind != KindInt && v.Kind != KindFloat {
 		return v.ElemType()
 	}
@@ -114,6 +124,9 @@ func (v Variant) IPv4() bool {
 }
 
 func (v Variant) BinPut() string {
+	if v.FixedStr() {
+		return "copy"
+	}
 	if v.IPv6() {
 		return "binPutIPv6"
 	}
@@ -143,6 +156,9 @@ func (v Variant) UnsignedType() string {
 }
 
 func (v Variant) ElemLower() string {
+	if v.Kind == KindFixedStr {
+		return "byte" + strconv.Itoa(v.Bytes())
+	}
 	return strings.ToLower(v.ElemType())
 }
 
@@ -167,7 +183,14 @@ func (v Variant) DateTime() bool {
 	return v.Kind == KindDateTime
 }
 
+func (v Variant) FixedStr() bool {
+	return v.Kind == KindFixedStr
+}
+
 func (v Variant) ElemType() string {
+	if v.Kind == KindFixedStr {
+		return fmt.Sprintf("[%d]byte", v.Bytes())
+	}
 	if v.Kind == KindEnum {
 		return fmt.Sprintf("Enum%d", v.Bits)
 	}
@@ -336,11 +359,28 @@ func run() error {
 			})
 		}
 	}
+	for _, b := range []int{
+		8,
+		16,
+		32,
+		64,
+		128,
+		256,
+		512,
+	} {
+		variants = append(variants, Variant{
+			Kind: KindFixedStr,
+			Bits: b * 8,
+		})
+	}
 	for _, v := range variants {
 		if !v.Byte() {
 			v.GenerateUnsafe = true
 		}
 		base := "col_" + v.ElemLower()
+		if v.Kind == KindFixedStr {
+			base = "col_fixedstr" + strconv.Itoa(v.Bytes())
+		}
 		if !v.DateTime() {
 			if err := write(base+"_gen", v, tpl); err != nil {
 				return errors.Wrap(err, "write")

@@ -37,11 +37,13 @@ PEERDIR(
     ydb/core/fq/libs/common
     ydb/core/fq/libs/compute/common
     ydb/core/fq/libs/compute/ydb
+    ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/control_plane_storage
     ydb/core/fq/libs/control_plane_storage/events
     ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/core/fq/libs/db_schema
     ydb/core/fq/libs/events
+    ydb/core/fq/libs/exceptions
     ydb/core/fq/libs/grpc
     ydb/core/fq/libs/private_client
     ydb/core/fq/libs/rate_limiter/utils
@@ -97,4 +99,8 @@ END()
 
 RECURSE(
     logging
+)
+
+RECURSE_FOR_TESTS(
+    ut
 )

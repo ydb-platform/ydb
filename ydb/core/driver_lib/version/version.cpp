@@ -56,9 +56,9 @@ TCompatibilityInfo::TCompatibilityInfo() {
         );                                                                                      \
     } while (false)
 
-    EMPLACE_DEFAULT_COMPATIBILITY_INFO(PDisk, "ydb", 23, 2, 12, 0);
+    EMPLACE_DEFAULT_COMPATIBILITY_INFO(PDisk, "ydb", 23, 3, 13, 0);
     EMPLACE_DEFAULT_COMPATIBILITY_INFO(VDisk, "ydb", 23, 2, 12, 0);
-    EMPLACE_DEFAULT_COMPATIBILITY_INFO(BlobStorageController, "ydb", 23, 2, 12, 0);
+    EMPLACE_DEFAULT_COMPATIBILITY_INFO(BlobStorageController, "ydb", 23, 3, 13, 0);
 
 #undef EMPLACE_DEFAULT_COMPATIBILITY_INFO
 }

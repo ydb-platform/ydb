@@ -150,9 +150,6 @@ TProtoTableReader::TProtoTableReader(
     , Descriptors_(std::move(descriptors))
 { }
 
-TProtoTableReader::~TProtoTableReader()
-{ }
-
 void TProtoTableReader::ReadRow(Message* row)
 {
     const auto& node = NodeReader_->GetRow();
@@ -210,15 +207,21 @@ TLenvalProtoTableReader::TLenvalProtoTableReader(
     ::TIntrusivePtr<TRawTableReader> input,
     TVector<const Descriptor*>&& descriptors)
     : TLenvalTableReader(std::move(input))
+    , ValidateProtoDescriptor_(true)
     , Descriptors_(std::move(descriptors))
 { }
 
-TLenvalProtoTableReader::~TLenvalProtoTableReader()
+TLenvalProtoTableReader::TLenvalProtoTableReader(
+    ::TIntrusivePtr<TRawTableReader> input)
+    : TLenvalTableReader(std::move(input))
+    , ValidateProtoDescriptor_(false)
 { }
 
 void TLenvalProtoTableReader::ReadRow(Message* row)
 {
-    ValidateProtoDescriptor(*row, GetTableIndex(), Descriptors_, true);
+    if (ValidateProtoDescriptor_) {
+        ValidateProtoDescriptor(*row, GetTableIndex(), Descriptors_, true);
+    }
 
     while (true) {
         try {

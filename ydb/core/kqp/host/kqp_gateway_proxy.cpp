@@ -778,15 +778,107 @@ public:
     }
 
     TFuture<TGenericResult> CreateUser(const TString& cluster, const TCreateUserSettings& settings) override {
-        FORWARD_ENSURE_NO_PREPARE(CreateUser, cluster, settings);
+        CHECK_PREPARED_DDL(CreateUser);
+
+        auto createUserPromise = NewPromise<TGenericResult>();
+
+        TString database;
+        if (!SetDatabaseForLoginOperation(database, GetDomainLoginOnly(), GetDomainName(), GetDatabase())) {
+            return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+        }
+
+        NKikimrSchemeOp::TModifyScheme schemeTx;
+        schemeTx.SetWorkingDir(database);
+        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+        auto& createUser = *schemeTx.MutableAlterLogin()->MutableCreateUser();
+        createUser.SetUser(settings.UserName);
+        if (settings.Password) {
+            createUser.SetPassword(settings.Password);
+        }
+
+        if (IsPrepare()) {
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+            phyTx.MutableSchemeOperation()->MutableCreateUser()->Swap(&schemeTx);
+
+            TGenericResult result;
+            result.SetSuccess();
+            createUserPromise.SetValue(result);
+        } else {
+            return Gateway->CreateUser(cluster, settings);
+        }
+
+        return createUserPromise.GetFuture();
     }
 
     TFuture<TGenericResult> AlterUser(const TString& cluster, const TAlterUserSettings& settings) override {
-        FORWARD_ENSURE_NO_PREPARE(AlterUser, cluster, settings);
+        CHECK_PREPARED_DDL(AlterUser);
+
+        auto alterUserPromise = NewPromise<TGenericResult>();
+
+        TString database;
+        if (!SetDatabaseForLoginOperation(database, GetDomainLoginOnly(), GetDomainName(), GetDatabase())) {
+            return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+        }
+
+        NKikimrSchemeOp::TModifyScheme schemeTx;
+        schemeTx.SetWorkingDir(database);
+        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+        auto& alterUser = *schemeTx.MutableAlterLogin()->MutableModifyUser();
+        alterUser.SetUser(settings.UserName);
+        if (settings.Password) {
+            alterUser.SetPassword(settings.Password);
+        }
+
+        if (IsPrepare()) {
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+            phyTx.MutableSchemeOperation()->MutableAlterUser()->Swap(&schemeTx);
+            TGenericResult result;
+            result.SetSuccess();
+            alterUserPromise.SetValue(result);
+        } else {
+            return Gateway->AlterUser(cluster, settings);
+        }
+
+        return alterUserPromise.GetFuture();
     }
 
     TFuture<TGenericResult> DropUser(const TString& cluster, const TDropUserSettings& settings) override {
-        FORWARD_ENSURE_NO_PREPARE(DropUser, cluster, settings);
+        CHECK_PREPARED_DDL(DropUser);
+
+        auto dropUserPromise = NewPromise<TGenericResult>();
+
+        TString database;
+        if (!SetDatabaseForLoginOperation(database, GetDomainLoginOnly(), GetDomainName(), GetDatabase())) {
+            return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+        }
+
+        NKikimrSchemeOp::TModifyScheme schemeTx;
+        schemeTx.SetWorkingDir(database);
+        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+        auto& dropUser = *schemeTx.MutableAlterLogin()->MutableRemoveUser();
+        dropUser.SetUser(settings.UserName);
+        dropUser.SetMissingOk(settings.Force);
+
+        if (IsPrepare()) {
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+            phyTx.MutableSchemeOperation()->MutableAlterUser()->Swap(&schemeTx);
+            TGenericResult result;
+            result.SetSuccess();
+            dropUserPromise.SetValue(result);
+        } else {
+            return Gateway->DropUser(cluster, settings);
+        }
+
+        return dropUserPromise.GetFuture();
     }
 
     TFuture<TGenericResult> UpsertObject(const TString& cluster, const TUpsertObjectSettings& settings) override {
@@ -888,6 +980,14 @@ private:
         }
 
         return Gateway->GetDatabase();
+    }
+
+    bool GetDomainLoginOnly() {
+        return Gateway->GetDomainLoginOnly();
+    }
+
+    TMaybe<TString> GetDomainName() {
+        return Gateway->GetDomainName();
     }
 
 private:

@@ -43,6 +43,9 @@ func TestColAuto_Infer(t *testing.T) {
 		ColumnTypeNothing,
 		"Nullable(Nothing)",
 		"Array(Nothing)",
+		ColumnTypeUUID,
+		ColumnTypeArray.Sub(ColumnTypeUUID),
+		ColumnTypeNullable.Sub(ColumnTypeUUID),
 	} {
 		r := AutoResult("foo")
 		require.NoError(t, r.Data.(Inferable).Infer(columnType))

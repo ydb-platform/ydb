@@ -15,7 +15,7 @@ SRCS(
     yt/yt/core/rpc/unittests/viable_peer_registry_ut.cpp
 )
 
-INCLUDE(${ARCADIA_ROOT}/yt/opensource_tests.inc)
+INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(
     yt/yt/core

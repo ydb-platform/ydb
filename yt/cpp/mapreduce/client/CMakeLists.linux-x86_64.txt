@@ -57,6 +57,7 @@ target_sources(cpp-mapreduce-client PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/retry_heavy_write_request.cpp
   ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/retry_transaction.cpp
   ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/retryful_writer.cpp
+  ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/retryful_writer_v2.cpp
   ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/retryless_writer.cpp
   ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/skiff.cpp
   ${CMAKE_SOURCE_DIR}/yt/cpp/mapreduce/client/structured_table_formats.cpp

@@ -21,6 +21,8 @@ struct TEvPartitionWriter {
         EvWriteResponse,
         EvDisconnected,
 
+        EvTxWriteRequest,
+
         EvEnd,
     };
 
@@ -77,6 +79,10 @@ struct TEvPartitionWriter {
         explicit TEvWriteRequest(ui64 cookie) {
             Record.MutablePartitionRequest()->SetCookie(cookie);
         }
+
+        ui64 GetCookie() const {
+            return Record.GetPartitionRequest().GetCookie();
+        }
     };
 
     struct TEvWriteAccepted: public TEventLocal<TEvWriteAccepted, EvWriteAccepted> {
@@ -101,6 +107,7 @@ struct TEvPartitionWriter {
             PartitionNotLocal,
             // Partitition restarted.
             PartitionDisconnected,
+            OverloadError,
         };
 
         struct TSuccess {
@@ -142,6 +149,19 @@ struct TEvPartitionWriter {
     };
 
     struct TEvDisconnected: public TEventLocal<TEvDisconnected, EvDisconnected> {
+    };
+
+    struct TEvTxWriteRequest : public TEventLocal<TEvTxWriteRequest, EvTxWriteRequest> {
+        TEvTxWriteRequest(const TString& sessionId, const TString& txId, THolder<TEvWriteRequest>&& request) :
+            SessionId(sessionId),
+            TxId(txId),
+            Request(std::move(request))
+        {
+        }
+
+        TString SessionId;
+        TString TxId;
+        THolder<TEvWriteRequest> Request;
     };
 
 }; // TEvPartitionWriter

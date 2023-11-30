@@ -49,14 +49,14 @@ class TAssembleColumnsTaskConstructor: public IFetchTaskConstructor {
 private:
     using TBase = IFetchTaskConstructor;
 protected:
-    std::set<ui32> ColumnIds;
+    std::shared_ptr<TColumnsSet> Columns;
     std::shared_ptr<TPortionInfo> PortionInfo;
     THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> BuildBatchAssembler();
 public:
     TAssembleColumnsTaskConstructor(const std::shared_ptr<TSpecialReadContext>& context, const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, THashMap<TBlobRange, ui32>&& nullBlocks,
-        const std::set<ui32>& columnIds, const TPortionDataSource& portion, const std::shared_ptr<IDataSource>& sourcePtr, const TString& taskCustomer)
+        const std::shared_ptr<TColumnsSet>& columns, const TPortionDataSource& portion, const std::shared_ptr<IDataSource>& sourcePtr, const TString& taskCustomer)
         : TBase(context, readActions, std::move(nullBlocks), sourcePtr, taskCustomer)
-        , ColumnIds(columnIds)
+        , Columns(columns)
         , PortionInfo(portion.GetPortionInfoPtr())
     {
 
@@ -70,8 +70,8 @@ private:
     virtual void DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override;
 public:
     TFFColumnsTaskConstructor(const std::shared_ptr<TSpecialReadContext>& context, const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, THashMap<TBlobRange, ui32>&& nullBlocks,
-        const std::set<ui32>& columnIds, const TPortionDataSource& portion, const std::shared_ptr<IDataSource>& sourcePtr, const TString& taskCustomer)
-        : TBase(context, readActions, std::move(nullBlocks), columnIds, portion, sourcePtr, taskCustomer)
+        const std::shared_ptr<TColumnsSet>& columns, const TPortionDataSource& portion, const std::shared_ptr<IDataSource>& sourcePtr, const TString& taskCustomer)
+        : TBase(context, readActions, std::move(nullBlocks), columns, portion, sourcePtr, taskCustomer)
         , AppliedFilter(portion.GetFilterStageData().GetAppliedFilter())
     {
     }
@@ -84,8 +84,8 @@ private:
     virtual void DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override;
 public:
     TEFTaskConstructor(const std::shared_ptr<TSpecialReadContext>& context, const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, THashMap<TBlobRange, ui32>&& nullBlocks,
-        const std::set<ui32>& columnIds, const TPortionDataSource& portion, const std::shared_ptr<IDataSource>& sourcePtr, const bool useEarlyFilter, const TString& taskCustomer)
-        : TBase(context, readActions, std::move(nullBlocks), columnIds, portion, sourcePtr, taskCustomer)
+        const std::shared_ptr<TColumnsSet>& columns, const TPortionDataSource& portion, const std::shared_ptr<IDataSource>& sourcePtr, const bool useEarlyFilter, const TString& taskCustomer)
+        : TBase(context, readActions, std::move(nullBlocks), columns, portion, sourcePtr, taskCustomer)
         , UseEarlyFilter(useEarlyFilter)
     {
     }

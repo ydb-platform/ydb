@@ -118,7 +118,7 @@ public:
         return CurrentPortionRecords == Context.GetPortionRowsCountLimit();
     }
 
-    void FlushBuffer();
+    bool FlushBuffer();
 
     std::shared_ptr<arrow::Array> AppendBlob(const TString& data, const TColumnRecord& columnChunk, ui32& remained);
     ui32 AppendSlice(const std::shared_ptr<arrow::Array>& a, const ui32 startIndex, const ui32 length);

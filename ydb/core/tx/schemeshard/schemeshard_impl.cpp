@@ -1881,6 +1881,7 @@ void TSchemeShard::PersistSubDomainAlter(NIceDb::TNiceDb& db, const TPathId& pat
     }
 
     PersistSubDomainAuditSettingsAlter(db, pathId, subDomain);
+    PersistSubDomainServerlessComputeResourcesModeAlter(db, pathId, subDomain);
 
     for (auto shardIdx: subDomain.GetPrivateShards()) {
         db.Table<Schema::SubDomainShardsAlterData>().Key(pathId.LocalPathId, shardIdx.GetLocalId()).Update();
@@ -1944,6 +1945,7 @@ void TSchemeShard::PersistSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId, 
     PersistSubDomainState(db, pathId, subDomain);
 
     PersistSubDomainAuditSettings(db, pathId, subDomain);
+    PersistSubDomainServerlessComputeResourcesMode(db, pathId, subDomain);
 
     db.Table<Schema::SubDomainsAlterData>().Key(pathId.LocalPathId).Delete();
 
@@ -2064,6 +2066,27 @@ void TSchemeShard::PersistSubDomainAuditSettings(NIceDb::TNiceDb& db, const TPat
 
 void TSchemeShard::PersistSubDomainAuditSettingsAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain) {
     PersistSubDomainAuditSettingsImpl<Schema::SubDomainsAlterData>(db, pathId, subDomain.GetAuditSettings());
+}
+
+template <class Table>
+void PersistSubDomainServerlessComputeResourcesModeImpl(NIceDb::TNiceDb& db, const TPathId& pathId,
+                                                        const TSubDomainInfo::TMaybeServerlessComputeResourcesMode& value) {
+    using Field = typename Table::ServerlessComputeResourcesMode;
+    if (value) {
+        db.Table<Table>().Key(pathId.LocalPathId).Update(NIceDb::TUpdate<Field>(*value));
+    }
+}
+
+void TSchemeShard::PersistSubDomainServerlessComputeResourcesMode(NIceDb::TNiceDb& db, const TPathId& pathId,
+                                                                  const TSubDomainInfo& subDomain) {
+    const auto& serverlessComputeResourcesMode = subDomain.GetServerlessComputeResourcesMode();
+    PersistSubDomainServerlessComputeResourcesModeImpl<Schema::SubDomains>(db, pathId, serverlessComputeResourcesMode);
+}
+
+void TSchemeShard::PersistSubDomainServerlessComputeResourcesModeAlter(NIceDb::TNiceDb& db, const TPathId& pathId,
+                                                                       const TSubDomainInfo& subDomain) {
+    const auto& serverlessComputeResourcesMode = subDomain.GetServerlessComputeResourcesMode();
+    PersistSubDomainServerlessComputeResourcesModeImpl<Schema::SubDomainsAlterData>(db, pathId, serverlessComputeResourcesMode);
 }
 
 void TSchemeShard::PersistACL(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
@@ -4180,6 +4203,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableAlterDatabaseCreateHiveFirst = appData->FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst();
     EnablePQConfigTransactionsAtSchemeShard = appData->FeatureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
     EnableStatistics = appData->FeatureFlags.GetEnableStatistics();
+    EnableTablePgTypes = appData->FeatureFlags.GetEnableTablePgTypes();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -6567,6 +6591,7 @@ void TSchemeShard::SubscribeConsoleConfigs(const TActorContext &ctx) {
             (ui32)NKikimrConsole::TConfigItem::CompactionConfigItem,
             (ui32)NKikimrConsole::TConfigItem::SchemeShardConfigItem,
             (ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem,
+            (ui32)NKikimrConsole::TConfigItem::QueryServiceConfigItem,
         }),
         IEventHandle::FlagTrackDelivery
     );
@@ -6605,6 +6630,11 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         LoadTableProfiles(nullptr, ctx);
     }
 
+    if (appConfig.HasQueryServiceConfig()) {
+        const auto& hostnamePatterns = appConfig.GetQueryServiceConfig().GetHostnamePatterns();
+        ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()));
+    }
+
     if (IsSchemeShardConfigured()) {
         StartStopCompactionQueues();
     }
@@ -6627,6 +6657,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableAlterDatabaseCreateHiveFirst = featureFlags.GetEnableAlterDatabaseCreateHiveFirst();
     EnablePQConfigTransactionsAtSchemeShard = featureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
     EnableStatistics = featureFlags.GetEnableStatistics();
+    EnableTablePgTypes = featureFlags.GetEnableTablePgTypes();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {

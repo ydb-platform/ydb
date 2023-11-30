@@ -1,4 +1,3 @@
-/* skip double format */
 $list = AsList(AsStruct('one' AS x), AsStruct('two' AS x));
 $lazy = ListMap(ListFromRange(1s, 3s), ($i)->{ RETURN AsStruct($i AS y) });
 

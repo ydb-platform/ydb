@@ -80,7 +80,7 @@ public:
         std::vector<std::shared_ptr<TPortionInfo>> RemovePortions;
     public:
         TModificationGuard& AddPortion(const std::shared_ptr<TPortionInfo>& portion) {
-            if (AppData()->ColumnShardConfig.GetSkipOldGranules() && portion->GetDeprecatedGranuleId() > 0) {
+            if (HasAppData() && AppDataVerified().ColumnShardConfig.GetSkipOldGranules() && portion->GetDeprecatedGranuleId() > 0) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_granule")("granule_id", portion->GetDeprecatedGranuleId());
                 return *this;
             }
@@ -89,7 +89,7 @@ public:
         }
 
         TModificationGuard& RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
-            if (AppData()->ColumnShardConfig.GetSkipOldGranules() && portion->GetDeprecatedGranuleId() > 0) {
+            if (HasAppData() && AppDataVerified().ColumnShardConfig.GetSkipOldGranules() && portion->GetDeprecatedGranuleId() > 0) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_granule")("granule_id", portion->GetDeprecatedGranuleId());
                 return *this;
             }

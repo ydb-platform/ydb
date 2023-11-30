@@ -10,7 +10,7 @@ SRCS(
     options.go
     profile.go
     profiles.go
-    tables13.0.0.go
+    tables15.0.0.go
     transformer.go
     trieval.go
 )
@@ -26,4 +26,6 @@ GO_TEST_SRCS(
 
 END()
 
-RECURSE(gotest)
+RECURSE(
+    gotest
+)

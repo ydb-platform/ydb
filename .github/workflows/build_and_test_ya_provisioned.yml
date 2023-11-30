@@ -12,6 +12,7 @@ on:
         default: "relwithdebinfo"
         description: "Build preset"
         options:
+          - debug
           - relwithdebinfo
           - release-asan
           - release-tsan

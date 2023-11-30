@@ -9,7 +9,7 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-static TString GetSdkBuildInfo(NGrpc::IRequestContextBase* reqCtx) {
+static TString GetSdkBuildInfo(NYdbGrpc::IRequestContextBase* reqCtx) {
     const auto& res = reqCtx->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
     if (res.empty()) {
         return {};
@@ -17,7 +17,7 @@ static TString GetSdkBuildInfo(NGrpc::IRequestContextBase* reqCtx) {
     return TString{res[0]};
 }
 
-void TGRpcMonitoringService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcMonitoringService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
     using namespace Ydb;
 
@@ -27,7 +27,7 @@ void TGRpcMonitoringService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #define ADD_REQUEST_NEW(NAME, CB) \
      MakeIntrusive<TGRpcRequest<Monitoring::NAME##Request, Monitoring::NAME##Response, TGRpcMonitoringService>>   \
          (this, &Service_, CQ_,                                                                                   \
-            [this](NGrpc::IRequestContextBase *ctx) {                                                             \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                             \
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));            \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                           \
                     new TGrpcRequestOperationCall<Monitoring::NAME##Request, Monitoring::NAME##Response>          \
@@ -39,7 +39,7 @@ void TGRpcMonitoringService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 
 #define ADD_REQUEST_OLD(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Monitoring::IN, Ydb::Monitoring::OUT, TGRpcMonitoringService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase* reqCtx) { \
+        [this](NYdbGrpc::IRequestContextBase* reqCtx) { \
            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer(), GetSdkBuildInfo(reqCtx)); \
            ACTION; \
         }, &Ydb::Monitoring::V1::MonitoringService::AsyncService::Request ## NAME, \

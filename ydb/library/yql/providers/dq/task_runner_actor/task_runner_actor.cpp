@@ -480,8 +480,8 @@ private:
                 auto sensorName = TCounters::GetCounterName(
                     "Actor",
                     {{"ClusterName", clusterName}},
-                    "ProcessInit");
-                i64 val = (TInstant::Now()-startTime).MilliSeconds();
+                    "ProcessInitUs");
+                i64 val = (TInstant::Now()-startTime).MicroSeconds();
                 sensors.push_back({sensorName, val, val, val, val, 1});
 
                 auto event = MakeHolder<TEvTaskRunnerCreateFinished>(

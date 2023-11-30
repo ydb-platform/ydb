@@ -22,10 +22,10 @@ namespace NYql::NConnector {
         TClientGRPC() = delete;
         TClientGRPC(const TGenericConnectorConfig& config) {
             TString endpoint = TStringBuilder() << config.GetEndpoint().host() << ":" << ToString(config.GetEndpoint().port());
-            GrpcConfig_ = NGrpc::TGRpcClientConfig(endpoint);
+            GrpcConfig_ = NYdbGrpc::TGRpcClientConfig(endpoint);
             GrpcConfig_.EnableSsl = config.GetUseSsl();
 
-            GrpcClient_ = std::make_unique<NGrpc::TGRpcClientLow>();
+            GrpcClient_ = std::make_unique<NYdbGrpc::TGRpcClientLow>();
 
             // FIXME: is it OK to use single connection during the client lifetime?
             GrpcConnection_ = GrpcClient_->CreateGRpcServiceConnection<NApi::Connector>(GrpcConfig_);
@@ -58,14 +58,14 @@ namespace NYql::NConnector {
         template <class TRequest, class TResponse>
         TAsyncResult<TResponse> UnaryCall(
             const TRequest& request,
-            typename NGrpc::TSimpleRequestProcessor<NApi::Connector::Stub, TRequest, TResponse>::TAsyncRequest rpc) {
+            typename NYdbGrpc::TSimpleRequestProcessor<NApi::Connector::Stub, TRequest, TResponse>::TAsyncRequest rpc) {
             auto context = GrpcClient_->CreateContext();
             if (!context) {
                 throw yexception() << "Client is being shutted down";
             }
 
             auto promise = NThreading::NewPromise<TResult<TResponse>>();
-            auto callback = [promise, context](NGrpc::TGrpcStatus&& status, TResponse&& resp) mutable {
+            auto callback = [promise, context](NYdbGrpc::TGrpcStatus&& status, TResponse&& resp) mutable {
                 promise.SetValue({std::move(status), std::move(resp)});
             };
 
@@ -82,9 +82,9 @@ namespace NYql::NConnector {
         template <class TRequest, class TResponse>
         TIteratorAsyncResult<IStreamIterator<TResponse>> ServerSideStreamingCall(
             const TRequest& request,
-            TStreamRpc<NApi::Connector::Stub, TRequest, TResponse, NGrpc::TStreamRequestReadProcessor> rpc) {
-            using TStreamProcessorPtr = typename NGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
-            using TStreamInitResult = std::pair<NGrpc::TGrpcStatus, TStreamProcessorPtr>;
+            TStreamRpc<NApi::Connector::Stub, TRequest, TResponse, NYdbGrpc::TStreamRequestReadProcessor> rpc) {
+            using TStreamProcessorPtr = typename NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
+            using TStreamInitResult = std::pair<NYdbGrpc::TGrpcStatus, TStreamProcessorPtr>;
 
             auto promise = NThreading::NewPromise<TStreamInitResult>();
 
@@ -95,7 +95,7 @@ namespace NYql::NConnector {
 
             GrpcConnection_->DoStreamRequest<TRequest, TResponse>(
                 request,
-                [context, promise](NGrpc::TGrpcStatus&& status, TStreamProcessorPtr streamProcessor) mutable {
+                [context, promise](NYdbGrpc::TGrpcStatus&& status, TStreamProcessorPtr streamProcessor) mutable {
                     promise.SetValue({std::move(status), streamProcessor});
                 },
                 rpc,
@@ -117,9 +117,9 @@ namespace NYql::NConnector {
         }
 
     private:
-        NGrpc::TGRpcClientConfig GrpcConfig_;
-        std::unique_ptr<NGrpc::TGRpcClientLow> GrpcClient_;
-        std::shared_ptr<NGrpc::TServiceConnection<NApi::Connector>> GrpcConnection_;
+        NYdbGrpc::TGRpcClientConfig GrpcConfig_;
+        std::unique_ptr<NYdbGrpc::TGRpcClientLow> GrpcClient_;
+        std::shared_ptr<NYdbGrpc::TServiceConnection<NApi::Connector>> GrpcConnection_;
     };
 
     IClient::TPtr MakeClientGRPC(const NYql::TGenericConnectorConfig& cfg) {

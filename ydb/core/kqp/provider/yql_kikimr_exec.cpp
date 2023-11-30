@@ -1684,10 +1684,6 @@ public:
         }
 
         if (auto maybeCreateUser = TMaybeNode<TKiCreateUser>(input)) {
-            if (!EnsureNotPrepare("CREATE USER", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
@@ -1696,8 +1692,7 @@ public:
             auto cluster = TString(maybeCreateUser.Cast().DataSink().Cluster());
             TCreateUserSettings createUserSettings = ParseCreateUserSettings(maybeCreateUser.Cast());
 
-            bool prepareOnly = SessionCtx->Query().PrepareOnly;
-            auto future = prepareOnly ? CreateDummySuccess() : Gateway->CreateUser(cluster, createUserSettings);
+            auto future = Gateway->CreateUser(cluster, createUserSettings);
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -1708,10 +1703,6 @@ public:
         }
 
         if (auto maybeAlterUser = TMaybeNode<TKiAlterUser>(input)) {
-            if (!EnsureNotPrepare("ALTER USER", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
@@ -1720,8 +1711,7 @@ public:
             auto cluster = TString(maybeAlterUser.Cast().DataSink().Cluster());
             TAlterUserSettings alterUserSettings = ParseAlterUserSettings(maybeAlterUser.Cast());
 
-            bool prepareOnly = SessionCtx->Query().PrepareOnly;
-            auto future = prepareOnly ? CreateDummySuccess() : Gateway->AlterUser(cluster, alterUserSettings);
+            auto future = Gateway->AlterUser(cluster, alterUserSettings);
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -1732,10 +1722,6 @@ public:
         }
 
         if (auto maybeDropUser = TMaybeNode<TKiDropUser>(input)) {
-            if (!EnsureNotPrepare("DROP USER", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
@@ -1744,8 +1730,7 @@ public:
             auto cluster = TString(maybeDropUser.Cast().DataSink().Cluster());
             TDropUserSettings dropUserSettings = ParseDropUserSettings(maybeDropUser.Cast());
 
-            bool prepareOnly = SessionCtx->Query().PrepareOnly;
-            auto future = prepareOnly ? CreateDummySuccess() : Gateway->DropUser(cluster, dropUserSettings);
+            auto future = Gateway->DropUser(cluster, dropUserSettings);
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {

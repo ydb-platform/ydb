@@ -8,7 +8,7 @@
 
 namespace NKikimr::NGRpcService {
 
-void TGRpcMaintenanceService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcMaintenanceService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     Y_UNUSED(logger);
 
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
@@ -21,7 +21,7 @@ void TGRpcMaintenanceService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #define ADD_REQUEST(NAME, REQUEST, RESPONSE, CB) \
     MakeIntrusive<TGRpcRequest<Maintenance::REQUEST, Maintenance::RESPONSE, TGRpcMaintenanceService>> \
         (this, &Service_, CQ_,                                                                        \
-            [this](NGrpc::IRequestContextBase *ctx) {                                                 \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                 \
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                      \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                               \
                     new TGrpcRequestOperationCall<Maintenance::REQUEST, Maintenance::RESPONSE>        \

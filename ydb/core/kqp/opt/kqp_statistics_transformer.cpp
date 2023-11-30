@@ -38,7 +38,7 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for read table, nrows:" << nRows << ", nattrs: " << nAttrs;
 
-    auto outputStats = TOptimizerStatistics(nRows, nAttrs, 0.0);
+    auto outputStats = TOptimizerStatistics(EStatisticsType::BaseTable, nRows, nAttrs, 0.0, tableData.Metadata->KeyColumnNames);
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats));
 }
 
@@ -57,7 +57,7 @@ void InferStatisticsForKqpTable(const TExprNode::TPtr& input, TTypeAnnotationCon
     int nAttrs = tableData.Metadata->Columns.size();
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for table: " << path.Value() << ", nrows: " << nRows << ", nattrs: " << nAttrs;
 
-    auto outputStats = TOptimizerStatistics(nRows, nAttrs, 0.0);
+    auto outputStats = TOptimizerStatistics(EStatisticsType::BaseTable, nRows, nAttrs, 0.0, tableData.Metadata->KeyColumnNames);
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats));
 }
 
@@ -86,7 +86,7 @@ void InferStatisticsForLookupTable(const TExprNode::TPtr& input, TTypeAnnotation
         nRows = 1;
     }
 
-    auto outputStats = TOptimizerStatistics(nRows, nAttrs, 0);
+    auto outputStats = TOptimizerStatistics(EStatisticsType::BaseTable, nRows, nAttrs, 0, inputStats->KeyColumns);
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats));
 }
 
@@ -120,7 +120,7 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
     int nAttrs = sourceSettings.Columns().Size();
     double cost = inputStats->Cost;
 
-    auto outputStats = TOptimizerStatistics(nRows, nAttrs, cost);
+    auto outputStats = TOptimizerStatistics(EStatisticsType::BaseTable, nRows, nAttrs, cost, inputStats->KeyColumns);
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats));
 }
 

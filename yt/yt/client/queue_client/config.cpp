@@ -37,7 +37,9 @@ void TQueueAutoTrimConfig::Register(TRegistrar registrar)
         .Default();
 
     registrar.Postprocessor([] (TThis* trimConfig) {
-        if (trimConfig->RetainedLifetimeDuration && trimConfig->RetainedLifetimeDuration->GetValue() % TDuration::Seconds(1).GetValue() != 0) {
+        if (trimConfig->RetainedLifetimeDuration &&
+            trimConfig->RetainedLifetimeDuration->GetValue() % TDuration::Seconds(1).GetValue() != 0)
+        {
             THROW_ERROR_EXCEPTION("The value of \"retained_lifetime_duration\" must be a multiple of 1000 (1 second)");
         }
     });
@@ -45,7 +47,8 @@ void TQueueAutoTrimConfig::Register(TRegistrar registrar)
 
 bool operator==(const TQueueAutoTrimConfig& lhs, const TQueueAutoTrimConfig& rhs)
 {
-    return std::tie(lhs.Enable, lhs.RetainedRows, lhs.RetainedLifetimeDuration) == std::tie(rhs.Enable, rhs.RetainedRows, rhs.RetainedLifetimeDuration);
+    return std::tie(lhs.Enable, lhs.RetainedRows, lhs.RetainedLifetimeDuration) ==
+        std::tie(rhs.Enable, rhs.RetainedRows, rhs.RetainedLifetimeDuration);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

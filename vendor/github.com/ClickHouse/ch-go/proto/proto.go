@@ -4,5 +4,5 @@ package proto
 // Defaults for ClientHello.
 const (
 	Version = 54460
-	Name    = "go-faster/ch"
+	Name    = "clickhouse/ch-go"
 )

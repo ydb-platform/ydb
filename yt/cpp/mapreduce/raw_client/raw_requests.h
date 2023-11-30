@@ -84,7 +84,14 @@ TNodeId Create(
     const ENodeType& type,
     const TCreateOptions& options = TCreateOptions());
 
-TNodeId Copy(
+TNodeId CopyWithoutRetries(
+    const TClientContext& context,
+    const TTransactionId& transactionId,
+    const TYPath& sourcePath,
+    const TYPath& destinationPath,
+    const TCopyOptions& options = TCopyOptions());
+
+TNodeId CopyInsideMasterCell(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,
     const TTransactionId& transactionId,
@@ -92,7 +99,14 @@ TNodeId Copy(
     const TYPath& destinationPath,
     const TCopyOptions& options = TCopyOptions());
 
-TNodeId Move(
+TNodeId MoveWithoutRetries(
+    const TClientContext& context,
+    const TTransactionId& transactionId,
+    const TYPath& sourcePath,
+    const TYPath& destinationPath,
+    const TMoveOptions& options = TMoveOptions());
+
+TNodeId MoveInsideMasterCell(
     const IRequestRetryPolicyPtr& retryPolicy,
     const TClientContext& context,
     const TTransactionId& transactionId,

@@ -75,16 +75,7 @@ namespace NKikimr::NKqp {
             ConnectorClient = NYql::NConnector::MakeClientGRPC(GenericGatewaysConfig.GetConnector());
 
             if (queryServiceConfig.HasMdbTransformHost()) {
-                auto mdbTransformHost = queryServiceConfig.GetMdbTransformHost();
-                bool useNativeProtocolForClickHouse = false;
-                for (const auto& p: queryServiceConfig.GetGeneric().GetDefaultSettings()) {
-                    if (p.GetName() == "UseNativeProtocolForClickHouse") {
-                        TryFromString<bool>(p.GetValue(), useNativeProtocolForClickHouse);
-                        break;
-                    }
-                }
-
-                MdbEndpointGenerator = NFq::MakeMdbEndpointGeneratorGeneric(mdbTransformHost, useNativeProtocolForClickHouse);
+                MdbEndpointGenerator = NFq::MakeMdbEndpointGeneratorGeneric(queryServiceConfig.GetMdbTransformHost());
             }
 
             // Create actors required for MDB database resolving

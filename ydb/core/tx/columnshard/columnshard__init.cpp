@@ -235,6 +235,7 @@ bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
             Self->NormalizerController.SwitchNormalizer();
         } else {
             Self->NormalizerController.GetCounters().OnNormalizerFails();
+            ACFL_INFO("step", "TTxUpdateSchema.Execute_Failed")("details", Self->NormalizerController.DebugString());
             return false;
         }
     }

@@ -37,7 +37,7 @@ void YdsProcessAttr(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
 
 namespace NKikimr::NGRpcService {
 
-void TGRpcDataStreamsService::SetupIncomingRequests(NGrpc::TLoggerPtr logger)
+void TGRpcDataStreamsService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
 {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
     using std::placeholders::_1;
@@ -49,7 +49,7 @@ void TGRpcDataStreamsService::SetupIncomingRequests(NGrpc::TLoggerPtr logger)
 #define ADD_REQUEST(NAME, CB, ATTR, LIMIT_TYPE) \
     MakeIntrusive<TGRpcRequest<Ydb::DataStreams::V1::NAME##Request, Ydb::DataStreams::V1::NAME##Response, TGRpcDataStreamsService>> \
         (this, &Service_, CQ_,                                                                                                      \
-            [this](NGrpc::IRequestContextBase *ctx) {                                                                               \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                                               \
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                                    \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                                             \
                     new TGrpcRequestOperationCall<Ydb::DataStreams::V1::NAME##Request, Ydb::DataStreams::V1::NAME##Response>        \

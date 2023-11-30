@@ -13,6 +13,7 @@
 #include "table_client.h"
 #include "queue_client.h"
 #include "query_tracker_client.h"
+#include "bundle_controller_client.h"
 
 namespace NYT::NApi {
 
@@ -65,6 +66,7 @@ struct IClient
     , public IAdminClient
     , public IQueryTrackerClient
     , public IEtcClient
+    , public IBundleControllerClient
 {
     //! Terminates all channels.
     //! Aborts all pending uncommitted transactions.

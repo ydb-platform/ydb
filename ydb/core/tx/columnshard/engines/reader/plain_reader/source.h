@@ -68,6 +68,7 @@ public:
 
     void Abort() {
         AbortedFlag = true;
+        Intervals.clear();
         DoAbort();
     }
 
@@ -104,7 +105,7 @@ public:
         , const std::shared_ptr<IDataSource>& sourcePtr);
     void InitFetchStageData(const std::shared_ptr<arrow::RecordBatch>& batch);
 
-    void RegisterInterval(TFetchingInterval* interval);
+    void RegisterInterval(TFetchingInterval& interval);
 
     IDataSource(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish)
         : SourceIdx(sourceIdx)

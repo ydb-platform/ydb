@@ -1,5 +1,6 @@
 #include "external_source.h"
 #include "object_storage.h"
+#include "validation_functions.h"
 
 #include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -19,6 +20,10 @@ namespace NKikimr::NExternalSource {
 namespace {
 
 struct TObjectStorageExternalSource : public IExternalSource {
+    explicit TObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns)
+        : HostnamePatterns(hostnamePatterns)
+    {}
+
     virtual TString Pack(const NKikimrExternalSources::TSchema& schema,
                          const NKikimrExternalSources::TGeneral& general) const override {
         NKikimrExternalSources::TObjectStorage objectStorage;
@@ -96,15 +101,17 @@ struct TObjectStorageExternalSource : public IExternalSource {
         return parameters;
     }
 
-    virtual void ValidateProperties(const TString& properties) const override {
-        NKikimrSchemeOp::TExternalDataSourceProperties proto;
-        if (!proto.ParseFromString(properties)) {
-            ythrow TExternalSourceException() << "Internal error. Couldn't parse protobuf with properties for external data source";
+    virtual void ValidateExternalDataSource(const TString& externalDataSourceDescription) const override {
+        NKikimrSchemeOp::TExternalDataSourceDescription proto;
+        if (!proto.ParseFromString(externalDataSourceDescription)) {
+            ythrow TExternalSourceException() << "Internal error. Couldn't parse protobuf with external data source description";
         }
 
-        if (!proto.GetProperties().empty()) {
+        if (!proto.GetProperties().GetProperties().empty()) {
             ythrow TExternalSourceException() << "ObjectStorage source doesn't support any properties";
         }
+
+        ValidateHostname(HostnamePatterns, proto.GetLocation());
     }
 
     template<typename TScheme, typename TObjectStorage>
@@ -406,12 +413,15 @@ private:
         }
         return dataSlotColumns;
     }
+
+private:
+    const std::vector<TRegExMatch> HostnamePatterns;
 };
 
 }
 
-IExternalSource::TPtr CreateObjectStorageExternalSource() {
-    return MakeIntrusive<TObjectStorageExternalSource>();
+IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns) {
+    return MakeIntrusive<TObjectStorageExternalSource>(hostnamePatterns);
 }
 
 NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit) {

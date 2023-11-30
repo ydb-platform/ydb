@@ -90,7 +90,7 @@ public:
         AddHandler(0, &TYtDqWrite::Match, HNDL(YtDqWrite));
         AddHandler(0, &TYtDqProcessWrite::Match, HNDL(YtDqProcessWrite));
         AddHandler(0, &TYtTransientOpBase::Match, HNDL(ZeroSample));
-        AddHandler(0, &TYtEquiJoin::Match, HNDL(RuntimeEquiJoin));
+        AddHandler(0, &TYtEquiJoin::Match, HNDL(EarlyMergeJoin));
 
         AddHandler(1, &TYtMap::Match, HNDL(FuseInnerMap));
         AddHandler(1, &TYtMap::Match, HNDL(FuseOuterMap));
@@ -111,6 +111,7 @@ public:
         AddHandler(1, &TYtMerge::Match, HNDL(PushMergeLimitToInput));
         AddHandler(1, &TYtReduce::Match, HNDL(FuseReduce));
 
+        AddHandler(2, &TYtEquiJoin::Match, HNDL(RuntimeEquiJoin));
         AddHandler(2, &TStatWriteTable::Match, HNDL(ReplaceStatWriteTable));
         AddHandler(2, &TYtMap::Match, HNDL(MapToMerge));
         AddHandler(2, &TYtPublish::Match, HNDL(UnorderedPublishTarget));
@@ -5734,6 +5735,28 @@ private:
             .Operation(ctx.ChangeChildren(join.Ref(), std::move(children)))
             .OutIndex().Value(0U).Build()
             .Done();
+    }
+
+    TMaybeNode<TExprBase> EarlyMergeJoin(TExprBase node, TExprContext& ctx) const {
+        if (State_->Configuration->JoinMergeTablesLimit.Get()) {
+            auto equiJoin = node.Cast<TYtEquiJoin>();
+            const auto tree = ImportYtEquiJoin(equiJoin, ctx);
+            if (State_->Configuration->JoinMergeForce.Get() || tree->LinkSettings.ForceSortedMerge) {
+                const auto rewriteStatus = RewriteYtEquiJoinLeaves(equiJoin, *tree, State_, ctx);
+                switch (rewriteStatus.Level) {
+                    case TStatus::Repeat:
+                        return node;
+                    case TStatus::Error:
+                        return {};
+                    case TStatus::Ok:
+                        break;
+                    default:
+                        YQL_ENSURE(false, "Unexpected rewrite status");
+                }
+                return ExportYtEquiJoin(equiJoin, *tree, ctx, State_);
+            }
+        }
+        return node;
     }
 
     TMaybeNode<TExprBase> RuntimeEquiJoin(TExprBase node, TExprContext& ctx) const {

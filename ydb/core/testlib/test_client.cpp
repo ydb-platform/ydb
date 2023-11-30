@@ -119,7 +119,7 @@
 #include <library/cpp/actors/http/http_proxy.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 
-#include <library/cpp/grpc/server/actors/logger.h>
+#include <ydb/library/grpc/server/actors/logger.h>
 
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
@@ -306,8 +306,8 @@ namespace Tests {
         }
     }
 
-    void TServer::EnableGRpc(const NGrpc::TServerOptions& options) {
-        GRpcServer.reset(new NGrpc::TGRpcServer(options));
+    void TServer::EnableGRpc(const NYdbGrpc::TServerOptions& options) {
+        GRpcServer.reset(new NYdbGrpc::TGRpcServer(options));
         auto grpcService = new NGRpcProxy::TGRpcService();
 
         auto system(Runtime->GetAnyNodeActorSystem());
@@ -415,10 +415,10 @@ namespace Tests {
     }
 
     void TServer::EnableGRpc(ui16 port) {
-        EnableGRpc(NGrpc::TServerOptions()
+        EnableGRpc(NYdbGrpc::TServerOptions()
             .SetHost("localhost")
             .SetPort(port)
-            .SetLogger(NGrpc::CreateActorSystemLogger(*Runtime->GetAnyNodeActorSystem(), NKikimrServices::GRPC_SERVER))
+            .SetLogger(NYdbGrpc::CreateActorSystemLogger(*Runtime->GetAnyNodeActorSystem(), NKikimrServices::GRPC_SERVER))
         );
     }
 
@@ -1211,7 +1211,7 @@ namespace Tests {
         return *Driver;
     }
 
-    const NGrpc::TGRpcServer& TServer::GetGRpcServer() const {
+    const NYdbGrpc::TGRpcServer& TServer::GetGRpcServer() const {
         Y_ABORT_UNLESS(GRpcServer);
         return *GRpcServer;
     }

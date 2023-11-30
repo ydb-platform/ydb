@@ -55,6 +55,7 @@ struct TEvConsole {
         EvReplaceYamlConfigRequest,
         EvGetAllMetadataRequest,
         EvGetNodeLabelsRequest,
+        EvIsYamlReadOnlyRequest,
 
         // responses
         EvCreateTenantResponse = EvCreateTenantRequest + 1024,
@@ -99,6 +100,8 @@ struct TEvConsole {
         EvUnauthorized,
         EvDisabled,
         EvGenericError,
+
+        EvIsYamlReadOnlyResponse,
 
         EvEnd
     };
@@ -194,6 +197,12 @@ struct TEvConsole {
 
     struct TEvGetAllConfigsRequest : public TEventShortDebugPB<TEvGetAllConfigsRequest, NKikimrConsole::TGetAllConfigsRequest, EvGetAllConfigsRequest> {
         using TResponse = TEvGetAllConfigsResponse;
+    };
+
+    struct TEvIsYamlReadOnlyResponse : public TEventShortDebugPB<TEvIsYamlReadOnlyResponse, NKikimrConsole::TIsYamlReadOnlyResponse, EvIsYamlReadOnlyResponse> {};
+
+    struct TEvIsYamlReadOnlyRequest : public TEventShortDebugPB<TEvIsYamlReadOnlyRequest, NKikimrConsole::TIsYamlReadOnlyRequest, EvIsYamlReadOnlyRequest> {
+        using TResponse = TEvIsYamlReadOnlyResponse;
     };
 
     struct TEvGetAllMetadataResponse : public TEventShortDebugPB<TEvGetAllMetadataResponse, NKikimrConsole::TGetAllMetadataResponse, EvGetAllMetadataResponse> {};

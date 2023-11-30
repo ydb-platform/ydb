@@ -7,7 +7,7 @@ SRCS(
     bracket.go
     core.go
     prop.go
-    tables13.0.0.go
+    tables15.0.0.go
     trieval.go
 )
 
@@ -20,4 +20,6 @@ GO_TEST_SRCS(
 
 END()
 
-RECURSE(gotest)
+RECURSE(
+    gotest
+)

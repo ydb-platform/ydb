@@ -63,7 +63,7 @@ struct TCmdPersQueueDiscoverReadSessionClustersConfig final : public TCliCmdConf
 };
 
 
-static void PrintGRpcConfigAndRequest(const NGrpc::TGRpcClientConfig& grpcConfig, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest& request) {
+static void PrintGRpcConfigAndRequest(const NYdbGrpc::TGRpcClientConfig& grpcConfig, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest& request) {
     Cerr << "Request endpoint: " << grpcConfig.Locator << " "
          << "timeout: " << grpcConfig.Timeout << " "
          << "max message size: " << grpcConfig.MaxMessageSize << Endl;
@@ -74,8 +74,8 @@ static void PrintGRpcConfigAndRequest(const NGrpc::TGRpcClientConfig& grpcConfig
 template <class TConfig>
 static int MakeRequest(const TConfig& config, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest& request) {
     if (config.ClientConfig.Defined()) {
-        if (std::holds_alternative<NGrpc::TGRpcClientConfig>(*config.ClientConfig)) {
-            const auto& grpcConfig = std::get<NGrpc::TGRpcClientConfig>(*config.ClientConfig);
+        if (std::holds_alternative<NYdbGrpc::TGRpcClientConfig>(*config.ClientConfig)) {
+            const auto& grpcConfig = std::get<NYdbGrpc::TGRpcClientConfig>(*config.ClientConfig);
 
             if (config.IsVerbose) {
                 PrintGRpcConfigAndRequest(grpcConfig, request);

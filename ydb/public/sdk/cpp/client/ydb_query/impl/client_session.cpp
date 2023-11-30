@@ -25,7 +25,7 @@ void TSession::TImpl::MakeImplAsync(TStreamProcessorPtr ptr,
     std::shared_ptr<TAttachSessionArgs> args)
 {
     auto resp = std::make_shared<Ydb::Query::SessionState>();
-    ptr->Read(resp.get(), [args, resp, ptr](NGrpc::TGrpcStatus grpcStatus) mutable {
+    ptr->Read(resp.get(), [args, resp, ptr](NYdbGrpc::TGrpcStatus grpcStatus) mutable {
         if (grpcStatus.GRpcStatusCode != grpc::StatusCode::OK) {
             TStatus st(TPlainStatus(grpcStatus, args->Endpoint));
             args->Promise.SetValue(TCreateSessionResult(std::move(st), TSession()));

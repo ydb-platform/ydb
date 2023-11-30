@@ -13,7 +13,7 @@ func TestDate32_Time(t *testing.T) {
 	t.Run("Single", func(t *testing.T) {
 		v := time.Date(2011, 10, 10, 14, 59, 31, 401235, time.UTC)
 		d := ToDate32(v)
-		assert.Equal(t, Date32(31693), d)
+		assert.Equal(t, Date32(15257), d) // SELECT toInt64(Date32('2011-10-10'))
 		assert.Equal(t, NewDate32(2011, 10, 10), d)
 		assert.Equal(t, d.String(), "2011-10-10")
 		assert.Equal(t, d, ToDate32(d.Time()))

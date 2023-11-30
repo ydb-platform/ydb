@@ -26,7 +26,7 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(serialize_ut.h)
 
-INCLUDE(${ARCADIA_ROOT}/yt/opensource_tests.inc)
+INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(
     yt/yt/core

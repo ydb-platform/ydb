@@ -10,6 +10,15 @@ import (
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
+func fillServerConfigDefaults(c *config.TServerConfig) {
+	if c.Paging == nil {
+		c.Paging = &config.TPagingConfig{
+			BytesPerPage:          4 * 1024 * 1024,
+			PrefetchQueueCapacity: 2,
+		}
+	}
+}
+
 func validateServerConfig(c *config.TServerConfig) error {
 	if err := validateConnectorServerConfig(c.ConnectorServer); err != nil {
 		return fmt.Errorf("validate `connector_server`: %w", err)
@@ -158,6 +167,8 @@ func newConfigFromPath(configPath string) (*config.TServerConfig, error) {
 	if err := unmarshaller.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("prototext unmarshal `%v`: %w", string(data), err)
 	}
+
+	fillServerConfigDefaults(&cfg)
 
 	if err := validateServerConfig(&cfg); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)

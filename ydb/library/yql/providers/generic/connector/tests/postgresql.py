@@ -3,11 +3,13 @@ from typing import Sequence
 
 import ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 as data_source_pb2
 
-from utils.settings import Settings
+from utils.comparator import data_outs_equal
 from utils.database import Database
-from utils.schema import Schema
-from utils.postgresql import Client
 from utils.log import make_logger
+from utils.postgresql import Client
+from utils.schema import Schema
+from utils.settings import Settings
+
 import test_cases.select_missing_database
 import test_cases.select_missing_table
 import test_cases.select_positive
@@ -102,7 +104,12 @@ def select_positive(
     LOGGER.debug(yql_script)
     result = dqrun_runner.run(test_dir=tmp_path, script=yql_script, generic_settings=test_case.generic_settings)
 
-    assert test_case.data_out == result.data_out_with_types, (test_case.data_out, result.data_out_with_types)
+    assert result.returncode == 0, result.stderr
+
+    assert data_outs_equal(test_case.data_out, result.data_out_with_types), (
+        test_case.data_out,
+        result.data_out_with_types,
+    )
     if test_case.check_output_schema:
         assert test_case.schema == result.schema, (test_case.schema, result.schema)
 
@@ -182,4 +189,9 @@ def select_pg_schema(
     LOGGER.debug(yql_script)
     result = dqrun_runner.run(test_dir=tmp_path, script=yql_script, generic_settings=test_case.generic_settings)
 
-    assert test_case.data_out == result.data_out_with_types, (test_case.data_out, result.data_out_with_types)
+    assert result.returncode == 0, result.stderr
+
+    assert data_outs_equal(test_case.data_out, result.data_out_with_types), (
+        test_case.data_out,
+        result.data_out_with_types,
+    )

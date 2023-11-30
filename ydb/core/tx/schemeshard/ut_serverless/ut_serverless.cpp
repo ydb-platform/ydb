@@ -7,6 +7,8 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
+using enum NKikimrSubDomains::EServerlessComputeResourcesMode;
+
 Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
     Y_UNIT_TEST(Fake) {
     }
@@ -249,5 +251,182 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             meteringData += "\n";
             UNIT_ASSERT_NO_DIFF(meteringMessages, meteringData);
         }
+    }
+
+    Y_UNIT_TEST(TestServerlessComputeResourcesMode) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "SharedDB")"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "pool-kind-1"
+                }
+                StoragePools {
+                    Name: "pool-2"
+                    Kind: "pool-kind-2"
+                }
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                ExternalSchemeShard: true
+                ExternalHive: true
+                Name: "SharedDB"
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TString createData = Sprintf(
+            R"(
+                ResourcesDomainKey {
+                    SchemeShard: %lu
+                    PathId: 2 
+                }
+                Name: "ServerLess0"
+            )",
+            TTestTxConfig::SchemeShard
+        );
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", createData);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                ExternalSchemeShard: true
+                ExternalHive: false
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "pool-kind-1"
+                }
+                Name: "ServerLess0"
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerLess0"),
+                           {NLs::PathExist,
+                            NLs::IsExternalSubDomain("ServerLess0"),
+                            NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED),
+                            NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
+
+        UNIT_ASSERT(tenantSchemeShard != 0
+                    && tenantSchemeShard != (ui64)-1
+                    && tenantSchemeShard != TTestTxConfig::SchemeShard);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLess0"),
+                           {NLs::PathExist,
+                            NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED)});
+        
+        auto checkServerlessComputeResourcesMode = [&](EServerlessComputeResourcesMode serverlessComputeResourcesMode) {
+            TString alterData = Sprintf(
+                R"(
+                    ServerlessComputeResourcesMode: %d
+                    Name: "ServerLess0"
+                )",
+                serverlessComputeResourcesMode
+            );
+            TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", alterData);
+            env.TestWaitNotification(runtime, txId);
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerLess0"),
+                               {NLs::ServerlessComputeResourcesMode(serverlessComputeResourcesMode)});
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLess0"),
+                               {NLs::ServerlessComputeResourcesMode(serverlessComputeResourcesMode)});
+        };
+
+        checkServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED);
+        checkServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED);
+    }
+
+    Y_UNIT_TEST(TestServerlessComputeResourcesModeValidation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "SharedDB")"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "pool-kind-1"
+                }
+                StoragePools {
+                    Name: "pool-2"
+                    Kind: "pool-kind-2"
+                }
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                ExternalSchemeShard: true
+                ExternalHive: true
+                Name: "SharedDB"
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TString createData = Sprintf(
+            R"(
+                ResourcesDomainKey {
+                    SchemeShard: %lu
+                    PathId: 2 
+                }
+                Name: "ServerLess0"
+            )",
+            TTestTxConfig::SchemeShard
+        );
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", createData);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                ExternalSchemeShard: true
+                ExternalHive: false
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "pool-kind-1"
+                }
+                Name: "ServerLess0"
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // Try to change ServerlessComputeResourcesMode not on serverless database
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED
+                Name: "SharedDB"
+            )",
+            {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "only for serverless" }}
+        );
+
+        // Try to set ServerlessComputeResourcesMode to SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED
+                Name: "SharedDB"
+            )",
+            {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED" }}
+        );
     }
 }

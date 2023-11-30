@@ -24,7 +24,7 @@
 
 namespace NKikimr {
 
-inline bool IsRetryableGrpcError(const NGrpc::TGrpcStatus& status) {
+inline bool IsRetryableGrpcError(const NYdbGrpc::TGrpcStatus& status) {
     switch (status.GRpcStatusCode) {
     case grpc::StatusCode::UNAUTHENTICATED:
     case grpc::StatusCode::PERMISSION_DENIED:

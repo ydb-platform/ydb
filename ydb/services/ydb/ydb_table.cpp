@@ -27,7 +27,7 @@ TGRpcYdbTableService::TGRpcYdbTableService(NActors::TActorSystem *system,
 {
 }
 
-void TGRpcYdbTableService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
     size_t proxyCounter = 0;
@@ -45,7 +45,7 @@ void TGRpcYdbTableService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         for (auto* cq: CQS) {                                                                                         \
             MakeIntrusive<TGRpcRequest<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response, TGRpcYdbTableService>>  \
                 (this, &Service_, cq,                                                                                 \
-                    [this, proxyCounter](NGrpc::IRequestContextBase *ctx) {                                           \
+                    [this, proxyCounter](NYdbGrpc::IRequestContextBase *ctx) {                                           \
                         NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                              \
                         ActorSystem_->Send(GRpcProxies_[proxyCounter % GRpcProxies_.size()],                          \
                             new TGrpcRequestOperationCall<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response>      \
@@ -61,7 +61,7 @@ void TGRpcYdbTableService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         for (auto* cq: CQS) {                                                                                         \
             MakeIntrusive<TGRpcRequest<Ydb::Table::IN, Ydb::Table::OUT, TGRpcYdbTableService>>                        \
                 (this, &Service_, cq,                                                                                 \
-                    [this, proxyCounter](NGrpc::IRequestContextBase *ctx) {                                           \
+                    [this, proxyCounter](NYdbGrpc::IRequestContextBase *ctx) {                                           \
                         NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                              \
                         ActorSystem_->Send(GRpcProxies_[proxyCounter % GRpcProxies_.size()],                          \
                             new TGrpcRequestNoOperationCall<Ydb::Table::IN, Ydb::Table::OUT>                          \

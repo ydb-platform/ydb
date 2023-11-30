@@ -10,8 +10,8 @@ namespace {
 class TTokenAccessorCredentialsProviderFactory : public NYdb::ICredentialsProviderFactory {
 public:
     TTokenAccessorCredentialsProviderFactory(
-        std::shared_ptr<NGrpc::TGRpcClientLow> client,
-        std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> connection,
+        std::shared_ptr<NYdbGrpc::TGRpcClientLow> client,
+        std::shared_ptr<NYdbGrpc::TServiceConnection<TokenAccessorService>> connection,
         const TString& serviceAccountId,
         const TString& serviceAccountIdSignature,
         const TDuration& refreshPeriod,
@@ -31,8 +31,8 @@ public:
     }
 
 private:
-    const std::shared_ptr<NGrpc::TGRpcClientLow> Client;
-    const std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> Connection;
+    const std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client;
+    const std::shared_ptr<NYdbGrpc::TServiceConnection<TokenAccessorService>> Connection;
     const TString ServiceAccountId;
     const TString ServiceAccountIdSignature;
     const TDuration RefreshPeriod;
@@ -51,19 +51,19 @@ std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateTokenAccessorCredential
     const TDuration& requestTimeout
 )
 {
-    auto client = std::make_unique<NGrpc::TGRpcClientLow>();
-    NGrpc::TGRpcClientConfig grpcConf;
+    auto client = std::make_unique<NYdbGrpc::TGRpcClientLow>();
+    NYdbGrpc::TGRpcClientConfig grpcConf;
     grpcConf.Locator = tokenAccessorEndpoint;
     grpcConf.EnableSsl = useSsl;
     grpcConf.SslCredentials.pem_root_certs = sslCaCert;
-    std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> connection = client->CreateGRpcServiceConnection<TokenAccessorService>(grpcConf);
+    std::shared_ptr<NYdbGrpc::TServiceConnection<TokenAccessorService>> connection = client->CreateGRpcServiceConnection<TokenAccessorService>(grpcConf);
 
     return CreateTokenAccessorCredentialsProviderFactory(std::move(client), std::move(connection), serviceAccountId, serviceAccountIdSignature, refreshPeriod, requestTimeout);
 }
 
 std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateTokenAccessorCredentialsProviderFactory(
-    std::shared_ptr<NGrpc::TGRpcClientLow> client,
-    std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> connection,
+    std::shared_ptr<NYdbGrpc::TGRpcClientLow> client,
+    std::shared_ptr<NYdbGrpc::TServiceConnection<TokenAccessorService>> connection,
     const TString& serviceAccountId,
     const TString& serviceAccountIdSignature,
     const TDuration& refreshPeriod,

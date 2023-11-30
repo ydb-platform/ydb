@@ -3929,12 +3929,8 @@ void TDataShard::Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TA
     if (rejectProbabilty > 0) {
         const float rnd = AppData(ctx)->RandomProvider->GenRandReal2();
         if (rnd < rejectProbabilty) {
-            auto response = MakeHolder<TEvDataShard::TEvS3UploadRowsResponse>(
-                TabletID(), NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
-            response->Record.SetErrorDescription("Reject due to given RejectProbability");
-            ctx.Send(ev->Sender, std::move(response));
+            DelayedS3UploadRows.emplace_back().Reset(ev.Release());
             IncCounter(COUNTER_BULK_UPSERT_OVERLOADED);
-
             return;
         }
     }

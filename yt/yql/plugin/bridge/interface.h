@@ -10,14 +10,12 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 // NB(mpereskokova): don't forget to update min_required_abi_version at yt/yql/agent/config.cpp and abi_version in yt/yql/plugin/dynamic/impl.cpp during breaking changes
-using TFuncBridgeGetABIVersion = ssize_t();
+using TFuncBridgeGetAbiVersion = ssize_t();
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TBridgeYqlPluginOptions
 {
-    ssize_t RequiredABIVersion;
-
     const char* SingletonsConfig = nullptr;
     ssize_t SingletonsConfigLength = 0;
 
@@ -96,6 +94,6 @@ using TFuncBridgeGetProgress = TBridgeQueryResult*(TBridgeYqlPlugin* plugin, con
     XX(BridgeFreeQueryResult) \
     XX(BridgeRun) \
     XX(BridgeGetProgress) \
-    XX(BridgeGetABIVersion)
+    XX(BridgeGetAbiVersion)
 
 ////////////////////////////////////////////////////////////////////////////////

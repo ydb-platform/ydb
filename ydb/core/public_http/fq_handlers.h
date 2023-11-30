@@ -251,7 +251,7 @@ template <typename GrpcProtoRequestType, typename HttpProtoRequestType, typename
 class TGrpcCallWrapper : public TActorBootstrapped<TGrpcCallWrapper<GrpcProtoRequestType, HttpProtoRequestType, GrpcProtoResultType, HttpProtoResultType, GrpcProtoResponseType>> {
     THttpRequestContext RequestContext;
 
-    typedef std::function<std::unique_ptr<NGRpcService::TEvProxyRuntimeEvent>(TIntrusivePtr<NGrpc::IRequestContextBase> ctx)> TGrpcProxyEventFactory;
+    typedef std::function<std::unique_ptr<NGRpcService::TEvProxyRuntimeEvent>(TIntrusivePtr<NYdbGrpc::IRequestContextBase> ctx)> TGrpcProxyEventFactory;
     TGrpcProxyEventFactory EventFactory;
 
     NProtobufJson::TJson2ProtoConfig Json2ProtoConfig;

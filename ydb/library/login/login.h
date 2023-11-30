@@ -73,6 +73,7 @@ public:
 
     struct TRemoveUserRequest : TBasicRequest {
         TString User;
+        bool MissingOk;
     };
 
     struct TRemoveUserResponse : TBasicResponse {

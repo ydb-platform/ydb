@@ -19,6 +19,7 @@ message TSubDomainSettings {
     optional bool ExternalSchemeShard = 7 [default = false];
     optional bool ExternalHive = 8 [default = false];
     optional TDomainKey ResourcesDomainKey = 9;
+    optional EServerlessComputeResourcesMode ServerlessComputeResourcesMode = 15;
     optional bool ExternalSysViewProcessor = 10 [default = false];
     optional TSchemeQuotas DeclaredSchemeQuotas = 11;
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 12;
@@ -87,6 +88,7 @@ message TDomainDescription {
     optional uint64 ShardsLimit = 9;
 
     optional TDomainKey ResourcesDomainKey = 10;
+    optional EServerlessComputeResourcesMode ServerlessComputeResourcesMode = 23;
 
     optional TDiskSpaceUsage DiskSpaceUsage = 11; // TODO: temp for SLYDB-95
 
@@ -111,4 +113,10 @@ message TSchemeQuotas {
 message TSchemeQuota {
     optional double BucketSize = 1;
     optional uint64 BucketSeconds = 2;
+}
+
+enum EServerlessComputeResourcesMode {
+    SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED = 0;
+    SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED = 1;     // using nodes that serve resources domain
+    SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED = 2;  // using nodes that serve self domain
 }

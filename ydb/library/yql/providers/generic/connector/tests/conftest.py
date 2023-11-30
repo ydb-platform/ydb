@@ -8,7 +8,9 @@ import yatest.common as yat
 
 from utils.settings import Settings
 import utils.clickhouse
-import utils.dqrun as dqrun
+from utils.dqrun import DqRunner
+from utils.kqprun import KqpRunner
+from utils.runner import Runner
 import utils.postgresql
 
 
@@ -39,6 +41,9 @@ def connector_client(settings) -> ConnectorClient:
     return stub
 
 
-@pytest.fixture
-def dqrun_runner(settings) -> dqrun.Runner:
-    return dqrun.Runner(dqrun_path=yat.build_path("ydb/library/yql/tools/dqrun/dqrun"), settings=settings)
+def configure_runner(runner, settings) -> Runner:
+    if runner is DqRunner:
+        return DqRunner(dqrun_path=yat.build_path("ydb/library/yql/tools/dqrun/dqrun"), settings=settings)
+    elif runner is KqpRunner:
+        return KqpRunner(kqprun_path=yat.build_path("ydb/tests/tools/kqprun/kqprun"), settings=settings)
+    return None

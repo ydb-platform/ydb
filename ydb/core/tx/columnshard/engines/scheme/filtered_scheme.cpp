@@ -47,8 +47,8 @@ std::shared_ptr<TColumnLoader> TFilteredSnapshotSchema::GetColumnLoader(const ui
     return OriginalSnapshot->GetColumnLoader(columnId);
 }
 
-ui32 TFilteredSnapshotSchema::GetColumnId(const std::string& columnName) const {
-    return OriginalSnapshot->GetColumnId(columnName);
+std::optional<ui32> TFilteredSnapshotSchema::GetColumnIdOptional(const std::string& columnName) const {
+    return OriginalSnapshot->GetColumnIdOptional(columnName);
 }
 
 int TFilteredSnapshotSchema::GetFieldIndex(const ui32 columnId) const {

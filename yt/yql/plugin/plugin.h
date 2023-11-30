@@ -26,8 +26,6 @@ using TQueryId = TGuid;
 class TYqlPluginOptions
 {
 public:
-    int RequiredABIVersion;
-
     TYsonString SingletonsConfig;
     TYsonString GatewayConfig;
     TYsonString FileStorageConfig;

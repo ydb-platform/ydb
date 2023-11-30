@@ -55,6 +55,7 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         : DomainKey(GetDomainKey(descr.GetDomainKey()))
         , Params(descr.GetProcessingParams())
         , Coordinators(descr.GetProcessingParams())
+        , ServerlessComputeResourcesMode(descr.GetServerlessComputeResourcesMode())
     {
         if (descr.HasResourcesDomainKey()) {
             ResourcesDomainKey = GetDomainKey(descr.GetResourcesDomainKey());
@@ -83,6 +84,8 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     TPathId ResourcesDomainKey;
     NKikimrSubDomains::TProcessingParams Params;
     TCoordinators Coordinators;
+    NKikimrSubDomains::EServerlessComputeResourcesMode ServerlessComputeResourcesMode =
+        NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED;
 
     TString ToString() const;
 

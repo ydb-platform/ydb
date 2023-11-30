@@ -42,6 +42,10 @@ SRCS(
     schema_actors.h
     schema_actors.cpp
     update_offsets_in_transaction_actor.cpp
+    partition_writer.h
+    partition_writer.cpp
+    partition_writer_cache_actor.h
+    partition_writer_cache_actor.cpp
 )
 
 END()

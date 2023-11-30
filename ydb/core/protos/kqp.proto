@@ -610,7 +610,6 @@ message TEvRemoteScanData {
 
     optional bool RequestedBytesLimitReached = 11 [default = false];
     optional uint32 AvailablePacks = 12;
-    repeated bytes SplittedArrowBatches = 13;
 }
 
 message TEvRemoteScanDataAck {

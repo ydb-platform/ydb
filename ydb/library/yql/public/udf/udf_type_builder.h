@@ -1055,8 +1055,11 @@ struct TArgsHelper<TArg, TArgs...> {
 
 template <typename TReturn, typename... TArgs>
 struct TSimpleSignatureHelper<TReturn(TArgs...)> {
+    static TType* BuildReturnType(IFunctionTypeInfoBuilder& builder) {
+        return TTypeBuilderHelper<TReturn>::Build(builder);
+    }
     static void Register(IFunctionTypeInfoBuilder& builder) {
-        builder.Returns(TTypeBuilderHelper<TReturn>::Build(builder));
+        builder.Returns(BuildReturnType(builder));
         TArgsHelper<TArgs...>::Add(*builder.Args());
     }
 };

@@ -588,42 +588,48 @@ func (p *Pool[T]) AcquireAllIdle() []*Resource[T] {
 	return idle
 }
 
-// CreateResource constructs a new resource without acquiring it.
-// It goes straight in the IdlePool. It does not check against maxSize.
-// It can be useful to maintain warm resources under little load.
+// CreateResource constructs a new resource without acquiring it. It goes straight in the IdlePool. If the pool is full
+// it returns an error. It can be useful to maintain warm resources under little load.
 func (p *Pool[T]) CreateResource(ctx context.Context) error {
+	if !p.acquireSem.TryAcquire(1) {
+		return ErrNotAvailable
+	}
+
 	p.mux.Lock()
 	if p.closed {
+		p.acquireSem.Release(1)
 		p.mux.Unlock()
 		return ErrClosedPool
 	}
-	p.destructWG.Add(1)
+
+	if len(p.allResources) >= int(p.maxSize) {
+		p.acquireSem.Release(1)
+		p.mux.Unlock()
+		return ErrNotAvailable
+	}
+
+	res := p.createNewResource()
 	p.mux.Unlock()
 
 	value, err := p.constructor(ctx)
+	p.mux.Lock()
+	defer p.mux.Unlock()
+	defer p.acquireSem.Release(1)
 	if err != nil {
+		p.allResources.remove(res)
 		p.destructWG.Done()
 		return err
 	}
 
-	res := &Resource[T]{
-		pool:           p,
-		creationTime:   time.Now(),
-		status:         resourceStatusIdle,
-		value:          value,
-		lastUsedNano:   nanotime(),
-		poolResetCount: p.resetCount,
-	}
-
-	p.mux.Lock()
-	defer p.mux.Unlock()
+	res.value = value
+	res.status = resourceStatusIdle
 
 	// If closed while constructing resource then destroy it and return an error
 	if p.closed {
 		go p.destructResourceValue(res.value)
 		return ErrClosedPool
 	}
-	p.allResources.append(res)
+
 	p.idleResources.Push(res)
 
 	return nil

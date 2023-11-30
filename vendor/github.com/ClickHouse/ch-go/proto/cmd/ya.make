@@ -1,1 +1,3 @@
-RECURSE(ch-gen-col)
+RECURSE(
+    ch-gen-col
+)

@@ -250,7 +250,7 @@ TExprBase KqpPushDownOlapGroupByKeys(TExprBase node, TExprContext& ctx, const TK
         return node;
     }
 
-    if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
+    if (!kqpCtx.Config->HasOptEnableOlapPushdown() || !kqpCtx.Config->HasOptEnableOlapProvideComputeSharding()) {
         return node;
     }
 

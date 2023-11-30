@@ -108,14 +108,17 @@ public:
         return DoFindRequest(id, isRetry);
     }
 
-    void EndRequest(TMutationId id, TSharedRefArray response, bool remember) override
+    std::function<void()> EndRequest(
+        TMutationId id,
+        TSharedRefArray response,
+        bool remember) override
     {
         auto guard = WriterGuard(Lock_);
 
         YT_ASSERT(id);
 
         if (!Started_) {
-            return;
+            return {};
         }
 
         if (!response) {
@@ -148,30 +151,37 @@ public:
             }
         }
 
+        guard.Release();
+
         if (promise) {
-            guard.Release();
-            promise.TrySet(response);
+            return [promise = std::move(promise), response = std::move(response)] {
+                promise.TrySet(std::move(response));
+            };
+        } else {
+            return {};
         }
     }
 
-    void EndRequest(TMutationId id, TErrorOr<TSharedRefArray> responseOrError, bool remember) override
+    std::function<void()> EndRequest(
+        TMutationId id,
+        TErrorOr<TSharedRefArray> responseOrError,
+        bool remember) override
     {
         YT_ASSERT(id);
 
         if (responseOrError.IsOK()) {
-            EndRequest(id, std::move(responseOrError.Value()), remember);
-            return;
+            return EndRequest(id, std::move(responseOrError.Value()), remember);
         }
 
         auto guard = WriterGuard(Lock_);
 
         if (!Started_) {
-            return;
+            return {};
         }
 
         auto it = PendingResponses_.find(id);
         if (it == PendingResponses_.end()) {
-            return;
+            return {};
         }
 
         auto promise = std::move(it->second);
@@ -179,7 +189,9 @@ public:
 
         guard.Release();
 
-        promise.TrySet(TError(std::move(responseOrError)));
+        return [promise = std::move(promise), responseOrError = std::move(responseOrError)] {
+            promise.TrySet(std::move(responseOrError));
+        };
     }
 
     void CancelPendingRequests(const TError& error) override

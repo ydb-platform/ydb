@@ -49,12 +49,14 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::NameserviceConfigItem,
     (ui32)NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem,
     (ui32)NKikimrConsole::TConfigItem::NodeBrokerConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::QueryServiceConfigItem,
     (ui32)NKikimrConsole::TConfigItem::SchemeShardConfigItem,
     (ui32)NKikimrConsole::TConfigItem::SharedCacheConfigItem,
     (ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem,
     (ui32)NKikimrConsole::TConfigItem::TableServiceConfigItem,
     (ui32)NKikimrConsole::TConfigItem::TenantPoolConfigItem,
     (ui32)NKikimrConsole::TConfigItem::TenantSlotBrokerConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::AllowEditYamlInUiItem,
 });
 
 const THashSet<ui32> NON_YAML_KINDS({

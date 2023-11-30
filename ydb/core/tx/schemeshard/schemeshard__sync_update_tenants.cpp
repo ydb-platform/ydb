@@ -118,6 +118,11 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
                 Self->PersistSubDomainAuditSettings(db, Self->RootPathId(), *subdomain);
             }
 
+            if (record.HasServerlessComputeResourcesMode()) {
+                subdomain->SetServerlessComputeResourcesMode(record.GetServerlessComputeResourcesMode());
+                Self->PersistSubDomainServerlessComputeResourcesMode(db, Self->RootPathId(), *subdomain);
+            }
+
             Self->PersistStoragePools(db, Self->RootPathId(), *subdomain);
             SideEffects.PublishToSchemeBoard(InvalidOperationId, Self->RootPathId());
             MakeSync();

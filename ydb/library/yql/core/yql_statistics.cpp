@@ -3,7 +3,7 @@
 using namespace NYql;
 
 std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) {
-    os << "Nrows: " << s.Nrows << ", Ncols: " << s.Ncols << ", Cost: " << s.Cost ;
+    os << "Type: " << s.Type << ", Nrows: " << s.Nrows << ", Ncols: " << s.Ncols << ", Cost: " << s.Cost ;
     return os;
 }
 

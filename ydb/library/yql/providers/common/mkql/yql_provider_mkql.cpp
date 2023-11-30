@@ -1549,23 +1549,23 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
                 node.Child(3)->ForEachChild([&](const TExprNode& child){ leftKeyColumns.emplace_back(*GetFieldPosition(*inputStructType, child.Content())); });
                 bool s = false;
-                node.Child(4)->ForEachChild([&](const TExprNode& child){ leftRenames.emplace_back(*GetFieldPosition((s = !s) ?  *inputStructType : *outputStructType, child.Content())); });
+                node.Child(5)->ForEachChild([&](const TExprNode& child){ leftRenames.emplace_back(*GetFieldPosition((s = !s) ?  *inputStructType : *outputStructType, child.Content())); });
 
                 switch (rightItemType->GetKind()) {
                     case ETypeAnnotationKind::Struct: {
                         const auto rightStructType = rightItemType->Cast<TStructExprType>();
-                        node.Child(5)->ForEachChild([&](const TExprNode& child){
+                        node.Child(6)->ForEachChild([&](const TExprNode& child){
                             rightRenames.emplace_back(*GetFieldPosition((s = !s) ? *rightStructType : *outputStructType, child.Content()));    });
                         }
                         break;
                     case ETypeAnnotationKind::Tuple: {
                         const auto rightTupleType = rightItemType->Cast<TTupleExprType>();
-                        node.Child(5)->ForEachChild([&](const TExprNode& child){
+                        node.Child(6)->ForEachChild([&](const TExprNode& child){
                             rightRenames.emplace_back((s = !s) ? *GetFieldPosition(*rightTupleType, child.Content()) : *GetFieldPosition(*outputStructType, child.Content())); });
                         }
                         break;
                     default:
-                        MKQL_ENSURE(!node.Child(5)->ChildrenSize(), "Expected empty right output columns.");
+                        MKQL_ENSURE(!node.Child(6)->ChildrenSize(), "Expected empty right output columns.");
                 }
                 break;
             }
@@ -1575,23 +1575,23 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
                 node.Child(3)->ForEachChild([&](const TExprNode& child){ leftKeyColumns.emplace_back(*GetFieldPosition(*inputTupleType, child.Content())); });
                 bool s = false;
-                node.Child(4)->ForEachChild([&](const TExprNode& child){ leftRenames.emplace_back(*GetFieldPosition((s = !s) ?  *inputTupleType : *outputTupleType, child.Content())); });
+                node.Child(5)->ForEachChild([&](const TExprNode& child){ leftRenames.emplace_back(*GetFieldPosition((s = !s) ?  *inputTupleType : *outputTupleType, child.Content())); });
 
                 switch (rightItemType->GetKind()) {
                     case ETypeAnnotationKind::Tuple: {
                         const auto rightTupleType = rightItemType->Cast<TTupleExprType>();
-                        node.Child(5)->ForEachChild([&](const TExprNode& child){
+                        node.Child(6)->ForEachChild([&](const TExprNode& child){
                             rightRenames.emplace_back(*GetFieldPosition((s = !s) ? *rightTupleType : *outputTupleType, child.Content()));    });
                         }
                         break;
                     case ETypeAnnotationKind::Struct: {
                         const auto rightStructType = rightItemType->Cast<TStructExprType>();
-                        node.Child(5)->ForEachChild([&](const TExprNode& child){
+                        node.Child(6)->ForEachChild([&](const TExprNode& child){
                             rightRenames.emplace_back((s = !s) ? *GetFieldPosition(*rightStructType, child.Content()) : *GetFieldPosition(*outputTupleType, child.Content())); });
                         }
                         break;
                     default:
-                        MKQL_ENSURE(!node.Child(5)->ChildrenSize(), "Expected empty right output columns.");
+                        MKQL_ENSURE(!node.Child(6)->ChildrenSize(), "Expected empty right output columns.");
                 }
                 break;
             }
@@ -1601,23 +1601,23 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
                 node.Child(3)->ForEachChild([&](const TExprNode& child){ leftKeyColumns.emplace_back(*GetFieldPosition(*inputMultiType, child.Content())); });
                 bool s = false;
-                node.Child(4)->ForEachChild([&](const TExprNode& child){ leftRenames.emplace_back(*GetFieldPosition((s = !s) ?  *inputMultiType : *outputMultiType, child.Content())); });
+                node.Child(5)->ForEachChild([&](const TExprNode& child){ leftRenames.emplace_back(*GetFieldPosition((s = !s) ?  *inputMultiType : *outputMultiType, child.Content())); });
 
                 switch (rightItemType->GetKind()) {
                     case ETypeAnnotationKind::Tuple: {
                         const auto rightTupleType = rightItemType->Cast<TTupleExprType>();
-                        node.Child(5)->ForEachChild([&](const TExprNode& child){
+                        node.Child(6)->ForEachChild([&](const TExprNode& child){
                             rightRenames.emplace_back((s = !s) ? *GetFieldPosition(*rightTupleType, child.Content()) : *GetFieldPosition(*outputMultiType, child.Content())); });
                         }
                         break;
                     case ETypeAnnotationKind::Struct: {
                         const auto rightStructType = rightItemType->Cast<TStructExprType>();
-                        node.Child(5)->ForEachChild([&](const TExprNode& child){
+                        node.Child(6)->ForEachChild([&](const TExprNode& child){
                             rightRenames.emplace_back((s = !s) ? *GetFieldPosition(*rightStructType, child.Content()) : *GetFieldPosition(*outputMultiType, child.Content())); });
                         }
                         break;
                     default:
-                        MKQL_ENSURE(!node.Child(5)->ChildrenSize(), "Expected empty right output columns.");
+                        MKQL_ENSURE(!node.Child(6)->ChildrenSize(), "Expected empty right output columns.");
                 }
                 break;
             }

@@ -1004,6 +1004,13 @@ TFuture<void> TDelegatingClient::AlterQuery(
     return Underlying_->AlterQuery(queryId, options);
 }
 
+TFuture<TBundleConfigDescriptor> TDelegatingClient::GetBundleConfig(
+    const TString& bundleName,
+    const TGetBundleConfigOptions& options)
+{
+    return Underlying_->GetBundleConfig(bundleName, options);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // Method below ensures that delegating client contains implementations for all

@@ -245,9 +245,9 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
     TDuration delay = TDuration::Zero();
 
     // Previous operations contexts.
-    NGrpc::IQueueClientContextPtr prevConnectContext;
-    NGrpc::IQueueClientContextPtr prevConnectTimeoutContext;
-    NGrpc::IQueueClientContextPtr prevConnectDelayContext;
+    NYdbGrpc::IQueueClientContextPtr prevConnectContext;
+    NYdbGrpc::IQueueClientContextPtr prevConnectTimeoutContext;
+    NYdbGrpc::IQueueClientContextPtr prevConnectDelayContext;
 
     // Callbacks
     std::function<void(TPlainStatus&&, typename IProcessor::TPtr&&)> connectCallback;
@@ -258,9 +258,9 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
                                             << ". Description: " << IssuesSingleLineString(status.Issues));
     }
 
-    NGrpc::IQueueClientContextPtr delayContext = nullptr;
-    NGrpc::IQueueClientContextPtr connectContext = nullptr;
-    NGrpc::IQueueClientContextPtr connectTimeoutContext = nullptr;
+    NYdbGrpc::IQueueClientContextPtr delayContext = nullptr;
+    NYdbGrpc::IQueueClientContextPtr connectContext = nullptr;
+    NYdbGrpc::IQueueClientContextPtr connectTimeoutContext = nullptr;
 
     TDeferredActions<UseMigrationProtocol> deferred;
     with_lock (Lock) {
@@ -377,7 +377,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::BreakConnectionAndReco
 }
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnectTimeout(const NGrpc::IQueueClientContextPtr& connectTimeoutContext) {
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext) {
     with_lock (Lock) {
         if (ConnectTimeoutContext == connectTimeoutContext) {
             Cancel(ConnectContext);
@@ -404,7 +404,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnectTimeout(const
 
 template <bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnect(
-    TPlainStatus&& st, typename IProcessor::TPtr&& processor, const NGrpc::IQueueClientContextPtr& connectContext) {
+    TPlainStatus&& st, typename IProcessor::TPtr&& processor, const NYdbGrpc::IQueueClientContextPtr& connectContext) {
     TDeferredActions<UseMigrationProtocol> deferred;
     with_lock (Lock) {
         if (ConnectContext == connectContext) {
@@ -828,7 +828,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ReadFromProcessorImpl(
                          connectionGeneration = ConnectionGeneration,
                          // Capture message & processor not to read in freed memory.
                          serverMessage = ServerMessage,
-                         processor = Processor](NGrpc::TGrpcStatus&& grpcStatus) {
+                         processor = Processor](NYdbGrpc::TGrpcStatus&& grpcStatus) {
             if (auto borrowedSelf = cbContext->LockShared()) {
                 borrowedSelf->OnReadDone(std::move(grpcStatus), connectionGeneration);
             }
@@ -839,7 +839,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ReadFromProcessorImpl(
 }
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnReadDone(NGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration) {
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration) {
     TPlainStatus errorStatus;
     if (!grpcStatus.Ok()) {
         errorStatus = TPlainStatus(std::move(grpcStatus));

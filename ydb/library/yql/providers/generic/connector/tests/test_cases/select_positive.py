@@ -356,12 +356,11 @@ class Factory:
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATE),
                     data_source_type=DataSourceType(ch=clickhouse.Date()),
                 ),
-                # FIXME: https://st.yandex-team.ru/YQ-2295
-                # Column(
-                #     name='col_15_date32',
-                #     ydb_type=getYdbType(Type.DATE,
-                #     data_source_type=DataSourceType(ch=clickhouse.Date32),
-                # ),
+                Column(
+                    name='col_15_date32',
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATE),
+                    data_source_type=DataSourceType(ch=clickhouse.Date32()),
+                ),
                 Column(
                     name='col_16_datetime',
                     ydb_type=makeOptionalYdbTypeFromTypeID(Type.DATETIME),
@@ -396,6 +395,7 @@ class Factory:
                     'az',
                     'az   ',
                     '2023-01-09',
+                    '2023-01-09',
                     '2023-01-09 13:19:11',
                     '2023-01-09 13:19:11.123456',
                 ],
@@ -413,6 +413,7 @@ class Factory:
                     -11.11,
                     'buki',
                     'buki ',
+                    '1988-11-20',
                     '1988-11-20',
                     '1988-11-20 12:00:00',
                     '1988-11-20 12:00:00.100000',
@@ -434,6 +435,7 @@ class Factory:
                     'az',
                     'az   ',
                     datetime.date(2023, 1, 9),
+                    datetime.date(2023, 1, 9),
                     datetime.datetime(2023, 1, 9, 13, 19, 11),
                     datetime.datetime(2023, 1, 9, 13, 19, 11, 123456),
                 ],
@@ -452,6 +454,7 @@ class Factory:
                     'buki',
                     'buki ',
                     datetime.date(1988, 11, 20),
+                    datetime.date(1988, 11, 20),
                     datetime.datetime(1988, 11, 20, 12, 00, 00),
                     datetime.datetime(1988, 11, 20, 12, 00, 00, 100000),
                 ],
@@ -469,14 +472,6 @@ class Factory:
 
         for i, col in enumerate(schema.columns):
             ch_type = col.data_source_type.ch
-
-            # FIXME: YQ-2300
-            if isinstance(ch_type, clickhouse.FixedString):
-                continue
-
-            # FIXME: YQ-2301
-            if isinstance(ch_type, clickhouse.DateTime64):
-                continue
 
             # copy type and example value to new TestCase
             schema_nullable.columns.append(
@@ -566,9 +561,7 @@ class Factory:
                 ],
                 (
                     EDataSourceKind.CLICKHOUSE,
-                    # NOTE: In PostgreSQL column names are case-insensitive unless they are double-quoted.
-                    # FIXME: YQ-2264
-                    # EDataSourceKind.POSTGRESQL,
+                    # doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                 ),
             ),
             # SELECT col1 FROM table
@@ -601,9 +594,7 @@ class Factory:
                 ],
                 (
                     EDataSourceKind.CLICKHOUSE,
-                    # NOTE: In PostgreSQL column names are case-insensitive unless they are double-quoted.
-                    # FIXME: YQ-2264
-                    # EDataSourceKind.POSTGRESQL,
+                    # doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                 ),
             ),
             # SELECT col2, col1 FROM table
@@ -625,9 +616,7 @@ class Factory:
                 ],
                 (
                     EDataSourceKind.CLICKHOUSE,
-                    # NOTE: In PostgreSQL column names are case-insensitive unless they are double-quoted.
-                    # FIXME: YQ-2264
-                    # EDataSourceKind.POSTGRESQL,
+                    # doesn't work for PostgreSQL because of implicit cast to lowercase (COL1 -> col1)
                 ),
             ),
             # Select the same column multiple times with different aliases
@@ -859,6 +848,44 @@ class Factory:
 
         return [tc]
 
+    def _select_upper_case_column_postgresql(self) -> Sequence[TestCase]:
+        '''
+        In this test case set we check SELECT COL1 from a pg table.
+        https://st.yandex-team.ru/YQ-2264
+        '''
+
+        schema = Schema(
+            columns=ColumnList(
+                Column(
+                    name='"COL1"',
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.INT32),
+                    data_source_type=DataSourceType(pg=postgresql.Integer()),
+                ),
+            )
+        )
+
+        tc = TestCase(
+            name='upper_case_column_postgresql',
+            schema=schema,
+            select_what=SelectWhat(SelectWhat.Item(name='COL1')),
+            select_where=None,
+            data_in=[
+                [
+                    3,
+                ]
+            ],
+            data_out_=[
+                [
+                    3,
+                ],
+            ],
+            data_source_kind=EDataSourceKind.POSTGRESQL,
+            database=Database.make_for_data_source_kind(EDataSourceKind.POSTGRESQL),
+            pragmas=dict(),
+        )
+
+        return [tc]
+
     def make_test_cases(self) -> Sequence[TestCase]:
         protocols = {
             EDataSourceKind.CLICKHOUSE: [EProtocol.NATIVE, EProtocol.HTTP],
@@ -874,6 +901,7 @@ class Factory:
                 self._constant_clickhouse(),
                 self._count_postgresql(),
                 self._count_clickhouse(),
+                self._select_upper_case_column_postgresql(),
             )
         )
 

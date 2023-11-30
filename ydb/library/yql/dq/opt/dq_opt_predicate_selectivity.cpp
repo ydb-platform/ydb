@@ -8,19 +8,20 @@ using namespace NYql::NNodes;
 
 namespace {
 
-    THashSet<TString> exprCallables = {"SafeCast", "Int32", "Date", "Interval", "String"};
+    THashSet<TString> exprCallables = {"SafeCast"};
 
     /**
      * Check if a callable is an attribute of some table
      * Currently just return a boolean and cover only basic cases
      */
-    bool IsAttribute(const TExprBase& input) {
-        if (input.Maybe<TCoMember>()) {
+    bool IsAttribute(const TExprBase& input, TString& attributeName) {
+        if (auto member = input.Maybe<TCoMember>()) {
+            attributeName = member.Cast().Raw()->Content();
             return true;
         } else if (auto cast = input.Maybe<TCoSafeCast>()) {
-            return IsAttribute(cast.Cast().Value());
+            return IsAttribute(cast.Cast().Value(), attributeName);
         } else if (auto ifPresent = input.Maybe<TCoIfPresent>()) {
-            return IsAttribute(ifPresent.Cast().Optional());
+            return IsAttribute(ifPresent.Cast().Optional(), attributeName);
         }
 
         return false;
@@ -31,12 +32,17 @@ namespace {
      * We use a whitelist of callables
      */
     bool IsConstant(const TExprBase& input) {
-        if (input.Maybe<TCoAtom>()) {
+        if (input.Maybe<TCoDataCtor>()){
             return true;
         } else if (input.Ref().IsCallable(exprCallables)) {
             if (input.Ref().ChildrenSize() >= 1) {
-                auto callableInput = TExprBase(input.Ref().Child(0));
-                return IsConstant(callableInput);
+                for (size_t i = 0; i < input.Ref().ChildrenSize(); i++) {
+                    auto callableInput = TExprBase(input.Ref().Child(i));
+                    if (!IsConstant(callableInput)) {
+                        return false;
+                    }
+                }
+                return true; 
             } else {
                 return false;
             }
@@ -92,23 +98,37 @@ double NYql::NDq::ComputePredicateSelectivity(const TExprBase& input, const std:
         auto left = equality.Cast().Left();
         auto right = equality.Cast().Right();
 
-        if (IsAttribute(right) && IsConstant(left)) {
+        TString attributeName;
+
+        if (IsAttribute(right, attributeName) && IsConstant(left)) {
             std::swap(left, right);
         }
 
-        if (IsAttribute(left)) {
+        
+        if (IsAttribute(left, attributeName)) {
             // In case both arguments refer to an attribute, return 0.2
-            if (IsAttribute(right)) {
-                result = 0.2;
+            TString rightAttributeName;
+            if (IsAttribute(right, rightAttributeName)) {
+                result = 0.3;
             }
             // In case the right side is a constant that can be extracted, compute the selectivity using statistics
             // Currently, with the basic statistics we just return 1/nRows
 
             else if (IsConstant(right)) {
-                if (stats->Nrows > 1) {
-                    result = 1.0 / stats->Nrows;
+                if (stats->KeyColumns.size()==1 && attributeName==stats->KeyColumns[0]) {
+                    if (stats->Nrows > 1) {
+                        result = 1.0 / stats->Nrows;
+                    }
+                    else {
+                        result = 1.0;
+                    }
                 } else {
-                    result = 1.0;
+                    if (stats->Nrows > 1) {
+                        result = stats->Nrows / 10;
+                    }
+                    else {
+                        result = 1.0;
+                    }
                 }
             }
         }
@@ -120,14 +140,15 @@ double NYql::NDq::ComputePredicateSelectivity(const TExprBase& input, const std:
         auto left = comparison.Cast().Left();
         auto right = comparison.Cast().Right();
 
-        if (IsAttribute(right) && IsConstant(left)) {
+        TString attributeName;
+        if (IsAttribute(right, attributeName) && IsConstant(left)) {
             std::swap(left, right);
         }
 
-        if (IsAttribute(left)) {
+        if (IsAttribute(left, attributeName)) {
             // In case both arguments refer to an attribute, return 0.2
-            if (IsAttribute(right)) {
-                result = 0.2;
+            if (IsAttribute(right, attributeName)) {
+                result = 0.3;
             }
             // In case the right side is a constant that can be extracted, compute the selectivity using statistics
             // Currently, with the basic statistics we just return 0.5

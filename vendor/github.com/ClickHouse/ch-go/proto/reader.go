@@ -87,8 +87,6 @@ func (r *Reader) UVarInt() (uint64, error) {
 	return n, nil
 }
 
-const maxStrSize = 10 * 1024 * 1024 // 10 MB
-
 func (r *Reader) StrLen() (int, error) {
 	n, err := r.Int()
 	if err != nil {
@@ -97,10 +95,6 @@ func (r *Reader) StrLen() (int, error) {
 
 	if n < 0 {
 		return 0, errors.Errorf("size %d is invalid", n)
-	}
-	if n > maxStrSize {
-		// Protecting from possible OOM.
-		return 0, errors.Errorf("size %d too big (%d is maximum)", n, maxStrSize)
 	}
 
 	return n, nil

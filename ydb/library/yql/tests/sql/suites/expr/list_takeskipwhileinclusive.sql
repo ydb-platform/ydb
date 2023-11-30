@@ -1,6 +1,5 @@
 /* postgres can not */
 /* syntax version 1 */
-/* skip double format */
 $a = AsList(1,2,3,1,2,3);
 
 select

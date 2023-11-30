@@ -55,6 +55,9 @@ runs:
         fi
         
         case "${{ inputs.build_preset }}" in
+          debug)
+            build_type=debug
+            ;;
           relwithdebinfo)
             build_type=relwithdebinfo
             ;;

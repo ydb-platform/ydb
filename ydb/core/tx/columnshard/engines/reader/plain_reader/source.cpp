@@ -48,8 +48,8 @@ void IDataSource::InitFetchingPlan(const TFetchingPlan& fetchingPlan, const std:
     }
 }
 
-void IDataSource::RegisterInterval(TFetchingInterval* interval) {
-    AFL_VERIFY(Intervals.emplace(interval->GetIntervalIdx(), interval).second);
+void IDataSource::RegisterInterval(TFetchingInterval& interval) {
+    AFL_VERIFY(Intervals.emplace(interval.GetIntervalIdx(), &interval).second);
 }
 
 void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds,
@@ -93,7 +93,7 @@ void TPortionDataSource::DoStartFilterStage(const std::shared_ptr<IDataSource>& 
     NeedFetchColumns(columnIds, readAction, nullBlocks, nullptr);
 
     std::vector<std::shared_ptr<IBlobsReadingAction>> actions = {readAction};
-    auto constructor = std::make_shared<TEFTaskConstructor>(GetContext(), actions, std::move(nullBlocks), columnIds, *this, sourcePtr, FetchingPlan->CanUseEarlyFilterImmediately(), "ReaderFilter");
+    auto constructor = std::make_shared<TEFTaskConstructor>(GetContext(), actions, std::move(nullBlocks), FetchingPlan->GetFilterStage(), *this, sourcePtr, FetchingPlan->CanUseEarlyFilterImmediately(), "ReaderFilter");
 //    NActors::TActivationContext::AsActorContext().Send(GetContext()->GetCommonContext()->GetReadCoordinatorActorId(), new NOlap::NBlobOperations::NRead::TEvStartReadTask(constructor));
     NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
 }
@@ -111,7 +111,7 @@ void TPortionDataSource::DoStartFetchStage(const std::shared_ptr<IDataSource>& s
         NeedFetchColumns(columnIds, readAction, nullBlocks, GetFilterStageData().GetAppliedFilter());
         if (readAction->GetExpectedBlobsCount()) {
             std::vector<std::shared_ptr<IBlobsReadingAction>> actions = {readAction};
-            auto constructor = std::make_shared<TFFColumnsTaskConstructor>(GetContext(), actions, std::move(nullBlocks), columnIds, *this, sourcePtr, "ReaderFetcher");
+            auto constructor = std::make_shared<TFFColumnsTaskConstructor>(GetContext(), actions, std::move(nullBlocks), FetchingPlan->GetFetchingStage(), *this, sourcePtr, "ReaderFetcher");
             NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
             return;
         }

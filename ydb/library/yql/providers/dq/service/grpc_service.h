@@ -7,8 +7,8 @@
 
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 
-#include <library/cpp/grpc/server/grpc_request.h>
-#include <library/cpp/grpc/server/grpc_server.h>
+#include <ydb/library/grpc/server/grpc_request.h>
+#include <ydb/library/grpc/server/grpc_server.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/event_local.h>
@@ -21,14 +21,14 @@
 namespace NYql::NDqs {
     class TDatabaseManager;
 
-    class TDqsGrpcService: public NGrpc::TGrpcServiceBase<Yql::DqsProto::DqService> {
+    class TDqsGrpcService: public NYdbGrpc::TGrpcServiceBase<Yql::DqsProto::DqService> {
     public:
         TDqsGrpcService(NActors::TActorSystem& system,
                         TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
                         const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories);
 
-        void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
-        void SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) override;
+        void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
+        void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override;
 
         bool IncRequest();
         void DecRequest();
@@ -38,7 +38,7 @@ namespace NYql::NDqs {
     private:
         NActors::TActorSystem& ActorSystem;
         grpc::ServerCompletionQueue* CQ = nullptr;
-        NGrpc::TGlobalLimiter* Limiter = nullptr;
+        NYdbGrpc::TGlobalLimiter* Limiter = nullptr;
 
         TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
         TDqTaskPreprocessorFactoryCollection DqTaskPreprocessorFactories;

@@ -15,7 +15,7 @@ target_link_libraries(library-ycloud-impl PUBLIC
   library-ycloud-api
   cpp-actors-core
   cpp-digest-crc32c
-  cpp-grpc-client
+  library-grpc-client
   library-cpp-json
   ydb-core-base
   ydb-library-services

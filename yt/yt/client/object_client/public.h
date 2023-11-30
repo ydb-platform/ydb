@@ -346,7 +346,6 @@ using TTransactionId = TObjectId;
 constexpr TTransactionId NullTransactionId = {};
 
 using TOperationId = TObjectId;
-using TJobId = TObjectId;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -296,7 +296,7 @@ private:
             auto delta = TInstant::Now() - maybeRequestInfo->second.StartTime;
             // catched at grpc_service
             QueryStat.AddCounter(
-                QueryStat.GetCounterName("Actor", {{"ClusterName", maybeRequestInfo->second.ClusterName}}, "CreateFailTime"),
+                QueryStat.GetCounterName("Actor", {{"ClusterName", maybeRequestInfo->second.ClusterName}}, "CreateFailTimeUs"),
                 delta);
         }
         TString message = "Disconnected from worker: `" + workerInfo + "', reason: " + reason;

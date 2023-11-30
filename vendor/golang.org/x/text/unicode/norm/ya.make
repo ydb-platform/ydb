@@ -9,14 +9,14 @@ SRCS(
     iter.go
     normalize.go
     readwriter.go
-    tables13.0.0.go
+    tables15.0.0.go
     transform.go
     trie.go
 )
 
 GO_TEST_SRCS(
     composition_test.go
-    data13.0.0_test.go
+    data15.0.0_test.go
     iter_test.go
     normalize_test.go
     readwriter_test.go
@@ -31,4 +31,6 @@ GO_XTEST_SRCS(
 
 END()
 
-RECURSE(gotest)
+RECURSE(
+    gotest
+)

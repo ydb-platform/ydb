@@ -21,8 +21,8 @@ target_link_libraries(ydb-core-testlib PUBLIC
   yutil
   cpp-actors-core
   cpp-actors-interconnect
-  cpp-grpc-client
-  cpp-grpc-server
+  library-grpc-client
+  library-grpc-server
   grpc-server-actors
   cpp-regex-pcre
   cpp-testing-gmock_in_unittest

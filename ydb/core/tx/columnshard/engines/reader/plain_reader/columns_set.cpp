@@ -1,5 +1,6 @@
 #include "columns_set.h"
 #include <util/string/join.h>
+#include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 
 namespace NKikimr::NOlap::NPlainReader {
 
@@ -54,6 +55,20 @@ bool TColumnsSet::ColumnsOnly(const std::vector<std::string>& fieldNames) const 
         }
     }
     return true;
+}
+
+void TColumnsSet::Rebuild() {
+    ColumnNamesVector.clear();
+    ColumnNames.clear();
+    for (auto&& i : Schema->field_names()) {
+        ColumnNamesVector.emplace_back(i);
+        ColumnNames.emplace(i);
+    }
+    if (ColumnIds.size()) {
+        FilteredSchema = std::make_shared<TFilteredSnapshotSchema>(FullReadSchema, ColumnIds);
+    } else {
+        FilteredSchema = FullReadSchema;
+    }
 }
 
 }

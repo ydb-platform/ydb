@@ -7,6 +7,7 @@
 #include "serializer/batch_only.h"
 #include "serializer/abstract.h"
 #include "serializer/stream.h"
+#include "simple_arrays_cache.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/library/services/services.pb.h>
@@ -131,10 +132,9 @@ std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::
     columns.reserve(schema->num_fields());
 
     for (auto& field : schema->fields()) {
-        auto result = arrow::MakeArrayOfNull(field->type(), rowsCount);
-        Y_VERIFY_OK(result.status());
-        columns.emplace_back(*result);
-        Y_ABORT_UNLESS(columns.back());
+        auto result = NArrow::TThreadSimpleArraysCache::GetNull(field->type(), rowsCount);
+        columns.emplace_back(result);
+        Y_ABORT_UNLESS(result);
     }
     return arrow::RecordBatch::Make(schema, 0, columns);
 }
@@ -781,11 +781,13 @@ bool MergeBatchColumnsImpl(const std::vector<std::shared_ptr<TData>>& batches, s
         Y_ABORT_UNLESS(i);
         for (auto&& f : i->schema()->fields()) {
             if (!fieldNames.emplace(f->name(), fields.size()).second) {
+                AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "duplicated column")("name", f->name());
                 return false;
             }
             fields.emplace_back(f);
         }
         if (i->num_rows() != batches.front()->num_rows()) {
+            AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "inconsistency record sizes")("i", i->num_rows())("front", batches.front()->num_rows());
             return false;
         }
         for (auto&& c : i->columns()) {

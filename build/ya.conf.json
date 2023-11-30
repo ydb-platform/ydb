@@ -1,6 +1,6 @@
 {
     "bottles": {
-        "clang14": {
+        "clang16": {
             "executable": {
                 "c++": [
                     "bin",
@@ -47,7 +47,7 @@
                     "llvm-symbolizer"
                 ]
             },
-            "formula": "build/platform/clang/clang14.json"
+            "formula": "build/platform/clang/clang16.json"
         },
         "gdb": {
             "executable": {
@@ -120,7 +120,7 @@
         }
     },
     "toolchain": {
-        "clang14": {
+        "clang16": {
             "env": {
                 "CPATH": [
                     ""
@@ -135,7 +135,7 @@
             "params": {
                 "c_compiler": "$(CLANG)/bin/clang",
                 "cxx_compiler": "$(CLANG)/bin/clang++",
-                "gcc_version": "14.0",
+                "gcc_version": "16.0",
                 "llvm-symbolizer": "$(CLANG)/bin/llvm-symbolizer",
                 "match_root": "CLANG",
                 "objcopy": "$(CLANG)/bin/llvm-objcopy",
@@ -620,57 +620,67 @@
                         "arch": "armv7ahf_cortex_a53",
                         "os": "LINUX"
                     }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
+                        "arch": "wasm64",
+                        "os": "EMSCRIPTEN"
+                    }
                 }
             ],
             "tools": {
                 "c++": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "c++"
                 },
                 "c++filt": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "c++filt"
                 },
                 "cc": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "cc"
                 },
                 "clang-rename": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "clang-rename"
                 },
                 "gcov": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-gcov"
                 },
                 "llvm-cov": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-cov"
                 },
                 "llvm-profdata": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-profdata"
                 },
                 "llvm-symbolizer": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-symbolizer"
                 },
                 "nm": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-nm"
                 },
                 "objcopy": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-objcopy"
                 },
                 "strip": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-strip"
                 }
             }
         },
-        "clang14-windows": {
-            "name": "clang14",
+        "clang16-windows": {
+            "name": "clang16",
             "params": {
                 "c_compiler": "$(CLANG)/bin/clang-cl",
                 "cxx_compiler": "$(CLANG)/bin/clang-cl",
@@ -686,7 +696,7 @@
             },
             "platforms": [
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -696,7 +706,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -706,7 +716,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "WIN"
                     },
@@ -716,7 +726,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "WIN"
                     },
@@ -728,43 +738,43 @@
             ],
             "tools": {
                 "c++": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "c++"
                 },
                 "c++filt": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "c++filt"
                 },
                 "cc": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "cc"
                 },
                 "gcov": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-gcov"
                 },
                 "llvm-cov": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-cov"
                 },
                 "llvm-profdata": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-profdata"
                 },
                 "llvm-symbolizer": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-symbolizer"
                 },
                 "nm": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-nm"
                 },
                 "objcopy": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-objcopy"
                 },
                 "strip": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-strip"
                 }
             }

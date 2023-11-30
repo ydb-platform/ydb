@@ -74,11 +74,11 @@ func (tm typeMapper) SQLTypeToYDBColumn(columnName, typeName string, rules *api_
 		var overflow bool
 		ydbType, overflow, err = makeYdbDateTimeType(Ydb.Type_DATE, rules.GetDateTimeFormat())
 		nullable = overflow || nullable
-	// FIXME: https://st.yandex-team.ru/YQ-2295
-	// Date32 is not displayed correctly.
-	// case typeName == "Date32":
-	//  nullable = true
-	// 	ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_DATE}}
+	case typeName == "Date32":
+		// NOTE: ClickHouse's Date32 value range is much more wide than YDB's Date value range
+		var overflow bool
+		ydbType, overflow, err = makeYdbDateTimeType(Ydb.Type_DATE, rules.GetDateTimeFormat())
+		nullable = overflow || nullable
 	case tm.isDateTime64.MatchString(typeName):
 		// NOTE: ClickHouse's DateTime64 value range is much more wide than YDB's Timestamp value range
 		var overflow bool
@@ -158,6 +158,8 @@ func acceptorsFromSQLTypes(typeNames []string) ([]any, error) {
 			// Looks like []byte would be a better choice here, but clickhouse driver prefers string
 			acceptors = append(acceptors, new(*string))
 		case typeName == "Date":
+			acceptors = append(acceptors, new(*utils.Date))
+		case typeName == "Date32":
 			acceptors = append(acceptors, new(*utils.Date))
 		case isDateTime64.MatchString(typeName):
 			acceptors = append(acceptors, new(*utils.Timestamp))

@@ -89,7 +89,8 @@ def test(case):
         files=files,
         check_error=not xfail,
         extra_env=extra_env,
-        require_udf_resolver=False
+        require_udf_resolver=True,
+        scan_udfs=False
     )
 
     if xfail:

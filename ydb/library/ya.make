@@ -8,6 +8,7 @@ RECURSE(
     chunks_limiter
     dynumber
     folder_service
+    grpc
     http_proxy
     keys
     login

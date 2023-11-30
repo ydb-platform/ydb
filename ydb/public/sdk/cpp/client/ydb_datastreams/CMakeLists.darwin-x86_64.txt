@@ -11,7 +11,7 @@ add_library(cpp-client-ydb_datastreams)
 target_link_libraries(cpp-client-ydb_datastreams PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-grpc-client
+  library-grpc-client
   cpp-string_utils-url
   api-grpc-draft
   public-lib-operation_id

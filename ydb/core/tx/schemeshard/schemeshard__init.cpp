@@ -1530,6 +1530,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(value, rowset.GetValue<Schema::SubDomains::AuditSettings>()));
                         domainInfo->SetAuditSettings(value);
                     }
+
+                    if (rowset.HaveValue<Schema::SubDomains::ServerlessComputeResourcesMode>()) {
+                        domainInfo->SetServerlessComputeResourcesMode(
+                            rowset.GetValue<Schema::SubDomains::ServerlessComputeResourcesMode>()
+                        );
+                    }
                 }
 
                 if (!rowset.Next())
@@ -1591,6 +1597,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Ydb::Cms::DatabaseQuotas databaseQuotas;
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(databaseQuotas, rowset.GetValue<Schema::SubDomainsAlterData::DatabaseQuotas>()));
                         alter->SetDatabaseQuotas(databaseQuotas);
+                    }
+
+                    if (rowset.HaveValue<Schema::SubDomainsAlterData::ServerlessComputeResourcesMode>()) {
+                        alter->SetServerlessComputeResourcesMode(
+                            rowset.GetValue<Schema::SubDomainsAlterData::ServerlessComputeResourcesMode>()
+                        );
                     }
 
                     subdomainInfo->SetAlter(alter);

@@ -1,6 +1,5 @@
 /* syntax version 1 */
 /* postgres can not */
-/* skip double format */
 $pred = ($x)->{ return $x > 0 };
 
 select

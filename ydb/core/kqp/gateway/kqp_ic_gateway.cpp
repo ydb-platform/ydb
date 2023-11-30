@@ -431,9 +431,10 @@ class TKqpSchemeExecuterRequestHandler: public TActorBootstrapped<TKqpSchemeExec
 public:
     using TResult = IKqpGateway::TGenericResult;
 
-    TKqpSchemeExecuterRequestHandler(TKqpPhyTxHolder::TConstPtr phyTx, const TMaybe<TString>& requestType, const TString& database,
+    TKqpSchemeExecuterRequestHandler(TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TMaybe<TString>& requestType, const TString& database,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken, TPromise<TResult> promise)
         : PhyTx(std::move(phyTx))
+        , QueryType(queryType)
         , Database(database)
         , UserToken(std::move(userToken))
         , Promise(promise)
@@ -442,7 +443,7 @@ public:
 
     void Bootstrap() {
         auto ctx = MakeIntrusive<TUserRequestContext>();
-        IActor* actor = CreateKqpSchemeExecuter(PhyTx, SelfId(), RequestType, Database, UserToken, false /* temporary */, TString() /* sessionId */, ctx);
+        IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, SelfId(), RequestType, Database, UserToken, false /* temporary */, TString() /* sessionId */, ctx);
         Register(actor);
         Become(&TThis::WaitState);
     }
@@ -471,6 +472,7 @@ public:
 
 private:
     TKqpPhyTxHolder::TConstPtr PhyTx;
+    const NKikimrKqp::EQueryType QueryType;
     const TString Database;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TPromise<TResult> Promise;
@@ -594,9 +596,10 @@ private:
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 public:
-    TKikimrIcGateway(const TString& cluster, const TString& database, std::shared_ptr<IKqpTableMetadataLoader>&& metadataLoader,
+    TKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database, std::shared_ptr<IKqpTableMetadataLoader>&& metadataLoader,
         TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters)
         : Cluster(cluster)
+        , QueryType(queryType)
         , Database(database)
         , ActorSystem(actorSystem)
         , NodeId(nodeId)
@@ -628,6 +631,21 @@ public:
     void SetToken(const TString& cluster, const TIntrusiveConstPtr<NACLib::TUserToken>& token) override {
         YQL_ENSURE(cluster == Cluster);
         UserToken = token;
+    }
+
+    bool GetDomainLoginOnly() override {
+        TAppData* appData = AppData(ActorSystem);
+        return appData && appData->AuthConfig.GetDomainLoginOnly();
+    }
+
+    TMaybe<TString> GetDomainName() override {
+        TAppData* appData = AppData(ActorSystem);
+        if (GetDomainLoginOnly()) {
+            if (appData->DomainsInfo && !appData->DomainsInfo->Domains.empty()) {
+                return appData->DomainsInfo->Domains.begin()->second->Name;
+            }
+        }
+        return {};
     }
 
     TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() override {
@@ -1368,17 +1386,11 @@ public:
             auto& dropUser = *schemeTx.MutableAlterLogin()->MutableRemoveUser();
 
             dropUser.SetUser(settings.UserName);
+            dropUser.SetMissingOk(settings.Force);
 
             SendSchemeRequest(ev.Release()).Apply(
-                [dropUserPromise, &settings](const TFuture<TGenericResult>& future) mutable {
-                    const auto& realResult = future.GetValue();
-                    if (!realResult.Success() && realResult.Status() == TIssuesIds::DEFAULT_ERROR && settings.Force) {
-                        IKqpGateway::TGenericResult fakeResult;
-                        fakeResult.SetSuccess();
-                        dropUserPromise.SetValue(std::move(fakeResult));
-                    } else {
-                        dropUserPromise.SetValue(realResult);
-                    }
+                [dropUserPromise](const TFuture<TGenericResult>& future) mutable {
+                    dropUserPromise.SetValue(future.GetValue());
                 }
             );
 
@@ -2076,7 +2088,7 @@ private:
 
     TFuture<TGenericResult> SendSchemeExecuterRequest(const TString&, const TMaybe<TString>& requestType, const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder>& phyTx) override {
         auto promise = NewPromise<TGenericResult>();
-        IActor* requestHandler = new TKqpSchemeExecuterRequestHandler(phyTx, requestType, Database, UserToken, promise);
+        IActor* requestHandler = new TKqpSchemeExecuterRequestHandler(phyTx, QueryType, requestType, Database, UserToken, promise);
         RegisterActor(requestHandler);
         return promise.GetFuture();
     }
@@ -2094,17 +2106,7 @@ private:
     }
 
     bool GetDatabaseForLoginOperation(TString& database) {
-        TAppData* appData = AppData(ActorSystem);
-        if (appData && appData->AuthConfig.GetDomainLoginOnly()) {
-            if (appData->DomainsInfo && !appData->DomainsInfo->Domains.empty()) {
-                database = "/" + appData->DomainsInfo->Domains.begin()->second->Name;
-                return true;
-            }
-        } else {
-            database = Database;
-            return true;
-        }
-        return false;
+        return SetDatabaseForLoginOperation(database, GetDomainLoginOnly(), GetDomainName(), GetDatabase());
     }
 
     bool GetPathPair(const TString& tableName, std::pair<TString, TString>& pathPair,
@@ -2238,6 +2240,7 @@ private:
 
 private:
     TString Cluster;
+    const NKikimrKqp::EQueryType QueryType;
     TString Database;
     TActorSystem* ActorSystem;
     ui32 NodeId;
@@ -2249,11 +2252,11 @@ private:
 
 } // namespace
 
-TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, const TString& database,
+TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database,
     std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader>&& metadataLoader, TActorSystem* actorSystem,
     ui32 nodeId, TKqpRequestCounters::TPtr counters)
 {
-    return MakeIntrusive<TKikimrIcGateway>(cluster, database, std::move(metadataLoader), actorSystem, nodeId,
+    return MakeIntrusive<TKikimrIcGateway>(cluster, queryType, database, std::move(metadataLoader), actorSystem, nodeId,
         counters);
 }
 
@@ -2265,6 +2268,16 @@ bool SplitTablePath(const TString& tableName, const TString& database, std::pair
     } else {
         return IKqpGateway::TrySplitTablePath(tableName, pathPair, error);
     }
+}
+
+bool SetDatabaseForLoginOperation(TString& result, bool getDomainLoginOnly, TMaybe<TString> domainName,
+    const TString& database)
+{
+    if (getDomainLoginOnly && !domainName) {
+        return false;
+    }
+    result = domainName ? "/" + *domainName : database;
+    return true;
 }
 
 

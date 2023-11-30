@@ -33,9 +33,6 @@
 #include <ydb/library/ycloud/impl/mock_access_service.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <util/generic/maybe.h>
-#include <util/generic/ptr.h>
-
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <ydb/library/security/util.h>
 
@@ -46,11 +43,14 @@
 
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/events.h>
-#include <memory>
 
 #include <contrib/libs/fmt/include/fmt/format.h>
 
+#include <util/generic/maybe.h>
+#include <util/generic/ptr.h>
+#include <util/string/ascii.h>
 #include <util/string/join.h>
+#include <util/string/strip.h>
 
 namespace NFq {
 namespace {
@@ -110,6 +110,17 @@ public:
     }
 };
 
+TString CutBearer(TString token) {
+    auto bearer = "Bearer "sv;
+    if (!AsciiHasPrefixIgnoreCase(token, bearer)) {
+        return token;
+    }
+    // cut prefix and strip
+    token = token.substr(bearer.size());
+    StripInPlace(token);
+    return token;
+}
+
 template<class TEventRequest, class TResponseProxy>
 class TResolveSubjectTypeActor : public NActors::TActorBootstrapped<TResolveSubjectTypeActor<TEventRequest, TResponseProxy>> {
     using TBase = NActors::TActorBootstrapped<TResolveSubjectTypeActor<TEventRequest, TResponseProxy>>;
@@ -120,15 +131,15 @@ class TResolveSubjectTypeActor : public NActors::TActorBootstrapped<TResolveSubj
     using TBase::Register;
     using IRetryPolicy = IRetryPolicy<NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr&>;
 
-    ::NFq::TControlPlaneProxyConfig Config;
-    TActorId Sender;
-    TRequestCommonCountersPtr Counters;
-    TString Token;
-    std::function<void(const TDuration&, bool, bool)> Probe;
+    const ::NFq::TControlPlaneProxyConfig Config;
+    const TActorId Sender;
+    const TRequestCommonCountersPtr Counters;
+    const TString Token;
+    const std::function<void(const TDuration&, bool, bool)> Probe;
     TEventRequest Event;
-    ui32 Cookie;
-    TInstant StartTime;
-    IRetryPolicy::IRetryState::TPtr RetryState;
+    const ui32 Cookie;
+    const TInstant StartTime;
+    const IRetryPolicy::IRetryState::TPtr RetryState;
     const TActorId AccessService;
 
 public:
@@ -141,14 +152,15 @@ public:
         : Config(config)
         , Sender(sender)
         , Counters(counters)
-        , Token(token)
+        , Token(CutBearer(token))
         , Probe(probe)
         , Event(event)
         , Cookie(cookie)
         , StartTime(TInstant::Now())
         , RetryState(GetRetryPolicy()->CreateRetryState())
         , AccessService(accessService)
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_RESOLVE_SUBJECT_TYPE";
 

@@ -80,6 +80,9 @@ class Settings:
 class GenericSettings:
     @dataclass
     class ClickHouseCluster:
+        def __hash__(self) -> int:
+            return hash(self.database) + hash(self.protocol)
+
         database: str
         protocol: EProtocol
 
@@ -87,6 +90,9 @@ class GenericSettings:
 
     @dataclass
     class PostgreSQLCluster:
+        def __hash__(self) -> int:
+            return hash(self.database) + hash(self.schema)
+
         database: str
         schema: str
 

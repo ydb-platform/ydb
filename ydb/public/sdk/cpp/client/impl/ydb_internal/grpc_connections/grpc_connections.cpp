@@ -81,7 +81,7 @@ private:
     grpc::Alarm Alarm;
 
 private:
-    using TFixedEvent = NGrpc::TQueueClientFixedEvent<TSelf>;
+    using TFixedEvent = NYdbGrpc::TQueueClientFixedEvent<TSelf>;
 
     TFixedEvent OnAlarmTag = { this, &TSelf::OnAlarm };
 };
@@ -303,7 +303,7 @@ void TGRpcConnectionsImpl::Stop(bool wait) {
     GRpcClientLow_.Stop(wait);
 }
 
-void TGRpcConnectionsImpl::SetGrpcKeepAlive(NGrpc::TGRpcClientConfig& config, const TDuration& timeout, bool permitWithoutCalls) {
+void TGRpcConnectionsImpl::SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config, const TDuration& timeout, bool permitWithoutCalls) {
     ui64 timeoutMs = timeout.MilliSeconds();
     config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIME_MS] = timeoutMs >> 3;
     config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIMEOUT_MS] = timeoutMs;

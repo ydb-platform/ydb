@@ -54,6 +54,7 @@ public:
     FEATURE_FLAG_SETTER(EnableUniqConstraint)
     FEATURE_FLAG_SETTER(EnableTopicMessageMeta)
     FEATURE_FLAG_SETTER(EnableUuidAsPrimaryKey)
+    FEATURE_FLAG_SETTER(EnableTablePgTypes)
 
     #undef FEATURE_FLAG_SETTER
 };

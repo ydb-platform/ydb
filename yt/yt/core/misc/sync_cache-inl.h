@@ -208,9 +208,9 @@ void TSyncSlruCacheBase<TKey, TValue, THash>::UpdateWeight(const TKey& key)
         MissedWeightCounter_.Increment(weightDelta);
     }
 
-    Trim(shard, guard);
-
     OnWeightUpdated(weightDelta);
+
+    Trim(shard, guard);
 }
 
 template <class TKey, class TValue, class THash>

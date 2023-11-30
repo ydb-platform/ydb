@@ -42,7 +42,8 @@ struct TParamsDelta {
 };
 
 std::tuple<NKikimrScheme::EStatus, TString>
-VerifyParams(TParamsDelta* delta, const TSubDomainInfo::TPtr& current, const NKikimrSubDomains::TSubDomainSettings& input) {
+VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TPtr& current,
+             const NKikimrSubDomains::TSubDomainSettings& input) {
     auto paramError = [](const TStringBuf& msg) {
         return std::make_tuple(NKikimrScheme::EStatus::StatusInvalidParameter,
             TStringBuilder() << "Invalid ExtSubDomain request: " << msg
@@ -245,6 +246,24 @@ VerifyParams(TParamsDelta* delta, const TSubDomainInfo::TPtr& current, const NKi
                             std::back_inserter(storagePoolsAdded));
     }
 
+    // ServerlessComputeResourcesMode check
+    if (input.HasServerlessComputeResourcesMode()) {
+        switch (input.GetServerlessComputeResourcesMode()) {
+            case EServerlessComputeResourcesMode::SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED:
+                return paramError("can not set ServerlessComputeResourcesMode to SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED");
+            case EServerlessComputeResourcesMode::SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED:
+            case EServerlessComputeResourcesMode::SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED:
+                break; // ok
+            default:
+                return paramError("unknown ServerlessComputeResourcesMode");
+        }
+
+        const bool isServerless = pathId != current->GetResourcesDomainId();
+        if (!isServerless) {
+            return paramError("ServerlessComputeResourcesMode can be changed only for serverless");
+        }
+    }
+
     delta->CoordinatorsAdded = coordinatorsAdded;
     delta->MediatorsAdded = mediatorsAdded;
     delta->TimeCastBucketsPerMediatorAdded = timeCastBucketsPerMediatorAdded;
@@ -258,10 +277,11 @@ VerifyParams(TParamsDelta* delta, const TSubDomainInfo::TPtr& current, const NKi
     return {NKikimrScheme::EStatus::StatusAccepted, {}};
 }
 
-void VerifyParams(TProposeResponse* result, TParamsDelta* delta, const TSubDomainInfo::TPtr& current, const NKikimrSubDomains::TSubDomainSettings& input) {
+void VerifyParams(TProposeResponse* result, TParamsDelta* delta, const TPathId pathId,
+                  const TSubDomainInfo::TPtr& current, const NKikimrSubDomains::TSubDomainSettings& input) {
     // TProposeRespose should come in assuming positive outcome (status NKikimrScheme::StatusAccepted, no errors)
     Y_ABORT_UNLESS(result->IsAccepted());
-    auto [status, reason] = VerifyParams(delta, current, input);
+    auto [status, reason] = VerifyParams(delta, pathId, current, input);
     result->SetStatus(status, reason);
 }
 
@@ -570,7 +590,7 @@ public:
 
         // Check params and build change delta
         TParamsDelta delta;
-        VerifyParams(result.Get(), &delta, subdomainInfo, inputSettings);
+        VerifyParams(result.Get(), &delta, basenameId, subdomainInfo, inputSettings);
         if (!result->IsAccepted()) {
             return result;
         }
@@ -751,7 +771,7 @@ public:
 
         // Check params and build change delta
         TParamsDelta delta;
-        VerifyParams(result.Get(), &delta, subdomainInfo, inputSettings);
+        VerifyParams(result.Get(), &delta, basenameId, subdomainInfo, inputSettings);
         if (!result->IsAccepted()) {
             return result;
         }
@@ -816,6 +836,10 @@ public:
         }
         if (inputSettings.HasAuditSettings()) {
             alter->ApplyAuditSettings(inputSettings.GetAuditSettings());
+        }
+
+        if (inputSettings.HasServerlessComputeResourcesMode()) {
+            alter->SetServerlessComputeResourcesMode(inputSettings.GetServerlessComputeResourcesMode());
         }
 
         LOG_D("TAlterExtSubDomain Propose"
@@ -988,7 +1012,7 @@ TVector<ISubOperation::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId id, 
     // Check params and build change delta
     TParamsDelta delta;
     {
-        auto [status, reason] = VerifyParams(&delta, subdomainInfo, inputSettings);
+        auto [status, reason] = VerifyParams(&delta, basenameId, subdomainInfo, inputSettings);
         if (status != NKikimrScheme::EStatus::StatusAccepted) {
             return errorResult(status, reason);
         }

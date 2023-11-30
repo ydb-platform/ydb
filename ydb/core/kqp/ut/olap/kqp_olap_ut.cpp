@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     UNIT_ASSERT(NJson::ReadJsonFastTree(*plan, statInfo));
                 }
             }
-            
+
             if (streamPart.HasDiagnostics()) {
                 TString diagnosticsString = streamPart.GetDiagnostics();
                 if (!diagnosticsString.empty() && diagnostics) {
@@ -1521,6 +1521,17 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(rows.size() == expectedCount);
     }
 
+    TString BuildQuery(const TString& predicate, bool pushEnabled) {
+        TStringBuilder qBuilder;
+        qBuilder << "--!syntax_v1" << Endl;
+        qBuilder << "PRAGMA Kikimr.OptEnableOlapPushdown = '" << (pushEnabled ? "true" : "false") << "';" << Endl;
+        qBuilder << "PRAGMA Kikimr.OptEnablePredicateExtract = 'false';" << Endl;
+        qBuilder << "SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE ";
+        qBuilder << predicate;
+        qBuilder << " ORDER BY `timestamp`";
+        return qBuilder;
+    };
+
     Y_UNIT_TEST(PredicatePushdown) {
         constexpr bool logQueries = false;
         auto settings = TKikimrSettings()
@@ -1594,60 +1605,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 #endif
         };
 
-        std::vector<TString> testDataNoPush = {
-            R"(`level` != NULL)",
-            R"(`level` > NULL)",
-            R"(`timestamp` >= CAST(3000001 AS Timestamp))",
-            R"(`level` >= CAST("2" As Uint32))",
-            R"(`level` = NULL)",
-            R"(`level` > NULL)",
-            R"(LENGTH(`uid`) > 0 OR `resource_id` = "10001")",
-            R"((LENGTH(`uid`) > 0 AND `resource_id` = "10001") OR `resource_id` = "10002")",
-            R"((LENGTH(`uid`) > 0 OR `resource_id` = "10002") AND (LENGTH(`uid`) < 15 OR `resource_id` = "10001"))",
-            R"(NOT(LENGTH(`uid`) > 0 AND `resource_id` = "10001"))",
-            // Not strict function in the beginning causes to disable pushdown
-            R"(Unwrap(`level`/1) = `level` AND `resource_id` = "10001")",
-            // We can handle this case in future
-            R"(NOT(LENGTH(`uid`) > 0 OR `resource_id` = "10001"))",
-#if SSA_RUNTIME_VERSION < 2U
-            R"(`uid` LIKE "%30000%")",
-            R"(`uid` LIKE "uid%")",
-            R"(`uid` LIKE "%001")",
-            R"(`uid` LIKE "uid%001")",
-#endif
-        };
-
-        std::vector<TString> testDataPartialPush = {
-            R"(LENGTH(`uid`) > 0 AND `resource_id` = "10001")",
-            R"(`resource_id` = "10001" AND `level` > 1 AND LENGTH(`uid`) > 0)",
-            R"(`resource_id` >= "10001" AND LENGTH(`uid`) > 0 AND `level` >= 1 AND `level` < 3)",
-            R"(LENGTH(`uid`) > 0 AND (`resource_id` >= "10001" OR `level`>= 1 AND `level` <= 3))",
-            R"(NOT(`resource_id` = "10001" OR `level` >= 1) AND LENGTH(`uid`) > 0)",
-            R"(NOT(`resource_id` = "10001" AND `level` != 1) AND LENGTH(`uid`) > 0)",
-            R"(`resource_id` = "10001" AND Unwrap(`level`/1) = `level`)",
-            R"(`resource_id` = "10001" AND Unwrap(`level`/1) = `level` AND `level` > 1)",
-        };
-
-        auto buildQuery = [](const TString& predicate, bool pushEnabled) {
-            TStringBuilder qBuilder;
-
-            qBuilder << "--!syntax_v1" << Endl;
-
-            if (!pushEnabled) {
-                qBuilder << R"(PRAGMA Kikimr.OptEnableOlapPushdown = "false";)" << Endl;
-            }
-
-            qBuilder << R"(PRAGMA Kikimr.OptEnablePredicateExtract = "false";)" << Endl;
-            qBuilder << "SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE ";
-            qBuilder << predicate;
-            qBuilder << " ORDER BY `timestamp`";
-
-            return TString(qBuilder);
-        };
-
         for (const auto& predicate: testData) {
-            auto normalQuery = buildQuery(predicate, false);
-            auto pushQuery = buildQuery(predicate, true);
+            auto normalQuery = BuildQuery(predicate, false);
+            auto pushQuery = BuildQuery(predicate, true);
 
             Cerr << "--- Run normal query ---\n";
             Cerr << normalQuery << Endl;
@@ -1678,9 +1638,48 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
                           TStringBuilder() << "Predicate not pushed down. Query: " << pushQuery);
         }
+    }
+
+    Y_UNIT_TEST(PredicateDoNotPushdown) {
+        constexpr bool logQueries = false;
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto tableClient = kikimr.GetTableClient();
+
+        std::vector<TString> testDataNoPush = {
+            R"(`level` != NULL)",
+            R"(`level` > NULL)",
+            R"(`timestamp` >= CAST(3000001 AS Timestamp))",
+            R"(`level` >= CAST("2" As Uint32))",
+            R"(`level` = NULL)",
+            R"(`level` > NULL)",
+            R"(LENGTH(`uid`) > 0 OR `resource_id` = "10001")",
+            R"((LENGTH(`uid`) > 0 AND `resource_id` = "10001") OR `resource_id` = "10002")",
+            R"((LENGTH(`uid`) > 0 OR `resource_id` = "10002") AND (LENGTH(`uid`) < 15 OR `resource_id` = "10001"))",
+            R"(NOT(LENGTH(`uid`) > 0 AND `resource_id` = "10001"))",
+            // Not strict function in the beginning causes to disable pushdown
+            R"(Unwrap(`level`/1) = `level` AND `resource_id` = "10001")",
+            // We can handle this case in future
+            R"(NOT(LENGTH(`uid`) > 0 OR `resource_id` = "10001"))",
+#if SSA_RUNTIME_VERSION < 2U
+            R"(`uid` LIKE "%30000%")",
+            R"(`uid` LIKE "uid%")",
+            R"(`uid` LIKE "%001")",
+            R"(`uid` LIKE "uid%001")",
+#endif
+        };
 
         for (const auto& predicate: testDataNoPush) {
-            auto pushQuery = buildQuery(predicate, true);
+            auto pushQuery = BuildQuery(predicate, true);
 
             if (logQueries) {
                 Cerr << "Query: " << pushQuery << Endl;
@@ -1695,10 +1694,37 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(ast.find("KqpOlapFilter") == std::string::npos,
                           TStringBuilder() << "Predicate pushed down. Query: " << pushQuery);
         }
+    }
+
+    Y_UNIT_TEST(PredicatePushdownPartial) {
+        constexpr bool logQueries = false;
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto tableClient = kikimr.GetTableClient();
+
+        std::vector<TString> testDataPartialPush = {
+            R"(LENGTH(`uid`) > 0 AND `resource_id` = "10001")",
+            R"(`resource_id` = "10001" AND `level` > 1 AND LENGTH(`uid`) > 0)",
+            R"(`resource_id` >= "10001" AND LENGTH(`uid`) > 0 AND `level` >= 1 AND `level` < 3)",
+            R"(LENGTH(`uid`) > 0 AND (`resource_id` >= "10001" OR `level`>= 1 AND `level` <= 3))",
+            R"(NOT(`resource_id` = "10001" OR `level` >= 1) AND LENGTH(`uid`) > 0)",
+            R"(NOT(`resource_id` = "10001" AND `level` != 1) AND LENGTH(`uid`) > 0)",
+            R"(`resource_id` = "10001" AND Unwrap(`level`/1) = `level`)",
+            R"(`resource_id` = "10001" AND Unwrap(`level`/1) = `level` AND `level` > 1)",
+        };
 
         for (const auto& predicate: testDataPartialPush) {
-            auto normalQuery = buildQuery(predicate, false);
-            auto pushQuery = buildQuery(predicate, true);
+            auto normalQuery = BuildQuery(predicate, false);
+            auto pushQuery = BuildQuery(predicate, true);
 
             Cerr << "--- Run normal query ---\n";
             Cerr << normalQuery << Endl;
@@ -1732,7 +1758,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                           TStringBuilder() << "NarrowMap was removed. Query: " << pushQuery);
         }
     }
-
 #if SSA_RUNTIME_VERSION >= 2U
     Y_UNIT_TEST(PredicatePushdown_DifferentLvlOfFilters) {
         auto settings = TKikimrSettings()
@@ -2171,6 +2196,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         std::string ExpectedReadNodeType;
         TExpectedLimitChecker LimitChecker;
         TExpectedRecordChecker RecordChecker;
+        bool UseLlvm = true;
     public:
         void FillExpectedAggregationGroupByPlanOptions() {
 #if SSA_RUNTIME_VERSION >= 2U
@@ -2185,6 +2211,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             queryFixed << "--!syntax_v1" << Endl;
             if (!Pushdown) {
                 queryFixed << "PRAGMA Kikimr.OptEnableOlapPushdown = \"false\";" << Endl;
+            }
+            if (!UseLlvm) {
+                queryFixed << "PRAGMA Kikimr.UseLlvm = \"false\";" << Endl;
             }
             queryFixed << "PRAGMA Kikimr.OptUseFinalizeByKey;" << Endl;
 
@@ -2215,6 +2244,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
         TAggregationTestCase& SetQuery(const TString& value) {
             Query = value;
+            return *this;
+        }
+        TAggregationTestCase& SetUseLlvm(const bool value) {
+            UseLlvm = value;
             return *this;
         }
         const TString& GetExpectedReply() const {
@@ -2348,7 +2381,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
 
         ui32 numIterations = 10;
-        const ui32 iterationPackSize = 2000;
+        const ui32 iterationPackSize = NSan::PlainOrUnderSanitizer(2000, 20);
         for (ui64 i = 0; i < numIterations; ++i) {
             WriteTestDataForClickBench(kikimr, "/Root/benchTable", 0, 1000000 + i * 1000000, iterationPackSize);
         }
@@ -2388,7 +2421,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         // write data
 
         ui32 numIterations = 10;
-        const ui32 iterationPackSize = 2000;
+        const ui32 iterationPackSize = NSan::PlainOrUnderSanitizer(2000, 20);
         for (ui64 i = 0; i < numIterations; ++i) {
             TClickHelper(*server).SendDataViaActorSystem("/Root/benchTable", 0, 1000000 + i * 1000000,
                                                          iterationPackSize);
@@ -3277,7 +3310,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
             // .SetExpectedReadNodeType("TableFullScan");
             .SetExpectedReadNodeType("Aggregate-TableFullScan");
-        ;
         q7.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q9;
@@ -3356,7 +3388,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetExpectedReadNodeType("Aggregate-Filter-TableFullScan");
         q39.FillExpectedAggregationGroupByPlanOptions();
 
-        TestClickBench({ q7, q9, q12, q14, q22, q39 });
+        std::vector<TAggregationTestCase> cases = {q7, q9, q12, q14, q22, q39};
+        for (auto&& c : cases) {
+            c.SetUseLlvm(NSan::PlainOrUnderSanitizer(true, false));
+        }
+
+        TestClickBench(cases);
     }
 
     Y_UNIT_TEST(StatsSysView) {

@@ -188,6 +188,7 @@ SRCS(
     rpc/message.cpp
     rpc/message_format.cpp
     rpc/null_channel.cpp
+    rpc/peer_discovery.cpp
     rpc/per_user_request_queue_provider.cpp
     rpc/protocol_version.cpp
     rpc/public.cpp

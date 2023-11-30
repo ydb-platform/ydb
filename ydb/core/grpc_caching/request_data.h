@@ -10,8 +10,8 @@ namespace NKikimr {
     struct TRequestIdData {
         TString RequestId;
 
-        NGrpc::TCallMeta FillCallMeta() const {
-            NGrpc::TCallMeta callMeta;
+        NYdbGrpc::TCallMeta FillCallMeta() const {
+            NYdbGrpc::TCallMeta callMeta;
             callMeta.Timeout = DEFAULT_CACHED_GRPC_REQUEST_TIMEOUT;
             callMeta.Aux.emplace_back(REQUEST_ID_METADATA_NAME, RequestId);
             return callMeta;
@@ -28,8 +28,8 @@ namespace NKikimr {
     struct TTicketData {
         TString Ticket;
 
-        NGrpc::TCallMeta FillCallMeta() const {
-            NGrpc::TCallMeta callMeta;
+        NYdbGrpc::TCallMeta FillCallMeta() const {
+            NYdbGrpc::TCallMeta callMeta;
             callMeta.Timeout = DEFAULT_CACHED_GRPC_REQUEST_TIMEOUT;
             callMeta.Aux.emplace_back("authorization", "Bearer " + Ticket);
             return callMeta;

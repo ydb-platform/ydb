@@ -9,7 +9,7 @@ namespace NYql {
 
 namespace {
 
-using TTokenAccessorConnectionPool = std::vector<std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>>>;
+using TTokenAccessorConnectionPool = std::vector<std::shared_ptr<NYdbGrpc::TServiceConnection<TokenAccessorService>>>;
 
 class TSecuredServiceAccountCredentialsFactoryImpl : public ISecuredServiceAccountCredentialsFactory {
 public:
@@ -23,7 +23,7 @@ public:
     )
         : RefreshPeriod(refreshPeriod)
         , RequestTimeout(requestTimeout)
-        , Client(std::make_shared<NGrpc::TGRpcClientLow>())
+        , Client(std::make_shared<NYdbGrpc::TGRpcClientLow>())
     {
         GrpcClientConfig.Locator = tokenAccessorEndpoint;
         GrpcClientConfig.EnableSsl = useSsl;
@@ -38,7 +38,7 @@ public:
         Y_ENSURE(serviceAccountId);
         Y_ENSURE(serviceAccountIdSignature);
 
-        std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> connection;
+        std::shared_ptr<NYdbGrpc::TServiceConnection<TokenAccessorService>> connection;
         if (Connections.empty()) {
             connection = Client->CreateGRpcServiceConnection<TokenAccessorService>(GrpcClientConfig);
         } else {
@@ -49,10 +49,10 @@ public:
     }
 
 private:
-    NGrpc::TGRpcClientConfig GrpcClientConfig;
+    NYdbGrpc::TGRpcClientConfig GrpcClientConfig;
     const TDuration RefreshPeriod;
     const TDuration RequestTimeout;
-    const std::shared_ptr<NGrpc::TGRpcClientLow> Client;
+    const std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client;
     TTokenAccessorConnectionPool Connections;
     mutable std::atomic<ui32> NextConnectionIndex = 0;
 };

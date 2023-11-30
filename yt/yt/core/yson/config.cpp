@@ -12,4 +12,4 @@ void TProtobufInteropDynamicConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // NYT::NYson
+} // namespace NYT::NYson

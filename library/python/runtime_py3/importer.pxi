@@ -240,8 +240,13 @@ class ResourceImporter(object):
             module.__path__= [executable + path_sep + module.__name__.replace('.', path_sep)]
         # exec(code, module.__dict__)
 
+        # __name__ and __file__ could be overwritten after execution
+        # So these two things are needed if wee want to be consistent at some point
+        initial_modname = module.__name__
+        initial_filename = module.__file__
+
         if self._before_import_callback:
-            self._before_import_callback(module)
+            self._before_import_callback(initial_modname, initial_filename)
 
         # “Zero-cost” exceptions are implemented.
         # The cost of try statements is almost eliminated when no exception is raised
@@ -249,7 +254,7 @@ class ResourceImporter(object):
             _call_with_frames_removed(exec, code, module.__dict__)
         finally:
             if self._after_import_callback:
-                self._after_import_callback(module)
+                self._after_import_callback(initial_modname, initial_filename)
 
     # PEP-302 extension 1 of 3: data loader.
     def get_data(self, path):
@@ -357,25 +362,19 @@ class ResourceImporter(object):
                 yield m
 
     def get_resource_reader(self, fullname):
-        try:
-            if not self.is_package(fullname):
-                return None
-        except ImportError:
-            return None
-        return _ResfsResourceReader(self, fullname)
+        import os
+        path = os.path.dirname(self.get_filename(fullname))
+        return _ResfsResourceReader(self, path)
 
 
 class _ResfsResourceReader:
 
-    def __init__(self, importer, fullname):
+    def __init__(self, importer, path):
         self.importer = importer
-        self.fullname = fullname
-
-        import os
-        self.prefix = "{}/".format(os.path.dirname(self.importer.get_filename(self.fullname)))
+        self.path = path
 
     def open_resource(self, resource):
-        path = f'{self.prefix}{resource}'
+        path = f'{self.path}/{resource}'
         from io import BytesIO
         try:
             return BytesIO(self.importer.get_data(path))
@@ -389,7 +388,7 @@ class _ResfsResourceReader:
         raise FileNotFoundError
 
     def is_resource(self, name):
-        path = f'{self.prefix}{name}'
+        path = f'{self.path}/{name}'
         try:
             self.importer.get_data(path)
         except OSError:
@@ -398,14 +397,19 @@ class _ResfsResourceReader:
 
     def contents(self):
         subdirs_seen = set()
-        for key in resfs_files(self.prefix):
-            relative = key[len(self.prefix):]
+        len_path = len(self.path) + 1  # path + /
+        for key in resfs_files(f"{self.path}/"):
+            relative = key[len_path:]
             res_or_subdir, *other = relative.split(b'/')
             if not other:
                 yield _s(res_or_subdir)
             elif res_or_subdir not in subdirs_seen:
                 subdirs_seen.add(res_or_subdir)
                 yield _s(res_or_subdir)
+
+    def files(self):
+        import sitecustomize
+        return sitecustomize.ArcadiaResourceContainer(f"resfs/file/{self.path}/")
 
 
 class BuiltinSubmoduleImporter(BuiltinImporter):

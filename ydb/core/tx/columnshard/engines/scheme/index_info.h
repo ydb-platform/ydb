@@ -49,11 +49,16 @@ public:
     };
 
     TString DebugString() const {
-        return TStringBuilder() << "("
+        TStringBuilder sb;
+        sb << "("
             << "id=" << Id << ";"
             << "version=" << Version << ";"
             << "name=" << Name << ";"
             << ")";
+        for (auto&& i : ColumnFeatures) {
+            sb << GetColumnName(i.first) << ":" << i.second.DebugString() << ";";
+        }
+        return sb;
     }
 
     /// Appends the special columns to the batch.

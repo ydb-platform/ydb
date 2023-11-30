@@ -228,9 +228,10 @@ TConsumerReadQuota* TReadQuoter::GetOrCreateConsumerQuota(const TString& consume
     auto it = ConsumerQuotas.find(consumerStr);
     if (it == ConsumerQuotas.end()) {
         TConsumerReadQuota consumer(CreateAccountQuotaTracker(consumerStr), GetConsumerReadBurst(ctx), GetConsumerReadSpeed(ctx));
+        Send(PartitionActor, new NReadQuoterEvents::TEvQuotaUpdated({{consumerStr, consumer.PartitionPerConsumerQuotaTracker.GetTotalSpeed()}}, PartitionTotalQuotaTracker.GetTotalSpeed()));
+
         auto result = ConsumerQuotas.emplace(consumerStr, std::move(consumer));
         Y_ABORT_UNLESS(result.second);
-        Send(PartitionActor, new NReadQuoterEvents::TEvQuotaUpdated({{consumerStr, consumer.PartitionPerConsumerQuotaTracker.GetTotalSpeed()}}, PartitionTotalQuotaTracker.GetTotalSpeed()));
         return &result.first->second;
     }
     return &it->second;

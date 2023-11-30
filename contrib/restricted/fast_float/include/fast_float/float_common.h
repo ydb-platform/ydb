@@ -12,10 +12,19 @@
 
 namespace fast_float {
 
+#define FASTFLOAT_JSONFMT (1 << 5)
+#define FASTFLOAT_FORTRANFMT (1 << 6)
+
 enum chars_format {
   scientific = 1 << 0,
   fixed = 1 << 2,
   hex = 1 << 3,
+  no_infnan = 1 << 4,
+  // RFC 8259: https://datatracker.ietf.org/doc/html/rfc8259#section-6
+  json = FASTFLOAT_JSONFMT | fixed | scientific | no_infnan,
+  // Extension of RFC 8259 where, e.g., "inf" and "nan" are allowed.
+  json_or_infnan = FASTFLOAT_JSONFMT | fixed | scientific,
+  fortran = FASTFLOAT_FORTRANFMT | fixed | scientific,
   general = fixed | scientific
 };
 
@@ -217,18 +226,16 @@ struct value128 {
   constexpr value128() : low(0), high(0) {}
 };
 
-/* Helper C++11 constexpr generic implementation of leading_zeroes */
-fastfloat_really_inline constexpr
+/* Helper C++14 constexpr generic implementation of leading_zeroes */
+fastfloat_really_inline FASTFLOAT_CONSTEXPR14
 int leading_zeroes_generic(uint64_t input_num, int last_bit = 0) {
-  return (
-    ((input_num & uint64_t(0xffffffff00000000)) && (input_num >>= 32, last_bit |= 32)),
-    ((input_num & uint64_t(        0xffff0000)) && (input_num >>= 16, last_bit |= 16)),
-    ((input_num & uint64_t(            0xff00)) && (input_num >>=  8, last_bit |=  8)),
-    ((input_num & uint64_t(              0xf0)) && (input_num >>=  4, last_bit |=  4)),
-    ((input_num & uint64_t(               0xc)) && (input_num >>=  2, last_bit |=  2)),
-    ((input_num & uint64_t(               0x2)) && (input_num >>=  1, last_bit |=  1)),
-    63 - last_bit
-  );
+    if(input_num & uint64_t(0xffffffff00000000)) { input_num >>= 32; last_bit |= 32; }
+    if(input_num & uint64_t(        0xffff0000)) { input_num >>= 16; last_bit |= 16; }
+    if(input_num & uint64_t(            0xff00)) { input_num >>=  8; last_bit |=  8; }
+    if(input_num & uint64_t(              0xf0)) { input_num >>=  4; last_bit |=  4; }
+    if(input_num & uint64_t(               0xc)) { input_num >>=  2; last_bit |=  2; }
+    if(input_num & uint64_t(               0x2)) { input_num >>=  1; last_bit |=  1; }
+    return 63 - last_bit;
 }
 
 /* result might be undefined when input_num is zero */

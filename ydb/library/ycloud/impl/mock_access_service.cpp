@@ -28,7 +28,7 @@ public:
 
     void Handle(TEvAccessService::TEvAuthorizeRequest::TPtr& ev) {
         auto result = std::make_unique<TEvAccessService::TEvAuthorizeResponse>();
-        result->Status = NGrpc::TGrpcStatus("Unimplemented", 1, true);
+        result->Status = NYdbGrpc::TGrpcStatus("Unimplemented", 1, true);
         Send(ev->Sender, result.release());
     }
 

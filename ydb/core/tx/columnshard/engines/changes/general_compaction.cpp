@@ -18,16 +18,12 @@ namespace NKikimr::NOlap::NCompaction {
 TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
     std::vector<TPortionInfoWithBlobs> portions = TPortionInfoWithBlobs::RestorePortions(SwitchedPortions, Blobs);
     Blobs.clear();
-    std::optional<TSnapshot> maxSnapshot;
     i64 portionsSize = 0;
     i64 portionsCount = 0;
     i64 insertedPortionsSize = 0;
     i64 compactedPortionsSize = 0;
     i64 otherPortionsSize = 0;
     for (auto&& i : SwitchedPortions) {
-        if (!maxSnapshot || *maxSnapshot < i.GetMinSnapshot()) {
-            maxSnapshot = i.GetMinSnapshot();
-        }
         if (i.GetMeta().GetProduced() == TPortionMeta::EProduced::INSERTED) {
             insertedPortionsSize += i.GetBlobBytes();
         } else if (i.GetMeta().GetProduced() == TPortionMeta::EProduced::SPLIT_COMPACTED) {
@@ -40,7 +36,6 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     }
     NChanges::TGeneralCompactionCounters::OnPortionsKind(insertedPortionsSize, compactedPortionsSize, otherPortionsSize);
     NChanges::TGeneralCompactionCounters::OnRepackPortions(portionsCount, portionsSize);
-    Y_ABORT_UNLESS(maxSnapshot);
 
     static const TString portionIdFieldName = "$$__portion_id";
     static const TString portionRecordIndexFieldName = "$$__portion_record_idx";
@@ -90,18 +85,24 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
 
     std::vector<std::map<std::string, std::vector<TColumnPortionResult>>> chunkGroups;
     chunkGroups.resize(batchResults.size());
+//    Cerr << context.SchemaVersions.DebugString() << Endl;
     for (auto&& f : resultSchema->GetSchema()->fields()) {
+        NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("field_name", f->name()));
         const ui32 columnId = resultSchema->GetColumnId(f->name());
         auto columnInfo = stats->GetColumnInfo(columnId);
         Y_ABORT_UNLESS(columnInfo);
 
         std::vector<TPortionColumnCursor> cursors;
-        auto loader = resultSchema->GetColumnLoader(f->name());
+//        Cerr << f->name() << Endl;
         for (auto&& p : portions) {
+//            Cerr << p.GetPortionInfo().DebugString() << Endl;
+            auto dataSchema = context.SchemaVersions.GetSchema(p.GetPortionInfo().GetMinSnapshot());
+            auto loader = dataSchema->GetColumnLoader(f->name());
+//            Cerr << "loader: " << loader->DebugString() << Endl;
             std::vector<const TColumnRecord*> records;
             std::vector<IPortionColumnChunk::TPtr> chunks;
             p.ExtractColumnChunks(columnId, records, chunks);
-            cursors.emplace_back(TPortionColumnCursor(chunks, records, loader));
+            cursors.emplace_back(TPortionColumnCursor(chunks, records, loader, p.GetPortionInfo().GetPortionId()));
         }
 
         ui32 batchesRecordsCount = 0;
@@ -143,6 +144,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
             chunkGroups[batchIdx][f->name()] = mColumn.BuildResult();
             batchesRecordsCount += batchResult->num_rows();
             columnRecordsCount += mColumn.GetRecordsCount();
+            AFL_VERIFY(batchResult->num_rows() == mColumn.GetRecordsCount());
             ++batchIdx;
         }
         AFL_VERIFY(columnRecordsCount == batchesRecordsCount)("f_name", f->name())("mCount", columnRecordsCount)("bCount", batchesRecordsCount);
@@ -182,7 +184,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
             TGeneralSerializedSlice slice(std::move(i));
             auto b = batchResult->Slice(recordIdx, slice.GetRecordsCount());
             std::vector<std::vector<IPortionColumnChunk::TPtr>> chunksByBlobs = slice.GroupChunksByBlobs();
-            AppendedPortions.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(chunksByBlobs, nullptr, GranuleMeta->GetPathId(), *maxSnapshot, SaverContext.GetStorageOperator()));
+            AppendedPortions.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(chunksByBlobs, nullptr, GranuleMeta->GetPathId(), resultSchema->GetSnapshot(), SaverContext.GetStorageOperator()));
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
             AppendedPortions.back().GetPortionInfo().AddMetadata(*resultSchema, primaryKeys, snapshotKeys, SaverContext.GetTierName());

@@ -2306,14 +2306,14 @@
         {
             "checksum": "08feb3c2ad2bee9d5746f3c1d62f5214",
             "size": 7091,
-            "uri": "https://{canondata_backend}/1773845/f65b350fb47bed5d03233e7ed3b1ef256d9abd32/resource.tar.gz#test.test_join-grace_join1-map-Analyze_/plan.txt"
+            "uri": "https://{canondata_backend}/1942671/9453685c6af2be2d06777e78a99d9db8738ffcc0/resource.tar.gz#test.test_join-grace_join1-map-Analyze_/plan.txt"
         }
     ],
     "test.test[join-grace_join1-map-Debug]": [
         {
-            "checksum": "9e684c9b5d95ed12bd278c3223de6227",
-            "size": 3115,
-            "uri": "https://{canondata_backend}/1689644/0237dc143f231e4673d5cf207336f86d8d4035f4/resource.tar.gz#test.test_join-grace_join1-map-Debug_/opt.yql_patched"
+            "checksum": "364edabe894457a73f9365d8004e0ca9",
+            "size": 3137,
+            "uri": "https://{canondata_backend}/1942671/9453685c6af2be2d06777e78a99d9db8738ffcc0/resource.tar.gz#test.test_join-grace_join1-map-Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-grace_join1-map-Plan]": [

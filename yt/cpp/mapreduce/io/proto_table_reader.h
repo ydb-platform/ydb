@@ -18,7 +18,7 @@ public:
     explicit TProtoTableReader(
         ::TIntrusivePtr<TRawTableReader> input,
         TVector<const ::google::protobuf::Descriptor*>&& descriptors);
-    ~TProtoTableReader() override;
+    ~TProtoTableReader() override = default;
 
     void ReadRow(Message* row) override;
 
@@ -47,7 +47,11 @@ public:
     explicit TLenvalProtoTableReader(
         ::TIntrusivePtr<TRawTableReader> input,
         TVector<const ::google::protobuf::Descriptor*>&& descriptors);
-    ~TLenvalProtoTableReader() override;
+
+    explicit TLenvalProtoTableReader(
+        ::TIntrusivePtr<TRawTableReader> input);
+
+    ~TLenvalProtoTableReader() override = default;
 
     void ReadRow(Message* row) override;
 
@@ -65,6 +69,7 @@ protected:
     void SkipRow() override;
 
 private:
+    bool ValidateProtoDescriptor_;
     TVector<const ::google::protobuf::Descriptor*> Descriptors_;
 };
 

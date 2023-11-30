@@ -118,6 +118,7 @@ struct TQueryResult
     TError Error;
     NTableClient::TTableSchemaPtr Schema;
     NChunkClient::NProto::TDataStatistics DataStatistics;
+    bool IsTruncated;
 };
 
 void Serialize(const TQueryResult& queryResult, NYson::IYsonConsumer* consumer);

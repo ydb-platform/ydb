@@ -12,7 +12,7 @@ target_link_libraries(client-ydb_federated_topic-impl PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-grpc-client
+  library-grpc-client
   cpp-monlib-dynamic_counters
   cpp-monlib-metrics
   cpp-string_utils-url

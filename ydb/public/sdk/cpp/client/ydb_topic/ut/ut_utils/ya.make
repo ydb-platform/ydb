@@ -8,7 +8,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/grpc/server
+    ydb/library/grpc/server
     library/cpp/testing/unittest
     library/cpp/threading/chunk_queue
     ydb/core/testlib/default

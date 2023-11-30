@@ -1,6 +1,5 @@
 /* syntax version 1 */
 /* dqfile can not */
-/* skip double format */
 USE plato;
 
 PRAGMA DqEngine="force";

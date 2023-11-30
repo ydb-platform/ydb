@@ -10,10 +10,15 @@ import (
 	"github.com/ydb-platform/ydb/library/go/core/metrics/internal/pkg/registryutil"
 )
 
+type PrometheusRegistry interface {
+	prometheus.Registerer
+	prometheus.Gatherer
+}
+
 type RegistryOpts struct {
 	Prefix        string
 	Tags          map[string]string
-	rg            *prometheus.Registry
+	rg            PrometheusRegistry
 	Collectors    []func(metrics.Registry)
 	NameSanitizer func(string) string
 	StreamFormat  expfmt.Format
@@ -58,7 +63,7 @@ func (o *RegistryOpts) AppendPrefix(prefix string) *RegistryOpts {
 //
 // This is primarily used to unite externally defined metrics with metrics kept
 // in the core registry.
-func (o *RegistryOpts) SetRegistry(rg *prometheus.Registry) *RegistryOpts {
+func (o *RegistryOpts) SetRegistry(rg PrometheusRegistry) *RegistryOpts {
 	o.rg = rg
 	return o
 }

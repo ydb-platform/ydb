@@ -17,8 +17,8 @@ std::shared_ptr<TColumnLoader> TSnapshotSchema::GetColumnLoader(const ui32 colum
     return IndexInfo.GetColumnLoader(columnId);
 }
 
-ui32 TSnapshotSchema::GetColumnId(const std::string& columnName) const {
-    return IndexInfo.GetColumnId(columnName);
+std::optional<ui32> TSnapshotSchema::GetColumnIdOptional(const std::string& columnName) const {
+    return IndexInfo.GetColumnIdOptional(columnName);
 }
 
 int TSnapshotSchema::GetFieldIndex(const ui32 columnId) const {

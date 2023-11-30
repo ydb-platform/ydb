@@ -1703,10 +1703,11 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
         const bool needPayload = joinType->IsAtom({"Inner", "Left"});
 
         // don't produce nulls
+        TExprNode::TListType remappedMembers;
+        TExprNode::TListType remappedMembersToSkipNull;
+
         TExprNode::TPtr smallKeySelector;
         if (!isCross) {
-            TExprNode::TListType remappedMembers;
-            TExprNode::TListType remappedMembersToSkipNull;
             tableContent = RemapNonConvertibleItems(tableContent, smallLabel, *rightKeyColumns, outputKeyType, remappedMembers, remappedMembersToSkipNull, ctx);
             if (!remappedMembersToSkipNull.empty()) {
                 tableContent = ctx.NewCallable(pos, "SkipNullMembers", { tableContent, ctx.NewList(pos, std::move(remappedMembersToSkipNull)) });
@@ -1883,8 +1884,9 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
                                 .Arg(1, "dict")
                                 .Add(2, joinType)
                                 .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
-                                .Add(4, ctx.NewList(pos, std::move(leftRenameNodes)))
-                                .Add(5, ctx.NewList(pos, std::move(rightRenameNodes)))
+                                .Add(4, ctx.NewList(pos, std::move(remappedMembers)))
+                                .Add(5, ctx.NewList(pos, std::move(leftRenameNodes)))
+                                .Add(6, ctx.NewList(pos, std::move(rightRenameNodes)))
                             .Seal()
                         .Seal()
                     .Seal()
@@ -1896,8 +1898,9 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
                         .Add(1, dict)
                         .Add(2, joinType)
                         .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
-                        .Add(4, ctx.NewList(pos, std::move(leftRenameNodes)))
-                        .Add(5, ctx.NewList(pos, std::move(rightRenameNodes)))
+                        .Add(4, ctx.NewList(pos, std::move(remappedMembers)))
+                        .Add(5, ctx.NewList(pos, std::move(leftRenameNodes)))
+                        .Add(6, ctx.NewList(pos, std::move(rightRenameNodes)))
                     .Seal()
                     .Build();
             }
@@ -2990,8 +2993,7 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
     const auto disableOptimizers = state->Configuration->DisableOptimizers.Get().GetOrElse(TSet<TString>());
 
     bool empty = false;
-    if (leftTablesReady
-        && 0ul == Accumulate(leftTables, 0ul, [] (ui64 sum, const TYtPathInfo::TPtr& p) { return sum + p->Table->Stat->RecordsCount; })
+    if (leftLeaf.Section.Ref().GetConstraint<TEmptyConstraintNode>() != nullptr
         && AllOf(leftTables, [](const TYtPathInfo::TPtr& p) { return !p->Table->Meta->IsDynamic; })
     ) {
         if (joinType == "Inner" || joinType == "Left" || joinType == "LeftOnly" || joinType == "LeftSemi" || joinType == "RightSemi" || joinType == "Cross") {
@@ -3000,8 +3002,7 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
         }
     }
     if (!empty
-        && rightTablesReady
-        && 0ul == Accumulate(rightTables, 0ul, [] (ui64 sum, const TYtPathInfo::TPtr& p) { return sum + p->Table->Stat->RecordsCount; })
+        && rightLeaf.Section.Ref().GetConstraint<TEmptyConstraintNode>() != nullptr
         && AllOf(rightTables, [](const TYtPathInfo::TPtr& p) { return !p->Table->Meta->IsDynamic; })
     ) {
         if (joinType == "Inner" || joinType == "Right" || joinType == "RightOnly" || joinType == "RightSemi" || joinType == "LeftSemi" || joinType == "Cross") {
@@ -3536,42 +3537,6 @@ void CombineJoinStatus(TStatus& status, TStatus other) {
     default:
         YQL_ENSURE(false, "Unexpected join status");
     }
-}
-
-TStatus RewriteYtEquiJoinLeaves(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, const TYtState::TPtr& state, TExprContext& ctx) {
-    TYtJoinNodeLeaf* leftLeaf = dynamic_cast<TYtJoinNodeLeaf*>(op.Left.Get());
-    TYtJoinNodeLeaf* rightLeaf = dynamic_cast<TYtJoinNodeLeaf*>(op.Right.Get());
-
-    TStatus result = TStatus::Repeat;
-    if (!leftLeaf) {
-        auto& leftOp = *dynamic_cast<TYtJoinNodeOp*>(op.Left.Get());
-        CombineJoinStatus(result, RewriteYtEquiJoinLeaves(equiJoin, leftOp, state, ctx));
-        if (result.Level == TStatus::Error) {
-            return result;
-        }
-        if (result.Level == TStatus::Ok && leftOp.Output) {
-            // convert to leaf
-            op.Left = ConvertYtEquiJoinToLeaf(leftOp, equiJoin.Pos(), ctx);
-        }
-    }
-
-    if (!rightLeaf) {
-        auto& rightOp = *dynamic_cast<TYtJoinNodeOp*>(op.Right.Get());
-        CombineJoinStatus(result, RewriteYtEquiJoinLeaves(equiJoin, rightOp, state, ctx));
-        if (result.Level == TStatus::Error) {
-            return result;
-        }
-        if (result.Level == TStatus::Ok && rightOp.Output) {
-            // convert to leaf
-            op.Right = ConvertYtEquiJoinToLeaf(rightOp, equiJoin.Pos(), ctx);
-        }
-    }
-
-    if (leftLeaf && rightLeaf) {
-        CombineJoinStatus(result, RewriteYtEquiJoinLeaf(equiJoin, op, *leftLeaf, *rightLeaf, state, ctx));
-    }
-
-    return result;
 }
 
 enum class EStarRewriteStatus {
@@ -4718,6 +4683,42 @@ IGraphTransformer::TStatus RewriteYtEquiJoin(TYtEquiJoin equiJoin, TYtJoinNodeOp
     }
 
     return RewriteYtEquiJoinLeaves(equiJoin, op, state, ctx);
+}
+
+TStatus RewriteYtEquiJoinLeaves(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, const TYtState::TPtr& state, TExprContext& ctx) {
+    TYtJoinNodeLeaf* leftLeaf = dynamic_cast<TYtJoinNodeLeaf*>(op.Left.Get());
+    TYtJoinNodeLeaf* rightLeaf = dynamic_cast<TYtJoinNodeLeaf*>(op.Right.Get());
+
+    TStatus result = TStatus::Repeat;
+    if (!leftLeaf) {
+        auto& leftOp = *dynamic_cast<TYtJoinNodeOp*>(op.Left.Get());
+        CombineJoinStatus(result, RewriteYtEquiJoinLeaves(equiJoin, leftOp, state, ctx));
+        if (result.Level == TStatus::Error) {
+            return result;
+        }
+        if (result.Level == TStatus::Ok && leftOp.Output) {
+            // convert to leaf
+            op.Left = ConvertYtEquiJoinToLeaf(leftOp, equiJoin.Pos(), ctx);
+        }
+    }
+
+    if (!rightLeaf) {
+        auto& rightOp = *dynamic_cast<TYtJoinNodeOp*>(op.Right.Get());
+        CombineJoinStatus(result, RewriteYtEquiJoinLeaves(equiJoin, rightOp, state, ctx));
+        if (result.Level == TStatus::Error) {
+            return result;
+        }
+        if (result.Level == TStatus::Ok && rightOp.Output) {
+            // convert to leaf
+            op.Right = ConvertYtEquiJoinToLeaf(rightOp, equiJoin.Pos(), ctx);
+        }
+    }
+
+    if (leftLeaf && rightLeaf) {
+        CombineJoinStatus(result, RewriteYtEquiJoinLeaf(equiJoin, op, *leftLeaf, *rightLeaf, state, ctx));
+    }
+
+    return result;
 }
 
 TMaybeNode<TExprBase> ExportYtEquiJoin(TYtEquiJoin equiJoin, const TYtJoinNodeOp& op, TExprContext& ctx,

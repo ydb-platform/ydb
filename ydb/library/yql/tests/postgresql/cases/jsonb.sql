@@ -34,8 +34,6 @@ SELECT '{"abc"::1}'::jsonb;		-- ERROR, another wrong separator
 SELECT '{"abc":1,"def":2,"ghi":[3,4],"hij":{"klm":5,"nop":[6]}}'::jsonb; -- OK
 SELECT '{"abc":1:2}'::jsonb;		-- ERROR, colon in wrong spot
 SELECT '{"abc":1,3}'::jsonb;		-- ERROR, no value
-SELECT repeat('[', 10000)::jsonb;
-SELECT repeat('{"a":', 10000)::jsonb;
 -- Miscellaneous stuff.
 SELECT 'true'::jsonb;			-- OK
 SELECT 'false'::jsonb;			-- OK

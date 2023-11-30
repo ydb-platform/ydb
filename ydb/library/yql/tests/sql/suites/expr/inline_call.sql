@@ -1,6 +1,5 @@
 /* postgres can not */
 /* syntax version 1 */
-/* skip double format */
 use plato;
 
 $x = AsStruct(1 as a);

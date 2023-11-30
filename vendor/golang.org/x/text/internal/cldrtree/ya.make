@@ -14,4 +14,6 @@ GO_TEST_SRCS(cldrtree_test.go)
 
 END()
 
-RECURSE(gotest)
+RECURSE(
+    gotest
+)

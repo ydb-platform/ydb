@@ -10,15 +10,13 @@ extern "C" {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ssize_t BridgeGetABIVersion()
+ssize_t BridgeGetAbiVersion()
 {
     return 0;
 }
 
 TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOptions)
 {
-    YT_VERIFY(bridgeOptions->RequiredABIVersion == BridgeGetABIVersion());
-
     static const TYsonString EmptyMap = TYsonString(TString("{}"));
 
     auto operationAttributes = bridgeOptions->OperationAttributes

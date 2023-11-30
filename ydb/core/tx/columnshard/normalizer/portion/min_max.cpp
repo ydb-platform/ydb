@@ -169,7 +169,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizer::Init(const 
                 AFL_VERIFY(it->second->IsEqualWithSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
                 it->second->AddRecord(currentSchema->GetIndexInfo(), rec, portionMeta);
             }
-            
         };
 
         while (!rowset.EndOfSet()) {

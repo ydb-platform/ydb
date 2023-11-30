@@ -686,6 +686,7 @@ message TLoginModifyUser {
 
 message TLoginRemoveUser {
     optional string User = 1;
+    optional bool MissingOk = 2;
 }
 
 message TLoginCreateGroup {

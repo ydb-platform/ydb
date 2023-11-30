@@ -21,3 +21,13 @@ func (c ColUUID) Row(i int) uuid.UUID      { return c[i] }
 func (c *ColUUID) Reset()                  { *c = (*c)[:0] }
 func (c *ColUUID) Append(v uuid.UUID)      { *c = append(*c, v) }
 func (c *ColUUID) AppendArr(v []uuid.UUID) { *c = append(*c, v...) }
+
+// Nullable is helper that creates Nullable(uuid.UUID).
+func (c *ColUUID) Nullable() *ColNullable[uuid.UUID] {
+	return NewColNullable[uuid.UUID](c)
+}
+
+// Array is helper that creates Array of uuid.UUID.
+func (c *ColUUID) Array() *ColArr[uuid.UUID] {
+	return NewArray[uuid.UUID](c)
+}

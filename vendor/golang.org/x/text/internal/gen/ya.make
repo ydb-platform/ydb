@@ -9,4 +9,6 @@ SRCS(
 
 END()
 
-RECURSE(bitfield)
+RECURSE(
+    bitfield
+)

@@ -178,6 +178,7 @@ public:
 
     void ReplyOptionsAndPassAway() {
         NHttp::THeadersBuilder headers;
+        SetCORS(headers);
         headers.Set("Allow", "OPTIONS, POST");
         Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("204", "No Content", headers)));
         PassAway();

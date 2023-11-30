@@ -12,6 +12,7 @@ target_link_libraries(formats-arrow-common PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
+  cpp-actors-core
 )
 target_sources(formats-arrow-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/common/validation.cpp

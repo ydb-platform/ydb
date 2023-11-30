@@ -325,9 +325,9 @@ public:
         Statements.push_back(configSource);
 
         for (int i = 0; i < ListLength(raw); ++i) {
-           if (!ParseRawStmt(LIST_CAST_NTH(RawStmt, raw, i))) {
-               return nullptr;
-           }
+            if (!ParseRawStmt(LIST_CAST_NTH(RawStmt, raw, i))) {
+                return nullptr;
+            }
         }
 
         if (!Views.empty()) {

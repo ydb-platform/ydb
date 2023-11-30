@@ -1,7 +1,9 @@
 #include "database_resolver.h"
 
-#include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/common/cache.h>
+#include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
+#include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/fq/libs/exceptions/exceptions.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
@@ -22,7 +24,12 @@ using namespace NActors;
 using namespace NYql;
 
 using TDatabaseDescription = NYql::TDatabaseResolverResponse::TDatabaseDescription;
-using TParser = std::function<TDatabaseDescription(NJson::TJsonValue& body, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator, bool useTls)>;
+using TParser = std::function<TDatabaseDescription(
+        NJson::TJsonValue& body,
+        const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
+        bool useTls,
+        NConnector::NApi::EProtocol protocol
+)>;
 using TParsers = THashMap<NYql::EDatabaseType, TParser>;
 
 struct TResolveParams {
@@ -144,19 +151,26 @@ private:
                 TParsers::const_iterator parserIt;
                 if (parseJsonOk && (parserIt = Parsers.find(params.DatabaseType)) != Parsers.end()) {
                     try {
-                        auto description = parserIt->second(databaseInfo, MdbEndpointGenerator, params.DatabaseAuth.UseTls);
+                        auto description = parserIt->second(
+                            databaseInfo,
+                            MdbEndpointGenerator,
+                            params.DatabaseAuth.UseTls,
+                            params.DatabaseAuth.Protocol);
                         LOG_D("ResponseProcessor::Handle(HttpIncomingResponse): got description" << ": params: " << params.ToDebugString()
                                                                                                  << ", description: " << description.ToDebugString());
                         DatabaseId2Description[std::make_pair(params.Id, params.DatabaseType)] = description;
                         result.ConstructInPlace(description);
+                    } catch (const TCodeLineException& ex) {
+                        errorMessage = TStringBuilder()
+                            << "response parser error: " << params.ToDebugString() << Endl
+                            << ex.GetRawMessage();
                     } catch (...) {
                         errorMessage = TStringBuilder()
-                            << "response parser error: "
-                            << ", params: " << params.ToDebugString() << Endl
+                            << "response parser error: " << params.ToDebugString() << Endl
                             << CurrentExceptionMessage();
                     }
                 } else {
-                    errorMessage = TStringBuilder() << "JSON parser error: " << ", params: " << params.ToDebugString();
+                    errorMessage = TStringBuilder() << "JSON parser error: " << params.ToDebugString();
                 }
             }
         } else {
@@ -223,7 +237,7 @@ public:
             .SetErrorTtl(TDuration::Minutes(1))
             .SetMaxSize(1000000))
     {
-        auto ydbParser = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr&, bool) {
+        auto ydbParser = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr&, bool, NConnector::NApi::EProtocol) {
             bool secure = false;
             TString endpoint = databaseInfo.GetMap().at("endpoint").GetStringRobust();
             TString prefix("/?database=");
@@ -245,18 +259,30 @@ public:
             return TDatabaseDescription{endpoint, "", 0, database, secure};
         };
         Parsers[NYql::EDatabaseType::Ydb] = ydbParser;
-        Parsers[NYql::EDatabaseType::DataStreams] = [ydbParser](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator, bool useTls)
+        Parsers[NYql::EDatabaseType::DataStreams] = [ydbParser](
+            NJson::TJsonValue& databaseInfo,
+            const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
+            bool useTls,
+            NConnector::NApi::EProtocol protocol)
         {
             bool isDedicatedDb  = databaseInfo.GetMap().contains("storageConfig");
-            auto ret = ydbParser(databaseInfo, mdbEndpointGenerator, useTls);
+            auto ret = ydbParser(databaseInfo, mdbEndpointGenerator, useTls, protocol);
             // TODO: Take explicit field from MVP
             if (!isDedicatedDb && ret.Endpoint.StartsWith("ydb.")) {
                 // Replace "ydb." -> "yds."
                 ret.Endpoint[2] = 's';
             }
+            if (isDedicatedDb) {
+                ret.Endpoint = "u-" + ret.Endpoint;
+            }
             return ret;
         };
-        Parsers[NYql::EDatabaseType::ClickHouse] = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator, bool useTls) {
+        Parsers[NYql::EDatabaseType::ClickHouse] = [](
+            NJson::TJsonValue& databaseInfo,
+            const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
+            bool useTls,
+            NConnector::NApi::EProtocol protocol
+            ) {
             NYql::IMdbEndpointGenerator::TEndpoint endpoint;
             TVector<TString> aliveHosts;
 
@@ -267,26 +293,42 @@ public:
             }
 
             if (aliveHosts.empty()) {
-                ythrow yexception() << "No ALIVE ClickHouse hosts found";
+                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE ClickHouse hosts found";
             }
 
-            endpoint = mdbEndpointGenerator->ToEndpoint(
-                NYql::EDatabaseType::ClickHouse,
-                aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
-                useTls
-            );
+            NYql::IMdbEndpointGenerator::TParams params = {
+                .DatabaseType = NYql::EDatabaseType::ClickHouse,
+                .MdbHost = aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
+                .UseTls = useTls,
+                .Protocol = protocol,
+            };
+
+            endpoint = mdbEndpointGenerator->ToEndpoint(params);
 
             return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
         };
 
-        Parsers[NYql::EDatabaseType::PostgreSQL] = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator, bool useTls) {
+        Parsers[NYql::EDatabaseType::PostgreSQL] = [](
+            NJson::TJsonValue& databaseInfo,
+            const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
+            bool useTls,
+            NConnector::NApi::EProtocol protocol
+            ) {
             NYql::IMdbEndpointGenerator::TEndpoint endpoint;
             TVector<TString> aliveHosts;
 
             for (const auto& host : databaseInfo.GetMap().at("hosts").GetArraySafe()) {
-                // all host services must be alive
+                const auto& hostMap = host.GetMap();
+
+                if (!hostMap.contains("services")) {
+                    // indicates that cluster is down
+                    continue;
+                }
+
+                // all services of a particular host must be alive
                 bool alive = true;
-                for (const auto& service: host.GetMap().at("services").GetArraySafe()) {
+
+                for (const auto& service: hostMap.at("services").GetArraySafe()) {
                     if (service["health"].GetString() != "ALIVE") {
                         alive = false;
                         break;
@@ -299,14 +341,17 @@ public:
             }
             
             if (aliveHosts.empty()) {
-                ythrow yexception() << "No ALIVE PostgreSQL hosts found";
+                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE PostgreSQL hosts found";
             }
 
-            endpoint = mdbEndpointGenerator->ToEndpoint(
-                NYql::EDatabaseType::PostgreSQL,
-                aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
-                useTls
-            );
+            NYql::IMdbEndpointGenerator::TParams params = {
+                .DatabaseType = NYql::EDatabaseType::PostgreSQL,
+                .MdbHost = aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
+                .UseTls = useTls,
+                .Protocol = protocol,
+            };
+
+            endpoint = mdbEndpointGenerator->ToEndpoint(params);
 
             return TDatabaseDescription{"", endpoint.first, endpoint.second, "", useTls};
         };

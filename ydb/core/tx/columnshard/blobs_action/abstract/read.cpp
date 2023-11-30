@@ -31,10 +31,9 @@ void IBlobsReadingAction::ExtractBlobsDataTo(THashMap<TBlobRange, TString>& resu
 void IBlobsReadingAction::Start(const THashSet<TBlobRange>& rangesInProgress) {
     Y_ABORT_UNLESS(!Started);
     Y_ABORT_UNLESS(RangesForRead.size() + RangesForResult.size());
+    StartWaitingRanges = TMonotonic::Now();
     for (auto&& i : RangesForRead) {
-        for (auto&& r : i.second) {
-            WaitingRanges.emplace(r, TMonotonic::Now());
-        }
+        WaitingRangesCount += i.second.size();
     }
     THashMap<TUnifiedBlobId, THashSet<TBlobRange>> rangesFiltered;
     if (rangesInProgress.empty()) {
@@ -59,19 +58,15 @@ void IBlobsReadingAction::Start(const THashSet<TBlobRange>& rangesInProgress) {
 
 void IBlobsReadingAction::OnReadResult(const TBlobRange& range, const TString& data) {
     AFL_VERIFY(Counters);
-    auto it = WaitingRanges.find(range);
-    Y_ABORT_UNLESS(it != WaitingRanges.end());
-    Counters->OnReply(range.Size, TMonotonic::Now() - it->second);
-    WaitingRanges.erase(it);
+    AFL_VERIFY(--WaitingRangesCount >= 0);
+    Counters->OnReply(range.Size, TMonotonic::Now() - StartWaitingRanges);
     Replies.emplace(range, data);
 }
 
 void IBlobsReadingAction::OnReadError(const TBlobRange& range, const TErrorStatus& replyStatus) {
     AFL_VERIFY(Counters);
-    auto it = WaitingRanges.find(range);
-    Y_ABORT_UNLESS(it != WaitingRanges.end());
-    Counters->OnFail(range.Size, TMonotonic::Now() - it->second);
-    WaitingRanges.erase(it);
+    AFL_VERIFY(--WaitingRangesCount >= 0);
+    Counters->OnFail(range.Size, TMonotonic::Now() - StartWaitingRanges);
     Fails.emplace(range, replyStatus);
 }
 

@@ -7,7 +7,7 @@
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/threading/future/future.h>
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 
 namespace NYql {
 
@@ -20,8 +20,8 @@ public:
         TConnectionResult() {}
 
         TConnectionResult(
-            std::unique_ptr<NGrpc::TServiceConnection<Yql::DqsProto::DqService>>&& connection,
-            std::shared_ptr<NGrpc::IQueueClientContext>&& ctx = nullptr,
+            std::unique_ptr<NYdbGrpc::TServiceConnection<Yql::DqsProto::DqService>>&& connection,
+            std::shared_ptr<NYdbGrpc::IQueueClientContext>&& ctx = nullptr,
             ui32 nodeId = 0,
             const TString& location = "")
             : Connection(connection.release())
@@ -34,8 +34,8 @@ public:
             }
         }
 
-        std::shared_ptr<NGrpc::TServiceConnection<Yql::DqsProto::DqService>> Connection;
-        std::shared_ptr<NGrpc::IQueueClientContext> GRpcContext;
+        std::shared_ptr<NYdbGrpc::TServiceConnection<Yql::DqsProto::DqService>> Connection;
+        std::shared_ptr<NYdbGrpc::IQueueClientContext> GRpcContext;
         ui32 NodeId;
         TString Location;
     };
@@ -68,8 +68,8 @@ public:
     void Stop() override { }
 
 private:
-    NGrpc::TGRpcClientLow ClientLow;
-    NGrpc::TChannelPool ChannelPool;
+    NYdbGrpc::TGRpcClientLow ClientLow;
+    NYdbGrpc::TChannelPool ChannelPool;
 
     TString LeaderHostPort;
 };

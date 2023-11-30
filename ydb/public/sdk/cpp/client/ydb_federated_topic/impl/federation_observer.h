@@ -76,7 +76,7 @@ private:
 
     NTopic::IRetryPolicy::TPtr FederationDiscoveryRetryPolicy;
     NTopic::IRetryPolicy::IRetryState::TPtr FederationDiscoveryRetryState;
-    NGrpc::IQueueClientContextPtr FederationDiscoveryDelayContext;
+    NYdbGrpc::IQueueClientContextPtr FederationDiscoveryDelayContext;
 
     bool Stopping = false;
 };

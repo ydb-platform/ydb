@@ -2,7 +2,7 @@
 #include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 
-#include <library/cpp/grpc/server/grpc_server.h>
+#include <ydb/library/grpc/server/grpc_server.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -24,7 +24,7 @@ public:
         , Port(PortManager->GetPort(2134))
         , GrpcPort(PortManager->GetPort(2135))
         , ServerSettings(settings)
-        , GrpcServerOptions(NGrpc::TServerOptions().SetHost("[::1]").SetPort(GrpcPort))
+        , GrpcServerOptions(NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(GrpcPort))
     {
         auto loggerInitializer = [logServices, logPriority](NActors::TTestActorRuntime& runtime) {
             for (auto s : logServices)
@@ -153,7 +153,7 @@ public:
 
     THolder<NKikimr::Tests::TServer> CleverServer;
     NKikimr::Tests::TServerSettings ServerSettings;
-    NGrpc::TServerOptions GrpcServerOptions;
+    NYdbGrpc::TServerOptions GrpcServerOptions;
     THolder<TTempFileHandle> NetDataFile;
 
     TLog Log = CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG);

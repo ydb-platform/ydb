@@ -49,10 +49,11 @@ public:
         return NKikimrServices::TActivity::KQP_EXECUTER_ACTOR;
     }
 
-    TKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target, const TMaybe<TString>& requestType, 
+    TKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target, const TMaybe<TString>& requestType, 
         const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken,
         bool temporary, TString sessionId, TIntrusivePtr<TUserRequestContext> ctx)
         : PhyTx(phyTx)
+        , QueryType(queryType)
         , Target(target)
         , Database(database)
         , UserToken(userToken)
@@ -133,6 +134,22 @@ public:
                 return StartBuildOperation();
             }
 
+            case NKqpProto::TKqpSchemeOperation::kCreateUser: {
+                auto modifyScheme = schemeOp.GetCreateUser();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+            case NKqpProto::TKqpSchemeOperation::kAlterUser: {
+                auto modifyScheme = schemeOp.GetAlterUser();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+            case NKqpProto::TKqpSchemeOperation::kDropUser: {
+                auto modifyScheme = schemeOp.GetDropUser();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
             default:
                 InternalError(TStringBuilder() << "Unexpected scheme operation: "
                     << (ui32) schemeOp.GetOperationCase());
@@ -141,8 +158,14 @@ public:
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
 
-        bool successOnNotExist = ev->Record.GetTransaction().GetModifyScheme().GetSuccessOnNotExist();
-        bool failedOnAlreadyExists = ev->Record.GetTransaction().GetModifyScheme().GetFailedOnAlreadyExists();
+        bool successOnNotExist = false;
+        bool failedOnAlreadyExists = false;        
+        // exists/not exists semantics supported only in the query service.
+        if (IsQueryService()) {
+            successOnNotExist = ev->Record.GetTransaction().GetModifyScheme().GetSuccessOnNotExist();
+            failedOnAlreadyExists = ev->Record.GetTransaction().GetModifyScheme().GetFailedOnAlreadyExists();
+        }
+
         IActor* requestHandler = new TSchemeOpRequestHandler(
             ev.Release(),
             promise,
@@ -387,6 +410,19 @@ private:
             << ", event: " << eventType);
     }
 
+    bool IsQueryService() const {
+
+        switch(QueryType) {
+            case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
+            case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY:
+            case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
+                return true;
+            default:
+                return false;
+        }
+
+    }
+
     void InternalError(const NYql::TIssues& issues) {
         LOG_E(issues.ToOneLineString());
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED,
@@ -417,6 +453,7 @@ private:
 
 private:
     TKqpPhyTxHolder::TConstPtr PhyTx;
+    const NKikimrKqp::EQueryType QueryType;
     const TActorId Target;
     const TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
@@ -432,12 +469,12 @@ private:
 
 } // namespace
 
-IActor* CreateKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target,
+IActor* CreateKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,
     const TMaybe<TString>& requestType, const TString& database,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool temporary, TString sessionId,
     TIntrusivePtr<TUserRequestContext> ctx)
 {
-    return new TKqpSchemeExecuter(phyTx, target, requestType, database, userToken, temporary, sessionId, std::move(ctx));
+    return new TKqpSchemeExecuter(phyTx, queryType, target, requestType, database, userToken, temporary, sessionId, std::move(ctx));
 }
 
 } // namespace NKikimr::NKqp

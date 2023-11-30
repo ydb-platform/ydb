@@ -12,7 +12,7 @@ target_link_libraries(common-token_accessor-client PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-grpc-client
+  library-grpc-client
   cpp-threading-atomic
   cpp-threading-future
   providers-common-structured_token

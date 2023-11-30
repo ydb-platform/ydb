@@ -149,11 +149,6 @@ void TFetchingInterval::OnSourceFetchStageReady(const ui32 /*sourceIdx*/) {
     ConstructResult();
 }
 
-void TFetchingInterval::OnSourceFilterStageReady(const ui32 /*sourceIdx*/) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "filtered")("interval_idx", IntervalIdx);
-    ConstructResult();
-}
-
 TFetchingInterval::TFetchingInterval(const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
     const ui32 intervalIdx, const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TSpecialReadContext>& context,
     const bool includeFinish, const bool includeStart, const bool isExclusiveInterval)
@@ -166,14 +161,14 @@ TFetchingInterval::TFetchingInterval(const NIndexedReader::TSortableBatchPositio
 {
     Y_ABORT_UNLESS(Sources.size());
     for (auto&& [_, i] : Sources) {
-        i->RegisterInterval(this);
+        i->RegisterInterval(*this);
     }
 }
 
 void TFetchingInterval::DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
+    OnInitResourcesGuard(guard);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("interval_idx", IntervalIdx)("event", "resources_allocated")
         ("resources", guard->DebugString())("start", MergingContext->GetIncludeStart())("finish", MergingContext->GetIncludeFinish())("sources", Sources.size());
-    OnInitResourcesGuard(guard);
     for (auto&& [_, i] : Sources) {
         i->InitFetchingPlan(Context->GetColumnsFetchingPlan(MergingContext->IsExclusiveInterval()), i);
     }

@@ -13,7 +13,7 @@ target_link_libraries(impl-ydb_internal-plain_status PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-protobuf
-  cpp-grpc-client
+  library-grpc-client
   yql-public-issue
 )
 target_sources(impl-ydb_internal-plain_status PRIVATE

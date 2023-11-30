@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"regexp"
 
 	"github.com/ydb-platform/ydb/library/go/core/log"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
@@ -17,10 +16,6 @@ func ValidateDescribeTableRequest(logger log.Logger, request *api_service_protos
 
 	if request.GetTable() == "" {
 		return fmt.Errorf("empty table: %w", utils.ErrInvalidRequest)
-	}
-
-	if err := checkForInjections(request.GetTable()); err != nil {
-		return fmt.Errorf("table field is invalid: %w", err)
 	}
 
 	return nil
@@ -81,10 +76,6 @@ func validateDataSourceInstance(logger log.Logger, dsi *api_common.TDataSourceIn
 		return fmt.Errorf("database field is empty: %w", utils.ErrInvalidRequest)
 	}
 
-	if err := checkForInjections(dsi.Database); err != nil {
-		return fmt.Errorf("database field is invalid: %w", err)
-	}
-
 	if dsi.UseTls {
 		logger.Info("connector will use secure connection to access data source")
 	} else {
@@ -101,28 +92,10 @@ func validateDataSourceInstance(logger log.Logger, dsi *api_common.TDataSourceIn
 			return fmt.Errorf("schema field is empty: %w", utils.ErrInvalidRequest)
 		}
 
-		if err := checkForInjections(dsi.GetPgOptions().Schema); err != nil {
-			return fmt.Errorf("schema field is invalid: %w", err)
-		}
 	case api_common.EDataSourceKind_CLICKHOUSE:
 		break
 	default:
 		return fmt.Errorf("unsupported data source: %w", utils.ErrInvalidRequest)
-	}
-
-	return nil
-}
-
-// TODO: improve during https://st.yandex-team.ru/YQ-2430
-func checkForInjections(field string) error {
-	pattern, err := regexp.Compile("[a-zA-Z0-9_]+")
-
-	if err != nil {
-		return fmt.Errorf("build regexp: %w", err)
-	}
-
-	if !pattern.MatchString(field) {
-		return fmt.Errorf("potential injection: %w", utils.ErrInvalidRequest)
 	}
 
 	return nil

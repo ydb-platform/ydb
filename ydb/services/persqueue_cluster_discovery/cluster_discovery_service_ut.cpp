@@ -286,7 +286,7 @@ public:
 
     void Run() {
         Server_ = MakeHolder<TServer>(Settings_);
-        Server_->EnableGRpc(NGrpc::TServerOptions().SetHost("localhost").SetPort(GrpcPort_));
+        Server_->EnableGRpc(NYdbGrpc::TServerOptions().SetHost("localhost").SetPort(GrpcPort_));
     }
 
     NPersQueueTests::TFlatMsgBusPQClient& PQClient() {

@@ -37,9 +37,9 @@ class TExecuteQueryIterator::TReaderImpl {
 public:
     using TSelf = TExecuteQueryIterator::TReaderImpl;
     using TResponse = Ydb::Query::ExecuteQueryResponsePart;
-    using TStreamProcessorPtr = NGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
-    using TReadCallback = NGrpc::IStreamRequestReadProcessor<TResponse>::TReadCallback;
-    using TGRpcStatus = NGrpc::TGrpcStatus;
+    using TStreamProcessorPtr = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
+    using TReadCallback = NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TReadCallback;
+    using TGRpcStatus = NYdbGrpc::TGrpcStatus;
     using TBatchReadResult = std::pair<TResponse, TGRpcStatus>;
 
     TReaderImpl(TStreamProcessorPtr streamProcessor, const TString& endpoint, const TMaybe<TSession>& session)

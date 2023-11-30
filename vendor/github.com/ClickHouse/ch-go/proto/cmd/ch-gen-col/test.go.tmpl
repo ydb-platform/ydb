@@ -13,6 +13,12 @@ import (
 	"github.com/ClickHouse/ch-go/internal/gold"
 )
 
+{{- if .FixedStr }}
+func {{ .New }}(v int) {{ .ElemType }} {
+    return {{ .ElemType }}{0: byte(v)}
+}
+{{- end }}
+
 func Test{{ .Type }}_DecodeColumn(t *testing.T) {
 	t.Parallel()
 	const rows = 50

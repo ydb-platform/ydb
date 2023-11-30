@@ -1,0 +1,29 @@
+Match Expand Tests
+==================
+
+Match objects have an .expand() method which allows them to
+expand templates as if the .sub() method was called on the pattern.
+
+    >>> import re2
+    >>> re2.set_fallback_notification(re2.FALLBACK_EXCEPTION)
+    >>> m = re2.match("(\\w+) (\\w+)\\W+(?P<title>\\w+)", "Isaac Newton, physicist")
+    >>> m.expand("\\2, \\1")
+    'Newton, Isaac'
+    >>> m.expand("\\1 \\g<title>")
+    'Isaac physicist'
+    >>> m.expand("\\2, \\1 \\2")
+    'Newton, Isaac Newton'
+    >>> m.expand("\\3")
+    'physicist'
+    >>> m.expand("\\1 \\g<foo>")  # doctest: +IGNORE_EXCEPTION_DETAIL +ELLIPSIS
+    Traceback (most recent call last):
+    ...
+    IndexError: no such group 'foo'; available groups: ['title']
+    >>> m.expand("\\0")
+    '\x00'
+    >>> m.expand("\01")
+    '\x01'
+    >>> m.expand('\t\n\x0b\r\x0c\x07\x08\\B\\Z\x07\\A\\w\\W\\s\\S\\d\\D')
+    '\t\n\x0b\r\x0c\x07\x08\\B\\Z\x07\\A\\w\\W\\s\\S\\d\\D'
+
+    >>> re2.set_fallback_notification(re2.FALLBACK_QUIETLY)

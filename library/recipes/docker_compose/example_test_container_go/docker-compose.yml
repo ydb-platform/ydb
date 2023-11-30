@@ -1,0 +1,7 @@
+version: '3.4'
+services:
+  test:
+    build: 
+      context: .
+  redis:
+    image: "redis:alpine@sha256:66ccc75f079ab9059c900e9545bbd271bff78a66f94b45827e6901f57fb973f1"

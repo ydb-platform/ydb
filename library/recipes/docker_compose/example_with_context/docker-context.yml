@@ -1,0 +1,5 @@
+main:
+  - build://devtools/dummy_arcadia/hello_world/hello_world: bin/hello
+  - arcadia://library/recipes/docker_compose/example/Dockerfile: Dockerfile
+  - arcadia://library/recipes/docker_compose/example/app.py: app.py
+  - arcadia://library/recipes/docker_compose/example/requirements.txt: requirements.txt

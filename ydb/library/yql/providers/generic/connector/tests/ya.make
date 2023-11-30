@@ -1,15 +1,24 @@
-# Because of this: https://a.yandex-team.ru/arcadia/library/recipes/clickhouse/recipe/recipe.inc?blame=true&rev=r11609149#L2
-IF (NOT OS_WINDOWS)
-
 PY3TEST()
 
 STYLE_PYTHON()
 NO_CHECK_IMPORTS()
 
-SIZE(MEDIUM)
+SIZE(LARGE)
 
-INCLUDE(${ARCADIA_ROOT}/library/recipes/clickhouse/recipe.inc)
-INCLUDE(${ARCADIA_ROOT}/library/recipes/postgresql/recipe.inc)
+# TAG and REQUIREMENTS are copied from: https://docs.yandex-team.ru/devtools/test/environment#docker-compose
+TAG(
+    ya:external
+    ya:force_sandbox
+    ya:fat
+)
+
+REQUIREMENTS(
+    container:4467981730
+    cpu:all
+    dns:dns64
+)
+
+INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/providers/generic/connector/recipe/recipe.inc)
 
 FORK_SUBTESTS()
@@ -44,5 +53,3 @@ DEPENDS(
 )
 
 END()
-
-ENDIF()

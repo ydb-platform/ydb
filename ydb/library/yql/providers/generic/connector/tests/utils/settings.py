@@ -35,7 +35,6 @@ class Settings:
         password: Optional[str]
         host: str
         port: int
-        max_connections: int
 
     postgresql: PostgreSQL
 
@@ -48,21 +47,20 @@ class Settings:
             ),
             clickhouse=cls.ClickHouse(
                 cluster_name='clickhouse_integration_test',
-                host=environ['RECIPE_CLICKHOUSE_HOST'],
-                http_port=int(environ['RECIPE_CLICKHOUSE_HTTP_PORT']),
-                native_port=int(environ['RECIPE_CLICKHOUSE_NATIVE_PORT']),
-                username=environ['RECIPE_CLICKHOUSE_USER'],
-                password=environ['RECIPE_CLICKHOUSE_PASSWORD'],
+                host='localhost',
+                http_port=18123,
+                native_port=19000,
+                username='user',
+                password='password',
                 protocol='native',
             ),
             postgresql=cls.PostgreSQL(
                 cluster_name='postgresql_integration_test',
-                host=environ['POSTGRES_RECIPE_HOST'],
-                port=int(environ['POSTGRES_RECIPE_PORT']),
-                dbname=environ['POSTGRES_RECIPE_DBNAME'],
-                username=environ['POSTGRES_RECIPE_USER'],
-                password=None,
-                max_connections=int(environ['POSTGRES_RECIPE_MAX_CONNECTIONS']),
+                host='localhost',
+                port=15432,
+                dbname='db',
+                username='user',
+                password='password',
             ),
         )
 

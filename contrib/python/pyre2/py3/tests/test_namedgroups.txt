@@ -1,0 +1,56 @@
+Testing some aspects of named groups
+=================================================
+
+    >>> import re2
+    >>> re2.set_fallback_notification(re2.FALLBACK_EXCEPTION)
+
+    >>> m = re2.match(r"(?P<first_name>\w+) (?P<last_name>\w+)", "Malcolm Reynolds")
+    >>> m.start("first_name")
+    0
+    >>> m.start("last_name")
+    8
+
+    >>> m.span("last_name")
+    (8, 16)
+    >>> m.regs
+    ((0, 16), (0, 7), (8, 16))
+
+    >>> m = re2.match(u"(?P<first_name>\\w+) (?P<last_name>\\w+)", u"Malcolm Reynolds")
+    >>> m.start(u"first_name")
+    0
+    >>> m.start(u"last_name")
+    8
+
+    >>> m.span(u"last_name")
+    (8, 16)
+    >>> m.regs
+    ((0, 16), (0, 7), (8, 16))
+
+Compare patterns with and without unicode
+
+    >>> pattern = re2.compile(br"(?P<first_name>\w+) (?P<last_name>\w+)")
+    >>> print(pattern._dump_pattern().decode('utf8'))
+    (?P<first_name>\w+) (?P<last_name>\w+)
+    >>> pattern = re2.compile(u"(?P<first_name>\\w+) (?P<last_name>\\w+)",
+    ... re2.UNICODE)
+    >>> print(pattern._dump_pattern())
+    (?P<first_name>[_\p{L}\p{Nd}]+) (?P<last_name>[_\p{L}\p{Nd}]+)
+
+Make sure positions are converted properly for unicode
+
+    >>> m = pattern.match(
+    ... u'\u05d9\u05e9\u05e8\u05d0\u05dc \u05e6\u05d3\u05d5\u05e7')
+    >>> m.start(u"first_name")
+    0
+    >>> m.start(u"last_name")
+    6
+    >>> m.end(u"last_name")
+    10
+    >>> m.regs
+    ((0, 10), (0, 5), (6, 10))
+    >>> m.span(2)
+    (6, 10)
+    >>> m.span(u"last_name")
+    (6, 10)
+
+    >>> re2.set_fallback_notification(re2.FALLBACK_QUIETLY)

@@ -1,0 +1,31 @@
+Tests of substitution
+=====================
+
+This first test is just looking to replace things between parentheses
+with an empty string.
+
+
+    >>> import hashlib
+    >>> import gzip
+    >>> import re2
+    >>> re2.set_fallback_notification(re2.FALLBACK_EXCEPTION)
+    >>> import warnings
+    >>> warnings.filterwarnings('ignore', category=DeprecationWarning)
+
+    >>> with gzip.open('tests/wikipages.xml.gz', 'rb') as tmp:
+    ...     data = tmp.read()
+    >>> print(hashlib.md5(re2.sub(b'\(.*?\)', b'', data)).hexdigest())
+    b7a469f55ab76cd5887c81dbb0cfe6d3
+
+    >>> re2.set_fallback_notification(re2.FALLBACK_QUIETLY)
+
+Issue #26 re2.sub replacements with a match of "(.*)" hangs forever
+
+   >>> re2.sub('(.*)', r'\1;replacement', 'original')
+   'original;replacement;replacement'
+
+   >>> re2.sub('(.*)', lambda x: x.group() + ';replacement', 'original')
+   'original;replacement;replacement'
+
+   >>> re2.subn("b*", lambda x: "X", "xyz", 4)
+   ('XxXyXzX', 4)

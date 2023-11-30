@@ -83,6 +83,9 @@ on:
         type: string
         default: 8
         description: "link threads count"
+      put_build_results_to_cache:
+        type: boolean
+        default: true
 
 jobs:
   provide-runner:
@@ -141,6 +144,7 @@ jobs:
       test_type: ${{ inputs.test_type }}
       link_threads: ${{ inputs.link_threads }}
       test_threads: ${{ inputs.test_threads }}
+      put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
     secrets: inherit
 
   release-runner:

@@ -1,3 +1,14 @@
+# Ignore generated binaries -- any file without extension
+# Ignore all
+*
+# Unignore all with extensions
+!*.*
+# Unignore all dirs
+!*/
+
+# Compiled dynamic C libraries
+*.so
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

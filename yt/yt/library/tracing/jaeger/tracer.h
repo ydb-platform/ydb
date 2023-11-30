@@ -5,6 +5,7 @@
 #include <yt/yt/library/tracing/tracer.h>
 
 #include <yt/yt/library/profiling/sensor.h>
+
 #include <yt/yt/library/tvm/service/config.h>
 #include <yt/yt/library/tvm/service/public.h>
 
@@ -125,7 +126,7 @@ class TJaegerChannelManager
 public:
     TJaegerChannelManager();
     TJaegerChannelManager(
-        const TIntrusivePtr<TJaegerTracerConfig>& config,
+        const TJaegerTracerConfigPtr& config,
         const TString& endpoint,
         const NAuth::ITvmServicePtr& tvmService);
 

@@ -297,7 +297,7 @@ TJaegerChannelManager::TJaegerChannelManager()
 { }
 
 TJaegerChannelManager::TJaegerChannelManager(
-    const TIntrusivePtr<TJaegerTracerConfig>& config,
+    const TJaegerTracerConfigPtr& config,
     const TString& endpoint,
     const ITvmServicePtr& tvmService)
     : TvmService_(tvmService)

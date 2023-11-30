@@ -55,7 +55,8 @@ void DelayedSamplingExample(std::optional<TString> endpoint)
     traceContext->Finish();
 }
 
-NAuth::TTvmServiceConfigPtr GetTvmMockConfig() {
+NAuth::TTvmServiceConfigPtr GetTvmMockConfig()
+{
     auto config = New<NAuth::TTvmServiceConfig>();
     config->EnableMock = true;
     config->ClientSelfSecret = "TestSecret-0";
@@ -65,7 +66,8 @@ NAuth::TTvmServiceConfigPtr GetTvmMockConfig() {
     return config;
 }
 
-NAuth::TTvmServiceConfigPtr GetTvmConfig() {
+NAuth::TTvmServiceConfigPtr GetTvmConfig()
+{
     auto config = New<NAuth::TTvmServiceConfig>();
     config->ClientSelfId = FromString<NAuth::TTvmId>(GetEnv("TVM_ID"));
     config->ClientSelfSecretEnv = "TVM_SECRET";

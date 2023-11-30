@@ -45,7 +45,7 @@ TString IssuesToYtErrorYson(const NYql::TIssues& issues)
             writer.OnInt64Scalar(position.Column);
 
             writer.OnKeyedItem("row");
-            writer.OnInt64Scalar(position.Row);
+            writer.OnInt64Scalar(position.Row - 1); // First line is for required pragmas.
 
             if (!position.File.empty()) {
                 writer.OnKeyedItem("file");

@@ -1,8 +1,8 @@
-PY3_LIBRARY()
+PY2_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
-VERSION(1.35+dev)
+VERSION(1.35)
 
 NO_COMPILER_WARNINGS()
 NO_UTIL()
@@ -10,8 +10,8 @@ NO_UTIL()
 PY_REGISTER(ujson)
 
 ADDINCL(
-    contrib/python/ujson/py3/lib
-    contrib/python/ujson/py3/python
+    contrib/deprecated/python/ujson/py2/lib
+    contrib/deprecated/python/ujson/py2/python
 )
 
 SRCS(

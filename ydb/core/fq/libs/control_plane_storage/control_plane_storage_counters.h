@@ -30,6 +30,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr InFly;
     ::NMonitoring::TDynamicCounters::TCounterPtr Ok;
     ::NMonitoring::TDynamicCounters::TCounterPtr Error;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ParseProtobufError;
     ::NMonitoring::TDynamicCounters::TCounterPtr Retry;
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr ResponseBytes;

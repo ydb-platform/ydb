@@ -2,7 +2,10 @@
 
 #include "validators.h"
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
+
 
 namespace NFq {
 
@@ -13,7 +16,8 @@ TValidationQuery CreateEntityExtractor(const TString& scope,
                                        const TString& idColumnName,
                                        const TString& tableName,
                                        std::shared_ptr<std::pair<T, A>> response,
-                                       const TString& tablePathPrefix) {
+                                       const TString& tablePathPrefix,
+                                       const ::NMonitoring::TDynamicCounters::TCounterPtr& parseProtobufError) {
     TSqlQueryBuilder queryBuilder(tablePathPrefix);
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("id", id);
@@ -22,7 +26,7 @@ TValidationQuery CreateEntityExtractor(const TString& scope,
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" + idColumnName + "` = $id;\n"
     );
 
-    auto validator = [response, entityColumnName](NYdb::NTable::TDataQueryResult result) {
+    auto validator = [response, entityColumnName, parseProtobufError](NYdb::NTable::TDataQueryResult result) {
         const auto& resultSets = result.GetResultSets();
         if (resultSets.size() != 1) {
             ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "internal error, result set size is not equal to 1 but equal " << resultSets.size();
@@ -34,6 +38,7 @@ TValidationQuery CreateEntityExtractor(const TString& scope,
         }
 
         if (!response->second.Before.ConstructInPlace().ParseFromString(*parser.ColumnParser(entityColumnName).GetOptionalString())) {
+            parseProtobufError->Inc();
             ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message. Please contact internal support";
         }
         return false;

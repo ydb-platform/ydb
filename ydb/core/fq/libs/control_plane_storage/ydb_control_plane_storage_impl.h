@@ -176,13 +176,16 @@ struct TRequestCounters {
 };
 
 template<typename T>
-THashMap<TString, T> GetEntitiesWithVisibilityPriority(const TResultSet& resultSet, const TString& columnName, bool ignorePrivateSources)
+THashMap<TString, T> GetEntitiesWithVisibilityPriority(const TResultSet& resultSet, const TString& columnName, bool ignorePrivateSources, const TRequestCommonCountersPtr& commonCounters)
 {
     THashMap<TString, T> entities;
     TResultSetParser parser(resultSet);
     while (parser.TryNextRow()) {
         T entity;
-        Y_ABORT_UNLESS(entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
+        if (!entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString())) {
+            commonCounters->ParseProtobufError->Inc();
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for GetEntitiesWithVisibilityPriority. Please contact internal support";
+        }
         const auto visibility = entity.content().acl().visibility();
         if (ignorePrivateSources && visibility == FederatedQuery::Acl::PRIVATE) {
             continue;
@@ -201,13 +204,16 @@ THashMap<TString, T> GetEntitiesWithVisibilityPriority(const TResultSet& resultS
 }
 
 template<typename T>
-TVector<T> GetEntities(const TResultSet& resultSet, const TString& columnName, bool ignorePrivateSources)
+TVector<T> GetEntities(const TResultSet& resultSet, const TString& columnName, bool ignorePrivateSources, const TRequestCommonCountersPtr& commonCounters)
 {
     TVector<T> entities;
     TResultSetParser parser(resultSet);
     while (parser.TryNextRow()) {
         T entity;
-        Y_ABORT_UNLESS(entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
+        if (!entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString())) {
+            commonCounters->ParseProtobufError->Inc();
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for GetEntities. Please contact internal support";
+        }
         const auto visibility = entity.content().acl().visibility();
         if (ignorePrivateSources && visibility == FederatedQuery::Acl::PRIVATE) {
             continue;

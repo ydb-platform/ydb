@@ -479,7 +479,11 @@ TAsyncStatus TDbRequester::Write(
                 }
                 return writeHandler(session);
             } catch (const TCodeLineException& exception) {
-                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                if (exception.Code == TIssuesIds::INTERNAL_ERROR) {
+                    CPS_LOG_AS_E(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                } else {
+                    CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                }
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{MakeErrorIssue(exception.Code, exception.GetRawMessage())}});
             } catch (const std::exception& exception) {
                 CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
@@ -586,7 +590,11 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                     return status;
                 });
             } catch (const TCodeLineException& exception) {
-                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                if (exception.Code == TIssuesIds::INTERNAL_ERROR) {
+                    CPS_LOG_AS_E(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                } else {
+                    CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                }
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{MakeErrorIssue(exception.Code, exception.GetRawMessage())}});
             } catch (const std::exception& exception) {
                 CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
@@ -616,7 +624,11 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                 }
                 return readModifyWriteHandler(session);
             } catch (const TCodeLineException& exception) {
-                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                if (exception.Code == TIssuesIds::INTERNAL_ERROR) {
+                    CPS_LOG_AS_E(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                } else {
+                    CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                }
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{MakeErrorIssue(exception.Code, exception.GetRawMessage())}});
             } catch (const std::exception& exception) {
                 CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());

@@ -27,6 +27,7 @@ void TRequestCommonCounters::Register(const ::NMonitoring::TDynamicCounterPtr& c
     InFly = requestCounters->GetCounter("InFly", false);
     Ok = requestCounters->GetCounter("Ok", true);
     Error = requestCounters->GetCounter("Error", true);
+    ParseProtobufError = requestCounters->GetCounter("ParseProtobufError", true);
     Retry = requestCounters->GetCounter("Retry", true);
     RequestBytes = requestCounters->GetCounter("RequestBytes", true);
     ResponseBytes = requestCounters->GetCounter("ResponseBytes", true);

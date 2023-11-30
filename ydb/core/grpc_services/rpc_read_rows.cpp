@@ -591,15 +591,16 @@ public:
     void SendResult(const Ydb::StatusIds::StatusCode& status, const TString& errorMsg) {
         auto* resp = CreateResponse();
         resp->set_status(status);
+        if (!errorMsg.Empty()) {
+            const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, errorMsg);
+            auto* protoIssue = resp->add_issues();
+            NYql::IssueToMessage(issue, protoIssue);
+        }
 
         if (status == Ydb::StatusIds::SUCCESS) {
             Request->SetRuHeader(RuCost);
 
             FillResultRows(resp);
-        }
-
-        if (errorMsg) {
-            Request->RaiseIssue(NYql::TIssue(errorMsg));
         }
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC sent result");

@@ -143,7 +143,7 @@ message TKqpColumnMetadataProto {
     optional bool NotNull = 6 [default = false];
     optional string DefaultFromSequence = 8;
     optional EDefaultKind DefaultKind = 9;
-    optional NKikimrMiniKQL.TResult DefaultFromLiteral = 10;
+    optional Ydb.TypedValue DefaultFromLiteral = 10;
 };
 
 message TKqpTableMetadataProto {

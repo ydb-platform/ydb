@@ -569,7 +569,7 @@ public:
     }
 
     TFuture<TGenericResult> PrepareAlterTable(const TString&, Ydb::Table::AlterTableRequest&& req,
-        const TMaybe<TString>&, ui64 flags)
+        const TMaybe<TString>&, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings)
     {
         YQL_ENSURE(SessionCtx->Query().PreparingQuery);
         auto promise = NewPromise<TGenericResult>();
@@ -610,7 +610,7 @@ public:
         auto profilesFuture = Gateway->GetTableProfiles();
         auto sessionCtx = SessionCtx;
         profilesFuture.Subscribe(
-            [tablePromise, sessionCtx, alterReq = std::move(req)](
+            [tablePromise, sessionCtx, alterReq = std::move(req), buildSettings = std::move(buildSettings)](
                 const TFuture<IKqpGateway::TKqpTableProfilesResult> &future) mutable {
                 auto profilesResult = future.GetValue();
                 if (!profilesResult.Success()) {
@@ -624,17 +624,27 @@ public:
                 auto &phyTx = *phyQuery.AddTransactions();
                 phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
 
-                auto alter = phyTx.MutableSchemeOperation()->MutableAlterTable();
+                NKikimrSchemeOp::TModifyScheme modifyScheme;
+
+
                 const TPathId invalidPathId;
                 Ydb::StatusIds::StatusCode code;
                 TString error;
-                if (!BuildAlterTableModifyScheme(&alterReq, alter, profilesResult.Profiles, invalidPathId, code, error)) {
+                if (!BuildAlterTableModifyScheme(&alterReq, &modifyScheme, profilesResult.Profiles, invalidPathId, code, error)) {
                     IKqpGateway::TGenericResult errResult;
                     errResult.AddIssue(NYql::TIssue(error));
                     errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
                     tablePromise.SetValue(errResult);
                     return;
                 }
+
+                if (buildSettings.has_column_build_operation()) {
+                    buildSettings.MutableAlterMainTablePayload()->PackFrom(modifyScheme);
+                    phyTx.MutableSchemeOperation()->MutableBuildOperation()->CopyFrom(buildSettings); 
+                } else {
+                    phyTx.MutableSchemeOperation()->MutableAlterTable()->CopyFrom(modifyScheme);
+                }
+
                 TGenericResult result;
                 result.SetSuccess();
                 tablePromise.SetValue(result);
@@ -650,7 +660,7 @@ public:
     }
 
     TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
-        const TMaybe<TString>& requestType, ui64 flags) override
+        const TMaybe<TString>& requestType, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings) override
     {
         CHECK_PREPARED_DDL(AlterTable);
 
@@ -673,7 +683,7 @@ public:
             }
         }
 
-        auto prepareFuture = PrepareAlterTable(cluster, std::move(req), requestType, flags);
+        auto prepareFuture = PrepareAlterTable(cluster, std::move(req), requestType, flags, std::move(buildSettings));
         if (IsPrepare())
             return prepareFuture;
 

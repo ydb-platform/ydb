@@ -689,8 +689,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             serialColumns.emplace(column.Value());
         }
 
-        THashMap<TString, const TTypeAnnotationNode*> typeAnnotations;
-
         for (auto item : create.Columns()) {
             auto columnTuple = item.Cast<TExprList>();
             auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
@@ -701,8 +699,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             YQL_ENSURE(columnType && columnType->GetKind() == ETypeAnnotationKind::Type);
 
             auto type = columnType->Cast<TTypeExprType>()->GetType();
-
-            typeAnnotations.emplace(columnName, type);
 
             auto isOptional = type->GetKind() == ETypeAnnotationKind::Optional;
             auto actualType = !isOptional ? type : type->Cast<TOptionalExprType>()->GetItemType();
@@ -762,7 +758,44 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             columnMeta.NotNull = notNull;
 
             if (columnTuple.Size() > 2) {
-                auto families = columnTuple.Item(2).Cast<TCoAtomList>();
+                const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
+                for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
+                    if (constraint.Name().Value() == "default") {
+                        auto defaultType = constraint.Value().Ref().GetTypeAnn();
+
+                        if (!SessionCtx->Config().EnableColumnsWithDefault) {
+                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                "Columns with default values are not supported yet."));
+                            return TStatus::Error;
+                        }
+
+                        if (defaultType->HasOptionalOrNull() && columnMeta.NotNull) {
+                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
+                                << " is nullable or optional, but column has not null constraint. "));
+                            return TStatus::Error;
+                        }
+
+                        if (!IsSameAnnotation(*defaultType, *actualType)) {
+                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
+                                << " type mismatch, expected: " << (*type) << ", actual: " << *(actualType)));
+                            return TStatus::Error;
+                        }
+
+                        if (columnMeta.IsDefaultKindDefined()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default setting for " << columnName
+                                << " column is already set: "
+                                << NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind_Name(columnMeta.DefaultKind)));
+                            return TStatus::Error;
+                        }
+
+                        columnMeta.SetDefaultFromLiteral();
+                        FillLiteralProto(constraint.Value().Cast<TCoDataCtor>(), columnMeta.DefaultFromLiteral);
+                    }
+                }
+            }
+
+            if (columnTuple.Size() > 3) {
+                auto families = columnTuple.Item(3).Cast<TCoAtomList>();
                 for (auto family : families) {
                     columnMeta.Families.push_back(TString(family.Value()));
                 }
@@ -832,55 +865,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             ctx.AddError(TIssue(ctx.GetPosition(changefeed.Pos()), TStringBuilder()
                 << "Cannot create table with changefeed"));
             return TStatus::Error;
-        }
-
-        for(auto defaultSettingExpr : create.ColumnsDefaultValues()) {
-            auto name = defaultSettingExpr.Name().Value();
-            auto type = defaultSettingExpr.Value().Ref().GetTypeAnn();
-            auto columnInfo = typeAnnotations.find(name);
-            auto columnMetaIt = meta->Columns.find(name);
-
-            if (!SessionCtx->Config().EnableColumnsWithDefault) {
-                ctx.AddError(TIssue(ctx.GetPosition(defaultSettingExpr.Pos()),
-                    "Columns with default values are not supported yet."));
-                return TStatus::Error;
-            }
-
-            if (columnInfo == typeAnnotations.end() || columnMetaIt == meta->Columns.end()) {
-                ctx.AddError(TIssue(ctx.GetPosition(defaultSettingExpr.Pos()), TStringBuilder()
-                    << "Unexpected default expr for column " << name));
-                return TStatus::Error;
-            }
-
-            TKikimrColumnMetadata& columnMeta = columnMetaIt->second;
-
-            if (type->HasOptionalOrNull() && columnMeta.NotNull) {
-                ctx.AddError(TIssue(ctx.GetPosition(defaultSettingExpr.Pos()), TStringBuilder() << "Default expr " << name
-                    << " is nullable or optional, but column has not null constraint. "));
-                return TStatus::Error;
-            }
-
-            const TTypeAnnotationNode* columnAnnotation = columnInfo->second;
-
-            if (columnAnnotation->HasOptional()) {
-                columnAnnotation = columnAnnotation->Cast<TOptionalExprType>()->GetItemType();
-            }
-
-            if (!IsSameAnnotation(*type, *columnAnnotation)) {
-                  ctx.AddError(TIssue(ctx.GetPosition(defaultSettingExpr.Pos()), TStringBuilder() << "Default expr " << name
-                    << " type mismatch, expected: " << (*type) << ", actual: " << *(columnInfo->second)));
-                return TStatus::Error;
-            }
-
-            if (columnMeta.IsDefaultKindDefined()) {
-                ctx.AddError(TIssue(ctx.GetPosition(defaultSettingExpr.Pos()), TStringBuilder() << "Default setting for " << name
-                    << " column is already set: "
-                    << NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind_Name(columnMeta.DefaultKind)));
-                return TStatus::Error;
-            }
-
-            columnMeta.SetDefaultFromLiteral();
-            FillLiteralProto(defaultSettingExpr.Value().Cast<TCoDataCtor>(), columnMeta.DefaultFromLiteral);
         }
 
         for (auto columnFamily : create.ColumnFamilies()) {
@@ -1186,6 +1170,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                             << " Column: \"" << name << "\" already exists"));
                         return TStatus::Error;
                     }
+
                 }
                 auto columnTypeError = GetColumnTypeErrorFn(ctx);
                 for (size_t i = 0; i < listNode.Size(); ++i) {
@@ -1212,13 +1197,36 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    auto families = columnTuple.Item(3);
-                    if (families.Cast<TCoAtomList>().Size() > 1) {
-                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                            << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                            << " Column: \"" << name
-                            << "\". Several column families for a single column are not yet supported"));
-                        return TStatus::Error;
+                    if (columnTuple.Size() > 2) {
+                        const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
+                        for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
+                            if (constraint.Name().Value() == "default") {
+                                auto defaultType = constraint.Value().Ref().GetTypeAnn();
+
+                                if (!SessionCtx->Config().EnableColumnsWithDefault) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                        "Columns with default values are not supported yet."));
+                                    return TStatus::Error;
+                                }
+
+                                if (!IsSameAnnotation(*defaultType, *actualType)) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << name
+                                        << " type mismatch, expected: " << (*type) << ", actual: " << *(actualType)));
+                                    return TStatus::Error;
+                                }
+                            }
+                        }
+                    }
+    
+                    if (columnTuple.Size() > 3) {
+                        auto families = columnTuple.Item(3);
+                        if (families.Cast<TCoAtomList>().Size() > 1) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                << " Column: \"" << name
+                                << "\". Several column families for a single column are not yet supported"));
+                            return TStatus::Error;
+                        }
                     }
                 }
             } else if (name == "dropColumns") {

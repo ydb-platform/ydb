@@ -1063,6 +1063,9 @@ public:
             Ydb::Table::AlterTableRequest alterTableRequest;
             alterTableRequest.set_path(table.Metadata->Name);
 
+            NKikimrIndexBuilder::TIndexBuildSettings indexBuildSettings;
+            indexBuildSettings.set_source_path(table.Metadata->Name);
+
             for (auto action : maybeAlter.Cast().Actions()) {
                 auto name = action.Name().Value();
                 if (name == "renameTo") {
@@ -1091,24 +1094,32 @@ public:
                         auto dataType = actualType->Cast<TDataExprType>();
                         SetColumnType(*add_column->mutable_type(), TString(dataType->GetName()), notNull);
 
-                        auto columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
-                        for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
-                            if (constraint.Name().Value() == "serial") {
-                                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), 
-                                    "Column addition with serial data type is unsupported"));
-                                return SyncError();
+                        if (columnTuple.Size() > 2) {
+                            auto columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
+                            for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
+                                if (constraint.Name().Value() == "serial") {
+                                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), 
+                                        "Column addition with serial data type is unsupported"));
+                                    return SyncError();
+                                } else if (constraint.Name().Value() == "default") {
+                                    auto columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
+                                    columnBuild->SetColumnName(TString(constraint.Name().Value()));
+                                    FillLiteralProto(constraint.Value().Cast<TCoDataCtor>(), *columnBuild->mutable_default_from_literal());
+                                }
                             }
                         }
 
-                        auto families = columnTuple.Item(3).Cast<TCoAtomList>();
-                        if (families.Size() > 1) {
-                            ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
-                                "Unsupported number of families"));
-                            return SyncError();
-                        }
+                        if (columnTuple.Size() > 3) {
+                            auto families = columnTuple.Item(3).Cast<TCoAtomList>();
+                            if (families.Size() > 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
+                                    "Unsupported number of families"));
+                                return SyncError();
+                            }
 
-                        for (auto family : families) {
-                            add_column->set_family(TString(family.Value()));
+                            for (auto family : families) {
+                                add_column->set_family(TString(family.Value()));
+                            }
                         }
                     }
                 } else if (name == "dropColumns") {
@@ -1548,7 +1559,7 @@ public:
                 if (!SessionCtx->Query().DocumentApiRestricted) {
                     requestType = NKikimr::NDocApi::RequestType;
                 }
-                future = Gateway->AlterTable(cluster, std::move(alterTableRequest), requestType, alterTableFlags);
+                future = Gateway->AlterTable(cluster, std::move(alterTableRequest), requestType, alterTableFlags, std::move(indexBuildSettings));
             }
 
             return WrapFuture(future,

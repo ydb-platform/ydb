@@ -66,7 +66,7 @@ message TKqpPhyColumn {
     string PgTypeName = 3;
     oneof DefaultKind {
         string DefaultFromSequence = 4;
-        NKikimrMiniKQL.TResult DefaultFromLiteral = 5;
+        Ydb.TypedValue DefaultFromLiteral = 5;
     }
     bool NotNull = 6;
 }

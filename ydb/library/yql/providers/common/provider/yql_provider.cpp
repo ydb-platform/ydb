@@ -237,7 +237,6 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     TVector<TCoIndex> indexes;
     TVector<TCoChangefeed> changefeeds;
     TMaybeNode<TExprList> columnFamilies;
-    TVector<TCoNameValueTuple> columnsDefaults;
     TVector<TCoNameValueTuple> tableSettings;
     TVector<TCoNameValueTuple> alterActions;
     TMaybeNode<TCoAtom> tableType;
@@ -323,11 +322,6 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
                 for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
                     tableSettings.push_back(item);
                 }
-            } else if (name == "columnsDefaultValues") {
-                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
-                for(const auto& item: tuple.Value().Cast<TCoNameValueTupleList>()) {
-                    columnsDefaults.push_back(item);
-                }
             } else if (name == "actions") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
                 for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
@@ -376,10 +370,6 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
         .Add(alterActions)
         .Done();
 
-    const auto& columnsDefaultValues = Build<TCoNameValueTupleList>(ctx, node.Pos())
-        .Add(columnsDefaults)
-        .Done();
-
     if (!columnFamilies.IsValid()) {
         columnFamilies = Build<TExprList>(ctx, node.Pos()).Done();
     }
@@ -399,7 +389,6 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     ret.Indexes = idx;
     ret.Changefeeds = cfs;
     ret.ColumnFamilies = columnFamilies;
-    ret.ColumnsDefaultValues = columnsDefaultValues;
     ret.TableSettings = tableProfileSettings;
     ret.AlterActions = alterTableActions;
     ret.TableType = tableType;

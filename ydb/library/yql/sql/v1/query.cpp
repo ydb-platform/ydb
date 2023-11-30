@@ -834,23 +834,27 @@ public:
                 if (notNullColumnsSet.insert(col.Name).second)
                     notNullColumns = L(notNullColumns, BuildQuotedAtom(Pos, col.Name));
             }
+
+            columnDesc = L(columnDesc, type);
+
+            auto columnConstraints = Y();
+            if (col.Serial) {
+                columnConstraints = L(columnConstraints, Q(Y(Q("serial"), Q("true"))));
+            }
+
             if (col.DefaultExpr) {
                 if (!col.DefaultExpr->Init(ctx, src)) {
                     return false;
                 }
 
-                if (!columnsWithDefaultValue.insert(col.Name).second)
-                    continue;
-
-                columnsDefaultValueSettings = L(
-                    columnsDefaultValueSettings,
-                    Q(Y(Q(col.Name), col.DefaultExpr))
-                );
+                columnConstraints = L(columnConstraints, Q(Y(Q("default"), col.DefaultExpr)));
             }
 
-            columnDesc = L(columnDesc, type);
+            columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
+
+            auto familiesDesc = Y();
+
             if (col.Families) {
-                auto familiesDesc = Y();
                 for (const auto& family : col.Families) {
                     if (columnFamilyNames.find(family.Name) == columnFamilyNames.end()) {
                         ctx.Error(family.Pos) << "Unknown family " << family.Name;
@@ -858,8 +862,10 @@ public:
                     }
                     familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
                 }
-                columnDesc = L(columnDesc, Q(familiesDesc));
             }
+
+            columnDesc = L(columnDesc, Q(familiesDesc));
+
             columns = L(columns, Q(columnDesc));
         }
         opts = L(opts, Q(Y(Q("columns"), Q(columns))));
@@ -1085,6 +1091,14 @@ public:
                 auto columnConstraints = Y();
                 if (col.Serial) {
                     columnConstraints = L(columnConstraints, Q(Y(Q("serial"), Q("true"))));
+                }
+
+                if (col.DefaultExpr) {
+                    if (!col.DefaultExpr->Init(ctx, src)) {
+                        return false;
+                    }
+
+                    columnConstraints = L(columnConstraints, Q(Y(Q("default"), col.DefaultExpr)));
                 }
 
                 columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));

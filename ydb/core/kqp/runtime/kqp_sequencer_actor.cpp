@@ -46,7 +46,7 @@ class TKqpSequencerActor : public NActors::TActorBootstrapped<TKqpSequencerActor
         std::set<i64> AllocatedSequenceValues;
         NScheme::TTypeInfo TypeInfo;
         NUdf::TUnboxedValue UvLiteral;
-        NKikimrMiniKQL::TResult Literal;
+        Ydb::TypedValue Literal;
         bool InitialiedLiteral = false;
         TCProto::EDefaultKind DefaultKind = TCProto::DEFAULT_KIND_UNSPECIFIED; 
 
@@ -86,7 +86,7 @@ class TKqpSequencerActor : public NActors::TActorBootstrapped<TKqpSequencerActor
             InitialiedLiteral = true;
             NKikimr::NMiniKQL::TType* type = nullptr;
             std::tie(type, UvLiteral) = NMiniKQL::ImportValueFromProto(
-                Literal.GetType(), Literal.GetValue(), env, factory);
+                Literal.type(), Literal.value(), env, factory);
             return UvLiteral;
         }
 

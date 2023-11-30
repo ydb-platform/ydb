@@ -559,7 +559,7 @@ namespace NKikimr {
             IActor* vMultiPutActor = CreateSkeletonVMultiPutActor(SelfId(), statuses, oosStatus, ev,
                     SkeletonFrontIDPtr, IFaceMonGroup->MultiPutResMsgsPtr(), Db->GetVDiskIncarnationGuid());
             NActors::TActorId vMultiPutActorId = ctx.Register(vMultiPutActor);
-            ActiveActors.insert(vMultiPutActorId);
+            ActiveActors.Insert(vMultiPutActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
 
             TLsnSeg lsnBatch;
             if (lsnCount) {
@@ -937,7 +937,7 @@ namespace NKikimr {
 
                 if (actor) {
                     auto aid = ctx.Register(actor);
-                    ActiveActors.Insert(aid);
+                    ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 } else {
                     auto res = std::make_unique<TEvBlobStorage::TEvVGetResult>();
                     res->MakeError(NKikimrProto::ERROR, "incorrect query", record);
@@ -1162,7 +1162,7 @@ namespace NKikimr {
                 IActor *actor = CreateLevelIndexBarrierQueryActor(HullCtx, ctx.SelfID, std::move(fullSnap.BarriersSnap),
                     ev, std::move(result));
                 auto aid = ctx.Register(actor);
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 // ReadBarrier is responsible for sending result to the recipient
             }
         }
@@ -1176,7 +1176,7 @@ namespace NKikimr {
             LOG_DEBUG_S(ctx, BS_VDISK_OTHER, VCtx->VDiskLogPrefix << "TEvVStatus Marker# BSVS20");
             auto aid = ctx.Register(CreateStatusRequestHandler(VCtx, Db->SkeletonID, Db->SyncerID, Db->SyncLogID,
                 IFaceMonGroup, SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo, ev, ctx.SelfID, now, ReplDone));
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
         void Handle(TEvLocalStatus::TPtr &ev, const TActorContext &ctx) {
@@ -1218,7 +1218,7 @@ namespace NKikimr {
                         ctx.SelfID, ev, std::move(result));
                 if (actor) {
                     auto aid = ctx.Register(actor);
-                    ActiveActors.Insert(aid);
+                    ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 }
                 // CreateDbStatActor is responsible for sending result to the recipient
             }
@@ -1235,7 +1235,7 @@ namespace NKikimr {
                     ctx.SelfID, ev, std::move(result));
             if (actor) {
                 auto aid = ctx.Register(actor);
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
         }
 
@@ -1249,7 +1249,7 @@ namespace NKikimr {
             TActorId& actorId = MonStreamActors[ev->Get()->StreamId];
             if (actorId == TActorId()) {
                 actorId = RunInBatchPool(ctx, CreateMonStreamActor(Hull->GetIndexSnapshot(), ev));
-                ActiveActors.insert(actorId);
+                ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
             ctx.ExecutorThread.ActorSystem->Send(ev->Forward(actorId));
         }
@@ -1257,7 +1257,7 @@ namespace NKikimr {
         void Handle(TEvBlobStorage::TEvMonStreamActorDeathNote::TPtr& ev, const TActorContext& /*ctx*/) {
             auto it = MonStreamActors.find(ev->Get()->StreamId);
             Y_ABORT_UNLESS(it != MonStreamActors.end());
-            ActiveActors.erase(it->second);
+            ActiveActors.Erase(it->second);
             MonStreamActors.erase(it);
         }
 
@@ -1280,7 +1280,7 @@ namespace NKikimr {
                 ReplyError(NKikimrProto::ERROR, "decommission didn't start yet", ev, ctx, TAppData::TimeProvider->Now());
             } else {
                 const TActorId actorId = RunInBatchPool(ctx, CreateAssimilationActor(Hull->GetIndexSnapshot(), ev, SelfVDiskId));
-                ActiveActors.insert(actorId);
+                ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
         }
 
@@ -1496,7 +1496,7 @@ namespace NKikimr {
             IActor *actor = CreateHullOsiris(ev->Sender, ctx.SelfID, ctx.SelfID, std::move(fullSnap), confirmedLsn,
                     Config->AnubisOsirisMaxInFly);
             auto aid = ctx.Register(actor);
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
         void Handle(TEvAnubisOsirisPut::TPtr &ev, const TActorContext &ctx) {
@@ -1580,7 +1580,7 @@ namespace NKikimr {
             dbBirthLsn = *DbBirthLsn;
             auto aid = ctx.RegisterWithSameMailbox(CreateHullSyncFullHandler(Db, HullCtx, SelfVDiskId, ctx.SelfID, Hull,
                 IFaceMonGroup, ev, now, dbBirthLsn, confirmedLsn));
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -1734,7 +1734,7 @@ namespace NKikimr {
             auto defragCtx = std::make_shared<TDefragCtx>(VCtx, HugeBlobCtx, PDiskCtx, ctx.SelfID,
                 Db->HugeKeeperID, true);
             DefragId = ctx.Register(CreateDefragActor(defragCtx, GInfo));
-            ActiveActors.Insert(DefragId); // keep forever
+            ActiveActors.Insert(DefragId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
         }
 
         void StartScrubberActor(const TActorContext &ctx, NKikimrVDiskData::TScrubEntrypoint scrubEntrypoint, ui64 scrubEntrypointLsn) {
@@ -1753,7 +1753,7 @@ namespace NKikimr {
                 Db->LoggerID,
                 Db->LogCutterID);
             ScrubId = ctx.Register(CreateScrubActor(std::move(scrubCtx), std::move(scrubEntrypoint), scrubEntrypointLsn));
-            ActiveActors.Insert(ScrubId);
+            ActiveActors.Insert(ScrubId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
         void Handle(TEvBlobStorage::TEvLocalRecoveryDone::TPtr &ev, const TActorContext &ctx) {
@@ -1803,24 +1803,23 @@ namespace NKikimr {
                         PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, Db->LsnMngr->GetStartLsn(),
                         VCtx->VDiskCounters);
                 Db->LoggerID.Set(ctx.Register(logWriter));
-                ActiveActors.Insert(Db->LoggerID); // keep forever
+                ActiveActors.Insert(Db->LoggerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
                 // run out of disk space tracker
                 Db->DskSpaceTrackerID.Set(ctx.Register(CreateDskSpaceTracker(VCtx, PDiskCtx,
                     Config->DskTrackerInterval)));
-                ActiveActors.Insert(Db->DskSpaceTrackerID); // keep forever
+                ActiveActors.Insert(Db->DskSpaceTrackerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
                 // start handoff proxies right now, because they are required for Hull compactions
                 if (Config->RunHandoff && !Config->BaseInfo.DonorMode) {
-                    auto moreActors = Db->Handoff->RunProxies(ctx);
-                    ActiveActors.Insert(moreActors);
+                    ActiveActors.Insert(Db->Handoff->RunProxies(ctx), ctx, NKikimrServices::BLOBSTORAGE);
                 }
 
                 // run LogCutter in the same mailbox
                 TLogCutterCtx logCutterCtx = {VCtx, PDiskCtx, Db->LsnMngr, Config,
                         (TActorId)(Db->LoggerID)};
                 Db->LogCutterID.Set(ctx.RegisterWithSameMailbox(CreateRecoveryLogCutter(std::move(logCutterCtx))));
-                ActiveActors.Insert(Db->LogCutterID); // keep forever
+                ActiveActors.Insert(Db->LogCutterID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
                 // run HugeBlobKeeper
                 TString localRecovInfoStr = Db->LocalRecoveryInfo ? Db->LocalRecoveryInfo->ToString() : TString("{}");
@@ -1829,7 +1828,7 @@ namespace NKikimr {
                         localRecovInfoStr, Config->BaseInfo.ReadOnly);
                 auto hugeKeeper = CreateHullHugeBlobKeeper(hugeKeeperCtx, ev->Get()->RepairedHuge);
                 Db->HugeKeeperID.Set(ctx.Register(hugeKeeper));
-                ActiveActors.Insert(Db->HugeKeeperID); // keep forever
+                ActiveActors.Insert(Db->HugeKeeperID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
                 // run SyncLogActor
                 std::unique_ptr<NSyncLog::TSyncLogRepaired> repairedSyncLog = std::move(ev->Get()->RepairedSyncLog);
@@ -1847,7 +1846,7 @@ namespace NKikimr {
                         Db->SyncLogFirstLsnToKeep,
                         Config->BaseInfo.ReadOnly);
                 Db->SyncLogID.Set(ctx.Register(CreateSyncLogActor(slCtx, GInfo, SelfVDiskId, std::move(repairedSyncLog))));
-                ActiveActors.Insert(Db->SyncLogID); // keep forever
+                ActiveActors.Insert(Db->SyncLogID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
                 // create HullLogCtx
                 HullLogCtx = std::make_shared<THullLogCtx>(VCtx, PDiskCtx, Db->SkeletonID, Db->SyncLogID,
@@ -1857,9 +1856,8 @@ namespace NKikimr {
                 Hull = std::make_shared<THull>(Db->LsnMngr, PDiskCtx, Db->Handoff, Db->SkeletonID,
                         Config->RunHandoff, std::move(*ev->Get()->Uncond),
                         ctx.ExecutorThread.ActorSystem, Config->BarrierValidation);
-                auto moreActors = Hull->RunHullServices(Config, HullLogCtx, Db->SyncLogFirstLsnToKeep,
-                        Db->LoggerID, Db->LogCutterID, ctx);
-                ActiveActors.Insert(moreActors);
+                ActiveActors.Insert(Hull->RunHullServices(Config, HullLogCtx, Db->SyncLogFirstLsnToKeep,
+                        Db->LoggerID, Db->LogCutterID, ctx), ctx, NKikimrServices::BLOBSTORAGE);
 
                 // create VDiskCompactionState
                 VDiskCompactionState = std::make_unique<TVDiskCompactionState>(Hull->GetHullDs()->LogoBlobs->LIActor,
@@ -1932,7 +1930,7 @@ namespace NKikimr {
                         Config);
                     // syncer performes sync recovery
                     Db->SyncerID.Set(ctx.Register(CreateSyncerActor(sc, GInfo, ev->Get()->SyncerData)));
-                    ActiveActors.Insert(Db->SyncerID); // keep forever
+                    ActiveActors.Insert(Db->SyncerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
                 } else {
                     // continue without sync
                     SkeletonIsUpAndRunning(ctx);
@@ -1959,7 +1957,7 @@ namespace NKikimr {
                     auto replCtx = std::make_shared<TReplCtx>(VCtx, PDiskCtx, HugeBlobCtx, Hull->GetHullDs(), GInfo,
                         SelfId(), Config, PDiskWriteBytes, Config->ReplPausedAtStart);
                     Db->ReplID.Set(ctx.Register(CreateReplActor(replCtx)));
-                    ActiveActors.Insert(Db->ReplID); // keep forever
+                    ActiveActors.Insert(Db->ReplID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
                     if (CommenceRepl) {
                         TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, Db->ReplID, SelfId(),
                             nullptr, 0));
@@ -1983,7 +1981,7 @@ namespace NKikimr {
                     // calculate id for the actor who'll tell us about local recovery
                     TActorId locRecovActor = LocalDbRecoveryID ? LocalDbRecoveryID : ctx.SelfID;
                     auto aid = ctx.Register(CreateSkeletonMonRequestHandler(Db, ev, ctx.SelfID, locRecovActor));
-                    ActiveActors.Insert(aid);
+                    ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                     break;
                 }
                 case TDbMon::SkeletonStateId: {
@@ -2312,7 +2310,7 @@ namespace NKikimr {
             genIndSelfVDiskId.GroupGeneration = -1;
             LocalDbRecoveryID = ctx.Register(CreateDatabaseLocalRecoveryActor(VCtx, Config, genIndSelfVDiskId, SelfId(),
                 *SkeletonFrontIDPtr, Arena));
-            ActiveActors.Insert(LocalDbRecoveryID);
+            ActiveActors.Insert(LocalDbRecoveryID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             UpdateWhiteboard(ctx);
         }
 

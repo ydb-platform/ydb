@@ -261,7 +261,7 @@ namespace NKikimr {
             if (msg->Task->NeedCommit()) {
                 auto proxy = std::make_unique<TSyncerCommitterProxy>(ctx.SelfID, CommitterId, std::move(msg->Task));
                 const TActorId aid = ctx.Register(proxy.release());
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             } else {
                 ApplyChanges(ctx, *msg->Task);
             }
@@ -288,7 +288,7 @@ namespace NKikimr {
                 auto task = std::make_unique<TSyncerJobTask>(TSyncerJobTask::EJustSync, GInfo->GetVDiskId(tmp->OrderNumber),
                     GInfo->GetActorId(tmp->OrderNumber), tmp->Get().PeerSyncState, JobCtx);
                 const TActorId aid = ctx.Register(CreateSyncerJob(SyncerContext, std::move(task), ctx.SelfID));
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
 
             if (!SchedulerQueue.empty() && !Scheduled) {
@@ -303,7 +303,7 @@ namespace NKikimr {
             // create an actor to handle request
             auto actor = std::make_unique<TSyncerSchedulerHttpActor>(SyncerContext, GInfo, SyncerData, ev, ctx.SelfID);
             auto aid = ctx.RegisterWithSameMailbox(actor.release());
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
         void Handle(TEvLocalStatus::TPtr &ev, const TActorContext &ctx) {

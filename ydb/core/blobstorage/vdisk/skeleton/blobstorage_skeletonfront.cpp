@@ -805,7 +805,7 @@ namespace NKikimr {
 
             // create and run skeleton
             SkeletonId = ctx.Register(CreateVDiskSkeleton(Config, GInfo, ctx.SelfID, VCtx));
-            ActiveActors.Insert(SkeletonId);
+            ActiveActors.Insert(SkeletonId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
 
             SetupMonitoring(ctx);
             Become(&TThis::StateLocalRecoveryInProgress);
@@ -1600,11 +1600,12 @@ namespace NKikimr {
             TString html = (type == TString()) ? GenerateHtmlState(ctx) : TString();
 
             if (cgi.Has("repl")) {
-                ActiveActors.Insert(ctx.Register(CreateReplMonRequestHandler(SkeletonId, SelfVDiskId, Top, ev)));
+                ActiveActors.Insert(ctx.Register(CreateReplMonRequestHandler(SkeletonId, SelfVDiskId, Top, ev)),
+                    __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             } else {
                 auto aid = ctx.Register(CreateFrontSkeletonMonRequestHandler(SelfVDiskId, ctx.SelfID, SkeletonId,
                     ctx.SelfID, Config, Top, ev, html, VDiskMonGroup));
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
         }
 
@@ -1616,7 +1617,7 @@ namespace NKikimr {
         void Handle(TEvGetLogoBlobRequest::TPtr &ev) {
             auto aid = Register(CreateFrontSkeletonGetLogoBlobRequestHandler(SelfVDiskId, SelfId(), SkeletonId,
                 Config, Top, ev));
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, TActivationContext::AsActorContext(), NKikimrServices::BLOBSTORAGE);
         }
 
 

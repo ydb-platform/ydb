@@ -118,20 +118,20 @@ namespace NKikimr {
 
         // actor for LogCutter Notifier
         auto logNotifierAid = ctx.RegisterWithSameMailbox(CreateHullLogCutterNotifier(hullLogCtx->VCtx, logCutterId, HullDs));
-        activeActors.Insert(logNotifierAid);
+        activeActors.Insert(logNotifierAid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         Fields->SetLogNotifierActorId(logNotifierAid);
         // actor for LogoBlobs DB
         HullDs->LogoBlobs->LIActor = ctx.RegisterWithSameMailbox(CreateLogoBlobsActor(config, HullDs, hullLogCtx, loggerId,
             Fields->LogoBlobsRunTimeCtx, syncLogFirstLsnToKeep));
-        activeActors.Insert(HullDs->LogoBlobs->LIActor);
+        activeActors.Insert(HullDs->LogoBlobs->LIActor, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         // actor for Blocks DB
         HullDs->Blocks->LIActor = ctx.RegisterWithSameMailbox(CreateBlocksActor(config, HullDs, hullLogCtx, loggerId,
             Fields->BlocksRunTimeCtx, syncLogFirstLsnToKeep));
-        activeActors.Insert(HullDs->Blocks->LIActor);
+        activeActors.Insert(HullDs->Blocks->LIActor, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         // actor for Barriers DB
         HullDs->Barriers->LIActor = ctx.RegisterWithSameMailbox(CreateBarriersActor(config, HullDs, hullLogCtx, loggerId,
             Fields->BarriersRunTimeCtx, syncLogFirstLsnToKeep));
-        activeActors.Insert(HullDs->Barriers->LIActor);
+        activeActors.Insert(HullDs->Barriers->LIActor, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
 
         // create delayed huge blob deleter actor only for LogoBlobs level index as huge blobs are only possible
         // for that data
@@ -139,7 +139,7 @@ namespace NKikimr {
         auto hugeBlobDeleterAid = ctx.RegisterWithSameMailbox(CreateDelayedCompactionDeleterActor(hullLogCtx->HugeKeeperId,
             hullLogCtx->SkeletonId, hullLogCtx->PDiskCtx, hullLogCtx->VCtx, deleterInfo));
         deleterInfo->SetActorId(hugeBlobDeleterAid);
-        activeActors.Insert(hugeBlobDeleterAid);
+        activeActors.Insert(hugeBlobDeleterAid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
 
         return activeActors;
     }

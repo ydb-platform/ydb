@@ -115,7 +115,7 @@ namespace NKikimr {
                                                                 SlCtx->VCtx->VDiskLogPrefix,
                                                                 ctx.ExecutorThread.ActorSystem);
                 KeeperId = ctx.Register(CreateSyncLogKeeperActor(SlCtx, std::move(Repaired)));
-                ActiveActors.Insert(KeeperId);
+                ActiveActors.Insert(KeeperId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 TThis::Become(&TThis::StateFunc);
             }
 
@@ -192,7 +192,7 @@ namespace NKikimr {
                 NeighborsPtr->Lock(sourceVDisk, oldSyncState.SyncedLsn);
                 auto aid = ctx.Register(CreateSyncLogReaderActor(SlCtx, VDiskIncarnationGuid, ev, ctx.SelfID, KeeperId,
                     SelfVDiskId, sourceVDisk, GetDbBirthLsn(), now));
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
 
             void Handle(TEvSyncLogPut::TPtr &ev, const TActorContext &ctx) {
@@ -249,7 +249,7 @@ namespace NKikimr {
                 Y_DEBUG_ABORT_UNLESS(ev->Get()->SubRequestId == TDbMon::SyncLogId);
                 auto aid = ctx.RegisterWithSameMailbox(CreateGetHttpInfoActor(SlCtx->VCtx, GInfo, ev, SelfId(), KeeperId,
                     NeighborsPtr));
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
 
             void Handle(TEvBlobStorage::TEvVBaldSyncLog::TPtr& ev, const TActorContext& ctx) {
@@ -260,7 +260,7 @@ namespace NKikimr {
                 auto selfId = ctx.SelfID;
                 auto actor = std::make_unique<TSyncLogGetLocalStatusActor>(SlCtx, ev, selfId, KeeperId);
                 auto aid = ctx.Register(actor.release());
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
 
             // reconfigure BlobStorage Group

@@ -659,12 +659,12 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 const ui64 wId = State.LogLsnFifo.Push(HugeKeeperCtx->LsnMngr->GetLsn());
                 auto aid = ctx.Register(new THullHugeBlobWriter(HugeKeeperCtx, ctx.SelfID, hugeSlot,
                     std::unique_ptr<TEvHullWriteHugeBlob>(ev.Release().Release()), wId, std::move(ev.TraceId)));
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 return true;
             } else if (AllocatingChunkPerSlotSize.insert(slotSize).second) {
                 LWTRACK(HugeBlobChunkAllocatorStart, ev.Get()->Orbit);
                 auto aid = ctx.RegisterWithSameMailbox(new THullHugeBlobChunkAllocator(HugeKeeperCtx, ctx.SelfID, State.Pers));
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
             return false;
         }
@@ -685,7 +685,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             if (!vec.empty()) {
                 const ui64 lsn = HugeKeeperCtx->LsnMngr->AllocLsnForLocalUse().Point();
                 auto aid = ctx.Register(new THullHugeBlobChunkDestroyer(HugeKeeperCtx, ctx.SelfID, std::move(vec), lsn));
-                ActiveActors.Insert(aid);
+                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 const ui64 prevLsn = std::exchange(State.Pers->LogPos.ChunkFreeingLsn, lsn);
                 Y_ABORT_UNLESS(prevLsn < lsn); // although it is useless :)
             }
@@ -754,7 +754,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "THullHugeKeeper: TryToCutLog: run committer"));
 
             auto aid = ctx.Register(new THullHugeBlobEntryPointSaver(HugeKeeperCtx, ctx.SelfID, lsn, serialized));
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
         //////////// Cut Log Handler ///////////////////////////////////
 
@@ -983,7 +983,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             UpdateGlobalFragmentationStat(State.Pers->Heap->GetStat());
             // run actor that periodically gather huge stat
             auto aid = ctx.Register(new THullHugeStatGather(HugeKeeperCtx, SelfId()));
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
 
             // issue entrypoint just at the start
             TryToCutLog(ctx);

@@ -58,7 +58,7 @@ namespace NKikimr {
             std::unique_ptr<IActor> finder(CreateAnubisCandidatesFinder(HullCtx, ctx.SelfID, Pos, std::move(LogoBlobsSnap),
                     std::move(BarriersSnap)));
             TActorId aid = RunInBatchPool(ctx, finder.release());
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             Become(&TThis::WaitForCandidatesStateFunc);
         }
 
@@ -289,7 +289,7 @@ namespace NKikimr {
             for (const auto &x : HullCtx->VCtx->Top->GetVDisks()) {
                 if (HullCtx->VCtx->ShortSelfVDisk != x.VDiskIdShort) {
                     auto aid = ctx.Register(CreateAnubisProxy(HullCtx->VCtx, GInfo, x.VDiskIdShort, ReplInterconnectChannel));
-                    ActiveActors.Insert(aid);
+                    ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                     (*QueueActorMapPtr)[x.VDiskIdShort] = aid;
                 }
             }
@@ -307,7 +307,7 @@ namespace NKikimr {
             auto a = std::make_unique<TAnubisQuantumActor>(HullCtx, QueueActorMapPtr, ctx.SelfID, SkeletonId, Pos,
                     std::move(snap.LogoBlobsSnap), std::move(snap.BarriersSnap), AnubisOsirisMaxInFly);
             auto aid = ctx.Register(a.release());
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
         void Handle(TEvAnubisQuantumDone::TPtr &ev, const TActorContext &ctx) {

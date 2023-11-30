@@ -733,8 +733,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("WideCombiner", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto flow = MkqlBuildExpr(node.Head(), ctx);
-        ui64 memLimit = 0ULL;
-        const bool withLimit = TryFromString<ui64>(node.Child(1U)->Content(), memLimit);
+        i64 memLimit = 0LL;
+        const bool withLimit = TryFromString<i64>(node.Child(1U)->Content(), memLimit);
 
         const auto keyExtractor = [&](TRuntimeNode::TList items) {
             return MkqlBuildWideLambda(*node.Child(2U), ctx, items);

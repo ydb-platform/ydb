@@ -418,7 +418,7 @@ public:
     TRuntimeNode WideTakeWhileInclusive(TRuntimeNode flow, const TNarrowLambda& handler);
     TRuntimeNode WideSkipWhileInclusive(TRuntimeNode flow, const TNarrowLambda& handler);
 
-    TRuntimeNode WideCombiner(TRuntimeNode flow, ui64 memLimit, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
+    TRuntimeNode WideCombiner(TRuntimeNode flow, i64 memLimit, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
     TRuntimeNode WideLastCombiner(TRuntimeNode flow, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
     TRuntimeNode WideCondense1(TRuntimeNode stream, const TWideLambda& init, const TWideSwitchLambda& switcher, const TBinaryWideLambda& handler, bool useCtx = false);
 

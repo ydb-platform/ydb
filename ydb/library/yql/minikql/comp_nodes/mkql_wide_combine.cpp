@@ -5,6 +5,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_runtime_version.h>
 #include <ydb/library/yql/minikql/mkql_stats_registry.h>
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/utils/cast.h>
@@ -244,7 +245,13 @@ public:
         return isNew;
     }
 
-    bool IsEmpty() {
+    template<bool SkipYields>
+    bool ReadMore() {
+        if constexpr (SkipYields) {
+            if (EFetchResult::Yield == InputStatus)
+                return true;
+        }
+
         if (!States.Empty())
             return false;
 
@@ -337,13 +344,13 @@ public:
 };
 #endif
 
-template <bool TrackRss>
-class TWideCombinerWrapper: public TStatefulWideFlowCodegeneratorNode<TWideCombinerWrapper<TrackRss>>
+template <bool TrackRss, bool SkipYields>
+class TWideCombinerWrapper: public TStatefulWideFlowCodegeneratorNode<TWideCombinerWrapper<TrackRss, SkipYields>>
 #ifndef MKQL_DISABLE_CODEGEN
     , public ICodegeneratorRootNode
 #endif
 {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideCombinerWrapper<TrackRss>>;
+using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideCombinerWrapper<TrackRss, SkipYields>>;
 public:
     TWideCombinerWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memLimit)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
@@ -360,13 +367,16 @@ public:
         }
 
         while (const auto ptr = static_cast<TState*>(state.AsBoxed().Get())) {
-            if (ptr->IsEmpty()) {
+            if (ptr->ReadMore<SkipYields>()) {
                 switch (ptr->InputStatus) {
                     case EFetchResult::One:
                         break;
                     case EFetchResult::Yield:
                         ptr->InputStatus = EFetchResult::One;
-                        return EFetchResult::Yield;
+                        if constexpr (SkipYields)
+                            break;
+                        else
+                            return EFetchResult::Yield;
                     case EFetchResult::Finish:
                         return EFetchResult::Finish;
                 }
@@ -381,8 +391,16 @@ public:
                             fields[i] = &Nodes.ItemNodes[i]->RefValue(ctx);
 
                     ptr->InputStatus = Flow->FetchValues(ctx, fields);
-                    if (EFetchResult::One != ptr->InputStatus) {
-                        break;
+                    if constexpr (SkipYields) {
+                        if (EFetchResult::Yield == ptr->InputStatus) {
+                            return EFetchResult::Yield;
+                        } else if (EFetchResult::Finish == ptr->InputStatus) {
+                            break;
+                        }
+                    } else {
+                        if (EFetchResult::One != ptr->InputStatus) {
+                            break;
+                        }
                     }
 
                     Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
@@ -441,15 +459,15 @@ public:
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
         const auto result = PHINode::Create(statusType, 3U, "result", over);
 
-        const auto isEmptyFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::IsEmpty));
-        const auto isEmptyFuncType = FunctionType::get(Type::getInt1Ty(context), { statePtrType }, false);
-        const auto isEmptyFuncPtr = CastInst::Create(Instruction::IntToPtr, isEmptyFunc, PointerType::getUnqual(isEmptyFuncType), "empty_func", block);
-        const auto empty = CallInst::Create(isEmptyFuncType, isEmptyFuncPtr, { stateArg }, "empty", block);
+        const auto readMoreFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::ReadMore<SkipYields>));
+        const auto readMoreFuncType = FunctionType::get(Type::getInt1Ty(context), { statePtrType }, false);
+        const auto readMoreFuncPtr = CastInst::Create(Instruction::IntToPtr, readMoreFunc, PointerType::getUnqual(readMoreFuncType), "read_more_func", block);
+        const auto readMore = CallInst::Create(readMoreFuncType, readMoreFuncPtr, { stateArg }, "read_more", block);
 
         const auto next = BasicBlock::Create(context, "next", ctx.Func);
         const auto full = BasicBlock::Create(context, "full", ctx.Func);
 
-        BranchInst::Create(next, full, empty, block);
+        BranchInst::Create(next, full, readMore, block);
 
         {
             block = next;
@@ -473,9 +491,15 @@ public:
             block = rest;
             new StoreInst(ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::One)), statusPtr, block);
 
-            result->addIncoming(last, block);
+            if constexpr (SkipYields) {
+                new StoreInst(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), statusPtr, block);
 
-            BranchInst::Create(over, block);
+                BranchInst::Create(pull, block);
+            } else {
+                result->addIncoming(last, block);
+
+                BranchInst::Create(over, block);
+            }
 
             block = pull;
 
@@ -487,9 +511,22 @@ public:
 
             const auto getres = GetNodeValues(Flow, ctx, block);
 
-            const auto special = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, getres.first, ConstantInt::get(getres.first->getType(), static_cast<i32>(EFetchResult::Yield)), "special", block);
+            if constexpr (SkipYields) {
+                const auto save = BasicBlock::Create(context, "save", ctx.Func);
 
-            BranchInst::Create(done, good, special, block);
+                const auto way = SwitchInst::Create(getres.first, good, 2U, block);
+                way->addCase(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), save);
+                way->addCase(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), done);
+
+                block = save;
+
+                new StoreInst(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), statusPtr, block);
+                result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
+                BranchInst::Create(over, block);
+            } else {
+                const auto special = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, getres.first, ConstantInt::get(getres.first->getType(), static_cast<i32>(EFetchResult::Yield)), "special", block);
+                BranchInst::Create(done, good, special, block);
+            }
 
             block = good;
 
@@ -1128,11 +1165,24 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
         if constexpr (Last)
             return new TWideLastCombinerWrapper(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes));
         else {
-            const auto memLimit = AS_VALUE(TDataLiteral, callable.GetInput(1U))->AsValue().Get<ui64>();
-            if (EGraphPerProcess::Single == ctx.GraphPerProcess)
-                return new TWideCombinerWrapper<true>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), memLimit);
-            else
-                return new TWideCombinerWrapper<false>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), memLimit);
+            if constexpr (RuntimeVersion < 46U) {
+                const auto memLimit = AS_VALUE(TDataLiteral, callable.GetInput(1U))->AsValue().Get<ui64>();
+                if (EGraphPerProcess::Single == ctx.GraphPerProcess)
+                    return new TWideCombinerWrapper<true, false>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), memLimit);
+                else
+                    return new TWideCombinerWrapper<false, false>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), memLimit);
+            } else {
+                if (const auto memLimit = AS_VALUE(TDataLiteral, callable.GetInput(1U))->AsValue().Get<i64>(); memLimit >= 0)
+                    if (EGraphPerProcess::Single == ctx.GraphPerProcess)
+                        return new TWideCombinerWrapper<true, false>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(memLimit));
+                    else
+                        return new TWideCombinerWrapper<false, false>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(memLimit));
+                else
+                    if (EGraphPerProcess::Single == ctx.GraphPerProcess)
+                        return new TWideCombinerWrapper<true, true>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(-memLimit));
+                    else
+                        return new TWideCombinerWrapper<false, true>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(-memLimit));
+            }
         }
     }
 

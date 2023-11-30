@@ -29,7 +29,9 @@ def onllvm_bc(unit, *args):
         passes += ['internalize']
         # XXX: '#' used instead of ',' to overcome ymake tendency to split everything by comma
         opt_opts += ['-internalize-public-api-list=' + '#'.join(symbols)]
-    opt_opts += ['-passes={}'.format('${__COMMA__}'.join(passes))]
+    # Add additional quotes for cmake build.
+    # Generated final option for cmake looks like: -passes="..."
+    opt_opts += ['\'-passes="{}"\''.format('${__COMMA__}'.join(passes))]
     unit.onllvm_opt([merged_bc, out_bc] + opt_opts)
     if 'GENERATE_MACHINE_CODE' in kwds:
         unit.onllvm_llc([out_bc, '-O2'])

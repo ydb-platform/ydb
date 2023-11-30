@@ -54,7 +54,11 @@ The minimum required scopes are 'repo', 'read:org', 'admin:public_key'.
 ? Paste your authentication token:
 ```
 
-As advised in the "Tip:", open the [https://github.com/settings/tokens](https://github.com/settings/tokens), click on "Generate new token" / "Classic", tick three boxes "repo", "admin:public_key" and "read:org" (under "admin:org"), and copy-paste the shown token to complete the GitHub CLI configuration.
+Open the [https://github.com/settings/tokens](https://github.com/settings/tokens), click on "Generate new token" / "Classic", tick FOUR boxes:
+* **Box `workflow`**
+* Three others as adivised in the tip: "repo", "admin:public_key" and "read:org" (under "admin:org")
+
+And copy-paste the shown token to complete the GitHub CLI configuration.
 
 ### Fork and clone repository {#fork_create}
 

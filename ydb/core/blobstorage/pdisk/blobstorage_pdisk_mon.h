@@ -549,6 +549,7 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceSubmitThreadBusyTimeNs;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceCompletionThreadBusyTimeNs;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceIoErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DeviceWaitTimeMs;
 
     // queue subgroup
     TIntrusivePtr<::NMonitoring::TDynamicCounters> QueueGroup;

@@ -896,6 +896,7 @@ private:
 
     void DoReadUnversionedValue(bool captureValues, TUnversionedValue* value)
     {
+        *value = TUnversionedValue{};
         ui64* rawValue = reinterpret_cast<ui64*>(value);
         rawValue[0] = ReadUint64();
         if (IsStringLikeType(value->Type)) {
@@ -907,6 +908,7 @@ private:
 
     void DoReadVersionedValue(bool captureValues, TVersionedValue* value)
     {
+        *value = TVersionedValue{};
         ui64* rawValue = reinterpret_cast<ui64*>(value);
         rawValue[0] = ReadUint64();
         if (IsStringLikeType(value->Type)) {

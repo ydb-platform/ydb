@@ -765,7 +765,7 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
 
     req->set_path(path);
     if (NTracing::IsCurrentTraceContextRecorded()) {
-        req->TracingTags().push_back({"yt.table_path", path});
+        req->TracingTags().emplace_back("yt.table_path", path);
     }
     req->Attachments() = SerializeRowset(nameTable, keys, req->mutable_rowset_descriptor());
 
@@ -812,7 +812,7 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
 
     req->set_path(path);
     if (NTracing::IsCurrentTraceContextRecorded()) {
-        req->TracingTags().push_back({"yt.table_path", path});
+        req->TracingTags().emplace_back("yt.table_path", path);
     }
     req->Attachments() = SerializeRowset(nameTable, keys, req->mutable_rowset_descriptor());
 
@@ -885,9 +885,9 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookup(
         std::vector<TString> paths;
         paths.reserve(subrequests.size());
         for (const auto& subrequest : subrequests) {
-            paths.push_back(subrequest.Path);
+            paths.emplace_back(subrequest.Path);
         }
-        req->TracingTags().push_back({"yt.table_paths", NYson::ConvertToYsonString(paths).ToString()});
+        req->TracingTags().emplace_back("yt.table_paths", NYson::ConvertToYsonString(paths).ToString());
     }
 
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));

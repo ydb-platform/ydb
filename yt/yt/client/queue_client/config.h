@@ -73,6 +73,9 @@ public:
     //! Path to directory that will contain resulting static tables with exported data.
     NYPath::TYPath ExportDirectory;
 
+    //! If set to a value larger than zero, the created output tables will be created with an expiration time computed as now + ttl.
+    TDuration ExportTtl;
+
     //! A format-string supporting the following specifiers:
     //!  - %UNIX_TS: the unix timestamp corresponding to the exported table
     //!  - %PERIOD: the length of the export period in seconds
@@ -83,6 +86,14 @@ public:
     //! An attempt to produce a table which already exists will lead to an error, in which case the data will be exported
     //! on the next iteration.
     TString OutputTableNamePattern;
+    //! If true, the unix timestamp used in formatting the output table name will be the upper bound actually used in gathering chunks for this table.
+    //! Otherwise, the unix timestamp used in the name formatting will be equal to the upper bound minus one export period.
+    //! E.g. if hourly exports are set up, setting this value to true will mean that a table named 17:00 has data from 16:00 to 17:00,
+    //! whereas setting it to false would mean that it has data from 17:00 to 18:00.
+    //! NB: In any case, it should be understood that the table exported with an upper bound timestamp of T is not guaranteed to contain all
+    //! data with timestamp <= T. In case of delays, some of the data can end up in latter tables. You should be especially careful with
+    //! commit_ordering=%false queues, since commit timestamp monotonicty within a tablet is not guaranteed for them.
+    bool UseUpperBoundForTableNames;
 
     REGISTER_YSON_STRUCT_LITE(TQueueStaticExportConfig);
 

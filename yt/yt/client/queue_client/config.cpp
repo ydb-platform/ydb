@@ -58,8 +58,12 @@ void TQueueStaticExportConfig::Register(TRegistrar registrar)
     registrar.Parameter("export_period", &TThis::ExportPeriod)
         .GreaterThan(TDuration::Zero());
     registrar.Parameter("export_directory", &TThis::ExportDirectory);
+    registrar.Parameter("export_ttl", &TThis::ExportTtl)
+        .Default(TDuration::Zero());
     registrar.Parameter("output_table_name_pattern", &TThis::OutputTableNamePattern)
         .Default("%UNIX_TS-%PERIOD");
+    registrar.Parameter("use_upper_bound_for_table_names", &TThis::UseUpperBoundForTableNames)
+        .Default(false);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->ExportPeriod.GetValue() % TDuration::Seconds(1).GetValue() != 0) {

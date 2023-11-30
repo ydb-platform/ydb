@@ -15,7 +15,6 @@ def mkdir_p(path):
 
 
 class Timer(object):
-
     def __init__(self):
         self.start = time.time()
 
@@ -24,7 +23,18 @@ class Timer(object):
         self.start = time.time()
 
 
-def main(source, output, java, prefix_filter, exclude_filter, jars_list, output_format, tar_output, agent_disposition, runners_paths):
+def main(
+    source,
+    output,
+    java,
+    prefix_filter,
+    exclude_filter,
+    jars_list,
+    output_format,
+    tar_output,
+    agent_disposition,
+    runners_paths,
+):
     timer = Timer()
     reports_dir = 'jacoco_reports_dir'
     mkdir_p(reports_dir)
@@ -72,7 +82,7 @@ def main(source, output, java, prefix_filter, exclude_filter, jars_list, output_
     timer.step("Jar files extracted")
 
     if not agent_disposition:
-        print>>sys.stderr, 'Can\'t find jacoco agent. Will not generate html report for java coverage.'
+        print >> sys.stderr, 'Can\'t find jacoco agent. Will not generate html report for java coverage.'
 
     if tar_output:
         report_dir = 'java.report.temp'
@@ -81,7 +91,17 @@ def main(source, output, java, prefix_filter, exclude_filter, jars_list, output_
     mkdir_p(report_dir)
 
     if agent_disposition:
-        agent_cmd = [java, '-jar', agent_disposition, src_dir, cls_dir, prefix_filter or '.', exclude_filter or '__no_exclude__', report_dir, output_format]
+        agent_cmd = [
+            java,
+            '-jar',
+            agent_disposition,
+            src_dir,
+            cls_dir,
+            prefix_filter or '.',
+            exclude_filter or '__no_exclude__',
+            report_dir,
+            output_format,
+        ]
         agent_cmd += reports
         subprocess.check_call(agent_cmd)
         timer.step("Jacoco finished")

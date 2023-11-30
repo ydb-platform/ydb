@@ -32,6 +32,7 @@ def merge_exit_codes(exit_codes):
 
 def is_temporary_error(exc):
     import logging
+
     logger = logging.getLogger(__name__)
 
     if getattr(exc, 'temporary', False):
@@ -39,6 +40,7 @@ def is_temporary_error(exc):
         return True
 
     import errno
+
     err = getattr(exc, 'errno', None)
 
     if err == errno.ECONNREFUSED or err == errno.ENETUNREACH:
@@ -57,7 +59,7 @@ def is_temporary_error(exc):
 
     import urllib2
 
-    if isinstance(exc, urllib2.HTTPError) and exc.code in (429, ):
+    if isinstance(exc, urllib2.HTTPError) and exc.code in (429,):
         logger.debug("urllib2.HTTPError: %s", exc)
         return True
 

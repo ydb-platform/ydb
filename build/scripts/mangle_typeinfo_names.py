@@ -2,10 +2,8 @@
 
 import base64
 import hashlib
-import io
 import os
 import struct
-import subprocess
 import sys
 from collections import namedtuple
 
@@ -116,8 +114,9 @@ def read_elf_sections(elf_data, elf64):
     #     Elf32_Half      e_shstrndx;
     # } Elf32_Ehdr;
 
-    section_header_offset, section_header_entry_size, section_header_entries_number,\
-        section_name_string_table_index = unpack('< Q 10x 3H', elf_data, 40) if elf64 else unpack('< L 10x 3H', elf_data, 32)
+    section_header_offset, section_header_entry_size, section_header_entries_number, section_name_string_table_index = (
+        unpack('< Q 10x 3H', elf_data, 40) if elf64 else unpack('< L 10x 3H', elf_data, 32)
+    )
 
     # https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.sheader.html
     # If the number of sections is greater than or equal to SHN_LORESERVE (0xff00), e_shnum has the value SHN_UNDEF (0)
@@ -126,17 +125,22 @@ def read_elf_sections(elf_data, elf64):
     if section_header_entries_number == 0:
         section_header_entries_number = unpack_section_header(elf_data, section_header_offset, elf64).size
 
-    sections = [unpack_section_header(elf_data, section_header_offset + i * section_header_entry_size, elf64)
-                for i in range(section_header_entries_number)]
+    sections = [
+        unpack_section_header(elf_data, section_header_offset + i * section_header_entry_size, elf64)
+        for i in range(section_header_entries_number)
+    ]
 
     # section names data
     section_names_section = sections[section_name_string_table_index]
-    section_names_data = elf_data[section_names_section.data_offset : section_names_section.data_offset + section_names_section.size]
+    section_names_data = elf_data[
+        section_names_section.data_offset : section_names_section.data_offset + section_names_section.size
+    ]
 
     # read section names
     for i, section in enumerate(sections):
         sections[i] = section._replace(
-            name=section_names_data[section.name : section_names_data.find(b'\x00', section.name)].decode())
+            name=section_names_data[section.name : section_names_data.find(b'\x00', section.name)].decode()
+        )
 
     return sections
 
@@ -161,7 +165,7 @@ def mangle_elf_typeinfo_names(elf_data, elf64, sections):
         else:
             elf_data[section.header_offset + 20 : section.header_offset + 24] = struct.pack('< L', len(mangled))
 
-        symbol_sizes[section.name[len('.rodata.'):]] = len(mangled)
+        symbol_sizes[section.name[len('.rodata.') :]] = len(mangled)
 
     return symbol_sizes
 
@@ -215,9 +219,9 @@ def mangle_elf(elf_data):
 
     ei_mag, ei_class = unpack('4s B', elf_data)
     assert ei_mag == b'\x7fELF'
-    if ei_class == 1: # ELFCLASS32
+    if ei_class == 1:  # ELFCLASS32
         elf64 = False
-    elif ei_class == 2: # ELFCLASS64
+    elif ei_class == 2:  # ELFCLASS64
         elf64 = True
     else:
         raise Exception('unknown ei_class: ' + str(ei_class))
@@ -268,8 +272,6 @@ def mangle_ar_impl(ar, out):
         raise Exception('bad ar magic: {}'.format(ar_magic))
 
     out.write(ar_magic)
-
-    string_table = None
 
     while True:
         obj = read_ar_object(ar)

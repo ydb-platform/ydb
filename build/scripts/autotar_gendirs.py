@@ -15,7 +15,9 @@ def pack_dir(dir_path, dest_path):
     dir_path = os.path.abspath(dir_path)
     for tar_exe in ('/usr/bin/tar', '/bin/tar'):
         if is_exe(tar_exe):
-            subprocess.check_call([tar_exe, '-cf', dest_path, '-C', os.path.dirname(dir_path), os.path.basename(dir_path)])
+            subprocess.check_call(
+                [tar_exe, '-cf', dest_path, '-C', os.path.dirname(dir_path), os.path.basename(dir_path)]
+            )
             break
     else:
         with tarfile.open(dest_path, 'w') as out:
@@ -55,7 +57,10 @@ def main(args):
     elif args.unpack:
         for tared_dir in args.dirs:
             if not tared_dir.endswith(args.ext):
-                print("Requested to unpack '{}' which do not have required extension '{}'".format(tared_dir, args.ext), file=sys.stderr)
+                print(
+                    "Requested to unpack '{}' which do not have required extension '{}'".format(tared_dir, args.ext),
+                    file=sys.stderr,
+                )
                 return 1
             dest = os.path.dirname(tared_dir)
             unpack_dir(tared_dir, dest)

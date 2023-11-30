@@ -25,7 +25,7 @@ def fix_tmpdir(cmd):
     tmpdir = os.environ.get('TMPDIR') or os.environ.get('TEMPDIR')
     if not tmpdir:
         return cmd
-    return cmd[:java_id + 1] + ['{}{}'.format(option_name, tmpdir)] + cmd[java_id + 1:]
+    return cmd[: java_id + 1] + ['{}{}'.format(option_name, tmpdir)] + cmd[java_id + 1 :]
 
 
 def just_do_it():

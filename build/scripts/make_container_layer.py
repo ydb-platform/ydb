@@ -1,6 +1,6 @@
 import sys
 
-import container # 1
+import container  # 1
 
 
 class UserError(Exception):

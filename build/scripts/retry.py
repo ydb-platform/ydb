@@ -8,7 +8,7 @@ def retry_func(f, exceptions=Exception, tries=-1, delay=1, max_delay=None, backo
     while _tries:
         try:
             return f()
-        except exceptions as e:
+        except exceptions:
             _tries -= 1
             if not _tries:
                 raise
@@ -25,5 +25,7 @@ def retry(**retry_kwargs):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             return retry_func(lambda: func(*args, **kwargs), **retry_kwargs)
+
         return wrapper
+
     return decorator

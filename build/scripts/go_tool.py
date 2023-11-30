@@ -23,9 +23,9 @@ vendor_prefix = 'vendor/'
 vet_info_ext = '.vet.out'
 vet_report_ext = '.vet.txt'
 
-FIXED_CGO1_SUFFIX='.fixed.cgo1.go'
+FIXED_CGO1_SUFFIX = '.fixed.cgo1.go'
 
-COMPILE_OPTIMIZATION_FLAGS=('-N',)
+COMPILE_OPTIMIZATION_FLAGS = ('-N',)
 
 
 def get_trimpath_args(args):
@@ -99,7 +99,7 @@ def preprocess_args(args):
     # compute root relative module dir path
     assert args.output is None or args.output_root == os.path.dirname(args.output)
     assert args.output_root.startswith(args.build_root_dir)
-    args.module_path = args.output_root[len(args.build_root_dir):]
+    args.module_path = args.output_root[len(args.build_root_dir) :]
     args.source_module_dir = os.path.join(args.source_root, args.test_import_path or args.module_path) + os.path.sep
     assert len(args.module_path) > 0
     args.import_path, args.is_std = get_import_path(args.module_path)
@@ -109,7 +109,7 @@ def preprocess_args(args):
     srcs = []
     for f in args.srcs:
         if f.endswith(FIXED_CGO1_SUFFIX) and f.startswith(args.build_root_dir):
-            path = os.path.join(args.output_root, '{}.cgo1.go'.format(os.path.basename(f[:-len(FIXED_CGO1_SUFFIX)])))
+            path = os.path.join(args.output_root, '{}.cgo1.go'.format(os.path.basename(f[: -len(FIXED_CGO1_SUFFIX)])))
             srcs.append(path)
             preprocess_cgo1(f, path, args.source_root)
         else:
@@ -127,8 +127,8 @@ def compare_versions(version1, version2):
         index = version.find('beta')
         return len(version) if index < 0 else index
 
-    v1 = tuple(x.zfill(8) for x in version1[:last_index(version1)].split('.'))
-    v2 = tuple(x.zfill(8) for x in version2[:last_index(version2)].split('.'))
+    v1 = tuple(x.zfill(8) for x in version1[: last_index(version1)].split('.'))
+    v2 = tuple(x.zfill(8) for x in version2[: last_index(version2)].split('.'))
     if v1 == v2:
         return 0
     return 1 if v1 < v2 else -1
@@ -159,9 +159,9 @@ def get_import_path(module_path):
     import_path = module_path.replace('\\', '/')
     is_std_module = import_path.startswith(std_lib_prefix)
     if is_std_module:
-        import_path = import_path[len(std_lib_prefix):]
+        import_path = import_path[len(std_lib_prefix) :]
     elif import_path.startswith(vendor_prefix):
-        import_path = import_path[len(vendor_prefix):]
+        import_path = import_path[len(vendor_prefix) :]
     else:
         import_path = arc_project_prefix + import_path
     assert len(import_path) > 0
@@ -224,7 +224,9 @@ def create_embed_config(args):
     }
     for info in args.embed:
         embed_dir = os.path.normpath(info[0])
-        assert embed_dir == args.source_module_dir[:-1] or embed_dir.startswith((args.source_module_dir, args.build_root))
+        assert embed_dir == args.source_module_dir[:-1] or embed_dir.startswith(
+            (args.source_module_dir, args.build_root)
+        )
         pattern = info[1]
         if pattern.endswith('/**/*'):
             pattern = pattern[:-3]
@@ -258,7 +260,7 @@ def gen_vet_info(args):
     #                    does't make any harm (it needs to be revised later)
     import_map['unsafe'] = 'unsafe'
 
-    for (key, _) in info['packagefile']:
+    for key, _ in info['packagefile']:
         if key not in import_map:
             import_map[key] = key
 
@@ -275,7 +277,7 @@ def gen_vet_info(args):
         'PackageVetx': dict((key, vet_info_output_name(value)) for key, value in info['packagefile']),
         'VetxOnly': False,
         'VetxOutput': vet_info_output_name(args.output),
-        'SucceedOnTypecheckFailure': False
+        'SucceedOnTypecheckFailure': False,
     }
     # sys.stderr.write('{}\n'.format(json.dumps(data, indent=4)))
     return data
@@ -360,7 +362,9 @@ def _do_compile_go(args):
     compiling_runtime = False
     if is_std_module:
         cmd.append('-std')
-        if import_path in ('runtime', 'internal/abi', 'internal/bytealg', 'internal/cpu') or import_path.startswith('runtime/internal/'):
+        if import_path in ('runtime', 'internal/abi', 'internal/bytealg', 'internal/cpu') or import_path.startswith(
+            'runtime/internal/'
+        ):
             cmd.append('-+')
             compiling_runtime = True
     import_config_name = create_import_config(args.peers, True, args.import_map, args.module_map)
@@ -399,7 +403,6 @@ def _do_compile_go(args):
 
 
 class VetThread(threading.Thread):
-
     def __init__(self, target, args):
         super(VetThread, self).__init__(target=target, args=args)
         self.exc_info = None
@@ -431,11 +434,14 @@ def do_compile_go(args):
 
 def do_compile_asm(args):
     def need_compiling_runtime(import_path):
-        return import_path in ('runtime', 'reflect', 'syscall') or \
-            import_path.startswith('runtime/internal/') or \
-            compare_versions('1.17', args.goversion) >= 0 and import_path == 'internal/bytealg'
+        return (
+            import_path in ('runtime', 'reflect', 'syscall')
+            or import_path.startswith('runtime/internal/')
+            or compare_versions('1.17', args.goversion) >= 0
+            and import_path == 'internal/bytealg'
+        )
 
-    assert(len(args.srcs) == 1 and len(args.asm_srcs) == 1)
+    assert len(args.srcs) == 1 and len(args.asm_srcs) == 1
     cmd = [args.go_asm]
     cmd += get_trimpath_args(args)
     cmd += ['-I', args.output_root, '-I', os.path.join(args.pkg_root, 'include')]
@@ -485,7 +491,9 @@ def do_link_exe(args):
 
     do_link_lib(compile_args)
     cmd = [args.go_link, '-o', args.output]
-    import_config_name = create_import_config(args.peers + args.non_local_peers, False, args.import_map, args.module_map)
+    import_config_name = create_import_config(
+        args.peers + args.non_local_peers, False, args.import_map, args.module_map
+    )
     if import_config_name:
         cmd += ['-importcfg', import_config_name]
     if args.link_flags:
@@ -522,7 +530,7 @@ def do_link_exe(args):
             cgo_peers.append('-Wl,--end-group')
     try:
         index = extldflags.index('--cgo-peers')
-        extldflags = extldflags[:index] + cgo_peers + extldflags[index+1:]
+        extldflags = extldflags[:index] + cgo_peers + extldflags[index + 1 :]
     except ValueError:
         extldflags.extend(cgo_peers)
     if len(extldflags) > 0:
@@ -533,20 +541,27 @@ def do_link_exe(args):
 
 def gen_cover_info(args):
     lines = []
-    lines.extend([
-        """
+    lines.extend(
+        [
+            """
 var (
     coverCounters = make(map[string][]uint32)
     coverBlocks = make(map[string][]testing.CoverBlock)
 )
         """,
-        'func init() {',
-    ])
+            'func init() {',
+        ]
+    )
     for var, file in (x.split(':') for x in args.cover_info):
-        lines.append('    coverRegisterFile("{file}", _cover0.{var}.Count[:], _cover0.{var}.Pos[:], _cover0.{var}.NumStmt[:])'.format(file=file, var=var))
-    lines.extend([
-        '}',
-        """
+        lines.append(
+            '    coverRegisterFile("{file}", _cover0.{var}.Count[:], _cover0.{var}.Pos[:], _cover0.{var}.NumStmt[:])'.format(
+                file=file, var=var
+            )
+        )
+    lines.extend(
+        [
+            '}',
+            """
 func coverRegisterFile(fileName string, counter []uint32, pos []uint32, numStmts []uint16) {
     if 3*len(counter) != len(pos) || len(counter) != len(numStmts) {
         panic("coverage: mismatched sizes")
@@ -569,7 +584,8 @@ func coverRegisterFile(fileName string, counter []uint32, pos []uint32, numStmts
     coverBlocks[fileName] = block
 }
         """,
-    ])
+        ]
+    )
     return lines
 
 
@@ -706,18 +722,22 @@ def gen_test_main(args, test_lib_args, xtest_lib_args):
 
     lines.append('func main() {')
     if is_cover:
-        lines.extend([
-            '    testing.RegisterCover(testing.Cover{',
-            '        Mode: "set",',
-            '        Counters: coverCounters,',
-            '        Blocks: coverBlocks,',
-            '        CoveredPackages: "",',
-            '    })',
-        ])
-    lines.extend([
-        '    m := testing.MainStart(testdeps.TestDeps{{}}, {})'.format(', '.join(var_names)),
-        '',
-    ])
+        lines.extend(
+            [
+                '    testing.RegisterCover(testing.Cover{',
+                '        Mode: "set",',
+                '        Counters: coverCounters,',
+                '        Blocks: coverBlocks,',
+                '        CoveredPackages: "",',
+                '    })',
+            ]
+        )
+    lines.extend(
+        [
+            '    m := testing.MainStart(testdeps.TestDeps{{}}, {})'.format(', '.join(var_names)),
+            '',
+        ]
+    )
 
     if test_main_package:
         lines.append('    {}.TestMain(m)'.format(test_main_package))
@@ -746,6 +766,7 @@ def do_link_test(args):
     xtest_ydx_file_name = None
     need_append_ydx = test_lib_args and xtest_lib_args and args.ydx_file and args.vet_flags
     if need_append_ydx:
+
         def find_ydx_file_name(name, flags):
             for i, elem in enumerate(flags):
                 if elem.endswith(name):
@@ -873,12 +894,7 @@ if __name__ == '__main__':
     # We are going to support only 'lib', 'exe' and 'cgo' build modes currently
     # and as a result we are going to generate only one build node per module
     # (or program)
-    dispatch = {
-        'exe': do_link_exe,
-        'dll': do_link_exe,
-        'lib': do_link_lib,
-        'test': do_link_test
-    }
+    dispatch = {'exe': do_link_exe, 'dll': do_link_exe, 'lib': do_link_lib, 'test': do_link_test}
 
     exit_code = 1
     try:

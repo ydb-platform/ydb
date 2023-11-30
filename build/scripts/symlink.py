@@ -8,7 +8,7 @@ from subprocess import call
 
 def symlink():
     if len(sys.argv) < 3:
-        print >>sys.stderr, "Usage: symlink.py <source> <target>"
+        print >> sys.stderr, "Usage: symlink.py <source> <target>"
         sys.exit(1)
 
     source = sys.argv[1]
@@ -24,6 +24,7 @@ def symlink():
             call(["mklink", target, source], shell=True)
     else:
         call(["ln", "-f", "-s", "-n", source, target])
+
 
 if __name__ == '__main__':
     symlink()

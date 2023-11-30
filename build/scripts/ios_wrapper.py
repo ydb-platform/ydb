@@ -86,7 +86,8 @@ def just_do_it(args):
     if not signs:
         sign_file = os.path.join(module_dir, app_name + '.xcent')
         with open(sign_file, 'w') as f:
-            f.write('''<?xml version="1.0" encoding="UTF-8"?>
+            f.write(
+                '''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -94,7 +95,8 @@ def just_do_it(args):
         <true/>
 </dict>
 </plist>
-            ''')
+            '''
+            )
     else:
         sign_file = signs[0]
     sign_application(sign_file, app_dir)
@@ -132,6 +134,7 @@ def make_main_plist(inputs, out, replaced_parameters):
             else:
                 if root[k] in replaced_parameters:
                     root[k] = replaced_parameters[root[k]]
+
     scan_n_replace(united_data)
     plistlib.writePlist(united_data, out)
     subprocess.check_call(['/usr/bin/plutil', '-convert', 'binary1', out])
@@ -145,16 +148,20 @@ def link_storyboards(ibtool, archives, app_name, app_dir, flags):
         with tarfile.open(arc) as a:
             a.extractall(path=unpacked[-1])
     flags += [
-        '--module', app_name,
-        '--link', app_dir,
+        '--module',
+        app_name,
+        '--link',
+        app_dir,
     ]
-    subprocess.check_call([ibtool] + flags +
-                          ['--errors', '--warnings', '--notices', '--output-format', 'human-readable-text'] +
-                          unpacked)
+    subprocess.check_call(
+        [ibtool] + flags + ['--errors', '--warnings', '--notices', '--output-format', 'human-readable-text'] + unpacked
+    )
 
 
 def sign_application(xcent, app_dir):
-    subprocess.check_call(['/usr/bin/codesign', '--force', '--sign', '-', '--entitlements', xcent, '--timestamp=none', app_dir])
+    subprocess.check_call(
+        ['/usr/bin/codesign', '--force', '--sign', '-', '--entitlements', xcent, '--timestamp=none', app_dir]
+    )
 
 
 def extract_resources(resources, app_dir, strings=False, sign=False):
@@ -163,17 +170,23 @@ def extract_resources(resources, app_dir, strings=False, sign=False):
             for tfinfo in tf:
                 tf.extract(tfinfo.name, app_dir)
                 if strings:
-                    subprocess.check_call(['/usr/bin/plutil', '-convert', 'binary1', os.path.join(app_dir, tfinfo.name)])
+                    subprocess.check_call(
+                        ['/usr/bin/plutil', '-convert', 'binary1', os.path.join(app_dir, tfinfo.name)]
+                    )
                 if sign:
-                    subprocess.check_call(['/usr/bin/codesign', '--force', '--sign', '-', os.path.join(app_dir, tfinfo.name)])
+                    subprocess.check_call(
+                        ['/usr/bin/codesign', '--force', '--sign', '-', os.path.join(app_dir, tfinfo.name)]
+                    )
 
 
 def make_archive(app_dir, output):
     with tarfile.open(output, "w") as tar_handle:
         for root, _, files in os.walk(app_dir):
             for f in files:
-                tar_handle.add(os.path.join(root, f), arcname=os.path.join(os.path.basename(app_dir),
-                                                                           os.path.relpath(os.path.join(root, f), app_dir)))
+                tar_handle.add(
+                    os.path.join(root, f),
+                    arcname=os.path.join(os.path.basename(app_dir), os.path.relpath(os.path.join(root, f), app_dir)),
+                )
 
 
 if __name__ == '__main__':

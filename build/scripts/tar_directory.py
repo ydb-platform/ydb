@@ -9,7 +9,9 @@ def is_exe(fpath):
 
 def main(args):
     if len(args) < 2 or len(args) > 3:
-        raise Exception("Illegal usage: `tar_directory.py archive.tar directory [skip prefix]` or `tar_directory.py archive.tar output_directory --extract`")
+        raise Exception(
+            "Illegal usage: `tar_directory.py archive.tar directory [skip prefix]` or `tar_directory.py archive.tar output_directory --extract`"
+        )
     tar, directory, prefix, extract = args[0], args[1], None, False
     if len(args) == 3:
         if args[2] == '--extract':

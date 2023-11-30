@@ -29,7 +29,11 @@ def just_do_it(argv):
         arcadia_root: fake_arcadia_root,
         build_root: fake_build_root,
     }
-    modify_sources_file(sources_file, os.path.join(os.path.dirname(sources_file), '_' + os.path.basename(sources_file)), fake_source_roots)
+    modify_sources_file(
+        sources_file,
+        os.path.join(os.path.dirname(sources_file), '_' + os.path.basename(sources_file)),
+        fake_source_roots,
+    )
     kindex_data_root = '{}/kindex'.format(os.path.join(build_root, os.path.dirname(corpus_name)))
     if not os.path.exists(kindex_data_root):
         os.makedirs(kindex_data_root)
@@ -44,6 +48,7 @@ def just_do_it(argv):
     finally:
         os.unlink(fake_arcadia_root)
         os.unlink(fake_build_root)
+
 
 if __name__ == '__main__':
     just_do_it(sys.argv[1:])

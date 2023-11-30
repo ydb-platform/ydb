@@ -1,7 +1,6 @@
 import sys
 import zipfile
 import os
-import re
 
 
 def prepare_path(path):

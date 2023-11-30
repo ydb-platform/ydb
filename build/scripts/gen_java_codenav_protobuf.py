@@ -7,7 +7,19 @@ def just_do_it(kythe_to_proto, entries, out_name, build_file, source_root):
         classpath = os.pathsep.join([line.strip() for line in f])
     os.execv(
         kythe_to_proto,
-        [kythe_to_proto, '--sources-rel-root', 'fake_arcadia_root', '--entries', entries, '--out', out_name, '--classpath', classpath, '--arcadia-root', source_root]
+        [
+            kythe_to_proto,
+            '--sources-rel-root',
+            'fake_arcadia_root',
+            '--entries',
+            entries,
+            '--out',
+            out_name,
+            '--classpath',
+            classpath,
+            '--arcadia-root',
+            source_root,
+        ],
     )
 
 

@@ -27,7 +27,7 @@ def main():
             rel_dst = os.path.dirname(os.path.normpath(src))
             for prefix in prefixes:
                 if src.startswith(prefix):
-                    rel_dst = rel_dst[len(prefix):]
+                    rel_dst = rel_dst[len(prefix) :]
                     continue
             assert not os.path.isabs(rel_dst)
             dest_dir = os.path.join(args.dest_dir, rel_dst)

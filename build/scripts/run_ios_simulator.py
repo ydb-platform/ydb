@@ -29,13 +29,17 @@ def action_create(simctl, profiles, device_dir, name, args):
     all_devices = list(get_all_devices(simctl, profiles, device_dir))
     if filter(lambda x: x["name"] == name, all_devices):
         raise Exception("Device named {} already exists".format(name))
-    subprocess.check_call([simctl, "--profiles", profiles, "--set", device_dir, "create", name, args.device_type, args.device_runtime])
+    subprocess.check_call(
+        [simctl, "--profiles", profiles, "--set", device_dir, "create", name, args.device_type, args.device_runtime]
+    )
     created = filter(lambda x: x["name"] == name, get_all_devices(simctl, profiles, device_dir))
     if not created:
         raise Exception("Creation error: temp device named {} not found".format(name))
     created = created[0]
     if created["availability"] != "(available)":
-        raise Exception("Creation error: temp device {} status is {} ((available) expected)".format(name, created["availability"]))
+        raise Exception(
+            "Creation error: temp device {} status is {} ((available) expected)".format(name, created["availability"])
+        )
 
 
 def action_spawn(simctl, profiles, device_dir, name, args):
@@ -60,7 +64,9 @@ def action_kill(simctl, profiles, device_dir, name):
 
 
 def get_all_devices(simctl, profiles, device_dir):
-    p = subprocess.Popen([simctl, "--profiles", profiles, "--set", device_dir, "list", "--json", "devices"], stdout=subprocess.PIPE)
+    p = subprocess.Popen(
+        [simctl, "--profiles", profiles, "--set", device_dir, "list", "--json", "devices"], stdout=subprocess.PIPE
+    )
     out, _ = p.communicate()
     rc = p.wait()
     if rc:

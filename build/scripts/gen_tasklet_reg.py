@@ -35,10 +35,7 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
 
-    includes = ''.join(
-        '#include <{}>\n'.format(include)
-        for include in args.includes
-    )
+    includes = ''.join('#include <{}>\n'.format(include) for include in args.includes)
 
     code = TEMPLATE.format(
         includes=includes,

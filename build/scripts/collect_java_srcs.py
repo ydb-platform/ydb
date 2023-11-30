@@ -22,14 +22,14 @@ if __name__ == '__main__':
 
             else:
                 # Outside root
-                print>>sys.stderr, 'External src file "{}" is outside of srcdir {}, ignore'.format(
+                print('External src file "{}" is outside of srcdir {}, ignore'.format(
                     os.path.relpath(src, build_root),
                     os.path.relpath(root, build_root),
                 )
                 continue
 
             if os.path.exists(dst):
-                print>>sys.stderr, 'Duplicate external src file {}, choice is undefined'.format(
+                print >> sys.stderr, 'Duplicate external src file {}, choice is undefined'.format(
                     os.path.relpath(dst, root)
                 )
 
@@ -48,4 +48,4 @@ if __name__ == '__main__':
                 zf.extractall(dst)
 
         else:
-            print>>sys.stderr, 'Unrecognized file type', os.path.relpath(src, build_root)
+            print >> sys.stderr, 'Unrecognized file type', os.path.relpath(src, build_root)

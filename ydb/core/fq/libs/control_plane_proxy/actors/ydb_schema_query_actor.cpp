@@ -428,6 +428,7 @@ public:
             TBase::SendErrorMessageToSender(
                 new TEvPrivate::TEvRecoveryResponse(Nothing(),
                                                     TStatus{EStatus::TIMEOUT, {}}));
+            return;
         }
         TBase::SendRequestToSender(new TEvPrivate::TEvRecoveryResponse(
             MakeDeleteExternalDataSourceQuery(Request->Get()->Request.content().name()),
@@ -495,6 +496,7 @@ public:
             TBase::SendErrorMessageToSender(
                 new TEvPrivate::TEvRecoveryResponse(Nothing(),
                                                     TStatus{EStatus::TIMEOUT, {}}));
+            return;
         }
         TBase::SendRequestToSender(new TEvPrivate::TEvRecoveryResponse(
             MakeDeleteExternalDataTableQuery(Request->Get()->Request.content().name()),

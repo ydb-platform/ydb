@@ -34,7 +34,7 @@ target_link_libraries(ydb-core-cms PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-resource
-  cpp-actors-core
+  library-actors-core
   ydb-core-actorlib_impl
   ydb-core-base
   ydb-core-blobstorage
@@ -103,7 +103,7 @@ target_link_libraries(ydb-core-cms.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-resource
-  cpp-actors-core
+  library-actors-core
   ydb-core-actorlib_impl
   ydb-core-base
   ydb-core-blobstorage

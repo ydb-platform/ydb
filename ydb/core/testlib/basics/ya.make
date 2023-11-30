@@ -8,7 +8,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/dnsresolver
+    ydb/library/actors/dnsresolver
     library/cpp/regex/pcre
     library/cpp/testing/unittest
     ydb/core/base

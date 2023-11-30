@@ -23,7 +23,7 @@ target_link_libraries(minikql-computation-llvm PUBLIC
   Target-X86-AsmParser
   lib-Transforms-IPO
   libs-apache-arrow
-  cpp-actors-util
+  library-actors-util
   library-cpp-enumbitset
   library-cpp-packedtypes
   library-cpp-random_provider

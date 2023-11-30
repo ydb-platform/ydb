@@ -11,7 +11,7 @@ add_library(tx-conveyor-usage)
 target_link_libraries(tx-conveyor-usage PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   services-metadata-request
 )
 target_sources(tx-conveyor-usage PRIVATE

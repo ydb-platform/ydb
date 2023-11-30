@@ -24,7 +24,7 @@ target_link_libraries(core-tx-scheme_board PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-base
   ydb-core-mon
   ydb-core-protos

@@ -4,8 +4,8 @@
 #include "compile_context.h"
 #include "db_key_resolver.h"
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 
 #include <library/cpp/threading/future/future.h>

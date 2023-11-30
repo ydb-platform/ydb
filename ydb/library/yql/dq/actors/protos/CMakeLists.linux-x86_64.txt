@@ -48,7 +48,7 @@ target_link_libraries(dq-actors-protos PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-protos
+  library-actors-protos
   api-protos
   core-issue-protos
   yql-dq-proto

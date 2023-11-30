@@ -12,7 +12,7 @@ target_link_libraries(engines-changes-counters PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-protos
-  cpp-actors-core
+  library-actors-core
   ydb-core-tablet_flat
 )
 target_sources(engines-changes-counters PRIVATE

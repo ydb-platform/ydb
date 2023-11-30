@@ -4,7 +4,7 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/actors/testlib/test_runtime.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <util/system/fs.h>
 #include <util/generic/string.h>

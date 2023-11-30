@@ -15,7 +15,7 @@ add_library(ydb-services-bg_tasks)
 target_link_libraries(ydb-services-bg_tasks PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   services-metadata-abstract
   services-bg_tasks-abstract
   services-bg_tasks-protos

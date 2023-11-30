@@ -11,8 +11,8 @@ add_library(libs-checkpoint_storage-events)
 target_link_libraries(libs-checkpoint_storage-events PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-interconnect
+  library-actors-core
+  library-actors-interconnect
   fq-libs-checkpointing_common
   fq-libs-events
   libs-checkpoint_storage-proto

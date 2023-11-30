@@ -4,7 +4,7 @@
 #include <ydb/core/cms/console/net_classifier_updater.h>
 #include <ydb/core/testlib/test_client.h>
 
-#include <library/cpp/actors/http/http_proxy.cpp>
+#include <ydb/library/actors/http/http_proxy.cpp>
 
 #include <library/cpp/protobuf/util/is_equal.h>
 

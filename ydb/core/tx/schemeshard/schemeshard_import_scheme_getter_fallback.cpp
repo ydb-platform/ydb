@@ -1,8 +1,8 @@
 #include "schemeshard_import_scheme_getter.h"
 #include "schemeshard_private.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

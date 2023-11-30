@@ -15,8 +15,8 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/console.pb.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>

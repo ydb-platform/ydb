@@ -14,7 +14,7 @@ target_compile_options(yql-dq-comp_nodes PRIVATE
 target_link_libraries(yql-dq-comp_nodes PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   dq-actors-compute
   minikql-computation-llvm
   library-yql-utils

@@ -20,7 +20,7 @@ target_link_libraries(ydb-library-yql-dq-actors-spilling-ut PUBLIC
   cpp-testing-unittest_main
   dq-actors-spilling
   cpp-testing-unittest
-  cpp-actors-testlib
+  library-actors-testlib
   ydb-library-services
   yql-sql-pg_dummy
   udf-service-exception_policy

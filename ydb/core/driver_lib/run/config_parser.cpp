@@ -1,7 +1,7 @@
 #include "config_parser.h"
 #include "dummy.h"
 
-#include <library/cpp/actors/core/log_settings.h>
+#include <ydb/library/actors/core/log_settings.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 

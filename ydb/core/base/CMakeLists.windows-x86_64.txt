@@ -14,11 +14,11 @@ add_library(ydb-core-base)
 target_link_libraries(ydb-core-base PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-helpers
-  cpp-actors-interconnect
-  cpp-actors-protos
-  cpp-actors-wilson
+  library-actors-core
+  library-actors-helpers
+  library-actors-interconnect
+  library-actors-protos
+  library-actors-wilson
   cpp-deprecated-enum_codegen
   library-cpp-logger
   library-cpp-lwtrace

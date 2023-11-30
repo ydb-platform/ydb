@@ -1,5 +1,5 @@
 #pragma once
-#include <library/cpp/actors/util/rope.h>
+#include <ydb/library/actors/util/rope.h>
 #include <util/generic/ptr.h>
 #include <util/system/types.h>
 

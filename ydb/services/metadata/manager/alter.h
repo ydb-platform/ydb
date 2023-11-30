@@ -5,7 +5,7 @@
 #include "restore.h"
 #include "modification.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NMetadata::NModifications {
 

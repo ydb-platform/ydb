@@ -11,7 +11,7 @@ add_library(core-persqueue-writer)
 target_link_libraries(core-persqueue-writer PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   cpp-digest-md5
   cpp-string_utils-base64
   ydb-core-base

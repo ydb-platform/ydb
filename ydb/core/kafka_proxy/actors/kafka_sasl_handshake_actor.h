@@ -3,7 +3,7 @@
 #include "ydb/library/aclib/aclib.h"
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include "actors.h"
 

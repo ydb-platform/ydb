@@ -12,7 +12,7 @@ add_library(ydb-library-db_pool)
 target_link_libraries(ydb-library-db_pool PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   cpp-monlib-dynamic_counters
   ydb-core-protos
   library-db_pool-protos

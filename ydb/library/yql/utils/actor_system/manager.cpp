@@ -63,7 +63,7 @@ namespace NYql {
     }
 
     // Inspired by simple example from
-    // https://a.yandex-team.ru/arcadia/library/cpp/actors/examples/01_ping_pong/main.cpp?rev=r11692799
+    // https://a.yandex-team.ru/arcadia/ydb/library/actors/examples/01_ping_pong/main.cpp?rev=r11692799
     void TActorSystemManager::ModifySetupWithDefaults(TActorSystemSetup& setup, ui32 nodeID) {
         if (setup.NodeId == 0) {
             setup.NodeId = nodeID;

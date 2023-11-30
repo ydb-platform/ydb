@@ -11,7 +11,7 @@ add_library(core-persqueue-events)
 target_link_libraries(core-persqueue-events PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-base
   ydb-core-keyvalue
   ydb-core-protos

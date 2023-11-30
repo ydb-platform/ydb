@@ -1,5 +1,5 @@
 #include <random>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include "hive_impl.h"
 #include "hive_log.h"

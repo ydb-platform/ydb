@@ -3,8 +3,8 @@
 
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/base/tablet_pipe.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
 namespace NKikimr {

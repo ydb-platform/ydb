@@ -12,11 +12,11 @@
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/event_pb.h>
-#include <library/cpp/actors/core/executor_pool_basic.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/scheduler_basic.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 

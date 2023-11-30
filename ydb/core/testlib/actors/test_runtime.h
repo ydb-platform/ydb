@@ -4,7 +4,7 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/memobserver.h>
 
-#include <library/cpp/actors/testlib/test_runtime.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/threading/future/future.h>
 

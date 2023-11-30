@@ -4,8 +4,8 @@
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/string/builder.h>
 #include <util/system/defaults.h>

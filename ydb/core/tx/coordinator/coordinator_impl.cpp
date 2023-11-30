@@ -4,15 +4,15 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tx/tx.h>
 
 #include <library/cpp/time_provider/time_provider.h>
-#include <library/cpp/actors/core/monotonic_provider.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/monotonic_provider.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr {
 namespace NFlatTxCoordinator {

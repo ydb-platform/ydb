@@ -1,6 +1,6 @@
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 #include <ydb/library/folder_service/events.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr::NFolderService {
 

@@ -16,7 +16,7 @@ target_link_libraries(core-client-server PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-helpers
+  library-actors-helpers
   library-cpp-json
   library-cpp-messagebus
   messagebus_protobuf

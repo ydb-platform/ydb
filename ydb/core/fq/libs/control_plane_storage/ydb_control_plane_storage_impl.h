@@ -13,7 +13,7 @@
 #include <util/generic/guid.h>
 #include <util/system/yassert.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/protobuf/interop/cast.h>

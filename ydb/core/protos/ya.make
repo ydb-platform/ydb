@@ -144,7 +144,7 @@ GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_config.pb.h)
 GENERATE_ENUM_SERIALIZATION(datashard_load.pb.h)
 
 PEERDIR(
-    library/cpp/actors/protos
+    ydb/library/actors/protos
     ydb/core/fq/libs/config/protos
     ydb/core/scheme/protos
     ydb/library/login/protos

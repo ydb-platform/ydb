@@ -12,7 +12,7 @@
 #include <ydb/services/metadata/initializer/fetcher.h>
 #include <ydb/services/metadata/manager/abstract.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr::NMetadata::NProvider {
 

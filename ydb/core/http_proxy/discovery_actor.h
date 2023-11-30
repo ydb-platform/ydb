@@ -3,7 +3,7 @@
 #include "events.h"
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr::NHttpProxy {
 

@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 namespace NFq {
 

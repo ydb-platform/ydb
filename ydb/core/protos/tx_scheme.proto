@@ -1,4 +1,4 @@
-import "library/cpp/actors/protos/actors.proto";
+import "ydb/library/actors/protos/actors.proto";
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/bind_channel_storage_pool.proto";
 

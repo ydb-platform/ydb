@@ -41,7 +41,7 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(sourceid.h)
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     library/cpp/html/pcdata
     library/cpp/json
     ydb/core/base

@@ -1,7 +1,7 @@
 #include "guid_proxyobtain.h"
 #include "guid_proxybase.h"
 
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/core/interconnect.h>
 
 using namespace NKikimrServices;
 

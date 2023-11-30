@@ -1,8 +1,8 @@
 #pragma once
 #include "kqp_compute_state.h"
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/log_iface.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/log_iface.h>
 
 namespace NKikimr::NKqp::NScanPrivate {
 

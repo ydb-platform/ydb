@@ -1,4 +1,4 @@
-#include <library/cpp/actors/protos/services_common.pb.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/library/services/services.pb.h>
 
 static_assert(static_cast<ui32>(NKikimrServices::EServiceKikimr_MIN) > static_cast<ui32>(NActorsServices::EServiceCommon_MAX), "KIKIMR SERVICES IDs SHOULD BE GREATER THAN COMMON ONES");

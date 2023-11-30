@@ -17,7 +17,7 @@ target_link_libraries(fq-libs-checkpointing PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   libs-actors-logging
   fq-libs-checkpointing_common
   libs-checkpoint_storage-events

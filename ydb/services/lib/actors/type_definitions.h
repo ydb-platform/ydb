@@ -2,7 +2,7 @@
 
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/map.h>

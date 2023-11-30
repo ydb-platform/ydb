@@ -4,9 +4,9 @@
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 static IOutputStream& operator<<(IOutputStream& out, const NKikimr::NKqp::IKqpGateway::TKqpSnapshot snap) {
     out << "[step: " << snap.Step << ", txId: " << snap.TxId << "]";

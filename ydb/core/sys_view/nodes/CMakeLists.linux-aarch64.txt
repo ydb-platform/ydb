@@ -15,7 +15,7 @@ target_link_libraries(core-sys_view-nodes PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-base
   core-kqp-runtime
   core-sys_view-common

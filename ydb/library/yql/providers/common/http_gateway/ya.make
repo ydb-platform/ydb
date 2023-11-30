@@ -7,7 +7,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/curl
-    library/cpp/actors/prof
+    ydb/library/actors/prof
     library/cpp/monlib/dynamic_counters
     library/cpp/retry
     ydb/library/yql/providers/common/proto

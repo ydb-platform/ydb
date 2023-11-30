@@ -1,7 +1,7 @@
 #include "service_node_resolver.h"
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/yson/node/node_io.h>
 
 #include <ydb/library/yql/utils/log/log.h>

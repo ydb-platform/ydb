@@ -1,6 +1,6 @@
 #include <library/cpp/messagebus/handler.h>
 #include <library/cpp/protobuf/json/json2proto.h>
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include "msgbus_http_server.h"
 #include "http_ping.h"

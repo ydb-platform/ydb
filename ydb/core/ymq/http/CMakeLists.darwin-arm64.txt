@@ -13,7 +13,7 @@ target_link_libraries(core-ymq-http PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-libxml
-  cpp-actors-core
+  library-actors-core
   library-cpp-cgiparam
   cpp-http-misc
   cpp-http-server

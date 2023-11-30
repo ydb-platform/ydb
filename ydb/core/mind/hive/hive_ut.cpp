@@ -22,10 +22,10 @@
 
 #include <ydb/core/mind/hive/hive_events.h>
 
-#include <library/cpp/actors/interconnect/interconnect_impl.h>
+#include <ydb/library/actors/interconnect/interconnect_impl.h>
 
 #include <library/cpp/malloc/api/malloc.h>
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/core/interconnect.h>
 #include <util/random/entropy.h>
 #include <util/stream/null.h>
 #include <util/string/printf.h>

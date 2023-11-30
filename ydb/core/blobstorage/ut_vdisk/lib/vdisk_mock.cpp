@@ -1,6 +1,6 @@
 #include "vdisk_mock.h"
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/protos/services_common.pb.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
 #include <util/generic/hash_set.h>
 #include <util/system/guard.h>
 

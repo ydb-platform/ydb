@@ -34,7 +34,7 @@ target_link_libraries(ydb-core-tx PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-base
   core-persqueue-config
   ydb-core-protos

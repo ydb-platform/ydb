@@ -1,8 +1,8 @@
 #pragma once
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/event.h>
-#include <library/cpp/actors/core/event_local.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/event.h>
+#include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/grpc/client/grpc_client_low.h>
 
 namespace NKikimr {

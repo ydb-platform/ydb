@@ -14,7 +14,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
-#include <library/cpp/actors/interconnect/interconnect_impl.h>
+#include <ydb/library/actors/interconnect/interconnect_impl.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>

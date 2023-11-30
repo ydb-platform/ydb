@@ -11,7 +11,7 @@ PEERDIR(
     ydb/core/tx/scheme_cache
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_proxy
-    library/cpp/actors/core
+    ydb/library/actors/core
 )
 
 END()

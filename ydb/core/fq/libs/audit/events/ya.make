@@ -5,8 +5,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/actors/interconnect
+    ydb/library/actors/core
+    ydb/library/actors/interconnect
     ydb/core/fq/libs/checkpointing_common
     ydb/core/fq/libs/control_plane_storage/events
     ydb/library/yql/public/issue

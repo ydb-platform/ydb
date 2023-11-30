@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     library/cpp/json/yson
     library/cpp/monlib/dynamic_counters
     library/cpp/random_provider

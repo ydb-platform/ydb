@@ -5,31 +5,31 @@
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
 
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/mon.h>
-#include <library/cpp/actors/core/mon_stats.h>
-#include <library/cpp/actors/core/monotonic_provider.h>
-#include <library/cpp/actors/core/process_stats.h>
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/core/log_settings.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/mon.h>
+#include <ydb/library/actors/core/mon_stats.h>
+#include <ydb/library/actors/core/monotonic_provider.h>
+#include <ydb/library/actors/core/process_stats.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/log_settings.h>
 
-#include <library/cpp/actors/core/executor_pool_basic.h>
-#include <library/cpp/actors/core/executor_pool_io.h>
-#include <library/cpp/actors/core/scheduler_basic.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/executor_pool_io.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
 
-#include <library/cpp/actors/interconnect/interconnect.h>
-#include <library/cpp/actors/interconnect/poller_tcp.h>
-#include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h>
-#include <library/cpp/actors/interconnect/interconnect_tcp_server.h>
-#include <library/cpp/actors/interconnect/interconnect_mon.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
+#include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
+#include <ydb/library/actors/interconnect/interconnect_mon.h>
 #include <ydb/core/actorlib_impl/mad_squirrel.h>
 
 #include <ydb/core/control/immediate_control_board_actor.h>
 
-#include <library/cpp/actors/protos/services_common.pb.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/core/cms/console/grpc_library_helper.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/formats/clickhouse_block.h>
@@ -41,7 +41,7 @@
 #include <ydb/core/mon/crossref.h>
 #include <ydb/core/mon_alloc/profiler.h>
 
-#include <library/cpp/actors/util/affinity.h>
+#include <ydb/library/actors/util/affinity.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -130,8 +130,8 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
 
-#include <library/cpp/actors/util/memory_track.h>
-#include <library/cpp/actors/prof/tag.h>
+#include <ydb/library/actors/util/memory_track.h>
+#include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 

@@ -1,7 +1,7 @@
 #include "metrics_printer.h"
 
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/http/http_proxy.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/http/http_proxy.h>
 #include <library/cpp/monlib/encode/format.h>
 
 #include <ydb/library/yql/utils/log/log.h>

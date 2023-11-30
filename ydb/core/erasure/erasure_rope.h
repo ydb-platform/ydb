@@ -11,7 +11,7 @@
 
 #include <util/generic/list.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <library/cpp/actors/util/rope.h>
+#include <ydb/library/actors/util/rope.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
 
 namespace NKikimr {

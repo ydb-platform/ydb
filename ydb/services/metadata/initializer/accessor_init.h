@@ -6,10 +6,10 @@
 #include <ydb/services/metadata/abstract/initialization.h>
 #include <ydb/services/metadata/ds_table/config.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/event_local.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/event_local.h>
 #include <library/cpp/threading/future/core/future.h>
-#include <library/cpp/actors/core/av_bootstrapped.h>
+#include <ydb/library/actors/core/av_bootstrapped.h>
 
 namespace NKikimr::NMetadata::NInitializer {
 

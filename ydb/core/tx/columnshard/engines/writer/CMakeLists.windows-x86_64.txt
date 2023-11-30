@@ -19,7 +19,7 @@ target_link_libraries(columnshard-engines-writer PUBLIC
   blobstorage-vdisk-protos
   ydb-core-tablet_flat
   core-formats-arrow
-  cpp-actors-core
+  library-actors-core
 )
 target_sources(columnshard-engines-writer PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/writer/compacted_blob_constructor.cpp

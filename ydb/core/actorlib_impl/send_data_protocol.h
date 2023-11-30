@@ -1,8 +1,8 @@
 #pragma once
 
-#include <library/cpp/actors/interconnect/events_local.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
-#include <library/cpp/actors/interconnect/interconnect_stream.h>
+#include <ydb/library/actors/interconnect/events_local.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect_stream.h>
 
 namespace NActors {
 

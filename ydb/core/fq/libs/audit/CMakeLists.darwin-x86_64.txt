@@ -12,7 +12,7 @@ add_library(fq-libs-audit)
 target_link_libraries(fq-libs-audit PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
 )
 target_sources(fq-libs-audit PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/audit/yq_audit_service.cpp

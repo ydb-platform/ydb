@@ -6,7 +6,7 @@
 
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/mon.h>
 
 using namespace NKikimrServices;
 

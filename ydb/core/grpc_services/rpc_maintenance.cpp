@@ -6,8 +6,8 @@
 #include <ydb/core/grpc_services/rpc_request_base.h>
 #include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr::NGRpcService {
 

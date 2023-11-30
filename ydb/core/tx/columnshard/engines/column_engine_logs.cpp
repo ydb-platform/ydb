@@ -14,7 +14,7 @@
 #include "changes/ttl.h"
 
 #include <library/cpp/time_provider/time_provider.h>
-#include <library/cpp/actors/core/monotonic_provider.h>
+#include <ydb/library/actors/core/monotonic_provider.h>
 
 #include <concepts>
 

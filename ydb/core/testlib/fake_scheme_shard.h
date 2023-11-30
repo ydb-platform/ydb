@@ -7,8 +7,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/library/aclib/aclib.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/events.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/ptr.h>

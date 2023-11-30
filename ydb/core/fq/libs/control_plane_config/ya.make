@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     library/cpp/lwtrace/mon
     library/cpp/monlib/service/pages
     ydb/core/base

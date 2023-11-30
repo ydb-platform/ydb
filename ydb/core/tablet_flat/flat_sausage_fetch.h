@@ -2,7 +2,7 @@
 
 #include "flat_sausage_gut.h"
 
-#include <library/cpp/actors/util/shared_data.h>
+#include <ydb/library/actors/util/shared_data.h>
 
 namespace NKikimr {
 namespace NPageCollection {

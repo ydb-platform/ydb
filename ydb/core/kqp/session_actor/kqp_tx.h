@@ -9,7 +9,7 @@
 
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 
-#include <library/cpp/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NKqp {
 

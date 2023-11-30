@@ -9,8 +9,8 @@
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 #include <ydb/core/util/ulid.h>
 

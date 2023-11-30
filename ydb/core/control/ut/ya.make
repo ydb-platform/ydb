@@ -7,8 +7,8 @@ TIMEOUT(600)
 SIZE(MEDIUM)
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/actors/interconnect
+    ydb/library/actors/core
+    ydb/library/actors/interconnect
     library/cpp/testing/unittest
     util
     ydb/core/base

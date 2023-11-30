@@ -2,7 +2,7 @@
 #include "keyvalue_const.h"
 
 #include <ydb/core/util/stlog.h>
-#include <library/cpp/actors/protos/services_common.pb.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
 #include <util/generic/overloaded.h>
 
 

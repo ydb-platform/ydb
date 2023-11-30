@@ -12,7 +12,7 @@ add_library(services-metadata-initializer)
 target_link_libraries(services-metadata-initializer PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-base
   core-grpc_services-local_rpc
   core-grpc_services-base

@@ -16,7 +16,7 @@ target_link_libraries(kqp-common-shutdown PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-protos
-  cpp-actors-core
+  library-actors-core
 )
 target_sources(kqp-common-shutdown PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/shutdown/controller.cpp

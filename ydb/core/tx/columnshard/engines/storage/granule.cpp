@@ -1,6 +1,6 @@
 #include "granule.h"
 #include "storage.h"
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include "optimizer/lbuckets/optimizer.h"
 
 namespace NKikimr::NOlap {

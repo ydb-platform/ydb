@@ -1,6 +1,6 @@
 #include "proxy_ut_helpers.h"
 
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>

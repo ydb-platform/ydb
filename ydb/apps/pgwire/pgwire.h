@@ -1,6 +1,6 @@
 #pragma once
 #include <atomic>
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include "signals.h"
 #include "appdata.h"
 

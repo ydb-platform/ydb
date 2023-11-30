@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/persqueue/writer/writer.h>

@@ -12,7 +12,7 @@ add_library(core-sys_view-service)
 target_link_libraries(core-sys_view-service PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-base
   ydb-core-protos
   library-aclib-protos

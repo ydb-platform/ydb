@@ -11,7 +11,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_multi_map.h>
 #include <util/generic/ptr.h>

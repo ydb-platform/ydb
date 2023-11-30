@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 

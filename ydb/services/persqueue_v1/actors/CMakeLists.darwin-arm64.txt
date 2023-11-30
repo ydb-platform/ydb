@@ -11,7 +11,7 @@ add_library(services-persqueue_v1-actors)
 target_link_libraries(services-persqueue_v1-actors PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   cpp-containers-disjoint_interval_tree
   cpp-string_utils-base64
   ydb-core-base

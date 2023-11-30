@@ -1,6 +1,6 @@
 #include "aligned_page_pool.h"
 #include "util/string/builder.h"
-#include <library/cpp/actors/util/intrinsics.h>
+#include <ydb/library/actors/util/intrinsics.h>
 
 #include <util/generic/yexception.h>
 #include <util/string/cast.h>

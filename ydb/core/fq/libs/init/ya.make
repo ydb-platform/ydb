@@ -5,8 +5,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/actors/http
+    ydb/library/actors/core
+    ydb/library/actors/http
     ydb/core/base
     ydb/core/fq/libs/actors
     ydb/core/fq/libs/audit

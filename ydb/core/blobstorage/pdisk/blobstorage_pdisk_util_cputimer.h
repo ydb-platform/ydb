@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 
-#include <library/cpp/actors/util/datetime.h>
+#include <ydb/library/actors/util/datetime.h>
 
 namespace NKikimr {
 namespace NPDisk {

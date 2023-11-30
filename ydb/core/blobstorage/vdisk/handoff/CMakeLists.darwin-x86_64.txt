@@ -11,7 +11,7 @@ add_library(blobstorage-vdisk-handoff)
 target_link_libraries(blobstorage-vdisk-handoff PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   monlib-service-pages
   ydb-core-base
   core-blobstorage-backpressure

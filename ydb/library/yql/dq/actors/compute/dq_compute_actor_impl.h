@@ -24,8 +24,8 @@
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/actors/compute/dq_request_context.h>
 
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>

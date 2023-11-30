@@ -10,9 +10,9 @@
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <library/cpp/json/json_writer.h>
 
 namespace NKikimr::NDataShard {

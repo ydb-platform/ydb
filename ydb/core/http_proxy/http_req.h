@@ -10,8 +10,8 @@
 #include <ydb/library/http_proxy/authorization/signature.h>
 #include <ydb/public/api/grpc/draft/ydb_datastreams_v1.grpc.pb.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/http/http.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/http/http.h>
 #include <ydb/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/http/server/http.h>
 #include <library/cpp/json/json_value.h>

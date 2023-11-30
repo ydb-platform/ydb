@@ -9,7 +9,7 @@
 #include <ydb/core/cms/console/net_classifier_updater.h>
 #include <ydb/core/mon/mon.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <util/generic/hash.h>
 #include <util/stream/file.h>

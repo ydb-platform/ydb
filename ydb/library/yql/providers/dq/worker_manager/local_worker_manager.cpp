@@ -12,9 +12,9 @@
 #include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/utils/log/log.h>
 
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 #include "worker_manager_common.h"
 

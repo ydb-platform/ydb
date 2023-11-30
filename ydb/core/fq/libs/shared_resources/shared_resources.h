@@ -7,7 +7,7 @@
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 namespace NFq {
 

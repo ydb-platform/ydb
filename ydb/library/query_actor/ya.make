@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     library/cpp/threading/future
     ydb/core/base
     ydb/core/grpc_services/local_rpc

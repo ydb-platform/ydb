@@ -10,7 +10,7 @@ PEERDIR(
     ydb/core/kqp/provider
     ydb/library/yql/providers/common/gateway
     ydb/core/tx/schemeshard
-    library/cpp/actors/core
+    ydb/library/actors/core
 )
 
 YQL_LAST_ABI_VERSION()

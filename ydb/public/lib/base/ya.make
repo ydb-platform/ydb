@@ -8,7 +8,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     library/cpp/deprecated/enum_codegen
     library/cpp/messagebus
     library/cpp/messagebus/protobuf

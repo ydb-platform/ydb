@@ -13,7 +13,7 @@ target_link_libraries(tx-columnshard-resource_subscriber PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-protos
-  cpp-actors-core
+  library-actors-core
   ydb-core-tablet_flat
 )
 target_sources(tx-columnshard-resource_subscriber PRIVATE

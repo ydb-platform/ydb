@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <library/cpp/actors/util/rope.h>
+#include <ydb/library/actors/util/rope.h>
 
 #include <util/generic/noncopyable.h>
 #include <util/stream/output.h>

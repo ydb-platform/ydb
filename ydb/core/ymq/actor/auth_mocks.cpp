@@ -6,8 +6,8 @@
 
 #include <ydb/library/grpc/client/grpc_client_low.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <util/stream/file.h>
 #include <util/string/builder.h>

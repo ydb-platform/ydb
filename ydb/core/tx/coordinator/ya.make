@@ -24,9 +24,9 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/actors/helpers
-    library/cpp/actors/interconnect
+    ydb/library/actors/core
+    ydb/library/actors/helpers
+    ydb/library/actors/interconnect
     library/cpp/containers/absl_flat_hash
     ydb/core/actorlib_impl
     ydb/core/base

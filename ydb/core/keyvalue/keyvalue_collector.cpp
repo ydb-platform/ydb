@@ -1,6 +1,6 @@
 #include "keyvalue_flat_impl.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/core/util/stlog.h>

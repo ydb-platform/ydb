@@ -13,8 +13,8 @@ target_link_libraries(ydb-core-blobstorage-dsproxy-ut_fat PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-testing-unittest_main
-  cpp-actors-protos
-  cpp-actors-util
+  library-actors-protos
+  library-actors-util
   library-cpp-getopt
   library-cpp-svnversion
   ydb-core-base

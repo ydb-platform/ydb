@@ -1,6 +1,6 @@
 #include "log_backend_build.h"
 #include <util/system/getpid.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 

@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 
-#include <library/cpp/actors/util/rope.h>
+#include <ydb/library/actors/util/rope.h>
 #include <util/generic/map.h>
 #include "interval_set.h"
 

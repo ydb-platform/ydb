@@ -5,7 +5,7 @@
 #include <ydb/core/protos/counters_hive.pb.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/generic/array_ref.h>

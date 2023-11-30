@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 #include <library/cpp/logger/file.h>
 

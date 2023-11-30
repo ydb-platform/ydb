@@ -3,7 +3,7 @@
 #include <util/datetime/base.h>
 #include <memory>
 #include <optional>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <library/cpp/json/writer/json_value.h>
 
 namespace NKikimr::NTracing {

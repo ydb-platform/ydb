@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/public/api/grpc/ydb_rate_limiter_v1.grpc.pb.h>
 

@@ -8,7 +8,7 @@
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/protobuf/util/pb_io.h>
-#include <library/cpp/actors/testlib/test_runtime.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <ydb/library/yql/utils/bind_in_range.h>
 

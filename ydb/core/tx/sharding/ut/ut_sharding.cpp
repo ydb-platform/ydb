@@ -2,7 +2,7 @@
 #include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/core/tx/sharding/xx_hash.h>
 
-#include <library/cpp/actors/core/av_bootstrapped.h>
+#include <ydb/library/actors/core/av_bootstrapped.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/testing/unittest/registar.h>
 

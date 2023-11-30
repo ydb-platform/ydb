@@ -1,15 +1,15 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tabletid.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/appdata.h>
-#include <library/cpp/actors/util/queue_oneone_inplace.h>
+#include <ydb/library/actors/util/queue_oneone_inplace.h>
 #include <library/cpp/random_provider/random_provider.h>
 
 

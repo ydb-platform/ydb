@@ -18,7 +18,7 @@ add_library(ydb-services-metadata)
 target_link_libraries(ydb-services-metadata PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   services-metadata-abstract
   services-metadata-manager
 )

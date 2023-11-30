@@ -5,7 +5,7 @@ NO_BUILD_IF(OS_WINDOWS)
 SIZE(SMALL)
 
 PEERDIR(
-    library/cpp/actors/testlib
+    ydb/library/actors/testlib
     ydb/library/yql/public/udf/service/stub
     ydb/library/yql/sql/pg_dummy
     ydb/library/yql/providers/dq/actors/yt

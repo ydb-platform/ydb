@@ -25,8 +25,8 @@ target_link_libraries(ydb-core-viewer PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-resource
-  cpp-actors-core
-  cpp-actors-helpers
+  library-actors-core
+  library-actors-helpers
   library-cpp-archive
   cpp-mime-types
   cpp-protobuf-json
@@ -72,8 +72,8 @@ target_link_libraries(ydb-core-viewer.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-resource
-  cpp-actors-core
-  cpp-actors-helpers
+  library-actors-core
+  library-actors-helpers
   library-cpp-archive
   cpp-mime-types
   cpp-protobuf-json

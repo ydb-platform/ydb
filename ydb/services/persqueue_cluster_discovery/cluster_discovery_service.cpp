@@ -10,7 +10,7 @@
 #include <ydb/core/persqueue/cluster_tracker.h>
 #include <ydb/core/util/address_classifier.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <algorithm>
 

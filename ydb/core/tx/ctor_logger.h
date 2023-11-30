@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
 // You have to define TLogThis in local namespace to use these macros

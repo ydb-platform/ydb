@@ -3,7 +3,7 @@
 #include "pg_proxy_events.h"
 #include "pg_stream.h"
 #include "pg_log_impl.h"
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/raw_socket/sock_config.h>
 
 namespace NPG {

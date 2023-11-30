@@ -1,6 +1,6 @@
 #include "task.h"
 #include "events.h"
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include "actor.h"
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {

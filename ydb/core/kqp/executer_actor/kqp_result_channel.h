@@ -3,7 +3,7 @@
 #include "kqp_tasks_graph.h"
 #include "kqp_executer.h"
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 namespace NYql {
 

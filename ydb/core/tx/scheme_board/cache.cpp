@@ -20,9 +20,9 @@
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <library/cpp/json/writer/json.h>
 
 #include <util/generic/algorithm.h>

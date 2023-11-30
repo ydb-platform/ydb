@@ -17,7 +17,7 @@ target_link_libraries(dqrun PUBLIC
   yutil
   contrib-libs-protobuf
   client-ydb_persqueue_public-codecs
-  cpp-actors-http
+  library-actors-http
   library-cpp-getopt
   cpp-lfalloc-alloc_profiler
   library-cpp-logger

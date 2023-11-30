@@ -5,7 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_defrag.h>
-#include <library/cpp/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 
 namespace NKikimr {
 

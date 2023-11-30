@@ -10,7 +10,7 @@
 #include <ydb/library/binary_json/read.h>
 #include <ydb/library/dynumber/dynumber.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
-//#include <library/cpp/actors/interconnect/interconnect.h>
+//#include <ydb/library/actors/interconnect/interconnect.h>
 
 //#include <util/generic/cast.h>
 

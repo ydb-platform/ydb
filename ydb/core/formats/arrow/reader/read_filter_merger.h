@@ -5,7 +5,7 @@
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/formats/arrow/permutations.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <util/generic/hash.h>
 #include <util/string/join.h>
 #include <set>

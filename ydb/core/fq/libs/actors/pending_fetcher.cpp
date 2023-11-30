@@ -3,9 +3,9 @@
 
 #include "database_resolver.h"
 
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/protobuf/interop/cast.h>
 
 #include <ydb/core/mon/mon.h>
@@ -55,7 +55,7 @@
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/private_client/internal_service.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <ydb/library/security/util.h>
 

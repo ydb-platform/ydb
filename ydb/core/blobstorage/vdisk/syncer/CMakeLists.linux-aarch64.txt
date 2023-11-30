@@ -13,8 +13,8 @@ target_link_libraries(blobstorage-vdisk-syncer PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-interconnect
+  library-actors-core
+  library-actors-interconnect
   monlib-service-pages
   ydb-core-base
   core-blobstorage-base

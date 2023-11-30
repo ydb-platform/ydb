@@ -7,7 +7,7 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <library/cpp/json/fast_sax/parser.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <util/string/split.h>
 #include <util/string/join.h>
 

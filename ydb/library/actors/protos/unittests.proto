@@ -1,0 +1,20 @@
+option cc_enable_arenas = true;
+
+message TSimple {
+    required string Str1 = 1;
+    optional string Str2 = 2;
+    optional uint64 Number1 = 3;
+}
+
+message TBigMessage {
+    repeated TSimple Simples = 1;
+    repeated string ManyStr = 2;
+    optional string OneMoreStr = 3;
+    optional uint64 YANumber = 4;
+}
+
+message TMessageWithPayload {
+    optional string Meta = 1;
+    repeated uint32 PayloadId = 2;
+    repeated bytes SomeData = 3;
+}

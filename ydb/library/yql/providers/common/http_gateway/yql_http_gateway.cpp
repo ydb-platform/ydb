@@ -14,7 +14,7 @@
 #include <queue>
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
-#include <library/cpp/actors/prof/tag.h>
+#include <ydb/library/actors/prof/tag.h>
 #endif
 
 namespace {

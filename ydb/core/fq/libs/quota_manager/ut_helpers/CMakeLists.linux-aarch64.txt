@@ -12,7 +12,7 @@ target_link_libraries(libs-quota_manager-ut_helpers PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   libs-quota_manager-events
 )
 target_sources(libs-quota_manager-ut_helpers PRIVATE

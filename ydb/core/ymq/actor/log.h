@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/stream/output.h>
 

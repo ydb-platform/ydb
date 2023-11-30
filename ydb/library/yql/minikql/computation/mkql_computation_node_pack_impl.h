@@ -6,7 +6,7 @@
 #include <ydb/library/yql/public/udf/udf_value.h>
 
 #include <library/cpp/packedtypes/zigzag.h>
-#include <library/cpp/actors/util/rope.h>
+#include <ydb/library/actors/util/rope.h>
 
 #include <util/generic/buffer.h>
 #include <util/generic/strbuf.h>

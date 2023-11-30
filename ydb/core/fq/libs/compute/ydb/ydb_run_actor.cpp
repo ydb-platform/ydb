@@ -1,17 +1,17 @@
 #include "ydb_run_actor.h"
 
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <google/protobuf/util/time_util.h>
 
 #include <util/string/split.h>
 #include <util/system/hostname.h>
 
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/mon.h>
 #include <library/cpp/protobuf/interop/cast.h>
 #include <ydb/core/fq/libs/compute/common/pinger.h>
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>

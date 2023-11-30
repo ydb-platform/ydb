@@ -31,7 +31,7 @@ target_link_libraries(minikql-comp_nodes-llvm PUBLIC
   public-udf-arrow
   parser-pg_wrapper-interface
   library-yql-utils
-  cpp-actors-core
+  library-actors-core
 )
 target_sources(minikql-comp_nodes-llvm PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_addmember.cpp

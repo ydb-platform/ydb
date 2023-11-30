@@ -1,7 +1,7 @@
 #pragma once
 #include "config.h"
-#include <library/cpp/actors/core/actorid.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/core/tx/conveyor/service/service.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
 

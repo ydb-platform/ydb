@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 import "ydb/core/protos/config.proto";
-import "library/cpp/actors/protos/interconnect.proto";
+import "ydb/library/actors/protos/interconnect.proto";
 
 package NKikimrBlobStorage;
 

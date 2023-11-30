@@ -2,7 +2,7 @@
 
 #include "kqp_script_executions.h"
 
-#include <library/cpp/actors/core/event_local.h>
+#include <ydb/library/actors/core/event_local.h>
 
 namespace NKikimr::NKqp::NPrivate {
 

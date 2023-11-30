@@ -12,7 +12,7 @@
 #include <ydb/services/metadata/abstract/parsing.h>
 
 #include <library/cpp/threading/future/core/future.h>
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 namespace NKikimr::NMetadata::NModifications {
 

@@ -11,7 +11,7 @@ add_library(ydb-core-mon)
 target_link_libraries(ydb-core-mon PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   cpp-lwtrace-mon
   cpp-string_utils-url
   ydb-core-base

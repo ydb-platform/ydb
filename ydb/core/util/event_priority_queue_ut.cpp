@@ -1,6 +1,6 @@
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include "event_priority_queue.h"

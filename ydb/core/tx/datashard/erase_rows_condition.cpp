@@ -2,7 +2,7 @@
 
 #include <ydb/library/dynumber/dynumber.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/datetime/base.h>
 #include <util/string/cast.h>

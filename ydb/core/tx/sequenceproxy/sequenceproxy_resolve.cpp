@@ -5,7 +5,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <util/string/builder.h>
 
 #define TXLOG_LOG(priority, stream) \

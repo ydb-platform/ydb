@@ -1,7 +1,7 @@
 #pragma once
 
 #include <library/cpp/yaml/fyamlcpp/fyamlcpp.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 
 #include <ydb/core/protos/config.pb.h>

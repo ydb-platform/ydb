@@ -1,8 +1,8 @@
 #include "dummy_lock.h"
 
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <library/cpp/svnversion/svnversion.h>
 

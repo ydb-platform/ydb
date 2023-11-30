@@ -1,7 +1,7 @@
 #include "long_timer.h"
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/services/services.pb.h>
 
 namespace NActors {

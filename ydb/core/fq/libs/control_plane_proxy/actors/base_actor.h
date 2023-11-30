@@ -3,8 +3,8 @@
 #include "counters.h"
 
 #include <contrib/libs/fmt/include/fmt/format.h>
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>

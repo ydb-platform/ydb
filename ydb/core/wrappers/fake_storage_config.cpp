@@ -1,6 +1,6 @@
 #include "fake_storage.h"
 #include "fake_storage_config.h"
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #ifndef KIKIMR_DISABLE_S3_OPS
 namespace NKikimr::NWrappers::NExternalStorage {

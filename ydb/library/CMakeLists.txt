@@ -8,6 +8,7 @@
 
 add_subdirectory(accessor)
 add_subdirectory(aclib)
+add_subdirectory(actors)
 add_subdirectory(arrow_clickhouse)
 add_subdirectory(arrow_kernels)
 add_subdirectory(backup)

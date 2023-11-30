@@ -2,12 +2,12 @@
 
 #include <ydb/library/yql/utils/log/log.h>
 
-#include <library/cpp/actors/interconnect/interconnect.h>
-#include <library/cpp/actors/interconnect/interconnect_impl.h>
-#include <library/cpp/actors/interconnect/interconnect_address.h>
-#include <library/cpp/actors/interconnect/events_local.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect_impl.h>
+#include <ydb/library/actors/interconnect/interconnect_address.h>
+#include <ydb/library/actors/interconnect/events_local.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 

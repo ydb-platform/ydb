@@ -11,8 +11,8 @@ add_library(ydb-core-raw_socket)
 target_link_libraries(ydb-core-raw_socket PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-protos
+  library-actors-core
+  library-actors-protos
   ydb-core-base
   ydb-core-protos
 )

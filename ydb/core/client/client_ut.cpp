@@ -8,7 +8,7 @@
 #include <ydb/core/client/minikql_compile/yql_expr_minikql.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
-#include <library/cpp/actors/interconnect/interconnect_impl.h>
+#include <ydb/library/actors/interconnect/interconnect_impl.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/diff/diff.h>

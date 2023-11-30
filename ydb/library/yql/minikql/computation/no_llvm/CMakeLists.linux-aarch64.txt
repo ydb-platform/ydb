@@ -20,7 +20,7 @@ target_link_libraries(minikql-computation-no_llvm PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
-  cpp-actors-util
+  library-actors-util
   library-cpp-enumbitset
   library-cpp-packedtypes
   library-cpp-random_provider

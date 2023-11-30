@@ -14,8 +14,8 @@ target_compile_options(compute-ydb-control_plane PRIVATE
 target_link_libraries(compute-ydb-control_plane PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-protos
+  library-actors-core
+  library-actors-protos
   compute-ydb-synchronization_service
   libs-control_plane_storage-proto
   libs-quota_manager-proto

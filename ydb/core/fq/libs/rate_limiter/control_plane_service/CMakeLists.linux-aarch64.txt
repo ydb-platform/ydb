@@ -15,7 +15,7 @@ target_link_libraries(libs-rate_limiter-control_plane_service PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   libs-config-protos
   fq-libs-events
   libs-quota_manager-events

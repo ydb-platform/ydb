@@ -8,8 +8,8 @@
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
 
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 

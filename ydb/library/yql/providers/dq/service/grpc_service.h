@@ -10,9 +10,9 @@
 #include <ydb/library/grpc/server/grpc_request.h>
 #include <ydb/library/grpc/server/grpc_server.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/threading/future/future.h>
 

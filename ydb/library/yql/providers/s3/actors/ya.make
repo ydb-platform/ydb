@@ -19,7 +19,7 @@ SRCS(
 PEERDIR(
     contrib/libs/fmt
     contrib/libs/poco/Util
-    library/cpp/actors/http
+    ydb/library/actors/http
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
     library/cpp/xml/document

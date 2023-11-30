@@ -9,7 +9,7 @@ PEERDIR(
     contrib/libs/openssl
     contrib/libs/protobuf
     contrib/libs/yaml-cpp
-    library/cpp/actors/core
+    ydb/library/actors/core
     library/cpp/protobuf/json
     library/cpp/yaml/fyamlcpp
 )

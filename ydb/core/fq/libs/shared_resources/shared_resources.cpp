@@ -4,7 +4,7 @@
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/library/logger/actor.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 #include <util/generic/cast.h>
 #include <util/generic/strbuf.h>

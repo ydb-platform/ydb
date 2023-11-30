@@ -12,7 +12,7 @@ add_library(ydb-core-external_sources)
 target_link_libraries(ydb-core-external_sources PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-http
+  library-actors-http
   cpp-regex-pcre
   library-cpp-scheme
   ydb-core-base

@@ -8,7 +8,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/http
+    ydb/library/actors/http
     library/cpp/regex/pcre
     library/cpp/scheme
     ydb/core/base

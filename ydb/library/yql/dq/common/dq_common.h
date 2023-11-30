@@ -1,7 +1,7 @@
 #pragma once
 
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
 
 #include <util/generic/variant.h>
 

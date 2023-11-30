@@ -13,7 +13,7 @@ target_link_libraries(blobstorage-vdisk-common PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-protos
+  library-actors-protos
   monlib-service-pages
   ydb-core-base
   vdisk-hulldb-base

@@ -20,8 +20,8 @@ target_link_libraries(ydb-core-base-ut_board_subscriber PUBLIC
   yutil
   cpp-testing-unittest_main
   ydb-core-base
-  cpp-actors-interconnect
-  cpp-actors-core
+  library-actors-interconnect
+  library-actors-core
   cpp-testing-unittest
   core-testlib-basics
   testlib-basics-default

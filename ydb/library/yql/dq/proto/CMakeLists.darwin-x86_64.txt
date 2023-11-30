@@ -59,7 +59,7 @@ add_library(yql-dq-proto)
 target_link_libraries(yql-dq-proto PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-protos
+  library-actors-protos
   contrib-libs-protobuf
 )
 target_proto_messages(yql-dq-proto PRIVATE

@@ -23,7 +23,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
-    library/cpp/actors/util
+    ydb/library/actors/util
     library/cpp/enumbitset
     library/cpp/packedtypes
     library/cpp/random_provider

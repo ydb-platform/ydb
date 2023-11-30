@@ -7,9 +7,9 @@
 #include <ydb/library/db_pool/protos/config.pb.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/system/mutex.h>

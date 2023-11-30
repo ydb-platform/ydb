@@ -12,8 +12,8 @@
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 
-#include <library/cpp/actors/core/event_pb.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <util/stream/file.h>
 #include <util/string/split.h>

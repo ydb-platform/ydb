@@ -5,7 +5,7 @@
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/tx/scheme_board/subscriber.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 #include "kafka_sasl_auth_actor.h"
 

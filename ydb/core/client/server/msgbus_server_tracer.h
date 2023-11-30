@@ -6,7 +6,7 @@
 #include <library/cpp/messagebus/message.h>
 #include <library/cpp/messagebus/defs.h>
 #include <ydb/public/lib/base/msgbus.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include "msgbus_server.h"
 #include <library/cpp/deprecated/atomic/atomic.h>
 

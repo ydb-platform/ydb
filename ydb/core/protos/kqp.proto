@@ -3,7 +3,7 @@ option java_package = "ru.yandex.kikimr.proto";
 option cc_enable_arenas = true;
 
 import "google/protobuf/duration.proto";
-import "library/cpp/actors/protos/actors.proto";
+import "ydb/library/actors/protos/actors.proto";
 import "ydb/core/scheme/protos/type_info.proto";
 import "ydb/core/protos/kqp_physical.proto";
 import "ydb/core/protos/kqp_stats.proto";

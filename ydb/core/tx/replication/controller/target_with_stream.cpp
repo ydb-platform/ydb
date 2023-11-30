@@ -3,7 +3,7 @@
 #include "stream_remover.h"
 #include "target_with_stream.h"
 
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/events.h>
 
 namespace NKikimr::NReplication::NController {
 

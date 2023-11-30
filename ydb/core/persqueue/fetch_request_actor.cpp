@@ -1,5 +1,5 @@
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/interconnect.h>
 
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/msgbus.pb.h>

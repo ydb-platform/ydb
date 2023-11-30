@@ -13,8 +13,8 @@ PEERDIR(
     ydb/library/accessor
     ydb/library/conclusion
     contrib/libs/apache/arrow
-    library/cpp/actors/core
-    library/cpp/actors/wilson
+    ydb/library/actors/core
+    ydb/library/actors/wilson
 
     # Temporary fix dep ydb/core/tx/columnshard
     ydb/core/tablet_flat/protos

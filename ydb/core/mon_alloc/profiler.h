@@ -2,10 +2,10 @@
 
 #include <ydb/core/protos/profiler.pb.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/defs.h>
-#include <library/cpp/actors/core/event_pb.h>
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/defs.h>
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/events.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 

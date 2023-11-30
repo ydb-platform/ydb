@@ -23,8 +23,8 @@ target_link_libraries(ydb-core-public_http PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-http
+  library-actors-core
+  library-actors-http
   cpp-protobuf-json
   library-cpp-resource
   ydb-core-base
@@ -52,8 +52,8 @@ target_link_libraries(ydb-core-public_http.global PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-http
+  library-actors-core
+  library-actors-http
   cpp-protobuf-json
   library-cpp-resource
   ydb-core-base

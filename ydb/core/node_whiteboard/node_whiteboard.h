@@ -7,8 +7,8 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
-#include <library/cpp/actors/interconnect/events_local.h>
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/interconnect/events_local.h>
+#include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/base/tracing.h>
 
 namespace NKikimr {

@@ -12,8 +12,8 @@
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/secure_protobuf_printer.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/log.h>
 #include <library/cpp/http/server/response.h>
 #include <library/cpp/http/misc/parsed_request.h>
 

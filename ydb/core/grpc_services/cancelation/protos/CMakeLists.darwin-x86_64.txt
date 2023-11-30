@@ -23,7 +23,7 @@ add_library(grpc_services-cancelation-protos)
 target_link_libraries(grpc_services-cancelation-protos PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-protos
+  library-actors-protos
   contrib-libs-protobuf
 )
 target_proto_messages(grpc_services-cancelation-protos PRIVATE

@@ -18,7 +18,7 @@ target_link_libraries(libs-compute-ydb PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-protos
+  library-actors-protos
   cpp-lwtrace-protos
   libs-compute-common
   libs-config-protos

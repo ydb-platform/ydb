@@ -18,7 +18,7 @@ target_link_libraries(ydb-library-yaml_config PUBLIC
   contrib-libs-openssl
   contrib-libs-protobuf
   contrib-libs-yaml-cpp
-  cpp-actors-core
+  library-actors-core
   cpp-protobuf-json
   cpp-yaml-fyamlcpp
   ydb-core-base

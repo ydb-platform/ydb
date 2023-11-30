@@ -7,7 +7,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet_flat/ut/flat_test_db.h>
 #include <ydb/core/tablet_flat/ut/flat_test_db_helpers.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr {
 namespace NFake {

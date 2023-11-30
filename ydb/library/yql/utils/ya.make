@@ -42,7 +42,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/util
+    ydb/library/actors/util
     library/cpp/digest/md5
     library/cpp/messagebus
     library/cpp/string_utils/quote

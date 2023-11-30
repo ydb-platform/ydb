@@ -13,7 +13,7 @@ target_link_libraries(ydb-core-external_sources PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-http
+  library-actors-http
   cpp-regex-pcre
   library-cpp-scheme
   ydb-core-base

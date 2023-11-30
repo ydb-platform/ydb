@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/library/services/services.pb.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #define LOG_STREAMS_IMPL(level, component, logRecordStream) \
     LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog:: Y_CAT(PRI_, level), ::NKikimrServices::component, logRecordStream);

@@ -8,7 +8,7 @@ PEERDIR(
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/counters
-    library/cpp/actors/protos
+    ydb/library/actors/protos
 )
 
 SRCS(

@@ -12,7 +12,7 @@ PEERDIR(
     ydb/core/formats/arrow/dictionary
     ydb/core/formats/arrow/transformer
     ydb/core/formats/arrow/reader
-    library/cpp/actors/core
+    ydb/library/actors/core
     ydb/library/arrow_kernels
     ydb/library/binary_json
     ydb/library/dynumber

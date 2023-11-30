@@ -1,9 +1,9 @@
 #pragma once
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <ydb/core/base/events.h>
 #include <ydb/core/kqp/common/kqp.h>

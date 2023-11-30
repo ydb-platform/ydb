@@ -1,13 +1,13 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/base/tablet_pipe.h>
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/protos/services_common.pb.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/tx/tx.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr {
     struct TEvProducerTablet {

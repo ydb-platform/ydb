@@ -36,8 +36,8 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/monotonic_provider.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/monotonic_provider.h>
 
 #include <util/generic/xrange.h>
 #include <util/generic/ymath.h>

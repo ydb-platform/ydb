@@ -13,7 +13,7 @@ target_link_libraries(yql-utils-actors PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   common-token_accessor-client
   yql-public-types
   yql-public-udf

@@ -15,7 +15,7 @@ target_link_libraries(providers-solomon-provider PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-protos
+  library-actors-protos
   yql-dq-expr_nodes
   yql-dq-integration
   providers-common-config

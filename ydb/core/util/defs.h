@@ -1,10 +1,10 @@
 #pragma once
 // unique tag to fix pragma once gcc glueing: ./ydb/core/util/defs.h
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/interconnect/interconnect_common.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect_common.h>
 
 #include <util/system/defaults.h>
 #include <util/generic/bt_exception.h>

@@ -23,7 +23,7 @@ ENDIF()
 PEERDIR(
     contrib/libs/t1ha
     library/cpp/sse
-    library/cpp/actors/util
+    ydb/library/actors/util
 )
 
 END()

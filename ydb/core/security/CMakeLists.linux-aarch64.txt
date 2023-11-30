@@ -14,8 +14,8 @@ target_link_libraries(ydb-core-security PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-openldap
-  cpp-actors-core
-  cpp-actors-http
+  library-actors-core
+  library-actors-http
   monlib-service-pages
   cpp-openssl-io
   ydb-core-base

@@ -1,9 +1,9 @@
 #include "blobstorage_synclogdsk.h"
 #include "blobstorage_synclog_private_events.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/mon.h>
 
 
 namespace NKikimr {

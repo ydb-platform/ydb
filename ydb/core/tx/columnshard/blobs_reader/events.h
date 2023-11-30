@@ -3,7 +3,7 @@
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/library/accessor/accessor.h>
 
-#include <library/cpp/actors/core/event_local.h>
+#include <ydb/library/actors/core/event_local.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 

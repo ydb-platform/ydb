@@ -11,7 +11,7 @@
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <util/string/hex.h>
 #include <util/string/vector.h>
 #include <util/string/escape.h>

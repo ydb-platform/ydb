@@ -50,7 +50,7 @@
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 #include <util/string/join.h>
 

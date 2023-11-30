@@ -1,6 +1,6 @@
 #include "read_context.h"
 #include "read_metadata.h"
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/events.h>
 
 namespace NKikimr::NOlap {
 

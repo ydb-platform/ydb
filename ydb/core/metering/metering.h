@@ -2,8 +2,8 @@
 
 #include <ydb/core/base/events.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/events.h>
 #include <library/cpp/logger/backend.h>
 
 #include <util/generic/strbuf.h>

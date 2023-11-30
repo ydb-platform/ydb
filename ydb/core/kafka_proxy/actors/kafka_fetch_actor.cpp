@@ -1,4 +1,4 @@
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include "ydb/core/kafka_proxy/kafka_metrics.h"
 #include <ydb/core/base/ticket_parser.h>

@@ -11,7 +11,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/util
+    ydb/library/actors/util
     library/cpp/containers/stack_vector
     library/cpp/digest/crc32c
     library/cpp/digest/old_crc

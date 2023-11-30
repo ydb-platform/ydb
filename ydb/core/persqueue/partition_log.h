@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <util/generic/string.h>
 
 namespace NKikimr::NPQ {

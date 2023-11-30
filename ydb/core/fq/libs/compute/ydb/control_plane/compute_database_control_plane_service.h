@@ -9,7 +9,7 @@
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/ycloud/impl/grpc_service_settings.h>
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 namespace NFq {
 

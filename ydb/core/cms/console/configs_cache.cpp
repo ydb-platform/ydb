@@ -8,7 +8,7 @@
 #include <util/stream/file.h>
 #include <util/system/fs.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <google/protobuf/text_format.h>
 
 #if defined BLOG_DEBUG || defined BLOG_ERROR || defined BLOG_WARN

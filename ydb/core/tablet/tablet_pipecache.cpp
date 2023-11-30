@@ -5,7 +5,7 @@
 #include <util/generic/set.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr {
 

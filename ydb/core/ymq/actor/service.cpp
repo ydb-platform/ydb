@@ -28,8 +28,8 @@
 #include <ydb/core/base/counters.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/logger/global/global.h>
 
 #include <util/generic/algorithm.h>

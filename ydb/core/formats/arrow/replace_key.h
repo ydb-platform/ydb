@@ -4,7 +4,7 @@
 #include "common/validation.h"
 #include <ydb/core/base/defs.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>

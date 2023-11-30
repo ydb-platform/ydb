@@ -11,7 +11,7 @@ add_library(core-sys_view-common)
 target_link_libraries(core-sys_view-common PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-base
   ydb-core-protos
   ydb-core-tablet_flat

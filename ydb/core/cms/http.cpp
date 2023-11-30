@@ -15,9 +15,9 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mon/mon.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/mon.h>
 #include <library/cpp/mime/types/mime.h>
 #include <library/cpp/resource/resource.h>
 

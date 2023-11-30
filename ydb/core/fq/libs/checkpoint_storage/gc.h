@@ -5,7 +5,7 @@
 
 #include <ydb/core/fq/libs/config/protos/checkpoint_coordinator.pb.h>
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 #include <memory>
 

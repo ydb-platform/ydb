@@ -36,7 +36,7 @@
 #include <util/string/subst.h>
 #include <util/system/env.h>
 #include <util/system/sanitizers.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/kesus/tablet/tablet.h>

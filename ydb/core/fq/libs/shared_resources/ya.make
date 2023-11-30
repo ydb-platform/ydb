@@ -6,7 +6,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     library/cpp/monlib/dynamic_counters
     ydb/core/fq/libs/common
     ydb/core/fq/libs/config

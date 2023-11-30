@@ -1,6 +1,6 @@
 #include "read_filter_merger.h"
 #include <ydb/core/formats/arrow/permutations.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
 
 namespace NKikimr::NOlap::NIndexedReader {

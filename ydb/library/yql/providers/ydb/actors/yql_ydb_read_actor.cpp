@@ -4,11 +4,11 @@
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/providers/ydb/proto/range.pb.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <ydb/public/lib/experimental/ydb_clickhouse_internal.h>
 #include <ydb/core/scheme/scheme_tablecell.h>

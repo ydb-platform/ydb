@@ -1,7 +1,7 @@
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
-import "library/cpp/actors/protos/actors.proto";
+import "ydb/library/actors/protos/actors.proto";
 
 package NKikimrExecutorFlat;
 option java_package = "ru.yandex.kikimr.proto";

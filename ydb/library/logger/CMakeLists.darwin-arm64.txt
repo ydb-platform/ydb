@@ -11,7 +11,7 @@ add_library(ydb-library-logger)
 target_link_libraries(ydb-library-logger PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   library-cpp-logger
 )
 target_sources(ydb-library-logger PRIVATE

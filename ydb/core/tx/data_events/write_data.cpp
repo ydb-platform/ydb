@@ -1,7 +1,7 @@
 #include "write_data.h"
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/defs.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 
 namespace NKikimr::NEvWrite {

@@ -6,8 +6,8 @@
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
 #include <contrib/libs/curl/include/curl/curl.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/log.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <util/string/cast.h>
 

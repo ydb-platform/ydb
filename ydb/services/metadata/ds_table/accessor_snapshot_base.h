@@ -4,7 +4,7 @@
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/initializer/accessor_init.h>
 #include <ydb/services/metadata/request/request_actor_cb.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr::NMetadata::NProvider {
 

@@ -3,7 +3,7 @@
 #include "factories.h"
 #include "service_initializer.h"
 
-#include <library/cpp/actors/util/affinity.h>
+#include <ydb/library/actors/util/affinity.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/tablet/tablet_setup.h>
@@ -16,12 +16,12 @@
 
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
 
-#include <library/cpp/actors/core/defs.h>
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/log_settings.h>
-#include <library/cpp/actors/core/scheduler_actor.h>
-#include <library/cpp/actors/core/scheduler_basic.h>
-#include <library/cpp/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/core/defs.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/log_settings.h>
+#include <ydb/library/actors/core/scheduler_actor.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/actors/interconnect/poller_tcp.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/vector.h>

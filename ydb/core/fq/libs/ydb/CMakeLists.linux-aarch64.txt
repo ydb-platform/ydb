@@ -21,7 +21,7 @@ target_link_libraries(fq-libs-ydb PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   library-cpp-retry
   ydb-core-base
   fq-libs-config

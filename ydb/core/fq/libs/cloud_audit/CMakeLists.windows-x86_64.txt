@@ -11,7 +11,7 @@ add_library(fq-libs-cloud_audit)
 target_link_libraries(fq-libs-cloud_audit PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-log_backend
+  library-actors-log_backend
   library-cpp-unified_agent_client
   fq-libs-actors
   libs-audit-events

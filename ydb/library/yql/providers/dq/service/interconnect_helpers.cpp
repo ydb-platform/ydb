@@ -3,7 +3,7 @@
 
 #include "grpc_service.h"
 
-#include <library/cpp/actors/helpers/selfping_actor.h>
+#include <ydb/library/actors/helpers/selfping_actor.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
@@ -11,15 +11,15 @@
 
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
-#include <library/cpp/actors/core/executor_pool_basic.h>
-#include <library/cpp/actors/core/scheduler_basic.h>
-#include <library/cpp/actors/core/scheduler_actor.h>
-#include <library/cpp/actors/dnsresolver/dnsresolver.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
-#include <library/cpp/actors/interconnect/interconnect_common.h>
-#include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h>
-#include <library/cpp/actors/interconnect/interconnect_tcp_server.h>
-#include <library/cpp/actors/interconnect/poller_actor.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/actors/core/scheduler_actor.h>
+#include <ydb/library/actors/dnsresolver/dnsresolver.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect_common.h>
+#include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
+#include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
+#include <ydb/library/actors/interconnect/poller_actor.h>
 #include <library/cpp/yson/node/node_io.h>
 
 #include <util/stream/file.h>

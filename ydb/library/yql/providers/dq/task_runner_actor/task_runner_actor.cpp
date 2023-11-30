@@ -11,7 +11,7 @@
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 using namespace NYql::NDqs;
 using namespace NActors;

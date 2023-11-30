@@ -30,15 +30,15 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/event_pb.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/string/printf.h>
 
-#include <library/cpp/actors/wilson/wilson_span.h>
-#include <library/cpp/actors/wilson/wilson_trace.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 
 LWTRACE_USING(KQP_PROVIDER);
 

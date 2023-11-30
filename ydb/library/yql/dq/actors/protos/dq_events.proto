@@ -2,7 +2,7 @@ package NYql.NDqProto;
 option cc_enable_arenas = true;
 
 import "google/protobuf/any.proto";
-import "library/cpp/actors/protos/actors.proto";
+import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
 import "ydb/library/yql/dq/actors/protos/dq_status_codes.proto";
 import "ydb/library/yql/dq/proto/dq_state_load_plan.proto";

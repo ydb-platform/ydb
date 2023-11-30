@@ -18,7 +18,7 @@ target_link_libraries(services-metadata-manager PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-library-accessor
-  cpp-actors-core
+  library-actors-core
   api-protos
   ydb-core-protos
   services-bg_tasks-abstract

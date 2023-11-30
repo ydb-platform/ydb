@@ -3,8 +3,8 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/domain.h>
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/actor.h>
 #include <util/string/builder.h>
 
 #define TXLOG_LOG(priority, stream) \

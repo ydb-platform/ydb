@@ -79,7 +79,7 @@
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/logger/priority.h>
 #include <library/cpp/protobuf/util/pb_io.h>
-#include <library/cpp/actors/http/http_proxy.h>
+#include <ydb/library/actors/http/http_proxy.h>
 
 #include <util/generic/string.h>
 #include <util/generic/hash.h>

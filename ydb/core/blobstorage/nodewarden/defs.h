@@ -2,12 +2,12 @@
 
 #include <ydb/core/blobstorage/defs.h>
 
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/mailbox_queue_revolving.h>
-#include <library/cpp/actors/core/invoke.h>
-#include <library/cpp/actors/core/io_dispatcher.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/mailbox_queue_revolving.h>
+#include <ydb/library/actors/core/invoke.h>
+#include <ydb/library/actors/core/io_dispatcher.h>
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/config.pb.h>
@@ -42,7 +42,7 @@
 #include <google/protobuf/text_format.h>
 
 #include <library/cpp/digest/crc32c/crc32c.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/openssl/crypto/sha.h>
 #include <library/cpp/json/json_value.h>
 

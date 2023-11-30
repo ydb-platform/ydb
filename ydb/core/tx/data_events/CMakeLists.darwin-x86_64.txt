@@ -23,8 +23,8 @@ target_link_libraries(core-tx-data_events PUBLIC
   ydb-library-accessor
   ydb-library-conclusion
   libs-apache-arrow
-  cpp-actors-core
-  cpp-actors-wilson
+  library-actors-core
+  library-actors-wilson
   core-tablet_flat-protos
   ydb-core-tablet_flat
   blobstorage-vdisk-protos

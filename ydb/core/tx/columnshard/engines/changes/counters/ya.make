@@ -6,7 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/protos
-    library/cpp/actors/core
+    ydb/library/actors/core
     ydb/core/tablet_flat
 )
 

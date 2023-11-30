@@ -1,8 +1,8 @@
 #pragma once
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/protos/services_common.pb.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
 
 #include "sock64.h"
 

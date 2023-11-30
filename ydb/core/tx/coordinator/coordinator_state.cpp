@@ -1,7 +1,7 @@
 #include "coordinator_state.h"
 #include "coordinator_impl.h"
 
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/core/interconnect.h>
 #include <library/cpp/time_provider/time_provider.h>
 
 

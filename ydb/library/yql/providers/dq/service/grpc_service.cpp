@@ -24,8 +24,8 @@
 #include <ydb/library/grpc/server/grpc_counters.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
-#include <library/cpp/actors/interconnect/interconnect.h>
-#include <library/cpp/actors/helpers/future_callback.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/helpers/future_callback.h>
 #include <library/cpp/build_info/build_info.h>
 #include <library/cpp/svnversion/svnversion.h>
 

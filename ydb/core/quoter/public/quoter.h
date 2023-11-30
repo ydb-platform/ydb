@@ -1,9 +1,9 @@
 #pragma once
-#include <library/cpp/actors/core/event_local.h>
+#include <ydb/library/actors/core/event_local.h>
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
 #include <ydb/library/time_series_vec/time_series_vec.h>
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/events.h>
 
 namespace NKikimr {
 

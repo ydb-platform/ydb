@@ -11,10 +11,10 @@
 #include <ydb/core/blobstorage/crypto/crypto.h>
 #include <ydb/core/blobstorage/nodewarden/group_stat_aggregator.h>
 #include <ydb/core/util/log_priority_mute_checker.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
 #include <ydb/core/base/interconnect_channels.h>
 #include <util/generic/deque.h>

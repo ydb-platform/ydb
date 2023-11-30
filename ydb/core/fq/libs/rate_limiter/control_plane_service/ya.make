@@ -6,7 +6,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/events
     ydb/core/fq/libs/quota_manager/events

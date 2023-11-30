@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/wilson
+    ydb/library/actors/wilson
 )
 
 END()

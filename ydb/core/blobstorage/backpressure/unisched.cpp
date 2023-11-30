@@ -1,5 +1,5 @@
 #include "unisched.h"
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/base/events.h>
 #include <util/generic/set.h>
 

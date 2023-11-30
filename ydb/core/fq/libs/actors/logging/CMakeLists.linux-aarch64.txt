@@ -12,6 +12,6 @@ target_link_libraries(libs-actors-logging INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-protos
 )

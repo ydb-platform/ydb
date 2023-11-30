@@ -27,7 +27,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/ycloud/api
-    library/cpp/actors/core
+    ydb/library/actors/core
     library/cpp/digest/crc32c
     ydb/library/grpc/client
     library/cpp/json

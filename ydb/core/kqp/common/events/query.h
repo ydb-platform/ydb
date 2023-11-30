@@ -8,8 +8,8 @@
 
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/library/aclib/aclib.h>
-#include <library/cpp/actors/core/event_pb.h>
-#include <library/cpp/actors/core/event_local.h>
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/event_local.h>
 
 namespace NKikimr::NKqp::NPrivateEvents {
 

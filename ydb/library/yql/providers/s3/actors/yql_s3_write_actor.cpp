@@ -10,12 +10,12 @@
 #include <ydb/library/yql/utils/aws_credentials.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/http/http.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/http/http.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/string_utils/quote/quote.h>
 

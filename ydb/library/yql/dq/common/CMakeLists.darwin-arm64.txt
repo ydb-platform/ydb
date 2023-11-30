@@ -17,8 +17,8 @@ add_library(yql-dq-common)
 target_link_libraries(yql-dq-common PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-util
+  library-actors-core
+  library-actors-util
   library-mkql_proto-protos
   yql-dq-proto
   library-yql-utils

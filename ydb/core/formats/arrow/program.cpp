@@ -41,7 +41,7 @@ struct GroupByOptions : public arrow::compute::ScalarAggregateOptions {
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/datum.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/result.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NSsa {

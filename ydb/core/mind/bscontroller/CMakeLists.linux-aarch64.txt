@@ -15,7 +15,7 @@ target_link_libraries(core-mind-bscontroller PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-base
   core-base-services
   ydb-core-blobstorage

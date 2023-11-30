@@ -11,7 +11,7 @@
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
-#include <library/cpp/actors/protos/unittests.pb.h>
+#include <ydb/library/actors/protos/unittests.pb.h>
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/formats/arrow/simple_builder/array.h>
 #include <ydb/core/formats/arrow/simple_builder/batch.h>

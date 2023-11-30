@@ -26,8 +26,8 @@
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/statistics/aggregator/aggregator.h>
 
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/folder/dirut.h>

@@ -6,7 +6,7 @@
 
 #include <ydb/core/base/defs.h>
 
-#include <library/cpp/actors/core/monotonic.h>
+#include <ydb/library/actors/core/monotonic.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/algorithm.h>

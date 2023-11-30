@@ -1,7 +1,7 @@
 #include "external_source.h"
 #include "validation_functions.h"
 
-#include <library/cpp/actors/http/http.h>
+#include <ydb/library/actors/http/http.h>
 
 
 namespace NKikimr::NExternalSource {

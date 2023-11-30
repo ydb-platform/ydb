@@ -12,7 +12,7 @@ target_link_libraries(blobstorage-ut_pdiskfit-lib PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-protos
+  library-actors-protos
   ydb-core-base
   core-blobstorage-pdisk
   ydb-library-pdisk_io

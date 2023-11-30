@@ -1,7 +1,7 @@
 #pragma once
 
 #include <library/cpp/yaml/fyamlcpp/fyamlcpp.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 #include <openssl/sha.h>
 

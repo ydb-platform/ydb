@@ -1,6 +1,6 @@
 #include "tenant_slot_broker_impl.h"
 
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr {
 namespace NTenantSlotBroker {

@@ -110,7 +110,7 @@ def generate_graph_for_platform(generate_graph_for_platform):
         "in $B/library/cpp/config/",
         "in $S/tools/rescompiler/bin/",
         # Fix
-        "in $B/library/cpp/actors/dnsresolver/ut/library-cpp-actors-dnsresolver-ut",
+        "in $B/ydb/library/actors/dnsresolver/ut/library-cpp-actors-dnsresolver-ut",
         "in $B/ydb/library/pdisk_io/libydb-library-pdisk_io",
     ]
 

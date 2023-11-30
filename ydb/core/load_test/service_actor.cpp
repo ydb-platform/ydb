@@ -14,7 +14,7 @@
 
 #include <ydb/public/lib/base/msgbus.h>
 
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/writer/json_value.h>

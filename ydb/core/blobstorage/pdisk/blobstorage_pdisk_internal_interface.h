@@ -6,7 +6,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_blockdevice.h>
 
 #include <ydb/library/pdisk_io/buffers.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/mon.h>
 
 
 namespace NKikimr {

@@ -8,7 +8,7 @@
 #include <library/cpp/monlib/service/pages/tablesorter/css_mon_page.h>
 #include <library/cpp/monlib/service/pages/tablesorter/js_mon_page.h>
 
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/mon.h>
 
 #include "mon.h"
 

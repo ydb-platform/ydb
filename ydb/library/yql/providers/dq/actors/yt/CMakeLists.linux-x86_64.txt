@@ -15,7 +15,7 @@ target_link_libraries(dq-actors-yt PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   library-grpc-client
   cpp-mapreduce-interface
   providers-dq-config

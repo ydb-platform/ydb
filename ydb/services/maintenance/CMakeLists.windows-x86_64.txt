@@ -13,7 +13,7 @@ target_link_libraries(ydb-services-maintenance PUBLIC
   yutil
   ydb-core-grpc_services
   api-grpc
-  cpp-actors-core
+  library-actors-core
   library-grpc-server
 )
 target_sources(ydb-services-maintenance PRIVATE

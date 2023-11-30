@@ -12,7 +12,7 @@ target_link_libraries(services-metadata-request PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-base
   core-grpc_services-local_rpc
   core-grpc_services-base

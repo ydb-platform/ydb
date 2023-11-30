@@ -4,8 +4,8 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/appdata.h>
 
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/random_provider/random_provider.h>
 
 #include <ydb/core/protos/bootstrapper.pb.h>

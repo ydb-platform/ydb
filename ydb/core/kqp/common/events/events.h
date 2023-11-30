@@ -10,9 +10,9 @@
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <library/cpp/actors/core/event_pb.h>
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/event_load.h>
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/event_load.h>
 #include <contrib/libs/protobuf/src/google/protobuf/map.h>
 
 namespace NKikimr::NKqp {

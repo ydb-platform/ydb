@@ -14,8 +14,8 @@ target_link_libraries(ydb-core-pgproxy PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-protos
+  library-actors-core
+  library-actors-protos
   cpp-string_utils-base64
   ydb-core-base
   core-pgproxy-protos

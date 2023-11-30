@@ -16,7 +16,7 @@ target_link_libraries(fq-libs-control_plane_config PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   cpp-lwtrace-mon
   monlib-service-pages
   ydb-core-base

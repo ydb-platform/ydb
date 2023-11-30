@@ -7,7 +7,7 @@
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 
-#include <library/cpp/actors/core/monotonic_provider.h>
+#include <ydb/library/actors/core/monotonic_provider.h>
 
 #include <util/system/hp_timer.h>
 

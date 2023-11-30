@@ -2,7 +2,7 @@
 #include "console.h"
 #include "log_settings_configurator.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <util/system/file.h>
 #include <util/system/fs.h>
 #include <util/stream/file.h>

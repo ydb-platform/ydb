@@ -55,7 +55,7 @@ SRCS(
 PEERDIR(
     contrib/libs/openssl
     contrib/libs/protobuf
-    library/cpp/actors/core
+    ydb/library/actors/core
     library/cpp/containers/intrusive_rb_tree
     library/cpp/digest/md5
     ydb/library/grpc/client

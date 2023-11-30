@@ -5,7 +5,7 @@
 #include <ydb/core/formats/arrow/ssa_runtime_version.h>
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <vector>
 #include <unordered_set>

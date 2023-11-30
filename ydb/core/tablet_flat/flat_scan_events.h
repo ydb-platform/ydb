@@ -7,7 +7,7 @@
 #include "flat_fwd_sieve.h"
 #include "flat_table_subset.h"
 #include "flat_executor_misc.h"
-#include <library/cpp/actors/core/event_local.h>
+#include <ydb/library/actors/core/event_local.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {

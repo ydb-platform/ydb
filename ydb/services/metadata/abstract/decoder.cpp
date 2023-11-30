@@ -1,7 +1,7 @@
 #include "decoder.h"
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <library/cpp/json/json_reader.h>
 
 namespace NKikimr::NMetadata::NInternal {

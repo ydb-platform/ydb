@@ -5,7 +5,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NArrow {
 

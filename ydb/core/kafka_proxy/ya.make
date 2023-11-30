@@ -34,8 +34,8 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(kafka.h)
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/actors/protos
+    ydb/library/actors/core
+    ydb/library/actors/protos
     ydb/core/base
     ydb/core/protos
     ydb/core/raw_socket

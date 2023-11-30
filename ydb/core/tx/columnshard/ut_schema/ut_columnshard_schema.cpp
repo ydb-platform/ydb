@@ -11,7 +11,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
-#include <library/cpp/actors/core/av_bootstrapped.h>
+#include <ydb/library/actors/core/av_bootstrapped.h>
 
 #include <util/system/hostname.h>
 #include <library/cpp/deprecated/atomic/atomic.h>

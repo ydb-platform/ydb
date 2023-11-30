@@ -2,7 +2,7 @@
 #include <util/generic/string.h>
 #include <util/system/yassert.h>
 #include <util/stream/output.h>
-#include <library/cpp/actors/core/monotonic.h>
+#include <ydb/library/actors/core/monotonic.h>
 #include <memory>
 
 namespace NKikimr::NOlap {

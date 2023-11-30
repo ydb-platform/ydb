@@ -18,8 +18,8 @@
 #include <ydb/library/pdisk_io/spdk_state.h>
 #include <ydb/library/pdisk_io/wcache.h>
 
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/util/thread.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/util/thread.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <util/generic/deque.h>

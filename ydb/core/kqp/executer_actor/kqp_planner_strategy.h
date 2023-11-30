@@ -2,7 +2,7 @@
 
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
 
-#include <library/cpp/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NKqp {
 

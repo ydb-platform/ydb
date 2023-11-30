@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/logoblob.h>
-#include <library/cpp/actors/util/shared_data.h>
+#include <ydb/library/actors/util/shared_data.h>
 
 namespace NKikimr {
 namespace NPageCollection {

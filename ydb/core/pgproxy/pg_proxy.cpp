@@ -2,8 +2,8 @@
 #include "pg_proxy.h"
 #include "pg_connection.h"
 #include "pg_listener.h"
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/interconnect/poller_actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/interconnect/poller_actor.h>
 
 namespace NPG {
 

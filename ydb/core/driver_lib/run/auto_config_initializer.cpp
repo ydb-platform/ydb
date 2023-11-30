@@ -2,7 +2,7 @@
 
 #include <ydb/core/protos/config.pb.h>
 
-#include <library/cpp/actors/util/affinity.h>
+#include <ydb/library/actors/util/affinity.h>
 #include <util/system/info.h>
 
 namespace {

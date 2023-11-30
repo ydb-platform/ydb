@@ -13,7 +13,7 @@ add_library(ydb-services-persqueue_v1)
 target_link_libraries(ydb-services-persqueue_v1 PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   cpp-containers-disjoint_interval_tree
   library-grpc-server
   ydb-core-base

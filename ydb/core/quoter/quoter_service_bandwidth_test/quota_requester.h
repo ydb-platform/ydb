@@ -4,7 +4,7 @@
 
 #include <ydb/core/quoter/public/quoter.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <random>
 

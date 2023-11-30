@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 

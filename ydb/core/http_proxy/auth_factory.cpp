@@ -8,7 +8,7 @@
 
 #include <ydb/public/sdk/cpp/client/iam_private/iam.h>
 
-#include <library/cpp/actors/http/http_proxy.h>
+#include <ydb/library/actors/http/http_proxy.h>
 
 namespace NKikimr::NHttpProxy {
 

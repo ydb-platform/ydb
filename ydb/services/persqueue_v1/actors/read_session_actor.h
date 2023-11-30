@@ -9,7 +9,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/pq_rl_helpers.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
 #include <util/generic/guid.h>

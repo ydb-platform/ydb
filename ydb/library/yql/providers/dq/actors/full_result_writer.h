@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/providers/dq/interface/yql_dq_full_result_writer.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 namespace NYql::NDqs {
 

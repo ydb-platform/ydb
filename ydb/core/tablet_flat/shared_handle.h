@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <library/cpp/actors/util/shared_data.h>
+#include <ydb/library/actors/util/shared_data.h>
 
 #include <util/generic/ptr.h>
 

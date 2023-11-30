@@ -7,10 +7,10 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/lwtrace/all.h>
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/generic/queue.h>
 #include <util/system/types.h>

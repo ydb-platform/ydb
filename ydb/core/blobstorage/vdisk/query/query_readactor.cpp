@@ -1,7 +1,7 @@
 #include "query_readbatch.h"
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/library/wilson_ids/wilson.h>
-#include <library/cpp/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 #include <util/generic/algorithm.h>
 
 using namespace NKikimrServices;

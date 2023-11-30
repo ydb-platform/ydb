@@ -1,6 +1,6 @@
 #pragma once
 #include <bitset>
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/blobstorage.h>
@@ -29,8 +29,8 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/util/event_priority_queue.h>
 
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/containers/ring_buffer/ring_buffer.h>
 
 #include <util/generic/queue.h>

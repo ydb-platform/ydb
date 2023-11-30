@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include <library/cpp/actors/core/event_local.h>
+#include <ydb/library/actors/core/event_local.h>
 
 #include <util/generic/vector.h>
 

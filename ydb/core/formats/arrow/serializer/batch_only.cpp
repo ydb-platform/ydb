@@ -7,7 +7,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 namespace NKikimr::NArrow::NSerialization {
 
 arrow::Result<std::shared_ptr<arrow::RecordBatch>> TBatchPayloadDeserializer::DoDeserialize(const TString& data) const {

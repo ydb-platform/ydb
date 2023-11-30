@@ -19,7 +19,7 @@ ENDIF()
     PEERDIR(
         contrib/libs/protobuf
         ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
-        library/cpp/actors/http
+        ydb/library/actors/http
         library/cpp/getopt
         library/cpp/lfalloc/alloc_profiler
         library/cpp/logger

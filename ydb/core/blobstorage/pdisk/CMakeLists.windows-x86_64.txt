@@ -20,10 +20,10 @@ target_link_libraries(core-blobstorage-pdisk PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-lz4
-  cpp-actors-core
-  cpp-actors-protos
-  cpp-actors-util
-  cpp-actors-wilson
+  library-actors-core
+  library-actors-protos
+  library-actors-util
+  library-actors-wilson
   cpp-containers-stack_vector
   cpp-deprecated-atomic
   library-cpp-lwtrace

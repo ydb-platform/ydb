@@ -7,9 +7,9 @@
 #include <ydb/library/ycloud/api/events.h>
 #include <ydb/library/ycloud/impl/grpc_service_client.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/event.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/event.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseCache]: " << stream)
 #define LOG_W(stream) LOG_WARN_S( *NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseCache]: " << stream)

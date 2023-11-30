@@ -60,7 +60,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/helpers
+    ydb/library/actors/helpers
     library/cpp/json
     library/cpp/messagebus
     library/cpp/messagebus/protobuf

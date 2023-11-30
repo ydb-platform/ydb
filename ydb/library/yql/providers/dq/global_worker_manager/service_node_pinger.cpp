@@ -4,9 +4,9 @@
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/utils/log/log.h>
 
-#include <library/cpp/actors/interconnect/interconnect.h>
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <util/generic/guid.h>
 #include <util/system/getpid.h>

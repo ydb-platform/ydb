@@ -47,7 +47,7 @@ add_library(dq-api-protos)
 target_link_libraries(dq-api-protos PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-protos
+  library-actors-protos
   api-protos
   dq-actors-protos
   yql-dq-proto

@@ -3,7 +3,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/core/interconnect.h>
 #include <util/generic/fwd.h>
 #include <util/generic/queue.h>
 #include <util/generic/deque.h>

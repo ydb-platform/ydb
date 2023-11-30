@@ -4,7 +4,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/library/accessor/accessor.h>
 
-#include <library/cpp/actors/core/monotonic.h>
+#include <ydb/library/actors/core/monotonic.h>
 
 namespace NKikimr::NEvWrite {
 

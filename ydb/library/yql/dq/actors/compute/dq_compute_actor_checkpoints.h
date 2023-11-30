@@ -6,7 +6,7 @@
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/generic/ptr.h>
 

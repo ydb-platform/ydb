@@ -17,7 +17,7 @@ target_link_libraries(ydb-library-table_creator PUBLIC
   core-tx-scheme_cache
   core-tx-schemeshard
   core-tx-tx_proxy
-  cpp-actors-core
+  library-actors-core
 )
 target_sources(ydb-library-table_creator PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/table_creator/table_creator.cpp

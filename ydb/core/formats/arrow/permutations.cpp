@@ -6,7 +6,7 @@
 #include <ydb/core/formats/arrow/common/validation.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/xxhash/xxhash.h>

@@ -14,7 +14,7 @@
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <ydb/library/yql/utils/yql_panic.h>

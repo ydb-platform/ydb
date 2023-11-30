@@ -4,7 +4,7 @@
 #include <ydb/core/pgproxy/pg_proxy_events.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/core/base/ticket_parser.h>
 
 namespace NLocalPgWire {

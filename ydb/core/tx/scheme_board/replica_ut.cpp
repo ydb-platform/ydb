@@ -6,7 +6,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {

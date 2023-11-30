@@ -1,6 +1,6 @@
 #include "ut_common.h"
 
-#include <library/cpp/actors/testlib/test_runtime.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/statistics/events.h>

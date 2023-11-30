@@ -4,8 +4,8 @@
 #include <ydb/core/testlib/basics/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/actors/core/executor_pool_basic.h>
-#include <library/cpp/actors/core/scheduler_basic.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
 
 #include <google/protobuf/util/message_differencer.h>
 

@@ -1,6 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr {
 namespace NHive {

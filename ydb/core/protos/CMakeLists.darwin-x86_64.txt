@@ -1607,7 +1607,7 @@ target_link_libraries(ydb-core-protos PUBLIC
   yutil
   contrib-libs-grpc
   tools-enum_parser-enum_serialization_runtime
-  cpp-actors-protos
+  library-actors-protos
   libs-config-protos
   core-scheme-protos
   library-login-protos

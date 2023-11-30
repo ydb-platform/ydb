@@ -5,7 +5,7 @@
 #include "flat_page_iface.h"
 #include "util_basics.h"
 
-#include <library/cpp/actors/util/shared_data.h>
+#include <ydb/library/actors/util/shared_data.h>
 
 #include <util/generic/array_ref.h>
 #include <util/system/unaligned_mem.h>

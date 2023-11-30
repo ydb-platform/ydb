@@ -11,10 +11,10 @@
 
 #include <library/cpp/unified_agent_client/client.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/log_backend/actor_log_backend.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/log_backend/actor_log_backend.h>
 #include <library/cpp/retry/retry_policy.h>
 
 #include <util/datetime/base.h>

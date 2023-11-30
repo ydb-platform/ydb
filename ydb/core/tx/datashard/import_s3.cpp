@@ -18,9 +18,9 @@
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <contrib/libs/zstd/include/zstd.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/generic/buffer.h>
 #include <util/generic/ptr.h>

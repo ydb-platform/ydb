@@ -9,8 +9,8 @@
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/actorid.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/actorid.h>
 
 #include <util/generic/maybe.h>
 

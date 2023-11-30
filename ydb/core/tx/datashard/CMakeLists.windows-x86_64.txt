@@ -108,7 +108,7 @@ target_link_libraries(core-tx-datashard PUBLIC
   tools-enum_parser-enum_serialization_runtime
   library-cpp-resource
   contrib-libs-zstd
-  cpp-actors-core
+  library-actors-core
   cpp-containers-absl_flat_hash
   cpp-containers-stack_vector
   cpp-digest-md5
@@ -372,7 +372,7 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   tools-enum_parser-enum_serialization_runtime
   library-cpp-resource
   contrib-libs-zstd
-  cpp-actors-core
+  library-actors-core
   cpp-containers-absl_flat_hash
   cpp-containers-stack_vector
   cpp-digest-md5

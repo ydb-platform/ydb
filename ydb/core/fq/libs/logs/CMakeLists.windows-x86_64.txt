@@ -14,7 +14,7 @@ target_compile_options(fq-libs-logs PRIVATE
 target_link_libraries(fq-libs-logs PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-protos
   yql-utils-actor_log
 )

@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/http/http.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/http/http.h>
 
 namespace NKikimr::NPublicHttp {
 

@@ -18,7 +18,7 @@ target_link_libraries(fq-libs-checkpoint_storage PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-fmt
-  cpp-actors-core
+  library-actors-core
   libs-actors-logging
   fq-libs-control_plane_storage
   fq-libs-ydb

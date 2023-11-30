@@ -4,9 +4,9 @@
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
 
 namespace NKikimr::NKqp {
 

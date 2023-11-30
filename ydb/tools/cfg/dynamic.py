@@ -3,11 +3,11 @@
 import itertools
 import os
 
-from contrib.ydb.core.protos import blobstorage_config_pb2 as bs_config
-from contrib.ydb.core.protos import blobstorage_pdisk_config_pb2 as pdisk_config
-from contrib.ydb.core.protos import flat_scheme_op_pb2 as flat_scheme_op
-from contrib.ydb.core.protos import msgbus_pb2 as msgbus
-from contrib.ydb.core.protos import tx_proxy_pb2 as tx_proxy
+from ydb.core.protos import blobstorage_config_pb2 as bs_config
+from ydb.core.protos import blobstorage_pdisk_config_pb2 as pdisk_config
+from ydb.core.protos import flat_scheme_op_pb2 as flat_scheme_op
+from ydb.core.protos import msgbus_pb2 as msgbus
+from ydb.core.protos import tx_proxy_pb2 as tx_proxy
 from ydb.tools.cfg import base, static, utils
 from ydb.tools.cfg.types import DistinctionLevels, Erasure, FailDomainType, PDiskCategory
 

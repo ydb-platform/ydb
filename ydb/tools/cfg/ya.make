@@ -30,7 +30,7 @@ PEERDIR(
     contrib/python/six
     ydb/tools/cfg/walle
     library/cpp/resource
-    contrib/ydb/core/protos
+    ydb/core/protos
 )
 
 END()

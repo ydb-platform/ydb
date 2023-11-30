@@ -8,10 +8,10 @@ import subprocess
 import tempfile
 
 import yaml
-from contrib.ydb.core.fq.libs.config.protos.fq_config_pb2 import TConfig as TFederatedQueryConfig
+from ydb.core.fq.libs.config.protos.fq_config_pb2 import TConfig as TFederatedQueryConfig
 from google.protobuf import json_format
 
-from contrib.ydb.core.protos import (
+from ydb.core.protos import (
     auth_pb2,
     blobstorage_vdisk_config_pb2,
     cms_pb2,

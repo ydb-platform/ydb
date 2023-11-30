@@ -13,6 +13,10 @@
 
 namespace NHttp {
 
+static bool StatusSuccess(const TStringBuf& status) {
+    return status.StartsWith("2");
+}
+
 class THttpOutgoingCacheActor : public NActors::TActorBootstrapped<THttpOutgoingCacheActor>, THttpConfig {
 public:
     using TBase = NActors::TActorBootstrapped<THttpOutgoingCacheActor>;
@@ -156,7 +160,7 @@ public:
         cacheRecord.Waiters.clear();
         TString error;
         if (event->Get()->Error.empty()) {
-            if (event->Get()->Response != nullptr && event->Get()->Response->Status != "200") {
+            if (event->Get()->Response != nullptr && !StatusSuccess(event->Get()->Response->Status)) {
                 error = event->Get()->Response->Message;
             }
         } else {
@@ -449,7 +453,7 @@ public:
 
         if (event->Get()->Response != nullptr) {
             status = event->Get()->Response->Status;
-            if (!status.StartsWith("2")) {
+            if (!StatusSuccess(status)) {
                 error = event->Get()->Response->Message;
             }
         }

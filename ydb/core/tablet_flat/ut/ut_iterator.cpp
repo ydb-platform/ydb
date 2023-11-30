@@ -24,7 +24,8 @@ namespace {
         NPage::TConf conf;
 
         conf.Group(0).PageSize = page;
-        conf.LargeEdge = 29;  /* neet to cover external blob usage */
+        conf.Group(0).BTreeIndexNodeTargetSize = 128;
+        conf.LargeEdge = 29;  /* need to cover external blob usage */
 
         return conf;
     }

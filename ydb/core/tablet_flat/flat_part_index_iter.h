@@ -2,13 +2,14 @@
 
 #include "flat_part_iface.h"
 #include "flat_page_index.h"
+#include "flat_part_index_iter_iface.h"
 #include "flat_table_part.h"
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 
 namespace NKikimr::NTable {
 
-class TPartIndexIt {
+class TPartIndexIt : public IIndexIter {
 public:
     using TCells = NPage::TCells;
     using TRecord = NPage::TIndex::TRecord;
@@ -25,7 +26,7 @@ public:
         , EndRowId(groupId.IsMain() && part->Stat.Rows ? part->Stat.Rows : Max<TRowId>())
     { }
     
-    EReady Seek(TRowId rowId) {
+    EReady Seek(TRowId rowId) override {
         auto index = TryGetIndex();
         if (!index) {
             return EReady::Page;
@@ -35,7 +36,7 @@ public:
         return DataOrGone();
     }
 
-    EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) {
+    EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) override {
         auto index = TryGetIndex();
         if (!index) {
             return EReady::Page;
@@ -45,7 +46,7 @@ public:
         return DataOrGone();
     }
 
-    EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) {
+    EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) override {
         auto index = TryGetIndex();
         if (!index) {
             return EReady::Page;
@@ -68,14 +69,14 @@ public:
         return DataOrGone();
     }
 
-    EReady Next() {
+    EReady Next() override {
         Y_DEBUG_ABORT_UNLESS(Index);
         Y_DEBUG_ABORT_UNLESS(Iter);
         Iter++;
         return DataOrGone();
     }
 
-    EReady Prev() {
+    EReady Prev() override {
         Y_DEBUG_ABORT_UNLESS(Index);
         Y_DEBUG_ABORT_UNLESS(Iter);
         if (Iter.Off() == 0) {
@@ -86,7 +87,7 @@ public:
         return DataOrGone();
     }
 
-    bool IsValid() const {
+    bool IsValid() const override {
         Y_DEBUG_ABORT_UNLESS(Index);
         return bool(Iter);
     }
@@ -97,29 +98,41 @@ public:
     }
 
 public:
-    TRowId GetEndRowId() const {
+    TRowId GetEndRowId() const override {
         return EndRowId;
     }
 
-    TPageId GetPageId() const {
+    TPageId GetPageId() const override {
         Y_ABORT_UNLESS(Index);
         Y_ABORT_UNLESS(Iter);
         return Iter->GetPageId();
     }
 
-    TRowId GetRowId() const {
+    TRowId GetRowId() const override {
         Y_ABORT_UNLESS(Index);
         Y_ABORT_UNLESS(Iter);
         return Iter->GetRowId();
     }
 
-    TRowId GetNextRowId() const {
+    TRowId GetNextRowId() const override {
         Y_ABORT_UNLESS(Index);
         Y_ABORT_UNLESS(Iter);
         auto next = Iter + 1;
         return next
             ? next->GetRowId()
             : EndRowId;
+    }
+
+    bool HasKeyCells() const override {
+        Y_ABORT_UNLESS(Index);
+        Y_ABORT_UNLESS(Iter);
+        return true;
+    }
+
+    TCell GetKeyCell(TPos index) const override {
+        Y_ABORT_UNLESS(Index);
+        Y_ABORT_UNLESS(Iter);
+        return Iter.GetRecord()->Cell(GroupInfo.ColsKeyIdx[index]);
     }
 
     const TRecord * GetRecord() const {

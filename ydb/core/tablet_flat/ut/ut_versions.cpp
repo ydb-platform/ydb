@@ -25,6 +25,7 @@ namespace {
         conf.Groups.resize(groups);
         for (size_t group : xrange(groups)) {
             conf.Group(group).IndexMin = 1024; /* Should cover index buffer grow code */
+            conf.Group(group).BTreeIndexNodeTargetSize = 128; /* Should cover up/down moves */
         }
         conf.SmallEdge = 19;  /* Packed to page collection large cell values */
         conf.LargeEdge = 29;  /* Large values placed to single blobs */

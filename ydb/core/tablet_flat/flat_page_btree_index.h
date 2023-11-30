@@ -150,6 +150,20 @@ namespace NKikimr::NTable::NPage {
                 return result;
             }
 
+            TCell At(TPos index)
+            {
+                Y_ABORT_UNLESS(Pos == 0, "Shouldn't be used");
+
+                // We may use offset = Columns[index].Offset - index * sizeof(TIndex::TItem) for fixed format
+                // But it looks too complicated because this method will be used only for history columns 0, 1, 2
+                Y_DEBUG_ABORT_UNLESS(index < 3);
+
+                for (TPos i = 0; i < index; i++) {
+                    Next();
+                }
+                return Next();
+            }
+
             int CompareTo(const TCells key, const TKeyCellDefaults *keyDefaults) noexcept
             {
                 Y_ABORT_UNLESS(Pos == 0, "Shouldn't be used");

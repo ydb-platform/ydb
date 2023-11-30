@@ -3,11 +3,11 @@
 #include "flat_part_iface.h"
 #include "flat_page_index.h"
 #include "flat_table_part.h"
-
+#include "flat_part_index_iter_iface.h"
 
 namespace NKikimr::NTable {
 
-class TPartBtreeIndexIt {
+class TPartBtreeIndexIt : public IIndexIter {
     using TCells = NPage::TCells;
     using TBtreeIndexNode = NPage::TBtreeIndexNode;
     using TGroupId = NPage::TGroupId;
@@ -33,7 +33,19 @@ class TPartBtreeIndexIt {
             , EndRowId(endRowId)
             , BeginKey(beginKey)
             , EndKey(endKey)
-        { 
+        {
+        }
+
+        bool IsLastPos() const noexcept {
+            Y_ABORT_UNLESS(Node);
+            Y_ABORT_UNLESS(Pos);
+            return *Pos == Node->GetKeysCount();
+        }
+
+        bool IsFirstPos() const noexcept {
+            Y_ABORT_UNLESS(Node);
+            Y_ABORT_UNLESS(Pos);
+            return *Pos == 0;
         }
     };
 
@@ -103,13 +115,13 @@ public:
         , Env(env)
         , GroupId(groupId)
         , GroupInfo(part->Scheme->GetLayout(groupId))
-        , Meta(groupId.IsMain() ? part->IndexPages.BTreeGroups[groupId.Index] : part->IndexPages.BTreeHistoric[groupId.Index])
+        , Meta(groupId.IsHistoric() ? part->IndexPages.BTreeHistoric[groupId.Index] : part->IndexPages.BTreeGroups[groupId.Index])
     {
         const static TCellsIterable EmptyKey(static_cast<const char*>(nullptr), TColumns());
         State.emplace_back(Meta, 0, GetEndRowId(), EmptyKey, EmptyKey);
     }
     
-    EReady Seek(TRowId rowId) {
+    EReady Seek(TRowId rowId) override {
         if (rowId >= GetEndRowId()) {
             return Exhaust();
         }
@@ -122,7 +134,7 @@ public:
      *
      * Result is approximate and may be off by one page
      */
-    EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) {
+    EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) override {
         if (!key) {
             // Special treatment for an empty key
             switch (seek) {
@@ -142,7 +154,7 @@ public:
      *
      * Result is approximate and may be off by one page
      */
-    EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) {
+    EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) override {
         if (!key) {
             // Special treatment for an empty key
             switch (seek) {
@@ -157,39 +169,101 @@ public:
         return DoSeek<TSeekKeyReverse>({seek, key, GroupInfo.ColsKeyIdx, keyDefaults});
     }
 
-    // EReady Next() {
-    //     Y_DEBUG_ABORT_UNLESS(IsLeaf());
-    //     return Exhaust();
-    // }
+    EReady Next() override {
+        Y_ABORT_UNLESS(!IsExhausted());
 
-    // EReady Prev() {
-    //     Y_DEBUG_ABORT_UNLESS(IsLeaf());
-    //     return Exhaust();
-    // }
+        if (Meta.LevelsCount == 0) {
+            return Exhaust();
+        }
+
+        if (IsLeaf()) {
+            do {
+                State.pop_back();
+            } while (State.size() > 1 && State.back().IsLastPos());
+            if (State.back().IsLastPos()) {
+                return Exhaust();
+            }
+            PushNextState(*State.back().Pos + 1);
+        }
+
+        for (size_t level : xrange(State.size() - 1, Meta.LevelsCount)) {
+            if (!TryLoad(State[level])) {
+                // exiting with an intermediate state
+                Y_DEBUG_ABORT_UNLESS(!IsLeaf() && !IsExhausted());
+                return EReady::Page;
+            }
+            PushNextState(0);
+        }
+
+        // State.back() points to the target data page
+        Y_ABORT_UNLESS(IsLeaf());
+        return EReady::Data;
+    }
+
+    EReady Prev() override {
+        Y_ABORT_UNLESS(!IsExhausted());
+
+        if (Meta.LevelsCount == 0) {
+            return Exhaust();
+        }
+
+        if (IsLeaf()) {
+            do {
+                State.pop_back();
+            } while (State.size() > 1 && State.back().IsFirstPos());
+            if (State.back().IsFirstPos()) {
+                return Exhaust();
+            }
+            PushNextState(*State.back().Pos - 1);
+        }
+
+        for (size_t level : xrange(State.size() - 1, Meta.LevelsCount)) {
+            if (!TryLoad(State[level])) {
+                // exiting with an intermediate state
+                Y_DEBUG_ABORT_UNLESS(!IsLeaf() && !IsExhausted());
+                return EReady::Page;
+            }
+            PushNextState(State[level].Node->GetKeysCount());
+        }
+
+        // State.back() points to the target data page
+        Y_ABORT_UNLESS(IsLeaf());
+        return EReady::Data;
+    }
 
 public:
-    bool IsValid() const {
+    bool IsValid() const override {
         Y_DEBUG_ABORT_UNLESS(IsLeaf() || IsExhausted());
         return IsLeaf();
     }
 
-    TPageId GetPageId() const {
+    TRowId GetEndRowId() const override {
+        return Meta.Count;
+    }
+
+    TPageId GetPageId() const override {
         Y_ABORT_UNLESS(IsLeaf());
         return State.back().Meta.PageId;
     }
 
-    TRowId GetRowId() const {
+    TRowId GetRowId() const override {
         Y_ABORT_UNLESS(IsLeaf());
         return State.back().BeginRowId;
     }
 
-    TRowId GetNextRowId() const {
+    TRowId GetNextRowId() const override {
         Y_ABORT_UNLESS(IsLeaf());
         return State.back().EndRowId;
     }
 
-    TRowId GetEndRowId() const {
-        return Meta.Count;
+    bool HasKeyCells() const override {
+        Y_ABORT_UNLESS(IsLeaf());
+        return State.back().BeginKey.Count();
+    }
+
+    TCell GetKeyCell(TPos index) const override {
+        Y_ABORT_UNLESS(IsLeaf());
+        return State.back().BeginKey.Iter().At(index);
     }
 
 private:
@@ -214,7 +288,7 @@ private:
             }
             auto pos = seek.Do(state);
             
-            PushNextState(state, pos);
+            PushNextState(pos);
         }
 
         // State.back() points to the target data page
@@ -245,7 +319,8 @@ private:
         return EReady::Gone;
     }
 
-    void PushNextState(TNodeState& current, TRecIdx pos) {
+    void PushNextState(TRecIdx pos) {
+        TNodeState& current = State.back();
         Y_ABORT_UNLESS(pos < current.Node->GetChildrenCount(), "Should point to some child");
         current.Pos.emplace(pos);
 

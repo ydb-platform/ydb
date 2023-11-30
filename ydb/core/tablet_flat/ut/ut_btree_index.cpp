@@ -258,6 +258,9 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
         Dump(serialized, writer.GroupInfo);
         CheckKeys(node, keys, writer.GroupInfo);
         CheckChildren(node, children);
+
+        UNIT_ASSERT_VALUES_EQUAL(node.GetKeyCellsIter(1, writer.GroupInfo.ColsKeyIdx).At(0).AsValue<ui32>(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(node.GetKeyCellsIter(1, writer.GroupInfo.ColsKeyIdx).At(2).AsValue<bool>(), true);
     }
 
     Y_UNIT_TEST(Group) {
@@ -343,6 +346,10 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
         Dump(serialized, writer.GroupInfo);
         CheckKeys(node, keys, writer.GroupInfo);
         CheckChildren(node, children);
+
+        UNIT_ASSERT_VALUES_EQUAL(node.GetKeyCellsIter(12, writer.GroupInfo.ColsKeyIdx).At(0).AsValue<TRowId>(), 12);
+        UNIT_ASSERT_VALUES_EQUAL(node.GetKeyCellsIter(12, writer.GroupInfo.ColsKeyIdx).At(1).AsValue<ui64>(), 120);
+        UNIT_ASSERT_VALUES_EQUAL(node.GetKeyCellsIter(12, writer.GroupInfo.ColsKeyIdx).At(2).AsValue<ui64>(), 1200);
     }
 
     Y_UNIT_TEST(OneKey) {
@@ -886,10 +893,9 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
         }
     }
 
-    template<typename TIter>
-    EReady SeekRowId(TIter& iter, TRowId rowId, const TString& message, ui32 failsAllowed = 10) {
+    EReady Retry(std::function<EReady()> action, const TString& message, ui32 failsAllowed = 10) {
         while (true) {
-            if (auto ready = iter.Seek(rowId); ready != EReady::Page) {
+            if (auto ready = action(); ready != EReady::Page) {
                 return ready;
             }
             UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
@@ -898,22 +904,32 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     }
 
     template<typename TIter>
+    EReady SeekRowId(TIter& iter, TRowId rowId, const TString& message, ui32 failsAllowed = 10) {
+        return Retry([&]() {
+            return iter.Seek(rowId);
+        }, message, failsAllowed);
+    }
+
+    template<typename TIter>
     EReady SeekKey(TIter& iter, ESeek seek, bool reverse, TCells key, const TKeyCellDefaults *keyDefaults, const TString& message, ui32 failsAllowed = 10) {
-        const auto doSeek = [&] () {
+        return Retry([&]() {
             if (reverse) {
                 return iter.SeekReverse(seek, key, keyDefaults);
             } else {
                 return iter.Seek(seek, key, keyDefaults);
             }
-        };
+        }, message, failsAllowed);
+    }
 
-        while (true) {
-            if (auto ready = doSeek(); ready != EReady::Page) {
-                return ready;
+    template<typename TIter>
+    EReady NextPrev(TIter& iter, bool next, const TString& message, ui32 failsAllowed = 10) {
+        return Retry([&]() {
+            if (next) {
+                return iter.Next();
+            } else {
+                return iter.Prev();
             }
-            UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
-        }
-        return EReady::Page;
+        }, message, failsAllowed);
     }
 
     template<typename TEnv>
@@ -946,10 +962,10 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     }
 
     template<typename TEnv>
-    void CheckSeekKey(const TPartStore& part, ui32 rows, const TKeyCellDefaults *keyDefaults) {
+    void CheckSeekKey(const TPartStore& part, const TKeyCellDefaults *keyDefaults) {
         for (bool reverse : {false, true}) {
             for (ESeek seek : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
-                for (ui32 keyId : xrange(0u, rows + 2)) {
+                for (ui32 keyId : xrange(0u, static_cast<ui32>(part.Stat.Rows) + 2)) {
                     TVector<TCell> key{TCell::Make(keyId / 7), TCell::Make(keyId % 7)};
 
                     while (true) {
@@ -971,6 +987,38 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
                             break;
                         }
                         key.pop_back();
+                    }
+                }
+            }
+        }
+    }
+
+    template<typename TEnv>
+    void CheckNextPrev(const TPartStore& part) {
+        for (bool next : {true, false}) {
+            for (TRowId rowId : xrange(part.Stat.Rows)) {
+                TEnv env;
+                TPartBtreeIndexIt bTree(&part, &env, { });
+                TPartIndexIt flat(&part, &env, { });
+
+                // checking initial seek:
+                {
+                    TString message = TStringBuilder() << "CheckNext<" << typeid(TEnv).name() << "> " << rowId;
+                    EReady bTreeReady = SeekRowId(bTree, rowId, message);
+                    EReady flatReady = SeekRowId(flat, rowId, message);
+                    UNIT_ASSERT_VALUES_EQUAL(bTreeReady, rowId < part.Stat.Rows ? EReady::Data : EReady::Gone);
+                    AssertEqual(bTree, bTreeReady, flat, flatReady, message);
+                }
+
+                // checking next:
+                while (true)
+                {
+                    TString message = TStringBuilder() << "CheckNext<" << typeid(TEnv).name() << "> " << rowId << " -> " << rowId;
+                    EReady bTreeReady = NextPrev(bTree, next, message);
+                    EReady flatReady = NextPrev(flat, next, message);
+                    AssertEqual(bTree, bTreeReady, flat, flatReady, message);
+                    if (flatReady == EReady::Gone) {
+                        break;
                     }
                 }
             }
@@ -1002,8 +1050,17 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
 
         CheckSeekRowId<TTestEnv>(part);
         CheckSeekRowId<TTouchEnv>(part);
-        CheckSeekKey<TTestEnv>(part, rows, eggs.Scheme->Keys.Get());
-        CheckSeekKey<TTouchEnv>(part, rows, eggs.Scheme->Keys.Get());
+        CheckSeekKey<TTestEnv>(part, eggs.Scheme->Keys.Get());
+        CheckSeekKey<TTouchEnv>(part, eggs.Scheme->Keys.Get());
+        CheckNextPrev<TTestEnv>(part);
+        CheckNextPrev<TTouchEnv>(part);
+    }
+
+    Y_UNIT_TEST(Conf) {
+        NPage::TConf conf;
+
+        // to not accidentally turn this setting on in trunk
+        UNIT_ASSERT_VALUES_EQUAL(conf.WriteBTreeIndex, false);
     }
 
     Y_UNIT_TEST(NoNodes) {

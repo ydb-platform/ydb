@@ -136,8 +136,6 @@ public:
         TYtJoinNodeOp::TPtr res = dynamic_cast<TYtJoinNodeOp*>(Convert(0, scope).Get());
 
         YQL_ENSURE(res);
-        DebugPrint(res, Ctx, 0);
-
         if (Debug) {
             DebugPrint(res, Ctx, 0);
         }
@@ -277,7 +275,7 @@ private:
             // relId, varId, table, column
             std::vector<std::tuple<int,int,TStringBuf,TStringBuf>> leftVars;
             std::vector<std::tuple<int,int,TStringBuf,TStringBuf>> rightVars;
- 
+
             ExtractVars(leftVars, op->LeftLabel);
             ExtractVars(rightVars, op->RightLabel);
 
@@ -336,7 +334,7 @@ private:
 
     TExprNode::TPtr MakeLabel(const std::vector<IOptimizer::TVarId>& vars) const {
         TVector<TExprNodePtr> label; label.reserve(vars.size() * 2);
- 
+
         for (auto [relId, varId] : vars) {
             auto [table, column] = Var2TableCol[relId - 1][varId - 1];
 

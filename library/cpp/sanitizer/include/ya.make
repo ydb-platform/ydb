@@ -4,11 +4,7 @@ NO_SANITIZE()
 
 NO_RUNTIME()
 
-IF (CLANG16)
-ADDINCL(GLOBAL contrib/libs/clang16-rt/include)
-ELSE()
-ADDINCL(GLOBAL contrib/libs/clang14-rt/include)
-ENDIF()
+ADDINCL(GLOBAL contrib/libs/clang${CLANG_VER}-rt/include)
 
 END()
 

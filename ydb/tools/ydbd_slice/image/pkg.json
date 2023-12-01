@@ -1,0 +1,112 @@
+{
+  "meta": {
+    "name": "ydb",
+    "maintainer": "ydb <ydb@yandex-team.ru>",
+    "description": "Package with opensource YDB for Kubernetes",
+    "version": "{sandbox_task_id}.{branch}"
+  },
+  "build": {
+    "flags": [
+        {
+            "name": "OPENSOURCE",
+            "value": "yes"
+        },
+        {
+            "name": "HARDENING",
+            "value": "yes"
+        }
+    ],
+    "targets": [
+      "ydb/apps/ydbd",
+      "ydb/apps/ydb",
+      "contrib/libs/libiconv/dynamic",
+      "contrib/libs/libidn/dynamic",
+      "contrib/libs/libaio/dynamic"
+    ],
+
+    "target-platforms": [
+        "default-linux-x86_64"
+    ]
+  },
+  "data": [
+    {
+      "source": {
+        "type": "RELATIVE",
+        "path": "Dockerfile"
+      },
+      "destination": {
+        "path": "/Dockerfile"
+      }
+    },
+    {
+      "source": {
+        "type": "BUILD_OUTPUT",
+        "path": "contrib/libs/libiconv/dynamic/libiconv.so"
+      },
+      "destination": {
+        "path": "/libiconv.so",
+        "attributes": {
+          "mode": {
+            "value": "+x"
+          }
+        }
+      }
+    },
+    {
+      "source": {
+        "type": "BUILD_OUTPUT",
+        "path": "contrib/libs/libidn/dynamic/liblibidn-dynamic.so"
+      },
+      "destination": {
+        "path": "/liblibidn-dynamic.so",
+        "attributes": {
+          "mode": {
+            "value": "+x"
+          }
+        }
+      }
+    },
+    {
+      "source": {
+        "type": "BUILD_OUTPUT",
+        "path": "contrib/libs/libaio/dynamic/liblibaio-dynamic.so"
+      },
+      "destination": {
+        "path": "/liblibaio-dynamic.so",
+        "attributes": {
+          "mode": {
+            "value": "+x"
+          }
+        }
+      }
+    },
+    {
+      "source": {
+        "type": "BUILD_OUTPUT",
+        "path": "ydb/apps/ydbd/ydbd"
+      },
+      "destination": {
+        "path": "/ydbd",
+        "attributes": {
+          "mode": {
+            "value": "+x"
+          }
+        }
+      }
+    },
+    {
+      "source": {
+          "type": "BUILD_OUTPUT",
+          "path": "ydb/apps/ydb/ydb"
+      },
+      "destination": {
+        "path": "/ydb",
+        "attributes": {
+          "mode": {
+            "value": "+x"
+          }
+        }
+      }
+    }
+  ]
+}

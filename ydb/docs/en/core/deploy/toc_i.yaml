@@ -1,6 +1,4 @@
 items:
-- name: Kubernetes
-  include: { mode: link, path: orchestrated/toc_p.yaml }
 - name: VM / Baremetal
   href: manual/deploy-ydb-on-premises.md
 - name: Deploying a single-node cluster

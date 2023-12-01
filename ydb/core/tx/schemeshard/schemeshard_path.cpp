@@ -51,6 +51,18 @@ const TPath::TChecker& TPath::TChecker::IsResolved(EStatus status) const {
         << ": '" << nearest.PathString() << "' (id: " << nearest.GetPathIdSafe() << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::HasResolvedPrefix(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (!Path.Elements.empty()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "root not found");
+}
+
 const TPath::TChecker& TPath::TChecker::NotEmpty(EStatus status) const {
     if (Failed) {
         return *this;

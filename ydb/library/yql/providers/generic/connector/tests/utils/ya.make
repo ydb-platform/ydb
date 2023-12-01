@@ -7,6 +7,7 @@ PY_SRCS(
     comparator.py
     database.py
     dqrun.py
+    generate.py
     kqprun.py
     log.py
     postgresql.py

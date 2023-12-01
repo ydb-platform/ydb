@@ -5,6 +5,8 @@ from typing import Sequence, Optional
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
+from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
+from ydb.library.yql.providers.generic.connector.tests.utils.generate import generate_table_data
 import ydb.library.yql.providers.generic.connector.tests.utils.clickhouse as clickhouse
 import ydb.library.yql.providers.generic.connector.tests.utils.postgresql as postgresql
 from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
@@ -19,8 +21,6 @@ from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
 
 from ydb.library.yql.providers.generic.connector.tests.test_cases.base import BaseTestCase
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import GenericSettings
-
-# TODO: Canonize test data in YQL way https://st.yandex-team.ru/YQ-2108
 
 
 @dataclass
@@ -46,6 +46,11 @@ class TestCase(BaseTestCase):
 
 
 class Factory:
+    ss: Settings
+
+    def __init__(self, ss: Settings):
+        self.ss = ss
+
     def _column_selection(self) -> Sequence[TestCase]:
         '''
         In these test case set we check SELECT from a small table with various SELECT parameters,
@@ -198,6 +203,57 @@ class Factory:
 
         return test_cases
 
+    def _large_table(self) -> Sequence[TestCase]:
+        '''
+        In this test the dataset is obviously large than a single page
+        (a single message of ReadSplits protocol), so it will take at least several protocol messages
+        to transfer the table from Connector to the engine (dqrun, kqprun).
+
+        Therefore, we will check:
+        1. Connector's data prefetching logic
+        2. Engine backpressure logic
+
+        # TODO: assert connector stats when it will be accessible
+        '''
+
+        table_size = 2.5 * self.ss.connector.paging_bytes_per_page * self.ss.connector.paging_prefetch_queue_capacity
+
+        schema = Schema(
+            columns=ColumnList(
+                Column(
+                    name='col_int64',
+                    ydb_type=Type.INT64,
+                    data_source_type=DataSourceType(ch=clickhouse.Int32(), pg=postgresql.Int8()),
+                ),
+                Column(
+                    name='col_string',
+                    ydb_type=Type.UTF8,
+                    data_source_type=DataSourceType(ch=clickhouse.String(), pg=postgresql.Text()),
+                ),
+            )
+        )
+
+        data_in = generate_table_data(schema=schema, bytes_soft_limit=table_size)
+        data_source_kinds = [EDataSourceKind.CLICKHOUSE, EDataSourceKind.POSTGRESQL]
+
+        test_cases = []
+        for data_source_kind in data_source_kinds:
+            tc = TestCase(
+                name=f'large_table_{data_source_kind}',
+                data_source_kind=data_source_kind,
+                data_in=data_in,
+                data_out_=data_in,
+                select_what=SelectWhat.asterisk(schema.columns),
+                select_where=None,
+                schema=schema,
+                database=Database.make_for_data_source_kind(data_source_kind),
+                pragmas=dict(),
+            )
+
+            test_cases.append(tc)
+
+        return test_cases
+
     def make_test_cases(self, data_source_kind: EDataSourceKind) -> Sequence[TestCase]:
         protocols = {
             EDataSourceKind.CLICKHOUSE: [EProtocol.NATIVE, EProtocol.HTTP],
@@ -207,16 +263,18 @@ class Factory:
         base_test_cases = list(
             itertools.chain(
                 self._column_selection(),
+                self._large_table(),
             )
         )
 
         test_cases = []
         for base_tc in base_test_cases:
-            if base_tc != data_source_kind:
+            if base_tc.data_source_kind != data_source_kind:
                 continue
             for protocol in protocols[base_tc.data_source_kind]:
                 tc = replace(base_tc)
                 tc.name += f'_{protocol}'
                 tc.protocol = protocol
                 test_cases.append(tc)
+
         return test_cases

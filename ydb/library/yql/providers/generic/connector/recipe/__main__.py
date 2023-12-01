@@ -7,7 +7,7 @@ import os
 import logging
 import socket
 from pathlib import Path
-from typing import Final
+from typing import Dict, Final
 import tempfile
 
 import jinja2
@@ -26,24 +26,30 @@ def start(argv):
 
     connector = yat.build_path("ydb/library/yql/providers/generic/connector/app/yq-connector")
 
-    grpc_host = "0.0.0.0"
-    grpc_port = find_free_ports(1)[0]
+    options = {
+        "grpc_host": "0.0.0.0",
+        "grpc_port": find_free_ports(1)[0],
+        "paging_bytes_per_page": 1024,
+        "paging_prefetch_queue_capacity": 2,
+    }
 
-    config_path = _render_config(grpc_host=grpc_host, grpc_port=grpc_port)
+    config_path = _render_config(options)
 
     logger.info('Starting connector server...')
 
     start_daemon(
         command=[connector, 'server', f'--config={config_path}'],
         pid_file_name=yat.work_path(CONNECTOR_PID_FILE),
-        is_alive_check=lambda: _is_alive_check(grpc_host, grpc_port),
-        environment=_update_environment(grpc_host=grpc_host, grpc_port=grpc_port),
+        is_alive_check=lambda: _is_alive_check(host=options["grpc_host"], port=options["grpc_port"]),
+        environment=_update_environment(options),
     )
 
     logger.info('Connector server started')
 
 
-def _render_config(grpc_host: str, grpc_port: int) -> Path:
+def _render_config(
+    options: Dict,
+) -> Path:
     template_ = '''
     connector_server {
         endpoint {
@@ -58,13 +64,13 @@ def _render_config(grpc_host: str, grpc_port: int) -> Path:
     }
 
     paging {
-        bytes_per_page: 1024
-        prefetch_queue_capacity: 2
+        bytes_per_page: {{paging_bytes_per_page}}
+        prefetch_queue_capacity: {{paging_prefetch_queue_capacity}}
     }
     '''
     template = jinja2.Environment(loader=jinja2.BaseLoader).from_string(template_)
 
-    content = template.render(grpc_host=grpc_host, grpc_port=grpc_port)
+    content = template.render(**options)
     tmp = tempfile.NamedTemporaryFile(delete=False)
     with open(tmp.name, 'w') as f:
         f.write(content)
@@ -72,10 +78,12 @@ def _render_config(grpc_host: str, grpc_port: int) -> Path:
     return tmp.name
 
 
-def _update_environment(grpc_host: str, grpc_port: int):
+def _update_environment(options: Dict):
     variables = {
-        'YQL_RECIPE_CONNECTOR_GRPC_HOST': grpc_host,
-        'YQL_RECIPE_CONNECTOR_GRPC_PORT': str(grpc_port),
+        'YDB_CONNECTOR_RECIPE_GRPC_HOST': options['grpc_host'],
+        'YDB_CONNECTOR_RECIPE_GRPC_PORT': str(options['grpc_port']),
+        'YDB_CONNECTOR_RECIPE_GRPC_PAGING_BYTES_PER_PAGE': str(options['paging_bytes_per_page']),
+        'YDB_CONNECTOR_RECIPE_GRPC_PAGING_PREFETCH_QUEUE_CAPACITY': str(options['paging_prefetch_queue_capacity']),
     }
 
     for variable in variables.items():

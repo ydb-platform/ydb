@@ -53,7 +53,10 @@ namespace NKikimr::NTable::NPage {
         struct THeader {
             TRecIdx KeysCount;
             TPgSize KeysSize;
-            ui8 FixedKeySize;
+            ui8 IsShortChildFormat : 1;
+            ui8 FixedKeySize : 7;
+            
+            const static ui8 MaxFixedKeySize = 127;
         } Y_PACKED;
 
         static_assert(sizeof(THeader) == 9, "Invalid TBtreeIndexNode THeader size");
@@ -80,22 +83,35 @@ namespace NKikimr::NTable::NPage {
 
         static_assert(sizeof(TIsNullBitmap) == 1, "Invalid TBtreeIndexNode TIsNullBitmap size");
 
+        struct TShortChild {
+            TPageId PageId;
+            TRowId Count;
+            ui64 DataSize;
+
+            auto operator<=>(const TShortChild&) const = default;
+        } Y_PACKED;
+
+        static_assert(sizeof(TShortChild) == 20, "Invalid TBtreeIndexNode TShortChild size");
+
         struct TChild {
             TPageId PageId;
             TRowId Count;
-            TRowId ErasedCount;
             ui64 DataSize;
+            TRowId ErasedCount;
 
             auto operator<=>(const TChild&) const = default;
 
             TString ToString() const noexcept
             {
-                // copy values to prevent 'reference binding to misaligned address' error
-                return TStringBuilder() << "PageId: " << TPageId(PageId) << " Count: " << TRowId(Count) << " Erased: " << TRowId(ErasedCount) << " DataSize: " << ui64(DataSize);
+                return TStringBuilder() << "PageId: " << PageId << " Count: " << Count << " DataSize: " << DataSize << " Erased: " << ErasedCount;
             }
         } Y_PACKED;
 
         static_assert(sizeof(TChild) == 28, "Invalid TBtreeIndexNode TChild size");
+
+        static_assert(offsetof(TChild, PageId) == offsetof(TShortChild, PageId));
+        static_assert(offsetof(TChild, Count) == offsetof(TShortChild, Count));
+        static_assert(offsetof(TChild, DataSize) == offsetof(TShortChild, DataSize));
 
 #pragma pack(pop)
 
@@ -242,7 +258,7 @@ namespace NKikimr::NTable::NPage {
             offset += Header->KeysSize;
 
             Children = TDeref<const TChild>::At(Header, offset);
-            offset += (1 + Header->KeysCount) * sizeof(TChild);
+            offset += (1 + Header->KeysCount) * (Header->IsShortChildFormat ? sizeof(TShortChild) : sizeof(TChild));
 
             Y_ABORT_UNLESS(offset == data.Page.size());
         }
@@ -254,7 +270,7 @@ namespace NKikimr::NTable::NPage {
 
         bool IsFixedFormat() const noexcept
         {
-            return Header->FixedKeySize != Max<ui8>();
+            return Header->FixedKeySize != Header->MaxFixedKeySize;
         }
 
         TRecIdx GetKeysCount() const noexcept
@@ -277,9 +293,23 @@ namespace NKikimr::NTable::NPage {
             return GetCells<TCellsIter>(pos, columns);
         }
 
-        const TChild& GetChild(TRecIdx pos) const noexcept
+        const TShortChild& GetShortChild(TRecIdx pos) const noexcept
         {
-            return Children[pos];
+            if (Header->IsShortChildFormat) {
+                return *TDeref<const TShortChild>::At(Children, pos * sizeof(TShortChild));
+            } else {
+                return *TDeref<const TShortChild>::At(Children, pos * sizeof(TChild));
+            }
+        }
+
+        TChild GetChild(TRecIdx pos) const noexcept
+        {
+            if (Header->IsShortChildFormat) {
+                const TShortChild* const shortChild = TDeref<const TShortChild>::At(Children, pos * sizeof(TShortChild));
+                return { shortChild->PageId, shortChild->Count, shortChild->DataSize, 0 };
+            } else {
+                return *TDeref<const TChild>::At(Children, pos * sizeof(TChild));
+            }
         }
 
         static bool Has(TRowId rowId, TRowId beginRowId, TRowId endRowId) noexcept {
@@ -294,27 +324,27 @@ namespace NKikimr::NTable::NPage {
                 on = { };
             }
 
-            const auto cmp = [](TRowId rowId, const TChild& child) {
-                return rowId < child.Count;
+            auto range = xrange(0u, childrenCount);
+            const auto cmp = [this](TRowId rowId, TPos pos) {
+                return rowId < GetShortChild(pos).Count;
             };
 
             TRecIdx result;
             if (!on) {
-                // Use a full binary search
-                result = std::upper_bound(Children, Children + childrenCount, rowId, cmp) - Children;
-            } else if (Children[*on].Count <= rowId) {
+                // Will do a full binary search on full range
+            } else if (GetShortChild(*on).Count <= rowId) {
                 // Try a short linear search first
                 result = *on;
                 for (int linear = 0; linear < 4; ++linear) {
                     result++;
                     Y_ABORT_UNLESS(result < childrenCount, "Should always seek some child");
-                    if (Children[result].Count > rowId) {
+                    if (GetShortChild(result).Count > rowId) {
                         return result;
                     }
                 }
 
-                // Binary search from the next record
-                result = std::upper_bound(Children + result + 1, Children + childrenCount, rowId, cmp) - Children;
+                // Will do a binary search from the next record
+                range = xrange(result + 1, childrenCount);
             } else { // Children[*on].Count > rowId
                 // Try a short linear search first
                 result = *on;
@@ -322,15 +352,17 @@ namespace NKikimr::NTable::NPage {
                     if (result == 0) {
                         return 0;
                     }
-                    if (Children[result - 1].Count <= rowId) {
+                    if (GetShortChild(result - 1).Count <= rowId) {
                         return result;
                     }
                     result--;
                 }
 
-                // Binary search up to current record
-                result = std::upper_bound(Children, Children + result, rowId, cmp) - Children;
+                // Will do a binary search up to current record
+                range = xrange(0u, result);
             }
+
+            result = *std::upper_bound(range.begin(), range.end(), rowId, cmp);
 
             Y_ABORT_UNLESS(result < childrenCount, "Should always seek some child");
             return result;
@@ -428,7 +460,7 @@ namespace NKikimr::NTable::NPage {
         const THeader* Header = nullptr;
         const void* Keys = nullptr;
         const TRecordsEntry* Offsets = nullptr;
-        const TChild* Children = nullptr;
+        const void* Children = nullptr;
     };
 
     struct TBtreeIndexMeta : public TBtreeIndexNode::TChild {

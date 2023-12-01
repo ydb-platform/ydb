@@ -796,11 +796,10 @@ namespace NTable {
                         g.BTreeIndex.AddKey(Key);
                     }
                     if (groupId.IsMain()) {
-                        g.BTreeIndex.AddChild({page, dataPage->Count, Current.BTreeIndexErased, raw.size()});
+                        g.BTreeIndex.AddChild({page, dataPage->Count, raw.size(), Current.BTreeIndexErased});
                         Current.BTreeIndexErased = 0;
                     } else {
-                        // TODO: don't write erased for non-main groups
-                        g.BTreeIndex.AddChild({page, dataPage->Count, 0, raw.size()});
+                        g.BTreeIndex.AddShortChild({page, dataPage->Count, raw.size()});
                     }
                     g.BTreeIndex.Flush(Pager, false);
                 }

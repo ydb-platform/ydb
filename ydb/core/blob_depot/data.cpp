@@ -135,7 +135,10 @@ namespace NKikimr::NBlobDepot {
                 if (inserted) {
                     Y_ABORT_UNLESS(!CanBeCollected(TBlobSeqId::FromLogoBlobId(id)));
                     Y_VERIFY_DEBUG_S(id.Generation() == generation, "BlobId# " << id << " Generation# " << generation);
-                    Y_DEBUG_ABORT_UNLESS(Self->Channels[id.Channel()].GetLeastExpectedBlobId(generation) <= TBlobSeqId::FromLogoBlobId(id));
+                    Y_VERIFY_DEBUG_S(Self->Channels[id.Channel()].GetLeastExpectedBlobId(generation) <= TBlobSeqId::FromLogoBlobId(id),
+                        "LeastExpectedBlobId# " << Self->Channels[id.Channel()].GetLeastExpectedBlobId(generation)
+                        << " Id# " << id
+                        << " Generation# " << generation);
                     AddFirstMentionedBlob(id);
                 }
                 if (outcome == EUpdateOutcome::DROP) {
@@ -603,7 +606,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     bool TData::TRecordsPerChannelGroup::Collectible(TData *self) {
-        return !Trash.empty() || HardGenStep < GetHardGenStep(self);
+        return !Trash.empty() || HardGenStep < GetHardGenStep(self) || !InitialCollectionComplete;
     }
 
     TGenStep TData::TRecordsPerChannelGroup::GetHardGenStep(TData *self) {
@@ -639,6 +642,10 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT_UNLESS(blobSeqId.Channel < Self->Channels.size());
         auto& channel = Self->Channels[blobSeqId.Channel];
 
+#ifndef NDEBUG
+        const TBlobSeqId leastBefore = channel.GetLeastExpectedBlobId(generation);
+#endif
+
         const ui64 value = blobSeqId.ToSequentialNumber();
 
         agent.GivenIdRanges[blobSeqId.Channel].RemovePoint(value);
@@ -646,6 +653,11 @@ namespace NKikimr::NBlobDepot {
 
         const bool inserted = channel.SequenceNumbersInFlight.insert(value).second;
         Y_ABORT_UNLESS(inserted);
+
+#ifndef NDEBUG
+        // ensure least expected blob id didn't change
+        Y_ABORT_UNLESS(leastBefore == channel.GetLeastExpectedBlobId(generation));
+#endif
 
         return true;
     }

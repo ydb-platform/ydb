@@ -400,6 +400,7 @@ namespace NKikimr::NBlobDepot {
             TGenStep HardGenStep; // last sucessfully confirmed (non-persistent value)
             ui32 CollectGarbageRequestsInFlight = 0;
             TBlobSeqId LastLeastBlobSeqId;
+            bool InitialCollectionComplete = false;
 
             TRecordsPerChannelGroup(ui8 channel, ui32 groupId)
                 : Channel(channel)

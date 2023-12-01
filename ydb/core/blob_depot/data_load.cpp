@@ -74,6 +74,14 @@ namespace NKikimr::NBlobDepot {
         });
         Y_ABORT_UNLESS(Loaded);
         Self->OnDataLoadComplete();
+
+        // prepare records for all groups in history
+        for (const auto& channel : Self->Info()->Channels) {
+            for (const auto& entry : channel.History) {
+                RecordsPerChannelGroup.try_emplace(std::make_tuple(channel.Channel, entry.GroupID), channel.Channel, entry.GroupID);
+            }
+        }
+
         for (auto& [key, record] : RecordsPerChannelGroup) {
             record.CollectIfPossible(this);
         }

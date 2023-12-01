@@ -31,7 +31,7 @@ struct TBlobStorageMockState {
     }
 
     std::unique_ptr<TEvBlobStorage::TEvGetResult> MakeGetResult(ui32 groupId, TEvBlobStorage::TEvGet *get,
-            std::function<const std::pair<NKikimrProto::EReplyStatus, const TString&>&(TLogoBlobID blobId)> getBlob)
+            std::function<std::pair<NKikimrProto::EReplyStatus, TString>(TLogoBlobID blobId)> getBlob)
     {
         TGroup &group = Groups[groupId];
         if (group.GroupId) {

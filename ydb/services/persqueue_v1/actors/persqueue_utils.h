@@ -58,7 +58,6 @@ Ydb::PersQueue::ErrorCode::ErrorCode ConvertOldCode(const NPersQueue::NErrorCode
 static inline bool InternalErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode errorCode) {
     switch(errorCode) {
         // TODO: check list
-        case Ydb::PersQueue::ErrorCode::UNKNOWN_TOPIC:
         case Ydb::PersQueue::ErrorCode::ERROR:
         case Ydb::PersQueue::ErrorCode::INITIALIZING:
         case Ydb::PersQueue::ErrorCode::OVERLOAD:

@@ -27,6 +27,8 @@ items:
   href: ../../administration/decommissioning.md
 - name: Перевоз VDisk'ов
   href: moving_vdisks.md
+- name: Замена FQDN узла
+  href: replacing_nodes.md
 - name: Предотвращение выхода за модель отказа
   href: failure_model.md
 - name: Балансировка нагрузки на диски

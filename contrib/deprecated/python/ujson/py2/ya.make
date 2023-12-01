@@ -1,5 +1,7 @@
 PY2_LIBRARY()
 
+PROVIDES(ujson)
+
 LICENSE(BSD-3-Clause)
 
 VERSION(1.35)

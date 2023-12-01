@@ -963,11 +963,15 @@ bool FreezeUsedFilesSync(const TExprNode& node, TUserDataTable& files, const TTy
 }
 
 void WriteColumns(NYson::TYsonWriter& writer, const TExprBase& columns) {
-    if (auto maybeList = columns.Maybe<TCoAtomList>()) {
+    if (auto maybeList = columns.Maybe<TExprList>()) {
         writer.OnBeginList();
         for (const auto& column : maybeList.Cast()) {
             writer.OnListItem();
-            writer.OnStringScalar(column.Value());
+            if (column.Maybe<TCoAtom>()) {
+                writer.OnStringScalar(column.Cast<TCoAtom>().Value());
+            } else {
+                writer.OnStringScalar(column.Cast<TCoAtomList>().Item(0).Value());
+            }
         }
         writer.OnEndList();
     } else if (columns.Maybe<TCoVoid>()) {

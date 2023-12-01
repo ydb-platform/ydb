@@ -547,6 +547,19 @@ public:                                                                         
             COUNTER_DEF(DefragBytesRewritten);
         };
 
+
+
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TBalancingGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TBalancingGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TBalancingGroup)
+            {
+            }
+        };
+        
+
     } // NMonGroup
 } // NKikimr
 

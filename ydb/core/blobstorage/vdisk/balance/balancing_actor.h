@@ -10,10 +10,12 @@ namespace NKikimr {
         TIntrusivePtr<TVDiskContext> VCtx;
         TPDiskCtxPtr PDiskCtx;
         TActorId SkeletonId;
+        NMonGroup::TBalancingGroup MonGroup;
 
         NKikimr::THullDsSnap Snap;
 
         TIntrusivePtr<TVDiskConfig> VDiskCfg;
+        TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
     };
 
     IActor* CreateBalancingActor(std::shared_ptr<TBalancingCtx> &ctx);

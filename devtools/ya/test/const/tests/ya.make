@@ -1,5 +1,7 @@
 PY23_TEST()
 
+STYLE_PYTHON()
+
 TEST_SRCS(
     test_validate_test_types.py
 )

@@ -1,0 +1,71 @@
+Here are some tests to make sure that utf-8 works
+=================================================
+
+    >>> import sys
+    >>> import re2 as re
+    >>> re.set_fallback_notification(re.FALLBACK_EXCEPTION)
+    >>> a = u'\u6211\u5f88\u597d'
+    >>> c = re.compile(a[0])
+    >>> c.search(a).group() == u'\u6211'
+    True
+
+Test unicode stickyness
+
+    >>> re.sub(u'x', u'y', u'x') == u'y'
+    True
+    >>> re.sub(r'x', 'y', 'x') == 'y'
+    True
+    >>> re.findall('.', 'x') == ['x']
+    True
+    >>> re.findall(u'.', u'x') == [u'x']
+    True
+    >>> re.split(',', '1,2,3') == ['1', '2', '3']
+    True
+    >>> re.split(u',', u'1,2,3') == [u'1', u'2', u'3']
+    True
+    >>> re.search('(\\d)', '1').group(1) == '1'
+    True
+    >>> re.search(u'(\\d)', u'1').group(1) == u'1'
+    True
+
+Test unicode character groups
+
+    >>> re.search(u'\\d', u'\u0661', re.UNICODE).group(0) == u'\u0661'
+    True
+    >>> int(re.search(u'\\d', u'\u0661', re.UNICODE).group(0)) == 1
+    True
+    >>> (re.search(u'\\w', u'\u0401') is None) == (sys.version_info[0] == 2)
+    True
+    >>> re.search(u'\\w', u'\u0401', re.UNICODE).group(0) == u'\u0401'
+    True
+    >>> re.search(u'\\s', u'\u1680', re.UNICODE).group(0) == u'\u1680'
+    True
+    >>> re.findall(r'[\s\d\w]', 'hey 123', re.UNICODE) == ['h', 'e', 'y', ' ', '1', '2', '3']
+    True
+    >>> re.search(u'\\D', u'\u0661x', re.UNICODE).group(0) == u'x'
+    True
+    >>> re.search(u'\\W', u'\u0401!', re.UNICODE).group(0) == u'!'
+    True
+    >>> re.search(u'\\S', u'\u1680x', re.UNICODE).group(0) == u'x'
+    True
+    >>> re.set_fallback_notification(re.FALLBACK_QUIETLY)
+    >>> re.search(u'[\\W]', u'\u0401!', re.UNICODE).group(0) == u'!'
+    True
+    >>> re.search(u'[\\S]', u'\u1680x', re.UNICODE).group(0) == u'x'
+    True
+    >>> re.set_fallback_notification(re.FALLBACK_EXCEPTION)
+
+
+Positions are translated transparently between unicode and UTF-8
+
+    >>> re.search(u' (.)', u'\U0001d200xxx\u1234 x').span(1)
+    (6, 7)
+    >>> re.search(b' (.)', u'\U0001d200xxx\u1234 x'.encode('utf-8')).span(1)
+    (11, 12)
+    >>> re.compile(u'x').findall(u'\u1234x', 1, 2) == [u'x']
+    True
+    >>> data = u'\U0001d200xxx\u1234 x'
+    >>> re.search(u' (.)', data).string == data
+    True
+
+    >>> re.set_fallback_notification(re.FALLBACK_QUIETLY)

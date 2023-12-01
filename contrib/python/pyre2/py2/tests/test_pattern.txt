@@ -1,0 +1,12 @@
+pattern tests
+=============
+
+    >>> import re2
+    >>> re2.set_fallback_notification(re2.FALLBACK_EXCEPTION)
+
+We should be able to get back what we put in.
+
+    >>> re2.compile("(foo|b[a]r?)").pattern
+    '(foo|b[a]r?)'
+
+    >>> re2.set_fallback_notification(re2.FALLBACK_QUIETLY)

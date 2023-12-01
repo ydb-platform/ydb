@@ -1,0 +1,40 @@
+count tests
+===========
+
+    >>> import re2
+    >>> re2.set_fallback_notification(re2.FALLBACK_EXCEPTION)
+
+This one is from http://docs.python.org/library/re.html?#finding-all-adverbs:
+
+    >>> re2.count(r"\w+ly", "He was carefully disguised but captured quickly by police.")
+    2
+
+Groups should not affect count():
+
+    >>> re2.count(r"(\w+)=(\d+)", "foo=1,foo=2")
+    2
+    >>> re2.count(r"(\w)\w", "fx")
+    1
+
+Zero matches:
+
+    >>> re2.count("(f)", "gggg")
+    0
+
+A pattern matching an empty string:
+
+    >>> re2.count(".*", "foo")
+    2
+
+    >>> re2.count("", "foo")
+    4
+
+contains tests
+==============
+
+	>>> re2.contains('a', 'bbabb')
+	True
+	>>> re2.contains('a', 'bbbbb')
+	False
+
+    >>> re2.set_fallback_notification(re2.FALLBACK_QUIETLY)

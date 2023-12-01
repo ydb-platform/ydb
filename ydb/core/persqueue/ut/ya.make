@@ -34,6 +34,7 @@ SRCS(
     make_config.cpp
     metering_sink_ut.cpp
     mirrorer_ut.cpp
+    partition_chooser_ut.cpp
     pq_ut.cpp
     partition_ut.cpp
     partitiongraph_ut.cpp

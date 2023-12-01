@@ -1550,8 +1550,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         for (ui32 i = 0; i < 15*5; ++i) {
             ss[writer.InitSession("sid_rand_" + ToString<ui32>(i), 0, true)]++;
         }
-        for (auto& s : ss) {
-            if (rr) {
+        if (rr) {
+            for (auto& s : ss) {
                 Cerr << "Round robin check: " << s.first << ":" << s.second << "\n";
                 UNIT_ASSERT(s.second >= 4 && s.second <= 6);
             }
@@ -6261,6 +6261,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         for (auto& w : writers) {
             w->Close();
         }
+
         NYdb::NTopic::TReadSessionSettings rSettings;
         rSettings.ConsumerName("debug").AppendTopics({topicFullName});
         auto readSession = topicClient.CreateReadSession(rSettings);

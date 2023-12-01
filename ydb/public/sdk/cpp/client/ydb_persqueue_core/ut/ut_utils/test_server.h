@@ -80,6 +80,10 @@ public:
         StartServer();
     }
 
+    auto GetRuntime() {
+        return CleverServer->GetRuntime();
+    }
+
     void EnableLogs(const TVector<NKikimrServices::EServiceKikimr>& services = LOGGED_SERVICES,
                     NActors::NLog::EPriority prio = NActors::NLog::PRI_DEBUG) {
         Y_ABORT_UNLESS(CleverServer != nullptr, "Start server before enabling logs");

@@ -13,6 +13,4 @@ bool RemoveEmptyMessages(PersQueue::V1::MigrationStreamingReadServerMessage::Dat
 
 bool RemoveEmptyMessages(Topic::StreamReadMessage::ReadResponse& data);
 
-TMaybe<ui32> GetPartitionFromConfigOptions(ui32 preferred, const NPQ::NSourceIdEncoding::TEncodedSourceId& encodedSrcId,
-                                           ui32 partPerTablet, bool firstClass, bool useRoundRobin);
 }

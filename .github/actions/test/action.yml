@@ -94,7 +94,7 @@ runs:
       RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       BRANCH_TAG="$GITHUB_REF_NAME"
       TESTMO_SOURCE="${{ inputs.log_suffix }}"
-      TESTMO_SOURCE="${TESTMO_SOURCE/_/-}"
+      TESTMO_SOURCE="cmake-${TESTMO_SOURCE/_/-}"
 
       case $GITHUB_EVENT_NAME in
         workflow_dispatch)

@@ -28,6 +28,12 @@ SRCS(
     functions_executor_wrapper.cpp
     topic_service_ut.cpp
     demo_tx.cpp
+
+    partition_writer_cache_actor_ut.cpp
+
+    pqtablet_mock.cpp
+    kqp_mock.cpp
+    partition_writer_cache_actor_fixture.cpp
 )
 
 PEERDIR(

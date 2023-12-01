@@ -1,0 +1,14 @@
+---
+apiVersion: ydb.tech/v1alpha1
+kind: NodeClaim
+metadata:
+  name: {{ nodeclaim_name }}
+  namespace: {{ nodeclaim_namespace }}
+spec:
+  owner: {{ nodeclaim_owner }}
+  description: Nodes for my YDB dev slice.
+  nodes:
+    - flavor:
+        name: {{ nodeclaim_flavor_name }}
+        amount: 8
+

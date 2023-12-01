@@ -1,4 +1,0 @@
-RECURSE(
-    acceptance
-    ut
-)

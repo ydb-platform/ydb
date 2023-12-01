@@ -223,6 +223,8 @@ message TCompactionPolicy {
     optional ECompactionStrategy CompactionStrategy = 20 [default = CompactionStrategyUnset];
     optional TShardPolicy ShardPolicy = 21;
     optional bool KeepEraseMarkers = 22;
+    optional uint32 MinBTreeIndexNodeSize = 23 [default = 7168];
+    optional uint32 MinBTreeIndexNodeKeys = 24 [default = 6];
 
     repeated TGenerationPolicy Generation = 10;
 }

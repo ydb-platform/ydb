@@ -4252,6 +4252,8 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 
     comp->Epoch = snapshot->Subset->Epoch(); /* narrows requested to actual */
     comp->Layout.Final = comp->Params->IsFinal;
+    comp->Layout.WriteBTreeIndex = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
+    comp->Writer.StickyFlatIndex = !comp->Layout.WriteBTreeIndex;
     comp->Layout.MaxRows = snapshot->Subset->MaxRows();
     comp->Layout.ByKeyFilter = tableInfo->ByKeyFilter;
     comp->Layout.UnderlayMask = comp->Params->UnderlayMask.Get();
@@ -4287,6 +4289,8 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 
         pageGroup.Codec = family->Codec;
         pageGroup.PageSize = policy->MinDataPageSize;
+        pageGroup.BTreeIndexNodeTargetSize = policy->MinBTreeIndexNodeSize;
+        pageGroup.BTreeIndexNodeKeysMin = policy->MinBTreeIndexNodeKeys;
 
         writeGroup.Cache = Max(family->Cache, cache);
         writeGroup.MaxBlobSize = NBlockIO::BlockSize;

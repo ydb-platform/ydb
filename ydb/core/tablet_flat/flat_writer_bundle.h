@@ -33,9 +33,9 @@ namespace NWriter {
             Blocks.resize(Groups.size() + 1);
             for (size_t group : xrange(Groups.size())) {
                 Blocks[group].Reset(
-                    new TBlocks(this, Groups[group].Channel, Groups[group].Cache, Groups[group].MaxBlobSize));
+                    new TBlocks(this, Groups[group].Channel, Groups[group].Cache, Groups[group].MaxBlobSize, conf.StickyFlatIndex));
             }
-            Blocks[Groups.size()].Reset(new TBlocks(this, conf.OuterChannel, none, Groups[0].MaxBlobSize));
+            Blocks[Groups.size()].Reset(new TBlocks(this, conf.OuterChannel, none, Groups[0].MaxBlobSize, conf.StickyFlatIndex));
 
             Growth = new NTable::TScreen::TCook;
         }

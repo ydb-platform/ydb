@@ -5,6 +5,8 @@
 !*.*
 # Unignore all dirs
 !*/
+# Unignore all files inside canondata dir
+!*/canondata/*
 
 # Compiled dynamic C libraries
 *.so

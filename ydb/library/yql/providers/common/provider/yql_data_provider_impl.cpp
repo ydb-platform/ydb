@@ -334,6 +334,18 @@ TExprNode::TPtr DefaultCleanupWorld(const TExprNode::TPtr& node, TExprContext& c
             if (cons) {
                 return cons.Cast().Input().Ptr();
             }
+
+            if (right.Cast().Input().Ref().IsCallable("PgReadTable!")) {
+                const auto& read = right.Cast().Input().Ref();
+                return ctx.Builder(node->Pos())
+                    .Callable("PgTableContent")
+                        .Add(0, read.Child(1)->TailPtr())
+                        .Add(1, read.ChildPtr(2))
+                        .Add(2, read.ChildPtr(3))
+                        .Add(3, read.ChildPtr(4))
+                    .Seal()
+                    .Build();
+            }
         }
 
         return node;

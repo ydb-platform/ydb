@@ -253,6 +253,52 @@ private:
     }
 };
 
+class TPgTableContent : public TMutableComputationNode<TPgTableContent> {
+    typedef TMutableComputationNode<TPgTableContent> TBaseComputation;
+public:
+    TPgTableContent(
+        TComputationMutables& mutables,
+        const std::string_view& cluster,
+        const std::string_view& table,
+        TType* returnType)
+        : TBaseComputation(mutables)
+        , Cluster_(cluster)
+        , Table_(table)
+        , ItemType_(AS_TYPE(TStructType, AS_TYPE(TListType, returnType)->GetItemType()))
+    {
+        YQL_ENSURE(Cluster_ == "pg_catalog");
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+        TUnboxedValueVector rows;
+        if (Table_ == "pg_type") {
+            NPg::EnumTypes([&](ui32 oid, const NPg::TTypeDesc& desc) {
+                NUdf::TUnboxedValue* items;
+                auto row = compCtx.HolderFactory.CreateDirectArrayHolder(ItemType_->GetMembersCount(), items);
+                if (auto oidPos = ItemType_->FindMemberIndex("oid")) {
+                    items[*oidPos] = ScalarDatumToPod(Datum(oid));
+                }
+
+                if (auto typnamePos = ItemType_->FindMemberIndex("typname")) {
+                    items[*typnamePos] = PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN));
+                }
+
+                rows.emplace_back(row);
+            });
+        }
+
+        return compCtx.HolderFactory.VectorAsVectorHolder(std::move(rows));
+    }
+
+private:
+    void RegisterDependencies() const final {
+    }
+
+    const std::string_view Cluster_;
+    const std::string_view Table_;
+    TStructType* const ItemType_;
+};
+
 class TFunctionCallInfo {
 public:
     TFunctionCallInfo(ui32 numArgs, const FmgrInfo* finfo)
@@ -1895,6 +1941,15 @@ TComputationNodeFactory GetPgFactory() {
 
             if (name == "PgInternal0") {
                 return new TPgInternal0(ctx.Mutables);
+            }
+
+            if (name == "PgTableContent") {
+                const auto clusterData = AS_VALUE(TDataLiteral, callable.GetInput(0));
+                const auto tableData = AS_VALUE(TDataLiteral, callable.GetInput(1));
+                const auto cluster = clusterData->AsValue().AsStringRef();
+                const auto table = tableData->AsValue().AsStringRef();
+                const auto returnType = callable.GetType()->GetReturnType();
+                return new TPgTableContent(ctx.Mutables, cluster, table, returnType);
             }
 
             if (name == "PgResolvedCall") {

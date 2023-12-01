@@ -2683,6 +2683,14 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.PgClone(input, dependentNodes);
     });
 
+     AddCallable("PgTableContent", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.PgTableContent(
+            node.Child(0)->Content(),
+            node.Child(1)->Content(),
+            returnType);
+    });
+
     AddCallable("WithContext", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto input = MkqlBuildExpr(*node.Child(0), ctx);
         return ctx.ProgramBuilder.WithContext(input, node.Child(1)->Content());

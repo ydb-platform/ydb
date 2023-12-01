@@ -55,6 +55,7 @@ target_link_libraries(dqrun PUBLIC
   providers-ydb-actors
   providers-ydb-comp_nodes
   providers-ydb-provider
+  providers-pg-provider
   udf-service-terminate_policy
   yql-utils-backtrace
   yql-utils-bindings

@@ -6,6 +6,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
+#include <ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
@@ -139,7 +140,8 @@ private:
 NSQLTranslation::TTranslationSettings GetTranslationSettings(const THolder<TGatewaysConfig>& gatewaysConfig) {
     static const THashMap<TString, TString> clusters = {
         { "plato", TString(YtProviderName) },
-        { "plato_rtmr", TString(RtmrProviderName) }
+        { "plato_rtmr", TString(RtmrProviderName) },
+        { "pg_catalog", TString(PgProviderName) }
     };
 
     NSQLTranslation::TTranslationSettings settings;
@@ -186,6 +188,7 @@ TProgramPtr MakeFileProgram(const TString& program, TYqlServer& yqlServer,
        return new TNullTransformer;
     }, {}, dqCompFactory, {}, yqlServer.FileStorage));
     dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+    dataProvidersInit.push_back(GetPgDataProviderInitializer());
 
     ExtProviderSpecific(yqlServer.FunctionRegistry, dataProvidersInit, rtmrTableAttributes);
 

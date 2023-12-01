@@ -34,6 +34,7 @@ target_link_libraries(tools-yqlrun-http PUBLIC
   yt-gateway-file
   providers-yt-provider
   yql-core-url_preprocessing
+  providers-pg-provider
 )
 target_sources(tools-yqlrun-http PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/assets_servlet.cpp

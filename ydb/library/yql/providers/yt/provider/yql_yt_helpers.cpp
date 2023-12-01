@@ -126,9 +126,16 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
         }
     }
 
-    if (auto maybeCons = TMaybeNode<TCoRight>(&lambdaBody).Input().Maybe<TCoCons>()) {
-        syncList.emplace(maybeCons.Cast().World().Ptr(), syncList.size());
-        return IsYtIsolatedLambdaImpl(maybeCons.Cast().Input().Ref(), syncList, usedCluster, supportsReads, supportsDq, visited);
+    if (auto right = TMaybeNode<TCoRight>(&lambdaBody).Input()) {
+        if (auto maybeCons = right.Maybe<TCoCons>()) {
+            syncList.emplace(maybeCons.Cast().World().Ptr(), syncList.size());
+            return IsYtIsolatedLambdaImpl(maybeCons.Cast().Input().Ref(), syncList, usedCluster, supportsReads, supportsDq, visited);
+        }
+
+        if (right.Cast().Raw()->IsCallable("PgReadTable!")) {
+            syncList.emplace(right.Cast().Raw()->HeadPtr(), syncList.size());
+            return true;
+        }
     }
 
     if (lambdaBody.IsCallable("WithWorld")) {
@@ -363,6 +370,18 @@ TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, 
             if (cons) {
                 remaps[node.Get()] = cons.Cast().Input().Ptr();
                 return false;
+            }
+
+            if (right.Cast().Input().Ref().IsCallable("PgReadTable!")) {
+                const auto& read = right.Cast().Input().Ref();
+                remaps[node.Get()] = ctx.Builder(node->Pos())
+                    .Callable("PgTableContent")
+                        .Add(0, read.Child(1)->TailPtr())
+                        .Add(1, read.ChildPtr(2))
+                        .Add(2, read.ChildPtr(3))
+                        .Add(3, read.ChildPtr(4))
+                    .Seal()
+                    .Build();
             }
         }
 

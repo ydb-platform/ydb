@@ -40,6 +40,7 @@
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
 #include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
+#include <ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
@@ -402,6 +403,7 @@ int RunMain(int argc, const char* argv[])
     THashSet<TString> sqlFlags;
     IMetricsRegistryPtr metricsRegistry = CreateMetricsRegistry(GetSensorsGroupFor(NSensorComponent::kDq));
     clusterMapping["plato"] = YtProviderName;
+    clusterMapping["pg_catalog"] = PgProviderName;
 
     TString mountConfig;
     TString mestricsPusherConfig;
@@ -647,7 +649,10 @@ int RunMain(int argc, const char* argv[])
 
     TVector<TIntrusivePtr<TThrRefBase>> gateways;
     THashMap<TString, TString> clusters;
+    clusters["pg_catalog"] = PgProviderName;
+
     TVector<TDataProviderInitializer> dataProvidersInit;
+    dataProvidersInit.push_back(GetPgDataProviderInitializer());
 
     const auto driverConfig = NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr"));
     NYdb::TDriver driver(driverConfig);

@@ -39,7 +39,10 @@ message TEvLoadTestRequest {
             optional NKikimrBlobStorage.EPutHandleClass PutHandleClass = 4;
         }
         message TTabletInfo {
-            optional uint64 TabletId = 1;
+            oneof Id {
+                uint64 TabletId = 8;
+                string TabletName = 7;  // only used to distinguish different tablets, will be reassigned
+            }
             optional uint32 Channel = 2;
             optional uint32 GroupId = 3;
             optional uint32 Generation = 4;

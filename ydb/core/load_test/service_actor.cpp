@@ -461,6 +461,14 @@ public:
         Send(ev->Sender, response.release());
     }
 
+    void Handle(TEvLoad::TEvLoadTestResponse::TPtr& ev) {
+        if (ev->Get()->Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
+            LOG_E("Receieved non-OK LoadTestResponse from another node, Record# " << ev->ToString());
+        } else {
+            LOG_N("Receieved OK LoadTestResponse from another node# " << ev->ToString());
+        }
+    }
+
     ui64 ProcessCmd(const NKikimr::TEvLoadTestRequest& record) {
         ui64 tag = 0;
         if (record.Command_case() != TEvLoadTestRequest::CommandCase::kStop) {
@@ -1317,6 +1325,7 @@ public:
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvLoad::TEvLoadTestRequest, Handle)
+        hFunc(TEvLoad::TEvLoadTestResponse, Handle)
         hFunc(TEvLoad::TEvLoadTestFinished, Handle)
         hFunc(TEvLoad::TEvNodeFinishResponse, Handle)
         hFunc(NMon::TEvHttpInfo, Handle)

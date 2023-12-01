@@ -6,6 +6,8 @@
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
 #include <library/cpp/json/writer/json_value.h>
 
+#include <google/protobuf/text_format.h>
+
 namespace NKikimr {
 struct TEvLoad {
     enum EEv {
@@ -91,7 +93,13 @@ struct TEvLoad {
 
     struct TEvNodeFinishResponse : public TEventPB<TEvNodeFinishResponse,
         NKikimr::TEvNodeFinishResponse, EvNodeFinishResponse>
-    {};
+    {
+        TString ToString() const {
+            TString str;
+            google::protobuf::TextFormat::PrintToString(Record, &str);
+            return str;
+        }
+    };
 
     struct TEvYqlSingleQueryResponse : public TEventLocal<TEvYqlSingleQueryResponse, TEvLoad::EvYqlSingleQueryResponse> {
         TString Result;  // empty in case if there is an error

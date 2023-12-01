@@ -125,9 +125,9 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             , RequestRateAtStart((EpochDuration / TDuration::Seconds(1)) * requestsPerSecondAtStart)
             , RequestRateOnFinish((EpochDuration / TDuration::Seconds(1)) * requestsPerSecondOnFinish)
             , CurrentEpochEnd(now)
-            , PlannedForCurrentEpoch(std::max(1., CalculateRequestRate(now)))
             , LoadStart(now)
-            , LoadDuration(duration) {
+            , LoadDuration(duration)
+            , PlannedForCurrentEpoch(std::max(1., CalculateRequestRate(now))) {
             CalculateDelayForNextRequest(now);
         }
 
@@ -142,11 +142,11 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         TDuration CurrentDelay = TDuration::Seconds(0);
         TMonotonic Now = TMonotonic::Max();
 
-        double PlannedForCurrentEpoch;
-        ui32 ResponsesAwaiting = 0;
-
         const TMonotonic LoadStart;
         const TMaybe<TDuration> LoadDuration;
+
+        double PlannedForCurrentEpoch;
+        ui32 ResponsesAwaiting = 0;
 
         double CalculateRequestRate(TMonotonic now) {
             double ratio = LoadDuration ? (now - LoadStart) / *LoadDuration : 0;
@@ -887,6 +887,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
     TMonotonic LastScheduleTime = TMonotonic::Max();
     TMonotonic LastWakeupTime = TMonotonic::Max();
 
+    static constexpr ui64 DefaultTabletId = 5000;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_LOAD_ACTOR;
@@ -902,6 +904,8 @@ public:
         if (cmd.HasDurationSeconds()) {
             TestDuration = TDuration::Seconds(cmd.GetDurationSeconds());
         }
+
+        std::unordered_map<TString, ui64> tabletIds;
         for (const auto& profile : cmd.GetTablets()) {
             if (!profile.TabletsSize()) {
                 ythrow TLoadActorException() << "TPerTabletProfile.Tablets must have at least one item";
@@ -978,10 +982,33 @@ public:
                             });
                 }
 
-                if (!tablet.HasTabletId() || !tablet.HasChannel() || !tablet.HasGroupId()) {
-                    ythrow TLoadActorException() << "TTabletInfo.{TabletId,Channel,GroupId} fields are mandatory";
+                if (!tablet.HasChannel() || !tablet.HasGroupId()) {
+                    ythrow TLoadActorException() << "TTabletInfo.{Channel,GroupId} fields are mandatory";
                 }
-                TabletWriters.emplace_back(std::make_unique<TTabletWriter>(Tag, counters, WakeupQueue, QueryDispatcher, tablet.GetTabletId(),
+                if (!tablet.HasTabletName() && !tablet.HasTabletId()) {
+                    ythrow TLoadActorException() << "One of TTabletInfo.{TabletName,TabletId} fields must be specified";
+                }
+
+                ui64 tabletId;
+                if (tablet.HasTabletId()) {
+                    tabletId = tablet.GetTabletId();
+                } else if (tablet.HasTabletName()) {
+                    TString name = tablet.GetTabletName();
+                    auto it = tabletIds.find(name);
+                    if (it != tabletIds.end()) {
+                        tabletId = it->second;
+                    } else {
+                        tabletId = THash<TString>{}(name) & ((1 << 20) - 1);
+                        tabletId = tabletId << 10 + tag;
+                        tabletId = tabletId << 10 + Parent.NodeId();
+                        tabletId = MakeTabletID(0, 0, tabletId);
+                        tabletIds[name] = tabletId;
+                    }
+                } else {
+                    Y_FAIL();
+                }
+
+                TabletWriters.emplace_back(std::make_unique<TTabletWriter>(Tag, counters, WakeupQueue, QueryDispatcher, tabletId,
                     tablet.GetChannel(), tablet.HasGeneration() ?  TMaybe<ui32>(tablet.GetGeneration()) : TMaybe<ui32>(),
                     tablet.GetGroupId(), putHandleClass, writeSettings,
                     getHandleClass, readSettings,

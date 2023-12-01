@@ -93,10 +93,12 @@ func (c *connectionManager) Make(
 			Username: dsi.Credentials.GetBasic().Username,
 			Password: dsi.Credentials.GetBasic().Password,
 		},
-		Debug: true,
+		// Set this field to true if you want to see ClickHouse driver's debug output
+		Debug: false,
 		Debugf: func(format string, v ...any) {
 			logger.Debugf(format, v...)
 		},
+		// TODO: make it configurable via Connector API
 		Compression: &clickhouse.Compression{
 			Method: clickhouse.CompressionLZ4,
 		},

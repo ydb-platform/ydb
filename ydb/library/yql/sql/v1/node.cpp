@@ -2614,11 +2614,19 @@ TNodePtr BuildBinaryOp(TContext& ctx, TPosition pos, const TString& opName, TNod
         const bool bothArgNull = a->IsNull() && b->IsNull();
         const bool oneArgNull  = a->IsNull() || b->IsNull();
 
-        if (bothArgNull || (opName != "Or" && oneArgNull)) {
+        if (bothArgNull || (oneArgNull && opName != "Or" && opName != "And")) {
             ctx.Warning(pos, TIssuesIds::YQL_OPERATION_WILL_RETURN_NULL) << "Binary operation "
             << opName.substr(0, opName.Size() - 7 * opName.EndsWith("MayWarn"))
             << " will return NULL here";
         }
+    }
+
+    return new TBinaryOpNode(pos, opName, a, b);
+}
+
+TNodePtr BuildBinaryOpRaw(TPosition pos, const TString& opName, TNodePtr a, TNodePtr b) {
+    if (!a || !b) {
+        return nullptr;
     }
 
     return new TBinaryOpNode(pos, opName, a, b);

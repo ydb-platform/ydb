@@ -39,13 +39,13 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(TokensAsColumnName) { //id_expr
         auto failed = ValidateTokens({
-                "ALL", "ANY", "AS", "ASSUME", "AUTOMAP", "BETWEEN", "BITCAST",
+                "ALL", "ANY", "AS", "ASSUME", "ASYMMETRIC", "AUTOMAP", "BETWEEN", "BITCAST",
                 "CALLABLE", "CASE", "CAST", "CUBE", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP",
                 "DICT", "DISTINCT", "ENUM", "ERASE", "EXCEPT", "EXISTS", "FLOW", "FROM", "FULL", "GLOBAL",
                 "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST", "LOCAL",
                 "NOT", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "ROLLUP",
-                "SELECT", "SET", "STREAM", "STRUCT", "TAGGED", "TUPLE", "UNBOUNDED", "UNION", "VARIANT",
-                "WHEN", "WHERE", "WINDOW", "WITHOUT"
+                "SELECT", "SET", "STREAM", "STRUCT", "SYMMETRIC", "TAGGED", "TUPLE", "UNBOUNDED",
+                "UNION", "VARIANT", "WHEN", "WHERE", "WINDOW", "WITHOUT"
             },
             [](const TString& token){
                 TStringBuilder req;
@@ -58,13 +58,13 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(TokensAsWithoutColumnName) { //id_without
         auto failed = ValidateTokens({
-                "ALL", "AS", "ASSUME", "AUTOMAP", "BETWEEN", "BITCAST",
+                "ALL", "AS", "ASSUME", "ASYMMETRIC", "AUTOMAP", "BETWEEN", "BITCAST",
                 "CALLABLE", "CASE", "CAST", "CUBE", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP",
                 "DICT", "DISTINCT", "EMPTY_ACTION", "ENUM", "EXCEPT", "EXISTS", "FALSE", "FLOW", "FROM", "FULL", "GLOBAL",
                 "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST", "LOCAL",
                 "NOT", "NULL", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "ROLLUP",
-                "SELECT", "SET", "STRUCT", "TAGGED", "TRUE", "TUPLE", "UNBOUNDED", "UNION", "VARIANT",
-                "WHEN", "WHERE", "WINDOW", "WITHOUT"
+                "SELECT", "SET", "STRUCT", "SYMMETRIC", "TAGGED", "TRUE", "TUPLE", "UNBOUNDED",
+                "UNION", "VARIANT", "WHEN", "WHERE", "WINDOW", "WITHOUT"
              },
              [](const TString& token){
                  TStringBuilder req;
@@ -164,13 +164,13 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(TokensAsIdExprIn) { //id_expr_in
         auto failed = ValidateTokens({
-                "ALL", "ANY", "AS", "ASSUME", "AUTOMAP", "BETWEEN", "BITCAST",
+                "ALL", "ANY", "AS", "ASSUME", "ASYMMETRIC", "AUTOMAP", "BETWEEN", "BITCAST",
                 "CALLABLE", "CASE", "CAST", "COMPACT", "CUBE", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP",
                 "DICT", "DISTINCT", "ENUM", "ERASE", "EXCEPT", "EXISTS", "FLOW", "FROM", "FULL", "GLOBAL",
                 "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST", "LOCAL",
                 "NOT", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "ROLLUP",
-                "SELECT", "SET", "STREAM", "STRUCT", "TAGGED", "TUPLE", "UNBOUNDED", "UNION", "VARIANT",
-                "WHEN", "WHERE", "WINDOW", "WITHOUT"
+                "SELECT", "SET", "STREAM", "STRUCT", "SYMMETRIC", "TAGGED", "TUPLE", "UNBOUNDED",
+                "UNION", "VARIANT", "WHEN", "WHERE", "WINDOW", "WITHOUT"
             },
             [](const TString& token){
                 TStringBuilder req;
@@ -2484,6 +2484,13 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(CreateTableTrailingComma) {
         UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE tableName (Key Uint32, PRIMARY KEY (Key),);").IsOk());
         UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE tableName (Key Uint32,);").IsOk());
+    }
+
+    Y_UNIT_TEST(BetweenSymmetric) {
+        UNIT_ASSERT(SqlToYql("select 3 between symmetric 5 and 4;").IsOk());
+        UNIT_ASSERT(SqlToYql("select 3 between asymmetric 5 and 4;").IsOk());
+        UNIT_ASSERT(SqlToYql("use plato; select key between symmetric and and and from Input;").IsOk());
+        UNIT_ASSERT(SqlToYql("use plato; select key between and and and from Input;").IsOk());
     }
 }
 

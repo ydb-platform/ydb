@@ -76,7 +76,7 @@ cond_expr:
     NOT? match_op eq_subexpr (ESCAPE eq_subexpr)?
   | NOT? IN COMPACT? in_expr
   | (ISNULL | NOTNULL | IS NULL | (IS)? NOT NULL)
-  | NOT? BETWEEN eq_subexpr AND eq_subexpr
+  | NOT? BETWEEN (SYMMETRIC | ASYMMETRIC)? eq_subexpr AND eq_subexpr
   | ((EQUALS | EQUALS2 | NOT_EQUALS | NOT_EQUALS2 | distinct_from_op) eq_subexpr)+ /* order of the eq subexpressions is reversed! */
 ;
 
@@ -1036,7 +1036,8 @@ keyword:
 ;
 
 keyword_expr_uncompat:
-    BETWEEN
+    ASYMMETRIC
+  | BETWEEN
   | BITCAST
   | CASE
   | CAST
@@ -1060,6 +1061,7 @@ keyword_expr_uncompat:
   | RETURN
   | ROLLUP
   | SELECT
+  | SYMMETRIC
   | UNBOUNDED
   | WHEN
   | WHERE
@@ -1472,6 +1474,7 @@ ARRAY: A R R A Y;
 AS: A S;
 ASC: A S C;
 ASSUME: A S S U M E;
+ASYMMETRIC: A S Y M M E T R I C;
 ASYNC: A S Y N C;
 ATTACH: A T T A C H;
 ATTRIBUTES: A T T R I B U T E S;
@@ -1689,6 +1692,7 @@ STRUCT: S T R U C T;
 SUBQUERY: S U B Q U E R Y;
 SUBSET: S U B S E T;
 SYMBOLS: S Y M B O L S;
+SYMMETRIC: S Y M M E T R I C;
 SYNC: S Y N C;
 SYSTEM: S Y S T E M;
 TABLE: T A B L E;

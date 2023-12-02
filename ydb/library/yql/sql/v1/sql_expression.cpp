@@ -1905,24 +1905,51 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
             }
             case TRule_cond_expr::kAltCondExpr4: {
                 auto alt = cond.GetAlt_cond_expr4();
-                if (alt.HasBlock1()) {
-                    Ctx.IncrementMonCounter("sql_features", "NotBetween");
-                    return BuildBinaryOp(
-                        Ctx,
-                        pos,
-                        "Or",
-                        BuildBinaryOp(Ctx, pos, "<", res, SubExpr(alt.GetRule_eq_subexpr3(), {})),
-                        BuildBinaryOp(Ctx, pos, ">", res, SubExpr(alt.GetRule_eq_subexpr5(), tail))
+                const bool symmetric = alt.HasBlock3() && alt.GetBlock3().GetToken1().GetId() == SQLv1LexerTokens::TOKEN_SYMMETRIC;
+                const bool negation = alt.HasBlock1();
+                TNodePtr left = SubExpr(alt.GetRule_eq_subexpr4(), {});
+                TNodePtr right = SubExpr(alt.GetRule_eq_subexpr6(), tail);
+                if (!left || !right) {
+                    return {};
+                }
+
+                const bool bothArgNull = left->IsNull() && right->IsNull();
+                const bool oneArgNull  = left->IsNull() || right->IsNull();
+
+                if (res->IsNull() || bothArgNull || (symmetric && oneArgNull)) {
+                    Ctx.Warning(pos, TIssuesIds::YQL_OPERATION_WILL_RETURN_NULL)
+                    << "BETWEEN operation will return NULL here";
+                }
+
+                auto buildSubexpr = [&](const TNodePtr& left, const TNodePtr& right) {
+                    if (negation) {
+                        return BuildBinaryOpRaw(
+                            pos,
+                            "Or",
+                            BuildBinaryOpRaw(pos, "<", res, left),
+                            BuildBinaryOpRaw(pos, ">", res, right)
+                        );
+                    } else {
+                        return BuildBinaryOpRaw(
+                            pos,
+                            "And",
+                            BuildBinaryOpRaw(pos, ">=", res, left),
+                            BuildBinaryOpRaw(pos, "<=", res, right)
+                        );
+                    }
+                };
+
+                if (symmetric) {
+                    Ctx.IncrementMonCounter("sql_features", negation? "NotBetweenSymmetric" : "BetweenSymmetric");
+                    return BuildBinaryOpRaw(
+                        pos, 
+                        negation? "And" : "Or", 
+                        buildSubexpr(left, right), 
+                        buildSubexpr(right, left)
                     );
                 } else {
-                    Ctx.IncrementMonCounter("sql_features", "Between");
-                    return BuildBinaryOp(
-                        Ctx,
-                        pos,
-                        "And",
-                        BuildBinaryOp(Ctx, pos, ">=", res, SubExpr(alt.GetRule_eq_subexpr3(), {})),
-                        BuildBinaryOp(Ctx, pos, "<=", res, SubExpr(alt.GetRule_eq_subexpr5(), tail))
-                    );
+                    Ctx.IncrementMonCounter("sql_features", negation? "NotBetween" : "Between");
+                    return buildSubexpr(left, right);
                 }
             }
             case TRule_cond_expr::kAltCondExpr5: {

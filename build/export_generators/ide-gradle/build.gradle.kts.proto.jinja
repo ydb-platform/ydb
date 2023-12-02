@@ -37,8 +37,12 @@ dependencies {
 {% endif -%}
 }
 
-{% if targets[0].proto_grpc is defined -%}
 protobuf {
+    protoc {
+        // Download from repositories
+        artifact = "com.google.protobuf:protoc:3.22.5"
+    }
+{% if targets[0].proto_grpc is defined -%}
     plugins {
         id("grpc") {
             artifact = "io.grpc:protoc-gen-grpc-java:1.45.0"
@@ -51,8 +55,8 @@ protobuf {
             }
         }
     }
-}
 {% endif -%}
+}
 
 val prepareProto = tasks.register<Copy>("prepareProto") {
     from(rootDir) {

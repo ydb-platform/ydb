@@ -33,6 +33,21 @@ PEERDIR(
     ydb/library/yql/providers/pg/provider
 )
 
+FILES(
+    www/bower.json
+    www/favicon.ico
+    www/file-index.html
+    www/css/base.css
+    www/js/ace.min.js
+    www/js/app.js
+    www/js/dagre-d3.core.min.js
+    www/js/dagre.core.min.js
+    www/js/graphlib.core.min.js
+    www/js/mode-sql.js
+    www/js/mode-yql.js
+    www/js/theme-tomorrow.min.js
+)
+
 YQL_LAST_ABI_VERSION()
 
 END()

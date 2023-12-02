@@ -44,3 +44,51 @@ target_sources(tools-yqlrun-http PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/yql_servlet.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/yql_server.cpp
 )
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/bower.json
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/bower.json
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/favicon.ico
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/favicon.ico
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/file-index.html
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/file-index.html
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/css/base.css
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/css/base.css
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/ace.min.js
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/ace.min.js
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/app.js
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/app.js
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/dagre-d3.core.min.js
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/dagre-d3.core.min.js
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/dagre.core.min.js
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/dagre.core.min.js
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/graphlib.core.min.js
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/graphlib.core.min.js
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/mode-sql.js
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/mode-sql.js
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/mode-yql.js
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/mode-yql.js
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/theme-tomorrow.min.js
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/theme-tomorrow.min.js
+)

@@ -29,6 +29,9 @@ void IDataSource::InitFetchStageData(const std::shared_ptr<arrow::RecordBatch>& 
 
 void IDataSource::InitFilterStageData(const std::shared_ptr<NArrow::TColumnFilter>& appliedFilter,
     const std::shared_ptr<NArrow::TColumnFilter>& earlyFilter, const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<IDataSource>& sourcePtr) {
+    if (IsAborted()) {
+        return;
+    }
     NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFilterStageData"));
     Y_ABORT_UNLESS(!FilterStageData);
     FilterStageData = std::make_shared<TFilterStageData>(appliedFilter, earlyFilter, batch);
@@ -44,12 +47,18 @@ void IDataSource::InitFetchingPlan(const TFetchingPlan& fetchingPlan, const std:
         Y_ABORT_UNLESS(!FetchingPlan);
         FetchingPlan = fetchingPlan;
         NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
+        if (IsAborted()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "InitFetchingPlanAborted");
+            return;
+        }
         DoStartFilterStage(sourcePtr);
     }
 }
 
 void IDataSource::RegisterInterval(TFetchingInterval& interval) {
-    AFL_VERIFY(Intervals.emplace(interval.GetIntervalIdx(), &interval).second);
+    if (!FetchStageData) {
+        AFL_VERIFY(Intervals.emplace(interval.GetIntervalIdx(), &interval).second);
+    }
 }
 
 void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds,

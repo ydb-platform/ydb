@@ -166,12 +166,13 @@ TFetchingInterval::TFetchingInterval(const NIndexedReader::TSortableBatchPositio
 }
 
 void TFetchingInterval::DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
-    OnInitResourcesGuard(guard);
+    AFL_VERIFY(guard);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("interval_idx", IntervalIdx)("event", "resources_allocated")
         ("resources", guard->DebugString())("start", MergingContext->GetIncludeStart())("finish", MergingContext->GetIncludeFinish())("sources", Sources.size());
     for (auto&& [_, i] : Sources) {
         i->InitFetchingPlan(Context->GetColumnsFetchingPlan(MergingContext->IsExclusiveInterval()), i);
     }
+    OnInitResourcesGuard(guard);
 }
 
 }

@@ -39,6 +39,10 @@ protected:
 
     TAtomic FilterStageFlag = 0;
 
+    bool IsAborted() const {
+        return AbortedFlag;
+    }
+
     virtual void DoStartFilterStage(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
     virtual void DoStartFetchStage(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
     virtual void DoAbort() = 0;

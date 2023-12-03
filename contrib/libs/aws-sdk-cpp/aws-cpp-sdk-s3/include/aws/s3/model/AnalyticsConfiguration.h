@@ -25,19 +25,19 @@ namespace Model
 {
 
   /**
-   * <p> Specifies the configuration and any analyses for the analytics filter of an
+   * <p>Specifies the configuration and any analyses for the analytics filter of an
    * Amazon S3 bucket.</p><p><h3>See Also:</h3>   <a
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/AnalyticsConfiguration">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API AnalyticsConfiguration
+  class AnalyticsConfiguration
   {
   public:
-    AnalyticsConfiguration();
-    AnalyticsConfiguration(const Aws::Utils::Xml::XmlNode& xmlNode);
-    AnalyticsConfiguration& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API AnalyticsConfiguration();
+    AWS_S3_API AnalyticsConfiguration(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API AnalyticsConfiguration& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -163,13 +163,13 @@ namespace Model
   private:
 
     Aws::String m_id;
-    bool m_idHasBeenSet;
+    bool m_idHasBeenSet = false;
 
     AnalyticsFilter m_filter;
-    bool m_filterHasBeenSet;
+    bool m_filterHasBeenSet = false;
 
     StorageClassAnalysis m_storageClassAnalysis;
-    bool m_storageClassAnalysisHasBeenSet;
+    bool m_storageClassAnalysisHasBeenSet = false;
   };
 
 } // namespace Model

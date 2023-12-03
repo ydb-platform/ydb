@@ -7,13 +7,16 @@
 
 #include <aws/core/Core_EXPORTS.h>
 
-#include <aws/core/utils/memory/stl/AWSString.h>
-#include <aws/core/utils/UnreferencedParam.h>
-#include <aws/core/http/HttpTypes.h>
-#include <aws/core/http/HttpRequest.h>
-#include <aws/core/utils/memory/stl/AWSStreamFwd.h>
-#include <aws/core/utils/stream/ResponseStream.h>
+#include <aws/core/client/RequestCompression.h>
 #include <aws/core/auth/AWSAuthSigner.h>
+#include <aws/core/client/CoreErrors.h>
+#include <aws/core/endpoint/EndpointParameter.h>
+#include <aws/core/http/HttpRequest.h>
+#include <aws/core/http/HttpTypes.h>
+#include <aws/core/utils/UnreferencedParam.h>
+#include <aws/core/utils/memory/stl/AWSStreamFwd.h>
+#include <aws/core/utils/memory/stl/AWSString.h>
+#include <aws/core/utils/stream/ResponseStream.h>
 
 namespace Aws
 {
@@ -51,12 +54,21 @@ namespace Aws
          */
         virtual Aws::Http::HeaderValueCollection GetHeaders() const = 0;
         /**
+         * Get the additional user-set custom headers for the request
+         */
+        virtual const Aws::Http::HeaderValueCollection& GetAdditionalCustomHeaders() const;
+        /**
+         * Set an additional custom header value under a key. This value will overwrite any previously set or regular header.
+         */
+        virtual void SetAdditionalCustomHeaderValue(const Aws::String& headerName, const Aws::String& headerValue);
+
+        /**
          * Do nothing virtual, override this to add query strings to the request
          */
         virtual void AddQueryStringParameters(Aws::Http::URI& uri) const { AWS_UNREFERENCED_PARAM(uri); }
 
         /**
-         * Put the request to a url for later presigning. This will push the body to the url and 
+         * Put the request to a url for later presigning. This will push the body to the url and
          * then adds the existing query string parameters as normal.
          */
         virtual void PutToPresignedUrl(Aws::Http::URI& uri) const { DumpBodyToUrl(uri); AddQueryStringParameters(uri); }
@@ -74,6 +86,15 @@ namespace Aws
          * Defaults to true, if this is set to false, then signers, if they support body signing, will not do so
          */
         virtual bool SignBody() const { return true; }
+
+        /**
+         * Defaults to false, if a derived class returns true it indicates that the body has an embedded error.
+         */
+        virtual bool HasEmbeddedError(Aws::IOStream& body, const Aws::Http::HeaderValueCollection& header) const {
+            (void) body;
+            (void) header;
+            return false;
+        }
 
         /**
          * Defaults to false, if this is set to true, it supports chunked transfer encoding.
@@ -150,15 +171,28 @@ namespace Aws
          */
         inline virtual bool ShouldComputeContentMd5() const { return false; }
 
+        inline virtual bool ShouldValidateResponseChecksum() const { return false; }
+
+        inline virtual Aws::Vector<Aws::String> GetResponseChecksumAlgorithmNames() const { return {}; }
+
+        inline virtual Aws::String GetChecksumAlgorithmName() const { return {}; }
+
         virtual const char* GetServiceRequestName() const = 0;
+
+        using EndpointParameters = Aws::Vector<Aws::Endpoint::EndpointParameter>;
+        virtual EndpointParameters GetEndpointContextParams() const;
+
+        virtual Aws::Client::CompressionAlgorithm
+        GetSelectedCompressionAlgorithm(Aws::Client::RequestCompressionConfig) const { return Aws::Client::CompressionAlgorithm::NONE; }
 
     protected:
         /**
-         * Default does nothing. Override this to convert what would otherwise be the payload of the 
+         * Default does nothing. Override this to convert what would otherwise be the payload of the
          *  request to a query string format.
          */
         virtual void DumpBodyToUrl(Aws::Http::URI& uri) const { AWS_UNREFERENCED_PARAM(uri); }
 
+        Aws::Http::HeaderValueCollection m_additionalCustomHeaders;
     private:
         Aws::IOStreamFactory m_responseStreamFactory;
 

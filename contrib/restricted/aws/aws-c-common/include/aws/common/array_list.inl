@@ -27,7 +27,7 @@ int aws_array_list_init_dynamic(
 
     AWS_ZERO_STRUCT(*list);
 
-    size_t allocation_size;
+    size_t allocation_size = 0;
     if (aws_mul_size_checked(initial_item_allocation, item_size, &allocation_size)) {
         goto error;
     }
@@ -67,10 +67,13 @@ void aws_array_list_init_static(
     AWS_FATAL_PRECONDITION(item_count > 0);
     AWS_FATAL_PRECONDITION(item_size > 0);
 
+    AWS_ZERO_STRUCT(*list);
     list->alloc = NULL;
 
-    int no_overflow = !aws_mul_size_checked(item_count, item_size, &list->current_size);
+    size_t current_size = 0;
+    int no_overflow = !aws_mul_size_checked(item_count, item_size, &current_size);
     AWS_FATAL_PRECONDITION(no_overflow);
+    list->current_size = current_size;
 
     list->item_size = item_size;
     list->length = 0;

@@ -29,14 +29,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/StorageClassAnalysisDataExport">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API StorageClassAnalysisDataExport
+  class StorageClassAnalysisDataExport
   {
   public:
-    StorageClassAnalysisDataExport();
-    StorageClassAnalysisDataExport(const Aws::Utils::Xml::XmlNode& xmlNode);
-    StorageClassAnalysisDataExport& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API StorageClassAnalysisDataExport();
+    AWS_S3_API StorageClassAnalysisDataExport(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API StorageClassAnalysisDataExport& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -109,10 +109,10 @@ namespace Model
   private:
 
     StorageClassAnalysisSchemaVersion m_outputSchemaVersion;
-    bool m_outputSchemaVersionHasBeenSet;
+    bool m_outputSchemaVersionHasBeenSet = false;
 
     AnalyticsExportDestination m_destination;
-    bool m_destinationHasBeenSet;
+    bool m_destinationHasBeenSet = false;
   };
 
 } // namespace Model

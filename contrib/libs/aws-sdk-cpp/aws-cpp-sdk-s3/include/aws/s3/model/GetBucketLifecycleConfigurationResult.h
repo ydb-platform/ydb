@@ -25,12 +25,12 @@ namespace S3
 {
 namespace Model
 {
-  class AWS_S3_API GetBucketLifecycleConfigurationResult
+  class GetBucketLifecycleConfigurationResult
   {
   public:
-    GetBucketLifecycleConfigurationResult();
-    GetBucketLifecycleConfigurationResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
-    GetBucketLifecycleConfigurationResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API GetBucketLifecycleConfigurationResult();
+    AWS_S3_API GetBucketLifecycleConfigurationResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API GetBucketLifecycleConfigurationResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
 
 
     /**

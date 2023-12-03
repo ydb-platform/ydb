@@ -160,6 +160,7 @@ namespace Aws
                  */
                 XmlDocument(const XmlDocument& other);
                 XmlDocument(XmlDocument&& doc);
+                XmlDocument();
 
                 XmlDocument& operator=(const XmlDocument& other);
                 XmlDocument& operator=(XmlDocument&& other);
@@ -197,7 +198,6 @@ namespace Aws
                 static XmlDocument CreateWithRootNode(const Aws::String&);
 
             private:
-                XmlDocument();
                 void InitDoc();
 
                 Aws::External::tinyxml2::XMLDocument* m_doc;
@@ -215,4 +215,3 @@ namespace Aws
         } // namespace Xml
     } // namespace Utils
 } // namespace Aws
-

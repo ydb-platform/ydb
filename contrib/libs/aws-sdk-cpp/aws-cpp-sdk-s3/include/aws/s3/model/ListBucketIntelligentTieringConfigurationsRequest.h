@@ -23,10 +23,10 @@ namespace Model
 
   /**
    */
-  class AWS_S3_API ListBucketIntelligentTieringConfigurationsRequest : public S3Request
+  class ListBucketIntelligentTieringConfigurationsRequest : public S3Request
   {
   public:
-    ListBucketIntelligentTieringConfigurationsRequest();
+    AWS_S3_API ListBucketIntelligentTieringConfigurationsRequest();
 
     // Service request name is the Operation name which will send this request out,
     // each operation should has unique request name, so that we can get operation's name from this request.
@@ -34,10 +34,14 @@ namespace Model
     // so we can not get operation's name from response.
     inline virtual const char* GetServiceRequestName() const override { return "ListBucketIntelligentTieringConfigurations"; }
 
-    Aws::String SerializePayload() const override;
+    AWS_S3_API Aws::String SerializePayload() const override;
 
-    void AddQueryStringParameters(Aws::Http::URI& uri) const override;
+    AWS_S3_API void AddQueryStringParameters(Aws::Http::URI& uri) const override;
 
+    /**
+     * Helper function to collect parameters (configurable and static hardcoded) required for endpoint computation.
+     */
+    AWS_S3_API EndpointParameters GetEndpointContextParams() const override;
 
     /**
      * <p>The name of the Amazon S3 bucket whose configuration you want to modify or
@@ -89,50 +93,50 @@ namespace Model
 
 
     /**
-     * <p>The ContinuationToken that represents a placeholder from where this request
-     * should begin.</p>
+     * <p>The <code>ContinuationToken</code> that represents a placeholder from where
+     * this request should begin.</p>
      */
     inline const Aws::String& GetContinuationToken() const{ return m_continuationToken; }
 
     /**
-     * <p>The ContinuationToken that represents a placeholder from where this request
-     * should begin.</p>
+     * <p>The <code>ContinuationToken</code> that represents a placeholder from where
+     * this request should begin.</p>
      */
     inline bool ContinuationTokenHasBeenSet() const { return m_continuationTokenHasBeenSet; }
 
     /**
-     * <p>The ContinuationToken that represents a placeholder from where this request
-     * should begin.</p>
+     * <p>The <code>ContinuationToken</code> that represents a placeholder from where
+     * this request should begin.</p>
      */
     inline void SetContinuationToken(const Aws::String& value) { m_continuationTokenHasBeenSet = true; m_continuationToken = value; }
 
     /**
-     * <p>The ContinuationToken that represents a placeholder from where this request
-     * should begin.</p>
+     * <p>The <code>ContinuationToken</code> that represents a placeholder from where
+     * this request should begin.</p>
      */
     inline void SetContinuationToken(Aws::String&& value) { m_continuationTokenHasBeenSet = true; m_continuationToken = std::move(value); }
 
     /**
-     * <p>The ContinuationToken that represents a placeholder from where this request
-     * should begin.</p>
+     * <p>The <code>ContinuationToken</code> that represents a placeholder from where
+     * this request should begin.</p>
      */
     inline void SetContinuationToken(const char* value) { m_continuationTokenHasBeenSet = true; m_continuationToken.assign(value); }
 
     /**
-     * <p>The ContinuationToken that represents a placeholder from where this request
-     * should begin.</p>
+     * <p>The <code>ContinuationToken</code> that represents a placeholder from where
+     * this request should begin.</p>
      */
     inline ListBucketIntelligentTieringConfigurationsRequest& WithContinuationToken(const Aws::String& value) { SetContinuationToken(value); return *this;}
 
     /**
-     * <p>The ContinuationToken that represents a placeholder from where this request
-     * should begin.</p>
+     * <p>The <code>ContinuationToken</code> that represents a placeholder from where
+     * this request should begin.</p>
      */
     inline ListBucketIntelligentTieringConfigurationsRequest& WithContinuationToken(Aws::String&& value) { SetContinuationToken(std::move(value)); return *this;}
 
     /**
-     * <p>The ContinuationToken that represents a placeholder from where this request
-     * should begin.</p>
+     * <p>The <code>ContinuationToken</code> that represents a placeholder from where
+     * this request should begin.</p>
      */
     inline ListBucketIntelligentTieringConfigurationsRequest& WithContinuationToken(const char* value) { SetContinuationToken(value); return *this;}
 
@@ -179,13 +183,13 @@ namespace Model
   private:
 
     Aws::String m_bucket;
-    bool m_bucketHasBeenSet;
+    bool m_bucketHasBeenSet = false;
 
     Aws::String m_continuationToken;
-    bool m_continuationTokenHasBeenSet;
+    bool m_continuationTokenHasBeenSet = false;
 
     Aws::Map<Aws::String, Aws::String> m_customizedAccessLogTag;
-    bool m_customizedAccessLogTagHasBeenSet;
+    bool m_customizedAccessLogTagHasBeenSet = false;
   };
 
 } // namespace Model

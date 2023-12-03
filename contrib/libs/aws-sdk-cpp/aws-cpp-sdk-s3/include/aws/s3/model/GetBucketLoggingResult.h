@@ -24,12 +24,12 @@ namespace S3
 {
 namespace Model
 {
-  class AWS_S3_API GetBucketLoggingResult
+  class GetBucketLoggingResult
   {
   public:
-    GetBucketLoggingResult();
-    GetBucketLoggingResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
-    GetBucketLoggingResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API GetBucketLoggingResult();
+    AWS_S3_API GetBucketLoggingResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API GetBucketLoggingResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
 
 
     

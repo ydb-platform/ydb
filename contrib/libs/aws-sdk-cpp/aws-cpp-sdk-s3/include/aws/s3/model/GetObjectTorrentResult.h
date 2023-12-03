@@ -19,28 +19,28 @@ namespace S3
 {
 namespace Model
 {
-  class AWS_S3_API GetObjectTorrentResult
+  class GetObjectTorrentResult
   {
   public:
-    GetObjectTorrentResult();
+    AWS_S3_API GetObjectTorrentResult();
     //We have to define these because Microsoft doesn't auto generate them
-    GetObjectTorrentResult(GetObjectTorrentResult&&);
-    GetObjectTorrentResult& operator=(GetObjectTorrentResult&&);
+    AWS_S3_API GetObjectTorrentResult(GetObjectTorrentResult&&);
+    AWS_S3_API GetObjectTorrentResult& operator=(GetObjectTorrentResult&&);
     //we delete these because Microsoft doesn't handle move generation correctly
     //and we therefore don't trust them to get it right here either.
     GetObjectTorrentResult(const GetObjectTorrentResult&) = delete;
     GetObjectTorrentResult& operator=(const GetObjectTorrentResult&) = delete;
 
 
-    GetObjectTorrentResult(Aws::AmazonWebServiceResult<Aws::Utils::Stream::ResponseStream>&& result);
-    GetObjectTorrentResult& operator=(Aws::AmazonWebServiceResult<Aws::Utils::Stream::ResponseStream>&& result);
+    AWS_S3_API GetObjectTorrentResult(Aws::AmazonWebServiceResult<Aws::Utils::Stream::ResponseStream>&& result);
+    AWS_S3_API GetObjectTorrentResult& operator=(Aws::AmazonWebServiceResult<Aws::Utils::Stream::ResponseStream>&& result);
 
 
 
     /**
      * <p>A Bencoded dictionary as defined by the BitTorrent specification</p>
      */
-    inline Aws::IOStream& GetBody() { return m_body.GetUnderlyingStream(); }
+    inline Aws::IOStream& GetBody() const { return m_body.GetUnderlyingStream(); }
 
     /**
      * <p>A Bencoded dictionary as defined by the BitTorrent specification</p>
@@ -65,7 +65,7 @@ namespace Model
 
   private:
 
-  Aws::Utils::Stream::ResponseStream m_body;
+    Aws::Utils::Stream::ResponseStream m_body;
 
     RequestCharged m_requestCharged;
   };

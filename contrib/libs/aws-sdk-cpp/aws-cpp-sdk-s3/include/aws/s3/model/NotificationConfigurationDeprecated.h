@@ -24,14 +24,14 @@ namespace S3
 namespace Model
 {
 
-  class AWS_S3_API NotificationConfigurationDeprecated
+  class NotificationConfigurationDeprecated
   {
   public:
-    NotificationConfigurationDeprecated();
-    NotificationConfigurationDeprecated(const Aws::Utils::Xml::XmlNode& xmlNode);
-    NotificationConfigurationDeprecated& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API NotificationConfigurationDeprecated();
+    AWS_S3_API NotificationConfigurationDeprecated(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API NotificationConfigurationDeprecated& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -121,45 +121,45 @@ namespace Model
 
 
     /**
-     * <p>Container for specifying the AWS Lambda notification configuration.</p>
+     * <p>Container for specifying the Lambda notification configuration.</p>
      */
     inline const CloudFunctionConfiguration& GetCloudFunctionConfiguration() const{ return m_cloudFunctionConfiguration; }
 
     /**
-     * <p>Container for specifying the AWS Lambda notification configuration.</p>
+     * <p>Container for specifying the Lambda notification configuration.</p>
      */
     inline bool CloudFunctionConfigurationHasBeenSet() const { return m_cloudFunctionConfigurationHasBeenSet; }
 
     /**
-     * <p>Container for specifying the AWS Lambda notification configuration.</p>
+     * <p>Container for specifying the Lambda notification configuration.</p>
      */
     inline void SetCloudFunctionConfiguration(const CloudFunctionConfiguration& value) { m_cloudFunctionConfigurationHasBeenSet = true; m_cloudFunctionConfiguration = value; }
 
     /**
-     * <p>Container for specifying the AWS Lambda notification configuration.</p>
+     * <p>Container for specifying the Lambda notification configuration.</p>
      */
     inline void SetCloudFunctionConfiguration(CloudFunctionConfiguration&& value) { m_cloudFunctionConfigurationHasBeenSet = true; m_cloudFunctionConfiguration = std::move(value); }
 
     /**
-     * <p>Container for specifying the AWS Lambda notification configuration.</p>
+     * <p>Container for specifying the Lambda notification configuration.</p>
      */
     inline NotificationConfigurationDeprecated& WithCloudFunctionConfiguration(const CloudFunctionConfiguration& value) { SetCloudFunctionConfiguration(value); return *this;}
 
     /**
-     * <p>Container for specifying the AWS Lambda notification configuration.</p>
+     * <p>Container for specifying the Lambda notification configuration.</p>
      */
     inline NotificationConfigurationDeprecated& WithCloudFunctionConfiguration(CloudFunctionConfiguration&& value) { SetCloudFunctionConfiguration(std::move(value)); return *this;}
 
   private:
 
     TopicConfigurationDeprecated m_topicConfiguration;
-    bool m_topicConfigurationHasBeenSet;
+    bool m_topicConfigurationHasBeenSet = false;
 
     QueueConfigurationDeprecated m_queueConfiguration;
-    bool m_queueConfigurationHasBeenSet;
+    bool m_queueConfigurationHasBeenSet = false;
 
     CloudFunctionConfiguration m_cloudFunctionConfiguration;
-    bool m_cloudFunctionConfigurationHasBeenSet;
+    bool m_cloudFunctionConfigurationHasBeenSet = false;
   };
 
 } // namespace Model

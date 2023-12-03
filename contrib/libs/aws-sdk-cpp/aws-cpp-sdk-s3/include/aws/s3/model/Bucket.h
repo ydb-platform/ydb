@@ -25,19 +25,19 @@ namespace Model
 
   /**
    * <p> In terms of implementation, a Bucket is a resource. An Amazon S3 bucket name
-   * is globally unique, and the namespace is shared by all AWS accounts.
-   * </p><p><h3>See Also:</h3>   <a
+   * is globally unique, and the namespace is shared by all Amazon Web Services
+   * accounts. </p><p><h3>See Also:</h3>   <a
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Bucket">AWS API
    * Reference</a></p>
    */
-  class AWS_S3_API Bucket
+  class Bucket
   {
   public:
-    Bucket();
-    Bucket(const Aws::Utils::Xml::XmlNode& xmlNode);
-    Bucket& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API Bucket();
+    AWS_S3_API Bucket(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API Bucket& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -120,10 +120,10 @@ namespace Model
   private:
 
     Aws::String m_name;
-    bool m_nameHasBeenSet;
+    bool m_nameHasBeenSet = false;
 
     Aws::Utils::DateTime m_creationDate;
-    bool m_creationDateHasBeenSet;
+    bool m_creationDateHasBeenSet = false;
   };
 
 } // namespace Model

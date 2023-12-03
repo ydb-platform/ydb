@@ -126,17 +126,15 @@ struct aws_logger {
 /**
  * The base formatted logging macro that all other formatted logging macros resolve to.
  * Checks for a logger and filters based on log level.
- *
  */
 #define AWS_LOGF(log_level, subject, ...)                                                                              \
-    {                                                                                                                  \
+    do {                                                                                                               \
         AWS_ASSERT(log_level > 0);                                                                                     \
         struct aws_logger *logger = aws_logger_get();                                                                  \
         if (logger != NULL && logger->vtable->get_log_level(logger, (subject)) >= (log_level)) {                       \
             logger->vtable->log(logger, log_level, subject, __VA_ARGS__);                                              \
         }                                                                                                              \
-    }
-
+    } while (0)
 /**
  * Unconditional logging macro that takes a logger and does not do a level check or a null check.  Intended for
  * situations when you need to log many things and do a single manual level check before beginning.

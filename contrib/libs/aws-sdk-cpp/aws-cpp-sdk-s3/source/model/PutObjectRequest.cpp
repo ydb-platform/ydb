@@ -28,6 +28,12 @@ PutObjectRequest::PutObjectRequest() :
     m_contentLength(0),
     m_contentLengthHasBeenSet(false),
     m_contentMD5HasBeenSet(false),
+    m_checksumAlgorithm(ChecksumAlgorithm::NOT_SET),
+    m_checksumAlgorithmHasBeenSet(false),
+    m_checksumCRC32HasBeenSet(false),
+    m_checksumCRC32CHasBeenSet(false),
+    m_checksumSHA1HasBeenSet(false),
+    m_checksumSHA256HasBeenSet(false),
     m_expiresHasBeenSet(false),
     m_grantFullControlHasBeenSet(false),
     m_grantReadHasBeenSet(false),
@@ -134,9 +140,42 @@ Aws::Http::HeaderValueCollection PutObjectRequest::GetRequestSpecificHeaders() c
     ss.str("");
   }
 
+  if(m_checksumAlgorithmHasBeenSet)
+  {
+    headers.emplace("x-amz-sdk-checksum-algorithm", ChecksumAlgorithmMapper::GetNameForChecksumAlgorithm(m_checksumAlgorithm));
+  }
+
+  if(m_checksumCRC32HasBeenSet)
+  {
+    ss << m_checksumCRC32;
+    headers.emplace("x-amz-checksum-crc32",  ss.str());
+    ss.str("");
+  }
+
+  if(m_checksumCRC32CHasBeenSet)
+  {
+    ss << m_checksumCRC32C;
+    headers.emplace("x-amz-checksum-crc32c",  ss.str());
+    ss.str("");
+  }
+
+  if(m_checksumSHA1HasBeenSet)
+  {
+    ss << m_checksumSHA1;
+    headers.emplace("x-amz-checksum-sha1",  ss.str());
+    ss.str("");
+  }
+
+  if(m_checksumSHA256HasBeenSet)
+  {
+    ss << m_checksumSHA256;
+    headers.emplace("x-amz-checksum-sha256",  ss.str());
+    ss.str("");
+  }
+
   if(m_expiresHasBeenSet)
   {
-    headers.emplace("expires", m_expires.ToGmtString(DateFormat::RFC822));
+    headers.emplace("expires", m_expires.ToGmtString(Aws::Utils::DateFormat::RFC822));
   }
 
   if(m_grantFullControlHasBeenSet)
@@ -255,7 +294,7 @@ Aws::Http::HeaderValueCollection PutObjectRequest::GetRequestSpecificHeaders() c
 
   if(m_objectLockRetainUntilDateHasBeenSet)
   {
-    headers.emplace("x-amz-object-lock-retain-until-date", m_objectLockRetainUntilDate.ToGmtString(DateFormat::ISO_8601));
+    headers.emplace("x-amz-object-lock-retain-until-date", m_objectLockRetainUntilDate.ToGmtString(Aws::Utils::DateFormat::ISO_8601));
   }
 
   if(m_objectLockLegalHoldStatusHasBeenSet)
@@ -273,3 +312,26 @@ Aws::Http::HeaderValueCollection PutObjectRequest::GetRequestSpecificHeaders() c
   return headers;
 
 }
+
+PutObjectRequest::EndpointParameters PutObjectRequest::GetEndpointContextParams() const
+{
+    EndpointParameters parameters;
+    // Operation context parameters
+    if (BucketHasBeenSet()) {
+        parameters.emplace_back(Aws::String("Bucket"), this->GetBucket(), Aws::Endpoint::EndpointParameter::ParameterOrigin::OPERATION_CONTEXT);
+    }
+    return parameters;
+}
+
+Aws::String PutObjectRequest::GetChecksumAlgorithmName() const
+{
+  if (m_checksumAlgorithm == ChecksumAlgorithm::NOT_SET)
+  {
+    return "md5";
+  }
+  else
+  {
+    return ChecksumAlgorithmMapper::GetNameForChecksumAlgorithm(m_checksumAlgorithm);
+  }
+}
+

@@ -145,8 +145,20 @@ void aws_register_error_info(const struct aws_error_info_list *error_info) {
     }
 
 #if DEBUG_BUILD
+    /* Assert that first error has the right value */
+    const int expected_first_code = slot_index << AWS_ERROR_ENUM_STRIDE_BITS;
+    if (error_info->error_list[0].error_code != expected_first_code) {
+        fprintf(
+            stderr,
+            "Missing info: First error in list should be %d, not %d (%s)\n",
+            expected_first_code,
+            error_info->error_list[0].error_code,
+            error_info->error_list[0].literal_name);
+        AWS_FATAL_ASSERT(0);
+    }
+
     /* Assert that error info entries are in the right order. */
-    for (int i = 1; i < error_info->count; ++i) {
+    for (int i = 0; i < error_info->count; ++i) {
         const int expected_code = min_range + i;
         const struct aws_error_info *info = &error_info->error_list[i];
         if (info->error_code != expected_code) {
@@ -193,13 +205,17 @@ int aws_translate_and_raise_io_error(int error_no) {
         case EISDIR:
         case ENAMETOOLONG:
         case ENOENT:
+        case ENOTDIR:
             return aws_raise_error(AWS_ERROR_FILE_INVALID_PATH);
+        case EMFILE:
         case ENFILE:
             return aws_raise_error(AWS_ERROR_MAX_FDS_EXCEEDED);
         case ENOMEM:
             return aws_raise_error(AWS_ERROR_OOM);
         case ENOSPC:
             return aws_raise_error(AWS_ERROR_NO_SPACE);
+        case ENOTEMPTY:
+            return aws_raise_error(AWS_ERROR_DIRECTORY_NOT_EMPTY);
         default:
             return aws_raise_error(AWS_ERROR_SYS_CALL_FAILURE);
     }

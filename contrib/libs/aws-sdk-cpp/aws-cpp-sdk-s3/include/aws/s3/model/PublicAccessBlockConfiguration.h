@@ -30,21 +30,21 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/PublicAccessBlockConfiguration">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API PublicAccessBlockConfiguration
+  class PublicAccessBlockConfiguration
   {
   public:
-    PublicAccessBlockConfiguration();
-    PublicAccessBlockConfiguration(const Aws::Utils::Xml::XmlNode& xmlNode);
-    PublicAccessBlockConfiguration& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API PublicAccessBlockConfiguration();
+    AWS_S3_API PublicAccessBlockConfiguration(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API PublicAccessBlockConfiguration& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
      * <p>Specifies whether Amazon S3 should block public access control lists (ACLs)
      * for this bucket and objects in this bucket. Setting this element to
-     * <code>TRUE</code> causes the following behavior:</p> <ul> <li> <p>PUT Bucket acl
-     * and PUT Object acl calls fail if the specified ACL is public.</p> </li> <li>
+     * <code>TRUE</code> causes the following behavior:</p> <ul> <li> <p>PUT Bucket ACL
+     * and PUT Object ACL calls fail if the specified ACL is public.</p> </li> <li>
      * <p>PUT Object calls fail if the request includes a public ACL.</p> </li> <li>
      * <p>PUT Bucket calls fail if the request includes a public ACL.</p> </li> </ul>
      * <p>Enabling this setting doesn't affect existing policies or ACLs.</p>
@@ -54,8 +54,8 @@ namespace Model
     /**
      * <p>Specifies whether Amazon S3 should block public access control lists (ACLs)
      * for this bucket and objects in this bucket. Setting this element to
-     * <code>TRUE</code> causes the following behavior:</p> <ul> <li> <p>PUT Bucket acl
-     * and PUT Object acl calls fail if the specified ACL is public.</p> </li> <li>
+     * <code>TRUE</code> causes the following behavior:</p> <ul> <li> <p>PUT Bucket ACL
+     * and PUT Object ACL calls fail if the specified ACL is public.</p> </li> <li>
      * <p>PUT Object calls fail if the request includes a public ACL.</p> </li> <li>
      * <p>PUT Bucket calls fail if the request includes a public ACL.</p> </li> </ul>
      * <p>Enabling this setting doesn't affect existing policies or ACLs.</p>
@@ -65,8 +65,8 @@ namespace Model
     /**
      * <p>Specifies whether Amazon S3 should block public access control lists (ACLs)
      * for this bucket and objects in this bucket. Setting this element to
-     * <code>TRUE</code> causes the following behavior:</p> <ul> <li> <p>PUT Bucket acl
-     * and PUT Object acl calls fail if the specified ACL is public.</p> </li> <li>
+     * <code>TRUE</code> causes the following behavior:</p> <ul> <li> <p>PUT Bucket ACL
+     * and PUT Object ACL calls fail if the specified ACL is public.</p> </li> <li>
      * <p>PUT Object calls fail if the request includes a public ACL.</p> </li> <li>
      * <p>PUT Bucket calls fail if the request includes a public ACL.</p> </li> </ul>
      * <p>Enabling this setting doesn't affect existing policies or ACLs.</p>
@@ -76,8 +76,8 @@ namespace Model
     /**
      * <p>Specifies whether Amazon S3 should block public access control lists (ACLs)
      * for this bucket and objects in this bucket. Setting this element to
-     * <code>TRUE</code> causes the following behavior:</p> <ul> <li> <p>PUT Bucket acl
-     * and PUT Object acl calls fail if the specified ACL is public.</p> </li> <li>
+     * <code>TRUE</code> causes the following behavior:</p> <ul> <li> <p>PUT Bucket ACL
+     * and PUT Object ACL calls fail if the specified ACL is public.</p> </li> <li>
      * <p>PUT Object calls fail if the request includes a public ACL.</p> </li> <li>
      * <p>PUT Bucket calls fail if the request includes a public ACL.</p> </li> </ul>
      * <p>Enabling this setting doesn't affect existing policies or ACLs.</p>
@@ -158,60 +158,60 @@ namespace Model
     /**
      * <p>Specifies whether Amazon S3 should restrict public bucket policies for this
      * bucket. Setting this element to <code>TRUE</code> restricts access to this
-     * bucket to only AWS service principals and authorized users within this account
-     * if the bucket has a public policy.</p> <p>Enabling this setting doesn't affect
-     * previously stored bucket policies, except that public and cross-account access
-     * within any public bucket policy, including non-public delegation to specific
-     * accounts, is blocked.</p>
+     * bucket to only Amazon Web Service principals and authorized users within this
+     * account if the bucket has a public policy.</p> <p>Enabling this setting doesn't
+     * affect previously stored bucket policies, except that public and cross-account
+     * access within any public bucket policy, including non-public delegation to
+     * specific accounts, is blocked.</p>
      */
     inline bool GetRestrictPublicBuckets() const{ return m_restrictPublicBuckets; }
 
     /**
      * <p>Specifies whether Amazon S3 should restrict public bucket policies for this
      * bucket. Setting this element to <code>TRUE</code> restricts access to this
-     * bucket to only AWS service principals and authorized users within this account
-     * if the bucket has a public policy.</p> <p>Enabling this setting doesn't affect
-     * previously stored bucket policies, except that public and cross-account access
-     * within any public bucket policy, including non-public delegation to specific
-     * accounts, is blocked.</p>
+     * bucket to only Amazon Web Service principals and authorized users within this
+     * account if the bucket has a public policy.</p> <p>Enabling this setting doesn't
+     * affect previously stored bucket policies, except that public and cross-account
+     * access within any public bucket policy, including non-public delegation to
+     * specific accounts, is blocked.</p>
      */
     inline bool RestrictPublicBucketsHasBeenSet() const { return m_restrictPublicBucketsHasBeenSet; }
 
     /**
      * <p>Specifies whether Amazon S3 should restrict public bucket policies for this
      * bucket. Setting this element to <code>TRUE</code> restricts access to this
-     * bucket to only AWS service principals and authorized users within this account
-     * if the bucket has a public policy.</p> <p>Enabling this setting doesn't affect
-     * previously stored bucket policies, except that public and cross-account access
-     * within any public bucket policy, including non-public delegation to specific
-     * accounts, is blocked.</p>
+     * bucket to only Amazon Web Service principals and authorized users within this
+     * account if the bucket has a public policy.</p> <p>Enabling this setting doesn't
+     * affect previously stored bucket policies, except that public and cross-account
+     * access within any public bucket policy, including non-public delegation to
+     * specific accounts, is blocked.</p>
      */
     inline void SetRestrictPublicBuckets(bool value) { m_restrictPublicBucketsHasBeenSet = true; m_restrictPublicBuckets = value; }
 
     /**
      * <p>Specifies whether Amazon S3 should restrict public bucket policies for this
      * bucket. Setting this element to <code>TRUE</code> restricts access to this
-     * bucket to only AWS service principals and authorized users within this account
-     * if the bucket has a public policy.</p> <p>Enabling this setting doesn't affect
-     * previously stored bucket policies, except that public and cross-account access
-     * within any public bucket policy, including non-public delegation to specific
-     * accounts, is blocked.</p>
+     * bucket to only Amazon Web Service principals and authorized users within this
+     * account if the bucket has a public policy.</p> <p>Enabling this setting doesn't
+     * affect previously stored bucket policies, except that public and cross-account
+     * access within any public bucket policy, including non-public delegation to
+     * specific accounts, is blocked.</p>
      */
     inline PublicAccessBlockConfiguration& WithRestrictPublicBuckets(bool value) { SetRestrictPublicBuckets(value); return *this;}
 
   private:
 
     bool m_blockPublicAcls;
-    bool m_blockPublicAclsHasBeenSet;
+    bool m_blockPublicAclsHasBeenSet = false;
 
     bool m_ignorePublicAcls;
-    bool m_ignorePublicAclsHasBeenSet;
+    bool m_ignorePublicAclsHasBeenSet = false;
 
     bool m_blockPublicPolicy;
-    bool m_blockPublicPolicyHasBeenSet;
+    bool m_blockPublicPolicyHasBeenSet = false;
 
     bool m_restrictPublicBuckets;
-    bool m_restrictPublicBucketsHasBeenSet;
+    bool m_restrictPublicBucketsHasBeenSet = false;
   };
 
 } // namespace Model

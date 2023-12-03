@@ -48,7 +48,7 @@ LifecycleExpiration& LifecycleExpiration::operator =(const XmlNode& xmlNode)
     XmlNode dateNode = resultNode.FirstChild("Date");
     if(!dateNode.IsNull())
     {
-      m_date = DateTime(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(dateNode.GetText()).c_str()).c_str(), DateFormat::ISO_8601);
+      m_date = DateTime(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(dateNode.GetText()).c_str()).c_str(), Aws::Utils::DateFormat::ISO_8601);
       m_dateHasBeenSet = true;
     }
     XmlNode daysNode = resultNode.FirstChild("Days");
@@ -74,7 +74,7 @@ void LifecycleExpiration::AddToNode(XmlNode& parentNode) const
   if(m_dateHasBeenSet)
   {
    XmlNode dateNode = parentNode.CreateChildElement("Date");
-   dateNode.SetText(m_date.ToGmtString(DateFormat::ISO_8601));
+   dateNode.SetText(m_date.ToGmtString(Aws::Utils::DateFormat::ISO_8601));
   }
 
   if(m_daysHasBeenSet)

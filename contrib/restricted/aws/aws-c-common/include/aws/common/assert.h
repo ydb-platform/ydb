@@ -82,9 +82,11 @@ AWS_EXTERN_C_END
             __pragma(warning(pop))
 #    else
 #        define AWS_FATAL_ASSERT(cond)                                                                                 \
-            if (!(cond)) {                                                                                             \
-                aws_fatal_assert(#cond, __FILE__, __LINE__);                                                           \
-            }
+            do {                                                                                                       \
+                if (!(cond)) {                                                                                         \
+                    aws_fatal_assert(#cond, __FILE__, __LINE__);                                                       \
+                }                                                                                                      \
+            } while (0)
 #    endif /* defined(_MSC_VER) */
 #endif     /* defined(CBMC) */
 
@@ -96,16 +98,20 @@ AWS_EXTERN_C_END
  * Violations of the function contracts are undefined behaviour.
  */
 #ifdef CBMC
+// clang-format off
+// disable clang format, since it likes to break formatting of stringize macro.
+// seems to be fixed in v15 plus, but we are not ready to update to it yet
 #    define AWS_PRECONDITION2(cond, explanation) __CPROVER_precondition((cond), (explanation))
-#    define AWS_PRECONDITION1(cond) __CPROVER_precondition((cond), #    cond " check failed")
+#    define AWS_PRECONDITION1(cond) __CPROVER_precondition((cond), #cond " check failed")
 #    define AWS_FATAL_PRECONDITION2(cond, explanation) __CPROVER_precondition((cond), (explanation))
-#    define AWS_FATAL_PRECONDITION1(cond) __CPROVER_precondition((cond), #    cond " check failed")
+#    define AWS_FATAL_PRECONDITION1(cond) __CPROVER_precondition((cond), #cond " check failed")
 #    define AWS_POSTCONDITION2(cond, explanation) __CPROVER_assert((cond), (explanation))
-#    define AWS_POSTCONDITION1(cond) __CPROVER_assert((cond), #    cond " check failed")
+#    define AWS_POSTCONDITION1(cond) __CPROVER_assert((cond), #cond " check failed")
 #    define AWS_FATAL_POSTCONDITION2(cond, explanation) __CPROVER_assert((cond), (explanation))
-#    define AWS_FATAL_POSTCONDITION1(cond) __CPROVER_assert((cond), #    cond " check failed")
+#    define AWS_FATAL_POSTCONDITION1(cond) __CPROVER_assert((cond), #cond " check failed")
 #    define AWS_MEM_IS_READABLE_CHECK(base, len) (((len) == 0) || (__CPROVER_r_ok((base), (len))))
 #    define AWS_MEM_IS_WRITABLE_CHECK(base, len) (((len) == 0) || (__CPROVER_r_ok((base), (len))))
+// clang-format on
 #else
 #    define AWS_PRECONDITION2(cond, expl) AWS_ASSERT(cond)
 #    define AWS_PRECONDITION1(cond) AWS_ASSERT(cond)

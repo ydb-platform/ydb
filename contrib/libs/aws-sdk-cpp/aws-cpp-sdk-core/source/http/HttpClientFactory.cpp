@@ -121,9 +121,11 @@ namespace Aws
 
             void InitStaticState() override
             {
+                AWS_LOGSTREAM_DEBUG(HTTP_CLIENT_FACTORY_ALLOCATION_TAG, "Initializing Http Static State");
 #if ENABLE_CURL_CLIENT
                 if(s_InitCleanupCurlFlag)
                 {
+                    AWS_LOGSTREAM_DEBUG(HTTP_CLIENT_FACTORY_ALLOCATION_TAG, "Initializing Curl Http Client");
                     CurlHttpClient::InitGlobalState();
                 }
 #if !defined (_WIN32)
@@ -139,9 +141,11 @@ namespace Aws
 
             virtual void CleanupStaticState() override
             {
+                AWS_LOGSTREAM_DEBUG(HTTP_CLIENT_FACTORY_ALLOCATION_TAG, "Cleanup Http Static State");
 #if ENABLE_CURL_CLIENT
                 if(s_InitCleanupCurlFlag)
                 {
+                    AWS_LOGSTREAM_DEBUG(HTTP_CLIENT_FACTORY_ALLOCATION_TAG, "Cleanup Curl Http Client");
                     CurlHttpClient::CleanupGlobalState();
                 }
 #endif

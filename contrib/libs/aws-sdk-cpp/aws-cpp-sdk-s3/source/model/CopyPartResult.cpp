@@ -22,13 +22,21 @@ namespace Model
 
 CopyPartResult::CopyPartResult() : 
     m_eTagHasBeenSet(false),
-    m_lastModifiedHasBeenSet(false)
+    m_lastModifiedHasBeenSet(false),
+    m_checksumCRC32HasBeenSet(false),
+    m_checksumCRC32CHasBeenSet(false),
+    m_checksumSHA1HasBeenSet(false),
+    m_checksumSHA256HasBeenSet(false)
 {
 }
 
 CopyPartResult::CopyPartResult(const XmlNode& xmlNode) : 
     m_eTagHasBeenSet(false),
-    m_lastModifiedHasBeenSet(false)
+    m_lastModifiedHasBeenSet(false),
+    m_checksumCRC32HasBeenSet(false),
+    m_checksumCRC32CHasBeenSet(false),
+    m_checksumSHA1HasBeenSet(false),
+    m_checksumSHA256HasBeenSet(false)
 {
   *this = xmlNode;
 }
@@ -48,8 +56,32 @@ CopyPartResult& CopyPartResult::operator =(const XmlNode& xmlNode)
     XmlNode lastModifiedNode = resultNode.FirstChild("LastModified");
     if(!lastModifiedNode.IsNull())
     {
-      m_lastModified = DateTime(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(lastModifiedNode.GetText()).c_str()).c_str(), DateFormat::ISO_8601);
+      m_lastModified = DateTime(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(lastModifiedNode.GetText()).c_str()).c_str(), Aws::Utils::DateFormat::ISO_8601);
       m_lastModifiedHasBeenSet = true;
+    }
+    XmlNode checksumCRC32Node = resultNode.FirstChild("ChecksumCRC32");
+    if(!checksumCRC32Node.IsNull())
+    {
+      m_checksumCRC32 = Aws::Utils::Xml::DecodeEscapedXmlText(checksumCRC32Node.GetText());
+      m_checksumCRC32HasBeenSet = true;
+    }
+    XmlNode checksumCRC32CNode = resultNode.FirstChild("ChecksumCRC32C");
+    if(!checksumCRC32CNode.IsNull())
+    {
+      m_checksumCRC32C = Aws::Utils::Xml::DecodeEscapedXmlText(checksumCRC32CNode.GetText());
+      m_checksumCRC32CHasBeenSet = true;
+    }
+    XmlNode checksumSHA1Node = resultNode.FirstChild("ChecksumSHA1");
+    if(!checksumSHA1Node.IsNull())
+    {
+      m_checksumSHA1 = Aws::Utils::Xml::DecodeEscapedXmlText(checksumSHA1Node.GetText());
+      m_checksumSHA1HasBeenSet = true;
+    }
+    XmlNode checksumSHA256Node = resultNode.FirstChild("ChecksumSHA256");
+    if(!checksumSHA256Node.IsNull())
+    {
+      m_checksumSHA256 = Aws::Utils::Xml::DecodeEscapedXmlText(checksumSHA256Node.GetText());
+      m_checksumSHA256HasBeenSet = true;
     }
   }
 
@@ -68,7 +100,31 @@ void CopyPartResult::AddToNode(XmlNode& parentNode) const
   if(m_lastModifiedHasBeenSet)
   {
    XmlNode lastModifiedNode = parentNode.CreateChildElement("LastModified");
-   lastModifiedNode.SetText(m_lastModified.ToGmtString(DateFormat::ISO_8601));
+   lastModifiedNode.SetText(m_lastModified.ToGmtString(Aws::Utils::DateFormat::ISO_8601));
+  }
+
+  if(m_checksumCRC32HasBeenSet)
+  {
+   XmlNode checksumCRC32Node = parentNode.CreateChildElement("ChecksumCRC32");
+   checksumCRC32Node.SetText(m_checksumCRC32);
+  }
+
+  if(m_checksumCRC32CHasBeenSet)
+  {
+   XmlNode checksumCRC32CNode = parentNode.CreateChildElement("ChecksumCRC32C");
+   checksumCRC32CNode.SetText(m_checksumCRC32C);
+  }
+
+  if(m_checksumSHA1HasBeenSet)
+  {
+   XmlNode checksumSHA1Node = parentNode.CreateChildElement("ChecksumSHA1");
+   checksumSHA1Node.SetText(m_checksumSHA1);
+  }
+
+  if(m_checksumSHA256HasBeenSet)
+  {
+   XmlNode checksumSHA256Node = parentNode.CreateChildElement("ChecksumSHA256");
+   checksumSHA256Node.SetText(m_checksumSHA256);
   }
 
 }

@@ -12,6 +12,13 @@
 #include <aws/core/utils/json/JsonSerializer.h>
 #include <aws/core/utils/StringUtils.h>
 
+// TODO: temporary fix for naming conflicts on Windows.
+#ifdef _WIN32
+#ifdef GetMessage
+#undef GetMessage
+#endif
+#endif
+
 namespace Aws
 {
     namespace Client
@@ -41,12 +48,17 @@ namespace Aws
             /**
              * Initializes AWSError object as empty with the error not being retryable.
              */
-            AWSError() : m_responseCode(Aws::Http::HttpResponseCode::REQUEST_NOT_MADE), m_isRetryable(false) {}
+            AWSError()
+              : m_errorType(),
+                m_responseCode(Aws::Http::HttpResponseCode::REQUEST_NOT_MADE),
+                m_isRetryable(false),
+                m_errorPayloadType(ErrorPayloadType::NOT_SET)
+            {}
             /**
              * Initializes AWSError object with errorType, exceptionName, message, and retryable flag.
              */
-            AWSError(ERROR_TYPE errorType, Aws::String exceptionName, const Aws::String message, bool isRetryable) :
-                m_errorType(errorType), m_exceptionName(exceptionName), m_message(message),
+            AWSError(ERROR_TYPE errorType, Aws::String exceptionName, Aws::String message, bool isRetryable)
+              : m_errorType(errorType), m_exceptionName(std::move(exceptionName)), m_message(std::move(message)),
                 m_responseCode(Aws::Http::HttpResponseCode::REQUEST_NOT_MADE), m_isRetryable(isRetryable),
                 m_errorPayloadType(ErrorPayloadType::NOT_SET) {}
             /**
@@ -85,7 +97,7 @@ namespace Aws
             /**
              * Move assignment operator
              */
-            AWSError& operator=(AWSError<ERROR_TYPE>&& other) = default;
+            AWSError& operator=(AWSError<ERROR_TYPE>&&) = default;
 
             /**
              * Gets underlying errorType.
@@ -191,10 +203,10 @@ namespace Aws
             Aws::String m_remoteHostIpAddress;
             Aws::String m_requestId;
             Aws::Http::HeaderValueCollection m_responseHeaders;
-            Aws::Http::HttpResponseCode m_responseCode;
-            bool m_isRetryable;
+            Aws::Http::HttpResponseCode m_responseCode = Aws::Http::HttpResponseCode::REQUEST_NOT_MADE;
+            bool m_isRetryable = false;
 
-            ErrorPayloadType m_errorPayloadType;
+            ErrorPayloadType m_errorPayloadType = ErrorPayloadType::NOT_SET;
             Aws::Utils::Xml::XmlDocument m_xmlPayload;
             Aws::Utils::Json::JsonValue m_jsonPayload;
         };

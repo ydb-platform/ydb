@@ -58,6 +58,26 @@ CompleteMultipartUploadResult& CompleteMultipartUploadResult::operator =(const A
     {
       m_eTag = Aws::Utils::Xml::DecodeEscapedXmlText(eTagNode.GetText());
     }
+    XmlNode checksumCRC32Node = resultNode.FirstChild("ChecksumCRC32");
+    if(!checksumCRC32Node.IsNull())
+    {
+      m_checksumCRC32 = Aws::Utils::Xml::DecodeEscapedXmlText(checksumCRC32Node.GetText());
+    }
+    XmlNode checksumCRC32CNode = resultNode.FirstChild("ChecksumCRC32C");
+    if(!checksumCRC32CNode.IsNull())
+    {
+      m_checksumCRC32C = Aws::Utils::Xml::DecodeEscapedXmlText(checksumCRC32CNode.GetText());
+    }
+    XmlNode checksumSHA1Node = resultNode.FirstChild("ChecksumSHA1");
+    if(!checksumSHA1Node.IsNull())
+    {
+      m_checksumSHA1 = Aws::Utils::Xml::DecodeEscapedXmlText(checksumSHA1Node.GetText());
+    }
+    XmlNode checksumSHA256Node = resultNode.FirstChild("ChecksumSHA256");
+    if(!checksumSHA256Node.IsNull())
+    {
+      m_checksumSHA256 = Aws::Utils::Xml::DecodeEscapedXmlText(checksumSHA256Node.GetText());
+    }
   }
 
   const auto& headers = result.GetHeaderValueCollection();

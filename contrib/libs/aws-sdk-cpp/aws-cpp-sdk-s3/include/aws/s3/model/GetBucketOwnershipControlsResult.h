@@ -24,41 +24,46 @@ namespace S3
 {
 namespace Model
 {
-  class AWS_S3_API GetBucketOwnershipControlsResult
+  class GetBucketOwnershipControlsResult
   {
   public:
-    GetBucketOwnershipControlsResult();
-    GetBucketOwnershipControlsResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
-    GetBucketOwnershipControlsResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API GetBucketOwnershipControlsResult();
+    AWS_S3_API GetBucketOwnershipControlsResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API GetBucketOwnershipControlsResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
 
 
     /**
-     * <p>The <code>OwnershipControls</code> (BucketOwnerPreferred or ObjectWriter)
-     * currently in effect for this Amazon S3 bucket.</p>
+     * <p>The <code>OwnershipControls</code> (BucketOwnerEnforced,
+     * BucketOwnerPreferred, or ObjectWriter) currently in effect for this Amazon S3
+     * bucket.</p>
      */
     inline const OwnershipControls& GetOwnershipControls() const{ return m_ownershipControls; }
 
     /**
-     * <p>The <code>OwnershipControls</code> (BucketOwnerPreferred or ObjectWriter)
-     * currently in effect for this Amazon S3 bucket.</p>
+     * <p>The <code>OwnershipControls</code> (BucketOwnerEnforced,
+     * BucketOwnerPreferred, or ObjectWriter) currently in effect for this Amazon S3
+     * bucket.</p>
      */
     inline void SetOwnershipControls(const OwnershipControls& value) { m_ownershipControls = value; }
 
     /**
-     * <p>The <code>OwnershipControls</code> (BucketOwnerPreferred or ObjectWriter)
-     * currently in effect for this Amazon S3 bucket.</p>
+     * <p>The <code>OwnershipControls</code> (BucketOwnerEnforced,
+     * BucketOwnerPreferred, or ObjectWriter) currently in effect for this Amazon S3
+     * bucket.</p>
      */
     inline void SetOwnershipControls(OwnershipControls&& value) { m_ownershipControls = std::move(value); }
 
     /**
-     * <p>The <code>OwnershipControls</code> (BucketOwnerPreferred or ObjectWriter)
-     * currently in effect for this Amazon S3 bucket.</p>
+     * <p>The <code>OwnershipControls</code> (BucketOwnerEnforced,
+     * BucketOwnerPreferred, or ObjectWriter) currently in effect for this Amazon S3
+     * bucket.</p>
      */
     inline GetBucketOwnershipControlsResult& WithOwnershipControls(const OwnershipControls& value) { SetOwnershipControls(value); return *this;}
 
     /**
-     * <p>The <code>OwnershipControls</code> (BucketOwnerPreferred or ObjectWriter)
-     * currently in effect for this Amazon S3 bucket.</p>
+     * <p>The <code>OwnershipControls</code> (BucketOwnerEnforced,
+     * BucketOwnerPreferred, or ObjectWriter) currently in effect for this Amazon S3
+     * bucket.</p>
      */
     inline GetBucketOwnershipControlsResult& WithOwnershipControls(OwnershipControls&& value) { SetOwnershipControls(std::move(value)); return *this;}
 

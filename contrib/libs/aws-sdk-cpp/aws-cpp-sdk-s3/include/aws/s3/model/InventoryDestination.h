@@ -28,14 +28,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/InventoryDestination">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API InventoryDestination
+  class InventoryDestination
   {
   public:
-    InventoryDestination();
-    InventoryDestination(const Aws::Utils::Xml::XmlNode& xmlNode);
-    InventoryDestination& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API InventoryDestination();
+    AWS_S3_API InventoryDestination(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API InventoryDestination& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -77,7 +77,7 @@ namespace Model
   private:
 
     InventoryS3BucketDestination m_s3BucketDestination;
-    bool m_s3BucketDestinationHasBeenSet;
+    bool m_s3BucketDestinationHasBeenSet = false;
   };
 
 } // namespace Model

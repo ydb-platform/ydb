@@ -8,6 +8,7 @@
 
 #include <aws/core/Core_EXPORTS.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
+#include <aws/core/auth/bearer-token-provider/SSOBearerTokenProvider.h>
 #include <memory>
 
 namespace Aws {
@@ -39,6 +40,8 @@ namespace Aws {
             Aws::String m_ssoRegion;
             // The expiration time of the accessToken.
             Aws::Utils::DateTime m_expiresAt;
+            // The SSO Token Provider
+            Aws::Auth::SSOBearerTokenProvider m_bearerTokenProvider;
 
             void Reload() override;
             void RefreshIfExpired();

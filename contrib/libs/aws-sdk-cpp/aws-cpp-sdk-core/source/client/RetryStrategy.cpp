@@ -17,18 +17,21 @@ namespace Aws
     {
         static const int INITIAL_RETRY_TOKENS = 500;
         static const int RETRY_COST = 5;
-        static const int NO_RETRY_INCREMENT = 1;
         static const int TIMEOUT_RETRY_COST = 10;
 
         StandardRetryStrategy::StandardRetryStrategy(long maxAttempts) :
             m_retryQuotaContainer(Aws::MakeShared<DefaultRetryQuotaContainer>("StandardRetryStrategy")),
             m_maxAttempts(maxAttempts)
-        {}
+        {
+          srand((unsigned int)time(NULL));
+        }
 
         StandardRetryStrategy::StandardRetryStrategy(std::shared_ptr<RetryQuotaContainer> retryQuotaContainer, long maxAttempts) :
             m_retryQuotaContainer(retryQuotaContainer),
             m_maxAttempts(maxAttempts)
-        {}
+        {
+          srand((unsigned int)time(NULL));
+        }
 
         void StandardRetryStrategy::RequestBookkeeping(const HttpResponseOutcome& httpResponseOutcome)
         {
@@ -60,7 +63,8 @@ namespace Aws
         long StandardRetryStrategy::CalculateDelayBeforeNextRetry(const AWSError<CoreErrors>& error, long attemptedRetries) const
         {
             AWS_UNREFERENCED_PARAM(error);
-            return (std::min)(rand() % 1000 * (1 << attemptedRetries), 20000);
+            // Maximum left shift factor is capped by ceil(log2(max_delay)), to avoid wrap-around and overflow into negative values:
+            return (std::min)(rand() % 1000 * (1 << (std::min)(attemptedRetries, 15L)), 20000);
         }
 
         DefaultRetryQuotaContainer::DefaultRetryQuotaContainer() : m_retryQuota(INITIAL_RETRY_TOKENS)

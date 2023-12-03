@@ -7,9 +7,12 @@
 #include <aws/core/http/HttpRequest.h>
 #include <aws/core/http/standard/StandardHttpResponse.h>
 #include <aws/core/utils/StringUtils.h>
+#include <aws/core/utils/HashingUtils.h>
 #include <aws/core/utils/logging/LogMacros.h>
 #include <aws/core/utils/ratelimiter/RateLimiterInterface.h>
 #include <aws/core/utils/DateTime.h>
+#include <aws/core/utils/crypto/Hash.h>
+#include <aws/core/utils/Outcome.h>
 #include <aws/core/monitoring/HttpClientMetrics.h>
 #include <cassert>
 #include <algorithm>
@@ -146,16 +149,33 @@ struct CurlReadCallbackContext
         m_client(client),
         m_curlHandle(curlHandle),
         m_rateLimiter(limiter),
-        m_request(request)
+        m_request(request),
+        m_chunkEnd(false)
     {}
 
     const CurlHttpClient* m_client;
     CURL* m_curlHandle;
     Aws::Utils::RateLimits::RateLimiterInterface* m_rateLimiter;
     HttpRequest* m_request;
+    bool m_chunkEnd;
 };
 
 static const char* CURL_HTTP_CLIENT_TAG = "CurlHttpClient";
+
+static int64_t GetContentLengthFromHeader(CURL* connectionHandle,
+                                          bool& hasContentLength) {
+#if LIBCURL_VERSION_NUM >= 0x073700  // 7.55.0
+  curl_off_t contentLength = {};
+  CURLcode res = curl_easy_getinfo(
+      connectionHandle, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &contentLength);
+#else
+  double contentLength = {};
+  CURLcode res = curl_easy_getinfo(
+      connectionHandle, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &contentLength);
+#endif
+  hasContentLength = (res == CURLE_OK) && (contentLength != -1);
+  return hasContentLength ? static_cast<int64_t>(contentLength) : -1;
+}
 
 static size_t WriteData(char* ptr, size_t size, size_t nmemb, void* userdata)
 {
@@ -176,8 +196,13 @@ static size_t WriteData(char* ptr, size_t size, size_t nmemb, void* userdata)
             context->m_rateLimiter->ApplyAndPayForCost(static_cast<int64_t>(sizeToWrite));
         }
 
+        for (const auto& hashIterator : context->m_request->GetResponseValidationHashes())
+        {
+            hashIterator.second->Update(reinterpret_cast<unsigned char*>(ptr), sizeToWrite);
+        }
+
         response->GetResponseBody().write(ptr, static_cast<std::streamsize>(sizeToWrite));
-        if (context->m_request->IsEventStreamRequest())
+        if (context->m_request->IsEventStreamRequest() && !response->HasHeader(Aws::Http::X_AMZN_ERROR_TYPE))
         {
             response->GetResponseBody().flush();
         }
@@ -214,8 +239,7 @@ static size_t WriteHeader(char* ptr, size_t size, size_t nmemb, void* userdata)
     return 0;
 }
 
-
-static size_t ReadBody(char* ptr, size_t size, size_t nmemb, void* userdata)
+static size_t ReadBody(char* ptr, size_t size, size_t nmemb, void* userdata, bool isStreaming)
 {
     CurlReadCallbackContext* context = reinterpret_cast<CurlReadCallbackContext*>(userdata);
     if(context == nullptr)
@@ -232,10 +256,20 @@ static size_t ReadBody(char* ptr, size_t size, size_t nmemb, void* userdata)
     HttpRequest* request = context->m_request;
     const std::shared_ptr<Aws::IOStream>& ioStream = request->GetContentBody();
 
-    const size_t amountToRead = size * nmemb;
+    size_t amountToRead = size * nmemb;
+    bool isAwsChunked = request->HasHeader(Aws::Http::CONTENT_ENCODING_HEADER) &&
+        request->GetHeaderValue(Aws::Http::CONTENT_ENCODING_HEADER) == Aws::Http::AWS_CHUNKED_VALUE;
+    // aws-chunk = hex(chunk-size) + CRLF + chunk-data + CRLF
+    // Needs to reserve bytes of sizeof(hex(chunk-size)) + sizeof(CRLF) + sizeof(CRLF)
+    if (isAwsChunked)
+    {
+        Aws::String amountToReadHexString = Aws::Utils::StringUtils::ToHexString(amountToRead);
+        amountToRead -= (amountToReadHexString.size() + 4);
+    }
+
     if (ioStream != nullptr && amountToRead > 0)
     {
-        if (request->IsEventStreamRequest())
+        if (isStreaming)
         {
             if (ioStream->readsome(ptr, amountToRead) == 0 && !ioStream->eof())
             {
@@ -247,6 +281,39 @@ static size_t ReadBody(char* ptr, size_t size, size_t nmemb, void* userdata)
             ioStream->read(ptr, amountToRead);
         }
         size_t amountRead = static_cast<size_t>(ioStream->gcount());
+
+        if (isAwsChunked)
+        {
+            if (amountRead > 0)
+            {
+                if (request->GetRequestHash().second != nullptr)
+                {
+                    request->GetRequestHash().second->Update(reinterpret_cast<unsigned char*>(ptr), amountRead);
+                }
+
+                Aws::String hex = Aws::Utils::StringUtils::ToHexString(amountRead);
+                memmove(ptr + hex.size() + 2, ptr, amountRead);
+                memmove(ptr + hex.size() + 2 + amountRead, "\r\n", 2);
+                memmove(ptr, hex.c_str(), hex.size());
+                memmove(ptr + hex.size(), "\r\n", 2);
+                amountRead += hex.size() + 4;
+            }
+            else if (!context->m_chunkEnd)
+            {
+                Aws::StringStream chunkedTrailer;
+                chunkedTrailer << "0\r\n";
+                if (request->GetRequestHash().second != nullptr)
+                {
+                    chunkedTrailer << "x-amz-checksum-" << request->GetRequestHash().first << ":"
+                        << HashingUtils::Base64Encode(request->GetRequestHash().second->GetHash().GetResult()) << "\r\n";
+                }
+                chunkedTrailer << "\r\n";
+                amountRead = chunkedTrailer.str().size();
+                memcpy(ptr, chunkedTrailer.str().c_str(), amountRead);
+                context->m_chunkEnd = true;
+            }
+        }
+
         auto& sentHandler = request->GetDataSentEventHandler();
         if (sentHandler)
         {
@@ -262,6 +329,14 @@ static size_t ReadBody(char* ptr, size_t size, size_t nmemb, void* userdata)
     }
 
     return 0;
+}
+
+static size_t ReadBodyStreaming(char* ptr, size_t size, size_t nmemb, void* userdata) {
+    return ReadBody(ptr, size, nmemb, userdata, true);
+}
+
+static size_t ReadBodyFunc(char* ptr, size_t size, size_t nmemb, void* userdata) {
+    return ReadBody(ptr, size, nmemb, userdata, false);
 }
 
 static size_t SeekBody(void* userdata, curl_off_t offset, int origin)
@@ -358,7 +433,11 @@ void SetOptCodeForHttpMethod(CURL* requestHandle, const std::shared_ptr<HttpRequ
             }
             else
             {
+#if LIBCURL_VERSION_NUM >= 0x070c01 // 7.12.1
+                curl_easy_setopt(requestHandle, CURLOPT_UPLOAD, 1L);
+#else
                 curl_easy_setopt(requestHandle, CURLOPT_PUT, 1L);
+#endif
             }
             break;
         case HttpMethod::HTTP_HEAD:
@@ -579,6 +658,9 @@ std::shared_ptr<HttpResponse> CurlHttpClient::MakeRequest(const std::shared_ptr<
             curl_easy_setopt(connectionHandle, CURLOPT_CAINFO, m_caFile.c_str());
         }
 
+        // enable the cookie engine without reading any initial cookies.
+        curl_easy_setopt(connectionHandle, CURLOPT_COOKIEFILE, "");
+
 	// only set by android test builds because the emulator is missing a cert needed for aws services
 #ifdef TEST_CERT_PATH
 	curl_easy_setopt(connectionHandle, CURLOPT_CAPATH, TEST_CERT_PATH);
@@ -664,12 +746,13 @@ std::shared_ptr<HttpResponse> CurlHttpClient::MakeRequest(const std::shared_ptr<
 
         if (request->GetContentBody())
         {
-            curl_easy_setopt(connectionHandle, CURLOPT_READFUNCTION, ReadBody);
+            curl_easy_setopt(connectionHandle, CURLOPT_READFUNCTION, ReadBodyFunc);
             curl_easy_setopt(connectionHandle, CURLOPT_READDATA, &readContext);
             curl_easy_setopt(connectionHandle, CURLOPT_SEEKFUNCTION, SeekBody);
             curl_easy_setopt(connectionHandle, CURLOPT_SEEKDATA, &readContext);
-            if (request->IsEventStreamRequest())
+            if (request->IsEventStreamRequest() && !response->HasHeader(Aws::Http::X_AMZN_ERROR_TYPE))
             {
+                curl_easy_setopt(connectionHandle, CURLOPT_READFUNCTION, ReadBodyStreaming);
                 curl_easy_setopt(connectionHandle, CURLOPT_NOPROGRESS, 0L);
 #if LIBCURL_VERSION_NUM >= 0x072000 // 7.32.0
                 curl_easy_setopt(connectionHandle, CURLOPT_XFERINFOFUNCTION, CurlProgressCallback);
@@ -714,15 +797,18 @@ std::shared_ptr<HttpResponse> CurlHttpClient::MakeRequest(const std::shared_ptr<
                 AWS_LOGSTREAM_DEBUG(CURL_HTTP_CLIENT_TAG, "Returned content type " << contentType);
             }
 
+            bool hasContentLength = false;
+            int64_t contentLength =
+                GetContentLengthFromHeader(connectionHandle, hasContentLength);
+
             if (request->GetMethod() != HttpMethod::HTTP_HEAD &&
                 writeContext.m_client->IsRequestProcessingEnabled() &&
-                response->HasHeader(Aws::Http::CONTENT_LENGTH_HEADER))
+                hasContentLength)
             {
-                const Aws::String& contentLength = response->GetHeader(Aws::Http::CONTENT_LENGTH_HEADER);
                 int64_t numBytesResponseReceived = writeContext.m_numBytesResponseReceived;
                 AWS_LOGSTREAM_TRACE(CURL_HTTP_CLIENT_TAG, "Response content-length header: " << contentLength);
                 AWS_LOGSTREAM_TRACE(CURL_HTTP_CLIENT_TAG, "Response body length: " << numBytesResponseReceived);
-                if (StringUtils::ConvertToInt64(contentLength.c_str()) != numBytesResponseReceived)
+                if (contentLength != numBytesResponseReceived)
                 {
                     response->SetClientErrorType(CoreErrors::NETWORK_CONNECTION);
                     response->SetClientErrorMessage("Response body length doesn't match the content-length header.");

@@ -358,7 +358,7 @@ int aws_event_stream_channel_handler_write_message(
         AWS_LS_EVENT_STREAM_CHANNEL_HANDLER, "id=%p: Scheduling message write task", (void *)channel_handler);
     aws_channel_task_init(
         &write_data->task, s_write_handler_message, write_data, "aws_event_stream_channel_handler_write_message");
-    aws_channel_schedule_task_now(handler->handler.slot->channel, &write_data->task);
+    aws_channel_schedule_task_now_serialized(handler->handler.slot->channel, &write_data->task);
 
     return AWS_OP_SUCCESS;
 }

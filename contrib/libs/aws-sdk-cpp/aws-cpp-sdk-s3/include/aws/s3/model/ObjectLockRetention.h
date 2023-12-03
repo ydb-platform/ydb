@@ -28,14 +28,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/ObjectLockRetention">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API ObjectLockRetention
+  class ObjectLockRetention
   {
   public:
-    ObjectLockRetention();
-    ObjectLockRetention(const Aws::Utils::Xml::XmlNode& xmlNode);
-    ObjectLockRetention& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API ObjectLockRetention();
+    AWS_S3_API ObjectLockRetention(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API ObjectLockRetention& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -102,10 +102,10 @@ namespace Model
   private:
 
     ObjectLockRetentionMode m_mode;
-    bool m_modeHasBeenSet;
+    bool m_modeHasBeenSet = false;
 
     Aws::Utils::DateTime m_retainUntilDate;
-    bool m_retainUntilDateHasBeenSet;
+    bool m_retainUntilDateHasBeenSet = false;
   };
 
 } // namespace Model

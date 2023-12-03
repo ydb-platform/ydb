@@ -29,12 +29,12 @@ namespace S3
 {
 namespace Model
 {
-  class AWS_S3_API ListObjectVersionsResult
+  class ListObjectVersionsResult
   {
   public:
-    ListObjectVersionsResult();
-    ListObjectVersionsResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
-    ListObjectVersionsResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API ListObjectVersionsResult();
+    AWS_S3_API ListObjectVersionsResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API ListObjectVersionsResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
 
 
     /**

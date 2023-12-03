@@ -24,12 +24,12 @@ namespace S3
 {
 namespace Model
 {
-  class AWS_S3_API GetBucketAnalyticsConfigurationResult
+  class GetBucketAnalyticsConfigurationResult
   {
   public:
-    GetBucketAnalyticsConfigurationResult();
-    GetBucketAnalyticsConfigurationResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
-    GetBucketAnalyticsConfigurationResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API GetBucketAnalyticsConfigurationResult();
+    AWS_S3_API GetBucketAnalyticsConfigurationResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API GetBucketAnalyticsConfigurationResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
 
 
     /**

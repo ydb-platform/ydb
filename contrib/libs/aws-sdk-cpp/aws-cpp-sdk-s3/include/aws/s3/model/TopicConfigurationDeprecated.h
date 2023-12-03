@@ -33,14 +33,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/TopicConfigurationDeprecated">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API TopicConfigurationDeprecated
+  class TopicConfigurationDeprecated
   {
   public:
-    TopicConfigurationDeprecated();
-    TopicConfigurationDeprecated(const Aws::Utils::Xml::XmlNode& xmlNode);
-    TopicConfigurationDeprecated& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API TopicConfigurationDeprecated();
+    AWS_S3_API TopicConfigurationDeprecated(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API TopicConfigurationDeprecated& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     
@@ -160,13 +160,13 @@ namespace Model
   private:
 
     Aws::String m_id;
-    bool m_idHasBeenSet;
+    bool m_idHasBeenSet = false;
 
     Aws::Vector<Event> m_events;
-    bool m_eventsHasBeenSet;
+    bool m_eventsHasBeenSet = false;
 
     Aws::String m_topic;
-    bool m_topicHasBeenSet;
+    bool m_topicHasBeenSet = false;
   };
 
 } // namespace Model

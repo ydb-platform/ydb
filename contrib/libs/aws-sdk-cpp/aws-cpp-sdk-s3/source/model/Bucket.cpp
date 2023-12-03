@@ -48,7 +48,7 @@ Bucket& Bucket::operator =(const XmlNode& xmlNode)
     XmlNode creationDateNode = resultNode.FirstChild("CreationDate");
     if(!creationDateNode.IsNull())
     {
-      m_creationDate = DateTime(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(creationDateNode.GetText()).c_str()).c_str(), DateFormat::ISO_8601);
+      m_creationDate = DateTime(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(creationDateNode.GetText()).c_str()).c_str(), Aws::Utils::DateFormat::ISO_8601);
       m_creationDateHasBeenSet = true;
     }
   }
@@ -68,7 +68,7 @@ void Bucket::AddToNode(XmlNode& parentNode) const
   if(m_creationDateHasBeenSet)
   {
    XmlNode creationDateNode = parentNode.CreateChildElement("CreationDate");
-   creationDateNode.SetText(m_creationDate.ToGmtString(DateFormat::ISO_8601));
+   creationDateNode.SetText(m_creationDate.ToGmtString(Aws::Utils::DateFormat::ISO_8601));
   }
 
 }

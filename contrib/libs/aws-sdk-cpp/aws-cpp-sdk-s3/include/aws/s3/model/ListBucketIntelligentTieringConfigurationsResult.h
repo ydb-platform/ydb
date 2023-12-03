@@ -26,75 +26,78 @@ namespace S3
 {
 namespace Model
 {
-  class AWS_S3_API ListBucketIntelligentTieringConfigurationsResult
+  class ListBucketIntelligentTieringConfigurationsResult
   {
   public:
-    ListBucketIntelligentTieringConfigurationsResult();
-    ListBucketIntelligentTieringConfigurationsResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
-    ListBucketIntelligentTieringConfigurationsResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API ListBucketIntelligentTieringConfigurationsResult();
+    AWS_S3_API ListBucketIntelligentTieringConfigurationsResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API ListBucketIntelligentTieringConfigurationsResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
 
 
     /**
      * <p>Indicates whether the returned list of analytics configurations is complete.
-     * A value of true indicates that the list is not complete and the
-     * NextContinuationToken will be provided for a subsequent request.</p>
+     * A value of <code>true</code> indicates that the list is not complete and the
+     * <code>NextContinuationToken</code> will be provided for a subsequent
+     * request.</p>
      */
     inline bool GetIsTruncated() const{ return m_isTruncated; }
 
     /**
      * <p>Indicates whether the returned list of analytics configurations is complete.
-     * A value of true indicates that the list is not complete and the
-     * NextContinuationToken will be provided for a subsequent request.</p>
+     * A value of <code>true</code> indicates that the list is not complete and the
+     * <code>NextContinuationToken</code> will be provided for a subsequent
+     * request.</p>
      */
     inline void SetIsTruncated(bool value) { m_isTruncated = value; }
 
     /**
      * <p>Indicates whether the returned list of analytics configurations is complete.
-     * A value of true indicates that the list is not complete and the
-     * NextContinuationToken will be provided for a subsequent request.</p>
+     * A value of <code>true</code> indicates that the list is not complete and the
+     * <code>NextContinuationToken</code> will be provided for a subsequent
+     * request.</p>
      */
     inline ListBucketIntelligentTieringConfigurationsResult& WithIsTruncated(bool value) { SetIsTruncated(value); return *this;}
 
 
     /**
-     * <p>The ContinuationToken that represents a placeholder from where this request
-     * should begin.</p>
+     * <p>The <code>ContinuationToken</code> that represents a placeholder from where
+     * this request should begin.</p>
      */
     inline const Aws::String& GetContinuationToken() const{ return m_continuationToken; }
 
     /**
-     * <p>The ContinuationToken that represents a placeholder from where this request
-     * should begin.</p>
+     * <p>The <code>ContinuationToken</code> that represents a placeholder from where
+     * this request should begin.</p>
      */
     inline void SetContinuationToken(const Aws::String& value) { m_continuationToken = value; }
 
     /**
-     * <p>The ContinuationToken that represents a placeholder from where this request
-     * should begin.</p>
+     * <p>The <code>ContinuationToken</code> that represents a placeholder from where
+     * this request should begin.</p>
      */
     inline void SetContinuationToken(Aws::String&& value) { m_continuationToken = std::move(value); }
 
     /**
-     * <p>The ContinuationToken that represents a placeholder from where this request
-     * should begin.</p>
+     * <p>The <code>ContinuationToken</code> that represents a placeholder from where
+     * this request should begin.</p>
      */
     inline void SetContinuationToken(const char* value) { m_continuationToken.assign(value); }
 
     /**
-     * <p>The ContinuationToken that represents a placeholder from where this request
-     * should begin.</p>
+     * <p>The <code>ContinuationToken</code> that represents a placeholder from where
+     * this request should begin.</p>
      */
     inline ListBucketIntelligentTieringConfigurationsResult& WithContinuationToken(const Aws::String& value) { SetContinuationToken(value); return *this;}
 
     /**
-     * <p>The ContinuationToken that represents a placeholder from where this request
-     * should begin.</p>
+     * <p>The <code>ContinuationToken</code> that represents a placeholder from where
+     * this request should begin.</p>
      */
     inline ListBucketIntelligentTieringConfigurationsResult& WithContinuationToken(Aws::String&& value) { SetContinuationToken(std::move(value)); return *this;}
 
     /**
-     * <p>The ContinuationToken that represents a placeholder from where this request
-     * should begin.</p>
+     * <p>The <code>ContinuationToken</code> that represents a placeholder from where
+     * this request should begin.</p>
      */
     inline ListBucketIntelligentTieringConfigurationsResult& WithContinuationToken(const char* value) { SetContinuationToken(value); return *this;}
 

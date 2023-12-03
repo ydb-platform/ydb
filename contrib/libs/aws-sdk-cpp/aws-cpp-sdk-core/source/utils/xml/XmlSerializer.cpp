@@ -23,6 +23,8 @@ Aws::String Aws::Utils::Xml::DecodeEscapedXmlText(const Aws::String& textToDecod
     StringUtils::Replace(decodedString, "&lt;", "<");
     StringUtils::Replace(decodedString, "&gt;", ">");
     StringUtils::Replace(decodedString, "&amp;", "&");
+    StringUtils::Replace(decodedString, "&#xA;", "\n");
+    StringUtils::Replace(decodedString, "&#xD;", "\r");
 
     return decodedString;
 }

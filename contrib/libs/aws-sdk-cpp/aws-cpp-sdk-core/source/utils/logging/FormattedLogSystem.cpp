@@ -72,7 +72,7 @@ void FormattedLogSystem::Log(LogLevel logLevel, const char* tag, const char* for
 
     va_list tmp_args; //unfortunately you cannot consume a va_list twice
     va_copy(tmp_args, args); //so we have to copy it
-    #ifdef WIN32
+    #ifdef _WIN32
         const int requiredLength = _vscprintf(formatStr, tmp_args) + 1;
     #else
         const int requiredLength = vsnprintf(nullptr, 0, formatStr, tmp_args) + 1;
@@ -80,11 +80,11 @@ void FormattedLogSystem::Log(LogLevel logLevel, const char* tag, const char* for
     va_end(tmp_args);
 
     Array<char> outputBuff(requiredLength);
-    #ifdef WIN32
+    #ifdef _WIN32
         vsnprintf_s(outputBuff.GetUnderlyingData(), requiredLength, _TRUNCATE, formatStr, args);
     #else
         vsnprintf(outputBuff.GetUnderlyingData(), requiredLength, formatStr, args);
-    #endif // WIN32
+    #endif // _WIN32
 
     ss << outputBuff.GetUnderlyingData() << std::endl;  
   

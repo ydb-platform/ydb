@@ -129,3 +129,13 @@ Aws::Http::HeaderValueCollection ListObjectsV2Request::GetRequestSpecificHeaders
 
   return headers;
 }
+
+ListObjectsV2Request::EndpointParameters ListObjectsV2Request::GetEndpointContextParams() const
+{
+    EndpointParameters parameters;
+    // Operation context parameters
+    if (BucketHasBeenSet()) {
+        parameters.emplace_back(Aws::String("Bucket"), this->GetBucket(), Aws::Endpoint::EndpointParameter::ParameterOrigin::OPERATION_CONTEXT);
+    }
+    return parameters;
+}

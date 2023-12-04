@@ -7,8 +7,8 @@ NO_UTIL()
 EXPORT_ALL_DYNAMIC_SYMBOLS()
 
 DYNAMIC_LIBRARY_FROM(
-    contrib/libs/clang${YA_CLANG_VER}-rt/lib/ubsan_standalone
-    contrib/libs/clang${YA_CLANG_VER}-rt/lib/ubsan_standalone_cxx
+    contrib/libs/clang${CLANG_VER}-rt/lib/ubsan_standalone
+    contrib/libs/clang${CLANG_VER}-rt/lib/ubsan_standalone_cxx
 )
 
 END()

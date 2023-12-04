@@ -290,14 +290,7 @@ public:
 
         LWTRACK(KqpDataExecuterFinalize, ResponseEv->Orbit, TxId, LastShard, ResponseEv->ResultsSize(), ResponseEv->GetByteSize());
 
-        if (ExecuterStateSpan) {
-            ExecuterStateSpan.End();
-            ExecuterStateSpan = {};
-        }
-
-        if (ExecuterSpan) {
-            ExecuterSpan.EndOk();
-        }
+        ExecuterSpan.EndOk();
 
         Request.Transactions.crop(0);
         LOG_D("Sending response to: " << Target << ", results: " << ResponseEv->ResultsSize());
@@ -847,11 +840,6 @@ private:
 
         LOG_D("All shards prepared, become ExecuteState.");
         Become(&TKqpDataExecuter::ExecuteState);
-        if (ExecuterStateSpan) {
-            ExecuterStateSpan.End();
-            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterExecuteState, ExecuterSpan.GetTraceId(), "ExecuteState", NWilson::EFlags::AUTO_END);
-        }
-
         ExecutePlanned();
     }
 
@@ -1590,7 +1578,7 @@ private:
 
     void HandleResolve(TEvDescribeSecretsResponse::TPtr& ev) {
         YQL_ENSURE(ev->Get()->Description.Status == Ydb::StatusIds::SUCCESS, "failed to get secrets snapshot with issues: " << ev->Get()->Description.Issues.ToOneLineString());
-        
+
         for (size_t i = 0; i < SecretNames.size(); ++i) {
             SecureParams.emplace(SecretNames[i], ev->Get()->Description.SecretValues[i]);
         }
@@ -1614,7 +1602,7 @@ private:
 
     void HandleResolve(TEvSaveScriptExternalEffectResponse::TPtr& ev) {
         YQL_ENSURE(ev->Get()->Status == Ydb::StatusIds::SUCCESS, "failed to save script external effect with issues: " << ev->Get()->Issues.ToOneLineString());
-        
+
         SaveScriptExternalEffectRequired = false;
         if (!WaitRequired()) {
             Execute();
@@ -1624,7 +1612,7 @@ private:
     void DoExecute() {
         const auto& requestContext = GetUserRequestContext();
         auto scriptExternalEffect = std::make_unique<TEvSaveScriptExternalEffectRequest>(
-            requestContext->CurrentExecutionId, requestContext->Database, 
+            requestContext->CurrentExecutionId, requestContext->Database,
             requestContext->CustomerSuppliedId, UserToken ? UserToken->GetUserSID() : ""
         );
         for (const auto& transaction : Request.Transactions) {
@@ -1676,7 +1664,6 @@ private:
     }
 
     void Execute() {
-        NWilson::TSpan prepareTasksSpan(TWilsonKqp::DataExecuterPrepareTasks, ExecuterStateSpan.GetTraceId(), "PrepareTasks", NWilson::EFlags::AUTO_END);
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
         size_t sourceScanPartitionsCount = 0;
@@ -1857,10 +1844,6 @@ private:
         DatashardTxs = std::move(datashardTxs);
         RemoteComputeTasks = std::move(remoteComputeTasks);
 
-        if (prepareTasksSpan) {
-            prepareTasksSpan.End();
-        }
-
         TasksGraph.GetMeta().UseFollowers = GetUseFollowers();
 
         if (RemoteComputeTasks) {
@@ -1870,6 +1853,7 @@ private:
                 shardIds.insert(shardId);
             }
 
+            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
             auto kqpShardsResolver = CreateKqpShardsResolver(
                 SelfId(), TxId, TasksGraph.GetMeta().UseFollowers, std::move(shardIds));
             RegisterWithSameMailbox(kqpShardsResolver);
@@ -1919,6 +1903,7 @@ private:
 
             if ((HasOlapTable || HasDatashardSourceScan) && shardIds) {
                 LOG_D("Start resolving tablets nodes... (" << shardIds.size() << ")");
+                ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
                 auto kqpShardsResolver = CreateKqpShardsResolver(
                     this->SelfId(), TxId, false, std::move(shardIds));
                 KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
@@ -1932,7 +1917,9 @@ private:
     }
 
     void HandleResolve(TEvKqpExecuter::TEvShardsResolveStatus::TPtr& ev) {
-        if (!TBase::HandleResolve(ev)) return;
+        if (!TBase::HandleResolve(ev)) {
+            return;
+        }
         if (HasOlapTable) {
             GetResourcesSnapshot();
             return;
@@ -1952,10 +1939,7 @@ private:
 
             LOG_T("Create temporary mvcc snapshot, become WaitSnapshotState");
             Become(&TKqpDataExecuter::WaitSnapshotState);
-            if (ExecuterStateSpan) {
-                ExecuterStateSpan.End();
-                ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterWaitSnapshotState, ExecuterSpan.GetTraceId(), "WaitSnapshotState", NWilson::EFlags::AUTO_END);
-            }
+            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterAcquireSnapshot, ExecuterSpan.GetTraceId(), "WaitForSnapshot");
 
             return;
         }
@@ -1985,9 +1969,11 @@ private:
             << ", tx id: " << record.GetSnapshotTxId());
 
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            ExecuterStateSpan.EndError(TStringBuilder() << Ydb::StatusIds::StatusCode_Name(record.GetStatus()));
             ReplyErrorAndDie(record.GetStatus(), record.MutableIssues());
             return;
         }
+        ExecuterStateSpan.EndOk();
 
         SetSnapshot(record.GetSnapshotStep(), record.GetSnapshotTxId());
         ImmediateTx = true;
@@ -2007,22 +1993,15 @@ private:
 
         ExecuteTasks();
 
+        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
         if (ImmediateTx) {
             LOG_D("ActorState: " << CurrentStateFuncName()
                 << ", immediate tx, become ExecuteState");
             Become(&TKqpDataExecuter::ExecuteState);
-            if (ExecuterStateSpan) {
-                ExecuterStateSpan.End();
-                ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterExecuteState, ExecuterSpan.GetTraceId(), "ExecuteState", NWilson::EFlags::AUTO_END);
-            }
         } else {
             LOG_D("ActorState: " << CurrentStateFuncName()
                 << ", not immediate tx, become PrepareState");
             Become(&TKqpDataExecuter::PrepareState);
-            if (ExecuterStateSpan) {
-                ExecuterStateSpan.End();
-                ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterPrepareState, ExecuterSpan.GetTraceId(), "PrepareState", NWilson::EFlags::AUTO_END);
-            }
         }
     }
 
@@ -2205,7 +2184,6 @@ private:
             }
         }
 
-        NWilson::TSpan sendTasksSpan(TWilsonKqp::DataExecuterSendTasksAndTxs, ExecuterStateSpan.GetTraceId(), "SendTasksAndTxs", NWilson::EFlags::AUTO_END);
         LWTRACK(KqpDataExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, ComputeTasks.size(), DatashardTxs.size());
 
         for (auto& [shardId, tasks] : RemoteComputeTasks) {
@@ -2286,10 +2264,6 @@ private:
         }
 
         ExecuteTopicTabletTransactions(TopicTxs);
-
-        if (sendTasksSpan) {
-            sendTasksSpan.End();
-        }
 
         LOG_I("Total tasks: " << TasksGraph.GetTasks().size()
             << ", readonly: " << ReadOnlyTx

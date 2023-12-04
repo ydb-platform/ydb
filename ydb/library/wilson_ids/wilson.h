@@ -13,37 +13,28 @@ namespace NKikimr {
 
     struct TWilsonKqp {
         enum {
-            KqpSession = 10,
-                CompileRequest = 9,
-                    CompileService = 8,
-                        CompileActor = 7,
+            KqpSession = 8,
+                CompileService = 9,
+                CompileActor = 9,
+                SessionAcquireSnapshot = 9,
 
-                KqpSessionCreateAndSendPropose = 9,
-
-                ExecuterReadyState = 9,
-                ExecuterWaitResolveState = 9,
-                    ExecuterTableResolve = 9,
-                ExecuterZombieState = 9,
-
-                ComputeActor = 6,
+                    ExecuterTableResolve = 10,
+                    ExecuterShardsResolve = 10,
 
                 LiteralExecuter = 9,
-                    LiteralExecuterPrepareTasks = 9,
-                    LiteralExecuterRunTasks = 9,
 
                 DataExecuter = 9,
-                    DataExecuterPrepareState = 9,
-                        DataExecuterPrepareTasks = 9,
-                    DataExecuterExecuteState = 9,
-                        DataExecuterSendTasksAndTxs = 9,
-                    DataExecuterWaitSnapshotState = 9,
-                    ProposeTransaction = 8,
+                    DataExecuterAcquireSnapshot = 10,
+                    DataExecuterRunTasks = 10,
 
                 ScanExecuter = 9,
-                    ScanExecuterExecuteState = 9,
-                    ScanExecuterPrepareTasks = 9,
-                    KqpPlanner = 8,
-                        KqpNodeSendTasks = 7,
+                    ScanExecuterRunTasks = 10,
+
+                KqpNodeSendTasks = 9,
+
+                ProposeTransaction = 9,
+
+                ComputeActor = 9,
         };
     };
 

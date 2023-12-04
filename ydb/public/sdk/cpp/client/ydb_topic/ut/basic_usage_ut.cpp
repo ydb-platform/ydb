@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
         TTopicClient client = setup.MakeClient();
 
-        {
+        for (size_t i = 0; i < 100; ++i) {
             auto writeSettings = TWriteSessionSettings()
                         .Path(TEST_TOPIC)
                         .ProducerId(TEST_MESSAGE_GROUP_ID)
@@ -176,9 +176,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             dataReceived.Commit();
 
             auto& messages = dataReceived.GetMessages();
-            UNIT_ASSERT(messages.size() == 2);
+            UNIT_ASSERT(messages.size() == 101);
             UNIT_ASSERT(messages[0].GetData() == "message_using_MessageGroupId");
-            UNIT_ASSERT(messages[1].GetData() == "message_using_PartitionId");
+            UNIT_ASSERT(messages[100].GetData() == "message_using_PartitionId");
         }
     }
 
@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .MaxMemoryUsageBytes(1_MB)
             .DecompressionExecutor(decompressor)
             .AppendTopics(topic);
-            
+
         TWriteSessionSettings writeSettings;
         writeSettings
             .Path(TEST_TOPIC)

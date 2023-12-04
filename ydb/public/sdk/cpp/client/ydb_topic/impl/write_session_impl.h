@@ -103,14 +103,16 @@ public:
 private:
     struct THandlersVisitor : public TParent::TBaseHandlersVisitor {
         using TParent::TBaseHandlersVisitor::TBaseHandlersVisitor;
-#define DECLARE_HANDLER(type, handler, answer)          \
-        bool operator()(type& event) {                  \
-            if (Settings.EventHandlers_.handler) {      \
-                Settings.EventHandlers_.handler(event); \
-                return answer;                          \
-            }                                           \
-            return false;                               \
-        }                                               \
+#define DECLARE_HANDLER(type, handler, answer)                      \
+        bool operator()(type&) {                                    \
+            if (this->PushHandler<type>(                            \
+                std::move(TParent::TBaseHandlersVisitor::Event),    \
+                this->Settings.EventHandlers_.handler,              \
+                this->Settings.EventHandlers_.CommonHandler_)) {    \
+                return answer;                                      \
+            }                                                       \
+            return false;                                           \
+        }                                                           \
         /**/
         DECLARE_HANDLER(TWriteSessionEvent::TAcksEvent, AcksHandler_, true);
         DECLARE_HANDLER(TWriteSessionEvent::TReadyToAcceptEvent, ReadyToAcceptHander_, true);
@@ -149,7 +151,8 @@ struct TMemoryUsageChange {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSessionImpl
 
-class TWriteSessionImpl : public NPersQueue::TEnableSelfContext<TWriteSessionImpl> {
+class TWriteSessionImpl : public TContinuationTokenIssuer,
+                          public NPersQueue::TEnableSelfContext<TWriteSessionImpl> {
 private:
     friend class TWriteSession;
     friend class TSimpleBlockingWriteSession;

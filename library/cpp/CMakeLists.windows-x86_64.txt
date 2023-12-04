@@ -7,7 +7,6 @@
 
 
 add_subdirectory(accurate_accumulate)
-add_subdirectory(actors)
 add_subdirectory(archive)
 add_subdirectory(balloc)
 add_subdirectory(binsaver)

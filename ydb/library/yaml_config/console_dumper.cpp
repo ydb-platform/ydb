@@ -4,7 +4,7 @@
 #include "yaml_config.h"
 
 #include <ydb/core/cms/console/util/config_index.h>
-#include <library/cpp/yaml/fyamlcpp/fyamlcpp.h>
+#include <ydb/library/fyamlcpp/fyamlcpp.h>
 
 #include <regex>
 

@@ -14,11 +14,22 @@ public:
     size_t operator()(const TKeyType& key) const {
         const auto& headers = std::get<1U>(key);
         auto initHash = CombineHashes(Hash(std::get<0U>(key)), Hash(std::get<2U>(key)));
-        return std::accumulate(headers.cbegin(), headers.cend(), initHash,
+        return std::accumulate(headers.Fields.cbegin(), headers.Fields.cend(), initHash,
                                [this](size_t hash, const TString& item) { return CombineHashes(hash, Hash(item)); });
     }
 public:
     const std::hash<TString> Hash;
+};
+
+struct TKeyEqual
+{
+    bool operator()(const TKeyType& lhs, const TKeyType& rhs) const
+    {
+        auto& lhsHeader = get<1>(lhs);
+        auto& rhsHeader = get<1>(rhs);
+        return std::tie(std::get<0U>(lhs), lhsHeader.Fields, lhsHeader.Options.AwsSigV4, lhsHeader.Options.UserPwd) 
+            == std::tie(std::get<0U>(rhs), rhsHeader.Fields, rhsHeader.Options.AwsSigV4, rhsHeader.Options.UserPwd);
+    }
 };
 
 class THTTPMockGateway : public IHTTPMockGateway {
@@ -36,8 +47,8 @@ public:
         TStringBuilder ret;
         ret << "{ Url: \"" << std::get<0>(key) << "\"";
         ret << " Headers: [";
-        for (const TString& header : std::get<1>(key)) {
-            ret << " \"" << header << "\"";
+        for (const TString& field : std::get<1>(key).Fields) {
+            ret << " \"" << field << "\"";
         }
         ret << " ] Data: \"" << std::get<2>(key) << "\" }";
         return std::move(ret);
@@ -104,7 +115,7 @@ public:
     }
 
 private:
-    std::unordered_map<TKeyType, std::vector<TDataResponse>, TKeyHash> RequestsResponse;
+    std::unordered_map<TKeyType, std::vector<TDataResponse>, TKeyHash, TKeyEqual> RequestsResponse;
     TDataDefaultResponse DefaultResponse;
 };
 }

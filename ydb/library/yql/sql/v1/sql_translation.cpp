@@ -4260,13 +4260,14 @@ bool TSqlTranslation::ValidateAuthMethod(const std::map<TString, TDeferredAtom>&
         "login",
         "password_secret_name",
         "aws_access_key_id_secret_name",
-        "aws_secret_access_key_secret_name"
+        "aws_secret_access_key_secret_name",
+        "aws_region"
     };
     const static TMap<TStringBuf, TSet<TStringBuf>> authMethodFields{
         {"NONE", {}},
         {"SERVICE_ACCOUNT", {"service_account_id", "service_account_secret_name"}},
         {"BASIC", {"login", "password_secret_name"}},
-        {"AWS", {"aws_access_key_id_secret_name", "aws_secret_access_key_secret_name"}},
+        {"AWS", {"aws_access_key_id_secret_name", "aws_secret_access_key_secret_name", "aws_region"}},
         {"MDB_BASIC", {"service_account_id", "service_account_secret_name", "login", "password_secret_name"}}
     };
     auto authMethodIt = result.find("auth_method");

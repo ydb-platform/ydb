@@ -48,6 +48,7 @@ void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescri
         auto& aws = *externaDataSourceDesc.MutableAuth()->MutableAws();
         aws.SetAwsAccessKeyIdSecretName(GetOrEmpty(settings, "aws_access_key_id_secret_name"));
         aws.SetAwsSecretAccessKeySecretName(GetOrEmpty(settings, "aws_secret_access_key_secret_name"));
+        aws.SetAwsRegion(GetOrEmpty(settings, "aws_region"));
     } else {
         ythrow yexception() << "Internal error. Unknown auth method: " << authMethod;
     }

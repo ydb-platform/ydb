@@ -339,6 +339,8 @@ TTableMetadataResult EnrichExternalTable(const TTableMetadataResult& externalTab
     tableMeta->ExternalSource.DataSourceInstallation = externalDataSource.Metadata->ExternalSource.DataSourceInstallation;
     tableMeta->ExternalSource.DataSourceAuth = externalDataSource.Metadata->ExternalSource.DataSourceAuth;
     tableMeta->ExternalSource.ServiceAccountIdSignature = externalDataSource.Metadata->ExternalSource.ServiceAccountIdSignature;
+    tableMeta->ExternalSource.AwsAccessKeyId = externalDataSource.Metadata->ExternalSource.AwsAccessKeyId;
+    tableMeta->ExternalSource.AwsSecretAccessKey = externalDataSource.Metadata->ExternalSource.AwsSecretAccessKey;
     return result;
 }
 

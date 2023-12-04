@@ -5423,14 +5423,15 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     LOCATION="protocol://host:port/",
                     AUTH_METHOD="AWS",
                     AWS_ACCESS_KEY_ID_SECRET_NAME="secred_id_name",
-                    AWS_SECRET_ACCESS_KEY_SECRET_NAME="secret_key_name"
+                    AWS_SECRET_ACCESS_KEY_SECRET_NAME="secret_key_name",
+                    AWS_REGION="ru-central-1"
                 );
             )");
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"AWS") '('"aws_access_key_id_secret_name" '"secred_id_name") '('"aws_secret_access_key_secret_name" '"secret_key_name") '('"location" '"protocol://host:port/") '('"source_type" '"PostgreSQL"))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"AWS") '('"aws_access_key_id_secret_name" '"secred_id_name") '('"aws_region" '"ru-central-1") '('"aws_secret_access_key_secret_name" '"secret_key_name") '('"location" '"protocol://host:port/") '('"source_type" '"PostgreSQL"))#");
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
             }
         };
@@ -5601,9 +5602,10 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     SOURCE_TYPE="PostgreSQL",
                     LOCATION="protocol://host:port/",
                     AUTH_METHOD="AWS",
-                    AWS_SECRET_ACCESS_KEY_SECRET_NAME="secret_key_name"
+                    AWS_SECRET_ACCESS_KEY_SECRET_NAME="secret_key_name",
+                    AWS_REGION="ru-central-1"
                 );
-            )" , "<main>:7:55: Error: AWS_ACCESS_KEY_ID_SECRET_NAME requires key\n");
+            )" , "<main>:8:32: Error: AWS_ACCESS_KEY_ID_SECRET_NAME requires key\n");
 
         ExpectFailWithError(R"(
                 USE plato;
@@ -5611,9 +5613,21 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     SOURCE_TYPE="PostgreSQL",
                     LOCATION="protocol://host:port/",
                     AUTH_METHOD="AWS",
+                    AWS_ACCESS_KEY_ID_SECRET_NAME="secred_id_name",
+                    AWS_REGION="ru-central-1"
+                );
+            )" , "<main>:8:32: Error: AWS_SECRET_ACCESS_KEY_SECRET_NAME requires key\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="PostgreSQL",
+                    LOCATION="protocol://host:port/",
+                    AUTH_METHOD="AWS",
+                    AWS_SECRET_ACCESS_KEY_SECRET_NAME="secret_key_name",
                     AWS_ACCESS_KEY_ID_SECRET_NAME="secred_id_name"
                 );
-            )" , "<main>:7:51: Error: AWS_SECRET_ACCESS_KEY_SECRET_NAME requires key\n");
+            )" , "<main>:8:51: Error: AWS_REGION requires key\n");
     }
 
     Y_UNIT_TEST(DropExternalDataSourceWithTablePrefix) {

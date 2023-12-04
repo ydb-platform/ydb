@@ -434,7 +434,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
                 LOCATION="my-bucket",
                 AUTH_METHOD="AWS",
                 AWS_ACCESS_KEY_ID_SECRET_NAME=")" << awsAccessKeyIdSecretId << R"(",
-                AWS_SECRET_ACCESS_KEY_SECRET_NAME=")" << awsSecretAccessKeySecretId << R"("
+                AWS_SECRET_ACCESS_KEY_SECRET_NAME=")" << awsSecretAccessKeySecretId << R"(",
+                AWS_REGION="ru-central-1"
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -446,6 +447,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.AwsAccessKeyId, awsAccessKeyIdSecretValue);
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.AwsSecretAccessKey, awsSecretAccessKeySecretValue);
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.DataSourceAuth.GetAws().GetAwsRegion(), "ru-central-1");
     }
 
     Y_UNIT_TEST(TestLoadDataSourceProperties) {

@@ -1771,6 +1771,7 @@ message TMdbBasic {
 message TAws {
     optional string AwsAccessKeyIdSecretName = 1;
     optional string AwsSecretAccessKeySecretName = 2;
+    optional string AwsRegion = 3;
 }
 
 message TBasic {

@@ -53,12 +53,12 @@
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
-#include <ydb/library/yql/utils/aws_credentials.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 
 #include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/compressors/factory.h>
+#include <ydb/library/yql/providers/s3/credentials/credentials.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
@@ -331,7 +331,7 @@ public:
         ui64 fileSizeLimit,
         IHTTPGateway::TPtr gateway,
         TString url,
-        TString token,
+        TS3Credentials::TAuthInfo authInfo,
         TString pattern,
         ES3PatternVariant patternVariant,
         ES3PatternType patternType)
@@ -341,7 +341,7 @@ public:
         , MaybeIssues(Nothing())
         , Gateway(std::move(gateway))
         , Url(std::move(url))
-        , Token(std::move(token))
+        , AuthInfo(std::move(authInfo))
         , Pattern(std::move(pattern))
         , PatternVariant(patternVariant)
         , PatternType(patternType) {
@@ -611,7 +611,7 @@ private:
                 Gateway,
                 NS3Lister::TListingRequest{
                     Url,
-                    Token,
+                    AuthInfo,
                     PatternVariant == ES3PatternVariant::PathPattern
                         ? Pattern
                         : TStringBuilder{} << path << Pattern,
@@ -660,7 +660,7 @@ private:
 
     const IHTTPGateway::TPtr Gateway;
     const TString Url;
-    const TString Token;
+    const TS3Credentials::TAuthInfo AuthInfo;
     const TString Pattern;
     const ES3PatternVariant PatternVariant;
     const ES3PatternType PatternType;
@@ -678,7 +678,7 @@ public:
         IHTTPGateway::TPtr gateway,
         const THolderFactory& holderFactory,
         const TString& url,
-        const TString& token,
+        const TS3Credentials::TAuthInfo& authInfo,
         const TString& pattern,
         ES3PatternVariant patternVariant,
         TPathList&& paths,
@@ -700,7 +700,7 @@ public:
         , RetryPolicy(retryPolicy)
         , ActorSystem(TActivationContext::ActorSystem())
         , Url(url)
-        , Token(token)
+        , AuthInfo(authInfo)
         , Pattern(pattern)
         , PatternVariant(patternVariant)
         , Paths(std::move(paths))
@@ -733,7 +733,7 @@ public:
             FileSizeLimit,
             Gateway,
             Url,
-            Token,
+            AuthInfo,
             Pattern,
             PatternVariant,
             ES3PatternType::Wildcard});
@@ -772,7 +772,7 @@ public:
         LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id << ", request id: [" << requestId << "]");
         Gateway->Download(
             UrlEscapeRet(url, true),
-            IHTTPGateway::MakeYcHeaders(requestId, Token),
+            IHTTPGateway::MakeYcHeaders(requestId, AuthInfo.GetToken(), {}, AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
             0U,
             std::min(size, SizeLimit),
             std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), requestId, std::placeholders::_1, id, path),
@@ -994,7 +994,7 @@ private:
     TActorSystem* const ActorSystem;
 
     const TString Url;
-    const TString Token;
+    const TS3Credentials::TAuthInfo AuthInfo;
     const TString Pattern;
     const ES3PatternVariant PatternVariant;
     TPathList Paths;
@@ -2302,7 +2302,7 @@ public:
         IHTTPGateway::TPtr gateway,
         const THolderFactory& holderFactory,
         const TString& url,
-        const TString& token,
+        const TS3Credentials::TAuthInfo& authInfo,
         const TString& pattern,
         ES3PatternVariant patternVariant,
         TPathList&& paths,
@@ -2324,7 +2324,7 @@ public:
         , ComputeActorId(computeActorId)
         , RetryPolicy(retryPolicy)
         , Url(url)
-        , Token(token)
+        , AuthInfo(authInfo)
         , Pattern(pattern)
         , PatternVariant(patternVariant)
         , Paths(std::move(paths))
@@ -2388,7 +2388,7 @@ public:
             FileSizeLimit,
             Gateway,
             Url,
-            Token,
+            AuthInfo,
             Pattern,
             PatternVariant,
             ES3PatternType::Wildcard});
@@ -2439,7 +2439,7 @@ public:
         auto stuff = std::make_shared<TRetryStuff>(
             Gateway,
             Url + objectPath.Path,
-            IHTTPGateway::MakeYcHeaders(requestId, Token),
+            IHTTPGateway::MakeYcHeaders(requestId, AuthInfo.GetToken(), {}, AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
             objectPath.Size,
             TxId,
             requestId,
@@ -2779,7 +2779,7 @@ private:
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
 
     const TString Url;
-    const TString Token;
+    const TS3Credentials::TAuthInfo AuthInfo;
     const TString Pattern;
     const ES3PatternVariant PatternVariant;
     TPathList Paths;
@@ -2955,6 +2955,8 @@ NDB::FormatSettings::TimestampFormat ToTimestampFormat(const TString& formatName
     return NDB::FormatSettings::TimestampFormat::Unspecified;
 }
 
+
+
 } // namespace
 
 using namespace NKikimr::NMiniKQL;
@@ -2984,8 +2986,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     ReadPathsList(params, taskParams, readRanges, paths);
 
     const auto token = secureParams.Value(params.GetToken(), TString{});
-    const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, false, ConvertBasicToAwsToken);
-    const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
+    const auto authInfo = GetAuthInfo(credentialsFactory, token);
 
     const auto& settings = params.GetSettings();
     TString pathPattern = "*";
@@ -3130,7 +3131,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
 #undef SET_FLAG
 #undef SUPPORTED_FLAGS
-        const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authToken, pathPattern, pathPatternVariant,
+        const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authInfo, pathPattern, pathPatternVariant,
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
                                                   cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint, memoryQuotaManager);
 
@@ -3140,7 +3141,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         if (const auto it = settings.find("sizeLimit"); settings.cend() != it)
             sizeLimit = FromString<ui64>(it->second);
 
-        const auto actor = new TS3ReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authToken, pathPattern, pathPatternVariant,
+        const auto actor = new TS3ReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authInfo, pathPattern, pathPatternVariant,
                                             std::move(paths), addPathIndex, computeActorId, sizeLimit, retryPolicy,
                                             cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint);
         return {actor, actor};

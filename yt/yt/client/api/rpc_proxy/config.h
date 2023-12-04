@@ -74,6 +74,9 @@ public:
     //! Path in Cypress with UDFs.
     std::optional<NYPath::TYPath> UdfRegistryPath;
 
+    //! If |true| select query will be added to tracing tags of SelectRows span.
+    bool EnableSelectQueryTracingTag;
+
     REGISTER_YSON_STRUCT(TConnectionConfig);
 
     static void Register(TRegistrar registrar);

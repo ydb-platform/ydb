@@ -6,8 +6,8 @@
 
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
+#include <ydb/library/yql/providers/s3/credentials/credentials.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
-#include <ydb/library/yql/utils/aws_credentials.h>
 #include <ydb/library/yql/utils/url_builder.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
@@ -505,16 +505,16 @@ public:
         }
     }
 
-    TString GetSecureToken(const TString& token) {
+    TS3Credentials::TAuthInfo GetAuthInfo(const TString& token) {
         const auto secureToken = SecureParams.Value(token, TString{});
-        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, secureToken, false, ConvertBasicToAwsToken);
-        return credentialsProviderFactory->CreateProvider()->GetAuthInfo();
+        return ::NYql::GetAuthInfo(CredentialsFactory, secureToken);
     }
 
     void CommitMultipartUpload(TCompleteMultipartUpload::TPtr state) {
         LOG_D("CommitMultipartUpload BEGIN " << state->BuildUrl());
+        auto authInfo = GetAuthInfo(state->Token);
         Gateway->Upload(state->BuildUrl(),
-            IHTTPGateway::MakeYcHeaders(state->RequestId, GetSecureToken(state->Token), "application/xml"),
+            IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), "application/xml", authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
             state->BuildMessage(),
             std::bind(&TS3ApplicatorActor::OnCommitMultipartUpload, ActorSystem, SelfId(), state, std::placeholders::_1),
             false,
@@ -527,8 +527,9 @@ public:
 
     void ListMultipartUploads(TListMultipartUploads::TPtr state) {
         LOG_D("ListMultipartUploads BEGIN " << state->BuildUrl());
+        auto authInfo = GetAuthInfo(state->Token);
         Gateway->Download(state->BuildUrl(),
-            IHTTPGateway::MakeYcHeaders(state->RequestId, GetSecureToken(state->Token)),
+            IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
             0U,
             0U,
             std::bind(&TS3ApplicatorActor::OnListMultipartUploads, ActorSystem, SelfId(), state, std::placeholders::_1),
@@ -542,8 +543,9 @@ public:
 
     void AbortMultipartUpload(TAbortMultipartUpload::TPtr state) {
         LOG_D("AbortMultipartUpload BEGIN " << state->BuildUrl());
+        auto authInfo = GetAuthInfo(state->Token);
         Gateway->Delete(state->BuildUrl(),
-            IHTTPGateway::MakeYcHeaders(state->RequestId, GetSecureToken(state->Token), "application/xml"),
+            IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), "application/xml", authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
             std::bind(&TS3ApplicatorActor::OnAbortMultipartUpload, ActorSystem, SelfId(), state, std::placeholders::_1),
             RetryPolicy);
     }
@@ -554,8 +556,9 @@ public:
 
     void ListParts(TListParts::TPtr state) {
         LOG_D("ListParts BEGIN " << state->BuildUrl());
+        auto authInfo = GetAuthInfo(state->Token);
         Gateway->Download(state->BuildUrl(),
-            IHTTPGateway::MakeYcHeaders(state->RequestId, GetSecureToken(state->Token)),
+            IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
             0U,
             0U,
             std::bind(&TS3ApplicatorActor::OnListParts, ActorSystem, SelfId(), state, std::placeholders::_1),

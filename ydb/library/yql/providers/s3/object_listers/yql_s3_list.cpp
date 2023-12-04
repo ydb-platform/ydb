@@ -29,7 +29,9 @@ IOutputStream& operator<<(IOutputStream& stream, const TListingRequest& request)
                   << ",.Prefix=" << request.Prefix
                   << ",.Pattern=" << request.Pattern
                   << ",.PatternType=" << request.PatternType
-                  << ",.Token=<some token with length " << request.Token.length() << ">}";
+                  << ",.AwsUserPwd=<some token with length" << request.AuthInfo.GetAwsUserPwd().length() << ">"
+                  << ",.AwsSigV4=" << request.AuthInfo.GetAwsSigV4().length()
+                  << ",.Token=<some token with length " << request.AuthInfo.GetToken().length() << ">}";
 }
 
 namespace {
@@ -284,7 +286,7 @@ public:
     ~TS3Lister() override = default;
 private:
     static void SubmitRequestIntoGateway(TListingContext& ctx) {
-        IHTTPGateway::THeaders headers = IHTTPGateway::MakeYcHeaders(ctx.RequestId, ctx.ListingRequest.Token, {});
+        IHTTPGateway::THeaders headers = IHTTPGateway::MakeYcHeaders(ctx.RequestId, ctx.ListingRequest.AuthInfo.GetToken(), {}, ctx.ListingRequest.AuthInfo.GetAwsUserPwd(), ctx.ListingRequest.AuthInfo.GetAwsSigV4());
         TUrlBuilder urlBuilder(ctx.ListingRequest.Url);
         urlBuilder.AddUrlParam("list-type", "2")
             .AddUrlParam("prefix", ctx.ListingRequest.Prefix)

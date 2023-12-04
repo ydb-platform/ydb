@@ -1,8 +1,6 @@
 LIBRARY()
 
 SRCS(
-    aws_credentials.cpp
-    aws_credentials.h
     bind_in_range.cpp
     bind_in_range.h
     cast.h

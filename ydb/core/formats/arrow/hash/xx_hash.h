@@ -1,25 +1,24 @@
 #pragma once
-#include "hash.h"
-
 #ifndef XXH_STATIC_LINKING_ONLY
 #  define XXH_STATIC_LINKING_ONLY    /* XXH64_state_t */
 #endif
 #include <contrib/libs/xxhash/xxhash.h>
+#include <util/system/types.h>
 
-namespace NKikimr::NSharding {
+namespace NKikimr::NArrow::NHash::NXX64 {
 
-class TStreamStringHashCalcer: public IHashCalcer {
+class TStreamStringHashCalcer {
 private:
-    ui64 Seed;
+    const ui64 Seed;
     XXH64_state_t HashState;
 public:
     TStreamStringHashCalcer(const ui64 seed)
         : Seed(seed) {
     }
 
-    virtual void Start() override;
-    virtual void Update(const ui8* data, const ui32 size) override;
-    virtual ui64 Finish() override;
+    void Start();
+    void Update(const ui8* data, const ui32 size);
+    ui64 Finish();
 };
 
 }

@@ -610,10 +610,11 @@ message TColumnTableSharding {
             // A simple hash modulo number of shards
             HASH_FUNCTION_MODULO_N = 0;
             HASH_FUNCTION_CLOUD_LOGS = 1;
+            HASH_FUNCTION_CONSISTENCY_64 = 2;
         }
 
         // Hash function used for mapping column values to a column shard
-        optional EHashFunction Function = 1;
+        optional EHashFunction Function = 1 [default = HASH_FUNCTION_MODULO_N];
 
         // A list of columns used for hashing, must not be empty
         repeated string Columns = 2;

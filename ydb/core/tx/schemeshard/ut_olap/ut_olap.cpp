@@ -358,7 +358,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             auto& hashSharding = sharding.GetHashSharding();
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.ColumnsSize(), 2);
             UNIT_ASSERT_EQUAL(hashSharding.GetFunction(),
-                              NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
+                              NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.GetColumns()[0], "some");
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.GetColumns()[1], "data");
         };
@@ -419,7 +419,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             auto& hashSharding = sharding.GetHashSharding();
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.ColumnsSize(), 2);
             UNIT_ASSERT_EQUAL(hashSharding.GetFunction(),
-                              NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
+                              NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.GetColumns()[0], "some");
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.GetColumns()[1], "data");
         };

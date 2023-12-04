@@ -1,6 +1,6 @@
 #include "xx_hash.h"
 
-namespace NKikimr::NSharding {
+namespace NKikimr::NArrow::NHash::NXX64 {
 
 void TStreamStringHashCalcer::Start() {
     XXH64_reset(&HashState, Seed);

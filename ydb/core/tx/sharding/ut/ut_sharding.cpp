@@ -1,6 +1,6 @@
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/tx/sharding/sharding.h>
-#include <ydb/core/tx/sharding/xx_hash.h>
+#include <ydb/core/formats/arrow/hash/xx_hash.h>
 
 #include <ydb/library/actors/core/av_bootstrapped.h>
 #include <library/cpp/protobuf/json/proto2json.h>
@@ -13,7 +13,7 @@ namespace NKikimr {
 Y_UNIT_TEST_SUITE(Sharding) {
 
     Y_UNIT_TEST(XXUsage) {
-        NSharding::TStreamStringHashCalcer hCalcer(0);
+        NArrow::NHash::NXX64::TStreamStringHashCalcer hCalcer(0);
         for (ui32 a = 1; a < 10; ++a) {
             TString ss;
             hCalcer.Start();

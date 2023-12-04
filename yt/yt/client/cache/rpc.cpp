@@ -42,6 +42,9 @@ NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TConfig& config)
     if (config.GetChannelPoolRebalanceIntervalSeconds() != 0) {
         connectionConfig->DynamicChannelPool->RandomPeerEvictionPeriod = TDuration::Seconds(config.GetChannelPoolRebalanceIntervalSeconds());
     }
+    if (config.HasEnablePowerOfTwoChoicesStrategy()) {
+        connectionConfig->DynamicChannelPool->EnablePowerOfTwoChoicesStrategy = config.GetEnablePowerOfTwoChoicesStrategy();
+    }
     if (config.GetModifyRowsBatchCapacity() != 0) {
         connectionConfig->ModifyRowsBatchCapacity = config.GetModifyRowsBatchCapacity();
     }

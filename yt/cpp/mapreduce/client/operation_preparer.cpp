@@ -578,9 +578,10 @@ TMaybe<TString> TJobPreparer::GetItemFromCypressCache(const TString& md5Signatur
 
 TDuration TJobPreparer::GetWaitForUploadTimeout(const IItemToUpload& itemToUpload) const
 {
-    const TDuration extraTime = OperationPreparer_.GetContext().Config->WaitLockPollInterval +
+    TDuration extraTime = OperationPreparer_.GetContext().Config->WaitLockPollInterval +
         TDuration::MilliSeconds(100);
-    const double dataSizeGb = static_cast<double>(itemToUpload.GetDataSize()) / 1_GB;
+    auto dataSizeGb = (itemToUpload.GetDataSize() + 1_GB - 1) / 1_GB;
+    dataSizeGb = Max<ui64>(dataSizeGb, 1);
     return extraTime + dataSizeGb * OperationPreparer_.GetContext().Config->CacheLockTimeoutPerGb;
 }
 

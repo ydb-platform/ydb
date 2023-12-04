@@ -503,7 +503,7 @@ public:
         } else {
             switch (owner) {
                 case OwnerCommonStaticLog:
-                case OwnerSystem: 
+                case OwnerSystem:
                 {
                     // Chunk release for common log (fill bonus pool first, then fill the common pool)
                     i64 usedBonus = GlobalQuota->GetUsed(OwnerCommonStaticLog);

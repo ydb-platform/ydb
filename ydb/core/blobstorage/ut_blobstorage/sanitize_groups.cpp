@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
     }
 
     using TLocationGenerator = std::function<NActorsInterconnect::TNodeLocation(ui32, ui32, ui32)>;
-    
+
     void MakeLocations(std::vector<TNodeLocation>& locations, ui32 numDatacenters, ui32 numRacksPerDC, ui32 numNodesPerRack,
             TLocationGenerator locationGenerator) {
         for (ui32 dc = 0; dc < numDatacenters; ++dc) {
@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
 
         std::unordered_map<ui32, TNodeLocation> nodes;
         std::unordered_map<TPDiskId, NLayoutChecker::TPDiskLayoutPosition> pdisks;
-        
+
         for (ui32 i = 0; i < cfg.NodeSize(); ++i) {
             auto node = cfg.GetNode(i);
             nodes[node.GetNodeId()] = TNodeLocation(node.GetLocation());
@@ -186,11 +186,11 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
         MakeLocations(locations, 4, 5, 1, locationGenerator);
 
         env->Initialize();
-    
+
         if (!allowMultipleRealmsOccupation) {
             env->Runtime->FilterFunction = {};
         }
-    
+
         // Update bs config
         {
             NKikimrBlobStorage::TConfigRequest request;

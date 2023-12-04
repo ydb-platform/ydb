@@ -51,7 +51,7 @@ void FormatPDiskForTest(TString path, ui64 guid, ui32& chunkSize, ui64 diskSize,
             FormatPDisk(path, diskSize, 4 << 10, chunkSize, guid, chunkKey, logKey, sysLogKey,
                     NPDisk::YdbDefaultPDiskSequence, "Info", isErasureEncodeUserLog, false, sectorMap,
                     enableSmallDiskOptimization);
-        } catch (NPDisk::TPDiskFormatBigChunkException) { 
+        } catch (NPDisk::TPDiskFormatBigChunkException) {
             FormatPDisk(path, diskSize, 4 << 10, NPDisk::SmallDiskMaximumChunkSize, guid, chunkKey, logKey, sysLogKey,
                     NPDisk::YdbDefaultPDiskSequence, "Info", isErasureEncodeUserLog, false, sectorMap,
                     enableSmallDiskOptimization);

@@ -120,8 +120,8 @@ struct TTetsEnv {
     auto SendCollectGarbage(ui32 step) {
         const TActorId sender = Env.Runtime->AllocateEdgeActor(VDiskActorId.NodeId(), __FILE__, __LINE__);
         auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(
-            1, ++CollectGeneration, 0, 
-            true, 1, step, 
+            1, ++CollectGeneration, 0,
+            true, 1, step,
             nullptr, nullptr, TInstant::Max()
         );
         Env.Runtime->WrapInActorContext(sender, [&] {
@@ -154,7 +154,7 @@ struct TTetsEnv {
         }
         const TActorId sender = Env.Runtime->AllocateEdgeActor(VDiskActorId.NodeId(), __FILE__, __LINE__);
         auto ev = std::make_unique<TEvLoad::TEvLoadTestRequest>();
-        
+
         TString conf("StorageLoad: {\n"
             "DurationSeconds: 8\n"
             "Tablets: {\n"

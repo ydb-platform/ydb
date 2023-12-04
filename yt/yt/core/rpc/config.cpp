@@ -208,6 +208,8 @@ void TBalancingChannelConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("addresses", &TThis::Addresses)
         .Optional();
+    registrar.Parameter("disable_balancing_on_single_address", &TThis::DisableBalancingOnSingleAddress)
+        .Default(true);
     registrar.Parameter("endpoints", &TThis::Endpoints)
         .Optional();
     registrar.Parameter("hedging_delay", &TThis::HedgingDelay)

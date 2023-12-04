@@ -47,4 +47,10 @@ namespace NKikimr {
         };
     };
 
+    struct TWilsonTablet {
+        enum {
+            Tablet = 15
+        };
+    };
+
 } // NKikimr

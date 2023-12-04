@@ -33,6 +33,8 @@
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -193,6 +195,7 @@ void TExecutor::RecreatePageCollectionsCache() noexcept
         for (auto &xpair : TransactionWaitPads) {
             auto &seat = xpair.second->Seat;
             LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
+            seat->CreateEnqueuedSpan();
             ActivationQueue->Push(seat.Release());
             ActivateTransactionWaiting++;
         }
@@ -516,6 +519,7 @@ void TExecutor::PlanTransactionActivation() {
     while (PendingQueue->Head() && (!limitTxInFly || (Stats->TxInFly - Stats->TxPending < limitTxInFly))) {
         TAutoPtr<TSeat> seat = PendingQueue->Pop();
         LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
+        seat->CreateEnqueuedSpan();
         ActivationQueue->Push(seat.Release());
         ActivateTransactionWaiting++;
         --Stats->TxPending;
@@ -535,6 +539,7 @@ void TExecutor::ActivateWaitingTransactions(TPrivatePageCache::TPage::TWaitQueue
             if (auto it = TransactionWaitPads.find(waitPad); it != TransactionWaitPads.end()) {
                 auto &seat = it->second->Seat;
                 LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
+                seat->CreateEnqueuedSpan();
                 ActivationQueue->Push(seat.Release());
                 ActivateTransactionWaiting++;
                 TransactionWaitPads.erase(waitPad);
@@ -1522,7 +1527,7 @@ TExecutor::TLeaseCommit* TExecutor::EnsureReadOnlyLease(TMonotonic at) {
     } else if (!LeaseDropped) {
         LogicRedo->FlushBatchedLog();
 
-        auto commit = CommitManager->Begin(true, ECommit::Misc);
+        auto commit = CommitManager->Begin(true, ECommit::Misc, {});
 
         lease = AttachLeaseCommit(commit.Get(), /* force */ true);
 
@@ -1572,7 +1577,9 @@ bool TExecutor::CanExecuteTransaction() const {
 void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, const TActorContext &ctx) {
     Y_ABORT_UNLESS(ActivationQueue, "attempt to execute transaction before activation");
 
-    TAutoPtr<TSeat> seat = new TSeat(++TransactionUniqCounter, self);
+    NWilson::TTraceId traceId;
+
+    TAutoPtr<TSeat> seat = new TSeat(++TransactionUniqCounter, self, std::move(traceId));
 
     LWTRACK(TransactionBegin, seat->Self->Orbit, seat->UniqID, Owner->TabletID(), TypeName(*seat->Self));
 
@@ -1616,6 +1623,7 @@ void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, cons
 
     if (ActiveTransaction || ActivateTransactionWaiting || !allowImmediate) {
         LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
+        seat->CreateEnqueuedSpan();
         ActivationQueue->Push(seat.Release());
         ActivateTransactionWaiting++;
         PlanTransactionActivation();
@@ -1648,9 +1656,15 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     txc.NotEnoughMemory(seat->NotEnoughMemoryCount);
 
     Database->Begin(Stamp(), env);
+
     LWTRACK(TransactionExecuteBegin, seat->Self->Orbit, seat->UniqID);
+    
+    NWilson::TSpan txExecuteSpan(TWilsonTablet::Tablet, seat->GetTxTraceId(), "Tablet.Transaction.Execute");
     const bool done = seat->Self->Execute(txc, ctx.MakeFor(OwnerActorId));
+    txExecuteSpan.EndOk();
+    
     LWTRACK(TransactionExecuteEnd, seat->Self->Orbit, seat->UniqID, done);
+
     seat->CPUExecTime += cpuTimer.PassedReset();
 
     if (done) {
@@ -1842,6 +1856,7 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
     // then tx may be re-activated.
     if (!PrivatePageCache->GetStats().CurrentCacheMisses) {
         LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
+        seat->CreateEnqueuedSpan();
         ActivationQueue->Push(seat.Release());
         ActivateTransactionWaiting++;
         PlanTransactionActivation();
@@ -1925,7 +1940,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
         if (Stats->IsFollower) {
             --Stats->TxInFly;
             Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
-            seat->Self->Terminate(seat->TerminationReason, OwnerCtx());
+            seat->Terminate(seat->TerminationReason, OwnerCtx());
         } else if (LogicRedo->TerminateTransaction(seat, ctx, OwnerActorId)) {
             --Stats->TxInFly;
             Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
@@ -2423,7 +2438,7 @@ void TExecutor::MakeLogSnapshot() {
 
     LogicRedo->FlushBatchedLog();
 
-    auto commit = CommitManager->Begin(true, ECommit::Snap);
+    auto commit = CommitManager->Begin(true, ECommit::Snap, {});
 
     NKikimrExecutorFlat::TLogSnapshot snap;
 
@@ -2537,6 +2552,7 @@ void TExecutor::Handle(TEvPrivate::TEvActivateExecution::TPtr &ev, const TActorC
     if (TAutoPtr<TSeat> seat = ActivationQueue->Pop()) {
         Y_ABORT_UNLESS(ActivateTransactionWaiting > 0);
         ActivateTransactionWaiting--;
+        seat->FinishEnqueuedSpan();
         ExecuteTransaction(seat, ctx);
     } else {
         // N.B. it should actually never happen, since ActivationQueue size
@@ -2928,6 +2944,7 @@ void TExecutor::StartSeat(ui64 task, TResource *cookie_) noexcept
     PostponedTransactions.erase(it);
     Memory->AcquiredMemory(*seat, task);
     LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
+    seat->CreateEnqueuedSpan();
     ActivationQueue->Push(seat.Release());
     ActivateTransactionWaiting++;
     PlanTransactionActivation();
@@ -2937,7 +2954,7 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
 {
     LogicRedo->FlushBatchedLog();
 
-    auto commit = CommitManager->Begin(true, ECommit::Misc);
+    auto commit = CommitManager->Begin(true, ECommit::Misc, {});
 
     if (params && params->Edge.Head == NTable::TEpoch::Max()) {
         auto redo = Database->SnapshotToLog(table, { Generation(), commit->Step });
@@ -3230,7 +3247,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     NKikimrExecutorFlat::TFollowerPartSwitchAux aux;
 
-    auto commit = CommitManager->Begin(true, ECommit::Data);
+    auto commit = CommitManager->Begin(true, ECommit::Data, {});
 
     commit->WaitFollowerGcAck = true;
 
@@ -4564,7 +4581,7 @@ void TExecutor::CommitCompactionChanges(
 
     LogicRedo->FlushBatchedLog();
 
-    auto commit = CommitManager->Begin(true, ECommit::Misc);
+    auto commit = CommitManager->Begin(true, ECommit::Misc, {});
 
     NKikimrExecutorFlat::TTablePartSwitch proto;
     proto.SetTableId(tableId);

@@ -220,3 +220,11 @@ Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::ECdcStreamState, stream, value) {
 Y_DECLARE_OUT_SPEC(, NKikimrSubDomains::EServerlessComputeResourcesMode, stream, value) {
     stream << NKikimrSubDomains::EServerlessComputeResourcesMode_Name(value);
 }
+
+Y_DECLARE_OUT_SPEC(, NKikimrDataEvents::TEvWriteResult::EStatus, stream, value) {
+    stream << NKikimrDataEvents::TEvWriteResult::EStatus_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrDataEvents::TEvWrite::ETxMode, stream, value) {
+    stream << NKikimrDataEvents::TEvWrite::ETxMode_Name(value);
+}

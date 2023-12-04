@@ -25,14 +25,13 @@ using namespace NKikimr::Tests;
 
 const static ui32 PQ_DEFAULT_NODE_COUNT = 2;
 
-inline Tests::TServerSettings PQSettings(ui16 port = 0, ui32 nodesCount = PQ_DEFAULT_NODE_COUNT, bool roundrobin = true, const TString& yql_timeout = "10", const THolder<TTempFileHandle>& netDataFile = nullptr) {
+inline Tests::TServerSettings PQSettings(ui16 port = 0, ui32 nodesCount = PQ_DEFAULT_NODE_COUNT, const TString& yql_timeout = "10", const THolder<TTempFileHandle>& netDataFile = nullptr) {
     NKikimrPQ::TPQConfig pqConfig;
     NKikimrProto::TAuthConfig authConfig;
     authConfig.SetUseBlackBox(false);
     authConfig.SetUseAccessService(false);
     authConfig.SetUseAccessServiceTLS(false);
     authConfig.SetUseStaff(false);
-    pqConfig.SetRoundRobinPartitionMapping(roundrobin);
 
     pqConfig.SetEnabled(true);
     pqConfig.SetMaxReadCookies(10);
@@ -70,6 +69,13 @@ inline Tests::TServerSettings PQSettings(ui16 port = 0, ui32 nodesCount = PQ_DEF
         settings.NetClassifierConfig.SetNetDataFilePath(netDataFile->Name());
 
     return settings;
+}
+
+// deprecated.
+inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount, bool roundrobin, const TString& yql_timeout = "10", const THolder<TTempFileHandle>& netDataFile = nullptr) {
+    Y_UNUSED(roundrobin);
+
+    return PQSettings(port, nodesCount, yql_timeout, netDataFile);
 }
 
 const TString TopicPrefix = "/Root/PQ/";

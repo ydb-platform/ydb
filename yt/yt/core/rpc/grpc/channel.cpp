@@ -209,6 +209,11 @@ public:
         return EndpointAddress_;
     }
 
+    int GetInflightRequestCount() override
+    {
+        YT_UNIMPLEMENTED();
+    }
+
 private:
     const TChannelConfigPtr Config_;
     const TString EndpointAddress_;

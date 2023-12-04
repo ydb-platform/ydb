@@ -99,14 +99,6 @@ Y_UNIT_TEST(TBoundaryChooser_GetTabletIdTest) {
     UNIT_ASSERT(!chooser.GetPartition(666));
 }
 
-Y_UNIT_TEST(TBoundaryChooser_GetRandomPartitionTest) {
-    auto config = CreateConfig(SMEnabled);
-
-    NKikimr::NPQ::NPartitionChooser::TBoundaryChooser chooser(config);
-    auto p = chooser.GetRandomPartition();
-    UNIT_ASSERT(p->PartitionId != 3);
-}
-
 Y_UNIT_TEST(THashChooserTest) {
     auto config = CreateConfig(SMDisabled);
 
@@ -143,14 +135,6 @@ Y_UNIT_TEST(THashChooser_GetTabletIdTest) {
     // Not found
     UNIT_ASSERT(!chooser.GetPartition(3));
     UNIT_ASSERT(!chooser.GetPartition(666));
-}
-
-Y_UNIT_TEST(THashChooser_GetRandomPartitionTest) {
-    auto config = CreateConfig(SMDisabled);
-
-    NKikimr::NPQ::NPartitionChooser::THashChooser chooser(config);
-    auto p = chooser.GetRandomPartition();
-    UNIT_ASSERT(p->PartitionId != 3);
 }
 
 
@@ -277,7 +261,6 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_Test) {
 
 Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_Test) {
     NPersQueue::TTestServer server{};
-    server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetRoundRobinPartitionMapping(false);
     server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
     server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
 

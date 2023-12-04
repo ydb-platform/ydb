@@ -143,6 +143,9 @@ void TViablePeerRegistryConfig::Register(TRegistrar registrar)
         .GreaterThanOrEqual(0)
         .Default(0);
 
+    registrar.Parameter("enable_power_of_two_choices_strategy", &TThis::EnablePowerOfTwoChoicesStrategy)
+        .Default(false);
+
     registrar.Postprocessor([] (TThis* config) {
         if (config->MinPeerCountForPriorityAwareness > config->MaxPeerCount) {
             THROW_ERROR_EXCEPTION(

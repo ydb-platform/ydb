@@ -3,10 +3,11 @@
 
 import logging
 import os
-import sys
 import signal
 import tempfile
 import shutil
+
+import six
 
 try:
     from . import gdb
@@ -66,11 +67,7 @@ class Daemon(object):
         self.stdinf = stdin or tempfile.NamedTemporaryFile(dir=self.cwd, prefix="stdin_", delete=False)
 
         self.cmd = command
-        if sys.version_info.major > 2:
-            _basestring = str
-        else:
-            _basestring = basestring
-        if isinstance(command, _basestring):
+        if isinstance(command, six.string_types):
             self.cmd = [arg for arg in command.split() if arg]
         self.daemon = None
         self.name = os.path.basename(self.cmd[0])

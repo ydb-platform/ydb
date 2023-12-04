@@ -1509,8 +1509,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
     }
 
-    void SetupWriteSessionImpl(bool rr) {
-        NPersQueue::TTestServer server{PQSettings(0, 2, rr), false};
+    Y_UNIT_TEST(SetupWriteSession) {
+        NPersQueue::TTestServer server{PQSettings(0, 2), false};
         server.ServerSettings.SetEnableSystemViews(false);
         server.StartServer();
 
@@ -1550,17 +1550,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         for (ui32 i = 0; i < 15*5; ++i) {
             ss[writer.InitSession("sid_rand_" + ToString<ui32>(i), 0, true)]++;
         }
-        if (rr) {
-            for (auto& s : ss) {
-                Cerr << "Round robin check: " << s.first << ":" << s.second << "\n";
-                UNIT_ASSERT(s.second >= 4 && s.second <= 6);
-            }
+        for (auto& s : ss) {
+            Cerr << "Round robin check: " << s.first << ":" << s.second << "\n";
+            UNIT_ASSERT(s.second >= 4 && s.second <= 6);
         }
-     }
-
-    Y_UNIT_TEST(SetupWriteSession) {
-        SetupWriteSessionImpl(false);
-        SetupWriteSessionImpl(true);
     }
 
     Y_UNIT_TEST(StoreNoMoreThanXSourceIDs) {
@@ -3158,7 +3151,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 UNIT_ASSERT(equal);
             };
 
-            NPersQueue::TTestServer server(PQSettings(0, 1, true, "10"), false);
+            NPersQueue::TTestServer server(PQSettings(0, 1, "10"), false);
             auto netDataUpdated = server.PrepareNetDataFile(FormNetData());
             UNIT_ASSERT(netDataUpdated);
             server.StartServer();

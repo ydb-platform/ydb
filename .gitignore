@@ -8,8 +8,9 @@
 # Unignore all files inside canondata dir
 !*/canondata/*
 
-# Compiled dynamic C libraries
+# C libraries
 *.so
+*.a
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

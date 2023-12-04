@@ -58,7 +58,6 @@ public:
 
     const TPartitionInfo* GetPartition(const TString& sourceId) const;
     const TPartitionInfo* GetPartition(ui32 partitionId) const;
-    const TPartitionInfo* GetRandomPartition() const;
 
 private:
     const TString TopicName;
@@ -79,7 +78,6 @@ public:
 
     const TPartitionInfo* GetPartition(const TString& sourceId) const;
     const TPartitionInfo* GetPartition(ui32 partitionId) const;
-    const TPartitionInfo* GetRandomPartition() const;
 
 private:
     std::vector<TPartitionInfo> Partitions;
@@ -257,11 +255,6 @@ const typename TBoundaryChooser<THasher>::TPartitionInfo* TBoundaryChooser<THash
     return it == Partitions.end() ? nullptr : it;
 }
 
-template<class THasher>
-const typename TBoundaryChooser<THasher>::TPartitionInfo* TBoundaryChooser<THasher>::GetRandomPartition() const {
-    return &Partitions[RandomNumber<size_t>(Partitions.size())];
-}
-
 
 
 //
@@ -293,11 +286,6 @@ const typename THashChooser<THasher>::TPartitionInfo* THashChooser<THasher>::Get
         return nullptr;
     }
     return it->PartitionId == partitionId ? it : nullptr;
-}
-
-template<class THasher>
-const typename THashChooser<THasher>::TPartitionInfo* THashChooser<THasher>::GetRandomPartition() const {
-    return &Partitions[RandomNumber<size_t>(Partitions.size())];
 }
 
 
@@ -740,10 +728,8 @@ std::pair<bool, const typename TPartitionChooserActor<TChooser>::TPartitionInfo*
         return {false, Chooser.GetPartition(PreferedPartition.value())};
     } else if (pqConfig.GetTopicsAreFirstClassCitizen() && SourceId) {
         return {false, Chooser.GetPartition(SourceId)};
-    } else if (pqConfig.GetRoundRobinPartitionMapping()) {
-        return {true, nullptr};
     } else {
-        return {false, Chooser.GetRandomPartition()};
+        return {true, nullptr};
     }
 }
 

@@ -128,6 +128,11 @@ public:
         Terminated_.Unsubscribe(callback);
     }
 
+    int GetInflightRequestCount() override
+    {
+        return 0;
+    }
+
 private:
     class TSession;
     using TSessionPtr = TIntrusivePtr<TSession>;

@@ -229,6 +229,8 @@ public:
     //! If you want to set bigger values, you must also increase MaxPeerCount to accommodate more peers.
     int MinPeerCountForPriorityAwareness;
 
+    bool EnablePowerOfTwoChoicesStrategy;
+
     REGISTER_YSON_STRUCT(TViablePeerRegistryConfig);
 
     static void Register(TRegistrar registrar);

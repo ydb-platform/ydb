@@ -999,8 +999,9 @@ public:
                         tabletId = it->second;
                     } else {
                         tabletId = THash<TString>{}(name) & ((1 << 20) - 1);
-                        tabletId = tabletId << 10 + tag;
-                        tabletId = tabletId << 10 + Parent.NodeId();
+                        tabletId = (tabletId << 10) + tag;
+                        tabletId = (tabletId << 10) + Parent.NodeId();
+                        tabletId &= (1ull << 44) - 1;
                         tabletId = MakeTabletID(0, 0, tabletId);
                         tabletIds[name] = tabletId;
                     }

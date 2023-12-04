@@ -197,8 +197,11 @@ std::vector<NKikimr::NOlap::IPortionColumnChunk::TPtr> TPortionInfoWithBlobs::Ge
     return result;
 }
 
-void TPortionInfoWithBlobs::ExtractColumnChunks(const ui32 columnId, std::vector<const TColumnRecord*>& records, std::vector<IPortionColumnChunk::TPtr>& chunks) {
+bool TPortionInfoWithBlobs::ExtractColumnChunks(const ui32 columnId, std::vector<const TColumnRecord*>& records, std::vector<IPortionColumnChunk::TPtr>& chunks) {
     records = GetPortionInfo().GetColumnChunksPointers(columnId);
+    if (records.empty()) {
+        return false;
+    }
     std::map<TChunkAddress, IPortionColumnChunk::TPtr> chunksMap;
     for (auto&& i : Blobs) {
         i.ExtractColumnChunks(columnId, chunksMap);
@@ -210,6 +213,7 @@ void TPortionInfoWithBlobs::ExtractColumnChunks(const ui32 columnId, std::vector
         chunksLocal.emplace_back(i.second);
     }
     std::swap(chunksLocal, chunks);
+    return true;
 }
 
 }

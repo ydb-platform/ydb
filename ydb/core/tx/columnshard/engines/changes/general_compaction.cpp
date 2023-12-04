@@ -101,7 +101,10 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
 //            Cerr << "loader: " << loader->DebugString() << Endl;
             std::vector<const TColumnRecord*> records;
             std::vector<IPortionColumnChunk::TPtr> chunks;
-            p.ExtractColumnChunks(columnId, records, chunks);
+            if (!p.ExtractColumnChunks(columnId, records, chunks)) {
+                records = {nullptr};
+                chunks.emplace_back(std::make_shared<TNullChunkPreparation>(columnId, p.GetPortionInfo().GetRecordsCount(), loader->GetField(), dataSchema->GetColumnSaver(f->name(), SaverContext)));
+            }
             cursors.emplace_back(TPortionColumnCursor(chunks, records, loader, p.GetPortionInfo().GetPortionId()));
         }
 

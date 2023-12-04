@@ -84,7 +84,7 @@ public:
 
     std::vector<IPortionColumnChunk::TPtr> GetColumnChunks(const ui32 columnId) const;
 
-    void ExtractColumnChunks(const ui32 columnId, std::vector<const TColumnRecord*>& records, std::vector<IPortionColumnChunk::TPtr>& chunks);
+    bool ExtractColumnChunks(const ui32 columnId, std::vector<const TColumnRecord*>& records, std::vector<IPortionColumnChunk::TPtr>& chunks);
 
     ui64 GetSize() const {
         return PortionInfo.BlobsBytes();

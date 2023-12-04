@@ -135,6 +135,22 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
     }
 
+    Y_UNIT_TEST(CreateTableStmt_Default) {
+        auto res = PgSqlToYql("CREATE TABLE t (a int PRIMARY KEY, b int DEFAULT 0)");
+        UNIT_ASSERT(res.Root);
+
+        TString program = R"(
+        (
+            (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'int4)))) '('primarykey '('a)) '('notnull '('a)) '('default 'b (PgConst '0 (PgType 'int4))))))
+            (let world (CommitAll! world))
+            (return world)
+        )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }    
+
     Y_UNIT_TEST(CreateTableStmt_PKAndNotNull) {
         auto res = PgSqlToYql("CREATE TABLE t (a int PRIMARY KEY NOT NULL, b text)");
         UNIT_ASSERT(res.Root);

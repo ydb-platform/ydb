@@ -52,11 +52,12 @@ ui32 TColumnPortion::AppendSlice(const std::shared_ptr<arrow::Array>& a, const u
     Y_ABORT_UNLESS(CurrentPortionRecords < Context.GetPortionRowsCountLimit());
     Y_ABORT_UNLESS(startIndex + length <= a->length());
     ui32 i = startIndex;
+    const ui32 packedRecordSize = Context.GetColumnStat() ? Context.GetColumnStat()->GetPackedRecordSize() : 0;
     for (; i < startIndex + length; ++i) {
         ui64 recordSize = 0;
         AFL_VERIFY(NArrow::Append(*Builder, *a, i, &recordSize))("a", a->ToString())("a_type", a->type()->ToString())("builder_type", Builder->type()->ToString());
         CurrentChunkRawSize += recordSize;
-        PredictedPackedBytes += Context.GetColumnStat().GetPackedRecordSize();
+        PredictedPackedBytes += packedRecordSize ? packedRecordSize : (recordSize / 2);
         if (++CurrentPortionRecords == Context.GetPortionRowsCountLimit()) {
             FlushBuffer();
             ++i;

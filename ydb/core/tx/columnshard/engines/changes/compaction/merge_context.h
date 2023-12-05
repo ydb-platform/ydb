@@ -22,14 +22,14 @@ private:
     YDB_READONLY(ui64, StorePackedChunkSizeLimit, 512 * 1024);
     YDB_READONLY(bool, UseWholeChunksOptimization, true);
 
-    TColumnSerializationStat ColumnStat;
+    std::optional<TColumnSerializationStat> ColumnStat;
     const TIndexInfo& IndexInfo;
 public:
     ISnapshotSchema::TPtr GetSchemaInfo() const {
         return SchemaInfo;
     }
 
-    const TColumnSerializationStat& GetColumnStat() const {
+    const std::optional<TColumnSerializationStat>& GetColumnStat() const {
         return ColumnStat;
     }
 
@@ -42,7 +42,7 @@ public:
     }
 
     TColumnMergeContext(const ISnapshotSchema::TPtr& schema, const ui32 portionRowsCountLimit, const ui32 chunkRawBytesLimit,
-        std::shared_ptr<arrow::Field> f, const TColumnSerializationStat& columnStat, const TSaverContext& saverContext)
+        std::shared_ptr<arrow::Field> f, const std::optional<TColumnSerializationStat>& columnStat, const TSaverContext& saverContext)
         : ColumnId(schema->GetColumnId(f->name()))
         , SchemaInfo(schema)
         , Saver(schema->GetColumnSaver(schema->GetColumnId(f->name()), saverContext))

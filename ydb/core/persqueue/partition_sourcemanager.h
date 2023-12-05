@@ -36,7 +36,7 @@ public:
 
     class TSourceManager {
     public:
-        TSourceManager(TModificationBatch* batch, const TString& id);
+        TSourceManager(TModificationBatch& batch, const TString& id);
 
         // Checks whether a message with the specified Sourceid can be processed.
         // The message can be processed if it is not required to receive information
@@ -60,7 +60,7 @@ public:
 
 
     private:
-        TModificationBatch* Batch;
+        TModificationBatch& Batch;
         const TString SourceId;
 
         TSourceInfo Info;
@@ -74,7 +74,7 @@ public:
     class TModificationBatch {
         friend TSourceManager;
     public:
-        TModificationBatch(TPartitionSourceManager* manager, ESourceIdFormat format);
+        TModificationBatch(TPartitionSourceManager& manager, ESourceIdFormat format);
         ~TModificationBatch();
 
         TMaybe<THeartbeat> CanEmit() const;
@@ -91,17 +91,17 @@ public:
         void DeregisterSourceId(const TString& sourceId);
 
     private:
-        TPartitionSourceManager* GetManager() const;
+        TPartitionSourceManager& GetManager() const;
 
     private:
-        TPartitionSourceManager* Manager;
+        TPartitionSourceManager& Manager;
 
         TPartitionNode Node;
         TSourceIdWriter SourceIdWriter;
         THeartbeatEmitter HeartbeatEmitter;
     };
 
-    TPartitionSourceManager(TPartition* partition);
+    explicit TPartitionSourceManager(TPartition& partition);
 
     // For a partition obtained as a result of a merge or split, it requests 
     // information about the consumer's parameters from the parent partitions.
@@ -134,7 +134,7 @@ private:
 
 
 private:
-    TPartition* Partition;
+    TPartition& Partition;
 
     TSourceIds UnknownSourceIds;
     TSourceIds PendingSourceIds;

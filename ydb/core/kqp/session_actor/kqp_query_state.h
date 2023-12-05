@@ -439,6 +439,10 @@ public:
         return RequestEv->GetCollectDiagnostics();
     }
 
+    TDuration GetProgressStatsPeriod() {
+        return RequestEv->GetProgressStatsPeriod();
+    }
+
     //// Topic ops ////
     void AddOffsetsToTransaction();
     bool TryMergeTopicOffsets(const NTopic::TTopicOperations &operations, TString& message);

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(68.2.2)
+VERSION(69.0.0)
 
 LICENSE(MIT)
 
@@ -38,8 +38,11 @@ PY_SRCS(
     pkg_resources/_vendor/jaraco/functools.py
     pkg_resources/_vendor/jaraco/text/__init__.py
     pkg_resources/_vendor/more_itertools/__init__.py
+    pkg_resources/_vendor/more_itertools/__init__.pyi
     pkg_resources/_vendor/more_itertools/more.py
+    pkg_resources/_vendor/more_itertools/more.pyi
     pkg_resources/_vendor/more_itertools/recipes.py
+    pkg_resources/_vendor/more_itertools/recipes.pyi
     pkg_resources/_vendor/packaging/__init__.py
     pkg_resources/_vendor/packaging/_elffile.py
     pkg_resources/_vendor/packaging/_manylinux.py
@@ -72,6 +75,7 @@ PY_SRCS(
     setuptools/_distutils/_functools.py
     setuptools/_distutils/_log.py
     setuptools/_distutils/_macos_compat.py
+    setuptools/_distutils/_modified.py
     setuptools/_distutils/_msvccompiler.py
     setuptools/_distutils/archive_util.py
     setuptools/_distutils/bcppcompiler.py
@@ -155,8 +159,11 @@ PY_SRCS(
     setuptools/_vendor/jaraco/functools.py
     setuptools/_vendor/jaraco/text/__init__.py
     setuptools/_vendor/more_itertools/__init__.py
+    setuptools/_vendor/more_itertools/__init__.pyi
     setuptools/_vendor/more_itertools/more.py
+    setuptools/_vendor/more_itertools/more.pyi
     setuptools/_vendor/more_itertools/recipes.py
+    setuptools/_vendor/more_itertools/recipes.pyi
     setuptools/_vendor/ordered_set.py
     setuptools/_vendor/packaging/__init__.py
     setuptools/_vendor/packaging/_elffile.py
@@ -228,6 +235,7 @@ PY_SRCS(
     setuptools/installer.py
     setuptools/launch.py
     setuptools/logging.py
+    setuptools/modified.py
     setuptools/monkey.py
     setuptools/msvc.py
     setuptools/namespaces.py
@@ -246,6 +254,15 @@ RESOURCE_FILES(
     .dist-info/METADATA
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
+    pkg_resources/_vendor/importlib_resources/py.typed
+    pkg_resources/_vendor/more_itertools/py.typed
+    pkg_resources/_vendor/packaging/py.typed
+    pkg_resources/_vendor/platformdirs/py.typed
+    setuptools/_vendor/importlib_metadata/py.typed
+    setuptools/_vendor/importlib_resources/py.typed
+    setuptools/_vendor/more_itertools/py.typed
+    setuptools/_vendor/packaging/py.typed
+    setuptools/_vendor/tomli/py.typed
     setuptools/script.tmpl
 )
 

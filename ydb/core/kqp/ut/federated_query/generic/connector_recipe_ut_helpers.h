@@ -4,9 +4,9 @@
 #include <util/system/env.h>
 
 inline const TString GetConnectorHost() {
-    return GetEnv("YQL_RECIPE_CONNECTOR_GRPC_HOST", "localhost");
+    return GetEnv("YDB_CONNECTOR_RECIPE_GRPC_HOST", "localhost");
 }
 
 inline ui32 GetConnectorPort() {
-    return FromString<ui32>(GetEnv("YQL_RECIPE_CONNECTOR_GRPC_PORT"));
+    return FromString<ui32>(GetEnv("YDB_CONNECTOR_RECIPE_GRPC_PORT"));
 }

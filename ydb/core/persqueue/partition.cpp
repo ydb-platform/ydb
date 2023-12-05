@@ -151,7 +151,7 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
     , IsLocalDC(TabletConfig.GetLocalDC())
     , DCId(std::move(dcId))
     , PartitionGraph()
-    , SourceManager(this)
+    , SourceManager(*this)
     , StartOffset(0)
     , EndOffset(0)
     , WriteInflightSize(0)

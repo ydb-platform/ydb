@@ -377,12 +377,22 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
     }
 
     Y_UNIT_TEST(DropTableUnknownClusterStmt) {
-        auto res = PgSqlToYql("drop table if exists public.t");
+        auto res = PgSqlToYql("drop table if exists pub.t");
         UNIT_ASSERT(!res.IsOk());
         UNIT_ASSERT_EQUAL(res.Issues.Size(), 1);
 
         auto issue = *(res.Issues.begin());
-        UNIT_ASSERT_C(issue.GetMessage().find("Unknown cluster: public") != TString::npos, res.Issues.ToString());
+        UNIT_ASSERT_C(issue.GetMessage().find("Unknown cluster: pub") != TString::npos, res.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(PublicSchemeRemove) {
+        auto res = PgSqlToYql("DROP TABLE IF EXISTS public.t; CREATE TABLE public.t(id INT PRIMARY KEY, foo INT);\
+INSERT INTO public.t VALUES(1, 2);\
+UPDATE public.t SET foo = 3 WHERE id == 1;\
+DELETE FROM public.t WHERE id == 1;\
+SELECT COUNT(*) FROM public.t;");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Root->ToString().find("public") == TString::npos);
     }
 
     Y_UNIT_TEST(UpdateStmt) {

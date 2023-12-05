@@ -591,7 +591,7 @@ NKikimrConsole::TConfigureRequest DumpYamlConfigRequest(const TString &cItem, co
         }
     }
 
-    auto prepareActions = [&](auto& result) {
+    auto prepareActions = [&](auto& result, auto configItemCb) {
         Y_ABORT_UNLESS(configNode.Type() == NFyaml::ENodeType::Mapping, "Config has to be mapping");
         switch (mergeStrategy) {
             case NKikimrConsole::TConfigItem::MERGE_OVERWRITE_REPEATED:
@@ -611,6 +611,7 @@ NKikimrConsole::TConfigureRequest DumpYamlConfigRequest(const TString &cItem, co
             separateConfig.Root().Map().Append(key, value);
             auto config = YamlToProto(separateConfig.Root(), true, false);
             NKikimrConsole::TConfigItem& configItem = *result.AddActions()->MutableAddConfigItem()->MutableConfigItem();
+            configItemCb(configItem);
             configItem.MutableConfig()->CopyFrom(config);
             configItem.SetCookie(cookie.c_str());
             configItem.SetMergeStrategy(mergeStrategy);
@@ -619,14 +620,13 @@ NKikimrConsole::TConfigureRequest DumpYamlConfigRequest(const TString &cItem, co
 
     // for domain
     if (tenants.empty()) {
-        prepareActions(result);
+        prepareActions(result, [](auto&){});
     }
 
     for (auto& tenant : tenants) {
-        prepareActions(result);
-        for (auto& action : *result.MutableActions()) {
-            action.MutableAddConfigItem()->MutableConfigItem()->MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetTenant(tenant);
-        }
+        prepareActions(result, [&tenant](auto& configItem) {
+            configItem.MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetTenant(tenant);
+        });
     }
 
     return result;

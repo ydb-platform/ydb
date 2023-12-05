@@ -2394,7 +2394,7 @@ public:
         return {};
       }
 
-      const auto cluster = !schemaname.Empty() ? schemaname : Settings.DefaultCluster;
+      const auto cluster = !schemaname.Empty() && schemaname != "public" ? schemaname : Settings.DefaultCluster;
       const auto sinkOrSource = BuildClusterSinkOrSourceExpression(isSink, cluster);
       const auto key = BuildTableKeyExpression(relname, isScheme);
       return {sinkOrSource, key};
@@ -2421,7 +2421,7 @@ public:
             return {};
         }
 
-        const auto cluster = !schemaname.Empty() ? schemaname : Settings.DefaultCluster;
+        const auto cluster = !schemaname.Empty() && schemaname != "public" ? schemaname : Settings.DefaultCluster;
         const auto sinkOrSource = BuildClusterSinkOrSourceExpression(true, cluster);
         const auto key = BuildPgObjectExpression(objectName, pgObjectType);
         return {sinkOrSource, key};

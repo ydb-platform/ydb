@@ -213,6 +213,8 @@ public:
     static THashSet<int> GetRandomIndexes(int max, int count = 1)
     {
         THashSet<int> result;
+        count = std::min(count, max);
+        result.reserve(count);
         while (std::ssize(result) < count) {
             result.insert(static_cast<int>(RandomNumber<unsigned int>(max)));
         }

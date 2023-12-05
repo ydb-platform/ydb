@@ -1,70 +1,36 @@
 #pragma once
 
 #include "balancing_actor.h"
+#include "defs.h"
+#include "deleter.h"
+#include "merger.h"
+#include "sender.h"
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_queues.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
 #include <ydb/core/blobstorage/base/vdisk_sync_common.h>
+#include <ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h>
 
 
 namespace NKikimr {
 
-    class TKeysHandler {
-        virtual void Process(ui32 batchSize) = 0;
-    };
-
-    class TSender {
-    private:
-        TQueue<TLogoBlobID> Keys;
-        TQueueActorMapPtr QueueActorMapPtr;
-        std::shared_ptr<TBalancingCtx> Ctx;
-    
-    public:
-        TSender(
-            TQueue<TLogoBlobID> keys,
-            TQueueActorMapPtr queueActorMapPtr,
-            std::shared_ptr<TBalancingCtx> ctx
-        )
-            : Keys(std::move(keys))
-            , QueueActorMapPtr(queueActorMapPtr)
-            , Ctx(ctx)
-        {}
-    };
-
-    class TDeleter {
-    private:
-        TQueue<TLogoBlobID> Keys;
-        TQueueActorMapPtr QueueActorMapPtr;
-        std::shared_ptr<TBalancingCtx> Ctx;
-    
-    public:
-        TDeleter(
-            TQueue<TLogoBlobID> keys,
-            TQueueActorMapPtr queueActorMapPtr,
-            std::shared_ptr<TBalancingCtx> ctx
-        )
-            : Keys(std::move(keys))
-            , QueueActorMapPtr(queueActorMapPtr)
-            , Ctx(ctx)
-        {}
-    };
-
     class TBalancingActor : public TActorBootstrapped<TBalancingActor> {
     private:
         std::shared_ptr<TBalancingCtx> Ctx;
-        TLogoBlobsSnapshot::TIndexForwardIterator It;
+        TLogoBlobsSnapshot::TForwardIterator It;
         TQueueActorMapPtr QueueActorMapPtr;
         TActiveActors ActiveActors;
 
-        TSender Sender;
-        TDeleter Deleter;
+        TActorId Sender;
+        // TDeleter Deleter;
 
-        void Bootstrap() {
+        void Bootstrap(const TActorContext &ctx) {
             CreateVDisksQueues();
-            auto [sendOnMainKeys, tryDeleteKeys] = CollectKeys();
-            Sender = TSender(sendOnMainKeys, QueueActorMapPtr, Ctx);
-            Deleter = TDeleter(sendOnMainKeys, QueueActorMapPtr, Ctx);
+            auto [sendOnMainParts, tryDeleteParts] = CollectKeys();
 
+            Sender = ctx.Register(new TSender(std::move(sendOnMainParts), QueueActorMapPtr, Ctx));
+            ActiveActors.Insert(Sender, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+
+            Become(&TThis::StateFunc);
 
             // Ctx->VCtx->ReplNodeRequestQuoter
         }
@@ -83,34 +49,65 @@ namespace NKikimr {
                     "DisksBalancing", interconnectChannel);
         }
 
-        std::pair<TQueue<TLogoBlobID>, TQueue<TLogoBlobID>> CollectKeys() {
-            // TBlobIdQueuePtr
-            TQueue<TLogoBlobID> sendOnMainKeys, tryDeleteKeys;
+        std::pair<TQueue<TPartInfo>, TQueue<TPartInfo>> CollectKeys() {
+            TQueue<TPartInfo> sendOnMainParts, tryDeleteParts;
+
             for (It.SeekToFirst(); It.Valid(); It.Next()) {
-                const TLogoBlobID& key = It.GetCurKey().LogoBlobID();
-                const TMemRecLogoBlob& rec = It.GetMemRec();
+                TMerger merger(Ctx->GInfo->GetTopology().GType);
+                It.PutToMerger(&merger);
 
-                // TDiskDataExtractor extr;
-                // extr = rec.GetDiskData(&extr, const TDiskPart *outbound)
-                
-                if (!MainHasPart(rec.GetIngress())) {
-                    sendOnMainKeys.push(key);
-                } else if (AllReplicasHasParts(rec.GetIngress())) {
-                    tryDeleteKeys.push(key);
-                }
+                auto collectPartsByPredicate = [&](const TVector<ui8>& partIdxs, TQueue<TPartInfo>& queue) {
+                    for (ui8 partIdx: partIdxs) {
+                        if (!merger.Parts[partIdx].has_value()) {
+                            continue;  // something strange
+                        }
+                        queue.push(TPartInfo{
+                            .Key=It.GetCurKey().LogoBlobID(),
+                            .PartIdx=partIdx,
+                            .PartData=*merger.Parts[partIdx]
+                        });
+                    }
+                };
+                collectPartsByPredicate(PartsToSendOnMain(merger.Ingress), sendOnMainParts);
+                collectPartsByPredicate(PartsToSendOnMain(merger.Ingress), sendOnMainParts);
+
+                merger.Clear();
             }
-            return {sendOnMainKeys, tryDeleteKeys};
+            return {sendOnMainParts, tryDeleteParts};
         }
 
-        bool MainHasPart(const TIngress& ingress) {
-            Y_UNUSED(ingress);
-            return true; // TODO
+        void StartBalancing() {
+            if (!Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(Ctx->VDiskCfg->BaseInfo.PDiskId))) {
+                HandleReplToken();
+            }
         }
 
-        bool AllReplicasHasParts(const TIngress& ingress) {
-            Y_UNUSED(ingress);
-            return true; // TODO
+        void HandleReplToken() {
+            DoJobQuant();
+            Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
+            if (!Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(Ctx->VDiskCfg->BaseInfo.PDiskId))) {
+                HandleReplToken();
+            }
         }
+
+        void DoJobQuant() {
+            // Sender.DoJobQuant();
+            // Deleter.DoJobQuant();
+        }
+
+        TVector<ui8> PartsToSendOnMain(const TIngress& ingress) {
+            Y_UNUSED(ingress);
+            return {}; // TODO
+        }
+
+        TVector<ui8> PartsToDelete(const TIngress& ingress) {
+            Y_UNUSED(ingress);
+            return {}; // TODO
+        }
+
+        STRICT_STFUNC(StateFunc,
+            cFunc(TEvReplToken::EventType, HandleReplToken)
+        );
 
     public:
         TBalancingActor(std::shared_ptr<TBalancingCtx> &ctx)

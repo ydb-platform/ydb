@@ -28,6 +28,17 @@ jobs:
         with:
           github-token: ${{ secrets.YDB_PLATFORM_BOT_TOKEN_REPO }}
           script: |
+            const labels = context.payload.pull_request.labels;
+            const okToTestLabel = labels.find(
+              label => label.name == 'ok-to-test'
+            );
+
+            console.log("okToTestLabel=%o", okToTestLabel !== undefined);
+
+            if (okToTestLabel !== undefined) {
+              return true;
+            }
+
             // This is used primarily in forks. Repository owner
             // should be allowed to run anything.
             const userLogin = context.payload.pull_request.user.login;
@@ -59,15 +70,8 @@ jobs:
               console.log("You are a collaborator!");
               return true;
             }
-
-            const labels = context.payload.pull_request.labels;
-            const okToTestLabel = labels.find(
-              label => label.name == 'ok-to-test'
-            );
             
-            console.log("okToTestLabel=%o", okToTestLabel !== undefined);
-            
-            return okToTestLabel !== undefined;
+            return false;
       - name: comment-if-waiting-on-ok
         if: steps.check-ownership-membership.outputs.result == 'false' &&
             github.event.action == 'opened'

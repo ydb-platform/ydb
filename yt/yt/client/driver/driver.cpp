@@ -366,6 +366,10 @@ public:
             REGISTER_ALL(TLockHunkStoreCommand,            "lock_hunk_store",                 Null,       Structured, false,  true );
             REGISTER_ALL(TUnlockHunkStoreCommand,          "unlock_hunk_store",               Null,       Structured, false,  true );
             REGISTER_ALL(TGetConnectionConfigCommand,      "get_connection_config",           Null,       Structured, false,  false);
+            REGISTER_ALL(TIssueLeaseCommand,               "issue_lease",                     Null,       Structured, false,  false);
+            REGISTER_ALL(TRevokeLeaseCommand,              "revoke_lease",                    Null,       Structured, false,  false);
+            REGISTER_ALL(TReferenceLeaseCommand,           "reference_lease",                 Null,       Structured, false,  false);
+            REGISTER_ALL(TUnreferenceLeaseCommand,         "unreference_lease",               Null,       Structured, false,  false);
         }
 
 #undef REGISTER

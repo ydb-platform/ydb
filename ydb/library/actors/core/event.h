@@ -53,6 +53,9 @@ namespace NActors {
         virtual TEventSerializationInfo CreateSerializationInfo() const { return {}; }
     };
 
+    template <typename TEventType>
+    class TEventHandle;
+
     // fat handle
     class IEventHandle : TNonCopyable {
         struct TOnNondelivery {
@@ -71,6 +74,27 @@ namespace NActors {
 
             return fits ? static_cast<TEv*>(Event.Get()) : nullptr;
         }
+
+        template <typename TEv>
+        inline TEv* StaticCastAsLocal() const noexcept {  // blind cast
+            if constexpr (!std::is_same_v<TEv, IEventBase>) {
+                Y_DEBUG_ABORT_UNLESS(GetTypeRewrite() == TEv::EventType);
+            };
+
+            return static_cast<TEv*>(Event.Get());
+        }
+
+        template <typename TEv>
+        static TAutoPtr<TEventHandle<TEv>> Downcast(TAutoPtr<IEventHandle>&& ev) {
+            Y_DEBUG_ABORT_UNLESS(ev->GetTypeRewrite() == TEv::EventType);
+
+            return static_cast<typename TEv::THandle*>(ev.Release());
+        };
+
+        template <typename TEv>
+        static TAutoPtr<IEventHandle> Upcast(TAutoPtr<TEventHandle<TEv>>&& ev) {
+            return ev.Release();
+        };
 
         template <typename TEventType>
         TEventType* Get() {
@@ -323,11 +347,6 @@ namespace NActors {
         template<typename T>
         static TAutoPtr<T> Release(THolder<IEventHandle>& ev) {
             return ev->Release<T>();
-        }
-
-        template <typename TEv>
-        inline TEv* StaticCastAsLocal() const noexcept { // blind cast
-            return static_cast<TEv*>(Event.Get());
         }
     };
 

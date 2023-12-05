@@ -24,7 +24,7 @@ TOperationIdOrAlias TOperationIdOrAlias::FromString(TString operationIdOrAlias)
     if (!operationIdOrAlias.empty() && operationIdOrAlias[0] == '*') {
         return TOperationIdOrAlias(operationIdOrAlias);
     } else {
-        return TOperationIdOrAlias(TOperationId::FromString(operationIdOrAlias));
+        return TOperationIdOrAlias(TOperationId(TGuid::FromString(operationIdOrAlias)));
     }
 }
 

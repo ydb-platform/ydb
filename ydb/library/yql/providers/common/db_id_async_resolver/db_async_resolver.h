@@ -38,7 +38,7 @@ inline NConnector::NApi::EDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseT
     }
 }
 
-inline TString DatabaseTypeToMdbUrlPath(EDatabaseType databaseType) {
+inline TString DatabaseTypeLowercase(EDatabaseType databaseType) {
     auto dump = ToString(databaseType);
     dump.to_lower();
 
@@ -49,6 +49,11 @@ inline TString DatabaseTypeToMdbUrlPath(EDatabaseType databaseType) {
         default:
             ythrow yexception() << "Unsupported database type: " << ToString(databaseType);
     }
+}
+
+// TODO: remove this function after /kikimr/yq/tests/control_plane_storage is moved to /ydb.
+inline TString DatabaseTypeToMdbUrlPath(EDatabaseType databaseType) {
+    return DatabaseTypeLowercase(databaseType);
 }
 
 struct TDatabaseAuth {

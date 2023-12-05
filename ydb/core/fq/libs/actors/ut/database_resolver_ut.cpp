@@ -52,20 +52,36 @@ struct TTestBootstrap : public TTestActorRuntime {
     }
 
     void CheckEqual(
+        const NYql::TIssue& lhs,
+        const NYql::TIssue& rhs) {
+        UNIT_ASSERT_VALUES_EQUAL(lhs.GetMessage(), rhs.GetMessage());
+        UNIT_ASSERT_VALUES_EQUAL(lhs.GetCode(), rhs.GetCode());
+    }
+
+    void CheckEqual(
         const NFq::TEvents::TEvEndpointResponse& lhs,
         const NFq::TEvents::TEvEndpointResponse& rhs) {
-        UNIT_ASSERT_EQUAL(lhs.DbResolverResponse.Success, rhs.DbResolverResponse.Success);
-        UNIT_ASSERT_EQUAL(lhs.DbResolverResponse.DatabaseDescriptionMap.size(), rhs.DbResolverResponse.DatabaseDescriptionMap.size());
+        UNIT_ASSERT_VALUES_EQUAL(lhs.DbResolverResponse.Success, rhs.DbResolverResponse.Success);
+        UNIT_ASSERT_VALUES_EQUAL(lhs.DbResolverResponse.DatabaseDescriptionMap.size(), rhs.DbResolverResponse.DatabaseDescriptionMap.size());
         for (auto it = lhs.DbResolverResponse.DatabaseDescriptionMap.begin(); it != lhs.DbResolverResponse.DatabaseDescriptionMap.end(); ++it) {
             auto key = it->first;
             UNIT_ASSERT(rhs.DbResolverResponse.DatabaseDescriptionMap.contains(key));
             const NYql::TDatabaseResolverResponse::TDatabaseDescription& lhsDesc = it->second;
             const NYql::TDatabaseResolverResponse::TDatabaseDescription& rhsDesc = rhs.DbResolverResponse.DatabaseDescriptionMap.find(key)->second;
-            UNIT_ASSERT_EQUAL(lhsDesc.Endpoint, rhsDesc.Endpoint);
-            UNIT_ASSERT_EQUAL(lhsDesc.Host, rhsDesc.Host);
-            UNIT_ASSERT_EQUAL(lhsDesc.Port, rhsDesc.Port);
-            UNIT_ASSERT_EQUAL(lhsDesc.Database, rhsDesc.Database);
-            UNIT_ASSERT_EQUAL(lhsDesc.Secure, rhsDesc.Secure);
+            UNIT_ASSERT_VALUES_EQUAL(lhsDesc.Endpoint, rhsDesc.Endpoint);
+            UNIT_ASSERT_VALUES_EQUAL(lhsDesc.Host, rhsDesc.Host);
+            UNIT_ASSERT_VALUES_EQUAL(lhsDesc.Port, rhsDesc.Port);
+            UNIT_ASSERT_VALUES_EQUAL(lhsDesc.Database, rhsDesc.Database);
+            UNIT_ASSERT_VALUES_EQUAL(lhsDesc.Secure, rhsDesc.Secure);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(lhs.DbResolverResponse.Issues.Size(), rhs.DbResolverResponse.Issues.Size());
+        auto lhsIssueIter = lhs.DbResolverResponse.Issues.begin(); 
+        auto rhsIssueIter = rhs.DbResolverResponse.Issues.begin(); 
+        while (lhsIssueIter != lhs.DbResolverResponse.Issues.end()) {
+            CheckEqual(*lhsIssueIter, *rhsIssueIter);
+            lhsIssueIter++;
+            rhsIssueIter++;
         }
     }
 
@@ -92,8 +108,10 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
         NYql::EDatabaseType databaseType,
         NYql::NConnector::NApi::EProtocol protocol,
         const TString& getUrl,
+        const TString& status,
         const TString& responseBody,
-        const NYql::TDatabaseResolverResponse::TDatabaseDescription& description)
+        const NYql::TDatabaseResolverResponse::TDatabaseDescription& description,
+        const NYql::TIssues& issues)
     {
         TTestBootstrap bootstrap;
 
@@ -125,7 +143,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
         bootstrap.WaitForBootstrap();
 
         auto response = std::make_unique<NHttp::THttpIncomingResponse>(nullptr);
-        response->Status = "200";
+        response->Status = status;
         response->Body = responseBody;
 
         bootstrap.Send(new IEventHandle(
@@ -134,10 +152,12 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
             new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(httpOutgoingRequest->Request, response.release(), "")));
 
         NYql::TDatabaseResolverResponse::TDatabaseDescriptionMap result;
-        result[requestIdAnddatabaseType] = description;
+        if (status == "200") {
+            result[requestIdAnddatabaseType] = description;
+        }
         bootstrap.ExpectEvent<TEvents::TEvEndpointResponse>(bootstrap.AsyncResolver, 
             NFq::TEvents::TEvEndpointResponse(
-                NYql::TDatabaseResolverResponse(std::move(result), true, NYql::TIssues{})));
+                NYql::TDatabaseResolverResponse(std::move(result), status == "200", issues)));
     }
     
     Y_UNIT_TEST(Ydb_Serverless) {
@@ -145,6 +165,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
             NYql::EDatabaseType::Ydb,
             NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED,
             "https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
+            "200",
             R"(
                 {
                     "endpoint":"grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh"
@@ -155,7 +176,8 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                 0,
                 TString("/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh"),
                 true
-                }
+                },
+                {}
             );
     }
 
@@ -164,6 +186,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
             NYql::EDatabaseType::DataStreams,
             NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED,
             "https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
+            "200",
             R"(
                 {
                     "endpoint":"grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh"
@@ -174,7 +197,8 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                 0,
                 TString("/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh"),
                 true
-                }
+                },
+                {}
             );
     }
 
@@ -183,6 +207,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
             NYql::EDatabaseType::DataStreams,
             NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED,
             "https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
+            "200",
             R"(
                 {
                     "endpoint":"grpcs://lb.etn021us5r9rhld1vgbh.ydb.mdb.yandexcloud.net:2135/?database=/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh",
@@ -194,15 +219,17 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                 0,
                 TString("/ru-central1/b1g7jdjqd07qg43c4fmp/etn021us5r9rhld1vgbh"),
                 true
-                }
+                },
+                {}
             );
     }
 
-    Y_UNIT_TEST(ClickhouseNative) {
+    Y_UNIT_TEST(ClickHouseNative) {
         Test(
             NYql::EDatabaseType::ClickHouse,
             NYql::NConnector::NApi::EProtocol::NATIVE,
             "https://mdb.api.cloud.yandex.net:443/managed-clickhouse/v1/clusters/etn021us5r9rhld1vgbh/hosts",
+            "200",
             R"({
                 "hosts": [
                 {
@@ -226,15 +253,17 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                 9440,
                 TString(""),
                 true
-                }
+                },
+                {}
             );
     }
 
-    Y_UNIT_TEST(ClickhouseHttp) {
+    Y_UNIT_TEST(ClickHouseHttp) {
         Test(
             NYql::EDatabaseType::ClickHouse,
             NYql::NConnector::NApi::EProtocol::HTTP,
             "https://mdb.api.cloud.yandex.net:443/managed-clickhouse/v1/clusters/etn021us5r9rhld1vgbh/hosts",
+            "200",
             R"({
                 "hosts": [
                 {
@@ -258,15 +287,47 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                 8443,
                 TString(""),
                 true
-                }
+                },
+                {}
             );
     }
 
-    Y_UNIT_TEST(Postgres) {
+    Y_UNIT_TEST(ClickHouse_PermissionDenied) {
+        NYql::TIssues issues{
+            NYql::TIssue(
+                "You have no permission to resolve database id into database endpoint. Please check that your service account has role `managed-clickhouse.viewer`."
+            )
+        };
+
+        Test(
+            NYql::EDatabaseType::ClickHouse,
+            NYql::NConnector::NApi::EProtocol::HTTP,
+            "https://mdb.api.cloud.yandex.net:443/managed-clickhouse/v1/clusters/etn021us5r9rhld1vgbh/hosts",
+            "403",
+            R"(
+                {
+                    "code": 7,
+                    "message": "Permission denied",
+                    "details": [
+                        {
+                            "@type": "type.googleapis.com/google.rpc.RequestInfo",
+                            "requestId": "a943c092-d596-4e0e-ae7b-1f67f9d8164e"
+                        }
+                    ]
+                }
+            )",
+            NYql::TDatabaseResolverResponse::TDatabaseDescription{
+                },
+                issues
+            );
+    }
+
+    Y_UNIT_TEST(PostgreSQL) {
         Test(
             NYql::EDatabaseType::PostgreSQL,
             NYql::NConnector::NApi::EProtocol::NATIVE,
             "https://mdb.api.cloud.yandex.net:443/managed-postgresql/v1/clusters/etn021us5r9rhld1vgbh/hosts",
+            "200",
             R"({
                 "hosts": [
                 {
@@ -294,7 +355,38 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                 6432,
                 TString(""),
                 true
+                },
+                {}
+            );
+    }
+
+    Y_UNIT_TEST(PostgreSQL_PermissionDenied) {
+        NYql::TIssues issues{
+            NYql::TIssue(
+                "You have no permission to resolve database id into database endpoint. Please check that your service account has role `managed-postgresql.viewer`."
+            )
+        };
+
+        Test(
+            NYql::EDatabaseType::PostgreSQL,
+            NYql::NConnector::NApi::EProtocol::NATIVE,
+            "https://mdb.api.cloud.yandex.net:443/managed-postgresql/v1/clusters/etn021us5r9rhld1vgbh/hosts",
+            "403",
+            R"(
+                {
+                    "code": 7,
+                    "message": "Permission denied",
+                    "details": [
+                        {
+                            "@type": "type.googleapis.com/google.rpc.RequestInfo",
+                            "requestId": "a943c092-d596-4e0e-ae7b-1f67f9d8164e"
+                        }
+                    ]
                 }
+            )",
+            NYql::TDatabaseResolverResponse::TDatabaseDescription{
+                },
+                issues
             );
     }
 }

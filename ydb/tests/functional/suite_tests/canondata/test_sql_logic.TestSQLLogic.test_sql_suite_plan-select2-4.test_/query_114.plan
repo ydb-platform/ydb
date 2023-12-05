@@ -47,7 +47,7 @@
                                                         "Operators": [
                                                             {
                                                                 "Name": "Filter",
-                                                                "Predicate": "item.a > item.b - 2 And item.a < item.b + 2 Or Not Or item.d < 110 Or item.d > 150"
+                                                                "Predicate": "item.a > item.b - 2 And item.a < item.b + 2 Or Not Exist(item.a) Or item.d < 110 Or item.d > 150"
                                                             },
                                                             {
                                                                 "Name": "TableFullScan",

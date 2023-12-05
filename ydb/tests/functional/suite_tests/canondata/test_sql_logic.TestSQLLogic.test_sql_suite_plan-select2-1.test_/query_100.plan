@@ -33,7 +33,7 @@
                                             },
                                             {
                                                 "Name": "Filter",
-                                                "Predicate": "item.d > item.e Or Not"
+                                                "Predicate": "item.d > item.e Or Not Exist(item.a)"
                                             },
                                             {
                                                 "Name": "TableFullScan",

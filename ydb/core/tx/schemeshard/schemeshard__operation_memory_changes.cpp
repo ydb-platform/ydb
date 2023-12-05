@@ -90,6 +90,14 @@ void TMemoryChanges::GrabExternalDataSource(TSchemeShard* ss, const TPathId& pat
     Grab<TExternalDataSourceInfo>(pathId, ss->ExternalDataSources, ExternalDataSources);
 }
 
+void TMemoryChanges::GrabNewView(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNew(pathId, ss->Views, Views);
+}
+
+void TMemoryChanges::GrabView(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TViewInfo>(pathId, ss->Views, Views);
+}
+
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
@@ -208,6 +216,16 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->ExternalDataSources.erase(id);
         }
         ExternalDataSources.pop();
+    }
+
+    while (Views) {
+        const auto& [id, elem] = Views.top();
+        if (elem) {
+            ss->Views[id] = elem;
+        } else {
+            ss->Views.erase(id);
+        }
+        Views.pop();
     }
 }
 

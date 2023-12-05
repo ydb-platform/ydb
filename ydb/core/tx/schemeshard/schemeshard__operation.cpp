@@ -721,6 +721,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
         targetName = tx.GetCreateExternalDataSource().GetName();
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
+        targetName = tx.GetCreateView().GetName();
+        break;
     default:
         result.Transactions.push_back(tx);
         return result;
@@ -813,6 +816,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             break;
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
             create.MutableCreateExternalDataSource()->SetName(name);
+            break;
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
+            create.MutableCreateView()->SetName(name);
             break;
         default:
             Y_UNREACHABLE();
@@ -1063,6 +1069,15 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateDropExternalDataSource(NextPartId(), txState);
     case TTxState::ETxType::TxAlterExternalDataSource:
         Y_ABORT("TODO: implement");
+    
+    // View
+    case TTxState::ETxType::TxCreateView:
+        return CreateNewView(NextPartId(), txState);
+    case TTxState::ETxType::TxDropView:
+        return CreateDropView(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterView:
+        Y_ABORT("TODO: implement");
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
@@ -1279,6 +1294,14 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalDataSource:
         return CreateDropExternalDataSource(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalDataSource:
+        Y_ABORT("TODO: implement");
+
+    // View
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
+        return CreateNewView(NextPartId(), tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropView:
+        return CreateDropView(NextPartId(), tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterView:
         Y_ABORT("TODO: implement");
     }
 

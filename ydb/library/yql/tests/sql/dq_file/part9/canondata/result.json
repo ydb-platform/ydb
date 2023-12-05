@@ -4376,9 +4376,6 @@
             "checksum": "c1f2d837c3623c81dd596a9877913fb8",
             "size": 948,
             "uri": "https://{canondata_backend}/1937027/59d28a617b15c7f75da36d9dea508509edcd0162/resource.tar.gz#test.test_pg_catalog-pg_type_syntax_pg-default.txt-Analyze_/plan.txt"
-        },
-        {
-            "uri": "file://test.test_pg_catalog-pg_type_syntax_pg-default.txt-Analyze_/extracted"
         }
     ],
     "test.test[pg_catalog-pg_type_syntax_pg-default.txt-Debug]": [
@@ -4401,9 +4398,6 @@
             "checksum": "c1f2d837c3623c81dd596a9877913fb8",
             "size": 948,
             "uri": "https://{canondata_backend}/1937027/59d28a617b15c7f75da36d9dea508509edcd0162/resource.tar.gz#test.test_pg_catalog-pg_type_syntax_yql-default.txt-Analyze_/plan.txt"
-        },
-        {
-            "uri": "file://test.test_pg_catalog-pg_type_syntax_yql-default.txt-Analyze_/extracted"
         }
     ],
     "test.test[pg_catalog-pg_type_syntax_yql-default.txt-Debug]": [

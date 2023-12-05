@@ -17,6 +17,7 @@ public:
     TPgDataSourceImpl(TPgState::TPtr state)
         : State_(state)
         , TypeAnnotationTransformer_(CreatePgDataSourceTypeAnnotationTransformer(state))
+        , DqIntegration_(CreatePgDqIntegration(State_))
     {}
 
     TStringBuf GetName() const override {
@@ -110,9 +111,14 @@ public:
         return false;
     }
 
+    IDqIntegration* GetDqIntegration() override {
+        return DqIntegration_.Get();
+    }
+
 private:
     TPgState::TPtr State_;
     const THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
+    const THolder<IDqIntegration> DqIntegration_;
 };
 
 TIntrusivePtr<IDataProvider> CreatePgDataSource(TPgState::TPtr state) {

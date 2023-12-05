@@ -34,6 +34,21 @@ using namespace NClient;
 
 namespace {
 
+TString GetNameByReadType(EPlanTableReadType readType) {
+    switch (readType) {
+        case EPlanTableReadType::Unspecified:
+            return "Unspecified";
+        case EPlanTableReadType::FullScan:
+            return "TableFullScan";
+        case EPlanTableReadType::Scan:
+            return "TableRangeScan";
+        case EPlanTableReadType::Lookup:
+            return "TablePointLookup";
+        case EPlanTableReadType::MultiLookup:
+            return "TableMultiLookup";
+    }
+}
+
 struct TTableRead {
     EPlanTableReadType Type = EPlanTableReadType::Unspecified;
     TVector<TString> LookupBy;
@@ -706,10 +721,9 @@ private:
                     ranges.AppendValue(rangeDescr);
                 }
 
-                // Scan which fixes only few first members of compound primary key were called "Lookup"
-                // by older explain version. We continue to do so.
                 if (readInfo.LookupBy.size() > 0) {
-                    readInfo.Type = EPlanTableReadType::Lookup;
+                    bool isFullPk = readInfo.LookupBy.size() == tableData.Metadata->KeyColumnNames.size();
+                    readInfo.Type = isFullPk ? EPlanTableReadType::Lookup : EPlanTableReadType::Scan;
                 } else {
                     readInfo.Type = hasRangeScans ? EPlanTableReadType::Scan : EPlanTableReadType::FullScan;
                 }
@@ -743,19 +757,9 @@ private:
 
             SerializerCtx.Tables[table].Reads.push_back(readInfo);
 
-            if (readInfo.Type == EPlanTableReadType::Scan) {
-                op.Properties["Name"] = "TableRangeScan";
-                AddOperator(planNode, "TableRangeScan", std::move(op));
-            } else if (readInfo.Type == EPlanTableReadType::FullScan) {
-                op.Properties["Name"] = "TableFullScan";
-                AddOperator(planNode, "TableFullScan", std::move(op));
-            } else if (readInfo.Type == EPlanTableReadType::Lookup) {
-                op.Properties["Name"] = "TablePointLookup";
-                AddOperator(planNode, "TablePointLookup", std::move(op));
-            } else {
-                op.Properties["Name"] = "TableScan";
-                AddOperator(planNode, "TableScan", std::move(op));
-            }
+            auto readName = GetNameByReadType(readInfo.Type);
+            op.Properties["Name"] = readName;
+            AddOperator(planNode, readName, std::move(op));
         } else {
             const auto table = TString(sourceSettings.Table().Path());
             const auto explainPrompt = TKqpReadTableExplainPrompt::Parse(sourceSettings.ExplainPrompt().Cast());
@@ -852,13 +856,9 @@ private:
 
             AddOptimizerEstimates(op, sourceSettings);
 
-            if (readInfo.Type == EPlanTableReadType::FullScan) {
-                op.Properties["Name"] = "TableFullScan";
-                AddOperator(planNode, "TableFullScan", std::move(op));
-            } else {
-                op.Properties["Name"] = "TableRangesScan";
-                AddOperator(planNode, "TableRangesScan", std::move(op));
-            }
+            auto readName = GetNameByReadType(readInfo.Type);
+            op.Properties["Name"] = readName;
+            AddOperator(planNode, readName, std::move(op));
 
             SerializerCtx.Tables[table].Reads.push_back(std::move(readInfo));
         }
@@ -1323,12 +1323,29 @@ private:
 
     ui32 Visit(const TKqlLookupTableBase& lookup, TQueryPlanNode& planNode) {
         auto table = TString(lookup.Table().Path().Value());
+        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
+
+        auto lookupKeysType = lookup.LookupKeys().Ref().GetTypeAnn();
+        const TTypeAnnotationNode* lookupKeysItemType = nullptr;
+        if (lookupKeysType->GetKind() == ETypeAnnotationKind::List) {
+            lookupKeysItemType = lookupKeysType->Cast<TListExprType>()->GetItemType();
+        } else if (lookupKeysType->GetKind() == ETypeAnnotationKind::Stream) {
+            lookupKeysItemType = lookupKeysType->Cast<TStreamExprType>()->GetItemType();
+        } else {
+            Y_ENSURE(false, "Unexpected lookup keys type");
+        }
+
+        Y_ENSURE(lookupKeysItemType);
+        Y_ENSURE(lookupKeysItemType->GetKind() == ETypeAnnotationKind::Struct);
+        auto lookupKeyColumnsCount = lookupKeysItemType->Cast<TStructExprType>()->GetSize();
+
         TTableRead readInfo;
-        readInfo.Type = EPlanTableReadType::Lookup;
+        readInfo.Type = lookupKeyColumnsCount == tableData.Metadata->KeyColumnNames.size()
+            ? EPlanTableReadType::Lookup : EPlanTableReadType::Scan;
+        auto readName = GetNameByReadType(readInfo.Type);
 
         TOperator op;
-        op.Properties["Name"] = "TablePointLookup";
-        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
+        op.Properties["Name"] = readName;
         op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : table;
         auto& columns = op.Properties["ReadColumns"];
         for (auto const& col : lookup.Columns()) {
@@ -1340,7 +1357,7 @@ private:
 
         SerializerCtx.Tables[table].Reads.push_back(readInfo);
         planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
-        return AddOperator(planNode, "TablePointLookup", std::move(op));
+        return AddOperator(planNode, readName, std::move(op));
     }
 
     ui32 Visit(const TKqlReadTableRangesBase& read, TQueryPlanNode& planNode) {
@@ -1441,14 +1458,9 @@ private:
 
         AddOptimizerEstimates(op, read);
 
-        ui32 operatorId;
-        if (readInfo.Type == EPlanTableReadType::FullScan) {
-            op.Properties["Name"] = "TableFullScan";
-            operatorId = AddOperator(planNode, "TableFullScan", std::move(op));
-        } else {
-            op.Properties["Name"] = "TableRangesScan";
-            operatorId = AddOperator(planNode, "TableRangesScan", std::move(op));
-        }
+        auto readName = GetNameByReadType(readInfo.Type);
+        op.Properties["Name"] = readName;
+        ui32 operatorId = AddOperator(planNode, readName, std::move(op));
 
         SerializerCtx.Tables[table].Reads.push_back(std::move(readInfo));
         return operatorId;
@@ -1544,10 +1556,9 @@ private:
                 ranges.AppendValue(rangeDescr);
             }
 
-            // Scan which fixes only few first members of compound primary key were called "Lookup"
-            // by older explain version. We continue to do so.
             if (readInfo.LookupBy.size() > 0) {
-                readInfo.Type = EPlanTableReadType::Lookup;
+                bool isFullPk = readInfo.LookupBy.size() == tableData.Metadata->KeyColumnNames.size();
+                readInfo.Type = isFullPk ? EPlanTableReadType::Lookup : EPlanTableReadType::Scan;
             } else {
                 readInfo.Type = hasRangeScans ? EPlanTableReadType::Scan : EPlanTableReadType::FullScan;
             }
@@ -1581,20 +1592,9 @@ private:
 
         AddOptimizerEstimates(op, read);
 
-        ui32 operatorId;
-        if (readInfo.Type == EPlanTableReadType::Scan) {
-            op.Properties["Name"] = "TableRangeScan";
-            operatorId = AddOperator(planNode, "TableRangeScan", std::move(op));
-        } else if (readInfo.Type == EPlanTableReadType::FullScan) {
-            op.Properties["Name"] = "TableFullScan";
-            operatorId = AddOperator(planNode, "TableFullScan", std::move(op));
-        } else if (readInfo.Type == EPlanTableReadType::Lookup) {
-            op.Properties["Name"] = "TablePointLookup";
-            operatorId = AddOperator(planNode, "TablePointLookup", std::move(op));
-        } else {
-            op.Properties["Name"] = "TableScan";
-            operatorId = AddOperator(planNode, "TableScan", std::move(op));
-        }
+        auto readName = GetNameByReadType(readInfo.Type);
+        op.Properties["Name"] = readName;
+        ui32 operatorId = AddOperator(planNode, readName, std::move(op));
 
         return operatorId;
     }

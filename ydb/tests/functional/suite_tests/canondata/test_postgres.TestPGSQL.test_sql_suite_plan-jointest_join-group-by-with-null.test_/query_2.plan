@@ -90,14 +90,14 @@
                                                                                 "Plans": [
                                                                                     {
                                                                                         "CTE Name": "precompute_1_0",
-                                                                                        "Node Type": "Filter-TablePointLookup-ConstantExpr",
+                                                                                        "Node Type": "Filter-TableRangeScan-ConstantExpr",
                                                                                         "Operators": [
                                                                                             {
                                                                                                 "Name": "Filter",
                                                                                                 "Predicate": "Exist(item.q1)"
                                                                                             },
                                                                                             {
-                                                                                                "Name": "TablePointLookup",
+                                                                                                "Name": "TableRangeScan",
                                                                                                 "ReadColumns": [
                                                                                                     "q1"
                                                                                                 ],
@@ -230,7 +230,7 @@
                     "columns": [
                         "q1"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

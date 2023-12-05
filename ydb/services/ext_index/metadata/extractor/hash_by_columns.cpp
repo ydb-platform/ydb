@@ -1,6 +1,6 @@
 #include "hash_by_columns.h"
 #include <ydb/library/services/services.pb.h>
-#include <ydb/core/tx/sharding/sharding.h>
+#include <ydb/core/formats/arrow/hash/calcer.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/minikql/jsonpath/jsonpath.h>
 #include <ydb/library/yql/minikql/jsonpath/value.h>
@@ -129,8 +129,10 @@ std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow::Re
     }
     auto newBatch = arrow::RecordBatch::Make(*newSchema, batch->num_rows(), columns);
     if (HashType == EHashType::XX64) {
-        NSharding::THashSharding hashSharding(0, fieldIds);
-        return hashSharding.MakeHashes(newBatch);
+        NArrow::NHash::TXX64 hash(fieldIds, NArrow::NHash::TXX64::ENoColumnPolicy::ReturnEmpty);
+        auto result = hash.Execute(newBatch);
+        AFL_VERIFY(result);
+        return *result;
     } else {
         ALS_ERROR(NKikimrServices::EXT_INDEX) << "undefined hash type: " << HashType;
         return {};

@@ -1471,6 +1471,7 @@ private:
         std::unordered_set<TString> NotNullColSet;
         bool isTemporary;
         std::vector<TAstNode*> SerialColumns;
+        std::unordered_map<TString, TAstNode*> Defaults;
         bool ifNotExists;
     };
 
@@ -1606,6 +1607,17 @@ private:
                         ctx.UniqConstr.push_back({QA(node->colname)});
                     } break;
 
+                    case CONSTR_DEFAULT: {
+                        TExprSettings settings;
+                        settings.AllowColumns = false;
+                        settings.Scope = "DEFAULT";
+                        auto expr = ParseExpr(constraintNode->raw_expr, settings);
+                        if (!expr) {
+                            return false;
+                        }
+                        ctx.Defaults[node->colname] = expr;
+                    } break;
+
                     default:
                         AddError("column constraint not supported");
                         return false;
@@ -1685,6 +1697,9 @@ private:
                                   QL(QA("indexType"), QA("syncGlobalUnique")),
                                   QL(QA("dataColumns"), QL()),
                                   QL(QA("indexColumns"), columns))));
+        }
+        for (auto& def : ctx.Defaults) {
+            options.push_back(QL(QA("default"), QA(def.first), def.second));
         }
         if (ctx.isTemporary) {
             options.push_back(QL(QA("temporary")));

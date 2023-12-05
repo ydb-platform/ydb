@@ -17,7 +17,7 @@ target_link_libraries(library-yaml_config-public PUBLIC
   contrib-libs-yaml-cpp
   library-actors-core
   cpp-protobuf-json
-  cpp-yaml-fyamlcpp
+  ydb-library-fyamlcpp
 )
 target_sources(library-yaml_config-public PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/public/yaml_config.cpp

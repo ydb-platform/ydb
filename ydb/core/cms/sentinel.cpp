@@ -72,12 +72,12 @@ EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason
 
     if (!stateLimit || StateCounter < stateLimit) {
         reason = TStringBuilder()
-            << " PrevState# " << PrevState
+            <<  "PrevState# " << PrevState
             << " State# " << State
             << " StateCounter# " << StateCounter
             << " current# " << current;
         switch (PrevState) {
-            case  NKikimrBlobStorage::TPDiskState::Unknown:
+            case NKikimrBlobStorage::TPDiskState::Unknown:
                 return current;
             default:
                 return EPDiskStatus::INACTIVE;
@@ -85,7 +85,7 @@ EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason
     }
 
     reason = TStringBuilder()
-        << " PrevState# " << PrevState
+        <<  "PrevState# " << PrevState
         << " State# " << State
         << " StateCounter# " << StateCounter
         << " StateLimit# " << stateLimit;

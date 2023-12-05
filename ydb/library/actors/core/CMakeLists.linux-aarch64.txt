@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
+add_subdirectory(ut_fat)
 get_built_tool_path(
   TOOL_enum_parser_bin
   TOOL_enum_parser_dependency

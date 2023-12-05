@@ -2,6 +2,7 @@
 #include "permutations.h"
 #include "replace_key.h"
 #include "size_calcer.h"
+#include "hash/calcer.h"
 
 #include <ydb/core/formats/arrow/common/validation.h>
 #include <ydb/library/services/services.pb.h>
@@ -204,110 +205,9 @@ bool THashConstructor::BuildHashUI64(std::shared_ptr<arrow::RecordBatch>& batch,
             return true;
         }
     }
-    auto builder = NArrow::MakeBuilder(std::make_shared<arrow::Field>(hashFieldName, arrow::TypeTraits<arrow::UInt64Type>::type_singleton()));
-    {
-        auto& intBuilder = static_cast<arrow::UInt64Builder&>(*builder);
-        TStatusValidator::Validate(intBuilder.Reserve(batch->num_rows()));
-        std::vector<std::shared_ptr<arrow::Array>> columns;
-        for (auto&& i : fieldNames) {
-            auto column = batch->GetColumnByName(i);
-//            AFL_VERIFY(column)("column_name", i)("all_columns", JoinSeq(",", fieldNames));
-            if (column) {
-                columns.emplace_back(column);
-            }
-        }
-        if (columns.empty()) {
-            AFL_WARN(NKikimrServices::ARROW_HELPER)("event", "cannot_build_hash")("reason", "fields_not_found")("field_names", JoinSeq(",", fieldNames));
-            return false;
-        }
-        for (i64 i = 0; i < batch->num_rows(); ++i) {
-            intBuilder.UnsafeAppend(TypedHash(columns, i));
-        }
-    }
-    batch = TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), hashFieldName, NArrow::TStatusValidator::GetValid(builder->Finish())));
+    std::shared_ptr<arrow::Array> hashColumn = NArrow::NHash::TXX64(fieldNames, NArrow::NHash::TXX64::ENoColumnPolicy::Verify, 34323543).ExecuteToArray(batch, hashFieldName);
+    batch = TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), hashFieldName, hashColumn));
     return true;
-}
-
-size_t THashConstructor::TypedHash(const std::vector<std::shared_ptr<arrow::Array>>& ar, const int pos) {
-    size_t result = 0;
-    for (auto&& i : ar) {
-        result = CombineHashes(result, TypedHash(*i, pos));
-    }
-    return result;
-}
-
-size_t THashConstructor::TypedHash(const arrow::Array& ar, const int pos) {
-    switch (ar.type_id()) {
-        case arrow::Type::BOOL:
-            return (size_t)(static_cast<const arrow::BooleanArray&>(ar).Value(pos));
-        case arrow::Type::UINT8:
-            return THash<ui8>()(static_cast<const arrow::UInt8Array&>(ar).Value(pos));
-        case arrow::Type::INT8:
-            return THash<i8>()(static_cast<const arrow::Int8Array&>(ar).Value(pos));
-        case arrow::Type::UINT16:
-            return THash<ui16>()(static_cast<const arrow::UInt16Array&>(ar).Value(pos));
-        case arrow::Type::INT16:
-            return THash<i16>()(static_cast<const arrow::Int16Array&>(ar).Value(pos));
-        case arrow::Type::UINT32:
-            return THash<ui32>()(static_cast<const arrow::UInt32Array&>(ar).Value(pos));
-        case arrow::Type::INT32:
-            return THash<i32>()(static_cast<const arrow::Int32Array&>(ar).Value(pos));
-        case arrow::Type::UINT64:
-            return THash<ui64>()(static_cast<const arrow::UInt64Array&>(ar).Value(pos));
-        case arrow::Type::INT64:
-            return THash<i64>()(static_cast<const arrow::Int64Array&>(ar).Value(pos));
-        case arrow::Type::HALF_FLOAT:
-            break;
-        case arrow::Type::FLOAT:
-            return THash<float>()(static_cast<const arrow::FloatArray&>(ar).Value(pos));
-        case arrow::Type::DOUBLE:
-            return THash<double>()(static_cast<const arrow::DoubleArray&>(ar).Value(pos));
-        case arrow::Type::STRING:
-        {
-            const auto& str = static_cast<const arrow::StringArray&>(ar).GetView(pos);
-            return XXH64(str.data(), str.size(), 0);
-        }
-        case arrow::Type::BINARY:
-        {
-            const auto& str = static_cast<const arrow::BinaryArray&>(ar).GetView(pos);
-            return XXH64(str.data(), str.size(), 0);
-        }
-        case arrow::Type::FIXED_SIZE_BINARY:
-        {
-            const auto& str = static_cast<const arrow::FixedSizeBinaryArray&>(ar).GetView(pos);
-            return XXH64(str.data(), str.size(), 0);
-        }
-        case arrow::Type::TIMESTAMP:
-            return THash<i64>()(static_cast<const arrow::TimestampArray&>(ar).Value(pos));
-        case arrow::Type::TIME32:
-            return THash<i32>()(static_cast<const arrow::Time32Array&>(ar).Value(pos));
-        case arrow::Type::TIME64:
-            return THash<i64>()(static_cast<const arrow::Time64Array&>(ar).Value(pos));
-        case arrow::Type::DURATION:
-            return THash<i64>()(static_cast<const arrow::DurationArray&>(ar).Value(pos));
-        case arrow::Type::DATE32:
-        case arrow::Type::DATE64:
-        case arrow::Type::NA:
-        case arrow::Type::DECIMAL256:
-        case arrow::Type::DECIMAL:
-        case arrow::Type::DENSE_UNION:
-        case arrow::Type::DICTIONARY:
-        case arrow::Type::EXTENSION:
-        case arrow::Type::FIXED_SIZE_LIST:
-        case arrow::Type::INTERVAL_DAY_TIME:
-        case arrow::Type::INTERVAL_MONTHS:
-        case arrow::Type::LARGE_BINARY:
-        case arrow::Type::LARGE_LIST:
-        case arrow::Type::LARGE_STRING:
-        case arrow::Type::LIST:
-        case arrow::Type::MAP:
-        case arrow::Type::MAX_ID:
-        case arrow::Type::SPARSE_UNION:
-        case arrow::Type::STRUCT:
-            Y_ABORT("not implemented");
-            break;
-    }
-    return 0;
 }
 
 ui64 TShardedRecordBatch::GetMemorySize() const {

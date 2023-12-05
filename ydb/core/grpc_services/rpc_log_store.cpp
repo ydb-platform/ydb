@@ -446,7 +446,9 @@ private:
 
         create->SetColumnShardCount(req->shards_count());
         auto* sharding = create->MutableSharding()->MutableHashSharding();
-        if (req->sharding_type() == Ydb::LogStore::ShardingHashType::HASH_TYPE_MODULO_N) {
+        if (req->sharding_type() == Ydb::LogStore::ShardingHashType::HASH_TYPE_CONSISTENCY_64) {
+            sharding->SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
+        } else if (req->sharding_type() == Ydb::LogStore::ShardingHashType::HASH_TYPE_MODULO_N) {
             sharding->SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
         } else {
             sharding->SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CLOUD_LOGS);

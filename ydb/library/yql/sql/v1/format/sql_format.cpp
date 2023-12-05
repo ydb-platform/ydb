@@ -1337,8 +1337,11 @@ private:
         }
 
         if (str == "," && !MarkTokenStack.empty()) {
+            const bool addNewline = 
+                (TokenIndex + 1 < ParsedTokens.size() && ParsedTokens[TokenIndex].Line != ParsedTokens[TokenIndex + 1].Line)
+             || (TokenIndex > 0 && ParsedTokens[TokenIndex - 1].Line != ParsedTokens[TokenIndex].Line);
             // add line for trailing comma
-            if (TokenIndex + 1 < ParsedTokens.size() && ParsedTokens[TokenIndex].Line != ParsedTokens[TokenIndex + 1].Line) {
+            if (addNewline) {
                 NewLine();
             }
         }

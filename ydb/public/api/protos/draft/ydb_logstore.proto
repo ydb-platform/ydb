@@ -27,6 +27,7 @@ enum ShardingHashType {
     HASH_TYPE_UNSPECIFIED   = 0x0000;
     HASH_TYPE_MODULO_N      = 0x0001; // hash(sharding_columns) % N
     HASH_TYPE_LOGS_SPECIAL  = 0x0002;
+    HASH_TYPE_CONSISTENCY_64= 0x0004;
 }
 
 message ColumnMeta {

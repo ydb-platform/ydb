@@ -941,6 +941,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "SELECT\n\t[\n\t\t1, 2,\n\t\t3, 4\n\t];\n"},
             {"select [1,2,\n3,4,]",
              "SELECT\n\t[\n\t\t1, 2,\n\t\t3, 4,\n\t];\n"},
+            {"select [1,2\n,3,\n4\n,5]",
+             "SELECT\n\t[\n\t\t1, 2,\n\t\t3,\n\t\t4,\n\t\t5\n\t];\n"},
         };
 
         TSetup setup;
@@ -1254,7 +1256,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
             {"select tagged<int32,\nfoo>",
              "SELECT\n\ttagged<\n\t\tint32,\n\t\tfoo\n\t>;\n"},
             {"select tagged<int32\n,foo>",
-             "SELECT\n\ttagged<\n\t\tint32, foo\n\t>;\n"},
+             "SELECT\n\ttagged<\n\t\tint32,\n\t\tfoo\n\t>;\n"},
             {"select tagged<\nint32,foo>",
              "SELECT\n\ttagged<\n\t\tint32, foo\n\t>;\n"},
         };
@@ -1270,7 +1272,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
             {"select dict<int32,\nstring>",
              "SELECT\n\tdict<\n\t\tint32,\n\t\tstring\n\t>;\n"},
             {"select dict<int32\n,string>",
-             "SELECT\n\tdict<\n\t\tint32, string\n\t>;\n"},
+             "SELECT\n\tdict<\n\t\tint32,\n\t\tstring\n\t>;\n"},
             {"select dict<\nint32,string>",
              "SELECT\n\tdict<\n\t\tint32, string\n\t>;\n"},
         };
@@ -1290,7 +1292,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
             {"select callable<\n(int32,\ndouble)->int32>",
              "SELECT\n\tcallable<\n\t\t(\n\t\t\tint32,\n\t\t\tdouble\n\t\t) -> int32\n\t>;\n"},
             {"select callable<\n(int32\n,double)->int32>",
-             "SELECT\n\tcallable<\n\t\t(\n\t\t\tint32, double\n\t\t) -> int32\n\t>;\n"},
+             "SELECT\n\tcallable<\n\t\t(\n\t\t\tint32,\n\t\t\tdouble\n\t\t) -> int32\n\t>;\n"},
         };
 
         TSetup setup;

@@ -52,6 +52,19 @@ using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+constexpr i64 MaxTracingTagLength = 1000;
+static const TString DisabledSelectQueryTracingTag = "Tag is disabled, look for enable_select_query_tracing_tag parameter";
+
+TString SanitizeTracingTag(const TString& originalTag)
+{
+    if (originalTag.size() <= MaxTracingTagLength) {
+        return originalTag;
+    }
+    return Format("%v ... TRUNCATED", originalTag.substr(0, MaxTracingTagLength));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 IConnectionPtr TClientBase::GetConnection()
 {
     return GetRpcProxyConnection();
@@ -887,7 +900,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookup(
         for (const auto& subrequest : subrequests) {
             paths.emplace_back(subrequest.Path);
         }
-        req->TracingTags().emplace_back("yt.table_paths", NYson::ConvertToYsonString(paths).ToString());
+        req->TracingTags().emplace_back("yt.table_paths", SanitizeTracingTag(NYson::ConvertToYsonString(paths).ToString()));
     }
 
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
@@ -950,6 +963,14 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_query(query);
 
     const auto& config = GetRpcProxyConnection()->GetConfig();
+
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        if (config->EnableSelectQueryTracingTag) {
+            req->TracingTags().emplace_back("yt.query", SanitizeTracingTag(query));
+        } else {
+            req->TracingTags().emplace_back("yt.query", DisabledSelectQueryTracingTag);
+        }
+    }
 
     FillRequestBySelectRowsOptionsBase(options, config->UdfRegistryPath, req);
     // TODO(ifsmirnov): retention timestamp in explain_query.

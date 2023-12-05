@@ -208,7 +208,7 @@ public:
         YQL_ENSURE(!QueryState);
         NWilson::TTraceId id;
         if (false) { // change to enable Wilson tracing
-            id = NWilson::TTraceId::NewTraceId(TWilsonKqp::KqpSession, Max<ui32>());
+            id = NWilson::TTraceId::NewTraceId(15, 4095);
             LOG_I("wilson tracing started, id: " + std::to_string(id.GetTraceId()));
         }
         auto selfId = SelfId();
@@ -537,6 +537,8 @@ public:
 
     void AcquirePersistentSnapshot() {
         LOG_D("acquire persistent snapshot");
+        AcquireSnapshotSpan = NWilson::TSpan(TWilsonKqp::SessionAcquireSnapshot, QueryState->KqpSessionSpan.GetTraceId(),
+            "SessionActor.AcquirePersistentSnapshot");
         auto timeout = QueryState->QueryDeadlines.TimeoutAt - TAppData::TimeProvider->Now();
 
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
@@ -555,6 +557,8 @@ public:
     }
 
     void AcquireMvccSnapshot() {
+        AcquireSnapshotSpan = NWilson::TSpan(TWilsonKqp::SessionAcquireSnapshot, QueryState->KqpSessionSpan.GetTraceId(),
+            "SessionActor.AcquireMvccSnapshot");
         LOG_D("acquire mvcc snapshot");
         auto timeout = QueryState->QueryDeadlines.TimeoutAt - TAppData::TimeProvider->Now();
 
@@ -596,9 +600,11 @@ public:
             << ", tx id: " << response->Snapshot.TxId);
         if (response->Status != NKikimrIssues::TStatusIds::SUCCESS) {
             auto& issues = response->Issues;
+            AcquireSnapshotSpan.EndError(issues.ToString());
             ReplyQueryError(StatusForSnapshotError(response->Status), "", MessageFromIssues(issues));
             return;
         }
+        AcquireSnapshotSpan.EndOk();
         QueryState->TxCtx->SnapshotHandle.Snapshot = response->Snapshot;
 
         // Can reply inside (in case of deferred-only transactions) and become ReadyState
@@ -2161,6 +2167,7 @@ private:
     TKqpSettings::TConstPtr KqpSettings;
     std::optional<TActorId> WorkerId;
     TActorId ExecuterId;
+    NWilson::TSpan AcquireSnapshotSpan;
 
     std::shared_ptr<TKqpQueryState> QueryState;
     std::unique_ptr<TKqpCleanupCtx> CleanupCtx;

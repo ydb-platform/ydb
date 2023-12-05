@@ -1199,7 +1199,7 @@ bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) {
 
     entry->StateStorageConfirmed = true; // todo: do real query against state-storage (optionally?)
     entry->Task = Register(
-        CreateTabletReqWriteLog(SelfId(), logid, x.release(), msg->References, msg->CommitTactic, Info.Get())
+        CreateTabletReqWriteLog(SelfId(), logid, x.release(), msg->References, msg->CommitTactic, Info.Get(), std::move(ev->TraceId))
     );
 
     Graph.StepsInFlight += 1;

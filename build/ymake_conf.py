@@ -1268,10 +1268,10 @@ class GnuToolchain(Toolchain):
                 if target.is_apple:
                     if target.is_ios:
                         self.setup_xcode_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
-                        self.platform_projects.append('build/platform/macos_system_stl')
+                        self.platform_projects.append('build/internal/platform/macos_system_stl')
                     if target.is_macos:
-                        self.setup_xcode_sdk(project='build/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
-                        self.platform_projects.append('build/platform/macos_system_stl')
+                        self.setup_xcode_sdk(project='build/internal/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
+                        self.platform_projects.append('build/internal/platform/macos_system_stl')
 
                 if target.is_linux:
                     if not tc.os_sdk_local:
@@ -1294,10 +1294,10 @@ class GnuToolchain(Toolchain):
                     if not tc.os_sdk_local:
                         if target.is_ios:
                             self.setup_xcode_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
-                            self.platform_projects.append('build/platform/macos_system_stl')
+                            self.platform_projects.append('build/internal/platform/macos_system_stl')
                         if target.is_macos:
-                            self.setup_xcode_sdk(project='build/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
-                            self.platform_projects.append('build/platform/macos_system_stl')
+                            self.setup_xcode_sdk(project='build/internal/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
+                            self.platform_projects.append('build/internal/platform/macos_system_stl')
                     else:
                         if target.is_iossim:
                             self.env.setdefault('SDKROOT', subprocess.check_output(['xcrun', '-sdk', 'iphonesimulator', '--show-sdk-path']).strip())
@@ -1844,7 +1844,7 @@ class MSVCToolchain(MSVC, Toolchain):
         MSVC.__init__(self, tc, build)
 
         if self.tc.from_arcadia and not self.tc.ide_msvs:
-            self.platform_projects.append('build/platform/msvc')
+            self.platform_projects.append('build/internal/platform/msvc')
             if tc.under_wine:
                 self.platform_projects.append('build/platform/wine')
 
@@ -2398,7 +2398,7 @@ class Cuda(object):
         }
 
         if not self.build.tc.ide_msvs:
-            self.peerdirs.append('build/platform/msvc')
+            self.peerdirs.append('build/internal/platform/msvc')
         self.cuda_host_compiler_env.value = format_env(env)
         self.cuda_host_msvc_version.value = vc_version
         return '%(Y_VC_Root)s/bin/HostX64/x64/cl.exe' % env

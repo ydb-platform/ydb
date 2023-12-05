@@ -345,10 +345,12 @@ void PocoHTTPClient::makeRequestInternalImpl(
                     session = makeHTTPSession(target_uri, timeouts);
                 bool use_tunnel = request_configuration.protocol == DB::ProxyConfiguration::Protocol::HTTP && target_uri.getScheme() == "https";
 
-                // session->setProxy(
-                //     request_configuration.proxy_host,
-                //     request_configuration.proxy_port
-                // );
+#if 0
+                session->setProxy(
+                    request_configuration.proxy_host,
+                    request_configuration.proxy_port
+                );
+#endif
             }
             else
             {
@@ -359,8 +361,10 @@ void PocoHTTPClient::makeRequestInternalImpl(
                     session = makeHTTPSession(target_uri, timeouts);
             }
 
+#if 0
             /// In case of error this address will be written to logs
-            // request.SetResolvedRemoteHost(session->getResolvedAddress());
+            request.SetResolvedRemoteHost(session->getResolvedAddress());
+#endif
 
             Poco::Net::HTTPRequest poco_request(Poco::Net::HTTPRequest::HTTP_1_1);
 

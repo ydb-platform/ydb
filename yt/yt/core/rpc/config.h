@@ -292,6 +292,7 @@ class TBalancingChannelConfig
 public:
     //! First option: static list of addresses.
     std::optional<std::vector<TString>> Addresses;
+    bool DisableBalancingOnSingleAddress;
 
     //! Second option: SD endpoints.
     TServiceDiscoveryEndpointsConfigPtr Endpoints;

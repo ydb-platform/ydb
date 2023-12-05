@@ -35,8 +35,12 @@ PEERDIR(
     contrib/libs/snappy
     contrib/libs/sparsehash
     contrib/libs/zstd
+    contrib/restricted/aws/aws-c-auth
     contrib/restricted/aws/aws-c-common
     contrib/restricted/aws/aws-c-io
+    contrib/restricted/aws/aws-c-mqtt
+    contrib/restricted/aws/aws-c-sdkutils
+    contrib/restricted/aws/aws-crt-cpp
     contrib/restricted/boost/circular_buffer
     contrib/restricted/boost/container_hash
     contrib/restricted/boost/context

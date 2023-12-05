@@ -1,13 +1,10 @@
 PY3_LIBRARY()
 
-LICENSE(BSD-3-Clause)
-
 PROVIDES(numpy)
 
 VERSION(1.26.2)
 
-NO_COMPILER_WARNINGS()
-NO_EXTENDED_SOURCE_SEARCH()
+LICENSE(BSD-3-Clause)
 
 PEERDIR(
     contrib/libs/clapack
@@ -27,6 +24,19 @@ ADDINCL(
     contrib/python/numpy/include/numpy/core/src/npysort
     contrib/python/numpy/include/numpy/core/src/umath
     contrib/python/numpy/include/numpy/distutils/include
+)
+
+NO_COMPILER_WARNINGS()
+
+NO_EXTENDED_SOURCE_SEARCH()
+
+NO_LINT()
+
+NO_CHECK_IMPORTS(
+    numpy._pyinstaller.*
+    numpy.core.umath_tests
+    numpy.distutils.command.*
+    numpy.distutils.msvc9compiler
 )
 
 CFLAGS(
@@ -49,14 +59,205 @@ IF (CLANG)
     )
 ENDIF()
 
-NO_CHECK_IMPORTS(
-    numpy._pyinstaller.*
-    numpy.core.umath_tests
-    numpy.distutils.command.*
-    numpy.distutils.msvc9compiler
+SRCS(
+    numpy/core/src/_simd/_simd.c
+    numpy/core/src/_simd/_simd.dispatch.c
+    numpy/core/src/common/array_assign.c
+    numpy/core/src/common/cblasfuncs.c
+    numpy/core/src/common/mem_overlap.c
+    numpy/core/src/common/npy_argparse.c
+    numpy/core/src/common/npy_cpu_features.c
+    numpy/core/src/common/npy_hashtable.c
+    numpy/core/src/common/npy_longdouble.c
+    numpy/core/src/common/numpyos.c
+    # numpy/core/src/common/python_xerbla.c is defined in blas.
+    numpy/core/src/common/ucsnarrow.c
+    numpy/core/src/common/ufunc_override.c
+    numpy/core/src/dummymodule.c
+    numpy/core/src/multiarray/_multiarray_tests.c
+    numpy/core/src/multiarray/abstractdtypes.c
+    numpy/core/src/multiarray/alloc.c
+    numpy/core/src/multiarray/argfunc.dispatch.c
+    numpy/core/src/multiarray/array_assign_array.c
+    numpy/core/src/multiarray/array_assign_scalar.c
+    numpy/core/src/multiarray/array_coercion.c
+    numpy/core/src/multiarray/array_method.c
+    numpy/core/src/multiarray/arrayfunction_override.c
+    numpy/core/src/multiarray/arrayobject.c
+    numpy/core/src/multiarray/arraytypes.c
+    numpy/core/src/multiarray/buffer.c
+    numpy/core/src/multiarray/calculation.c
+    numpy/core/src/multiarray/common.c
+    numpy/core/src/multiarray/common_dtype.c
+    numpy/core/src/multiarray/compiled_base.c
+    numpy/core/src/multiarray/conversion_utils.c
+    numpy/core/src/multiarray/convert.c
+    numpy/core/src/multiarray/convert_datatype.c
+    numpy/core/src/multiarray/ctors.c
+    numpy/core/src/multiarray/datetime.c
+    numpy/core/src/multiarray/datetime_busday.c
+    numpy/core/src/multiarray/datetime_busdaycal.c
+    numpy/core/src/multiarray/datetime_strings.c
+    numpy/core/src/multiarray/descriptor.c
+    numpy/core/src/multiarray/dlpack.c
+    numpy/core/src/multiarray/dragon4.c
+    numpy/core/src/multiarray/dtype_transfer.c
+    numpy/core/src/multiarray/dtype_traversal.c
+    numpy/core/src/multiarray/dtypemeta.c
+    numpy/core/src/multiarray/einsum.c
+    numpy/core/src/multiarray/einsum_sumprod.c
+    numpy/core/src/multiarray/experimental_public_dtype_api.c
+    numpy/core/src/multiarray/flagsobject.c
+    numpy/core/src/multiarray/getset.c
+    numpy/core/src/multiarray/hashdescr.c
+    numpy/core/src/multiarray/item_selection.c
+    numpy/core/src/multiarray/iterators.c
+    numpy/core/src/multiarray/legacy_dtype_implementation.c
+    numpy/core/src/multiarray/lowlevel_strided_loops.c
+    numpy/core/src/multiarray/mapping.c
+    numpy/core/src/multiarray/methods.c
+    numpy/core/src/multiarray/multiarraymodule.c
+    numpy/core/src/multiarray/nditer_api.c
+    numpy/core/src/multiarray/nditer_constr.c
+    numpy/core/src/multiarray/nditer_pywrap.c
+    numpy/core/src/multiarray/nditer_templ.c
+    numpy/core/src/multiarray/number.c
+    numpy/core/src/multiarray/refcount.c
+    numpy/core/src/multiarray/scalarapi.c
+    numpy/core/src/multiarray/scalartypes.c
+    numpy/core/src/multiarray/sequence.c
+    numpy/core/src/multiarray/shape.c
+    numpy/core/src/multiarray/strfuncs.c
+    numpy/core/src/multiarray/temp_elide.c
+    numpy/core/src/multiarray/textreading/conversions.c
+    numpy/core/src/multiarray/textreading/field_types.c
+    numpy/core/src/multiarray/textreading/growth.c
+    numpy/core/src/multiarray/textreading/readtext.c
+    numpy/core/src/multiarray/textreading/rows.c
+    numpy/core/src/multiarray/textreading/str_to_int.c
+    numpy/core/src/multiarray/textreading/stream_pyobject.c
+    numpy/core/src/multiarray/textreading/tokenize.cpp
+    numpy/core/src/multiarray/typeinfo.c
+    numpy/core/src/multiarray/usertypes.c
+    numpy/core/src/multiarray/vdot.c
+    numpy/core/src/npymath/arm64_exports.c
+    numpy/core/src/npymath/halffloat.cpp
+    numpy/core/src/npymath/ieee754.c
+    numpy/core/src/npymath/ieee754.cpp
+    numpy/core/src/npymath/npy_math.c
+    numpy/core/src/npymath/npy_math_complex.c
+    numpy/core/src/npysort/binsearch.cpp
+    numpy/core/src/npysort/heapsort.cpp
+    numpy/core/src/npysort/mergesort.cpp
+    numpy/core/src/npysort/quicksort.cpp
+    numpy/core/src/npysort/radixsort.cpp
+    numpy/core/src/npysort/selection.cpp
+    numpy/core/src/npysort/simd_qsort.dispatch.cpp
+    numpy/core/src/npysort/simd_qsort_16bit.dispatch.cpp
+    numpy/core/src/npysort/timsort.cpp
+    numpy/core/src/umath/_operand_flag_tests.c
+    numpy/core/src/umath/_rational_tests.c
+    numpy/core/src/umath/_scaled_float_dtype.c
+    numpy/core/src/umath/_struct_ufunc_tests.c
+    numpy/core/src/umath/_umath_tests.c
+    numpy/core/src/umath/_umath_tests.dispatch.c
+    numpy/core/src/umath/clip.cpp
+    numpy/core/src/umath/dispatching.c
+    numpy/core/src/umath/extobj.c
+    numpy/core/src/umath/legacy_array_method.c
+    numpy/core/src/umath/loops.c
+    numpy/core/src/umath/loops_arithm_fp.dispatch.c
+    numpy/core/src/umath/loops_arithmetic.dispatch.c
+    numpy/core/src/umath/loops_autovec.dispatch.c
+    numpy/core/src/umath/loops_comparison.dispatch.c
+    numpy/core/src/umath/loops_exponent_log.dispatch.c
+    numpy/core/src/umath/loops_hyperbolic.dispatch.c
+    numpy/core/src/umath/loops_logical.dispatch.c
+    numpy/core/src/umath/loops_minmax.dispatch.c
+    numpy/core/src/umath/loops_modulo.dispatch.c
+    numpy/core/src/umath/loops_trigonometric.dispatch.c
+    numpy/core/src/umath/loops_umath_fp.dispatch.c
+    numpy/core/src/umath/loops_unary.dispatch.c
+    numpy/core/src/umath/loops_unary_complex.dispatch.c
+    numpy/core/src/umath/loops_unary_fp.dispatch.c
+    numpy/core/src/umath/loops_unary_fp_le.dispatch.c
+    numpy/core/src/umath/matmul.c
+    numpy/core/src/umath/override.c
+    numpy/core/src/umath/reduction.c
+    numpy/core/src/umath/scalarmath.c
+    numpy/core/src/umath/string_ufuncs.cpp
+    numpy/core/src/umath/ufunc_object.c
+    numpy/core/src/umath/ufunc_type_resolution.c
+    numpy/core/src/umath/umathmodule.c
+    numpy/core/src/umath/wrapping_array_method.c
+    numpy/f2py/src/fortranobject.c
+    numpy/fft/_pocketfft.c
+    numpy/linalg/lapack_litemodule.c
+    numpy/linalg/umath_linalg.cpp
 )
 
-NO_LINT()
+IF (CLANG OR CLANG_CL)
+    SET(F16C_FLAGS -mf16c)
+ELSE()
+    SET(F16C_FLAGS)
+ENDIF()
+
+IF (ARCH_X86_64)
+    SRC(numpy/core/src/_simd/_simd.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC(numpy/core/src/_simd/_simd.dispatch.avx512f.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC_C_AVX2(numpy/core/src/_simd/_simd.dispatch.fma3.avx2.c $F16C_FLAGS)
+    SRC(numpy/core/src/_simd/_simd.dispatch.sse42.c)
+    SRC_C_AVX2(numpy/core/src/multiarray/argfunc.dispatch.avx2.c $F16C_FLAGS)
+    SRC(numpy/core/src/multiarray/argfunc.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC(numpy/core/src/multiarray/argfunc.dispatch.sse42.c)
+    SRC(numpy/core/src/npysort/simd_qsort.dispatch.avx512_skx.cpp $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC(numpy/core/src/npysort/simd_qsort_16bit.dispatch.avx512_icl.cpp $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS -mavx512vbmi2)
+    SRC_C_AVX2(numpy/core/src/umath/_umath_tests.dispatch.avx2.c $F16C_FLAGS)
+    SRC(numpy/core/src/umath/_umath_tests.dispatch.sse41.c)
+    SRC_C_AVX2(numpy/core/src/umath/loops_arithm_fp.dispatch.fma3.avx2.c $F16C_FLAGS)
+    SRC_C_AVX2(numpy/core/src/umath/loops_arithmetic.dispatch.avx2.c $F16C_FLAGS)
+    SRC(numpy/core/src/umath/loops_arithmetic.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC(numpy/core/src/umath/loops_arithmetic.dispatch.avx512f.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC(numpy/core/src/umath/loops_arithmetic.dispatch.sse41.c)
+    SRC_C_AVX2(numpy/core/src/umath/loops_autovec.dispatch.avx2.c $F16C_FLAGS)
+    SRC_C_AVX2(numpy/core/src/umath/loops_comparison.dispatch.avx2.c $F16C_FLAGS)
+    SRC(numpy/core/src/umath/loops_comparison.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC(numpy/core/src/umath/loops_comparison.dispatch.avx512f.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC(numpy/core/src/umath/loops_comparison.dispatch.sse42.c)
+    SRC(numpy/core/src/umath/loops_exponent_log.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC(numpy/core/src/umath/loops_exponent_log.dispatch.avx512f.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC_C_AVX2(numpy/core/src/umath/loops_exponent_log.dispatch.fma3.avx2.c $F16C_FLAGS)
+    SRC(numpy/core/src/umath/loops_hyperbolic.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC_C_AVX2(numpy/core/src/umath/loops_hyperbolic.dispatch.fma3.avx2.c $F16C_FLAGS)
+    SRC_C_AVX2(numpy/core/src/umath/loops_logical.dispatch.avx2.c $F16C_FLAGS)
+    SRC(numpy/core/src/umath/loops_logical.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC_C_AVX2(numpy/core/src/umath/loops_minmax.dispatch.avx2.c $F16C_FLAGS)
+    SRC(numpy/core/src/umath/loops_minmax.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC(numpy/core/src/umath/loops_trigonometric.dispatch.avx512f.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC_C_AVX2(numpy/core/src/umath/loops_trigonometric.dispatch.fma3.avx2.c $F16C_FLAGS)
+    SRC(numpy/core/src/umath/loops_umath_fp.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC_C_AVX2(numpy/core/src/umath/loops_unary.dispatch.avx2.c $F16C_FLAGS)
+    SRC(numpy/core/src/umath/loops_unary.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC(numpy/core/src/umath/loops_unary_complex.dispatch.avx512f.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
+    SRC_C_AVX2(numpy/core/src/umath/loops_unary_complex.dispatch.fma3.avx2.c $F16C_FLAGS)
+    SRC(numpy/core/src/umath/loops_unary_fp.dispatch.sse41.c)
+    SRC(numpy/core/src/umath/loops_unary_fp_le.dispatch.sse41.c)
+ELSEIF (ARCH_ARM64)
+    SRC(numpy/core/src/umath/_umath_tests.dispatch.asimdhp.c)
+ENDIF()
+
+PY_REGISTER(
+    numpy.core._multiarray_tests
+    numpy.core._multiarray_umath
+    numpy.core._operand_flag_tests
+    numpy.core._rational_tests
+    numpy.core._simd
+    numpy.core._struct_ufunc_tests
+    numpy.core._umath_tests
+    numpy.fft._pocketfft_internal
+    numpy.linalg._umath_linalg
+    numpy.linalg.lapack_lite
+)
 
 PY_SRCS(
     TOP_LEVEL
@@ -232,6 +433,7 @@ PY_SRCS(
     numpy/exceptions.py
     numpy/exceptions.pyi
     numpy/f2py/__init__.py
+    numpy/f2py/__init__.pyi
     numpy/f2py/__main__.py
     numpy/f2py/__version__.py
     numpy/f2py/_backends/__init__.py
@@ -339,6 +541,16 @@ PY_SRCS(
     numpy/polynomial/polynomial.pyi
     numpy/polynomial/polyutils.py
     numpy/polynomial/polyutils.pyi
+    numpy/random/__init__.py
+    numpy/random/__init__.pyi
+    numpy/random/_generator.pyi
+    numpy/random/_mt19937.pyi
+    numpy/random/_pcg64.pyi
+    numpy/random/_philox.pyi
+    numpy/random/_pickle.py
+    numpy/random/_sfc64.pyi
+    numpy/random/bit_generator.pyi
+    numpy/random/mtrand.pyi
     numpy/testing/__init__.py
     numpy/testing/__init__.pyi
     numpy/testing/_private/__init__.py
@@ -350,209 +562,6 @@ PY_SRCS(
     numpy/typing/__init__.py
     numpy/typing/mypy_plugin.py
     numpy/version.py
-)
-
-SRCS(
-    numpy/core/src/_simd/_simd.c
-    numpy/core/src/common/array_assign.c
-    numpy/core/src/common/cblasfuncs.c
-    numpy/core/src/common/mem_overlap.c
-    numpy/core/src/common/npy_argparse.c
-    numpy/core/src/common/npy_cpu_features.c
-    numpy/core/src/common/npy_hashtable.c
-    numpy/core/src/common/npy_longdouble.c
-    numpy/core/src/common/numpyos.c
-    # numpy/core/src/common/python_xerbla.c is defined in blas.
-    numpy/core/src/common/ucsnarrow.c
-    numpy/core/src/common/ufunc_override.c
-    numpy/core/src/dummymodule.c
-    numpy/core/src/multiarray/_multiarray_tests.c
-    numpy/core/src/multiarray/abstractdtypes.c
-    numpy/core/src/multiarray/alloc.c
-    numpy/core/src/multiarray/array_assign_array.c
-    numpy/core/src/multiarray/array_assign_scalar.c
-    numpy/core/src/multiarray/array_coercion.c
-    numpy/core/src/multiarray/array_method.c
-    numpy/core/src/multiarray/arrayfunction_override.c
-    numpy/core/src/multiarray/arrayobject.c
-    numpy/core/src/multiarray/arraytypes.c
-    numpy/core/src/multiarray/buffer.c
-    numpy/core/src/multiarray/calculation.c
-    numpy/core/src/multiarray/common.c
-    numpy/core/src/multiarray/common_dtype.c
-    numpy/core/src/multiarray/compiled_base.c
-    numpy/core/src/multiarray/conversion_utils.c
-    numpy/core/src/multiarray/convert.c
-    numpy/core/src/multiarray/convert_datatype.c
-    numpy/core/src/multiarray/ctors.c
-    numpy/core/src/multiarray/datetime.c
-    numpy/core/src/multiarray/datetime_busday.c
-    numpy/core/src/multiarray/datetime_busdaycal.c
-    numpy/core/src/multiarray/datetime_strings.c
-    numpy/core/src/multiarray/descriptor.c
-    numpy/core/src/multiarray/dlpack.c
-    numpy/core/src/multiarray/dragon4.c
-    numpy/core/src/multiarray/dtype_transfer.c
-    numpy/core/src/multiarray/dtype_traversal.c
-    numpy/core/src/multiarray/dtypemeta.c
-    numpy/core/src/multiarray/einsum.c
-    numpy/core/src/multiarray/einsum_sumprod.c
-    numpy/core/src/multiarray/experimental_public_dtype_api.c
-    numpy/core/src/multiarray/flagsobject.c
-    numpy/core/src/multiarray/getset.c
-    numpy/core/src/multiarray/hashdescr.c
-    numpy/core/src/multiarray/item_selection.c
-    numpy/core/src/multiarray/iterators.c
-    numpy/core/src/multiarray/legacy_dtype_implementation.c
-    numpy/core/src/multiarray/lowlevel_strided_loops.c
-    numpy/core/src/multiarray/mapping.c
-    numpy/core/src/multiarray/methods.c
-    numpy/core/src/multiarray/multiarraymodule.c
-    numpy/core/src/multiarray/nditer_api.c
-    numpy/core/src/multiarray/nditer_constr.c
-    numpy/core/src/multiarray/nditer_pywrap.c
-    numpy/core/src/multiarray/nditer_templ.c
-    numpy/core/src/multiarray/number.c
-    numpy/core/src/multiarray/refcount.c
-    numpy/core/src/multiarray/scalarapi.c
-    numpy/core/src/multiarray/scalartypes.c
-    numpy/core/src/multiarray/sequence.c
-    numpy/core/src/multiarray/shape.c
-    numpy/core/src/multiarray/strfuncs.c
-    numpy/core/src/multiarray/temp_elide.c
-    numpy/core/src/multiarray/textreading/conversions.c
-    numpy/core/src/multiarray/textreading/field_types.c
-    numpy/core/src/multiarray/textreading/growth.c
-    numpy/core/src/multiarray/textreading/readtext.c
-    numpy/core/src/multiarray/textreading/rows.c
-    numpy/core/src/multiarray/textreading/str_to_int.c
-    numpy/core/src/multiarray/textreading/stream_pyobject.c
-    numpy/core/src/multiarray/textreading/tokenize.cpp
-    numpy/core/src/multiarray/typeinfo.c
-    numpy/core/src/multiarray/usertypes.c
-    numpy/core/src/multiarray/vdot.c
-    numpy/core/src/npymath/arm64_exports.c
-    numpy/core/src/npymath/halffloat.cpp
-    numpy/core/src/npymath/ieee754.c
-    numpy/core/src/npymath/ieee754.cpp
-    numpy/core/src/npymath/npy_math.c
-    numpy/core/src/npymath/npy_math_complex.c
-    numpy/core/src/npysort/binsearch.cpp
-    numpy/core/src/npysort/heapsort.cpp
-    numpy/core/src/npysort/mergesort.cpp
-    numpy/core/src/npysort/quicksort.cpp
-    numpy/core/src/npysort/radixsort.cpp
-    numpy/core/src/npysort/selection.cpp
-    numpy/core/src/npysort/timsort.cpp
-    numpy/core/src/umath/_operand_flag_tests.c
-    numpy/core/src/umath/_rational_tests.c
-    numpy/core/src/umath/_scaled_float_dtype.c
-    numpy/core/src/umath/_struct_ufunc_tests.c
-    numpy/core/src/umath/_umath_tests.c
-    numpy/core/src/umath/clip.cpp
-    numpy/core/src/umath/dispatching.c
-    numpy/core/src/umath/extobj.c
-    numpy/core/src/umath/legacy_array_method.c
-    numpy/core/src/umath/loops.c
-    numpy/core/src/umath/matmul.c
-    numpy/core/src/umath/override.c
-    numpy/core/src/umath/reduction.c
-    numpy/core/src/umath/scalarmath.c
-    numpy/core/src/umath/string_ufuncs.cpp
-    numpy/core/src/umath/ufunc_object.c
-    numpy/core/src/umath/ufunc_type_resolution.c
-    numpy/core/src/umath/umathmodule.c
-    numpy/core/src/umath/wrapping_array_method.c
-    numpy/f2py/src/fortranobject.c
-    numpy/fft/_pocketfft.c
-    numpy/linalg/lapack_litemodule.c
-    numpy/linalg/umath_linalg.cpp
-)
-
-IF (CLANG OR CLANG_CL)
-    SET(F16C_FLAGS -mf16c)
-ELSE()
-    SET(F16C_FLAGS)
-ENDIF()
-
-SRCS(
-    numpy/core/src/_simd/_simd.dispatch.c
-    numpy/core/src/multiarray/argfunc.dispatch.c
-    numpy/core/src/npysort/simd_qsort.dispatch.cpp
-    numpy/core/src/npysort/simd_qsort_16bit.dispatch.cpp
-    numpy/core/src/umath/_umath_tests.dispatch.c
-    numpy/core/src/umath/loops_arithm_fp.dispatch.c
-    numpy/core/src/umath/loops_arithmetic.dispatch.c
-    numpy/core/src/umath/loops_autovec.dispatch.c
-    numpy/core/src/umath/loops_comparison.dispatch.c
-    numpy/core/src/umath/loops_exponent_log.dispatch.c
-    numpy/core/src/umath/loops_hyperbolic.dispatch.c
-    numpy/core/src/umath/loops_logical.dispatch.c
-    numpy/core/src/umath/loops_minmax.dispatch.c
-    numpy/core/src/umath/loops_modulo.dispatch.c
-    numpy/core/src/umath/loops_trigonometric.dispatch.c
-    numpy/core/src/umath/loops_umath_fp.dispatch.c
-    numpy/core/src/umath/loops_unary.dispatch.c
-    numpy/core/src/umath/loops_unary_complex.dispatch.c
-    numpy/core/src/umath/loops_unary_fp.dispatch.c
-    numpy/core/src/umath/loops_unary_fp_le.dispatch.c
-)
-
-IF (ARCH_X86_64)
-    SRC(numpy/core/src/_simd/_simd.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
-    SRC(numpy/core/src/_simd/_simd.dispatch.avx512f.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
-    SRC_C_AVX2(numpy/core/src/_simd/_simd.dispatch.fma3.avx2.c $F16C_FLAGS)
-    SRC(numpy/core/src/_simd/_simd.dispatch.sse42.c)
-    SRC_C_AVX2(numpy/core/src/multiarray/argfunc.dispatch.avx2.c $F16C_FLAGS)
-    SRC(numpy/core/src/multiarray/argfunc.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
-    SRC(numpy/core/src/multiarray/argfunc.dispatch.sse42.c)
-    SRC(numpy/core/src/npysort/simd_qsort.dispatch.avx512_skx.cpp $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
-    SRC(numpy/core/src/npysort/simd_qsort_16bit.dispatch.avx512_icl.cpp $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS -mavx512vbmi2)
-    SRC_C_AVX2(numpy/core/src/umath/_umath_tests.dispatch.avx2.c $F16C_FLAGS)
-    SRC(numpy/core/src/umath/_umath_tests.dispatch.sse41.c)
-    SRC_C_AVX2(numpy/core/src/umath/loops_arithm_fp.dispatch.fma3.avx2.c $F16C_FLAGS)
-    SRC_C_AVX2(numpy/core/src/umath/loops_arithmetic.dispatch.avx2.c $F16C_FLAGS)
-    SRC(numpy/core/src/umath/loops_arithmetic.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
-    SRC(numpy/core/src/umath/loops_arithmetic.dispatch.avx512f.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
-    SRC(numpy/core/src/umath/loops_arithmetic.dispatch.sse41.c)
-    SRC_C_AVX2(numpy/core/src/umath/loops_autovec.dispatch.avx2.c $F16C_FLAGS)
-    SRC_C_AVX2(numpy/core/src/umath/loops_comparison.dispatch.avx2.c $F16C_FLAGS)
-    SRC(numpy/core/src/umath/loops_comparison.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
-    SRC(numpy/core/src/umath/loops_comparison.dispatch.avx512f.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
-    SRC(numpy/core/src/umath/loops_comparison.dispatch.sse42.c)
-    SRC(numpy/core/src/umath/loops_exponent_log.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
-    SRC(numpy/core/src/umath/loops_exponent_log.dispatch.avx512f.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
-    SRC_C_AVX2(numpy/core/src/umath/loops_exponent_log.dispatch.fma3.avx2.c $F16C_FLAGS)
-    SRC(numpy/core/src/umath/loops_hyperbolic.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
-    SRC_C_AVX2(numpy/core/src/umath/loops_hyperbolic.dispatch.fma3.avx2.c $F16C_FLAGS)
-    SRC_C_AVX2(numpy/core/src/umath/loops_logical.dispatch.avx2.c $F16C_FLAGS)
-    SRC(numpy/core/src/umath/loops_logical.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
-    SRC_C_AVX2(numpy/core/src/umath/loops_minmax.dispatch.avx2.c $F16C_FLAGS)
-    SRC(numpy/core/src/umath/loops_minmax.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
-    SRC(numpy/core/src/umath/loops_trigonometric.dispatch.avx512f.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
-    SRC_C_AVX2(numpy/core/src/umath/loops_trigonometric.dispatch.fma3.avx2.c $F16C_FLAGS)
-    SRC(numpy/core/src/umath/loops_umath_fp.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
-    SRC_C_AVX2(numpy/core/src/umath/loops_unary.dispatch.avx2.c $F16C_FLAGS)
-    SRC(numpy/core/src/umath/loops_unary.dispatch.avx512_skx.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
-    SRC(numpy/core/src/umath/loops_unary_complex.dispatch.avx512f.c $AVX_CFLAGS $F16C_FLAGS $AVX2_CFLAGS $AVX512_CFLAGS)
-    SRC_C_AVX2(numpy/core/src/umath/loops_unary_complex.dispatch.fma3.avx2.c $F16C_FLAGS)
-    SRC(numpy/core/src/umath/loops_unary_fp.dispatch.sse41.c)
-    SRC(numpy/core/src/umath/loops_unary_fp_le.dispatch.sse41.c)
-ELSEIF (ARCH_ARM64)
-    SRC(numpy/core/src/umath/_umath_tests.dispatch.asimdhp.c)
-ENDIF()
-
-PY_REGISTER(
-    numpy.core._multiarray_tests
-    numpy.core._multiarray_umath
-    numpy.core._operand_flag_tests
-    numpy.core._rational_tests
-    numpy.core._simd
-    numpy.core._struct_ufunc_tests
-    numpy.core._umath_tests
-    numpy.fft._pocketfft_internal
-    numpy.linalg._umath_linalg
-    numpy.linalg.lapack_lite
 )
 
 RESOURCE_FILES(

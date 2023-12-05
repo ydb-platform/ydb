@@ -39,6 +39,7 @@ message TConfig
 
     repeated string ProxyAddresses = 18;
     optional bool EnableProxyDiscovery = 19;
+    optional bool EnablePowerOfTwoChoicesStrategy = 21;
 }
 
 message TClustersConfig

@@ -1,6 +1,0 @@
-version: '3.4'
-services:
-  srv1:
-    build: srv1
-  srv2:
-    build: srv2

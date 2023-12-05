@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/yaml/fyamlcpp/fyamlcpp.h>
+#include <ydb/library/fyamlcpp/fyamlcpp.h>
 #include <ydb/library/actors/core/actor.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 

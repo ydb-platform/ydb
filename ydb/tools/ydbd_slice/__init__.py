@@ -388,6 +388,9 @@ def deduce_kikimr_bin_from_args(args):
     else:
         sys.exit("unable to deduce kikimr bin")
 
+    if 'LD_LIBRARY_PATH' not in os.environ:
+        os.environ['LD_LIBRARY_PATH'] = os.path.dirname(path)
+
     compressed_path = args.kikimr_lz4
 
     logger.info("use kikimr bin '%s'", path)
@@ -466,7 +469,7 @@ def binaries_args():
     args.add_argument(
         "--build_args",
         metavar="BUILD_ARGS",
-        default=['--checkout', '-r'],
+        default=['-r'],
         nargs=argparse.REMAINDER,
         help="remaining arguments are treated as arguments to 'ya make' tool (only valid if --arcadia is provided)"
     )
@@ -736,7 +739,7 @@ def add_arguments_docker_build_with_remainder(mode, add_force_rebuild=False):
     group.add_argument(
         "--build_args",
         metavar="BUILD_ARGS",
-        default=['--checkout', '-r'],
+        default=['-r'],
         nargs=argparse.REMAINDER,
         help="remaining arguments are treated as arguments to 'ya package' tool"
     )

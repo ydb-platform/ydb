@@ -34,6 +34,7 @@ public:
     bool Apply(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
+        ACFL_INFO("normalizer", "TGranulesNormalizer")("message", TStringBuilder() << "apply " << Chunks.size() << " chunks");
 
         for (auto&& key : Chunks) {
             auto granuleIt = Granule2Path.find(key.GranuleId);
@@ -104,6 +105,7 @@ public:
                     if (chunksCount == 10000) {
                         tasks.emplace_back(changes);
                         controller.GetCounters().CountObjects(chunksCount);
+                        changes.reset(new TNormalizerResult(granule2Path));
                         chunksCount = 0;
                     }
                 }

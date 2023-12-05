@@ -1,6 +1,7 @@
 #include "abstract_scheme.h"
 
 #include <ydb/core/tx/columnshard/engines/index_info.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NOlap {
 
@@ -101,6 +102,12 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::PrepareForInsert(const TStr
     batch = NArrow::SortBatch(batch, sortingKey, true);
     Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, sortingKey));
     return batch;
+}
+
+ui32 ISnapshotSchema::GetColumnId(const std::string& columnName) const {
+    auto id = GetColumnIdOptional(columnName);
+    AFL_VERIFY(id)("column_name", columnName)("schema", JoinSeq(",", GetSchema()->field_names()));
+    return *id;
 }
 
 }

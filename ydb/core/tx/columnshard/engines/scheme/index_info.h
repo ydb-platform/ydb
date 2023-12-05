@@ -37,6 +37,9 @@ private:
     TIndexInfo(const TString& name, ui32 id);
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
     TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
+    void BuildSchemaWithSpecials();
+    void BuildArrowSchema();
+
 public:
     static constexpr const char* SPEC_COL_PLAN_STEP = "_yql_plan_step";
     static constexpr const char* SPEC_COL_TX_ID = "_yql_tx_id";
@@ -207,8 +210,8 @@ private:
     ui32 Id;
     ui64 Version = 0;
     TString Name;
-    mutable std::shared_ptr<arrow::Schema> Schema;
-    mutable std::shared_ptr<arrow::Schema> SchemaWithSpecials;
+    std::shared_ptr<arrow::Schema> Schema;
+    std::shared_ptr<arrow::Schema> SchemaWithSpecials;
     std::shared_ptr<arrow::Schema> SortingKey;
     std::shared_ptr<arrow::Schema> ReplaceKey;
     std::shared_ptr<arrow::Schema> ExtendedKey; // Extend PK with snapshot columns to allow old shapshot reads

@@ -1,5 +1,0 @@
-<tmp_path>/program.sql:<main>: Warning: Parse Sql
-
-    <tmp_path>/program.sql:<main>:5:8: Warning: Use of deprecated DisableAnsiOrderByLimitInUnionAll pragma. It will be dropped soon
-    	pragma DisableAnsiOrderByLimitInUnionAll;
-	       ^

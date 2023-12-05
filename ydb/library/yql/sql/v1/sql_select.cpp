@@ -1148,20 +1148,8 @@ bool TSqlSelect::ValidateLimitOrderByWithSelectOp(TMaybe<TSelectKindPlacement> p
         // not in select_op chain
         return true;
     }
-    if (!Ctx.AnsiOrderByLimitInUnionAll.Defined()) {
-        if (!placement->IsLastInSelectOp) {
-            Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_LIMIT_ORDER_BY_WITH_UNION)
-                << what << " will not be allowed here for ANSI compliant UNION ALL.\n"
-                << "For details please consult documentation on PRAGMA AnsiOrderByLimitInUnionAll";
-        } else {
-            Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_LIMIT_ORDER_BY_WITH_UNION)
-                << what << " will be applied to last subquery in UNION ALL, not to entire UNION ALL.\n"
-                << "For ANSI compliant behavior please use PRAGMA AnsiOrderByLimitInUnionAll";
-        }
-        return true;
-    }
 
-    if (*Ctx.AnsiOrderByLimitInUnionAll && !placement->IsLastInSelectOp) {
+    if (!placement->IsLastInSelectOp) {
         Ctx.Error() << what << " within UNION ALL is only allowed after last subquery";
         return false;
     }
@@ -1169,9 +1157,6 @@ bool TSqlSelect::ValidateLimitOrderByWithSelectOp(TMaybe<TSelectKindPlacement> p
 }
 
 bool TSqlSelect::NeedPassLimitOrderByToUnderlyingSelect(TMaybe<TSelectKindPlacement> placement) {
-    if (!Ctx.AnsiOrderByLimitInUnionAll.Defined() || !*Ctx.AnsiOrderByLimitInUnionAll) {
-        return true;
-    }
     return !placement.Defined() || !placement->IsLastInSelectOp;
 }
 
@@ -1262,24 +1247,16 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind& no
             res.Settings.Discard = settings.Discard;
         } else if (settings.Discard) {
             auto discardPos = Ctx.TokenPosition(node.GetBlock1().GetToken1());
-            if (Ctx.AnsiOrderByLimitInUnionAll.Defined() && *Ctx.AnsiOrderByLimitInUnionAll) {
-                Ctx.Error(discardPos) << "DISCARD within UNION ALL is only allowed before first subquery";
-                return {};
-            }
-            Ctx.Warning(discardPos, TIssuesIds::YQL_LIMIT_ORDER_BY_WITH_UNION)
-                << "DISCARD will be ignored here. Please use DISCARD before first subquery in UNION ALL if you want to discard entire UNION ALL result";
+            Ctx.Error(discardPos) << "DISCARD within UNION ALL is only allowed before first subquery";
+            return {};
         }
 
         if (placement->IsLastInSelectOp) {
             res.Settings.Label = settings.Label;
         } else if (!settings.Label.Empty()) {
             auto labelPos = Ctx.TokenPosition(node.GetBlock3().GetToken1());
-            if (Ctx.AnsiOrderByLimitInUnionAll.Defined() && *Ctx.AnsiOrderByLimitInUnionAll) {
-                Ctx.Error(labelPos) << "INTO RESULT within UNION ALL is only allowed after last subquery";
-                return {};
-            }
-            Ctx.Warning(labelPos, TIssuesIds::YQL_LIMIT_ORDER_BY_WITH_UNION)
-                << "INTO RESULT will be ignored here. Please use INTO RESULT after last subquery in UNION ALL if you want label entire UNION ALL result";
+            Ctx.Error(labelPos) << "INTO RESULT within UNION ALL is only allowed after last subquery";
+            return {};
         }
 
         settings = {};

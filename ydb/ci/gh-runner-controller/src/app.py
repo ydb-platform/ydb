@@ -18,20 +18,20 @@ def prepare_logger():
     logging.config.dictConfig(
         {
             "version": 1,
-            "disable_existing_loggers": True,
+            "disable_existing_loggers": False,
             "formatters": {
                 "standard": {"format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"},
             },
             "handlers": {
                 "default": {
                     #
-                    "level": "INFO",
+                    "level": "NOTSET",
                     "formatter": "standard",
                     "class": "logging.StreamHandler",
                 },
             },
             "loggers": {
-                "": {
+                '': {
                     #
                     "handlers": ["default"],
                     "level": "INFO",
@@ -91,6 +91,8 @@ def main():
     # noinspection PyUnusedLocal
     def sigint_handler(signum, frame):
         logger.info("catch SIGINT, set exit_event")
+        # FIXME: remove
+        raise SystemExit(0)
         exit_event.set()
 
     signal.signal(signal.SIGINT, sigint_handler)

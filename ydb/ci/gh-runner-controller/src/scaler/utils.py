@@ -1,6 +1,7 @@
 import base64
 import os
 import time
+import logging
 from typing import Callable, Optional
 
 
@@ -8,11 +9,14 @@ def generate_short_id(n=6):
     return base64.b32encode(os.urandom(n)).replace(b"=", b"").decode("utf8").lower()
 
 
+logger = logging.getLogger(__name__)
+
+
 class ExpireItemsSet:
-    def __init__(self, ttl, remove_callback: Optional[Callable[..., None]] = None):
+    def __init__(self, ttl, set_name: Optional[str]):
         self.items = {}
         self.ttl = ttl
-        self.remove_callback = remove_callback
+        self.set_name = set_name
 
     def add(self, item, timestamp=None):
         if timestamp is None:
@@ -24,8 +28,8 @@ class ExpireItemsSet:
         for k in list(self.items.keys()):
             if t > self.items[k] + self.ttl:
                 del self.items[k]
-                if self.remove_callback:
-                    self.remove_callback(k)
+                if self.set_name:
+                    logger.info("remove %s from %s", k, self.set_name)
 
     def __len__(self):
         self.evict_expired()

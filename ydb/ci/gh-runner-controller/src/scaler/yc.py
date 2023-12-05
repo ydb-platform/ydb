@@ -1,3 +1,4 @@
+import logging
 import requests
 import yandexcloud
 
@@ -39,6 +40,7 @@ def discover_folder_id():
 
 class YandexCloudProvider:
     def __init__(self, use_metadata, sa_key):
+        self.logger = logging.getLogger(__name__)
         if not use_metadata and not sa_key:
             raise ValueError("Service account key or metadata discovery is required")
 
@@ -78,28 +80,41 @@ class YandexCloudProvider:
 
         return cnt, cnt_provisioning
 
-    def start_vm(self, instance_name, user_data, vm_labels):
+    def start_vm(self, instance_name: str, preset_name: str, user_data, vm_labels):
         metadata = {
             "serial-port-enable": "1",
             "user-data": user_data,
         }
 
+        preset = self.cfg.vm_presets["default"]
+
+        if preset_name in self.cfg.vm_presets:
+            preset.update(self.cfg.vm_presets[preset_name])
+
+        self.logger.info("create vm with preset: %r, labels %r", preset, vm_labels)
+
+        #
+        # class A:
+        #     id = "fake-id"
+        #
+        # return A()
+
         request = CreateInstanceRequest(
             name=instance_name,
             folder_id=self.cfg.yc_folder_id,
             zone_id=self.cfg.yc_zone_id,
-            platform_id=self.cfg.platform_id,
+            platform_id=preset['platform_id'],
             resources_spec=ResourcesSpec(
-                cores=int(self.cfg.cores),
-                memory=int(self.cfg.memory),
+                cores=int(preset["cpu_cores"]),
+                memory=int(preset["memory_gb"] * 1024 * 1024 * 1024),
                 core_fraction=100,
             ),
-            scheduling_policy=SchedulingPolicy(preemptible=self.cfg.preemptible),
+            scheduling_policy=SchedulingPolicy(preemptible=preset['preemptible']),
             boot_disk_spec=AttachedDiskSpec(
                 auto_delete=True,
                 disk_spec=AttachedDiskSpec.DiskSpec(
-                    type_id=self.cfg.disk_type,
-                    size=int(self.cfg.disk_size),
+                    type_id=preset["disk_type"],
+                    size=int(preset["disk_size_gb"] * 1024 * 1024 * 1024),
                     image_id=self.get_latest_image_id(),
                 ),
             ),

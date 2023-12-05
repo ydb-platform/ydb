@@ -35,8 +35,10 @@ class Clickhouse:
             "query": query,
             "default_format": "JSONEachRow",
         }
+
         for i in range(5):
             response = None
+
             try:
                 response = requests.get(self.url, params=params, headers=self.auth, timeout=(5, 10))
                 response.raise_for_status()

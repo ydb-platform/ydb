@@ -1,4 +1,15 @@
+import dataclasses
+import logging
 from .ch import Clickhouse
+
+logger = logging.getLogger(__name__)
+
+
+@dataclasses.dataclass
+class JobQueue:
+    preset: str
+    in_queue: int
+    in_progress: int
 
 
 def get_jobs_summary(ch: Clickhouse):
@@ -6,17 +17,19 @@ def get_jobs_summary(ch: Clickhouse):
 
     RUNNER_TYPE_LABELS = ["auto-provisioned"]
 
-    # noinspection SqlShouldBeInGroupBy,SqlResolve,SqlNoDataSourceInspection
+    # noinspection SqlShouldBeInGroupBy,SqlResolve,SqlNoDataSourceInspection,SqlAggregates,SqlUnused
     QUEUE_QUERY = f"""SELECT
-        last_status AS status,
-        toUInt32(count()) AS length,
-        labels
+        labels,
+        toUInt32(countIf(last_status='queued')) AS count_queued,
+        toUInt32(countIf(last_status='in_progress')) AS count_in_progress,
+        groupArray(run_id) as run_ids
     FROM
     (
         SELECT
             arraySort(groupArray(status))[-1] AS last_status,
             labels,
             id,
+            run_id,
             html_url
         FROM workflow_jobs
         WHERE has(labels, 'self-hosted')
@@ -27,18 +40,26 @@ def get_jobs_summary(ch: Clickhouse):
         HAVING last_status IN ('in_progress', 'queued')
     )
     GROUP BY ALL
-    ORDER BY labels, last_status"""
-    result = ch.select(QUEUE_QUERY)
+    ORDER BY labels"""
 
-    queued = in_progress = 0
-    # TODO: add multiple labels support
-    for r in result:
-        status = r["status"]
-        if status == "queued":
-            queued += r["length"]
-        elif status == "in_progress":
-            in_progress += r["length"]
-        else:
-            raise Exception(f"Unknown status {status}")
+    ch_result = ch.select(QUEUE_QUERY)
 
-    return queued, in_progress
+    logger.info("ch_result=%r", ch_result)
+
+    result = []
+    for r in ch_result:
+        preset_name = "default"
+        for k in r['labels']:
+            if k.startswith('build-preset'):
+                preset_name = k.replace('build-preset-', '')
+
+        result.append(
+            #
+            JobQueue(
+                preset=preset_name,
+                in_queue=r["count_queued"],
+                in_progress=r["count_in_progress"]
+            )
+        )
+
+    return result

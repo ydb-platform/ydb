@@ -1,6 +1,7 @@
 import logging
 import time
 from threading import Event
+from collections import defaultdict
 
 import grpc
 
@@ -30,6 +31,36 @@ class DynamicValue:
                 self.expire_time = None
         return self.current
 
+class TimeoutFlag:
+    def __init__(self, expire_time=300):
+        self._value = False
+        self.expire_time = expire_time
+        self.expire_ts = None
+
+    def set(self):
+        self.expire_ts = time.time() + self.expire_time
+        self._value = True
+
+    def clear(self):
+        self.expire_ts = None
+        self._value = False
+
+    @property
+    def value(self):
+        if self.expire_ts is None:
+            return self._value
+
+        if time.time() > self.expire_ts:
+            self.clear()
+
+        return self._value
+
+    def __bool__(self):
+        return self.value
+
+class VMQuotaError(Exception):
+    pass
+
 
 class ScaleController:
     prefix = "ghrun"
@@ -43,85 +74,107 @@ class ScaleController:
         self.gh = gh
         self.yc = yc
         self.maximum_vms = DynamicValue(20)
-        self.fresh_runners = ExpireItemsSet(60, lambda i: self.logger.info("remove %s from fresh_runners", i))
-        self.wait_for_runners = ExpireItemsSet(600, lambda i: self.logger.info("remove %s from wait_for_runners", i))
+        self.resource_exhausted = TimeoutFlag(self.resource_exhausted_pause)
+        self.fresh_runners = defaultdict(lambda: ExpireItemsSet(60, "fresh_runners"))
+        self.wait_for_runners = defaultdict(lambda: ExpireItemsSet(600, "wait_for_runners"))
         self.exit_event = exit_event
 
     def tick(self):
-        jobs_queued, jobs_in_progress = get_jobs_summary(self.ch)
-        maximum_vms = self.maximum_vms.get()
+        queues = get_jobs_summary(self.ch)
+
         vm_count, vm_provisioning = self.yc.get_vm_count(self.prefix)
 
-        self.logger.info(
-            "jobs: %s/%s (queued, in_progress), vms: %s/%s/%s (total/provisioning/max), wait_runners: %s, "
-            "fresh_runners: %s",
-            jobs_queued,
-            jobs_in_progress,
-            vm_count,
-            vm_provisioning,
-            maximum_vms,
-            len(self.wait_for_runners),
-            len(self.fresh_runners),
-        )
+        self.logger.info("vms: %s/%s (total/provisioning)", vm_count, vm_provisioning)
 
-        if vm_count >= maximum_vms:
-            self.logger.info("maximum vms reached")
-        else:
-            cnt = min(maximum_vms - vm_count, jobs_queued - len(self.wait_for_runners) - len(self.fresh_runners))
+        do_check_idle_runners = True
+
+        for queue in queues:
+            wait_for_runners = self.wait_for_runners[queue.preset]
+            fresh_runners = self.fresh_runners[queue.preset]
+            self.logger.info("preset %s: jobs %s/%s, wait_runners: %s, fresh_runners: %s",
+                             queue.preset, queue.in_queue, queue.in_progress, len(wait_for_runners), len(fresh_runners))
+            cnt = queue.in_queue - len(wait_for_runners) - len(fresh_runners)
+
+            if queue.in_queue != 0:
+                do_check_idle_runners = True
+
             if cnt > 0:
-                self.logger.info("try to start %s runners", cnt)
-                for x in range(cnt):
-                    try:
-                        runner_name = self.start_runner()
-                    except grpc.RpcError as rpc_error:
-                        if rpc_error.code() == grpc.StatusCode.RESOURCE_EXHAUSTED:
-                            self.logger.info(
-                                "RESOURCE_EXHAUSTED, update maximum_vm=%s for %s seconds",
-                                vm_count,
-                                self.resource_exhausted_pause,
-                            )
-                            self.maximum_vms.update_for(vm_count, self.resource_exhausted_pause)
-                            break
-                        else:
-                            raise
-                    else:
-                        self.wait_for_runners.add(runner_name)
-                        # Incrementing vm_count without waiting success start of the vm
-                        # it helps when we have a lot of tasks and maximum_vm can be fixed with too low value
-                        vm_count += 1
-
-        # remove idle github runners one per tick
-        if jobs_queued == 0 or self.wait_for_runners:
-            self.logger.info("check for idle and new runners")
-            for runner in self.gh.get_runners():
-                if not runner.has_tag(self.prefix):
+                if self.resource_exhausted:
+                    self.logger.info("resource_exhausted: skip preset %s", queue.preset)
                     continue
 
-                if self.wait_for_runners.remove_if_contains(runner.name):
-                    self.logger.info("runner %s is ready", runner.full_name)
-                    self.fresh_runners.add(runner.name)
-                elif runner.online and not runner.busy:
-                    self.logger.info("remove GH runner: #%s %s (%s)", runner.id, runner.name, ", ".join(runner.tags))
-                    self.delete_runner(runner)
+                try:
+                    runner_name = self.start_runner(queue.preset)
+                except VMQuotaError:
+                    self.logger.info("QUOTA_ERROR, update maximum_vm=%s for %s seconds",
+                                     vm_count, self.resource_exhausted_pause)
+                    self.resource_exhausted.set()
                     break
-                elif runner.busy:
-                    if self.fresh_runners.remove_if_contains(runner.name):
-                        self.logger.info("remove runner %s from fresh runners", runner.full_name)
-                elif runner.offline:
-                    self.logger.info(
-                        "remove offline GH runner: #%s %s (%s)", runner.id, runner.name, ", ".join(runner.tags)
-                    )
-                    self.delete_runner(runner)
+                else:
+                    wait_for_runners.add(runner_name)
 
-    def start_runner(self):
+        # remove idle github runners one per tick
+        if do_check_idle_runners:
+            self.check_idle_runners()
+
+    def check_idle_runners(self):
+        # FIXME: too complex
+        self.logger.info("check for idle and new runners")
+
+        wait_list = {}
+        fresh_list = {}
+
+        for preset, wait_for_runners in self.wait_for_runners.items():
+            wait_for_runners.evict_expired()
+            for runner_id in wait_for_runners.items:
+                wait_list[runner_id] = preset
+
+        for preset, fresh_runners in self.fresh_runners.items():
+            fresh_runners.evict_expired()
+            for runner_id in fresh_runners.items:
+                fresh_list[runner_id] = preset
+
+        for runner in self.gh.get_runners():
+            if not runner.has_tag(self.prefix):
+                continue
+
+            if runner.name in wait_list:
+                preset = wait_list[runner.name]
+                self.logger.info("runner %s is ready", runner.full_name)
+                self.wait_for_runners[preset].remove(runner.name)
+                self.fresh_runners[preset].add(runner.name)
+            elif runner.online and not runner.busy and runner.name not in fresh_list:
+                self.logger.info("remove GH runner: #%s %s (%s)", runner.id, runner.name, ", ".join(runner.tags))
+                self.delete_runner(runner)
+                break
+            elif runner.busy:
+                if runner.name in fresh_list:
+                    preset = fresh_list[runner.name]
+                    self.fresh_runners[preset].remove(runner.name)
+                    self.logger.info("remove runner %s from fresh runners", runner.full_name)
+            elif runner.offline:
+                self.logger.info(
+                    "remove offline GH runner: #%s %s (%s)", runner.id, runner.name, ", ".join(runner.tags)
+                )
+                self.delete_runner(runner)
+
+    def start_runner(self, preset_name: str):
         runner_name = f"{self.prefix}-{generate_short_id()}"
         new_runner_token = self.gh.get_new_runner_token()
         # FIXME: auto-provisioned defined twice
-        labels = [self.prefix, "auto-provisioned"]
+        labels = [self.prefix, "auto-provisioned", f"build-preset-{preset_name}"]
         vm_labels = {self.prefix: runner_name}
         user_data = create_userdata(self.gh.html_url, new_runner_token, runner_name, labels, self.cfg.ssh_keys)
         self.logger.info("start runner %s (%s)", runner_name, labels)
-        instance = self.yc.start_vm(runner_name, user_data, vm_labels)
+        try:
+            instance = self.yc.start_vm(runner_name, preset_name, user_data, vm_labels)
+        except grpc.RpcError as rpc_error:
+            # noinspection PyUnresolvedReferences
+            if rpc_error.code() == grpc.StatusCode.RESOURCE_EXHAUSTED:
+                raise VMQuotaError()
+            else:
+                raise
+
         self.logger.info("instance %s started", instance.id)
         return runner_name
 

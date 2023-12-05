@@ -20,19 +20,20 @@ namespace NKikimr {
         TQueueActorMapPtr QueueActorMapPtr;
         TActiveActors ActiveActors;
 
-        TActorId Sender;
-        // TDeleter Deleter;
+        TActorId SenderId;
+        TActorId DeleterId;
 
         void Bootstrap(const TActorContext &ctx) {
             CreateVDisksQueues();
             auto [sendOnMainParts, tryDeleteParts] = CollectKeys();
 
-            Sender = ctx.Register(new TSender(std::move(sendOnMainParts), QueueActorMapPtr, Ctx));
-            ActiveActors.Insert(Sender, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+            SenderId = ctx.Register(new TSender(std::move(sendOnMainParts), QueueActorMapPtr, Ctx));
+            ActiveActors.Insert(SenderId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+
+            DeleterId = ctx.Register(new TDeleter(std::move(sendOnMainParts), QueueActorMapPtr, Ctx));
+            ActiveActors.Insert(DeleterId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
 
             Become(&TThis::StateFunc);
-
-            // Ctx->VCtx->ReplNodeRequestQuoter
         }
 
         void CreateVDisksQueues() {
@@ -91,8 +92,8 @@ namespace NKikimr {
         }
 
         void DoJobQuant() {
-            // Sender.DoJobQuant();
-            // Deleter.DoJobQuant();
+            Send(SenderId, new NActors::TEvents::TEvWakeup());
+            Send(DeleterId, new NActors::TEvents::TEvWakeup());
         }
 
         TVector<ui8> PartsToSendOnMain(const TIngress& ingress) {

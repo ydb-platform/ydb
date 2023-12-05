@@ -8,11 +8,22 @@
 
 namespace NKikimr {
 
-    class TDeleter {
-    private:
+    class TDeleter : public TActorBootstrapped<TDeleter> {
         TQueue<TPartInfo> Keys;
         TQueueActorMapPtr QueueActorMapPtr;
         std::shared_ptr<TBalancingCtx> Ctx;
+
+        void Bootstrap() {
+            Become(&TThis::StateFunc);
+        }
+
+        void DoJobQuant(const TActorContext &ctx) {
+            Y_UNUSED(ctx);
+        }
+
+        STRICT_STFUNC(StateFunc,
+            CFunc(NActors::TEvents::TEvWakeup::EventType, DoJobQuant)
+        );
     
     public:
         TDeleter() = default;

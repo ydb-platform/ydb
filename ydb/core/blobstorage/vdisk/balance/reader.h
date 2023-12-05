@@ -10,6 +10,7 @@ namespace NKikimr {
         const size_t BatchSize;
         TPDiskCtxPtr PDiskCtx;
         TQueue<TPartInfo> Parts;
+        TReplQuoter::TPtr Quoter;
 
         TVector<TPart> Result;
         ui32 Responses;
@@ -20,11 +21,12 @@ namespace NKikimr {
             FINISHED,
         };
 
-        TReader(TActorId notifyId, size_t batchSize, TPDiskCtxPtr pDiskCtx, TQueue<TPartInfo> parts)
+        TReader(TActorId notifyId, size_t batchSize, TPDiskCtxPtr pDiskCtx, TQueue<TPartInfo> parts, TReplQuoter::TPtr replPDiskReadQuoter)
             : NotifyId(notifyId)
             , BatchSize(batchSize)
             , PDiskCtx(pDiskCtx)
             , Parts(std::move(parts))
+            , Quoter(replPDiskReadQuoter)
             , Result(Reserve(BatchSize))
             , Responses(0)
         {}
@@ -59,7 +61,11 @@ namespace NKikimr {
                         reinterpret_cast<void *>(i)
 
                     );
-                    ctx.Send(PDiskCtx->PDiskId, ev.release());
+                    TReplQuoter::QuoteMessage(
+                        Quoter,
+                        std::make_unique<IEventHandle>(PDiskCtx->PDiskId, ctx.SelfID, ev.release()),
+                        diskPart.Size
+                    );
                     ++ExpectedResponses;
                 }
             }

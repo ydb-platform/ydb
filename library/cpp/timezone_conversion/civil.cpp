@@ -25,6 +25,12 @@ namespace {
         if (!name.SkipPrefix(OFFSET_PREFIX)) {
             return false;
         }
+        return NDatetime::TryParseOffset(name, offset);
+    }
+} // anonymous namespace
+
+namespace NDatetime {
+    bool TryParseOffset(TStringBuf name, int& offset) {
         if (name.empty()) {
             return false;
         }
@@ -61,9 +67,7 @@ namespace {
             offset = -offset;
         return true;
     }
-} // anonymous namespace
 
-namespace NDatetime {
     TTimeZone GetTimeZone(TStringBuf name) {
         int offset;
         if (TryParseUTCOffsetTimezone(name, offset)) {

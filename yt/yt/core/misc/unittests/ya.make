@@ -68,6 +68,7 @@ SRCS(
     string_ut.cpp
     sync_expiring_cache_ut.cpp
     time_formula_ut.cpp
+    tls_destructor_ut.cpp
     tls_expiring_cache_ut.cpp
     topological_ordering_ut.cpp
     yverify_ut.cpp

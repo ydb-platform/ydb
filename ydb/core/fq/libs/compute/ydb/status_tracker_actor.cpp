@@ -96,6 +96,11 @@ public:
     void Handle(const TEvents::TEvForwardPingResponse::TPtr& ev) {
         auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
         pingCounters->InFly->Dec();
+
+        if (ev->Cookie) {
+            return;
+        }
+
         pingCounters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
         if (ev.Get()->Get()->Success) {
             pingCounters->Ok->Inc();
@@ -125,6 +130,8 @@ public:
             case NYdb::NQuery::EExecStatus::Unspecified:
             case NYdb::NQuery::EExecStatus::Starting:
                 SendGetOperation(TDuration::MilliSeconds(BackoffTimer.NextBackoffMs()));
+                QueryStats = response.QueryStats;
+                UpdateProgress();
                 break;
             case NYdb::NQuery::EExecStatus::Aborted:
             case NYdb::NQuery::EExecStatus::Canceled:
@@ -150,6 +157,19 @@ public:
         Register(new TRetryActor<TEvYdbCompute::TEvGetOperationRequest, TEvYdbCompute::TEvGetOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_GET_OPERATION), delay, SelfId(), Connector, OperationId));
     }
 
+    void UpdateProgress() {
+        auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
+        pingCounters->InFly->Inc();
+        Fq::Private::PingTaskRequest pingTaskRequest;
+        PrepareAstAndPlan(pingTaskRequest, QueryStats.query_plan(), QueryStats.query_ast());
+        try {
+            pingTaskRequest.set_statistics(GetV1StatFromV2Plan(QueryStats.query_plan()));
+        } catch(const NJson::TJsonException& ex) {
+            LOG_E("Error statistics conversion: " << ex.what());
+        }
+        Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest), 0, 1);
+    }
+
     void Failed() {
         LOG_I("Execution status: Failed, Status: " << Status << ", StatusCode: " << NYql::NDqProto::StatusIds::StatusCode_Name(StatusCode) << " Issues: " << Issues.ToOneLineString());
         auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
@@ -158,6 +178,11 @@ public:
         NYql::IssuesToMessage(Issues, pingTaskRequest.mutable_issues());
         pingTaskRequest.set_pending_status_code(StatusCode);
         PrepareAstAndPlan(pingTaskRequest, QueryStats.query_plan(), QueryStats.query_ast());
+        try {
+            pingTaskRequest.set_statistics(GetV1StatFromV2Plan(QueryStats.query_plan()));
+        } catch(const NJson::TJsonException& ex) {
+            LOG_E("Error statistics conversion: " << ex.what());
+        }
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
     }
 

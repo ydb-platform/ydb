@@ -20,11 +20,11 @@
 
 #include <forward_list>
 
-#define LOG_T(stream) LOG_TRACE_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, SelfId() << " " << stream);
-#define LOG_D(stream) LOG_DEBUG_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, SelfId() << " " << stream);
-#define LOG_I(stream) LOG_INFO_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, SelfId() << " " << stream);
-#define LOG_W(stream) LOG_WARN_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, SelfId() << " " << stream);
-#define LOG_E(stream) LOG_ERROR_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, SelfId() << " " << stream);
+#define LOG_T(stream) LOG_TRACE_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". " << "Ctx: " << *UserRequestContext << ". " << stream);
+#define LOG_D(stream) LOG_DEBUG_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". " << "Ctx: " << *UserRequestContext << ". " << stream);
+#define LOG_I(stream) LOG_INFO_S (NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". " << "Ctx: " << *UserRequestContext << ". " << stream);
+#define LOG_W(stream) LOG_WARN_S (NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". " << "Ctx: " << *UserRequestContext << ". " << stream);
+#define LOG_E(stream) LOG_ERROR_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". " << "Ctx: " << *UserRequestContext << ". " << stream);
 
 namespace NKikimr::NKqp {
 
@@ -67,7 +67,9 @@ public:
         , ResultsTtl(resultsTtl)
         , QueryServiceConfig(queryServiceConfig)
         , Counters(counters)
-    {}
+    {
+        UserRequestContext = MakeIntrusive<TUserRequestContext>(Request.GetTraceId(), Database, "", ExecutionId, Request.GetTraceId());
+    }
 
     static constexpr char ActorName[] = "KQP_RUN_SCRIPT_ACTOR";
 
@@ -80,6 +82,7 @@ private:
         hFunc(NActors::TEvents::TEvWakeup, Handle);
         hFunc(NActors::TEvents::TEvPoison, Handle);
         hFunc(TEvKqpExecuter::TEvStreamData, Handle);
+        hFunc(TEvKqpExecuter::TEvExecuterProgress, Handle);
         hFunc(TEvKqp::TEvQueryResponse, Handle);
         hFunc(TEvKqp::TEvCreateSessionResponse, Handle);
         IgnoreFunc(TEvKqp::TEvCloseSessionResponse);
@@ -116,6 +119,7 @@ private:
             }
         } else {
             SessionId = resp.GetResponse().GetSessionId();
+            UserRequestContext->SessionId = SessionId;
 
             if (RunState == ERunState::Running) {
                 Start();
@@ -139,10 +143,14 @@ private:
         auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
         ev->Record = Request;
         ev->Record.MutableRequest()->SetSessionId(SessionId);
-        ev->SetUserRequestContext(MakeIntrusive<TUserRequestContext>(Request.GetTraceId(), Database, SessionId, ExecutionId, Request.GetTraceId()));
+        ev->SetUserRequestContext(UserRequestContext);
+        if (ev->Record.GetRequest().GetCollectStats() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
+            ev->SetProgressStatsPeriod(TDuration::MilliSeconds(QueryServiceConfig.GetProgressStatsPeriodMs()));
+        }
 
         NActors::ActorIdToProto(SelfId(), ev->Record.MutableRequestActorId());
 
+        LOG_I("Start Script Execution");
         SendToKqpProxy(std::move(ev));
     }
 
@@ -376,6 +384,12 @@ private:
         );
     }
 
+    void Handle(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
+        Register(
+            CreateScriptProgressActor(ExecutionId, Database, ev->Get()->Record.GetQueryPlan(), "")
+        );
+    }
+
     void Handle(TEvKqp::TEvQueryResponse::TPtr& ev) {
         if (RunState != ERunState::Running) {
             return;
@@ -582,6 +596,7 @@ private:
     std::optional<TString> QueryPlan;
     std::optional<TString> QueryAst;
     std::optional<NKqpProto::TKqpStatsQuery> QueryStats;
+    TIntrusivePtr<TUserRequestContext> UserRequestContext;
 };
 
 } // namespace

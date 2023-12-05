@@ -14,6 +14,7 @@
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
@@ -606,6 +607,11 @@ public:
         }
 
         const TString& sessionId = ev->Get()->GetSessionId();
+
+        if (!ev->Get()->GetUserRequestContext()) {
+            ev->Get()->SetUserRequestContext(MakeIntrusive<TUserRequestContext>(traceId, database, sessionId));
+        }
+
         const TKqpSessionInfo* sessionInfo = LocalSessions->FindPtr(sessionId);
         auto dbCounters = sessionInfo ? sessionInfo->DbCounters : nullptr;
         if (!dbCounters) {
@@ -650,11 +656,11 @@ public:
         if (cancelAfter) {
             timerDuration = Min(timerDuration, cancelAfter);
         }
-        KQP_PROXY_LOG_D(TKqpRequestInfo(traceId, sessionId) << "TEvQueryRequest, set timer for: " << timerDuration << " timeout: " << timeout << " cancelAfter: " << cancelAfter);
+        KQP_PROXY_LOG_D("Ctx: " << *ev->Get()->GetUserRequestContext() << ". TEvQueryRequest, set timer for: " << timerDuration 
+            << " timeout: " << timeout << " cancelAfter: " << cancelAfter 
+            << ". " << "Send request to target, requestId: " << requestId << ", targetId: " << targetId);
         auto status = timerDuration == cancelAfter ? NYql::NDqProto::StatusIds::CANCELLED : NYql::NDqProto::StatusIds::TIMEOUT;
         StartQueryTimeout(requestId, timerDuration, status);
-        KQP_PROXY_LOG_D("Sent request to target, requestId: " << requestId
-            << ", targetId: " << targetId << ", sessionId: " << sessionId);
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
     }
 
@@ -836,6 +842,22 @@ public:
             << ", sender: " << proxyRequest->Sender << ", selfId: " << SelfId() << ", source: " << ev->Sender);
 
         PendingRequests.Erase(requestId);
+    }
+
+    void ForwardProgress(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
+        ui64 requestId = ev->Cookie;
+
+        auto proxyRequest = PendingRequests.FindPtr(requestId);
+        if (!proxyRequest) {
+            KQP_PROXY_LOG_E("Unknown sender for proxy response, requestId: " << requestId);
+            return;
+        }
+
+        Send(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
+
+        TKqpRequestInfo requestInfo(proxyRequest->TraceId);
+        KQP_PROXY_LOG_D(requestInfo << "Forwarded response to sender actor, requestId: " << requestId
+            << ", sender: " << proxyRequest->Sender << ", selfId: " << SelfId() << ", source: " << ev->Sender);
     }
 
     void LookupPeerProxyData() {
@@ -1246,6 +1268,7 @@ public:
             hFunc(TEvKqp::TEvScriptRequest, Handle);
             hFunc(TEvKqp::TEvCloseSessionRequest, Handle);
             hFunc(TEvKqp::TEvQueryResponse, ForwardEvent);
+            hFunc(TEvKqpExecuter::TEvExecuterProgress, ForwardProgress);
             hFunc(TEvKqp::TEvProcessResponse, Handle);
             hFunc(TEvKqp::TEvCreateSessionRequest, Handle);
             hFunc(TEvKqp::TEvPingSessionRequest, Handle);

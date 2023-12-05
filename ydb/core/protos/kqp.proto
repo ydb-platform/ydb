@@ -432,8 +432,12 @@ message TEvExecuterStreamProfile {
     optional NYql.NDqProto.TDqExecutionStats Profile = 2;
 };
 
+// 1. Executer fills progress stats from it's own execution
+// 2. Session adds stats from early finished executions and builds complete plan 
 message TEvExecuterProgress {
     optional NActorsProto.TActorId ExecuterActorId = 1;
+    optional string QueryPlan = 2;
+    optional NKqpProto.TKqpStatsQuery QueryStats = 3;
 };
 
 message TKqpProxyNodeResources {

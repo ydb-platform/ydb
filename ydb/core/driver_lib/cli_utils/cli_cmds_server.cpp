@@ -325,14 +325,14 @@ protected:
     }
 
     void AddLabelToAppConfig(const TString& name, const TString& value) {
-        for (auto &label : *RunConfig.AppConfig.MutableLabels()) {
+        for (auto &label : *AppConfig.MutableLabels()) {
             if (label.GetName() == name) {
                 label.SetValue(value);
                 return;
             }
         }
 
-        auto *label = RunConfig.AppConfig.AddLabels();
+        auto *label = AppConfig.AddLabels();
         label->SetName(name);
         label->SetValue(value);
     }
@@ -414,7 +414,7 @@ protected:
         RunConfig.Labels["dynamic"] = ToString(NodeBrokerAddresses.empty() ? "false" : "true");
 
         for (const auto& [name, value] : RunConfig.Labels) {
-            auto *label = RunConfig.AppConfig.AddLabels();
+            auto *label = AppConfig.AddLabels();
             label->SetName(name);
             label->SetValue(value);
         }
@@ -594,7 +594,7 @@ protected:
         if (!AppConfig.HasRestartsCountConfig() && RestartsCountFile)
             AppConfig.MutableRestartsCountConfig()->SetRestartsCountFile(RestartsCountFile);
 
-        // Ports and node type are always applied (event if config was loaded from CMS).
+        // Ports and node type are always applied (even if config was loaded from CMS).
         if (MonitoringPort)
             AppConfig.MutableMonitoringConfig()->SetMonitoringPort(MonitoringPort);
         if (MonitoringAddress)
@@ -608,7 +608,7 @@ protected:
             }
         }
         if (SqsHttpPort)
-            RunConfig.AppConfig.MutableSqsConfig()->MutableHttpServerConfig()->SetPort(SqsHttpPort);
+            AppConfig.MutableSqsConfig()->MutableHttpServerConfig()->SetPort(SqsHttpPort);
         if (GRpcPort) {
             auto& conf = *AppConfig.MutableGRpcConfig();
             conf.SetStartGRpcProxy(true);
@@ -742,13 +742,13 @@ protected:
             messageBusConfig->SetTracePath(TracePath);
         }
 
-        if (RunConfig.AppConfig.HasDynamicNameserviceConfig()) {
-            bool isDynamic = RunConfig.NodeId > RunConfig.AppConfig.GetDynamicNameserviceConfig().GetMaxStaticNodeId();
+        if (AppConfig.HasDynamicNameserviceConfig()) {
+            bool isDynamic = RunConfig.NodeId > AppConfig.GetDynamicNameserviceConfig().GetMaxStaticNodeId();
             RunConfig.Labels["dynamic"] = ToString(isDynamic ? "true" : "false");
             AddLabelToAppConfig("node_id", RunConfig.Labels["node_id"]);
         }
 
-        RunConfig.ClusterName = RunConfig.AppConfig.GetNameserviceConfig().GetClusterUUID();
+        RunConfig.ClusterName = AppConfig.GetNameserviceConfig().GetClusterUUID();
     }
 
     inline bool LoadConfigFromCMS() {
@@ -936,24 +936,6 @@ protected:
         }
     }
 
-    void MaybeRegisterAndLoadConfigs()
-    {
-        // static node
-        if (NodeBrokerAddresses.empty() && !NodeBrokerPort) {
-            if (!NodeId) {
-                ythrow yexception() << "Either --node [NUM|'static'] or --node-broker[-port] should be specified";
-            }
-
-            if (!HierarchicalCfg && RunConfig.PathToConfigCacheFile)
-                LoadCachedConfigsForStaticNode();
-            return;
-        }
-
-        RegisterDynamicNode();
-        if (!HierarchicalCfg && !IgnoreCmsConfigs)
-            LoadConfigForDynamicNode();
-    }
-
     TNodeLocation CreateNodeLocation() {
         NActorsInterconnect::TNodeLocation location;
         location.SetDataCenter(DataCenter);
@@ -1055,7 +1037,7 @@ protected:
             }
         } else {
             Y_ABORT_UNLESS(NodeBrokerPort);
-            for (auto &node : RunConfig.AppConfig.MutableNameserviceConfig()->GetNode()) {
+            for (auto &node : AppConfig.MutableNameserviceConfig()->GetNode()) {
                 addrs.emplace_back(TStringBuilder() << (NodeBrokerUseTls ? "grpcs://" : "") << node.GetHost() << ':' << NodeBrokerPort);
             }
         }
@@ -1111,10 +1093,10 @@ protected:
         }
         RunConfig.ScopeId = TKikimrScopeId(scopeId);
 
-        auto &nsConfig = *RunConfig.AppConfig.MutableNameserviceConfig();
+        auto &nsConfig = *AppConfig.MutableNameserviceConfig();
         nsConfig.ClearNode();
 
-        auto &dnConfig = *RunConfig.AppConfig.MutableDynamicNodeConfig();
+        auto &dnConfig = *AppConfig.MutableDynamicNodeConfig();
         for (auto &node : result.GetNodes()) {
             if (node.NodeId == result.GetNodeId()) {
                 auto nodeInfo = dnConfig.MutableNodeInfo();
@@ -1223,10 +1205,10 @@ protected:
         RunConfig.NodeId = result->GetNodeId();
         RunConfig.ScopeId = TKikimrScopeId(result->GetScopeId());
 
-        auto &nsConfig = *RunConfig.AppConfig.MutableNameserviceConfig();
+        auto &nsConfig = *AppConfig.MutableNameserviceConfig();
         nsConfig.ClearNode();
 
-        auto &dnConfig = *RunConfig.AppConfig.MutableDynamicNodeConfig();
+        auto &dnConfig = *AppConfig.MutableDynamicNodeConfig();
         for (auto &node : result->Record().GetNodes()) {
             if (node.GetNodeId() == result->GetNodeId()) {
                 dnConfig.MutableNodeInfo()->CopyFrom(node);

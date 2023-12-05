@@ -374,10 +374,14 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
     i64 counterAfter = ResourceValues.GetCounter();
     const auto& after = ResourceValues;
     if (Node != nullptr) {
-        Node->UpdateResourceValues(this, before, after);
-        i64 deltaCounter = counterAfter - counterBefore;
-        if (deltaCounter != 0 && IsLeader()) {
-            Hive.UpdateObjectCount(AsLeader(), *Node, deltaCounter);
+        if (IsResourceDrainingState(VolatileState)) {
+            Node->UpdateResourceValues(this, before, after);
+        }
+        if (IsAliveState(VolatileState)) {
+            i64 deltaCounter = counterAfter - counterBefore;
+            if (deltaCounter != 0 && IsLeader()) {
+                Hive.UpdateObjectCount(AsLeader(), *Node, deltaCounter);
+            }
         }
     }
 }

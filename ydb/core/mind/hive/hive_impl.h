@@ -150,6 +150,8 @@ void MakeTabletTypeSet(std::vector<TTabletTypes::EType>& list);
 bool IsValidTabletType(TTabletTypes::EType type);
 bool IsValidObjectId(const TFullObjectId& objectId);
 TString GetRunningTabletsText(ui64 runningTablets, ui64 totalTablets, bool warmUp);
+bool IsResourceDrainingState(TTabletInfo::EVolatileState state);
+bool IsAliveState(TTabletInfo::EVolatileState state);
 
 class THive : public TActor<THive>, public TTabletExecutedFlat, public THiveSharedSettings {
 public:

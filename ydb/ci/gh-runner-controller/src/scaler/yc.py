@@ -1,0 +1,132 @@
+import requests
+import yandexcloud
+
+# noinspection PyUnresolvedReferences
+from yandex.cloud.compute.v1.image_service_pb2 import GetImageLatestByFamilyRequest
+from yandex.cloud.compute.v1.image_service_pb2_grpc import ImageServiceStub
+
+# noinspection PyUnresolvedReferences
+from yandex.cloud.compute.v1.instance_pb2 import Instance, SchedulingPolicy
+
+# noinspection PyUnresolvedReferences
+from yandex.cloud.compute.v1.instance_service_pb2 import (
+    AttachedDiskSpec,
+    CreateInstanceMetadata,
+    CreateInstanceRequest,
+    DeleteInstanceRequest,
+    GetInstanceRequest,
+    ListInstancesRequest,
+    NetworkInterfaceSpec,
+    PrimaryAddressSpec,
+    ResourcesSpec,
+)
+from yandex.cloud.compute.v1.instance_service_pb2_grpc import InstanceServiceStub
+
+# noinspection PyUnresolvedReferences
+from yandex.cloud.lockbox.v1.payload_service_pb2 import GetPayloadRequest
+from yandex.cloud.lockbox.v1.payload_service_pb2_grpc import PayloadServiceStub
+
+
+def metadata_query(path):
+    headers = {"Metadata-Flavor": "Google"}
+    # noinspection HttpUrlsUsage
+    return requests.get(f"http://169.254.169.254{path}", headers=headers)
+
+
+def discover_folder_id():
+    return metadata_query("/computeMetadata/v1/instance/vendor/folder-id").text
+
+
+class YandexCloudProvider:
+    def __init__(self, use_metadata, sa_key):
+        if not use_metadata and not sa_key:
+            raise ValueError("Service account key or metadata discovery is required")
+
+        if use_metadata:
+            self.sdk = yandexcloud.SDK()
+        else:
+            self.sdk = yandexcloud.SDK(service_account_key=sa_key)
+        self.cfg = None
+
+    def set_config(self, cfg):
+        # FIXME: strange decision
+        self.cfg = cfg
+
+    def get_latest_image_id(self):
+        image_service = self.sdk.client(ImageServiceStub)
+        image = image_service.GetLatestByFamily(
+            GetImageLatestByFamilyRequest(folder_id=self.cfg.yc_folder_id, family=self.cfg.image_family)
+        )
+        return image.id
+
+    def get_vm(self, instance_id):
+        return self.sdk.client(InstanceServiceStub).Get(GetInstanceRequest(instance_id=instance_id))
+
+    def get_vm_count(self, prefix):
+        request = ListInstancesRequest(folder_id=self.cfg.yc_folder_id, page_size=1000)
+        cnt = cnt_provisioning = 0
+        while 1:
+            response = self.sdk.client(InstanceServiceStub).List(request)
+            for instance in response.instances:
+                if prefix in instance.labels:
+                    if instance.status == Instance.Status.PROVISIONING:
+                        cnt_provisioning += 1
+                    cnt += 1
+            request.page_token = response.next_page_token
+            if not request.page_token:
+                break
+
+        return cnt, cnt_provisioning
+
+    def start_vm(self, instance_name, user_data, vm_labels):
+        metadata = {
+            "serial-port-enable": "1",
+            "user-data": user_data,
+        }
+
+        request = CreateInstanceRequest(
+            name=instance_name,
+            folder_id=self.cfg.yc_folder_id,
+            zone_id=self.cfg.yc_zone_id,
+            platform_id=self.cfg.platform_id,
+            resources_spec=ResourcesSpec(
+                cores=int(self.cfg.cores),
+                memory=int(self.cfg.memory),
+                core_fraction=100,
+            ),
+            scheduling_policy=SchedulingPolicy(preemptible=self.cfg.preemptible),
+            boot_disk_spec=AttachedDiskSpec(
+                auto_delete=True,
+                disk_spec=AttachedDiskSpec.DiskSpec(
+                    type_id=self.cfg.disk_type,
+                    size=int(self.cfg.disk_size),
+                    image_id=self.get_latest_image_id(),
+                ),
+            ),
+            network_interface_specs=[
+                NetworkInterfaceSpec(
+                    subnet_id=self.cfg.yc_subnet_id,
+                    primary_v4_address_spec=PrimaryAddressSpec(),
+                ),
+            ],
+            labels=vm_labels,
+            metadata=metadata,
+        )
+
+        op = self.sdk.client(InstanceServiceStub).Create(request)
+        return op
+        # result = self.sdk.wait_operation_and_get_result(op, response_type=Instance, meta_type=CreateInstanceMetadata)
+        # return result.response
+
+    def delete_vm(self, instance_id, our_label):
+        instance = self.get_vm(instance_id)
+        if our_label not in instance.labels:
+            raise Exception("Unable to delete non runner instance")
+
+        op = self.sdk.client(InstanceServiceStub).Delete(DeleteInstanceRequest(instance_id=instance_id))
+
+        return op
+
+    def get_lockbox_secret_entries(self, secret_id):
+        secret = self.sdk.client(PayloadServiceStub).Get(GetPayloadRequest(secret_id=secret_id))
+        return {e.key: e.text_value for e in secret.entries}

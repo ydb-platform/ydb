@@ -22,7 +22,7 @@ public:
 
         auto it = Self->State->ScheduledRequests.find(Id);
         if (it != Self->State->ScheduledRequests.end()) {
-            if (it->second.Request.GetPrepare()) {
+            if (it->second.Request.GetEvictVDisks()) {
                 for (const auto &action : it->second.Request.GetActions()) {
                     auto ret = Self->ResetHostMarkers(action.GetHost(), txc, ctx);
                     std::move(ret.begin(), ret.end(), std::back_inserter(UpdateMarkers));

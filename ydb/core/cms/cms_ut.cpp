@@ -1685,33 +1685,33 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.DestroyDefaultCmsPipe();
     }
 
-    Y_UNIT_TEST(PrepareHostShouldFailWhileSentinelIsDisabled)
+    Y_UNIT_TEST(VDisksEvictionShouldFailWhileSentinelIsDisabled)
     {
         TCmsTestEnv env(TTestEnvOpts(8).WithoutSentinel());
         env.CheckPermissionRequest(
-            MakePermissionRequest(TRequestOptions("user").WithPrepare(),
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
                 MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
             ),
             TStatus::ERROR
         );
     }
 
-    Y_UNIT_TEST(PrepareHostShouldFailOnUnsupportedAction)
+    Y_UNIT_TEST(VDisksEvictionShouldFailOnUnsupportedAction)
     {
         TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
         env.CheckPermissionRequest(
-            MakePermissionRequest(TRequestOptions("user").WithPrepare(),
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
                 MakeAction(TAction::REPLACE_DEVICES, env.GetNodeId(0), 60000000, env.PDiskName(0))
             ),
             TStatus::WRONG_REQUEST
         );
     }
 
-    Y_UNIT_TEST(PrepareHostShouldFailOnMultipleActions)
+    Y_UNIT_TEST(VDisksEvictionShouldFailOnMultipleActions)
     {
         TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
         env.CheckPermissionRequest(
-            MakePermissionRequest(TRequestOptions("user").WithPrepare(),
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
                 MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000),
                 MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000)
             ),
@@ -1719,7 +1719,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         );
     }
 
-    Y_UNIT_TEST(PrepareHost)
+    Y_UNIT_TEST(VDisksEviction)
     {
         auto opts = TTestEnvOpts(8).WithSentinel();
         TCmsTestEnv env(opts);
@@ -1727,14 +1727,14 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // ok
         auto request1 = env.CheckPermissionRequest(
-            MakePermissionRequest(TRequestOptions("user").WithPrepare(),
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
                 MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
             ),
             TStatus::DISALLOW_TEMP
         );
         // forbid another prepare request for same host
         env.CheckPermissionRequest(
-            MakePermissionRequest(TRequestOptions("user").WithPrepare(),
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
                 MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
             ),
             TStatus::WRONG_REQUEST
@@ -1753,7 +1753,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // allow immediately
         auto request2 = env.CheckPermissionRequest(
-            MakePermissionRequest(TRequestOptions("user").WithPrepare(),
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
                 MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
             ),
             TStatus::ALLOW
@@ -1763,7 +1763,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // check markers after restart
         env.RestartCms();
         env.CheckPermissionRequest(
-            MakePermissionRequest(TRequestOptions("user").WithPrepare(),
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
                 MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
             ),
             TStatus::WRONG_REQUEST
@@ -1778,7 +1778,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // prepare
         auto request3 = env.CheckPermissionRequest(
-            MakePermissionRequest(TRequestOptions("user").WithPrepare(),
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
                 MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
             ),
             TStatus::DISALLOW_TEMP

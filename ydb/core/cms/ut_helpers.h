@@ -72,22 +72,22 @@ struct TRequestOptions {
     bool Partial;
     bool DryRun;
     bool Schedule;
-    bool Prepare;
+    bool EvictVDisks;
 
     explicit TRequestOptions(const TString &user, bool partial, bool dry, bool schedule)
         : User(user)
         , Partial(partial)
         , DryRun(dry)
         , Schedule(schedule)
-        , Prepare(false)
+        , EvictVDisks(false)
     {}
 
     explicit TRequestOptions(const TString &user)
         : TRequestOptions(user, false, false, false)
     {}
 
-    TRequestOptions& WithPrepare() {
-        Prepare = true;
+    TRequestOptions& WithEvictVDisks() {
+        EvictVDisks = true;
         return *this;
     }
 };
@@ -99,7 +99,7 @@ TAutoPtr<NCms::TEvCms::TEvPermissionRequest> MakePermissionRequest(const TReques
     event->Record.SetPartialPermissionAllowed(opts.Partial);
     event->Record.SetDryRun(opts.DryRun);
     event->Record.SetSchedule(opts.Schedule);
-    event->Record.SetPrepare(opts.Prepare);
+    event->Record.SetEvictVDisks(opts.EvictVDisks);
     AddActions(event, actions...);
 
     return event;

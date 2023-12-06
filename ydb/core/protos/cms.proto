@@ -161,8 +161,8 @@ message TPermissionRequest {
   // Availability mode is not preserved for scheduled events.
   optional EAvailabilityMode AvailabilityMode = 9 [default = MODE_MAX_AVAILABILITY];
   optional string MaintenanceTaskId = 10;
-  // Prepare item (host/device) before granting permission
-  optional bool Prepare = 11 [default = false];
+  // Evit vdisks before granting permission
+  optional bool EvictVDisks = 11 [default = false];
 }
 
 enum EExtensionType {

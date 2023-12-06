@@ -70,7 +70,7 @@ public:
                 << ", validity# " << TInstant::MicroSeconds(deadline)
                 << ", action# " << actionStr);
 
-            if (Scheduled && Scheduled->Request.GetPrepare()) {
+            if (Scheduled && Scheduled->Request.GetEvictVDisks()) {
                 auto ret = Self->SetHostMarker(permission.GetAction().GetHost(), NKikimrCms::MARKER_DISK_FAULTY, txc, ctx);
                 std::move(ret.begin(), ret.end(), std::back_inserter(UpdateMarkers));
             }
@@ -80,7 +80,7 @@ public:
             auto &id = Scheduled->RequestId;
             auto &owner = Scheduled->Owner;
 
-            if (Scheduled->Request.ActionsSize() || Scheduled->Request.GetPrepare()) {
+            if (Scheduled->Request.ActionsSize() || Scheduled->Request.GetEvictVDisks()) {
                 ui64 order = Scheduled->Order;
                 TString requestStr;
                 google::protobuf::TextFormat::PrintToString(Scheduled->Request, &requestStr);
@@ -96,7 +96,7 @@ public:
                     << ", order# " << order
                     << ", body# " << requestStr);
 
-                if (Scheduled->Request.GetPrepare()) {
+                if (Scheduled->Request.GetEvictVDisks()) {
                     for (const auto &action : Scheduled->Request.GetActions()) {
                         auto ret = Self->SetHostMarker(action.GetHost(), NKikimrCms::MARKER_DISK_FAULTY, txc, ctx);
                         std::move(ret.begin(), ret.end(), std::back_inserter(UpdateMarkers));

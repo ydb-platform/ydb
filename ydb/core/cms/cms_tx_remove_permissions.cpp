@@ -47,7 +47,7 @@ public:
                         << ", reason# " << "permission " << id << " has expired");
                 }
                 
-                if (it->second.Request.GetPrepare()) {
+                if (it->second.Request.GetEvictVDisks()) {
                     auto ret = Self->ResetHostMarkers(host, txc, ctx);
                     std::move(ret.begin(), ret.end(), std::back_inserter(UpdateMarkers));
 

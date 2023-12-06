@@ -300,7 +300,7 @@ private:
         NKikimrCms::TStatus::ECode &code,
         TString &error,
         const TActorContext &ctx);
-    bool CheckPrepareHost(const NKikimrCms::TAction &action,
+    bool CheckEvictVDisks(const NKikimrCms::TAction &action,
         TErrorInfo &error) const;
     bool CheckAction(const NKikimrCms::TAction &action,
         const TActionOptions &opts,

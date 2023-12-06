@@ -286,11 +286,11 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         TStatus::UNKNOWN,
     });
     bool allowPartial = request.GetPartialPermissionAllowed();
-    bool schedule = (request.GetSchedule() || request.GetPrepare()) && !request.GetDryRun();
+    bool schedule = (request.GetSchedule() || request.GetEvictVDisks()) && !request.GetDryRun();
 
-    if (request.GetPrepare() && request.ActionsSize() > 1) {
+    if (request.GetEvictVDisks() && request.ActionsSize() > 1) {
         response.MutableStatus()->SetCode(TStatus::WRONG_REQUEST);
-        response.MutableStatus()->SetReason("Cannot prepare more than one action at once");
+        response.MutableStatus()->SetReason("Cannot perform several actions and evict vdisks");
         return false;
     }
 
@@ -299,7 +299,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         scheduled.SetUser(request.GetUser());
         scheduled.SetPartialPermissionAllowed(allowPartial);
         scheduled.SetSchedule(request.GetSchedule());
-        scheduled.SetPrepare(request.GetPrepare());
+        scheduled.SetEvictVDisks(request.GetEvictVDisks());
         scheduled.SetReason(request.GetReason());
         if (request.HasDuration())
             scheduled.SetDuration(request.GetDuration());
@@ -340,9 +340,9 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
         LOG_DEBUG(ctx, NKikimrServices::CMS, "Checking action: %s", action.ShortDebugString().data());
 
-        bool prepared = !request.GetPrepare();
+        bool prepared = !request.GetEvictVDisks();
         if (!prepared) {
-            prepared = CheckPrepareHost(action, error);
+            prepared = CheckEvictVDisks(action, error);
         }
 
         if (prepared && CheckAction(action, opts, error, ctx)) {
@@ -496,10 +496,10 @@ bool TCms::CheckAccess(const TString &token,
     return false;
 }
 
-bool TCms::CheckPrepareHost(const TAction &action, TErrorInfo &error) const {
+bool TCms::CheckEvictVDisks(const TAction &action, TErrorInfo &error) const {
     if (!State->Sentinel) {
         error.Code = TStatus::ERROR;
-        error.Reason = "Cannot prepare host while Sentinel (self heal) is disabled";
+        error.Reason = "Unable to evict vdisks while Sentinel (self heal) is disabled";
         return false;
     }
 
@@ -510,14 +510,14 @@ bool TCms::CheckPrepareHost(const TAction &action, TErrorInfo &error) const {
             break;
         default:
             error.Code = TStatus::WRONG_REQUEST;
-            error.Reason = TStringBuilder() << "Cannot prepare host for action: " << action.GetType();
+            error.Reason = TStringBuilder() << "Unable to evict vdisks to perform action: " << action.GetType();
             return false;
     }
 
     for (const auto node : ClusterInfo->HostNodes(action.GetHost())) {
         if (!node->VDisks.empty()) {
             error.Code = TStatus::DISALLOW_TEMP;
-            error.Reason = TStringBuilder() << "Host " << action.GetHost() << " is not prepared yet";
+            error.Reason = TStringBuilder() << "VDisks eviction from host " << action.GetHost() << " has not yet been completed";
             return false;
         }
     }
@@ -1347,10 +1347,10 @@ void TCms::RemoveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActor
             resp->Record.MutableStatus()->SetReason(Sprintf("Request %s doesn't belong to %s", id.data(), user.data()));
         }
 
-        if (request.Request.GetPrepare() && request.Request.ActionsSize() < 1) {
+        if (request.Request.GetEvictVDisks() && request.Request.ActionsSize() < 1) {
             resp->Record.MutableStatus()->SetCode(TStatus::WRONG_REQUEST);
             resp->Record.MutableStatus()->SetReason(
-                Sprintf("Request %s used to prepare action and cannot be deleted while permission is valid", id.data()));
+                Sprintf("Request %s used to evict vdisks and cannot be deleted while permission is valid", id.data()));
         }
     }
 
@@ -1844,16 +1844,16 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         }
     }
 
-    if (rec.GetPrepare()) {
+    if (rec.GetEvictVDisks()) {
         for (const auto &action : rec.GetActions()) {
             if (State->HostMarkers.contains(action.GetHost())) {
                 return ReplyWithError<TEvCms::TEvPermissionResponse>(
-                    ev, TStatus::WRONG_REQUEST, TStringBuilder() << "Host '" << action.GetHost() << "' is preparing", ctx);
+                    ev, TStatus::WRONG_REQUEST, TStringBuilder() << "VDisks of host '" << action.GetHost() << "' are being evicted", ctx);
             }
             for (const auto node : ClusterInfo->HostNodes(action.GetHost())) {
                 if (State->HostMarkers.contains(ToString(node->NodeId))) {
                     return ReplyWithError<TEvCms::TEvPermissionResponse>(
-                        ev, TStatus::WRONG_REQUEST, TStringBuilder() << "Node '" << node->NodeId << "' is preparing", ctx);
+                        ev, TStatus::WRONG_REQUEST, TStringBuilder() << "VDisks of node '" << node->NodeId << "' are being evicted", ctx);
                 }
             }
         }
@@ -1869,7 +1869,7 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         resp->Record.SetRequestId(reqId);
 
         TAutoPtr<TRequestInfo> copy;
-        if (scheduled.Request.ActionsSize() || scheduled.Request.GetPrepare()) {
+        if (scheduled.Request.ActionsSize() || scheduled.Request.GetEvictVDisks()) {
             scheduled.Owner = user;
             scheduled.Order = State->NextRequestId - 1;
             scheduled.RequestId = reqId;
@@ -1934,7 +1934,7 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
         auto order = request.Order;
 
         State->ScheduledRequests.erase(it);
-        if (scheduled.Request.ActionsSize() || scheduled.Request.GetPrepare()) {
+        if (scheduled.Request.ActionsSize() || scheduled.Request.GetEvictVDisks()) {
             scheduled.Owner = user;
             scheduled.Order = order;
             scheduled.RequestId = rec.GetRequestId();

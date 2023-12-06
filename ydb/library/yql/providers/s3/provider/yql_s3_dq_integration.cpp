@@ -230,7 +230,7 @@ public:
                         .Token<TCoSecureParam>()
                             .Name().Build(token)
                         .Build()
-                        .RowsLimitHint(s3ReadObject.Object().RowsLimitHint())
+                        .RowsLimitHint(ctx.NewAtom(read->Pos(), ""))
                         .Format(s3ReadObject.Object().Format())
                         .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
                         .Settings(s3ReadObject.Object().Settings())
@@ -273,7 +273,7 @@ public:
                         .Token<TCoSecureParam>()
                             .Name().Build(token)
                             .Build()
-                        .RowsLimitHint(s3ReadObject.Object().RowsLimitHint())
+                        .RowsLimitHint(ctx.NewAtom(read->Pos(), ""))
                         .SizeLimit(
                             sizeLimitIndex != -1 ? readSettings->Child(sizeLimitIndex)->TailPtr()
                                                  : emptyNode)

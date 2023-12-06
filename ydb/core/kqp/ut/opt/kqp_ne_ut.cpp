@@ -3896,7 +3896,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            SELECT * FROM `/Root/SecondaryKeys` VIEW @primary WHERE Fk <= 1;
+            SELECT * FROM `/Root/SecondaryKeys` VIEW PRIMARY KEY WHERE Fk <= 1;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
         AssertSuccessResult(result);
         AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 0);

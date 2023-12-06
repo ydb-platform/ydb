@@ -1013,7 +1013,7 @@ an_id_hint: id_hint | STRING_VALUE;
 an_id_pure: identifier | STRING_VALUE;
 an_id_as_compat: id_as_compat | STRING_VALUE;
 
-view_name: an_id | AT PRIMARY;
+view_name: an_id | PRIMARY KEY;
 
 opt_id_prefix: (an_id DOT)?;
 cluster_expr: (an_id COLON)? (pure_column_or_named | ASTERISK);

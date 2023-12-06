@@ -1152,7 +1152,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(UnionAggregationTest) {
         NYql::TAstParseResult res = SqlToYql(R"(
-            SELECT 1 
+            SELECT 1
             UNION ALL
                 SELECT 1 UNION ALL SELECT 1 UNION ALL SELECT 1
             UNION
@@ -3197,9 +3197,9 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     }
 
     Y_UNIT_TEST(PrimaryViewAbortMapReduce) {
-        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input VIEW @primary");
+        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input VIEW PRIMARY KEY");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:17: Error: @primary is not supported for yt tables\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:17: Error: primary view is not supported for yt tables\n");
     }
 
     Y_UNIT_TEST(InsertAbortMapReduce) {

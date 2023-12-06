@@ -17,7 +17,7 @@ namespace NSQLTranslationV1 {
 
 bool ValidateView(TPosition pos, TContext& ctx, TStringBuf service, TViewDescription& view) {
     if (view.PrimaryFlag && !(service == KikimrProviderName || service == YdbProviderName)) {
-        ctx.Error(pos) << "@primary is not supported for " << service << " tables";
+        ctx.Error(pos) << "primary view is not supported for " << service << " tables";
         return false;
     }
     return true;

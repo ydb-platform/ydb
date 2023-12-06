@@ -1371,6 +1371,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateBlobDepot:
     case TTxState::TxCreateExternalTable:
     case TTxState::TxCreateExternalDataSource:
+    case TTxState::TxCreateView:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:
@@ -1403,6 +1404,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxUpdateMainTableOnIndexMove:
     case TTxState::TxAlterExternalTable:
     case TTxState::TxAlterExternalDataSource:
+    case TTxState::TxAlterView:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:
@@ -1423,6 +1425,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropBlobDepot:
     case TTxState::TxDropExternalTable:
     case TTxState::TxDropExternalDataSource:
+    case TTxState::TxDropView:
         return TPathElement::EPathState::EPathStateDrop;
     case TTxState::TxBackup:
         return TPathElement::EPathState::EPathStateBackup;
@@ -2745,6 +2748,31 @@ void TSchemeShard::PersistRemoveExternalDataSource(NIceDb::TNiceDb& db, TPathId 
     db.Table<Schema::ExternalDataSource>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
+void TSchemeShard::PersistView(NIceDb::TNiceDb &db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+
+    const auto path = PathsById.find(pathId);
+    Y_ABORT_UNLESS(path != PathsById.end());
+    Y_ABORT_UNLESS(path->second && path->second->IsView());
+
+    const auto view = Views.find(pathId);
+    Y_ABORT_UNLESS(view != Views.end());
+    TViewInfo::TPtr viewInfo = view->second;
+    Y_ABORT_UNLESS(viewInfo);
+
+    db.Table<Schema::View>().Key(pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::View::AlterVersion>{viewInfo->AlterVersion},
+        NIceDb::TUpdate<Schema::View::QueryText>{viewInfo->QueryText});
+}
+
+void TSchemeShard::PersistRemoveView(NIceDb::TNiceDb& db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    if (const auto view = Views.find(pathId); view != Views.end()) {
+        Views.erase(view);
+    }
+    db.Table<Schema::View>().Key(pathId.LocalPathId).Delete();
+}
+
 void TSchemeShard::PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
@@ -3990,6 +4018,13 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 generalVersion += result.GetExternalDataSourceVersion();
                 break;
             }
+            case NKikimrSchemeOp::EPathType::EPathTypeView: {
+                auto it = Views.find(pathId);
+                Y_ABORT_UNLESS(it != Views.end());
+                result.SetViewVersion(it->second->AlterVersion);
+                generalVersion += result.GetViewVersion();
+                break;
+            }
 
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid: {
                 Y_UNREACHABLE();
@@ -4767,6 +4802,9 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
         break;
     case TPathElement::EPathType::EPathTypeExternalDataSource:
         TabletCounters->Simple()[COUNTER_EXTERNAL_DATA_SOURCE_COUNT].Sub(1);
+        break;
+    case TPathElement::EPathType::EPathTypeView:
+        TabletCounters->Simple()[COUNTER_VIEW_COUNT].Sub(1);
         break;
     case TPathElement::EPathType::EPathTypeInvalid:
         Y_ABORT("impossible path type");

@@ -38,6 +38,7 @@ enum EObjectType {
     BlobDepot = 23;
     ExternalTable = 24;
     ExternalDataSource = 25;
+    View = 26;
 }
 
 message TBrowseInfo {

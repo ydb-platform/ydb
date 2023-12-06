@@ -9,6 +9,8 @@
 
 #include <yt/yt/core/yson/token_writer.h>
 
+#include <library/cpp/yt/misc/wrapper_traits.h>
+
 namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -31,9 +33,7 @@ concept SupportsDontSerializeDefaultImpl =
 
 template <class T>
 concept SupportsDontSerializeDefault =
-    SupportsDontSerializeDefaultImpl<T> ||
-    TStdOptionalTraits<T>::IsStdOptional &&
-    SupportsDontSerializeDefaultImpl<typename TStdOptionalTraits<T>::TValueType>;
+    SupportsDontSerializeDefaultImpl<typename TWrapperTraits<T>::TRecursiveUnwrapped>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

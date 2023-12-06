@@ -805,6 +805,21 @@ const TPath::TChecker& TPath::TChecker::IsExternalDataSource(EStatus status) con
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::IsView(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsView()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a view"
+        << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
+
+}
+
 const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus status) const {
     if (Failed) {
         return *this;

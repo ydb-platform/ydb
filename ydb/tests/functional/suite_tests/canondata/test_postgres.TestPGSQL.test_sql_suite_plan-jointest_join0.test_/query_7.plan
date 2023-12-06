@@ -152,10 +152,10 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "TablePointLookup",
+                                                        "Node Type": "TableRangeScan",
                                                         "Operators": [
                                                             {
-                                                                "Name": "TablePointLookup",
+                                                                "Name": "TableRangeScan",
                                                                 "ReadColumns": [
                                                                     "hundred",
                                                                     "ten"
@@ -229,7 +229,7 @@
                     "scan_by": [
                         "unique2 (-\u221e, +\u221e)"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

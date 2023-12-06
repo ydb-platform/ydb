@@ -47,6 +47,7 @@ RECURSE_FOR_TESTS(
     ut_ttl
     ut_user_attributes
     ut_user_attributes_reboots
+    ut_view
 )
 
 LIBRARY()
@@ -118,6 +119,7 @@ SRCS(
     schemeshard__operation_create_solomon.cpp
     schemeshard__operation_create_subdomain.cpp
     schemeshard__operation_create_table.cpp
+    schemeshard__operation_create_view.cpp
     schemeshard__operation_drop_bsv.cpp
     schemeshard__operation_drop_external_data_source.cpp
     schemeshard__operation_drop_external_table.cpp
@@ -135,6 +137,7 @@ SRCS(
     schemeshard__operation_drop_subdomain.cpp
     schemeshard__operation_drop_table.cpp
     schemeshard__operation_drop_unsafe.cpp
+    schemeshard__operation_drop_view.cpp
     schemeshard__operation_mkdir.cpp
     schemeshard__operation_modify_acl.cpp
     schemeshard__operation_move_index.cpp

@@ -4015,12 +4015,9 @@
     "test.test[pg-tpch-q20-default.txt-Results]": [],
     "test.test[pg_catalog-lambda--Analyze]": [
         {
-            "checksum": "798e9432935df37140d2f81382e21f6a",
-            "size": 4576,
-            "uri": "https://{canondata_backend}/1600758/8c5c20c730827581670b6ca2218819f9f92978c0/resource.tar.gz#test.test_pg_catalog-lambda--Analyze_/plan.txt"
-        },
-        {
-            "uri": "file://test.test_pg_catalog-lambda--Analyze_/extracted"
+            "checksum": "a92a67f2dd21c0864f0612e4fb940657",
+            "size": 4713,
+            "uri": "https://{canondata_backend}/1880306/3b0ac69e754a5bc45f3b426e0cb53bbecdce37e5/resource.tar.gz#test.test_pg_catalog-lambda--Analyze_/plan.txt"
         }
     ],
     "test.test[pg_catalog-lambda--Debug]": [

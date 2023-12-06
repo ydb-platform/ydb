@@ -84,4 +84,12 @@ bool TDqIntegrationBase::PrepareFullResultTableParams(const TExprNode&, TExprCon
 void TDqIntegrationBase::WriteFullResultTableRef(NYson::TYsonWriter&, const TVector<TString>&, const THashMap<TString, TString>&) {
 }
 
+bool TDqIntegrationBase::FillSourcePlanProperties(const NNodes::TExprBase&, TMap<TString, NJson::TJsonValue>&) {
+    return false;
+}
+
+bool TDqIntegrationBase::FillSinkPlanProperties(const NNodes::TExprBase&, TMap<TString, NJson::TJsonValue>&) {
+    return false;
+}
+
 } // namespace NYql

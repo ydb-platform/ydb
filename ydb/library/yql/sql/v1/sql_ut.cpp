@@ -1593,7 +1593,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(SqlToYql(req).IsOk());
     }
 
-    Y_UNIT_TEST(NoWarnUnionAllWithOrderByWithExplicitLegacyMode) {
+    Y_UNIT_TEST(DenyAnsiOrderByLimitLegacyMode) {
         auto req = "pragma DisableAnsiOrderByLimitInUnionAll;\n"
                    "use plato;\n"
                    "\n"
@@ -1602,38 +1602,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                    "select * from Input order by key limit 1;";
 
         auto res = SqlToYql(req);
-        UNIT_ASSERT(res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Warning: Use of deprecated DisableAnsiOrderByLimitInUnionAll pragma. It will be dropped soon, code: 4518\n");
-    }
-
-    Y_UNIT_TEST(WarnUnionAllWithDiscardIntoResultWithExplicitLegacyMode) {
-        auto req = "use plato;\n"
-                   "pragma DisableAnsiOrderByLimitInUnionAll;\n"
-                   "\n"
-                   "select * from Input into result aaa\n"
-                   "union all\n"
-                   "discard select * from Input;";
-
-        auto res = SqlToYql(req);
-        UNIT_ASSERT(res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:8: Warning: Use of deprecated DisableAnsiOrderByLimitInUnionAll pragma. It will be dropped soon, code: 4518\n"
-                                          "<main>:4:21: Warning: INTO RESULT will be ignored here. Please use INTO RESULT after last subquery in UNION ALL if you want label entire UNION ALL result, code: 4522\n"
-                                          "<main>:6:1: Warning: DISCARD will be ignored here. Please use DISCARD before first subquery in UNION ALL if you want to discard entire UNION ALL result, code: 4522\n");
-    }
-
-    Y_UNIT_TEST(WarnUnionAllWithIgnoredOrderByLegacyMode) {
-        auto req = "use plato;\n"
-                   "pragma DisableAnsiOrderByLimitInUnionAll;\n"
-                   "\n"
-                   "SELECT * FROM (\n"
-                   "  SELECT * FROM Input\n"
-                   "  UNION ALL\n"
-                   "  SELECT t.* FROM Input AS t ORDER BY t.key\n"
-                   ");";
-        auto res = SqlToYql(req);
-        UNIT_ASSERT(res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:8: Warning: Use of deprecated DisableAnsiOrderByLimitInUnionAll pragma. It will be dropped soon, code: 4518\n"
-                                          "<main>:7:3: Warning: ORDER BY without LIMIT in subquery will be ignored, code: 4504\n");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: DisableAnsiOrderByLimitInUnionAll pragma is deprecated and no longer supported\n");
     }
 
     Y_UNIT_TEST(ReduceUsingUdfWithShortcutsWorks) {

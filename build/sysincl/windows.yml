@@ -181,6 +181,7 @@
   - processthreadsapi.h
   - processtopologyapi.h
   - profileapi.h
+  - projectedfslib.h
   - provider.h
   - psapi.h
   - pshpack1.h

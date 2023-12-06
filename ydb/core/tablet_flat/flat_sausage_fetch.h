@@ -8,10 +8,11 @@ namespace NKikimr {
 namespace NPageCollection {
 
     struct TFetch {
-        TFetch(ui64 cookie, TIntrusiveConstPtr<IPageCollection> pageCollection, TVector<ui32> pages)
+        TFetch(ui64 cookie, TIntrusiveConstPtr<IPageCollection> pageCollection, TVector<ui32> pages, NWilson::TTraceId traceId = {})
             : Cookie(cookie)
             , PageCollection(std::move(pageCollection))
             , Pages(std::move(pages))
+            , TraceId(std::move(traceId))
         {
 
         }
@@ -27,6 +28,7 @@ namespace NPageCollection {
 
         TIntrusiveConstPtr<IPageCollection> PageCollection;
         TVector<ui32> Pages;
+        NWilson::TTraceId TraceId;
     };
 
     struct TLoadedPage {

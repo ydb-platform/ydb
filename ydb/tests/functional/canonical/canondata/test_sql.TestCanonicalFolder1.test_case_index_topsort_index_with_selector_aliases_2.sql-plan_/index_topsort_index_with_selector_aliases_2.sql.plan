@@ -21,7 +21,7 @@
                     "scan_by": [
                         "orderId (-\u221e, +\u221e)"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

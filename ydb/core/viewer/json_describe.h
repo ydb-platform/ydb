@@ -172,6 +172,8 @@ public:
                 return NKikimrSchemeOp::EPathTypeBlockStoreVolume;
             case TNavigate::KindFileStore:
                 return NKikimrSchemeOp::EPathTypeFileStore;
+            case TNavigate::KindView:
+                return NKikimrSchemeOp::EPathTypeView;
             default:
                 return NKikimrSchemeOp::EPathTypeDir;
         }

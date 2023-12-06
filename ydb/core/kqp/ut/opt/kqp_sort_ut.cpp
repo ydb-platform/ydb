@@ -1054,21 +1054,21 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
 
-        auto tableLookup = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TablePointLookup");
+        auto tableRangeRead = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TableRangeScan");
         size_t lookupIndex = 2;
-        if (!tableLookup.IsDefined()) {
-            tableLookup = FindPlanNodeByKv(plan, "Node Type", "Limit-TablePointLookup");
+        if (!tableRangeRead.IsDefined()) {
+            tableRangeRead = FindPlanNodeByKv(plan, "Node Type", "Limit-TableRangeScan");
             lookupIndex = 1;
         }
-        UNIT_ASSERT(tableLookup.IsDefined());
+        UNIT_ASSERT(tableRangeRead.IsDefined());
 
-        auto& limitOp = tableLookup.GetMapSafe().at("Operators").GetArraySafe().at(0).GetMapSafe();
+        auto& limitOp = tableRangeRead.GetMapSafe().at("Operators").GetArraySafe().at(0).GetMapSafe();
         UNIT_ASSERT_VALUES_EQUAL("Limit", limitOp.at("Name").GetStringSafe());
         UNIT_ASSERT_VALUES_EQUAL("$limit", limitOp.at("Limit").GetStringSafe());
 
-        auto& lookupOp = tableLookup.GetMapSafe().at("Operators").GetArraySafe().at(lookupIndex).GetMapSafe();
-        UNIT_ASSERT_VALUES_EQUAL("TablePointLookup", lookupOp.at("Name").GetStringSafe());
-        UNIT_ASSERT_VALUES_EQUAL("index", lookupOp.at("Table").GetStringSafe());
+        auto& rangeReadOp = tableRangeRead.GetMapSafe().at("Operators").GetArraySafe().at(lookupIndex).GetMapSafe();
+        UNIT_ASSERT_VALUES_EQUAL("TableRangeScan", rangeReadOp.at("Name").GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL("index", rangeReadOp.at("Table").GetStringSafe());
     }
 
     Y_UNIT_TEST(Offset) {

@@ -106,7 +106,7 @@ void PrepareTablesToUnpack(TSession session) {
 
 Y_UNIT_TEST_SUITE(KqpExtractPredicateLookup) {
 
-void Test(const TString& query, const TString& answer, TMaybe<TString> allowScans = {}, NYdb::TParams params = TParamsBuilder().Build()) {
+void Test(const TString& query, const TString& answer, THashSet<TString> allowScans = {}, NYdb::TParams params = TParamsBuilder().Build()) {
     TKikimrSettings settings;
     settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
     TKikimrRunner kikimr(settings);
@@ -133,7 +133,7 @@ void Test(const TString& query, const TString& answer, TMaybe<TString> allowScan
     UNIT_ASSERT(ValidatePlanNodeIds(plan));
     for (const auto& tableStats : plan.GetMap().at("tables").GetArray()) {
         TString table = tableStats.GetMap().at("name").GetString();
-        if (allowScans && table == *allowScans) {
+        if (allowScans.contains(table)) {
             continue;
         }
 
@@ -406,7 +406,7 @@ Y_UNIT_TEST(PointJoin) {
             [[2];[102];["Value1"];[102];["Value22"]];
             [[2];[103];["Value3"];[103];["Value23"]]
         ])",
-        "/Root/SimpleKey",
+        {"/Root/SimpleKey"},
         TParamsBuilder().AddParam("$p").Int32(1).Build().Build());
 
     Test(
@@ -421,7 +421,7 @@ Y_UNIT_TEST(PointJoin) {
         R"([
             [[3u];[103];["Value2"];[103];["Value23"]]
         ])",
-        "/Root/SimpleKey",
+        {"/Root/SimpleKey"},
         TParamsBuilder().AddParam("$p").Int32(3).Build().Build());
 
     Test(
@@ -435,7 +435,7 @@ Y_UNIT_TEST(PointJoin) {
         )",
         R"([
         ])",
-        "/Root/SimpleKey",
+        {"/Root/SimpleKey"},
         TParamsBuilder().AddParam("$p").Int32(-2).Build().Build());
 
     Test(
@@ -450,7 +450,7 @@ Y_UNIT_TEST(PointJoin) {
         R"([
             [[3u];[103];["Value2"];[103];["Value23"];["103-2"]]
         ])",
-        "/Root/SimpleKey",
+        {"/Root/SimpleKey", "/Root/UintComplexKeyWithIndex/Index/indexImplTable"},
         TParamsBuilder().AddParam("$p").Int32(3).Build().Build());
 }
 
@@ -467,7 +467,7 @@ Y_UNIT_TEST(SqlInJoin) {
             [[2];[102];["Value1"]];
             [[2];[103];["Value3"]]
         ])",
-        "/Root/SimpleKey",
+        {"/Root/SimpleKey"},
         TParamsBuilder().AddParam("$p").Int32(1).Build().Build());
 
     Test(
@@ -480,7 +480,7 @@ Y_UNIT_TEST(SqlInJoin) {
         R"([
             [[3u];[103];["Value2"]]
         ])",
-        "/Root/SimpleKey",
+        {"/Root/SimpleKey"},
         TParamsBuilder().AddParam("$p").Int32(3).Build().Build());
 
     Test(
@@ -492,7 +492,7 @@ Y_UNIT_TEST(SqlInJoin) {
         )",
         R"([
         ])",
-        "/Root/SimpleKey",
+        {"/Root/SimpleKey"},
         TParamsBuilder().AddParam("$p").Int32(-2).Build().Build());
 
 
@@ -506,7 +506,7 @@ Y_UNIT_TEST(SqlInJoin) {
         R"([
             [[3u];[103];["Value2"];["103-2"]]
         ])",
-        "/Root/SimpleKey",
+        {"/Root/SimpleKey", "/Root/UintComplexKeyWithIndex/Index/indexImplTable"},
         TParamsBuilder().AddParam("$p").Int32(3).Build().Build());
 }
 

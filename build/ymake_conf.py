@@ -1089,7 +1089,10 @@ class Compiler(object):
     def print_compiler(self):
         # CLANG and CLANG_VER variables
         emit(self.compiler_variable, 'yes')
-        emit('{}_VER'.format(self.compiler_variable), self.tc.compiler_version)
+        cv = self.tc.compiler_version
+        if '.' in cv:
+            cv = cv[:cv.index('.')]
+        emit('{}_VER'.format(self.compiler_variable), cv)
         if self.tc.is_xcode:
             emit('XCODE', 'yes')
 

@@ -39,6 +39,7 @@ message TAllocateWorkersRequest {
 
     uint64 FreeWorkerAfterMs = 14;
     NYql.NDqProto.EDqStatsMode StatsMode = 16;
+    bool EnableSpilling = 17; // false
 }
 
 message TWorkerGroup {

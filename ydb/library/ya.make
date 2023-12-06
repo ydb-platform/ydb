@@ -1,5 +1,6 @@
 RECURSE(
     accessor
+    actors
     aclib
     arrow_clickhouse
     arrow_kernels

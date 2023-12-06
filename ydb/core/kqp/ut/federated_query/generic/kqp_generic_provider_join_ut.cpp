@@ -1,36 +1,15 @@
 #include "ch_recipe_ut_helpers.h"
 #include "connector_recipe_ut_helpers.h"
 #include "pg_recipe_ut_helpers.h"
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/kqp/ut/federated_query/common/common.h>
-#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/system/env.h>
-
 #include <fmt/format.h>
 
+using namespace NTestUtils;
 using namespace fmt::literals;
-
-std::shared_ptr<NKikimr::NKqp::TKikimrRunner> MakeKikimrRunner() {
-    NYql::TGenericConnectorConfig clientCfg;
-    clientCfg.MutableEndpoint()->set_host(GetConnectorHost());
-    clientCfg.MutableEndpoint()->set_port(GetConnectorPort());
-
-    NKikimrConfig::TAppConfig appCfg;
-    appCfg.MutableFeatureFlags()->SetEnableExternalDataSources(true);
-
-    auto kikimr = NKikimr::NKqp::NFederatedQueryTest::MakeKikimrRunner(
-        NYql::IHTTPGateway::Make(),
-        NYql::NConnector::MakeClientGRPC(clientCfg),
-        nullptr,
-        appCfg);
-    kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
-    return kikimr;
-}
 
 Y_UNIT_TEST_SUITE(FederatedQueryJoin) {
     Y_UNIT_TEST(InnerJoinChPg) {
@@ -83,7 +62,7 @@ Y_UNIT_TEST_SUITE(FederatedQueryJoin) {
             chClient.Execute(insertData);
         }
 
-        std::shared_ptr<NKikimr::NKqp::TKikimrRunner> kikimr = MakeKikimrRunner();
+        std::shared_ptr<NKikimr::NKqp::TKikimrRunner> kikimr = MakeKikimrRunnerWithConnector();
 
         auto tableCLient = kikimr->GetTableClient();
         auto session = tableCLient.CreateSession().GetValueSync().GetSession();

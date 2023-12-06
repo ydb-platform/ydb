@@ -4,6 +4,7 @@
 #include <ydb/library/yql/core/yql_data_provider.h>
 #include <ydb/library/yql/providers/common/transform/yql_visit.h>
 #include <ydb/library/yql/providers/common/transform/yql_exec.h>
+#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
 
 #include <util/generic/ptr.h>
 
@@ -17,5 +18,6 @@ THolder<TVisitorTransformerBase> CreatePgDataSinkTypeAnnotationTransformer(TPgSt
 
 THolder<TExecTransformerBase> CreatePgDataSinkExecTransformer(TPgState::TPtr state);
 
+THolder<IDqIntegration> CreatePgDqIntegration(TPgState::TPtr state);
 
 }

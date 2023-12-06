@@ -1845,13 +1845,11 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             Ctx.AnsiRankForNullableKeys = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiRankForNullableKeys");
         } else if (normalizedPragma == "ansiorderbylimitinunionall") {
-            Ctx.AnsiOrderByLimitInUnionAll = true;
             Ctx.IncrementMonCounter("sql_pragma", "AnsiOrderByLimitInUnionAll");
-        } else if (!Ctx.EnforceAnsiOrderByLimitInUnionAll && normalizedPragma == "disableansiorderbylimitinunionall") {
-            Ctx.AnsiOrderByLimitInUnionAll = false;
-            Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
-                << "Use of deprecated DisableAnsiOrderByLimitInUnionAll pragma. It will be dropped soon";
-            Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiOrderByLimitInUnionAll");
+        } else if (normalizedPragma == "disableansiorderbylimitinunionall") {
+            Error() << "DisableAnsiOrderByLimitInUnionAll pragma is deprecated and no longer supported";
+            Ctx.IncrementMonCounter("sql_errors", "DeprecatedPragma");
+            return {};
         } else if (normalizedPragma == "ansioptionalas") {
             Ctx.AnsiOptionalAs = true;
             Ctx.IncrementMonCounter("sql_pragma", "AnsiOptionalAs");

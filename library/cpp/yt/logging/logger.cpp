@@ -93,8 +93,8 @@ TMessageStringBuilder::TPerThreadCache* TMessageStringBuilder::GetCache()
     if (CacheDestroyed_) {
         return nullptr;
     }
-    static thread_local TPerThreadCache Cache;
-    Cache_ = &Cache;
+    static YT_THREAD_LOCAL(TPerThreadCache) Cache;
+    Cache_ = &GetTlsRef(Cache);
     return Cache_;
 }
 
@@ -103,8 +103,8 @@ TMessageStringBuilder::TPerThreadCache::~TPerThreadCache()
     TMessageStringBuilder::DisablePerThreadCache();
 }
 
-thread_local TMessageStringBuilder::TPerThreadCache* TMessageStringBuilder::Cache_;
-thread_local bool TMessageStringBuilder::CacheDestroyed_;
+YT_THREAD_LOCAL(TMessageStringBuilder::TPerThreadCache*) TMessageStringBuilder::Cache_;
+YT_THREAD_LOCAL(bool) TMessageStringBuilder::CacheDestroyed_;
 
 } // namespace NDetail
 
@@ -126,7 +126,7 @@ Y_WEAK ILogManager* GetDefaultLogManager()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-thread_local ELogLevel ThreadMinLogLevel = ELogLevel::Minimum;
+YT_THREAD_LOCAL(ELogLevel) ThreadMinLogLevel = ELogLevel::Minimum;
 
 void SetThreadMinLogLevel(ELogLevel minLogLevel)
 {

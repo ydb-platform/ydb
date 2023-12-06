@@ -33,7 +33,6 @@
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
-#include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -194,6 +193,7 @@ void TExecutor::RecreatePageCollectionsCache() noexcept
     if (TransactionWaitPads) {
         for (auto &xpair : TransactionWaitPads) {
             auto &seat = xpair.second->Seat;
+            xpair.second->WaitingSpan.EndOk();
             LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
             seat->CreateEnqueuedSpan();
             ActivationQueue->Push(seat.Release());
@@ -537,6 +537,7 @@ void TExecutor::ActivateWaitingTransactions(TPrivatePageCache::TPage::TWaitQueue
         bool haveCompactionReads = false;
         while (TPrivatePageCacheWaitPad *waitPad = waitPadsQueue->Pop()) {
             if (auto it = TransactionWaitPads.find(waitPad); it != TransactionWaitPads.end()) {
+                it->second->WaitingSpan.EndOk();
                 auto &seat = it->second->Seat;
                 LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
                 seat->CreateEnqueuedSpan();
@@ -1876,7 +1877,7 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
 
         const std::pair<ui32, ui64> toLoad = PrivatePageCache->Request(pages, pad, pageCollectionInfo);
         if (toLoad.first) {
-            auto *req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages));
+            auto *req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages), pad->GetWaitingTraceId());
 
             loadPages += toLoad.first;
             loadBytes += toLoad.second;
@@ -4194,10 +4195,15 @@ TString TExecutor::CheckBorrowConsistency() {
 
 TTransactionWaitPad::TTransactionWaitPad(THolder<TSeat> seat)
     : Seat(std::move(seat))
+    , WaitingSpan(NWilson::TSpan(TWilsonTablet::Tablet, Seat->GetTxTraceId(), "Tablet.Transaction.Wait"))
 {}
 
 TTransactionWaitPad::~TTransactionWaitPad()
 {}
+
+NWilson::TTraceId TTransactionWaitPad::GetWaitingTraceId() const noexcept {
+    return WaitingSpan.GetTraceId();
+}
 
 // ICompactionBackend implementation
 

@@ -87,16 +87,16 @@ runs:
         BRANCH_TAG="$GITHUB_REF_NAME"
         ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
         
-        
-        case "${{ inputs.build_preset }}" in
+        BUILD_PRESET="${{ inputs.build_preset }}"
+        case "$BUILD_PRESET" in
           relwithdebinfo)
             TESTMO_SOURCE="ya-${ARCH}"
             ;;
-          release-asan)
-            TESTMO_SOURCE="ya-${ARCH}-asan"
+          debug)
+            TESTMO_SOURCE="ya-${ARCH}-debug"
             ;;
-          release-tsan)
-            TESTMO_SOURCE="ya-${ARCH}-tsan"
+          release-*)
+            TESTMO_SOURCE="ya-${ARCH}-${BUILD_PRESET/release-/}"
             ;;
           *)
             echo "Invalid preset: ${{ inputs.build_preset }}"
@@ -165,6 +165,11 @@ runs:
           release-tsan)
             build_type=release
             extra_params+=(--sanitize="thread")
+            extra_params+=(-DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY)
+            ;;
+          release-msan)
+            build_type=release
+            extra_params+=(--sanitize="memory")
             extra_params+=(-DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY)
             ;;
           *)

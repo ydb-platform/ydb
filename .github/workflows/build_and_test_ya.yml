@@ -13,6 +13,10 @@ on:
         type: string
         default: "linux"
         description: "runner label"
+      runner_additional_label:
+        type: string
+        default: "linux"
+        description: "additional runner label, can be empty"
       run_build:
         type: boolean
         default: true
@@ -49,7 +53,7 @@ on:
 jobs:
   main:
     name: Build and test ${{ inputs.build_preset }}
-    runs-on: [ self-hosted, "${{ inputs.runner_label }}" ]
+    runs-on: [ self-hosted, "${{ inputs.runner_label }}", "${{ inputs.runner_additional_label || inputs.runner_label }}"]
     steps:
     - name: Checkout PR
       uses: actions/checkout@v3

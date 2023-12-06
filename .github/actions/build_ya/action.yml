@@ -71,6 +71,11 @@ runs:
             extra_params+=(--sanitize="thread")
             extra_params+=(-DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY)
             ;;
+          release-msan)
+            build_type=release
+            extra_params+=(--sanitize="memory")
+            extra_params+=(-DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY)
+            ;;
           *)
             echo "Invalid preset: ${{ inputs.build_preset }}"
             exit 1

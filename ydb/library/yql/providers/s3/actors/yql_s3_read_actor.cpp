@@ -1863,7 +1863,8 @@ public:
                     readers[readyReaderIndex].reset();
                 }
                 if (isCancelled) {
-                    LOG_CORO_D("RunCoroBlockArrowParserOverHttp - STOPPED ON SATURATION");
+                    LOG_CORO_D("RunCoroBlockArrowParserOverHttp - STOPPED ON SATURATION, downloaded " <<
+                               QueueBufferCounter->DownloadedBytes << " bytes");
                     break;        
                 }
             }

@@ -28,6 +28,7 @@ TEST_SRCS(
     test_formats.py
     test_inflight.py
     test_insert.py
+    test_push_down.py
     test_s3.py
     test_size_limit.py
     test_statistics.py

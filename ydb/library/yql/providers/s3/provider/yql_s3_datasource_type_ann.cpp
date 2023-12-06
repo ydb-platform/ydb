@@ -311,6 +311,10 @@ public:
             return TStatus::Error;
         }
 
+        if (!EnsureAtom(*input->Child(TS3SourceSettings::idx_RowsLimitHint), ctx)) {
+            return TStatus::Error;
+        }
+
         const TTypeAnnotationNode* itemType = ctx.MakeType<TDataExprType>(EDataSlot::String);
         if (extraColumnsType->GetSize()) {
             itemType = ctx.MakeType<TTupleExprType>(
@@ -510,7 +514,7 @@ public:
     }
 
     TStatus HandleObject(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 2U, 4U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 2U, 3U, ctx)) {
             return TStatus::Error;
         }
 
@@ -521,10 +525,6 @@ public:
 
         const auto format = input->Child(TS3Object::idx_Format)->Content();
         if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) || !NCommon::ValidateFormatForInput(format, ctx)) {
-            return TStatus::Error;
-        }
-
-        if (!EnsureAtom(*input->Child(TS3SourceSettings::idx_RowsLimitHint), ctx)) {
             return TStatus::Error;
         }
 

@@ -569,6 +569,39 @@ func TestIsWrongLength(t *testing.T) {
 	}
 }
 
+func FuzzParse(f *testing.F) {
+	for _, tt := range tests {
+		f.Add(tt.in)
+		f.Add(strings.ToUpper(tt.in))
+	}
+	f.Fuzz(func(t *testing.T, in string) {
+		Parse(in)
+	})
+}
+
+func FuzzParseBytes(f *testing.F) {
+	for _, tt := range tests {
+		f.Add([]byte(tt.in))
+	}
+	f.Fuzz(func(t *testing.T, in []byte) {
+		ParseBytes(in)
+	})
+}
+
+func FuzzFromBytes(f *testing.F) {
+	// Copied from TestFromBytes.
+	f.Add([]byte{
+		0x7d, 0x44, 0x48, 0x40,
+		0x9d, 0xc0,
+		0x11, 0xd1,
+		0xb2, 0x45,
+		0x5f, 0xfd, 0xce, 0x74, 0xfa, 0xd2,
+	})
+	f.Fuzz(func(t *testing.T, in []byte) {
+		FromBytes(in)
+	})
+}
+
 var asString = "f47ac10b-58cc-0372-8567-0e02b2c3d479"
 var asBytes = []byte(asString)
 
@@ -699,4 +732,19 @@ func BenchmarkUUID_NewPooled(b *testing.B) {
 			}
 		}
 	})
+}
+
+func BenchmarkUUIDs_Strings(b *testing.B) {
+	uuid1, err := Parse("f47ac10b-58cc-0372-8567-0e02b2c3d479")
+	if err != nil {
+		b.Fatal(err)
+	}
+	uuid2, err := Parse("7d444840-9dc0-11d1-b245-5ffdce74fad2")
+	if err != nil {
+		b.Fatal(err)
+	}
+	uuids := UUIDs{uuid1, uuid2}
+	for i := 0; i < b.N; i++ {
+		uuids.Strings()
+	}
 }

@@ -1734,6 +1734,15 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct View : Table<108> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct QueryText : Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, AlterVersion, QueryText>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -1840,7 +1849,8 @@ struct Schema : NIceDb::Schema {
         ExternalTable,
         ExternalDataSource,
         PersQueueGroupStats,
-        BuildColumnOperationSettings
+        BuildColumnOperationSettings,
+        View
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

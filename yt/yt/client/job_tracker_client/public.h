@@ -12,7 +12,8 @@ YT_DEFINE_STRONG_TYPEDEF(TJobId, TGuid);
 
 extern const TJobId NullJobId;
 
-using TOperationId = TGuid;
+YT_DEFINE_STRONG_TYPEDEF(TOperationId, TGuid);
+
 extern const TOperationId NullOperationId;
 
 ////////////////////////////////////////////////////////////////////////////////

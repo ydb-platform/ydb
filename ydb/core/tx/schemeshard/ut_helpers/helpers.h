@@ -257,6 +257,11 @@ namespace NSchemeShardUT_Private {
     void AsyncAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, const TString& mountToken, ui64 tokenVersion = 0);
     void TestAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, const TString& mountToken, ui64 tokenVersion = 0, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusSuccess});
 
+    // view
+    GENERIC_HELPERS(CreateView);
+    GENERIC_HELPERS(DropView);
+    DROP_BY_PATH_ID_HELPERS(DropView);
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS

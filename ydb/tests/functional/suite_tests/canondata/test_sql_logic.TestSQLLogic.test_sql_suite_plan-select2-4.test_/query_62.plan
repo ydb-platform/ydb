@@ -24,7 +24,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-Filter-TablePointLookup",
+                                        "Node Type": "TopSort-Filter-TableRangeScan",
                                         "Operators": [
                                             {
                                                 "Limit": "1001",
@@ -36,7 +36,7 @@
                                                 "Predicate": "item.a != 0 And item.e + item.d >= item.a + item.b - 10 And item.e + item.d <= item.c + 130"
                                             },
                                             {
-                                                "Name": "TablePointLookup",
+                                                "Name": "TableRangeScan",
                                                 "ReadColumns": [
                                                     "a",
                                                     "b",
@@ -95,7 +95,7 @@
                         "d (-\u221e, +\u221e)",
                         "e (-\u221e, +\u221e)"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

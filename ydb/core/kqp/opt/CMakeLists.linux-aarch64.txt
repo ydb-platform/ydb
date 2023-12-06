@@ -31,7 +31,7 @@ target_link_libraries(core-kqp-opt PUBLIC
   yql-dq-common
   yql-dq-opt
   yql-dq-type_ann
-  providers-s3-expr_nodes
+  yql-utils-plan
   core-kqp-provider
   tools-enum_parser-enum_serialization_runtime
 )

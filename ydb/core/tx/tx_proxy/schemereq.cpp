@@ -149,8 +149,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropReplication:
         case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
         case NKikimrSchemeOp::ESchemeOpDropExternalTable:
-            return *modifyScheme.MutableDrop()->MutableName();
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
+        case NKikimrSchemeOp::ESchemeOpDropView:
             return *modifyScheme.MutableDrop()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterTable:
@@ -338,6 +338,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpAlterExternalDataSource:
             Y_ABORT("no implementation for ESchemeOpAlterExternalDataSource");
+
+        case NKikimrSchemeOp::ESchemeOpCreateView:
+            return *modifyScheme.MutableCreateView()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpAlterView:
+            Y_ABORT("no implementation for ESchemeOpAlterView");
         }
     }
 
@@ -359,6 +365,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateColumnTable:
         case NKikimrSchemeOp::ESchemeOpCreateExternalTable:
         case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
+        case NKikimrSchemeOp::ESchemeOpCreateView:
             return true;
         default:
             return false;
@@ -607,7 +614,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropReplication:
         case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
         case NKikimrSchemeOp::ESchemeOpDropExternalTable:
-        case NKikimrSchemeOp::ESchemeOpDropExternalDataSource: {
+        case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
+        case NKikimrSchemeOp::ESchemeOpDropView:
+        {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
             toResolve.RequiredAccess = NACLib::EAccessRights::RemoveSchema;
@@ -667,6 +676,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateBlobDepot:
         case NKikimrSchemeOp::ESchemeOpCreateExternalTable:
         case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
+        case NKikimrSchemeOp::ESchemeOpCreateView:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;
@@ -768,6 +778,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropCdcStreamAtTable:
         case NKikimrSchemeOp::ESchemeOpMoveTableIndex:
         case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive:
+        case NKikimrSchemeOp::ESchemeOpAlterView:
             return false;
         }
         return true;

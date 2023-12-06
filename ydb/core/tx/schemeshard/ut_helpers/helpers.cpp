@@ -897,6 +897,11 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropExternalDataSource, NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalDataSource, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropExternalDataSource, NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalDataSource)
 
+    // view
+    GENERIC_HELPERS(CreateView, NKikimrSchemeOp::EOperationType::ESchemeOpCreateView, &NKikimrSchemeOp::TModifyScheme::MutableCreateView)
+    GENERIC_HELPERS(DropView, NKikimrSchemeOp::EOperationType::ESchemeOpDropView, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropView, NKikimrSchemeOp::EOperationType::ESchemeOpDropView)
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS

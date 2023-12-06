@@ -125,6 +125,7 @@ public:
     bool IsCreateFinished() const;
     bool IsExternalTable() const;
     bool IsExternalDataSource() const;
+    bool IsView() const;
     TVirtualTimestamp GetCreateTS() const;
     TVirtualTimestamp GetDropTS() const;
     void SetDropped(TStepId step, TTxId txId);

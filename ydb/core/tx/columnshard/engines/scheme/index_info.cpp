@@ -127,27 +127,26 @@ std::vector<TNameTypeInfo> TIndexInfo::GetColumns(const std::vector<ui32>& ids) 
     return NOlap::GetColumns(*this, ids);
 }
 
-std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchema() const {
-    if (!Schema) {
-        std::vector<ui32> ids;
-        ids.reserve(Columns.size());
-        for (const auto& [id, _] : Columns) {
-            ids.push_back(id);
-        }
-
-        // The ids had a set type before so we keep them sorted.
-        std::sort(ids.begin(), ids.end());
-        Schema = MakeArrowSchema(Columns, ids);
+void TIndexInfo::BuildArrowSchema() {
+    AFL_VERIFY(!Schema);
+    std::vector<ui32> ids;
+    ids.reserve(Columns.size());
+    for (const auto& [id, _] : Columns) {
+        ids.push_back(id);
     }
 
+    // The ids had a set type before so we keep them sorted.
+    std::sort(ids.begin(), ids.end());
+    Schema = MakeArrowSchema(Columns, ids);
+}
+
+std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchema() const {
+    AFL_VERIFY(Schema);
     return Schema;
 }
 
-std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchemaWithSpecials() const {
-    if (SchemaWithSpecials) {
-        return SchemaWithSpecials;
-    }
-
+void TIndexInfo::BuildSchemaWithSpecials() {
+    AFL_VERIFY(!SchemaWithSpecials);
     const auto& schema = ArrowSchema();
 
     std::vector<std::shared_ptr<arrow::Field>> extended;
@@ -160,6 +159,10 @@ std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchemaWithSpecials() const {
     extended.insert(extended.end(), schema->fields().begin(), schema->fields().end());
 
     SchemaWithSpecials = std::make_shared<arrow::Schema>(std::move(extended));
+}
+
+std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchemaWithSpecials() const {
+    AFL_VERIFY(SchemaWithSpecials);
     return SchemaWithSpecials;
 }
 
@@ -244,6 +247,11 @@ void TIndexInfo::SetAllKeys() {
         }
     }
     MinMaxIdxColumnsIds.insert(GetPKFirstColumnId());
+    if (!Schema) {
+        AFL_VERIFY(!SchemaWithSpecials);
+        BuildArrowSchema();
+        BuildSchemaWithSpecials();
+    }
 }
 
 std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortDescription() const {
@@ -360,6 +368,8 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
         Columns[id] = NTable::TColumn(name, id, typeInfoMod.TypeInfo, typeInfoMod.TypeMod, notNull);
         ColumnNames[name] = id;
     }
+    BuildArrowSchema();
+    BuildSchemaWithSpecials();
     for (const auto& col : schema.GetColumns()) {
         std::optional<TColumnFeatures> cFeatures = TColumnFeatures::BuildFromProto(col, *this);
         if (!cFeatures) {
@@ -382,7 +392,6 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
         }
         DefaultCompression = *result;
     }
-
     Version = schema.GetVersion();
     return true;
 }

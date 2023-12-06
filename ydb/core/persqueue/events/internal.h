@@ -343,9 +343,15 @@ struct TEvPQ {
         , GetStatForAllConsumers(getStatForAllConsumers)
         {}
 
+        explicit TEvPartitionStatus(const TActorId& sender, const TVector<TString>& consumers)
+        : Sender(sender)
+        , Consumers(consumers)
+        {}
+
         TActorId Sender;
         TString ClientId;
         bool GetStatForAllConsumers;
+        TVector<TString> Consumers;
     };
 
     struct TEvPartitionStatusResponse : public TEventLocal<TEvPartitionStatusResponse, EvPartitionStatusResponse> {

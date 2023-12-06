@@ -382,6 +382,14 @@ ISubOperation::TPtr CreateNewExternalDataSource(TOperationId id, TTxState::ETxSt
 ISubOperation::TPtr CreateDropExternalDataSource(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropExternalDataSource(TOperationId id, TTxState::ETxState state);
 
+// View
+// Create
+ISubOperation::TPtr CreateNewView(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewView(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperation::TPtr CreateDropView(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropView(TOperationId id, TTxState::ETxState state);
+
 /// CDC
 // Create
 TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId id, const TTxTransaction& tx, TOperationContext& context);

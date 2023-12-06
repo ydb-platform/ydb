@@ -97,6 +97,8 @@ public:
             return NKikimrViewer::EObjectType::ExternalTable;
         case NKikimrSchemeOp::EPathType::EPathTypeExternalDataSource:
             return NKikimrViewer::EObjectType::ExternalDataSource;
+        case NKikimrSchemeOp::EPathType::EPathTypeView:
+            return NKikimrViewer::EObjectType::View;
         case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
         case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
         case NKikimrSchemeOp::EPathType::EPathTypeInvalid:

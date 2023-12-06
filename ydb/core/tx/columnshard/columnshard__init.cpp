@@ -89,6 +89,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
     {
         ACFL_INFO("step", "TInsertTable::Load_Start");
+        TMemoryProfileGuard g("TTxInit/InsertTable");
         auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
         if (!localInsertTable->Load(dbTable, TAppData::TimeProvider->Now())) {
             ACFL_ERROR("step", "TInsertTable::Load_Fails");
@@ -100,6 +101,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
 
     {
         ACFL_INFO("step", "TTxController::Load_Start");
+        TMemoryProfileGuard g("TTxInit/TTxController");
         auto localTxController = std::make_unique<TTxController>(*Self);
          if (!localTxController->Load(txc)) {
             ACFL_ERROR("step", "TTxController::Load_Fails");
@@ -111,6 +113,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
 
     {
         ACFL_INFO("step", "TOperationsManager::Load_Start");
+        TMemoryProfileGuard g("TTxInit/TOperationsManager");
         auto localOperationsManager = std::make_unique<TOperationsManager>();
          if (!localOperationsManager->Load(txc)) {
             ACFL_ERROR("step", "TOperationsManager::Load_Fails");
@@ -122,6 +125,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
 
     {
         TBlobManagerDb blobManagerDb(txc.DB);
+        TMemoryProfileGuard g("TTxInit/StoragesManager");
         for (auto&& i : Self->StoragesManager->GetStorages()) {
             if (!i.second->Load(blobManagerDb)) {
                 ACFL_ERROR("event", "storages manager load")("storage", i.first);
@@ -132,13 +136,19 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     {
         ACFL_INFO("step", "TTablesManager::Load_Start");
         TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
-        if (!tManagerLocal.InitFromDB(db)) {
-            ACFL_ERROR("step", "TTablesManager::InitFromDB_Fails");
-            return false;
+        {
+            TMemoryProfileGuard g("TTxInit/TTablesManager");
+            if (!tManagerLocal.InitFromDB(db)) {
+                ACFL_ERROR("step", "TTablesManager::InitFromDB_Fails");
+                return false;
+            }
         }
-        if (!tManagerLocal.LoadIndex(dbTable)) {
-            ACFL_ERROR("step", "TTablesManager::LoadIndex_Fails");
-            return false;
+        {
+            TMemoryProfileGuard g("TTxInit/LoadIndex");
+            if (!tManagerLocal.LoadIndex(dbTable)) {
+                ACFL_ERROR("step", "TTablesManager::LoadIndex_Fails");
+                return false;
+            }
         }
         Self->TablesManager = std::move(tManagerLocal);
 
@@ -246,6 +256,7 @@ bool TTxUpdateSchema::Execute(TTransactionContext& txc, const TActorContext&) {
 void TTxUpdateSchema::Complete(const TActorContext& ctx) {
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxUpdateSchema.Complete");
     if (NormalizerTasks.empty()) {
+        AFL_VERIFY(Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
         Self->Execute(new TTxInit(Self), ctx);
         return;
     }
@@ -276,14 +287,15 @@ private:
 };
 
 bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&) {
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Execute")("details", Self->NormalizerController.DebugString());;
-    Self->NormalizerController.GetNormalizer()->OnResultReady();
+    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Execute")("details", Self->NormalizerController.DebugString());
     return Changes->Apply(txc, Self->NormalizerController);
 }
 
 void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Complete");
-
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("step", "TTxApplyNormalizer.Complete")("tablet_id", Self->TabletID())("event", "initialize_shard");
+    AFL_VERIFY(!Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
+    Self->NormalizerController.GetNormalizer()->OnResultReady();
     if (Self->NormalizerController.GetNormalizer()->WaitResult()) {
         return;
     }
@@ -291,6 +303,7 @@ void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
     if (Self->NormalizerController.SwitchNormalizer()) {
         Self->Execute(new TTxUpdateSchema(Self), ctx);
     } else {
+        AFL_VERIFY(Self->NormalizerController.IsNormalizationFinished())("details", Self->NormalizerController.DebugString());
         Self->Execute(new TTxInit(Self), ctx);
     }
 }

@@ -188,6 +188,7 @@ private:
 
 
         const TString computeActorType = Settings->ComputeActorType.Get().GetOrElse("sync");
+        bool enableSpilling = Settings->SpillingEngine.Get().GetOrElse(TDqSettings::TDefault::SpillingEngine) != TDqSettings::ESpillingEngine::Disable;
 
         auto resourceAllocator = RegisterChild(CreateResourceAllocator(
             GwmActorId, SelfId(), ControlId, workerCount,
@@ -201,6 +202,7 @@ private:
         allocateRequest->Record.SetCreateComputeActor(enableComputeActor);
         allocateRequest->Record.SetComputeActorType(computeActorType);
         allocateRequest->Record.SetStatsMode(StatsMode);
+        allocateRequest->Record.SetEnableSpilling(enableSpilling);
         if (enableComputeActor) {
             ActorIdToProto(ControlId, allocateRequest->Record.MutableResultActorId());
         }

@@ -360,8 +360,9 @@ def update_kikimr(nodes, bin_path, compressed_path):
     nodes.copy(bin_path, slice_kikimr_path, compressed_path=compressed_path)
     for lib in ['libiconv.so', 'liblibaio-dynamic.so', 'liblibidn-dynamic.so']:
         lib_path = os.path.join(bin_directory, lib)
-        remote_lib_path = os.path.join('/lib', lib)
-        nodes.copy(lib_path, remote_lib_path)
+        if os.path.exists(lib_path):
+            remote_lib_path = os.path.join('/lib', lib)
+            nodes.copy(lib_path, remote_lib_path)
 
 
 def update_cfg(nodes, cfg_path):

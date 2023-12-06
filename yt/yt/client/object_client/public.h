@@ -5,6 +5,7 @@
 #include <library/cpp/yt/misc/hash.h>
 
 #include <yt/yt/client/election/public.h>
+#include <yt/yt/client/job_tracker_client/public.h>
 
 #include <library/cpp/yt/misc/strong_typedef.h>
 
@@ -345,7 +346,7 @@ constexpr EObjectType MaxErasureJournalChunkPartType = EObjectType::ErasureJourn
 using TTransactionId = TObjectId;
 constexpr TTransactionId NullTransactionId = {};
 
-using TOperationId = TObjectId;
+using NJobTrackerClient::TOperationId;
 
 ////////////////////////////////////////////////////////////////////////////////
 

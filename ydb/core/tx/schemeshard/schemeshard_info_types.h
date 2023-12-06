@@ -3355,6 +3355,13 @@ struct TExternalDataSourceInfo: TSimpleRefCount<TExternalDataSourceInfo> {
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
 };
 
+struct TViewInfo : TSimpleRefCount<TViewInfo> {
+    using TPtr = TIntrusivePtr<TViewInfo>;
+
+    ui64 AlterVersion = 0;
+    TString QueryText;
+};
+
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const THashMap<ui32, TTableInfo::TColumn>& sourceColumns,
     const THashMap<ui32, TTableInfo::TColumn>& alterColumns,

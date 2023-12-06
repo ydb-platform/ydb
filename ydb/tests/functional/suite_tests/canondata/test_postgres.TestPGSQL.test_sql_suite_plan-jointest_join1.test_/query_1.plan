@@ -25,7 +25,7 @@
                                 "Plans": [
                                     {
                                         "CTE Name": "precompute_1_0",
-                                        "Node Type": "TopSort-InnerJoin (MapJoin)-Filter-TablePointLookup-ConstantExpr",
+                                        "Node Type": "TopSort-InnerJoin (MapJoin)-Filter-TableRangeScan-ConstantExpr",
                                         "Operators": [
                                             {
                                                 "Limit": "1001",
@@ -40,7 +40,7 @@
                                                 "Predicate": "Exist(item.i)"
                                             },
                                             {
-                                                "Name": "TablePointLookup",
+                                                "Name": "TableRangeScan",
                                                 "ReadColumns": [
                                                     "i",
                                                     "k"
@@ -169,7 +169,7 @@
                         "i",
                         "k"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

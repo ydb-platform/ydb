@@ -36,6 +36,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui32, false> _KqpMaxComputeActors;
     NCommon::TConfSetting<bool, false> _KqpEnableSpilling;
     NCommon::TConfSetting<bool, false> _KqpDisableLlvmForUdfStages;
+    NCommon::TConfSetting<ui64, false> _KqpYqlCombinerMemoryLimit;
 
     /* No op just to avoid errors in Cloud Logging until they remove this from their queries */
     NCommon::TConfSetting<bool, false> KqpPushOlapProcess;

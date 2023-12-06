@@ -417,5 +417,26 @@ TString GetRunningTabletsText(ui64 runningTablets, ui64 totalTablets, bool warmU
     return str;
 }
 
+bool IsResourceDrainingState(TTabletInfo::EVolatileState state) {
+    switch (state) {
+    case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_STARTING:
+    case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING:
+    case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool IsAliveState(TTabletInfo::EVolatileState state) {
+    switch (state) {
+    case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_STARTING:
+    case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING:
+        return true;
+    default:
+        return false;
+    }
+}
+
 } // NHive
 } // NKikimr

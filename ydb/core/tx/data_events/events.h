@@ -2,6 +2,8 @@
 
 #include "write_data.h"
 
+#include <library/cpp/lwtrace/shuttle.h>
+
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/base/events.h>
 
@@ -36,10 +38,14 @@ struct TDataEvents {
     static_assert(EEventType::EvEnd < EventSpaceEnd(TKikimrEvents::ES_DATA_OPERATIONS), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_DATA_OPERATIONS)");
 
     struct TEvWrite : public NActors::TEventPB<TEvWrite, NKikimrDataEvents::TEvWrite, TDataEvents::EvWrite> {
+    public:
         TEvWrite() = default;
 
-        TEvWrite(ui64 txId) {
+        TEvWrite(ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode) {
+            Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
+
             Record.SetTxId(txId);
+            Record.SetTxMode(txMode);
         }
 
         void AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, ui64 tableId, 
@@ -63,10 +69,16 @@ struct TDataEvents {
             Y_ABORT_UNLESS(Record.HasTxId());
             return Record.GetTxId();
         }
+
+        void SetOrbit(NLWTrace::TOrbit&& orbit) { Orbit = std::move(orbit); }
+        NLWTrace::TOrbit& GetOrbit() { return Orbit; }
+        NLWTrace::TOrbit&& MoveOrbit() { return std::move(Orbit); }
+    private:
+        NLWTrace::TOrbit Orbit;
     };
 
     struct TEvWriteResult : public NActors::TEventPB<TEvWriteResult, NKikimrDataEvents::TEvWriteResult, TDataEvents::EvWriteResult> {
-
+    public:
         TEvWriteResult() = default;
 
         static std::unique_ptr<TEvWriteResult> BuildError(const ui64 txId, const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {
@@ -96,7 +108,14 @@ struct TDataEvents {
             result->Record.MutableDomainCoordinators()->CopyFrom(transactionInfo.GetDomainCoordinators());
             return result;
         }
+
+        void SetOrbit(NLWTrace::TOrbit&& orbit) { Orbit = std::move(orbit); }
+        NLWTrace::TOrbit& GetOrbit() { return Orbit; }
+        NLWTrace::TOrbit&& MoveOrbit() { return std::move(Orbit); }
+    private:
+        NLWTrace::TOrbit Orbit;
     };
+
 };
 
 }

@@ -219,6 +219,7 @@ private:
         }
         bool createComputeActor = ev->Get()->Record.GetCreateComputeActor();
         TString computeActorType = ev->Get()->Record.GetComputeActorType();
+        bool enableSpilling = Options.UseSpilling && ev->Get()->Record.GetEnableSpilling();
 
         if (createComputeActor && !Options.CanUseComputeActor) {
             Send(ev->Sender, MakeHolder<TEvAllocateWorkersResponse>("Compute Actor Disabled", NYql::NDqProto::StatusIds::BAD_REQUEST), 0, ev->Cookie);
@@ -296,14 +297,15 @@ private:
                         computeActorType,
                         Options.TaskRunnerActorFactory,
                         taskCounters,
-                        ev->Get()->Record.GetStatsMode()));
+                        ev->Get()->Record.GetStatsMode(),
+                        enableSpilling));
                 } else {
                     actor.Reset(CreateWorkerActor(
                         Options.RuntimeData,
                         traceId,
                         Options.TaskRunnerActorFactory,
                         Options.AsyncIoFactory,
-                        Options.UseSpilling));
+                        enableSpilling));
                 }
                 allocationInfo.WorkerActors.emplace_back(RegisterChild(
                     actor.Release(), createComputeActor ? NYql::NDq::TEvDq::TEvAbortExecution::Unavailable("Aborted by LWM").Release() : nullptr

@@ -13,6 +13,7 @@
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/plan/plan_utils.h>
 
 namespace NYql {
 
@@ -94,8 +95,8 @@ namespace NYql {
             void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings,
                                     TString& sourceType) override {
                 const TDqSource source(&node);
-                if (const auto maySettings = source.Settings().Maybe<TGenSourceSettings>()) {
-                    const auto settings = maySettings.Cast();
+                if (const auto maybeSettings = source.Settings().Maybe<TGenSourceSettings>()) {
+                    const auto settings = maybeSettings.Cast();
                     const auto& clusterName = source.DataSource().Cast<TGenDataSource>().Cluster().StringValue();
                     const auto& table = settings.Table().StringValue();
                     const auto& token = settings.Token().Name().StringValue();
@@ -166,6 +167,67 @@ namespace NYql {
                             break;
                     }
                 }
+            }
+
+            bool FillSourcePlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) override {
+                if (!node.Maybe<TDqSource>()) {
+                    return false;
+                }
+
+                auto source = node.Cast<TDqSource>();
+                if (!source.Settings().Maybe<TGenSourceSettings>()) {
+                    return false;
+                }
+
+                const TGenSourceSettings settings = source.Settings().Cast<TGenSourceSettings>();
+                const TString& clusterName = source.DataSource().Cast<TGenDataSource>().Cluster().StringValue();
+                const TString& table = settings.Table().StringValue();
+                properties["Table"] = table;
+                auto [tableMeta, issue] = State_->GetTable(clusterName, table);
+                if (!issue) {
+                    const NConnector::NApi::TDataSourceInstance& dataSourceInstance = tableMeta.value()->DataSourceInstance;
+                    switch (dataSourceInstance.kind()) {
+                        case NConnector::NApi::CLICKHOUSE:
+                            properties["SourceType"] = "ClickHouse";
+                            break;
+                        case NConnector::NApi::POSTGRESQL:
+                            properties["SourceType"] = "PostgreSql";
+                            break;
+                        case NConnector::NApi::DATA_SOURCE_KIND_UNSPECIFIED:
+                            break;
+                        default:
+                            properties["SourceType"] = NConnector::NApi::EDataSourceKind_Name(dataSourceInstance.kind());
+                            break;
+                    }
+
+                    if (const TString& database = dataSourceInstance.database()) {
+                        properties["Database"] = database;
+                    }
+
+                    switch (dataSourceInstance.protocol()) {
+                        case NConnector::NApi::NATIVE:
+                            properties["Protocol"] = "Native";
+                            break;
+                        case NConnector::NApi::HTTP:
+                            properties["Protocol"] = "Http";
+                            break;
+                        case NConnector::NApi::PROTOCOL_UNSPECIFIED:
+                            break;
+                        default:
+                            properties["Protocol"] = NConnector::NApi::EProtocol_Name(dataSourceInstance.protocol());
+                            break;
+                    }
+                }
+                if (settings.Columns().Size()) {
+                    auto& columns = properties["ReadColumns"];
+                    for (const TCoAtom col : settings.Columns()) {
+                        columns.AppendValue(col.StringValue());
+                    }
+                }
+                if (auto predicate = settings.FilterPredicate(); !IsEmptyFilterPredicate(predicate)) {
+                    properties["Filter"] = NPlanUtils::PrettyExprStr(predicate);
+                }
+                return true;
             }
 
             void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {

@@ -32,7 +32,7 @@
                                             },
                                             {
                                                 "Name": "Filter",
-                                                "Predicate": "Not Or item.qa.id > 0"
+                                                "Predicate": "Not Exist(item.qa.id) Or item.qa.id > 0"
                                             },
                                             {
                                                 "Name": "LeftJoin (MapJoin)"

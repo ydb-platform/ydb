@@ -10,9 +10,14 @@
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/generic/map.h>
 #include <util/generic/maybe.h>
 
 #include <google/protobuf/any.pb.h>
+
+namespace NJson {
+class TJsonValue;
+} // namespace NJson
 
 namespace NYql {
 
@@ -62,6 +67,11 @@ public:
     virtual void Annotate(const TExprNode& node, THashMap<TString, TString>& params) = 0;
     virtual bool PrepareFullResultTableParams(const TExprNode& root, TExprContext& ctx, THashMap<TString, TString>& params, THashMap<TString, TString>& secureParams) = 0;
     virtual void WriteFullResultTableRef(NYson::TYsonWriter& writer, const TVector<TString>& columns, const THashMap<TString, TString>& graphParams) = 0;
+
+    // Fill plan operator properties for sources/sinks
+    // Return true if node was handled
+    virtual bool FillSourcePlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) = 0;
+    virtual bool FillSinkPlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) = 0;
 };
 
 } // namespace NYql

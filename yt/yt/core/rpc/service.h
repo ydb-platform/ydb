@@ -231,6 +231,11 @@ struct IServiceContext
     //! Changes the response codec.
     virtual void SetResponseCodec(NCompression::ECodec codec) = 0;
 
+    // COPMAT(danilalexeev)
+    //! Returnes true if response body has been serialized with compression.
+    virtual bool IsResponseBodySerializedWithCompression() const = 0;
+    virtual void SetResponseBodySerializedWithCompression() = 0;
+
     // Extension methods.
 
     void SetRequestInfo();

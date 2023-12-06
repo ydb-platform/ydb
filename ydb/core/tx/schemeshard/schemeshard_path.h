@@ -93,6 +93,7 @@ public:
         const TChecker& IsExternalDataSource(EStatus status = EStatus::StatusNameConflict) const;
         // Check there are no uncles or cousins with same name
         const TChecker& IsNameUniqGrandParentLevel(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsView(EStatus status = EStatus::StatusNameConflict) const;
     };
 
 public:

@@ -30,15 +30,15 @@ struct TCallContext {
 
 #define TRACE_CONFIG_CHANGE(CHANGE_CONTEXT, KIND, CHANGE_KIND) \
     RunConfig.ConfigInitInfo[KIND].Updates.emplace_back( \
-        CHANGE_CONTEXT.File, CHANGE_CONTEXT.Line, TConfigItemInfo::EUpdateKind:: CHANGE_KIND)
+        TConfigItemInfo::TUpdate{CHANGE_CONTEXT.File, static_cast<ui32>(CHANGE_CONTEXT.Line), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
 
 #define TRACE_CONFIG_CHANGE_INPLACE(KIND, CHANGE_KIND) \
     RunConfig.ConfigInitInfo[KIND].Updates.emplace_back( \
-        __FILE__, __LINE__, TConfigItemInfo::EUpdateKind:: CHANGE_KIND)
+        TConfigItemInfo::TUpdate{__FILE__, static_cast<ui32>(__LINE__), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
 
 #define TRACE_CONFIG_CHANGE_INPLACE_T(KIND, CHANGE_KIND) \
     RunConfig.ConfigInitInfo[NKikimrConsole::TConfigItem:: KIND ## Item].Updates.emplace_back( \
-        __FILE__, __LINE__, TConfigItemInfo::EUpdateKind:: CHANGE_KIND)
+        TConfigItemInfo::TUpdate{__FILE__, static_cast<ui32>(__LINE__), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
 
 #define CALL_CTX() TCallContext{__FILE__, __LINE__}
 

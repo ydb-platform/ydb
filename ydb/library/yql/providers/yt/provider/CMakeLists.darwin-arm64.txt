@@ -66,6 +66,7 @@ target_link_libraries(providers-yt-provider PUBLIC
   yt-lib-mkql_helpers
   yt-lib-res_pull
   yt-lib-row_spec
+  yt-lib-schema
   yt-lib-skiff
   yt-lib-yson_helpers
   providers-yt-opt

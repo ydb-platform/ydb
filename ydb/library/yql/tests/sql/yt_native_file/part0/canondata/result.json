@@ -2979,9 +2979,9 @@
     ],
     "test.test[lineage-select_field-default.txt-Lineage]": [
         {
-            "checksum": "77d3c06dffeab4578e2fa991c8a154bb",
-            "size": 683,
-            "uri": "https://{canondata_backend}/1936947/df9b81afb4a3789c183adb602db0c26fc8dd98f9/resource.tar.gz#test.test_lineage-select_field-default.txt-Lineage_/results.txt"
+            "checksum": "76522ff9c85d6989407abd6a1aff0859",
+            "size": 922,
+            "uri": "https://{canondata_backend}/1777230/e59af0e7f96e8fc7e1bb411d89f5a5bf7f957b73/resource.tar.gz#test.test_lineage-select_field-default.txt-Lineage_/results.txt"
         }
     ],
     "test.test[lineage-select_field-default.txt-Plan]": [
@@ -3007,9 +3007,9 @@
     ],
     "test.test[lineage-select_nested_table_row-default.txt-Lineage]": [
         {
-            "checksum": "562f2a1c1be7e8b71620e55329ec3f07",
-            "size": 1019,
-            "uri": "https://{canondata_backend}/1936947/df9b81afb4a3789c183adb602db0c26fc8dd98f9/resource.tar.gz#test.test_lineage-select_nested_table_row-default.txt-Lineage_/results.txt"
+            "checksum": "5b6775b942673edd82a288aa800287de",
+            "size": 1262,
+            "uri": "https://{canondata_backend}/1777230/e59af0e7f96e8fc7e1bb411d89f5a5bf7f957b73/resource.tar.gz#test.test_lineage-select_nested_table_row-default.txt-Lineage_/results.txt"
         }
     ],
     "test.test[lineage-select_nested_table_row-default.txt-Plan]": [
@@ -3035,9 +3035,9 @@
     ],
     "test.test[lineage-window_member_struct-default.txt-Lineage]": [
         {
-            "checksum": "c6b31864c2ac75af3ac10084e4f7101d",
-            "size": 1207,
-            "uri": "https://{canondata_backend}/1031349/5d84bc5db6dd385c4575ea21e6461bbae876c0ad/resource.tar.gz#test.test_lineage-window_member_struct-default.txt-Lineage_/results.txt"
+            "checksum": "8c0c9c8cf3dab1578139b7ea161a7953",
+            "size": 1641,
+            "uri": "https://{canondata_backend}/1777230/e59af0e7f96e8fc7e1bb411d89f5a5bf7f957b73/resource.tar.gz#test.test_lineage-window_member_struct-default.txt-Lineage_/results.txt"
         }
     ],
     "test.test[lineage-window_member_struct-default.txt-Plan]": [

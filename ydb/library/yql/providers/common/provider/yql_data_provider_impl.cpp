@@ -62,6 +62,16 @@ TString TPlanFormatterBase::GetOperationDisplayName(const TExprNode& node) {
     return TString(node.Content());
 }
 
+bool TPlanFormatterBase::WriteSchemaHeader(NYson::TYsonWriter& writer) {
+    Y_UNUSED(writer);
+    return false;
+}
+
+void TPlanFormatterBase::WriteTypeDetails(NYson::TYsonWriter& writer, const TTypeAnnotationNode& type) {
+    Y_UNUSED(writer);
+    Y_UNUSED(type);
+}
+
 void TTrackableNodeProcessorBase::GetUsedNodes(const TExprNode& node, TVector<TString>& usedNodeIds) {
     Y_UNUSED(node);
     usedNodeIds.clear();

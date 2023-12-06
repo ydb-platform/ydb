@@ -22,6 +22,8 @@ public:
     void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) override;
     void WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) override;
     TString GetOperationDisplayName(const TExprNode& node) override;
+    bool WriteSchemaHeader(NYson::TYsonWriter& writer) override;
+    void WriteTypeDetails(NYson::TYsonWriter& writer, const TTypeAnnotationNode& type) override;
 };
 
 class TTrackableNodeProcessorBase : public ITrackableNodeProcessor {

@@ -88,6 +88,7 @@ PEERDIR(
     ydb/library/yql/providers/yt/lib/mkql_helpers
     ydb/library/yql/providers/yt/lib/res_pull
     ydb/library/yql/providers/yt/lib/row_spec
+    ydb/library/yql/providers/yt/lib/schema
     ydb/library/yql/providers/yt/lib/skiff
     ydb/library/yql/providers/yt/lib/yson_helpers
     ydb/library/yql/providers/yt/opt

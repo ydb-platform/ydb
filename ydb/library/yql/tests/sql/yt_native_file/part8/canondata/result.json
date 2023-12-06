@@ -3114,9 +3114,9 @@
     ],
     "test.test[lineage-select_group_by_key-default.txt-Lineage]": [
         {
-            "checksum": "d206604c4213f59d58459213458663f0",
-            "size": 1005,
-            "uri": "https://{canondata_backend}/1937367/20cf7c53120f5dc778f37887b8cf90e1ff28bc0f/resource.tar.gz#test.test_lineage-select_group_by_key-default.txt-Lineage_/results.txt"
+            "checksum": "2f4388c32e2079752296709aa51ffa2e",
+            "size": 1328,
+            "uri": "https://{canondata_backend}/1937492/cd988abba8ecb60e2569d3dc25c564d6962909a9/resource.tar.gz#test.test_lineage-select_group_by_key-default.txt-Lineage_/results.txt"
         }
     ],
     "test.test[lineage-select_group_by_key-default.txt-Plan]": [

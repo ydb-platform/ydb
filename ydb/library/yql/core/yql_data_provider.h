@@ -57,6 +57,9 @@ public:
     virtual void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
     virtual void WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
     virtual TString GetOperationDisplayName(const TExprNode& node) = 0;
+    // returns false if provider schemas aren't supported
+    virtual bool WriteSchemaHeader(NYson::TYsonWriter& writer) = 0;
+    virtual void WriteTypeDetails(NYson::TYsonWriter& writer, const TTypeAnnotationNode& type) = 0;
 };
 
 class ITrackableNodeProcessor {

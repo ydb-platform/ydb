@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
                     location.SetUnit(ToString(id));
 
                     state->ClusterInfo->AddNode(TEvInterconnect::TNodeInfo(id, name, name, name, 10000, TNodeLocation(location)), nullptr);
-                    sentinelState->Nodes[id] = NSentinel::TNodeInfo{name, NActors::TNodeLocation(location)};
+                    sentinelState->Nodes[id] = NSentinel::TNodeInfo{name, NActors::TNodeLocation(location), {}};
 
                     for (ui64 npdisk : xrange(pdisksPerNode)) {
                         NKikimrBlobStorage::TBaseConfig::TPDisk pdisk;

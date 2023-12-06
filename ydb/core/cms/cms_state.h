@@ -31,6 +31,7 @@ struct TCmsState : public TAtomicRefCount<TCmsState> {
     THashMap<TString, TPermissionInfo> Permissions;
     THashMap<TString, TRequestInfo> ScheduledRequests;
     THashMap<TString, TNotificationInfo> Notifications;
+    THashMap<TString, THashSet<NKikimrCms::EMarker>> HostMarkers;
     TDowntimes Downtimes;
     ui64 NextPermissionId = 0;
     ui64 NextRequestId = 0;

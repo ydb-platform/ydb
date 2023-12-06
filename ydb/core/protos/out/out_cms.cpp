@@ -25,3 +25,7 @@ Y_DECLARE_OUT_SPEC(, NKikimrCms::ETextFormat, stream, value) {
 Y_DECLARE_OUT_SPEC(, NKikimrCms::TLogRecordData::EType, stream, value) {
     stream << NKikimrCms::TLogRecordData::EType_Name(value);
 }
+
+Y_DECLARE_OUT_SPEC(, NKikimrCms::TAction::EType, stream, value) {
+    stream << NKikimrCms::TAction::EType_Name(value);
+}

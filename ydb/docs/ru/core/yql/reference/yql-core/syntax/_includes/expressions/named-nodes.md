@@ -54,10 +54,6 @@ SELECT
   b * $multiplier,
   (a + b) * $multiplier
 FROM abc_table;
-$multiplier = c;
-SELECT
-  a * $multiplier -- $multiplier is column c
-FROM abc_table;
 ```
 
 ``` yql

@@ -2440,11 +2440,12 @@ TConfigsDispatcherInitializer::TConfigsDispatcherInitializer(const TKikimrRunCon
    , Labels(runConfig.Labels)
    , InitialCmsConfig(runConfig.InitialCmsConfig)
    , InitialCmsYamlConfig(runConfig.InitialCmsYamlConfig)
+   , ConfigInitInfo(runConfig.ConfigInitInfo)
 {
 }
 
 void TConfigsDispatcherInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    IActor* actor = NConsole::CreateConfigsDispatcher(Config, Labels, InitialCmsConfig, InitialCmsYamlConfig);
+    IActor* actor = NConsole::CreateConfigsDispatcher(Config, Labels, InitialCmsConfig, InitialCmsYamlConfig, ConfigInitInfo);
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             NConsole::MakeConfigsDispatcherID(NodeId),
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));

@@ -71,6 +71,8 @@ SRCS(
     util.h
 )
 
+GENERATE_ENUM_SERIALIZATION(config_item_info.h)
+
 PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/http

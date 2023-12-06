@@ -479,6 +479,7 @@ private:
     TMap<TString, TString> Labels;
     NKikimrConfig::TAppConfig InitialCmsConfig;
     NKikimrConfig::TAppConfig InitialCmsYamlConfig;
+    THashMap<ui32, TConfigItemInfo> ConfigInitInfo;
 };
 
 class TConfigsCacheInitializer : public IKikimrServicesInitializer {

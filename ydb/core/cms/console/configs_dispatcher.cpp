@@ -136,7 +136,8 @@ public:
         const NKikimrConfig::TAppConfig &config,
         const TMap<TString, TString> &labels,
         const NKikimrConfig::TAppConfig &initialCmsConfig,
-        const NKikimrConfig::TAppConfig &initialCmsYamlConfig);
+        const NKikimrConfig::TAppConfig &initialCmsYamlConfig,
+        const THashMap<ui32, TConfigItemInfo> &configInitInfo);
 
     void Bootstrap();
 
@@ -233,6 +234,7 @@ private:
     NKikimrConfig::TAppConfig CurrentConfig;
     const NKikimrConfig::TAppConfig InitialCmsConfig;
     const NKikimrConfig::TAppConfig InitialCmsYamlConfig;
+    const THashMap<ui32, TConfigItemInfo> ConfigInitInfo;
     ui64 NextRequestCookie;
     TVector<TActorId> HttpRequests;
     TActorId CommonSubscriptionClient;
@@ -256,12 +258,14 @@ TConfigsDispatcher::TConfigsDispatcher(
     const NKikimrConfig::TAppConfig &config,
     const TMap<TString, TString> &labels,
     const NKikimrConfig::TAppConfig &initialCmsConfig,
-    const NKikimrConfig::TAppConfig &initialCmsYamlConfig)
+    const NKikimrConfig::TAppConfig &initialCmsYamlConfig,
+    const THashMap<ui32, TConfigItemInfo> &configInitInfo)
         : Labels(labels)
         , InitialConfig(config)
         , CurrentConfig(config)
         , InitialCmsConfig(initialCmsConfig)
         , InitialCmsYamlConfig(initialCmsYamlConfig)
+        , ConfigInitInfo(configInitInfo)
         , NextRequestCookie(Now().GetValue())
 {
 }
@@ -480,142 +484,183 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                     }
                 }
                 str << "<br />" << Endl;
-                COLLAPSED_REF_CONTENT("state", "State") {
-                    PRE() {
-                        str << "SelfId: " << SelfId() << Endl;
-                        auto s = CurrentStateFunc();
-                        str << "State: " << ( s == &TThis::StateWork      ? "StateWork"
-                                            : s == &TThis::StateInit      ? "StateInit"
-                                                                          : "Unknown" ) << Endl;
-                        str << "YamlConfigEnabled: " << YamlConfigEnabled << Endl;
-                        str << "Subscriptions: " << Endl;
-                        for (auto &[kinds, subscription] : SubscriptionsByKinds) {
-                            str << "- Kinds: " << KindsToString(kinds) << Endl
-                                << "  Subscription: " << Endl
-                                << "    Yaml: " << subscription->Yaml << Endl
-                                << "    Subscribers: " << Endl;
-                            for (auto &[id, updates] : subscription->Subscribers) {
-                                str << "    - Actor: " << id << Endl;
-                                str << "      UpdatesSent: " << updates << Endl;
-                            }
-                            if (subscription->YamlVersion) {
-                                str << "    YamlVersion: " << subscription->YamlVersion->Version << ".[";
-                                bool first = true;
-                                for (auto &[id, hash] : subscription->YamlVersion->VolatileVersions) {
-                                    str << (first ? "" : ",") << id << "." << hash;
-                                    first = false;
-                                }
-                                str << "]" << Endl;
-                            } else {
-                                str << "    CurrentConfigId: " << subscription->CurrentConfig.Version.ShortDebugString() << Endl;
-                            }
-                            str << "    CurrentConfig: " << subscription->CurrentConfig.Config.ShortDebugString() << Endl;
-                            if (subscription->UpdateInProcess) {
-                                str << "    UpdateInProcess: " << subscription->UpdateInProcess->Record.ShortDebugString() << Endl
-                                    << "    SubscribersToUpdate:";
-                                for (auto &id : subscription->SubscribersToUpdate) {
-                                    str << " " << id;
-                                }
-                                str << Endl;
-                                str << "    UpdateInProcessConfigVersion: " << subscription->UpdateInProcessConfigVersion.ShortDebugString() << Endl
-                                    << "    UpdateInProcessCookie: " << subscription->UpdateInProcessCookie << Endl;
-                                if (subscription->UpdateInProcessYamlVersion) {
-                                    str << "    UpdateInProcessYamlVersion: " << subscription->UpdateInProcessYamlVersion->Version << Endl;
-                                }
-                            }
-                        }
-                        str << "Subscribers:" << Endl;
-                        for (auto &[subscriber, _] : SubscriptionsBySubscriber) {
-                            str << "- " << subscriber << Endl;
-                        }
-                    }
+                COLLAPSED_REF_CONTENT("effective-config", "Effective config") {
+                    str << "<div class=\"alert alert-primary tab-left\" role=\"alert\">" << Endl;
+                    str << "It is assumed that all config items marked dynamic are consumed by corresponding components at runtime." << Endl;
+                    str << "<br />" << Endl;
+                    str << "If any component is unable to update some config at runtime check \"Effective startup config\" below to see actual config for this component." << Endl;
+                    str << "<br />" << Endl;
+                    str << "Coloring: \"<font color=\"red\">config not set</font>\","
+                        << " \"<font color=\"green\">config set in dynamic config</font>\", \"<font color=\"#007bff\">config set in static config</font>\"" << Endl;
+                    str << "</div>" << Endl;
+                    NHttp::OutputRichConfigHTML(str, InitialConfig, YamlProtoConfig, CurrentConfig, DYNAMIC_KINDS, NON_YAML_KINDS, YamlConfigEnabled);
                 }
                 str << "<br />" << Endl;
-                COLLAPSED_REF_CONTENT("yaml-config", "YAML config") {
-                    DIV() {
-                        TAG(TH5) {
-                            str << "Persistent Config" << Endl;
-                        }
-                        TAG_CLASS_STYLE(TDiv, "configs-dispatcher", "padding: 0 12px;") {
-                            TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap fold-yaml-config yaml-btn-3"}, {"id", "fold-yaml-config"}, {"title", "fold"}}) {
-                                DIV_CLASS("yaml-sticky-btn") { }
-                            }
-                            TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap unfold-yaml-config yaml-btn-2"}, {"id", "unfold-yaml-config"}, {"title", "unfold"}}) {
-                                DIV_CLASS("yaml-sticky-btn") { }
-                            }
-                            TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap copy-yaml-config yaml-btn-1"}, {"id", "copy-yaml-config"}, {"title", "copy"}}) {
-                                DIV_CLASS("yaml-sticky-btn") { }
-                            }
-                            TAG_ATTRS(TDiv, {{"id", "yaml-config-item"}, {"name", "yaml-config-itemm"}}) {
-                                str << YamlConfig;
-                            }
-                        }
-                        str << "<hr/>" << Endl;
-                        for (auto &[id, config] : VolatileYamlConfigs) {
-                            DIV() {
-                                TAG(TH5) {
-                                    str << "Volatile Config Id: " << id << Endl;
-                                }
-                                TAG_CLASS_STYLE(TDiv, "configs-dispatcher", "padding: 0 12px;") {
-                                    TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap fold-yaml-config yaml-btn-3"}, {"title", "fold"}}) {
-                                        DIV_CLASS("yaml-sticky-btn") { }
-                                    }
-                                    TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap unfold-yaml-config yaml-btn-2"}, {"title", "unfold"}}) {
-                                        DIV_CLASS("yaml-sticky-btn") { }
-                                    }
-                                    TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap copy-yaml-config yaml-btn-1"}, {"title", "copy"}}) {
-                                        DIV_CLASS("yaml-sticky-btn") { }
-                                    }
-                                    DIV_CLASS("yaml-config-item") {
-                                        str << config;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                str << "<br />" << Endl;
-                COLLAPSED_REF_CONTENT("resolved-yaml-config", "Resolved YAML config") {
-                    TAG_CLASS_STYLE(TDiv, "configs-dispatcher", "padding: 0 12px;") {
-                        TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap fold-yaml-config yaml-btn-3"}, {"id", "fold-resolved-yaml-config"}, {"title", "fold"}}) {
-                            DIV_CLASS("yaml-sticky-btn") { }
-                        }
-                        TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap unfold-yaml-config yaml-btn-2"}, {"id", "unfold-resolved-yaml-config"}, {"title", "unfold"}}) {
-                            DIV_CLASS("yaml-sticky-btn") { }
-                        }
-                        TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap copy-yaml-config yaml-btn-1"}, {"id", "copy-resolved-yaml-config"}, {"title", "copy"}}) {
-                            DIV_CLASS("yaml-sticky-btn") { }
-                        }
-                        TAG_ATTRS(TDiv, {{"id", "resolved-yaml-config-item"}, {"name", "resolved-yaml-config-itemm"}}) {
-                            str << ResolvedYamlConfig;
-                        }
-                    }
-                }
-                str << "<br />" << Endl;
-                COLLAPSED_REF_CONTENT("resolved-json-config", "Resolved JSON config") {
-                    PRE() {
-                        str << ResolvedJsonConfig << Endl;
-                    }
-                }
-                str << "<br />" << Endl;
-                COLLAPSED_REF_CONTENT("yaml-proto-config", "YAML proto config") {
-                    NHttp::OutputConfigHTML(str, YamlProtoConfig);
-                }
-                str << "<br />" << Endl;
-                COLLAPSED_REF_CONTENT("current-config", "Current config") {
-                    NHttp::OutputConfigHTML(str, CurrentConfig);
-                }
-                str << "<br />" << Endl;
-                COLLAPSED_REF_CONTENT("initial-config", "Initial config") {
+                COLLAPSED_REF_CONTENT("effective-startup-config", "Effective startup config") {
+                    str << "<div class=\"alert alert-primary tab-left\" role=\"alert\">" << Endl;
+                    str << "Some of these configs may be overwritten by dynamic ones." << Endl;
+                    str << "</div>" << Endl;
                     NHttp::OutputConfigHTML(str, InitialConfig);
                 }
                 str << "<br />" << Endl;
-                COLLAPSED_REF_CONTENT("initial-cms-config", "Initial CMS config") {
-                    NHttp::OutputConfigHTML(str, InitialCmsConfig);
+                COLLAPSED_REF_CONTENT("effective-dynamic-config", "Effective dynamic config") {
+                    str << "<div class=\"alert alert-primary tab-left\" role=\"alert\">" << Endl;
+                    str << "Some subscribers may get static configs if they exist even if dynamic one of corresponding kind is not present." << Endl;
+                    str << "</div>" << Endl;
+                    NKikimrConfig::TAppConfig trunc;
+                    if (YamlConfigEnabled) {
+                        ReplaceConfigItems(YamlProtoConfig, trunc, KindsToBitMap(DYNAMIC_KINDS), InitialConfig);
+                        ReplaceConfigItems(CurrentConfig, trunc, KindsToBitMap(NON_YAML_KINDS), trunc, false);
+                    } else {
+                        ReplaceConfigItems(CurrentConfig, trunc, KindsToBitMap(DYNAMIC_KINDS), InitialConfig);
+                    }
+                    NHttp::OutputConfigHTML(str, trunc);
                 }
                 str << "<br />" << Endl;
-                COLLAPSED_REF_CONTENT("initial-cms-yaml-config", "Initial CMS YAML config") {
-                    NHttp::OutputConfigHTML(str, InitialCmsYamlConfig);
+                COLLAPSED_REF_CONTENT("debug-info", "Debug info") {
+                    DIV_CLASS("tab-left") {
+                        COLLAPSED_REF_CONTENT("effective-config-debug-info", "Effective config debug info") {
+                            NHttp::OutputConfigDebugInfoHTML(str, InitialConfig, YamlProtoConfig, CurrentConfig, ConfigInitInfo, DYNAMIC_KINDS, NON_YAML_KINDS, YamlConfigEnabled);
+                        }
+                        str << "<br />" << Endl;
+                        COLLAPSED_REF_CONTENT("state", "State") {
+                            PRE() {
+                                str << "SelfId: " << SelfId() << Endl;
+                                auto s = CurrentStateFunc();
+                                str << "State: " << ( s == &TThis::StateWork      ? "StateWork"
+                                                    : s == &TThis::StateInit      ? "StateInit"
+                                                                                  : "Unknown" ) << Endl;
+                                str << "YamlConfigEnabled: " << YamlConfigEnabled << Endl;
+                                str << "Subscriptions: " << Endl;
+                                for (auto &[kinds, subscription] : SubscriptionsByKinds) {
+                                    str << "- Kinds: " << KindsToString(kinds) << Endl
+                                        << "  Subscription: " << Endl
+                                        << "    Yaml: " << subscription->Yaml << Endl
+                                        << "    Subscribers: " << Endl;
+                                    for (auto &[id, updates] : subscription->Subscribers) {
+                                        str << "    - Actor: " << id << Endl;
+                                        str << "      UpdatesSent: " << updates << Endl;
+                                    }
+                                    if (subscription->YamlVersion) {
+                                        str << "    YamlVersion: " << subscription->YamlVersion->Version << ".[";
+                                        bool first = true;
+                                        for (auto &[id, hash] : subscription->YamlVersion->VolatileVersions) {
+                                            str << (first ? "" : ",") << id << "." << hash;
+                                            first = false;
+                                        }
+                                        str << "]" << Endl;
+                                    } else {
+                                        str << "    CurrentConfigId: " << subscription->CurrentConfig.Version.ShortDebugString() << Endl;
+                                    }
+                                    str << "    CurrentConfig: " << subscription->CurrentConfig.Config.ShortDebugString() << Endl;
+                                    if (subscription->UpdateInProcess) {
+                                        str << "    UpdateInProcess: " << subscription->UpdateInProcess->Record.ShortDebugString() << Endl
+                                            << "    SubscribersToUpdate:";
+                                        for (auto &id : subscription->SubscribersToUpdate) {
+                                            str << " " << id;
+                                        }
+                                        str << Endl;
+                                        str << "    UpdateInProcessConfigVersion: " << subscription->UpdateInProcessConfigVersion.ShortDebugString() << Endl
+                                            << "    UpdateInProcessCookie: " << subscription->UpdateInProcessCookie << Endl;
+                                        if (subscription->UpdateInProcessYamlVersion) {
+                                            str << "    UpdateInProcessYamlVersion: " << subscription->UpdateInProcessYamlVersion->Version << Endl;
+                                        }
+                                    }
+                                }
+                                str << "Subscribers:" << Endl;
+                                for (auto &[subscriber, _] : SubscriptionsBySubscriber) {
+                                    str << "- " << subscriber << Endl;
+                                }
+                            }
+                        }
+                        str << "<br />" << Endl;
+                        COLLAPSED_REF_CONTENT("yaml-config", "YAML config") {
+                            DIV() {
+                                TAG(TH5) {
+                                    str << "Persistent Config" << Endl;
+                                }
+                                TAG_CLASS_STYLE(TDiv, "configs-dispatcher", "padding: 0 12px;") {
+                                    TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap fold-yaml-config yaml-btn-3"}, {"id", "fold-yaml-config"}, {"title", "fold"}}) {
+                                        DIV_CLASS("yaml-sticky-btn") { }
+                                    }
+                                    TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap unfold-yaml-config yaml-btn-2"}, {"id", "unfold-yaml-config"}, {"title", "unfold"}}) {
+                                        DIV_CLASS("yaml-sticky-btn") { }
+                                    }
+                                    TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap copy-yaml-config yaml-btn-1"}, {"id", "copy-yaml-config"}, {"title", "copy"}}) {
+                                        DIV_CLASS("yaml-sticky-btn") { }
+                                    }
+                                    TAG_ATTRS(TDiv, {{"id", "yaml-config-item"}, {"name", "yaml-config-itemm"}}) {
+                                        str << YamlConfig;
+                                    }
+                                }
+                                str << "<hr/>" << Endl;
+                                for (auto &[id, config] : VolatileYamlConfigs) {
+                                    DIV() {
+                                        TAG(TH5) {
+                                            str << "Volatile Config Id: " << id << Endl;
+                                        }
+                                        TAG_CLASS_STYLE(TDiv, "configs-dispatcher", "padding: 0 12px;") {
+                                            TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap fold-yaml-config yaml-btn-3"}, {"title", "fold"}}) {
+                                                DIV_CLASS("yaml-sticky-btn") { }
+                                            }
+                                            TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap unfold-yaml-config yaml-btn-2"}, {"title", "unfold"}}) {
+                                                DIV_CLASS("yaml-sticky-btn") { }
+                                            }
+                                            TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap copy-yaml-config yaml-btn-1"}, {"title", "copy"}}) {
+                                                DIV_CLASS("yaml-sticky-btn") { }
+                                            }
+                                            DIV_CLASS("yaml-config-item") {
+                                                str << config;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        str << "<br />" << Endl;
+                        COLLAPSED_REF_CONTENT("resolved-yaml-config", "Resolved YAML config") {
+                            TAG_CLASS_STYLE(TDiv, "configs-dispatcher", "padding: 0 12px;") {
+                                TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap fold-yaml-config yaml-btn-3"}, {"id", "fold-resolved-yaml-config"}, {"title", "fold"}}) {
+                                    DIV_CLASS("yaml-sticky-btn") { }
+                                }
+                                TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap unfold-yaml-config yaml-btn-2"}, {"id", "unfold-resolved-yaml-config"}, {"title", "unfold"}}) {
+                                    DIV_CLASS("yaml-sticky-btn") { }
+                                }
+                                TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap copy-yaml-config yaml-btn-1"}, {"id", "copy-resolved-yaml-config"}, {"title", "copy"}}) {
+                                    DIV_CLASS("yaml-sticky-btn") { }
+                                }
+                                TAG_ATTRS(TDiv, {{"id", "resolved-yaml-config-item"}, {"name", "resolved-yaml-config-itemm"}}) {
+                                    str << ResolvedYamlConfig;
+                                }
+                            }
+                        }
+                        str << "<br />" << Endl;
+                        COLLAPSED_REF_CONTENT("resolved-json-config", "Resolved JSON config") {
+                            PRE() {
+                                str << ResolvedJsonConfig << Endl;
+                            }
+                        }
+                        str << "<br />" << Endl;
+                        COLLAPSED_REF_CONTENT("yaml-proto-config", "YAML proto config") {
+                            NHttp::OutputConfigHTML(str, YamlProtoConfig);
+                        }
+                        str << "<br />" << Endl;
+                        COLLAPSED_REF_CONTENT("current-config", "Current config") {
+                            NHttp::OutputConfigHTML(str, CurrentConfig);
+                        }
+                        str << "<br />" << Endl;
+                        COLLAPSED_REF_CONTENT("initial-config", "Initial config") {
+                            NHttp::OutputConfigHTML(str, InitialConfig);
+                        }
+                        str << "<br />" << Endl;
+                        COLLAPSED_REF_CONTENT("initial-cms-config", "Initial CMS config") {
+                            NHttp::OutputConfigHTML(str, InitialCmsConfig);
+                        }
+                        str << "<br />" << Endl;
+                        COLLAPSED_REF_CONTENT("initial-cms-yaml-config", "Initial CMS YAML config") {
+                            NHttp::OutputConfigHTML(str, InitialCmsYamlConfig);
+                        }
+                    }
                 }
             }
         }
@@ -955,9 +1000,10 @@ IActor *CreateConfigsDispatcher(
     const NKikimrConfig::TAppConfig &config,
     const TMap<TString, TString> &labels,
     const NKikimrConfig::TAppConfig &initialCmsConfig,
-    const NKikimrConfig::TAppConfig &initialCmsYamlConfig)
+    const NKikimrConfig::TAppConfig &initialCmsYamlConfig,
+    const THashMap<ui32, TConfigItemInfo> &configInitInfo)
 {
-    return new TConfigsDispatcher(config, labels, initialCmsConfig, initialCmsYamlConfig);
+    return new TConfigsDispatcher(config, labels, initialCmsConfig, initialCmsYamlConfig, configInitInfo);
 }
 
 } // namespace NKikimr::NConsole

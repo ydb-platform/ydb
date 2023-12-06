@@ -2,6 +2,7 @@
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/base/event_filter.h>
+#include <ydb/core/cms/console/config_item_info.h>
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
 
 #include <util/generic/hash.h>
@@ -127,7 +128,6 @@ union TBasicKikimrServicesMask {
 
 static_assert(sizeof(TBasicKikimrServicesMask) == 16, "expected sizeof(TBasicKikimrServicesMask) == 16");
 
-
 struct TKikimrRunConfig {
     NKikimrConfig::TAppConfig& AppConfig;
     ui32                       NodeId;
@@ -144,6 +144,7 @@ struct TKikimrRunConfig {
 
     NKikimrConfig::TAppConfig  InitialCmsConfig;
     NKikimrConfig::TAppConfig  InitialCmsYamlConfig;
+    THashMap<ui32, TConfigItemInfo> ConfigInitInfo;
 
     TKikimrRunConfig(NKikimrConfig::TAppConfig& appConfig,
                      ui32 nodeId = 0, const TKikimrScopeId& scopeId = {});

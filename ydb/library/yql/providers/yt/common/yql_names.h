@@ -49,6 +49,8 @@ const TStringBuf MrTableRangeName = "MrTableRange";
 const TStringBuf MrTableRangeStrictName = "MrTableRangeStrict";
 const TStringBuf MrTableConcatName = "MrTableConcat";
 const TStringBuf MrFolderName = "MrFolder";
+const TStringBuf MrWalkFoldersName = "MrWalkFolders";
+const TStringBuf MrWalkFoldersImplName = "MrWalkFoldersImpl";
 const TStringBuf MrRangeInputListInternal = "MrRangeInputListInternal";
 
 // YT related names

@@ -457,6 +457,31 @@
             {"Index": 0, "Name": "First", "Type": "TYtOutputOpBase"},
             {"Index": 1, "Name": "Second", "Type": "TYtOutputOpBase"}
         ]
+        },
+        {
+            "Name": "TYtWalkFolders",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "MrWalkFolders"},
+            "Children": [
+                {"Index": 0, "Name": "Prefix", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Attributes", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "PickledUserState", "Type": "TExprBase"},
+                {"Index": 3, "Name": "UserStateType", "Type": "TExprBase"},
+                {"Index": 4, "Name": "PreHandler", "Type": "TExprBase"},
+                {"Index": 5, "Name": "ResolveHandler", "Type": "TExprBase"},
+                {"Index": 6, "Name": "DiveHandler", "Type": "TExprBase"},
+                {"Index": 7, "Name": "PostHandler", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TYtWalkFoldersImpl",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "MrWalkFoldersImpl"},
+            "Children": [
+                {"Index": 0, "Name": "PickledUserState", "Type": "TExprBase"},
+                {"Index": 1, "Name": "UserStateType", "Type": "TExprBase"},
+                {"Index": 2, "Name": "ProcessStateKey", "Type": "TCoAtom"}
+            ]
         }
-        ]
+    ]
 }

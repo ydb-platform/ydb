@@ -235,6 +235,7 @@ namespace NSQLTranslationV1 {
         TMap<TString, TNodePtr> UniversalAliases;
         THashSet<TString> Exports;
         THashMap<TString, TString> ImportModuleAliases;
+        THashMap<TString, TString> RequiredModules;
         TMap<TString, TString> SimpleUdfs;
         NSQLTranslation::TIncrementMonCounterFunction IncrementMonCounterFunction;
         TScopedStatePtr Scoped;

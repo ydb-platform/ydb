@@ -17,6 +17,7 @@ SRCS(
     yql_yt_helpers.cpp
     yql_yt_intent_determination.cpp
     yql_yt_io_discovery.cpp
+    yql_yt_io_discovery_walk_folders.cpp
     yql_yt_join_impl.cpp
     yql_yt_join_reorder.cpp
     yql_yt_key.cpp

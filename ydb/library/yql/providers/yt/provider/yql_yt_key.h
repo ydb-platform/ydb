@@ -19,6 +19,8 @@ public:
         Table,
         TableScheme,
         Folder,
+        WalkFolders,
+        WalkFoldersImpl,
     };
 
     struct TRange {
@@ -43,6 +45,27 @@ public:
             return left.Prefix == right.Prefix
                 && left.Attributes == right.Attributes;
         }
+    };
+    
+    struct TWalkFoldersArgs {
+        TFolderList InitialFolder;
+
+        TExprNode::TPtr PickledUserState;
+        TExprNode::TPtr UserStateType;
+
+        TExprNode::TPtr PreHandler;
+        TExprNode::TPtr ResolveHandler;
+        TExprNode::TPtr DiveHandler;
+        TExprNode::TPtr PostHandler;
+
+        ui64 StateKey;
+    };
+
+    struct TWalkFoldersImplArgs {
+        TExprNode::TPtr UserStateExpr;
+        TExprNode::TPtr UserStateType;
+
+        ui64 StateKey;
     };
 
 public:
@@ -81,6 +104,16 @@ public:
         return Folder;
     }
 
+    TMaybe<TWalkFoldersArgs>& GetWalkFolderArgs() {
+        YQL_ENSURE(Type != EType::Undefined);
+        return WalkFolderArgs;
+    }
+
+    TMaybe<TWalkFoldersImplArgs>& GetWalkFolderImplArgs() {
+        YQL_ENSURE(Type != EType::Undefined);
+        return WalkFolderImplArgs;
+    }
+
     bool Parse(const TExprNode& key, TExprContext& ctx);
 
 private:
@@ -91,6 +124,8 @@ private:
     bool Anonymous = false;
     TMaybe<TRange> Range;
     TMaybe<TFolderList> Folder;
+    TMaybe<TWalkFoldersArgs> WalkFolderArgs;
+    TMaybe<TWalkFoldersImplArgs> WalkFolderImplArgs;
 };
 
 class TYtInputKeys {
@@ -104,6 +139,10 @@ public:
 
     const TVector<TYtKey>& GetKeys() const {
         return Keys;
+    }
+
+    TVector<TYtKey>&& ExtractKeys() {
+        return std::move(Keys);
     }
 
     bool IsProcessed() const {

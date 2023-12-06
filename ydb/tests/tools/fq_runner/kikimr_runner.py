@@ -600,7 +600,6 @@ class StreamingOverKikimr(object):
         self.wd = yatest.common.output_path("yq_" + self.uuid)
         os.mkdir(self.wd)
         self.fill_config()
-        self.compute_plane.qs_config['progress_stats_period_ms'] = 1
         driver_config = ydb.DriverConfig(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
         self.driver = ydb.Driver(driver_config)
         try:

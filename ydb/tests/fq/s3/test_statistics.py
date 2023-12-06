@@ -251,3 +251,18 @@ class TestS3(object):
 
         assert files_size == ingress_bytes, "Files size {} mistmatches ingress bytes {}".format(files_size, ingress_bytes)
         assert sum(kikimr.control_plane.get_metering()) == 110
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_aborted_by_user(self, kikimr, client):
+
+        sql = R'''
+SELECT * FROM AS_TABLE(()->(Yql::ToStream(ListReplicate(<|x:
+"0123456789ABCDEF"
+|>, 4000000000))));
+'''
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+        client.abort_query(query_id)
+        client.wait_query_status(query_id, fq.QueryMeta.ABORTED_BY_USER)
+        assert sum(kikimr.control_plane.get_metering()) == 10

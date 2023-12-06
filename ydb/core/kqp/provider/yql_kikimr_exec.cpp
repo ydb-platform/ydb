@@ -519,7 +519,7 @@ private:
         auto typeAnn = resInput->GetTypeAnn();
 
         const auto kind = resInput->GetTypeAnn()->GetKind();
-        const bool data = kind != ETypeAnnotationKind::Flow && kind != ETypeAnnotationKind::Stream && kind != ETypeAnnotationKind::Optional;
+        const bool data = kind != ETypeAnnotationKind::Flow && kind != ETypeAnnotationKind::Stream;
         auto node = ctx.WrapByCallableIf(kind != ETypeAnnotationKind::Stream, "ToStream",
                         ctx.WrapByCallableIf(data, "Just", std::move(resInput)));
 

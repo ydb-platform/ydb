@@ -86,7 +86,7 @@ class YandexCloudProvider:
             "user-data": user_data,
         }
 
-        preset = self.cfg.vm_presets["default"]
+        preset = self.cfg.vm_presets["default"].copy()
 
         if preset_name in self.cfg.vm_presets:
             preset.update(self.cfg.vm_presets[preset_name])

@@ -1,5 +1,6 @@
 #include "format.h"
 
+#include "arrow_parser.h"
 #include "arrow_writer.h"
 #include "dsv_parser.h"
 #include "dsv_writer.h"
@@ -516,6 +517,12 @@ std::vector<std::unique_ptr<IParser>> CreateParsersForFormat(
             auto skiffSchemas = ParseSkiffSchemas(config->SkiffSchemaRegistry, config->TableSkiffSchemas);
             for (int tableIndex = 0; tableIndex < parserCount; ++tableIndex) {
                 parsers.emplace_back(CreateParserForSkiff(valueConsumers[tableIndex], skiffSchemas, config, tableIndex));
+            }
+            break;
+        }
+        case EFormatType::Arrow: {
+            for (int tableIndex = 0; tableIndex < parserCount; ++tableIndex) {
+                parsers.emplace_back(CreateParserForArrow(valueConsumers[tableIndex]));
             }
             break;
         }

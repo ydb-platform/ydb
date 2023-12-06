@@ -3,6 +3,7 @@ LIBRARY()
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(
+    arrow_parser.cpp
     arrow_writer.cpp
     dsv_parser.cpp
     dsv_writer.cpp
@@ -39,6 +40,8 @@ PEERDIR(
     yt/yt/client/formats
     yt/yt/client/arrow/fbs
     yt/yt/library/column_converters
+
+    contrib/libs/apache/arrow
 )
 
 END()

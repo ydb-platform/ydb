@@ -738,14 +738,6 @@ public:
                         settings.PartitionBy = Build<TCoAtomList>(ctx, node->Pos()).Done();
                     }
 
-                    if (!settings.NotNullColumns.IsValid()) {
-                        settings.NotNullColumns = Build<TCoAtomList>(ctx, node->Pos()).Done();
-                    }
-
-                    if (!settings.SerialColumns.IsValid()) {
-                        settings.SerialColumns = Build<TCoAtomList>(ctx, node->Pos()).Done();
-                    }
-
                     auto temporary = settings.Temporary.IsValid()
                         ? settings.Temporary.Cast()
                         : Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
@@ -759,8 +751,6 @@ public:
                         .Temporary(temporary)
                         .Columns(settings.Columns.Cast())
                         .PrimaryKey(settings.PrimaryKey.Cast())
-                        .NotNullColumns(settings.NotNullColumns.Cast())
-                        .SerialColumns(settings.SerialColumns.Cast())
                         .Settings(settings.Other)
                         .Indexes(settings.Indexes.Cast())
                         .Changefeeds(settings.Changefeeds.Cast())

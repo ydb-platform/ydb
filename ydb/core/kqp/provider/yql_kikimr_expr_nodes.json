@@ -123,10 +123,8 @@
                 {"Index": 9, "Name": "TableSettings", "Type": "TCoNameValueTupleList"},
                 {"Index": 10, "Name": "Changefeeds", "Type": "TCoChangefeedList"},
                 {"Index": 11, "Name": "TableType", "Type": "TCoAtom"},
-                {"Index": 12, "Name": "NotNullColumns", "Type": "TCoAtomList"},
-                {"Index": 13, "Name": "SerialColumns", "Type": "TCoAtomList"},
-                {"Index": 14, "Name": "Temporary", "Type": "TCoAtom"},
-                {"Index": 15, "Name": "ExistingOk", "Type": "TCoAtom"}
+                {"Index": 12, "Name": "Temporary", "Type": "TCoAtom"},
+                {"Index": 13, "Name": "ExistingOk", "Type": "TCoAtom"}
             ]
         },
         {

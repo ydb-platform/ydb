@@ -679,16 +679,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             meta->TableSettings.PartitionBy.emplace_back(column.Value());
         }
 
-        THashSet<TString> notNullColumns;
-        for (const auto& column : create.NotNullColumns()) {
-            notNullColumns.emplace(column.Value());
-        }
-
-        THashSet<TString> serialColumns;
-        for(const auto& column : create.SerialColumns()) {
-            serialColumns.emplace(column.Value());
-        }
-
         for (auto item : create.Columns()) {
             auto columnTuple = item.Cast<TExprList>();
             auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
@@ -702,20 +692,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
             auto isOptional = type->GetKind() == ETypeAnnotationKind::Optional;
             auto actualType = !isOptional ? type : type->Cast<TOptionalExprType>()->GetItemType();
-
-            bool notNull;
-            if (actualType->GetKind() == ETypeAnnotationKind::Pg) {
-                notNull = notNullColumns.contains(columnName);
-            } else {
-                notNull = !isOptional;
-            }
-
-            auto scIt = serialColumns.find(columnName);
-            bool isSerial = false;
-            if (scIt != serialColumns.end()) {
-                // notNull = true;
-                isSerial = true;
-            }
 
             if (actualType->GetKind() != ETypeAnnotationKind::Data
                 && actualType->GetKind() != ETypeAnnotationKind::Pg
@@ -736,18 +712,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             columnMeta.Name = columnName;
             columnMeta.Type = GetColumnTypeName(actualType);
 
-            if (columnMeta.IsDefaultKindDefined()) {
-                ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder() << "Default setting for "
-                    << columnName << " column is already set: "
-                    << NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind_Name(columnMeta.DefaultKind)));
-                return TStatus::Error;
-            }
-
-            if (isSerial) {
-                columnMeta.DefaultFromSequence = "_serial_column_" + columnMeta.Name;
-                columnMeta.SetDefaultFromSequence();
-            }
-
             if (actualType->GetKind() == ETypeAnnotationKind::Pg) {
                 auto pgTypeId = actualType->Cast<TPgExprType>()->GetId();
                 columnMeta.TypeInfo = NKikimr::NScheme::TTypeInfo(
@@ -755,7 +719,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId)
                 );
             }
-            columnMeta.NotNull = notNull;
 
             if (columnTuple.Size() > 2) {
                 const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
@@ -790,6 +753,19 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
                         columnMeta.SetDefaultFromLiteral();
                         FillLiteralProto(constraint.Value().Cast<TCoDataCtor>(), columnMeta.DefaultFromLiteral);
+                    } else if (constraint.Name().Value() == "serial") {
+
+                        if (columnMeta.IsDefaultKindDefined()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder() << "Default setting for "
+                                << columnName << " column is already set: "
+                                << NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind_Name(columnMeta.DefaultKind)));
+                            return TStatus::Error;
+                        }
+
+                        columnMeta.DefaultFromSequence = "_serial_column_" + columnMeta.Name;
+                        columnMeta.SetDefaultFromSequence();
+                    } else if (constraint.Name().Value() == "not_null") {
+                        columnMeta.NotNull = true;
                     }
                 }
             }

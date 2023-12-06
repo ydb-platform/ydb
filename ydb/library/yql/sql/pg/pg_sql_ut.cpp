@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '())) '('b (PgType 'text) '('columnConstraints '())))))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('notnull '('a)))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('not_null)))) '('b (PgType 'text) '('columnConstraints '())))))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '('a)) '('notnull '('a)))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('not_null)))) '('b (PgType 'text) '('columnConstraints '())))) '('primarykey '('a)))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'int4)))) '('primarykey '('a)) '('notnull '('a)) '('default 'b (PgConst '0 (PgType 'int4))))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('not_null)))) '('b (PgType 'int4) '('columnConstraints '('('default (PgConst '0 (PgType 'int4)))))))) '('primarykey '('a)))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '('a)) '('notnull '('a)))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('not_null)))) '('b (PgType 'text) '('columnConstraints '())))) '('primarykey '('a)))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '('a)) '('notnull '('a 'b)))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('not_null)))) '('b (PgType 'text) '('columnConstraints '('('not_null)))))) '('primarykey '('a)))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -190,7 +190,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '('a 'b)) '('notnull '('b 'a)))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('not_null)))) '('b (PgType 'text) '('columnConstraints '('('not_null)))))) '('primarykey '('a 'b)))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
             (
                 (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-                (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)))) '('serialColumns '('a)))))
+                (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('serial)))))))))
                 (let world (CommitAll! world))
                 (return world))
         )";

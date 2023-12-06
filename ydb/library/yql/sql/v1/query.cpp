@@ -812,34 +812,29 @@ public:
             opts = L(opts, Q(Y(Q("columnFamilies"), Q(columnFamilies))));
         }
 
-        THashSet<TString> notNullColumnsSet;
-        auto notNullColumns = Y();
         auto columns = Y();
-        THashSet<TString> serialColumnsSet;
         THashSet<TString> columnsWithDefaultValue;
         auto columnsDefaultValueSettings = Y();
 
-        auto serialColumns = Y();
         for (auto& col : Params.Columns) {
             auto columnDesc = Y();
             columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
             auto type = col.Type;
-            if (col.Serial) {
-                if (serialColumnsSet.insert(col.Name).second)
-                    serialColumns = L(serialColumns, BuildQuotedAtom(Pos, col.Name));
-            }
+
             if (col.Nullable) {
                 type = Y("AsOptionalType", type);
-            } else {
-                if (notNullColumnsSet.insert(col.Name).second)
-                    notNullColumns = L(notNullColumns, BuildQuotedAtom(Pos, col.Name));
             }
 
             columnDesc = L(columnDesc, type);
 
             auto columnConstraints = Y();
+
+            if (!col.Nullable) {
+                columnConstraints = L(columnConstraints, Q(Y(Q("not_null"))));
+            }
+
             if (col.Serial) {
-                columnConstraints = L(columnConstraints, Q(Y(Q("serial"), Q("true"))));
+                columnConstraints = L(columnConstraints, Q(Y(Q("serial"))));
             }
 
             if (col.DefaultExpr) {
@@ -896,14 +891,6 @@ public:
                 ctx.Error() << "PRIMARY KEY cannot be used with ORDER BY, use PARTITION BY instead";
                 return false;
             }
-        }
-
-        if (!notNullColumnsSet.empty()) {
-            opts = L(opts, Q(Y(Q("notnull"), Q(notNullColumns))));
-        }
-
-        if (!serialColumnsSet.empty()) {
-            opts = L(opts, Q(Y(Q("serialColumns"), Q(serialColumns))));
         }
 
         if (!Params.PartitionByColumns.empty()) {
@@ -1089,8 +1076,12 @@ public:
 
                 columnDesc = L(columnDesc, type);
                 auto columnConstraints = Y();
+                if (!col.Nullable) {
+                    columnConstraints = L(columnConstraints, Q(Y(Q("not_null"))));
+                }
+
                 if (col.Serial) {
-                    columnConstraints = L(columnConstraints, Q(Y(Q("serial"), Q("true"))));
+                    columnConstraints = L(columnConstraints, Q(Y(Q("serial"))));
                 }
 
                 if (col.DefaultExpr) {

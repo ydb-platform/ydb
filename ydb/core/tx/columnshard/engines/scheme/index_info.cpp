@@ -302,10 +302,9 @@ TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId, const TSaverContext
     std::unique_ptr<arrow::util::Codec> columnCodec;
     {
         auto it = ColumnFeatures.find(columnId);
-        if (it != ColumnFeatures.end()) {
-            transformer = it->second.GetSaveTransformer();
-            columnCodec = it->second.GetCompressionCodec();
-        }
+        AFL_VERIFY(it != ColumnFeatures.end());
+        transformer = it->second.GetSaveTransformer();
+        columnCodec = it->second.GetCompressionCodec();
     }
 
     if (context.GetExternalCompression()) {
@@ -390,7 +389,9 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_column_feature");
             return false;
         }
-        ColumnFeatures.emplace(col.GetId(), *cFeatures);
+        auto it = ColumnFeatures.find(col.GetId());
+        AFL_VERIFY(it != ColumnFeatures.end());
+        it->second = *cFeatures;
     }
 
     for (const auto& keyName : schema.GetKeyColumnNames()) {

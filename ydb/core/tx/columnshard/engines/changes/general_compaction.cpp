@@ -85,8 +85,6 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
 
     std::vector<std::map<ui32, std::vector<TColumnPortionResult>>> chunkGroups;
     chunkGroups.resize(batchResults.size());
-//    Cerr << context.SchemaVersions.DebugString() << Endl;
-    
     for (auto&& columnId : resultSchema->GetIndexInfo().GetColumnIds()) {
         NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("field_name", resultSchema->GetIndexInfo().GetColumnName(columnId)));
         auto columnInfo = stats->GetColumnInfo(columnId);

@@ -5,10 +5,18 @@
 using namespace NSQLTranslation;
 
 Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
+    Y_UNIT_TEST(Locking) {
+        auto res = PgSqlToYql("SELECT 1 FROM plato.Input FOR UPDATE");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_EQUAL(res.Issues.Size(), 1);
+
+        auto issue = *(res.Issues.begin());
+        UNIT_ASSERT(issue.GetMessage().find("locking") != TString::npos);
+    }
+
     Y_UNIT_TEST(InsertStmt) {
         auto res = PgSqlToYql("INSERT INTO plato.Input VALUES (1, 1)");
         UNIT_ASSERT(res.Root);
-        res.Root->PrintTo(Cerr);
     }
 
     Y_UNIT_TEST(InsertStmt_DefaultValues) {
@@ -397,7 +405,6 @@ SELECT COUNT(*) FROM public.t;");
 
     Y_UNIT_TEST(UpdateStmt) {
         auto res = PgSqlToYql("UPDATE plato.Input SET kind = 'test' where kind = 'testtest'");
-        Cerr << res.Root->ToString();
         TString updateStmtProg = R"(
             (
                 (let world (Configure! world (DataSource 'config) 'OrderedColumns))

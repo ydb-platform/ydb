@@ -946,11 +946,10 @@ public:
                     AddError(TStringBuilder() << "LimitOption unsupported value: " << (int)x->limitOption);
                     return nullptr;
                 }
-            }
 
-            if (ListLength(x->lockingClause) > 0) {
-                AddError("SelectStmt: not supported lockingClause");
-                return nullptr;
+                if (ListLength(x->lockingClause) > 0) {
+                    AddWarning(TIssuesIds::PG_NO_LOCKING_SUPPORT, "SelectStmt: lockingClause is ignored");
+                }
             }
 
             TVector<TAstNode*> res;
@@ -1054,8 +1053,7 @@ public:
         }
 
         if (ListLength(value->lockingClause) > 0) {
-            AddError("SelectStmt: not supported lockingClause");
-            return nullptr;
+            AddWarning(TIssuesIds::PG_NO_LOCKING_SUPPORT, "SelectStmt: lockingClause is ignored");
         }
 
         TAstNode* limit = nullptr;

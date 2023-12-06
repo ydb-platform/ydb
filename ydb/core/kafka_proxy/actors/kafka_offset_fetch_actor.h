@@ -3,6 +3,8 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+// See API description at https://kafka.apache.org/protocol#The_Messages_OffsetFetch
+
 namespace NKafka {
 
 struct TopicEntities {

@@ -236,9 +236,13 @@ struct TDataProviderInfo {
 
     std::function<bool()> HasActiveProcesses;
 
+    // COMPAT(gritukan): Remove it after Arcadia migration.
     std::function<void(const TString& sessionId)> CloseSession;
-
     std::function<void(const TString& sessionId)> CleanupSession;
+
+    std::function<NThreading::TFuture<void>(const TString& sessionId)> CloseSessionAsync;
+
+    std::function<NThreading::TFuture<void>(const TString& sessionId)> CleanupSessionAsync;
 
     std::function<TString(const TString& url, const TString& alias)> TokenResolver;
 };

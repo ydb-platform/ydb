@@ -230,36 +230,49 @@ public:
         }
     }
 
-    void CloseSession(TCloseSessionOptions&& options) final {
+    TFuture<void> CloseSession(TCloseSessionOptions&& options) final {
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
-        try {
-            with_lock(Mutex_) {
-                auto it = Sessions_.find(options.SessionId());
-                if (it != Sessions_.end()) {
-                    auto session = it->second;
-                    Sessions_.erase(it);
+
+        with_lock(Mutex_) {
+            auto it = Sessions_.find(options.SessionId());
+            if (it != Sessions_.end()) {
+                auto session = it->second;
+                Sessions_.erase(it);
+                try {
                     session->Close();
-                    session.Drop();
+                } catch (...) {
+                    YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+                    return MakeErrorFuture<void>(std::current_exception());
                 }
             }
-        } catch (const yexception& e) {
-            YQL_CLOG(ERROR, ProviderYt) << e.what();
         }
+
+        return MakeFuture();
     }
 
-    void CleanupSession(TCleanupSessionOptions&& options) final {
+    TFuture<void> CleanupSession(TCleanupSessionOptions&& options) final {
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
-        try {
-            if (auto session = GetSession(options.SessionId(), false)) {
-                session->TxCache_.AbortAll();
-                if (session->OperationSemaphore) {
-                    session->OperationSemaphore->Cancel();
-                    session->OperationSemaphore.Drop();
-                }
+
+        if (auto session = GetSession(options.SessionId(), false)) {
+            if (session->OperationSemaphore) {
+                session->OperationSemaphore->Cancel();
+                session->OperationSemaphore.Drop();
             }
-        } catch (...) {
-            YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+            auto logCtx = NYql::NLog::CurrentLogContextPath();
+            return session->Queue_->Async([session, logCtx] {
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
+                try {
+                    session->TxCache_.AbortAll();
+                } catch (...) {
+                    YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+                    return MakeErrorFuture<void>(std::current_exception());
+                }
+
+                return MakeFuture();
+            });
         }
+
+        return MakeFuture();
     }
 
     TFuture<TFinalizeResult> Finalize(TFinalizeOptions&& options) final {

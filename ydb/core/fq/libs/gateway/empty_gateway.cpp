@@ -21,8 +21,9 @@ public:
         return result;
     }
 
-    void CloseSession(const TString& action) override {
+    NThreading::TFuture<void> CloseSessionAsync(const TString& action) override {
         Y_UNUSED(action);
+        return NThreading::MakeFuture();
     }
 
     NThreading::TFuture<TResult> ExecutePlan(

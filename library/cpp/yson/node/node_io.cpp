@@ -151,6 +151,22 @@ TNode NodeFromJsonString(const TStringBuf input)
     return result;
 }
 
+TNode NodeFromJsonStringIterative(const TStringBuf input, ui64 maxDepth)
+{
+    TMemoryInput stream(input);
+
+    TNode result;
+
+    TNodeBuilder builder(&result);
+    TYson2JsonCallbacksAdapter callbacks(&builder, /*throwException*/ true, maxDepth);
+    NJson::TJsonReaderConfig config;
+    config.DontValidateUtf8 = true;
+    config.UseIterativeParser = true;
+    config.MaxDepth = maxDepth;
+    NJson::ReadJson(&stream, &config, &callbacks);
+    return result;
+}
+
 TNode NodeFromJsonValue(const NJson::TJsonValue& input)
 {
     TNode result;

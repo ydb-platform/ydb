@@ -926,6 +926,8 @@ private:
             operatorId = Visit(maybeSkip.Cast(), planNode);
         } else if (auto maybeExtend = TMaybeNode<TCoExtendBase>(node)) {
             operatorId = Visit(maybeExtend.Cast(), planNode);
+        } else if (auto maybeToFlow = TMaybeNode<TCoToFlow>(node)) {
+            operatorId = Visit(maybeToFlow.Cast(), planNode);
         } else if (auto maybeIter = TMaybeNode<TCoIterator>(node)) {
             operatorId = Visit(maybeIter.Cast(), planNode);
         } else if (auto maybePartitionByKey = TMaybeNode<TCoPartitionByKey>(node)) {
@@ -1027,6 +1029,23 @@ private:
         op.Properties["Name"] = "Union";
 
         return AddOperator(planNode, "Union", std::move(op));
+    }
+
+    TMaybe<ui32> Visit(const TCoToFlow& toflow, TQueryPlanNode& planNode) {
+        const auto toflowValue = NPlanUtils::PrettyExprStr(toflow.Input());
+
+        TOperator op;
+        op.Properties["Name"] = "ToFlow";
+
+        if (auto maybeResultBinding = ContainResultBinding(toflowValue)) {
+            auto [txId, resId] = *maybeResultBinding;
+            planNode.CteRefName = TStringBuilder() << "precompute_" << txId << "_" << resId;
+            op.Properties["ToFlow"] = *planNode.CteRefName;
+        } else {
+            return TMaybe<ui32>();
+        }
+
+        return AddOperator(planNode, "ConstantExpr", std::move(op));
     }
 
     ui32 Visit(const TCoIterator& iter, TQueryPlanNode& planNode) {

@@ -24,12 +24,13 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-Aggregate-TableRangeScan",
+                                        "CTE Name": "precompute_0_0",
+                                        "Node Type": "TopSort-Aggregate-ConstantExpr-TableRangeScan",
                                         "Operators": [
                                             {
                                                 "Inputs": [
                                                     1,
-                                                    2
+                                                    3
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
@@ -37,6 +38,10 @@
                                             },
                                             {
                                                 "Name": "Aggregate"
+                                            },
+                                            {
+                                                "Name": "ToFlow",
+                                                "ToFlow": "precompute_0_0"
                                             },
                                             {
                                                 "Name": "TableRangeScan",

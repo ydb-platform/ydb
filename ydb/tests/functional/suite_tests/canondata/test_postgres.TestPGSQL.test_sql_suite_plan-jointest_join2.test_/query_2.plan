@@ -25,7 +25,7 @@
                                 "Plans": [
                                     {
                                         "CTE Name": "precompute_1_0",
-                                        "Node Type": "TopSort-InnerJoin (MapJoin)-Filter-TableRangeScan-ConstantExpr",
+                                        "Node Type": "TopSort-InnerJoin (MapJoin)-ConstantExpr-Filter-TableRangeScan-ConstantExpr",
                                         "Operators": [
                                             {
                                                 "Limit": "1001",
@@ -33,7 +33,15 @@
                                                 "TopSortBy": "argument.s2.name"
                                             },
                                             {
+                                                "Inputs": [
+                                                    2,
+                                                    3
+                                                ],
                                                 "Name": "InnerJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Name": "ToFlow",
+                                                "ToFlow": "precompute_0_0"
                                             },
                                             {
                                                 "Name": "Filter",

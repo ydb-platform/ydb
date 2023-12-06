@@ -68,16 +68,12 @@ private:
         return result;
     }
 
-    bool IsSourcesReady() {
-        for (auto&& [_, s] : Sources) {
-            if (!s->IsDataReady()) {
-                return false;
-            }
-        }
-        return true;
-    }
+    bool IsSourcesReady();
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
     const ui32 IntervalIdx;
+    TAtomicCounter ReadySourcesCount = 0;
+    TAtomicCounter ReadyGuards = 0;
+    ui32 WaitSourcesCount = 0;
     void OnInitResourcesGuard(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard);
 protected:
     virtual void DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) override;

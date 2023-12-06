@@ -1318,7 +1318,24 @@ struct TCatalog {
             "pg_ls_dir",
             // transactions
             "pg_last_committed_xact",
-            "pg_current_wal_lsn"
+            "pg_current_wal_lsn",
+            // large_objects
+            "lo_creat",
+            "lo_create",
+            "lo_import",
+            "lo_import_with_oid",
+            "lo_export",
+            "lo_open",
+            "lo_write",
+            "lo_read",
+            "lo_lseek",
+            "lo_lseek64",
+            "lo_tell",
+            "lo_tell64",
+            "lo_truncate",
+            "lo_truncate64",
+            "lo_close",
+            "lo_unlink"
         })
     {
         TString typeData;

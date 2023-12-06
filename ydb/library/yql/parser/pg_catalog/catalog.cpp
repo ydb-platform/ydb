@@ -1275,7 +1275,7 @@ TConversions ParseConversions(const TString& dat, const THashMap<TString, TVecto
 }
 
 struct TCatalog {
-    TCatalog() 
+    TCatalog()
         : ProhibitedProcs({
             // revoked from public
             "pg_start_backup",
@@ -1318,7 +1318,24 @@ struct TCatalog {
             "pg_ls_dir",
             // transactions
             "pg_last_committed_xact",
-            "pg_current_wal_lsn"
+            "pg_current_wal_lsn",
+            // large_objects
+            "lo_creat",
+            "lo_create",
+            "lo_import",
+            "lo_import_with_oid",
+            "lo_export",
+            "lo_open",
+            "lo_write",
+            "lo_read",
+            "lo_lseek",
+            "lo_lseek64",
+            "lo_tell",
+            "lo_tell64",
+            "lo_truncate",
+            "lo_truncate64",
+            "lo_close",
+            "lo_unlink"
         })
     {
         TString typeData;
@@ -1914,7 +1931,7 @@ char FindCommonCategory(const TVector<const C*> &candidates, std::function<ui32(
     isPreferred = false;
 
     for (const auto* candidate : candidates) {
-        const auto argTypeId = getTypeId(candidate); 
+        const auto argTypeId = getTypeId(candidate);
         const auto& argTypePtr = catalog.Types.FindPtr(argTypeId);
         Y_ENSURE(argTypePtr);
 
@@ -1965,7 +1982,7 @@ TVector<const C*> TryResolveUnknownsByCategory(const TVector<const C*>& candidat
     if (argCommonCategory.size() < unknownsCnt) {
         return candidates;
     }
-    
+
     TVector<const C*> filteredCandidates;
 
     for (const auto* candidate : candidates) {
@@ -2029,7 +2046,7 @@ TVector<const TOperDesc*> TryResolveUnknownsByCategory<TOperDesc>(const TVector<
     if (argCommonCategory.size() < unknownsCnt) {
         return candidates;
     }
-    
+
     TVector<const TOperDesc*> filteredCandidates;
 
     for (const auto* candidate : candidates) {

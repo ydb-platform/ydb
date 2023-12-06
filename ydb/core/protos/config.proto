@@ -752,6 +752,25 @@ message THttpProxyConfig {
     optional string JwtFile = 10;
 }
 
+message TS3ProxyResolverConfig {
+    message THttpResolverConfig {
+        // resolve proxy host to connect to that endpoint using this url
+        optional string ResolveUrl = 1;
+        // use resolved proxy through these ports
+        optional uint32 HttpPort = 2;
+        optional uint32 HttpsPort = 3;
+    }
+
+    message TEndpoint {
+        // S3 endpoint
+        optional string Endpoint = 1;
+        oneof Resolver {
+            THttpResolverConfig HttpResolver = 2;
+        }
+    }
+
+    repeated TEndpoint Endpoints = 1;
+}
 
 message TSqsConfig {
     optional bool EnableSqs = 5;
@@ -1671,6 +1690,7 @@ message TAppConfig {
     optional TQueryServiceConfig QueryServiceConfig = 73;
     optional TConveyorConfig InsertConveyorConfig = 74;
     optional bool AllowEditYamlInUi = 75;
+    optional TS3ProxyResolverConfig S3ProxyResolverConfig = 76;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

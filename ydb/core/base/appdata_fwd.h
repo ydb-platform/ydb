@@ -59,6 +59,7 @@ namespace NKikimrConfig {
     class TDomainsConfig;
     class TBootstrap;
     class TAwsCompatibilityConfig;
+    class TS3ProxyResolverConfig;
 }
 
 namespace NKikimrNetClassifier {
@@ -201,6 +202,7 @@ struct TAppData {
     std::unique_ptr<NKikimrConfig::TDomainsConfig> DomainsConfigPtr;
     std::unique_ptr<NKikimrConfig::TBootstrap> BootstrapConfigPtr;
     std::unique_ptr<NKikimrConfig::TAwsCompatibilityConfig> AwsCompatibilityConfigPtr;
+    std::unique_ptr<NKikimrConfig::TS3ProxyResolverConfig> S3ProxyResolverConfigPtr;
     std::unique_ptr<NKikimrSharedCache::TSharedCacheConfig> SharedCacheConfigPtr;
 
     NKikimrStream::TStreamingConfig& StreamingConfig;
@@ -223,6 +225,7 @@ struct TAppData {
     NKikimrConfig::TDomainsConfig& DomainsConfig;
     NKikimrConfig::TBootstrap& BootstrapConfig;
     NKikimrConfig::TAwsCompatibilityConfig& AwsCompatibilityConfig;
+    NKikimrConfig::TS3ProxyResolverConfig& S3ProxyResolverConfig;
     bool EnforceUserTokenRequirement = false;
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
     bool EnableKqpSpilling = false;

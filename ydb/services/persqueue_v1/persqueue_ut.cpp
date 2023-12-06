@@ -1,4 +1,8 @@
 #include "actors/read_session_actor.h"
+
+#include <google/protobuf/text_format.h>
+#include <google/protobuf/util/message_differencer.h>
+
 #include <ydb/services/persqueue_v1/ut/pq_data_writer.h>
 #include <ydb/services/persqueue_v1/ut/api_test_setup.h>
 #include <ydb/services/persqueue_v1/ut/rate_limiter_test_setup.h>
@@ -24,8 +28,6 @@
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/monlib/dynamic_counters/encode.h>
-#include <google/protobuf/text_format.h>
-#include <google/protobuf/util/message_differencer.h>
 
 #include <util/string/join.h>
 #include <util/system/sanitizers.h>

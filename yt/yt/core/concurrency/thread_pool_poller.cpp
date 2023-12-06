@@ -191,7 +191,8 @@ public:
             threadCount,
             threadNamePrefix + "FS",
             {
-                .PollingPeriod = pollingPeriod
+                .PollingPeriod = pollingPeriod,
+                .PoolRetentionTime = TDuration::Zero()
             });
         AuxInvoker_ = FairShareThreadPool_->GetInvoker("aux", "default");
     }

@@ -391,7 +391,9 @@ public:
         , ThreadNamePrefix_(threadNamePrefix)
         , Profiler_(TProfiler{"/fair_share_queue"}
             .WithHot())
+        , CumulativeSchedulingTimeCounter_(Profiler_.TimeCounter("/time/scheduling_cumulative"))
         , PoolWeightProvider_(options.PoolWeightProvider)
+        , PoolRetentionTime_(options.PoolRetentionTime)
         , VerboseLogging_(options.VerboseLogging)
     { }
 
@@ -434,6 +436,9 @@ public:
             }
         }
 
+        // Using non atomic Pool pointer is safe because it is set once and RemoveBucket cannot be
+        // concurrently executed with ConsumeInvokeQueue.
+        // Pool is nullptr when bucket was created but no actions were invoked.
         if (auto* pool = bucket->Pool) {
             UnlinkBucketQueue_.Enqueue(pool);
         }
@@ -566,7 +571,9 @@ private:
 
     const TString ThreadNamePrefix_;
     const TProfiler Profiler_;
+    const NProfiling::TTimeCounter CumulativeSchedulingTimeCounter_;
     const IPoolWeightProviderPtr PoolWeightProvider_;
+    const TDuration PoolRetentionTime_;
     const bool VerboseLogging_;
 
     // TODO(lukyan): Sharded mapping.
@@ -591,7 +598,6 @@ private:
 
     // Buffer to keep actions during distribution to threads.
     std::array<TAction, TThreadPoolBase::MaxThreadCount> OtherActions_;
-
     std::atomic<int> ThreadCount_ = 0;
     std::atomic<int> ActiveThreads_ = 0;
 
@@ -615,7 +621,7 @@ private:
         return mappingIt->second.get();
     }
 
-    void ConsumeInvokeQueue(TCpuInstant currentInstant)
+    Y_NO_INLINE void ConsumeInvokeQueue()
     {
         VERIFY_SPINLOCK_AFFINITY(MainLock_);
 
@@ -682,20 +688,24 @@ private:
                 WaitHeap_.Insert(&bucket->EnqueuedTime);
             }
         });
+    }
 
-        UnlinkBucketQueue_.DequeueAll(false, [&] (TExecutionPool* pool) {
-            YT_VERIFY(pool->BucketRefs > 0);
-            if (--pool->BucketRefs == 0) {
+    Y_NO_INLINE void ProcessUnlinkedBuckets(TCpuInstant currentInstant)
+    {
+        UnlinkBucketQueue_.FilterElements([&] (TExecutionPool* pool) {
+            YT_ASSERT(pool->BucketRefs > 0);
+            if (pool->BucketRefs == 1) {
                 auto lastUsageTime = pool->LastUsageTime.load(std::memory_order_acquire);
-                if (CpuDurationToDuration(currentInstant - lastUsageTime) > TDuration::Seconds(30)) {
-                    auto poolIt = PoolMapping_.find(pool->PoolName);
-                    YT_VERIFY(poolIt != PoolMapping_.end() && poolIt->second.get() == pool);
-                    PoolMapping_.erase(poolIt);
-                } else {
-                    ++pool->BucketRefs;
-                    UnlinkBucketQueue_.Enqueue(pool);
+                if (CpuDurationToDuration(currentInstant - lastUsageTime) < PoolRetentionTime_) {
+                    return true;
                 }
+                auto poolIt = PoolMapping_.find(pool->PoolName);
+                YT_ASSERT(poolIt != PoolMapping_.end() && poolIt->second.get() == pool);
+                PoolMapping_.erase(poolIt);
+            } else {
+                --pool->BucketRefs;
             }
+            return false;
         });
     }
 
@@ -739,7 +749,7 @@ private:
         threadState->BucketToUnref = std::move(bucket);
     }
 
-    void UpdateExcessTime(TBucket* bucket, TCpuDuration duration, TCpuInstant currentInstant)
+    Y_NO_INLINE void UpdateExcessTime(TBucket* bucket, TCpuDuration duration, TCpuInstant currentInstant)
     {
         VERIFY_SPINLOCK_AFFINITY(MainLock_);
 
@@ -771,7 +781,7 @@ private:
         YT_ASSERT(!bucket->EnqueuedTime.GetPositionInHeap() == !bucket->GetPositionInHeap());
     }
 
-    bool GetStarvingBucket(TAction* action)
+    Y_NO_INLINE bool GetStarvingBucket(TAction* action)
     {
         VERIFY_SPINLOCK_AFFINITY(MainLock_);
 
@@ -873,7 +883,9 @@ private:
 
         YT_LOG_TRACE("Consuming invoke queue");
 
-        ConsumeInvokeQueue(currentInstant);
+        ConsumeInvokeQueue();
+
+        ProcessUnlinkedBuckets(currentInstant);
 
         int fetchedActions = 0;
         int otherActionCount = 0;
@@ -976,6 +988,8 @@ private:
                 action.BucketHolder->Pool->WaitTimeCounter.Record(waitTime);
                 ReportWaitTime(waitTime);
             }
+
+            CumulativeSchedulingTimeCounter_.Add(CpuDurationToDuration(GetCpuInstant() - cpuInstant));
         });
 
         auto& request = threadState.Request;

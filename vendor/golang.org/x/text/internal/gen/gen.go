@@ -277,11 +277,9 @@ func fileToPattern(filename string) string {
 	return fmt.Sprint(prefix, "%s", suffix)
 }
 
-// tagLines returns the //go:build and // +build lines to add to the file.
+// tagLines returns the //go:build lines to add to the file.
 func tagLines(tags string) string {
-	newTags := strings.ReplaceAll(tags, ",", " && ")
-	return "//go:build " + newTags + "\n" +
-		"// +build " + tags + "\n"
+	return "//go:build " + strings.ReplaceAll(tags, ",", " && ") + "\n"
 }
 
 func updateBuildTags(pattern string) {
@@ -291,7 +289,7 @@ func updateBuildTags(pattern string) {
 		if err != nil {
 			continue
 		}
-		b = regexp.MustCompile(`((//go:build|// \+build).*\n)+`).ReplaceAll(b, []byte(tagLines(t.buildTags)))
+		b = regexp.MustCompile(`//go:build.*\n`).ReplaceAll(b, []byte(tagLines(t.buildTags)))
 		err = os.WriteFile(oldFile, b, 0644)
 		if err != nil {
 			log.Fatal(err)

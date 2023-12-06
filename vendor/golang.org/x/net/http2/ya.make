@@ -10,9 +10,6 @@ SRCS(
     errors.go
     flow.go
     frame.go
-    go111.go
-    go115.go
-    go118.go
     gotrack.go
     headermap.go
     http2.go

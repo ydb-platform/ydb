@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build openbsd
-// +build openbsd
 
 // This, on the face of it, bizarre testing mechanism is necessary because
 // the only reliable way to gauge whether or not a pledge(2) call has succeeded

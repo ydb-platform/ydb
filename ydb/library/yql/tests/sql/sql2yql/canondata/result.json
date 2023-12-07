@@ -9435,6 +9435,13 @@
             "uri": "https://{canondata_backend}/1689644/39ce6d9afd6582130ac864f33dffbf252ff73f8a/resource.tar.gz#test_sql2yql.test_lineage-member_over_if_struct_/sql.yql"
         }
     ],
+    "test_sql2yql.test[lineage-nested_lambda_fields]": [
+        {
+            "checksum": "7f27c8f0aff32fce7b86d9d370733164",
+            "size": 1538,
+            "uri": "https://{canondata_backend}/1937001/367147bfd772fc8975087ce9c3bf4c808edc62a9/resource.tar.gz#test_sql2yql.test_lineage-nested_lambda_fields_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[lineage-scalar_context]": [
         {
             "checksum": "d30139e2ac069a234955b9b89fe80997",
@@ -26534,6 +26541,13 @@
             "checksum": "f1e8032e0e8f6fbfdc51bc56af630a48",
             "size": 333,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_lineage-member_over_if_struct_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[lineage-nested_lambda_fields]": [
+        {
+            "checksum": "18ff9032fab9ba6187699e80a1885eb3",
+            "size": 210,
+            "uri": "https://{canondata_backend}/1937001/367147bfd772fc8975087ce9c3bf4c808edc62a9/resource.tar.gz#test_sql_format.test_lineage-nested_lambda_fields_/formatted.sql"
         }
     ],
     "test_sql_format.test[lineage-scalar_context]": [

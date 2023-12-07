@@ -246,10 +246,6 @@ private:
             return Nothing();
         }
 
-        if (node.IsArgument()) {
-            return Nothing();
-        }
-
         auto [it, inserted] = visited.emplace(&node, Nothing());
         if (!inserted) {
             return it->second;

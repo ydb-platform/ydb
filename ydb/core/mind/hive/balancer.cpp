@@ -166,7 +166,8 @@ protected:
     }
 
     bool CanKickNextTablet() const {
-        return KickInFlight < Settings.MaxInFlight;
+        return KickInFlight < Settings.MaxInFlight
+               && (Settings.MaxMovements == 0 || Movements < Settings.MaxMovements);
     }
 
     void UpdateProgress() {
@@ -267,9 +268,6 @@ protected:
     }
 
     void KickNextTablet() {
-        if (!CanKickNextTablet()) {
-            return;
-        }
         if (Settings.MaxMovements != 0 && Movements >= Settings.MaxMovements) {
             if (KickInFlight > 0) {
                 return;

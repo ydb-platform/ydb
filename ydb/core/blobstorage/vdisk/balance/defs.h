@@ -3,6 +3,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_hulllogctx.h>
 
 
 namespace NKikimr {
@@ -11,6 +12,8 @@ namespace NKikimr {
         TPDiskCtxPtr PDiskCtx;
         TActorId SkeletonId;
         NMonGroup::TBalancingGroup MonGroup;
+        const TIntrusivePtr<TLsnMngr> LsnMngr;
+        std::shared_ptr<THullLogCtx> HullLogCtx;
 
         NKikimr::THullDsSnap Snap;
 
@@ -20,13 +23,19 @@ namespace NKikimr {
 
     struct TPartInfo {
         TLogoBlobID Key;
-        ui8 PartIdx;
+        TIngress Ingress;
         std::variant<TDiskPart, TRope> PartData;
     };
 
     struct TPart {
         TLogoBlobID Key;
-        ui8 PartIdx;
+        TIngress Ingress;
         TRope PartData;
+    };
+
+    struct TPartOnMain {
+        TLogoBlobID Key;
+        TIngress Ingress;
+        bool HasOnMain;
     };
 } // NKikimr

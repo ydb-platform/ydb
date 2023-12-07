@@ -45,7 +45,7 @@ namespace NKikimr {
                 Parts.pop();
                 Result[i] = TPart{
                     .Key=item.Key,
-                    .PartIdx=item.PartIdx
+                    .Ingress=item.Ingress
                 };
                 if (std::holds_alternative<TRope>(item.PartData)) {
                     Result[i].PartData = std::get<TRope>(item.PartData);
@@ -82,13 +82,13 @@ namespace NKikimr {
         }
 
         void Handle(NPDisk::TEvChunkReadResult::TPtr ev) {
+            ++Responses;
             auto *msg = ev->Get();
             if (msg->Status != NKikimrProto::EReplyStatus::OK) {
                 return;
             }
             ui64 i = reinterpret_cast<ui64>(msg->Cookie);
             Result[i].PartData = TRope(msg->Data.ToString());
-            ++Responses;
         }
     };
 

@@ -1,10 +1,9 @@
-#pragma once
-
 #include "balancing_actor.h"
 #include "defs.h"
 #include "deleter.h"
 #include "merger.h"
 #include "sender.h"
+#include "utils.h"
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_queues.h>
 #include <ydb/core/blobstorage/base/vdisk_sync_common.h>
@@ -22,19 +21,6 @@ namespace NKikimr {
 
         TActorId SenderId;
         TActorId DeleterId;
-
-        void Bootstrap(const TActorContext &ctx) {
-            CreateVDisksQueues();
-            auto [sendOnMainParts, tryDeleteParts] = CollectKeys();
-
-            SenderId = ctx.Register(new TSender(std::move(sendOnMainParts), QueueActorMapPtr, Ctx));
-            ActiveActors.Insert(SenderId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
-
-            DeleterId = ctx.Register(new TDeleter(std::move(sendOnMainParts), QueueActorMapPtr, Ctx));
-            ActiveActors.Insert(DeleterId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
-
-            Become(&TThis::StateFunc);
-        }
 
         void CreateVDisksQueues() {
             QueueActorMapPtr = std::make_shared<TQueueActorMap>();
@@ -63,8 +49,8 @@ namespace NKikimr {
                             continue;  // something strange
                         }
                         queue.push(TPartInfo{
-                            .Key=It.GetCurKey().LogoBlobID(),
-                            .PartIdx=partIdx,
+                            .Key=TLogoBlobID(It.GetCurKey().LogoBlobID(), partIdx),
+                            .Ingress=merger.Ingress,
                             .PartData=*merger.Parts[partIdx]
                         });
                     }
@@ -96,16 +82,6 @@ namespace NKikimr {
             Send(DeleterId, new NActors::TEvents::TEvWakeup());
         }
 
-        TVector<ui8> PartsToSendOnMain(const TIngress& ingress) {
-            Y_UNUSED(ingress);
-            return {}; // TODO
-        }
-
-        TVector<ui8> PartsToDelete(const TIngress& ingress) {
-            Y_UNUSED(ingress);
-            return {}; // TODO
-        }
-
         STRICT_STFUNC(StateFunc,
             cFunc(TEvReplToken::EventType, HandleReplToken)
         );
@@ -116,6 +92,19 @@ namespace NKikimr {
             , Ctx(ctx)
             , It(Ctx->Snap.HullCtx, &Ctx->Snap.LogoBlobsSnap)
         {
+        }
+
+        void Bootstrap(const TActorContext &ctx) {
+            CreateVDisksQueues();
+            auto [sendOnMainParts, tryDeleteParts] = CollectKeys();
+
+            SenderId = ctx.Register(new TSender(std::move(sendOnMainParts), QueueActorMapPtr, Ctx));
+            ActiveActors.Insert(SenderId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+
+            DeleterId = ctx.Register(new TDeleter(std::move(sendOnMainParts), QueueActorMapPtr, Ctx));
+            ActiveActors.Insert(DeleterId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+
+            Become(&TThis::StateFunc);
         }
     };
 

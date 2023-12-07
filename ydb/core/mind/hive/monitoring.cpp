@@ -192,7 +192,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_MEM_STATE; }
 
-    bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
+    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         const auto& params(Event->Cgi());
         if (params.contains("bad")) {
             BadOnly = FromStringWithDefault(params.Get("bad"), BadOnly);
@@ -206,7 +206,6 @@ public:
         if (params.contains("sort")) {
             Sort = params.Get("sort");
         }
-        Y_UNUSED(txc);
         TStringStream str;
         RenderHTMLPage(str);
         ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(str.Str()));

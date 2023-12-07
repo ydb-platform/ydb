@@ -2,7 +2,6 @@
 
 #include "defs.h"
 
-#include "balancer.h"
 #include "config.h"
 #include "event.h"
 #include "executor_pool.h"
@@ -92,8 +91,6 @@ namespace NActors {
         // Either Executors or CpuManager must be initialized
         ui32 ExecutorsCount = 0;
         TArrayHolder<TAutoPtr<IExecutorPool>> Executors;
-
-        TAutoPtr<IBalancer> Balancer; // main implementation will be implicitly created if not set
 
         TCpuManagerConfig CpuManager;
 

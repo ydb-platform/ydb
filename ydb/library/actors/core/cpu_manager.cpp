@@ -3,23 +3,16 @@
 
 #include "executor_pool_basic.h"
 #include "executor_pool_io.h"
-#include "executor_pool_united.h"
 
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
     TCpuManager::TCpuManager(THolder<TActorSystemSetup>& setup)
         : ExecutorPoolCount(setup->GetExecutorsCount())
-        , Balancer(setup->Balancer)
         , Config(setup->CpuManager)
     {
         if (setup->Executors) { // Explicit mode w/o united pools
             Executors.Reset(setup->Executors.Release());
-            for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
-                IExecutorPool* pool = Executors[excIdx].Get();
-                Y_ABORT_UNLESS(dynamic_cast<TUnitedExecutorPool*>(pool) == nullptr,
-                    "united executor pool is prohibited in explicit mode of NActors::TCpuManager");
-            }
         } else {
             Setup();
         }
@@ -28,14 +21,6 @@ namespace NActors {
     void TCpuManager::Setup() {
         TAffinity available;
         available.Current();
-        TCpuAllocationConfig allocation(available, Config);
-
-        if (allocation) {
-            if (!Balancer) {
-                Balancer.Reset(MakeBalancer(Config.UnitedWorkers.Balancer, Config.United, GetCycleCountFast()));
-            }
-            UnitedWorkers.Reset(new TUnitedWorkers(Config.UnitedWorkers, Config.United, allocation, Balancer.Get()));
-        }
 
         ui64 ts = GetCycleCountFast();
         Harmonizer.Reset(MakeHarmonizer(ts));
@@ -53,9 +38,6 @@ namespace NActors {
     }
 
     void TCpuManager::PrepareStart(TVector<NSchedulerQueue::TReader*>& scheduleReaders, TActorSystem* actorSystem) {
-        if (UnitedWorkers) {
-            UnitedWorkers->Prepare(actorSystem, scheduleReaders);
-        }
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
             NSchedulerQueue::TReader* readers;
             ui32 readersCount = 0;
@@ -67,9 +49,6 @@ namespace NActors {
     }
 
     void TCpuManager::Start() {
-        if (UnitedWorkers) {
-            UnitedWorkers->Start();
-        }
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
             Executors[excIdx]->Start();
         }
@@ -79,17 +58,11 @@ namespace NActors {
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
             Executors[excIdx]->PrepareStop();
         }
-        if (UnitedWorkers) {
-            UnitedWorkers->PrepareStop();
-        }
     }
 
     void TCpuManager::Shutdown() {
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
             Executors[excIdx]->Shutdown();
-        }
-        if (UnitedWorkers) {
-            UnitedWorkers->Shutdown();
         }
         for (ui32 round = 0, done = 0; done < ExecutorPoolCount && round < 3; ++round) {
             done = 0;
@@ -112,7 +85,6 @@ namespace NActors {
             }
         }
         Executors.Destroy();
-        UnitedWorkers.Destroy();
     }
 
     IExecutorPool* TCpuManager::CreateExecutorPool(ui32 poolId) {
@@ -124,12 +96,6 @@ namespace NActors {
         for (TIOExecutorPoolConfig& cfg : Config.IO) {
             if (cfg.PoolId == poolId) {
                 return new TIOExecutorPool(cfg);
-            }
-        }
-        for (TUnitedExecutorPoolConfig& cfg : Config.United) {
-            if (cfg.PoolId == poolId) {
-                IExecutorPool* result = new TUnitedExecutorPool(cfg, UnitedWorkers.Get());
-                return result;
             }
         }
         Y_ABORT("missing PoolId: %d", int(poolId));

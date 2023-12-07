@@ -99,7 +99,6 @@ namespace NActors {
         ui64 RevolvingWriteCounter = 0;
         const TString ThreadName;
         volatile TThreadId ThreadId = UnknownThreadId;
-        bool IsUnitedWorker = false;
 
         TDuration TimePerMailbox;
         ui32 EventsPerMailbox;

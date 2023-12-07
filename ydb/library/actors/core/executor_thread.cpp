@@ -43,7 +43,6 @@ namespace NActors {
         , ExecutorPool(executorPool)
         , Ctx(workerId, cpuId)
         , ThreadName(threadName)
-        , IsUnitedWorker(true)
         , TimePerMailbox(timePerMailbox)
         , EventsPerMailbox(eventsPerMailbox)
     {
@@ -67,7 +66,6 @@ namespace NActors {
         , AvailableExecutorPools(executorPools)
         , Ctx(workerId, 0)
         , ThreadName(threadName)
-        , IsUnitedWorker(false)
         , TimePerMailbox(timePerMailbox)
         , EventsPerMailbox(eventsPerMailbox)
         , SoftProcessingDurationTs(softProcessingDurationTs)
@@ -79,7 +77,7 @@ namespace NActors {
     { }
 
     void TExecutorThread::UnregisterActor(TMailboxHeader* mailbox, TActorId actorId) {
-        Y_DEBUG_ABORT_UNLESS(IsUnitedWorker || actorId.PoolID() == ExecutorPool->PoolId && ExecutorPool->ResolveMailbox(actorId.Hint()) == mailbox);
+        Y_DEBUG_ABORT_UNLESS(actorId.PoolID() == ExecutorPool->PoolId && ExecutorPool->ResolveMailbox(actorId.Hint()) == mailbox);
         IActor* actor = mailbox->DetachActor(actorId.LocalId());
         Ctx.DecrementActorsAliveByActivity(actor->GetActivityType());
         DyingActors.push_back(THolder(actor));

@@ -37,11 +37,9 @@ target_sources(ydb-library-actors-core-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/actorsystem_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/performance_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/ask_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/balancer_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/event_pb_payload_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/event_pb_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/executor_pool_basic_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/executor_pool_united_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/log_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/mon_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/scheduler_actor_ut.cpp

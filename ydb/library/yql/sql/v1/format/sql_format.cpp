@@ -23,6 +23,7 @@ namespace {
 
 using namespace NSQLv1Generated;
 
+using NSQLTranslation::TParsedToken;
 using NSQLTranslation::TParsedTokenList;
 using TTokenIterator = TParsedTokenList::const_iterator;
 
@@ -1246,6 +1247,12 @@ private:
         WriteComments();
     }
 
+    void PosFromParsedToken(const TParsedToken& token) {
+        LastLine = token.Line;
+        LastColumn = token.LinePos;
+        WriteComments();
+    }
+
     void VisitToken(const TToken& token) {
         VisitTokenImpl(token, false);
     }
@@ -1264,7 +1271,7 @@ private:
 
         //Cerr << str << "\n";
         auto currentScope = Scopes.back();
-        if (!SkipSpaceAfterUnaryOp) {
+        if (!SkipSpaceAfterUnaryOp && !InMultiTokenOp) {
             if (AfterLess && str == ">") {
                 Out(' ');
             } else if (AfterDigits && str == ".") {
@@ -2060,6 +2067,180 @@ private:
         PopCurrentIndent();
     }
 
+    void VisitExpr(const TRule_expr& msg) {
+        if (msg.HasAlt_expr2()) {
+            Visit(msg.GetAlt_expr2());
+            return;
+        }
+        const auto& orExpr = msg.GetAlt_expr1();
+        auto getExpr = [](const TRule_expr::TAlt1::TBlock2& b) -> const TRule_or_subexpr& { return b.GetRule_or_subexpr2(); };
+        auto getOp = [](const TRule_expr::TAlt1::TBlock2& b) -> const TToken& { return b.GetToken1(); };
+        VisitBinaryOp(orExpr.GetRule_or_subexpr1(), getOp, getExpr, orExpr.GetBlock2().begin(), orExpr.GetBlock2().end());
+    }
+
+    void VisitOrSubexpr(const TRule_or_subexpr& msg) {
+        auto getExpr = [](const TRule_or_subexpr::TBlock2& b) -> const TRule_and_subexpr& { return b.GetRule_and_subexpr2(); };
+        auto getOp = [](const TRule_or_subexpr::TBlock2& b) -> const TToken& { return b.GetToken1(); };
+        VisitBinaryOp(msg.GetRule_and_subexpr1(), getOp, getExpr, msg.GetBlock2().begin(), msg.GetBlock2().end());
+    }
+
+    void VisitAndSubexpr(const TRule_and_subexpr& msg) {
+        auto getExpr = [](const TRule_and_subexpr::TBlock2& b) -> const TRule_xor_subexpr& { return b.GetRule_xor_subexpr2(); };
+        auto getOp = [](const TRule_and_subexpr::TBlock2& b) -> const TToken& { return b.GetToken1(); };
+        VisitBinaryOp(msg.GetRule_xor_subexpr1(), getOp, getExpr, msg.GetBlock2().begin(), msg.GetBlock2().end());
+    }
+
+    void VisitEqSubexpr(const TRule_eq_subexpr& msg) {
+        auto getExpr = [](const TRule_eq_subexpr::TBlock2& b) -> const TRule_neq_subexpr& { return b.GetRule_neq_subexpr2(); };
+        auto getOp = [](const TRule_eq_subexpr::TBlock2& b) -> const TToken& { return b.GetToken1(); };
+        VisitBinaryOp(msg.GetRule_neq_subexpr1(), getOp, getExpr, msg.GetBlock2().begin(), msg.GetBlock2().end());
+    }
+
+    void VisitNeqSubexpr(const TRule_neq_subexpr& msg) {
+        VisitNeqSubexprImpl(msg, false);
+    }
+
+    void VisitNeqSubexprImpl(const TRule_neq_subexpr& msg, bool pushedIndent) {
+        auto getExpr = [](const TRule_neq_subexpr::TBlock2& b) -> const TRule_bit_subexpr& { return b.GetRule_bit_subexpr2(); };
+        auto getOp = [](const TRule_neq_subexpr::TBlock2& b) -> const TRule_neq_subexpr::TBlock2::TBlock1& { return b.GetBlock1(); };
+        VisitBinaryOp(msg.GetRule_bit_subexpr1(), getOp, getExpr, msg.GetBlock2().begin(), msg.GetBlock2().end());
+
+        if (msg.HasBlock3()) {
+            const auto& b = msg.GetBlock3();
+            switch (b.Alt_case()) {
+            case TRule_neq_subexpr_TBlock3::kAlt1: {
+                const auto& alt = b.GetAlt1();
+                const bool hasFirstNewline = LastLine != ParsedTokens[TokenIndex].Line;
+                // 2 is `??` size in tokens
+                const bool hasSecondNewline = ParsedTokens[TokenIndex].Line != ParsedTokens[TokenIndex + 2].Line;
+                const ui32 currentOutLine = OutLine;
+
+                PosFromParsedToken(ParsedTokens[TokenIndex]);
+                if (currentOutLine != OutLine || (hasFirstNewline && hasSecondNewline)) {
+                    NewLine();
+                    if (!pushedIndent) {
+                        PushCurrentIndent();
+                        pushedIndent = true;
+                    }
+                }
+
+                Visit(alt.GetRule_double_question1());
+                PosFromParsedToken(ParsedTokens[TokenIndex]);
+                if (hasFirstNewline || hasSecondNewline) {
+                    NewLine();
+                    if (!pushedIndent) {
+                        PushCurrentIndent();
+                        pushedIndent = true;
+                    }
+                }
+
+                VisitNeqSubexprImpl(alt.GetRule_neq_subexpr2(), pushedIndent);
+                if (pushedIndent) {
+                    PopCurrentIndent();
+                }
+            }
+            case TRule_neq_subexpr_TBlock3::kAlt2:
+                Visit(b.GetAlt2());
+                break;
+            default:
+                ythrow yexception() << "Alt is not supported";
+            }
+        }
+    }
+
+    void VisitBitSubexpr(const TRule_bit_subexpr& msg) {
+        auto getExpr = [](const TRule_bit_subexpr::TBlock2& b) -> const TRule_add_subexpr& { return b.GetRule_add_subexpr2(); };
+        auto getOp = [](const TRule_bit_subexpr::TBlock2& b) -> const TToken& { return b.GetToken1(); };
+        VisitBinaryOp(msg.GetRule_add_subexpr1(), getOp, getExpr, msg.GetBlock2().begin(), msg.GetBlock2().end());
+    }
+
+    void VisitAddSubexpr(const TRule_add_subexpr& msg) {
+        auto getExpr = [](const TRule_add_subexpr::TBlock2& b) -> const TRule_mul_subexpr& { return b.GetRule_mul_subexpr2(); };
+        auto getOp = [](const TRule_add_subexpr::TBlock2& b) -> const TToken& { return b.GetToken1(); };
+        VisitBinaryOp(msg.GetRule_mul_subexpr1(), getOp, getExpr, msg.GetBlock2().begin(), msg.GetBlock2().end());
+    }
+
+    void VisitMulSubexpr(const TRule_mul_subexpr& msg) {
+        auto getExpr = [](const TRule_mul_subexpr::TBlock2& b) -> const TRule_con_subexpr& { return b.GetRule_con_subexpr2(); };
+        auto getOp = [](const TRule_mul_subexpr::TBlock2& b) -> const TToken& { return b.GetToken1(); };
+        VisitBinaryOp(msg.GetRule_con_subexpr1(), getOp, getExpr, msg.GetBlock2().begin(), msg.GetBlock2().end());
+    }
+
+    ui32 BinaryOpTokenSize(const TToken&) {
+        return 1;
+    }
+
+    ui32 BinaryOpTokenSize(const TRule_neq_subexpr::TBlock2::TBlock1& block) {
+        switch (block.Alt_case()) {
+        case TRule_neq_subexpr::TBlock2::TBlock1::kAlt1:
+        case TRule_neq_subexpr::TBlock2::TBlock1::kAlt3:
+        case TRule_neq_subexpr::TBlock2::TBlock1::kAlt5:
+        case TRule_neq_subexpr::TBlock2::TBlock1::kAlt6:
+        case TRule_neq_subexpr::TBlock2::TBlock1::kAlt7:
+            return 1;
+        case TRule_neq_subexpr::TBlock2::TBlock1::kAlt2:
+            return 2;
+        case TRule_neq_subexpr::TBlock2::TBlock1::kAlt4:
+            return 3;
+        default:
+            ythrow yexception() << "Alt is not supported";
+        }
+    }
+
+    void VisitShiftRight(const TRule_shift_right& msg) {
+        VisitToken(msg.GetToken1());
+        InMultiTokenOp = true;
+        VisitToken(msg.GetToken2());
+        InMultiTokenOp = false;
+    }
+
+    void VisitRotRight(const TRule_rot_right& msg) {
+        VisitToken(msg.GetToken1());
+        InMultiTokenOp = true;
+        VisitToken(msg.GetToken2());
+        VisitToken(msg.GetToken3());
+        InMultiTokenOp = false;
+    }
+
+    template <typename TExpr, typename TGetOp, typename TGetExpr, typename TIter>
+    void VisitBinaryOp(const TExpr& expr, TGetOp getOp, TGetExpr getExpr, TIter begin, TIter end) {
+        Visit(expr);
+        bool pushedIndent = false;
+
+        for (; begin != end; ++begin) {
+            const auto op = getOp(*begin);
+            const auto opSize = BinaryOpTokenSize(op);
+            const bool hasFirstNewline = LastLine != ParsedTokens[TokenIndex].Line;
+            const bool hasSecondNewline = ParsedTokens[TokenIndex].Line != ParsedTokens[TokenIndex + opSize].Line;
+            const ui32 currentOutLine = OutLine;
+
+            PosFromParsedToken(ParsedTokens[TokenIndex]);
+            if (currentOutLine != OutLine || (hasFirstNewline && hasSecondNewline)) {
+                NewLine();
+                if (!pushedIndent) {
+                    PushCurrentIndent();
+                    pushedIndent = true;
+                }
+            }
+            Visit(op);
+
+            PosFromParsedToken(ParsedTokens[TokenIndex]);
+            if (hasFirstNewline || hasSecondNewline) {
+                NewLine();
+                if (!pushedIndent) {
+                    PushCurrentIndent();
+                    pushedIndent = true;
+                }
+            }
+
+            Visit(getExpr(*begin));
+        }
+
+        if (pushedIndent) {
+            PopCurrentIndent();
+        }
+    }
+
     void PushCurrentIndent() {
         CurrentIndent += OneIndent;
     }
@@ -2092,7 +2273,8 @@ private:
     bool AfterDigits = false;
     bool AfterQuestion = false;
     bool AfterLess = false;
-    bool AfterKeyExpr = false; 
+    bool AfterKeyExpr = false;
+    bool InMultiTokenOp = false;
     ui32 ForceExpandedLine = 0;
     ui32 ForceExpandedColumn = 0;
 
@@ -2163,6 +2345,18 @@ TStaticData::TStaticData()
         {TRule_exists_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitExistsExpr)},
         {TRule_case_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitCaseExpr)},
         {TRule_when_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitWhenExpr)},
+
+        {TRule_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitExpr)},
+        {TRule_or_subexpr::GetDescriptor(), MakeFunctor(&TVisitor::VisitOrSubexpr)},
+        {TRule_and_subexpr::GetDescriptor(), MakeFunctor(&TVisitor::VisitAndSubexpr)},
+        {TRule_eq_subexpr::GetDescriptor(), MakeFunctor(&TVisitor::VisitEqSubexpr)},
+        {TRule_neq_subexpr::GetDescriptor(), MakeFunctor(&TVisitor::VisitNeqSubexpr)},
+        {TRule_bit_subexpr::GetDescriptor(), MakeFunctor(&TVisitor::VisitBitSubexpr)},
+        {TRule_add_subexpr::GetDescriptor(), MakeFunctor(&TVisitor::VisitAddSubexpr)},
+        {TRule_mul_subexpr::GetDescriptor(), MakeFunctor(&TVisitor::VisitMulSubexpr)},
+
+        {TRule_rot_right::GetDescriptor(), MakeFunctor(&TVisitor::VisitRotRight)},
+        {TRule_shift_right::GetDescriptor(), MakeFunctor(&TVisitor::VisitShiftRight)},
 
         {TRule_pragma_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitPragma)},
         {TRule_select_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitSelect)},

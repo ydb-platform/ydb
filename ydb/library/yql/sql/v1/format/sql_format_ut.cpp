@@ -1418,4 +1418,52 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
         TSetup setup;
         setup.Run(cases);
     }
+
+    Y_UNIT_TEST(MultiTokenOperations) {
+        TCases cases = {
+            {"$x = 1 >>| 2;", 
+             "$x = 1 >>| 2;\n"},
+             {"$x = 1 >> 2;", 
+             "$x = 1 >> 2;\n"},
+             {"$x = 1 ?? 2;", 
+             "$x = 1 ?? 2;\n"},
+             {"$x = 1 >  /*comment*/  >  /*comment*/  | 2;", 
+             "$x = 1 >/*comment*/>/*comment*/| 2;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(OperatorNewlines) {
+        TCases cases = {
+            {"$x = TRUE\nOR\nFALSE;", 
+             "$x = TRUE\n\tOR\n\tFALSE;\n"},
+            {"$x = TRUE OR\nFALSE;", 
+             "$x = TRUE OR\n\tFALSE;\n"},
+            {"$x = TRUE\nOR FALSE;", 
+             "$x = TRUE OR\n\tFALSE;\n"},
+            {"$x = 1\n+2\n*3;", 
+             "$x = 1 +\n\t2 *\n\t\t3;\n"},
+            {"$x = 1\n+\n2\n*3\n*5\n+\n4;", 
+             "$x = 1\n\t+\n\t2 *\n\t\t3 *\n\t\t5\n\t+\n\t4;\n"},
+            {"$x = 1\n+2+3+4\n+5+6+7+\n\n8+9+10;", 
+             "$x = 1 +\n\t2 + 3 + 4 +\n\t5 + 6 + 7 +\n\t8 + 9 + 10;\n"},
+            {"$x = TRUE\nAND\nTRUE OR\nFALSE\nAND TRUE\nOR FALSE\nAND TRUE\nOR FALSE;", 
+             "$x = TRUE\n\tAND\n\tTRUE OR\n\tFALSE AND\n\t\tTRUE OR\n\tFALSE AND\n\t\tTRUE OR\n\tFALSE;\n"},
+            {"$x = 1 -- comment\n+ 2;", 
+             "$x = 1-- comment\n\t+\n\t2;\n"},
+             {"$x = 1 -- comment\n+ -- comment\n2;", 
+             "$x = 1-- comment\n\t+-- comment\n\t2;\n"},
+             {"$x = 1 + -- comment\n2;", 
+             "$x = 1 +-- comment\n\t2;\n"},
+             {"$x = 1\n>\n>\n|\n2;", 
+             "$x = 1\n\t>>|\n\t2;\n"},
+             {"$x = 1\n?? 2 ??\n3\n??\n4 +\n5\n*\n6 +\n7 ??\n8;", 
+             "$x = 1 ??\n\t2 ??\n\t3\n\t??\n\t4 +\n\t\t5\n\t\t\t*\n\t\t\t6 +\n\t\t7 ??\n\t8;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
 }

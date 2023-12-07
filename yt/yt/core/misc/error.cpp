@@ -39,6 +39,10 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+constexpr TStringBuf OriginalErrorDepthAttribute = "original_error_depth";
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TErrorCode::Save(TStreamSaveContext& context) const
 {
     NYT::Save(context, Value_);
@@ -1155,9 +1159,9 @@ void Serialize(
                         .Item("trace_id").Value(error.GetTraceId())
                         .Item("span_id").Value(error.GetSpanId());
                 }
-                if (depth > ErrorSerializationDepthLimit) {
+                if (depth > ErrorSerializationDepthLimit && !error.Attributes().Contains(OriginalErrorDepthAttribute)) {
                     fluent
-                        .Item("original_error_depth").Value(depth);
+                        .Item(OriginalErrorDepthAttribute).Value(depth);
                 }
                 for (const auto& [key, value] : error.Attributes().ListPairs()) {
                     fluent

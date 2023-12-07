@@ -2,6 +2,7 @@ package paging
 
 import (
 	"github.com/stretchr/testify/mock"
+	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
@@ -11,8 +12,8 @@ type SinkMock struct {
 	mock.Mock
 }
 
-func (m *SinkMock) AddRow(acceptors []any) error {
-	args := m.Called(acceptors...)
+func (m *SinkMock) AddRow(transformer utils.Transformer) error {
+	args := m.Called(transformer)
 
 	return args.Error(0)
 }
@@ -35,7 +36,7 @@ type ColumnarBufferMock struct {
 	mock.Mock
 }
 
-func (m *ColumnarBufferMock) addRow(acceptors []any) error {
+func (m *ColumnarBufferMock) addRow(transformer utils.Transformer) error {
 	panic("not implemented") // TODO: Implement
 }
 

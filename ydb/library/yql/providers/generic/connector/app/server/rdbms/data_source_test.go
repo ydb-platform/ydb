@@ -68,18 +68,22 @@ func TestReadSplit(t *testing.T) {
 		}
 		connection.On("Query", `SELECT "col1", "col2" FROM "example_1"`).Return(rows, nil).Once()
 
-		col1 := new(int32)
-		col2 := new(string)
-		acceptors := []any{col1, col2}
-		rows.On("MakeAcceptors").Return(acceptors, nil).Once()
+		transformer := &utils.TransformerMock{
+			Acceptors: []any{
+				new(int32),
+				new(string),
+			},
+		}
+
+		rows.On("MakeTransformer", []*Ydb.Type{utils.NewPrimitiveType(Ydb.Type_INT32), utils.NewPrimitiveType(Ydb.Type_UTF8)}).Return(transformer, nil).Once()
 		rows.On("Next").Return(true).Times(2)
 		rows.On("Next").Return(false).Once()
-		rows.On("Scan", acceptors...).Return(nil).Times(2)
+		rows.On("Scan", transformer.GetAcceptors()...).Return(nil).Times(2)
 		rows.On("Err").Return(nil).Once()
 		rows.On("Close").Return(nil).Once()
 
 		sink := &paging.SinkMock{}
-		sink.On("AddRow", col1, col2).Return(nil).Times(2)
+		sink.On("AddRow", transformer).Return(nil).Times(2)
 		sink.On("Finish").Return().Once()
 
 		dataSource := NewDataSource(logger, preset)
@@ -110,19 +114,23 @@ func TestReadSplit(t *testing.T) {
 		}
 		connection.On("Query", `SELECT "col1", "col2" FROM "example_1"`).Return(rows, nil).Once()
 
-		col1 := new(int32)
-		col2 := new(string)
-		acceptors := []any{col1, col2}
+		transformer := &utils.TransformerMock{
+			Acceptors: []any{
+				new(int32),
+				new(string),
+			},
+		}
+
 		scanErr := fmt.Errorf("scan failed")
 
-		rows.On("MakeAcceptors").Return(acceptors, nil).Once()
+		rows.On("MakeTransformer", []*Ydb.Type{utils.NewPrimitiveType(Ydb.Type_INT32), utils.NewPrimitiveType(Ydb.Type_UTF8)}).Return(transformer, nil).Once()
 		rows.On("Next").Return(true).Times(2)
-		rows.On("Scan", acceptors...).Return(nil).Once()
-		rows.On("Scan", acceptors...).Return(scanErr).Once()
+		rows.On("Scan", transformer.GetAcceptors()...).Return(nil).Once()
+		rows.On("Scan", transformer.GetAcceptors()...).Return(scanErr).Once()
 		rows.On("Close").Return(nil).Once()
 
 		sink := &paging.SinkMock{}
-		sink.On("AddRow", col1, col2).Return(nil).Once()
+		sink.On("AddRow", transformer).Return(nil).Once()
 		sink.On("AddError", mock.MatchedBy(func(err error) bool {
 			return errors.Is(err, scanErr)
 		})).Return().Once()

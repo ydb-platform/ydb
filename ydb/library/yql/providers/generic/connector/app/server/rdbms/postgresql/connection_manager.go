@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb/library/go/core/log"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
@@ -24,20 +25,15 @@ func (r rows) Close() error {
 	return nil
 }
 
-func (r rows) MakeAcceptors() ([]any, error) {
+func (r rows) MakeTransformer(ydbTypes []*Ydb.Type) (utils.Transformer, error) {
 	fields := r.FieldDescriptions()
-	acceptors := make([]any, 0, len(fields))
 
+	oids := make([]uint32, 0, len(fields))
 	for _, field := range fields {
-		acceptor, err := acceptorFromOID(field.DataTypeOID)
-		if err != nil {
-			return nil, fmt.Errorf("get acceptor from OID: %w", err)
-		}
-
-		acceptors = append(acceptors, acceptor)
+		oids = append(oids, field.DataTypeOID)
 	}
 
-	return acceptors, nil
+	return transformerFromOIDs(oids, ydbTypes)
 }
 
 type Connection struct {

@@ -8,7 +8,6 @@ import (
 	"github.com/apache/arrow/go/v13/arrow/array"
 	"github.com/apache/arrow/go/v13/arrow/ipc"
 	"github.com/apache/arrow/go/v13/arrow/memory"
-	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb/library/go/core/log"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
@@ -18,19 +17,17 @@ type columnarBufferArrowIPCStreamingDefault struct {
 	arrowAllocator memory.Allocator
 	builders       []array.Builder
 	schema         *arrow.Schema
-	typeMapper     utils.TypeMapper
 	logger         log.Logger
-	ydbTypes       []*Ydb.Type
 }
 
 // AddRow saves a row obtained from the datasource into the buffer
-func (cb *columnarBufferArrowIPCStreamingDefault) addRow(acceptors []any) error {
-	if len(cb.builders) != len(acceptors) {
-		return fmt.Errorf("expected row %v values, got %v", len(cb.builders), len(acceptors))
+func (cb *columnarBufferArrowIPCStreamingDefault) addRow(transformer utils.Transformer) error {
+	if len(cb.builders) != len(transformer.GetAcceptors()) {
+		return fmt.Errorf("expected row %v values, got %v", len(cb.builders), len(transformer.GetAcceptors()))
 	}
 
-	if err := cb.typeMapper.AddRowToArrowIPCStreaming(cb.ydbTypes, acceptors, cb.builders); err != nil {
-		return fmt.Errorf("add row to arrow IPC Streaming: %w", err)
+	if err := transformer.AppendToArrowBuilders(cb.builders); err != nil {
+		return fmt.Errorf("append values to arrow builders: %w", err)
 	}
 
 	return nil

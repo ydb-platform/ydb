@@ -31,7 +31,7 @@ type sinkImpl struct {
 	ctx            context.Context       // client context
 }
 
-func (s *sinkImpl) AddRow(acceptors []any) error {
+func (s *sinkImpl) AddRow(transformer utils.Transformer) error {
 	if s.state != operational {
 		panic(s.unexpectedState(operational))
 	}
@@ -42,7 +42,7 @@ func (s *sinkImpl) AddRow(acceptors []any) error {
 
 	// Check if we can add one more data row
 	// without exceeding page size limit.
-	ok, err := s.trafficTracker.tryAddRow(acceptors)
+	ok, err := s.trafficTracker.tryAddRow(transformer.GetAcceptors())
 	if err != nil {
 		return fmt.Errorf("add row to traffic tracker: %w", err)
 	}
@@ -53,14 +53,14 @@ func (s *sinkImpl) AddRow(acceptors []any) error {
 			return fmt.Errorf("flush: %w", err)
 		}
 
-		_, err := s.trafficTracker.tryAddRow(acceptors)
+		_, err := s.trafficTracker.tryAddRow(transformer.GetAcceptors())
 		if err != nil {
 			return fmt.Errorf("add row to traffic tracker: %w", err)
 		}
 	}
 
 	// Add physical data to the buffer
-	if err := s.currBuffer.addRow(acceptors); err != nil {
+	if err := s.currBuffer.addRow(transformer); err != nil {
 		return fmt.Errorf("add row to buffer: %w", err)
 	}
 

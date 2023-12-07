@@ -18,7 +18,6 @@ type columnarBufferFactoryImpl struct {
 	format             api_service_protos.TReadSplitsRequest_EFormat
 	schema             *arrow.Schema
 	ydbTypes           []*Ydb.Type
-	typeMapper         utils.TypeMapper
 }
 
 func (cbf *columnarBufferFactoryImpl) MakeBuffer() (ColumnarBuffer, error) {
@@ -32,7 +31,6 @@ func (cbf *columnarBufferFactoryImpl) MakeBuffer() (ColumnarBuffer, error) {
 		if len(cbf.ydbTypes) == 0 {
 			return &columnarBufferArrowIPCStreamingEmptyColumns{
 				arrowAllocator: cbf.arrowAllocator,
-				typeMapper:     cbf.typeMapper,
 				schema:         cbf.schema,
 				rowsAdded:      0,
 			}, nil
@@ -41,8 +39,6 @@ func (cbf *columnarBufferFactoryImpl) MakeBuffer() (ColumnarBuffer, error) {
 		return &columnarBufferArrowIPCStreamingDefault{
 			arrowAllocator: cbf.arrowAllocator,
 			builders:       builders,
-			typeMapper:     cbf.typeMapper,
-			ydbTypes:       cbf.ydbTypes,
 			schema:         cbf.schema,
 			logger:         cbf.logger,
 		}, nil
@@ -57,7 +53,6 @@ func NewColumnarBufferFactory(
 	readLimiterFactory *ReadLimiterFactory,
 	format api_service_protos.TReadSplitsRequest_EFormat,
 	selectWhat *api_service_protos.TSelect_TWhat,
-	typeMapper utils.TypeMapper,
 ) (ColumnarBufferFactory, error) {
 	ydbTypes, err := utils.SelectWhatToYDBTypes(selectWhat)
 	if err != nil {
@@ -75,7 +70,6 @@ func NewColumnarBufferFactory(
 		readLimiterFactory: readLimiterFactory,
 		format:             format,
 		schema:             schema,
-		typeMapper:         typeMapper,
 		ydbTypes:           ydbTypes,
 	}
 

@@ -3,7 +3,9 @@ package utils
 import (
 	"context"
 
+	"github.com/apache/arrow/go/v13/arrow/array"
 	"github.com/stretchr/testify/mock"
+	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb/library/go/core/log"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
 )
@@ -85,8 +87,28 @@ func (m *RowsMock) Scan(dest ...any) error {
 	return args.Error(0)
 }
 
-func (m *RowsMock) MakeAcceptors() ([]any, error) {
-	args := m.Called()
+func (m *RowsMock) MakeTransformer(ydbType []*Ydb.Type) (Transformer, error) {
+	args := m.Called(ydbType)
 
-	return args.Get(0).([]any), args.Error(1)
+	return args.Get(0).(Transformer), args.Error(1)
+}
+
+var _ Transformer = (*TransformerMock)(nil)
+
+type TransformerMock struct {
+	mock.Mock
+	Acceptors []any
+}
+
+func (t *TransformerMock) GetAcceptors() []any {
+	return t.Acceptors
+}
+
+func (t *TransformerMock) AppendToArrowBuilders(builder []array.Builder) error {
+	builder[0].(*array.Int32Builder).Append(**t.Acceptors[0].(**int32))
+
+	cast := **t.Acceptors[1].(**string)
+	builder[1].(*array.BinaryBuilder).Append([]byte(cast))
+
+	return nil
 }

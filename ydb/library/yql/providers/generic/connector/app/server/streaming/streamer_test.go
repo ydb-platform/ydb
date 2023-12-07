@@ -13,6 +13,7 @@ import (
 	"github.com/apache/arrow/go/v13/arrow/memory"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb/library/go/core/log"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/config"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
@@ -165,21 +166,26 @@ func (tc testCaseStreaming) execute(t *testing.T) {
 	col1Acceptor := new(*string)
 	*col1Acceptor = new(string)
 
-	acceptors := []any{col0Acceptor, col1Acceptor}
+	transformer := &utils.TransformerMock{
+		Acceptors: []any{
+			col0Acceptor,
+			col1Acceptor,
+		},
+	}
 
 	if tc.scanErr == nil {
-		rows.On("MakeAcceptors").Return(acceptors, nil).Once()
+		rows.On("MakeTransformer", []*Ydb.Type{utils.NewPrimitiveType(Ydb.Type_INT32), utils.NewPrimitiveType(Ydb.Type_STRING)}).Return(transformer, nil).Once()
 		rows.On("Next").Return(true).Times(len(rows.PredefinedData))
 		rows.On("Next").Return(false).Once()
-		rows.On("Scan", acceptors...).Return(nil).Times(len(rows.PredefinedData))
+		rows.On("Scan", transformer.GetAcceptors()...).Return(nil).Times(len(rows.PredefinedData))
 		rows.On("Err").Return(nil).Once()
 		rows.On("Close").Return(nil).Once()
 	} else {
-		rows.On("MakeAcceptors").Return(acceptors, nil).Once()
+		rows.On("MakeTransformer", []*Ydb.Type{utils.NewPrimitiveType(Ydb.Type_INT32), utils.NewPrimitiveType(Ydb.Type_STRING)}).Return(transformer, nil).Once()
 		rows.On("Next").Return(true).Times(len(rows.PredefinedData) + 1)
-		rows.On("Scan", acceptors...).Return(nil).Times(len(rows.PredefinedData))
+		rows.On("Scan", transformer.GetAcceptors()...).Return(nil).Times(len(rows.PredefinedData))
 		// instead of the last message, an error occurs
-		rows.On("Scan", acceptors...).Return(tc.scanErr).Once()
+		rows.On("Scan", transformer.GetAcceptors()...).Return(tc.scanErr).Once()
 		rows.On("Err").Return(nil).Once()
 		rows.On("Close").Return(nil).Once()
 	}
@@ -225,8 +231,7 @@ func (tc testCaseStreaming) execute(t *testing.T) {
 		memory.NewGoAllocator(),
 		paging.NewReadLimiterFactory(nil),
 		api_service_protos.TReadSplitsRequest_ARROW_IPC_STREAMING,
-		split.Select.What,
-		typeMapper)
+		split.Select.What)
 	require.NoError(t, err)
 
 	pagingCfg := &config.TPagingConfig{RowsPerPage: uint64(tc.rowsPerPage)}
@@ -255,7 +260,7 @@ func (tc testCaseStreaming) execute(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	mocks := []interface{}{stream, connectionManager, connection}
+	mocks := []interface{}{stream, connectionManager, connection, transformer}
 
 	mock.AssertExpectationsForObjects(t, mocks...)
 }

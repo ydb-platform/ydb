@@ -101,17 +101,22 @@ func (ds *dataSourceImpl) doReadSplit(
 
 	defer func() { utils.LogCloserError(logger, rows, "close rows") }()
 
-	acceptors, err := rows.MakeAcceptors()
+	ydbTypes, err := utils.SelectWhatToYDBTypes(split.Select.What)
 	if err != nil {
-		return fmt.Errorf("make acceptors: %w", err)
+		return fmt.Errorf("convert Select.What to Ydb types: %w", err)
+	}
+
+	transformer, err := rows.MakeTransformer(ydbTypes)
+	if err != nil {
+		return fmt.Errorf("make transformer: %w", err)
 	}
 
 	for rows.Next() {
-		if err := rows.Scan(acceptors...); err != nil {
+		if err := rows.Scan(transformer.GetAcceptors()...); err != nil {
 			return fmt.Errorf("rows scan error: %w", err)
 		}
 
-		if err := sink.AddRow(acceptors); err != nil {
+		if err := sink.AddRow(transformer); err != nil {
 			return fmt.Errorf("add row to paging writer: %w", err)
 		}
 	}

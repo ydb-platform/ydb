@@ -3,6 +3,7 @@ package postgresql
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/apache/arrow/go/v13/arrow/array"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -12,6 +13,7 @@ import (
 )
 
 var _ utils.TypeMapper = typeMapper{}
+var _ utils.Transformer = Transformer{}
 
 type typeMapper struct{}
 
@@ -72,8 +74,154 @@ func (tm typeMapper) SQLTypeToYDBColumn(columnName, typeName string, rules *api_
 	}, nil
 }
 
+type Transformer struct {
+	acceptors []any
+	appenders []func(acceptor any, builder array.Builder) error
+}
+
+func (t Transformer) GetAcceptors() []any {
+	return t.acceptors
+}
+
+func (t Transformer) AppendToArrowBuilders(builders []array.Builder) error {
+	for i, acceptor := range t.acceptors {
+		if err := t.appenders[i](acceptor, builders[i]); err != nil {
+			return fmt.Errorf("append acceptor %#v of %d column to arrow builder %#v: %w", acceptor, i, builders[i], err)
+		}
+	}
+
+	return nil
+}
+
+func transformerFromOIDs(oids []uint32, ydbTypes []*Ydb.Type) (utils.Transformer, error) {
+	acceptors := make([]any, 0, len(oids))
+	appenders := make([]func(acceptor any, builder array.Builder) error, 0, len(oids))
+
+	for i, oid := range oids {
+		switch oid {
+		case pgtype.BoolOID:
+			acceptors = append(acceptors, new(pgtype.Bool))
+			appenders = append(appenders, func(acceptor any, builder array.Builder) error {
+				cast := acceptor.(*pgtype.Bool)
+
+				return appendValueToArrowBuilder[bool, uint8, *array.Uint8Builder, utils.BoolConverter](cast.Bool, builder, cast.Valid)
+			})
+		case pgtype.Int2OID:
+			acceptors = append(acceptors, new(pgtype.Int2))
+			appenders = append(appenders, func(acceptor any, builder array.Builder) error {
+				cast := acceptor.(*pgtype.Int2)
+
+				return appendValueToArrowBuilder[int16, int16, *array.Int16Builder, utils.Int16Converter](cast.Int16, builder, cast.Valid)
+			})
+		case pgtype.Int4OID:
+			acceptors = append(acceptors, new(pgtype.Int4))
+			appenders = append(appenders, func(acceptor any, builder array.Builder) error {
+				cast := acceptor.(*pgtype.Int4)
+
+				return appendValueToArrowBuilder[int32, int32, *array.Int32Builder, utils.Int32Converter](cast.Int32, builder, cast.Valid)
+			})
+		case pgtype.Int8OID:
+			acceptors = append(acceptors, new(pgtype.Int8))
+			appenders = append(appenders, func(acceptor any, builder array.Builder) error {
+				cast := acceptor.(*pgtype.Int8)
+
+				return appendValueToArrowBuilder[int64, int64, *array.Int64Builder, utils.Int64Converter](cast.Int64, builder, cast.Valid)
+			})
+		case pgtype.Float4OID:
+			acceptors = append(acceptors, new(pgtype.Float4))
+			appenders = append(appenders, func(acceptor any, builder array.Builder) error {
+				cast := acceptor.(*pgtype.Float4)
+
+				return appendValueToArrowBuilder[float32, float32, *array.Float32Builder, utils.Float32Converter](cast.Float32, builder, cast.Valid)
+			})
+		case pgtype.Float8OID:
+			acceptors = append(acceptors, new(pgtype.Float8))
+			appenders = append(appenders, func(acceptor any, builder array.Builder) error {
+				cast := acceptor.(*pgtype.Float8)
+
+				return appendValueToArrowBuilder[float64, float64, *array.Float64Builder, utils.Float64Converter](cast.Float64, builder, cast.Valid)
+			})
+		case pgtype.TextOID, pgtype.BPCharOID, pgtype.VarcharOID:
+			acceptors = append(acceptors, new(pgtype.Text))
+			appenders = append(appenders, func(acceptor any, builder array.Builder) error {
+				cast := acceptor.(*pgtype.Text)
+
+				return appendValueToArrowBuilder[string, string, *array.StringBuilder, utils.StringConverter](cast.String, builder, cast.Valid)
+			})
+		case pgtype.ByteaOID:
+			acceptors = append(acceptors, new(*[]byte))
+			appenders = append(appenders, func(acceptor any, builder array.Builder) error {
+				// TODO: Bytea exists in the upstream library, but missing in jackx/pgx:
+				// https://github.com/jackc/pgtype/blob/v1.14.0/bytea.go
+				// https://github.com/jackc/pgx/blob/v5.3.1/pgtype/bytea.go
+				// https://github.com/jackc/pgx/issues/1714
+				cast := acceptor.(**[]byte)
+				if *cast != nil {
+					builder.(*array.BinaryBuilder).Append(**cast)
+				} else {
+					builder.(*array.BinaryBuilder).AppendNull()
+				}
+
+				return nil
+			})
+		case pgtype.DateOID:
+			acceptors = append(acceptors, new(pgtype.Date))
+
+			ydbTypeID, err := utils.YdbTypeToYdbPrimitiveTypeID(ydbTypes[i])
+			if err != nil {
+				return nil, fmt.Errorf("ydb type to ydb primitive type id: %w", err)
+			}
+
+			switch ydbTypeID {
+			case Ydb.Type_UTF8:
+				appenders = append(appenders, func(acceptor any, builder array.Builder) error {
+					cast := acceptor.(*pgtype.Date)
+
+					return appendValueToArrowBuilder[time.Time, string, *array.StringBuilder, utils.DateToStringConverter](cast.Time, builder, cast.Valid)
+				})
+			case Ydb.Type_DATE:
+				appenders = append(appenders, func(acceptor any, builder array.Builder) error {
+					cast := acceptor.(*pgtype.Date)
+
+					return appendValueToArrowBuilder[time.Time, uint16, *array.Uint16Builder, utils.DateConverter](cast.Time, builder, cast.Valid)
+				})
+			default:
+				return nil, fmt.Errorf("unexpected ydb type %v with type oid %d: %w", ydbTypes[i], oid, utils.ErrDataTypeNotSupported)
+			}
+		case pgtype.TimestampOID:
+			acceptors = append(acceptors, new(pgtype.Timestamp))
+
+			ydbTypeID, err := utils.YdbTypeToYdbPrimitiveTypeID(ydbTypes[i])
+			if err != nil {
+				return nil, fmt.Errorf("ydb type to ydb primitive type id: %w", err)
+			}
+
+			switch ydbTypeID {
+			case Ydb.Type_UTF8:
+				appenders = append(appenders, func(acceptor any, builder array.Builder) error {
+					cast := acceptor.(*pgtype.Timestamp)
+
+					return appendValueToArrowBuilder[time.Time, string, *array.StringBuilder, utils.TimestampToStringConverter](cast.Time, builder, cast.Valid)
+				})
+			case Ydb.Type_TIMESTAMP:
+				appenders = append(appenders, func(acceptor any, builder array.Builder) error {
+					cast := acceptor.(*pgtype.Timestamp)
+
+					return appendValueToArrowBuilder[time.Time, uint64, *array.Uint64Builder, utils.TimestampConverter](cast.Time, builder, cast.Valid)
+				})
+			default:
+				return nil, fmt.Errorf("unexpected ydb type %v with type oid %d: %w", ydbTypes[i], oid, utils.ErrDataTypeNotSupported)
+			}
+		default:
+			return nil, fmt.Errorf("convert type OID %d: %w", oid, utils.ErrDataTypeNotSupported)
+		}
+	}
+
+	return Transformer{acceptors: acceptors, appenders: appenders}, nil
+}
+
 func appendValueToArrowBuilder[IN utils.ValueType, OUT utils.ValueType, AB utils.ArrowBuilder[OUT], CONV utils.ValueConverter[IN, OUT]](
-	value IN,
+	value any,
 	builder array.Builder,
 	valid bool,
 ) error {
@@ -83,9 +231,11 @@ func appendValueToArrowBuilder[IN utils.ValueType, OUT utils.ValueType, AB utils
 		return nil
 	}
 
+	cast := value.(IN)
+
 	var converter CONV
 
-	out, err := converter.Convert(value)
+	out, err := converter.Convert(cast)
 	if err != nil {
 		if errors.Is(err, utils.ErrValueOutOfTypeBounds) {
 			// TODO: logger ?
@@ -102,113 +252,4 @@ func appendValueToArrowBuilder[IN utils.ValueType, OUT utils.ValueType, AB utils
 	return nil
 }
 
-// AddRow saves a row obtained from the datasource into the buffer
-func (tm typeMapper) AddRowToArrowIPCStreaming(
-	ydbTypes []*Ydb.Type,
-	acceptors []any,
-	builders []array.Builder,
-) error {
-	if len(builders) != len(acceptors) {
-		return fmt.Errorf("expected row %v values, got %v", len(builders), len(acceptors))
-	}
-
-	for i, acceptor := range acceptors {
-		var ydbTypeID Ydb.Type_PrimitiveTypeId
-		switch t := ydbTypes[i].Type.(type) {
-		case *Ydb.Type_TypeId:
-			ydbTypeID = t.TypeId
-		case *Ydb.Type_OptionalType:
-			switch t.OptionalType.Item.Type.(type) {
-			case *Ydb.Type_TypeId:
-				ydbTypeID = t.OptionalType.Item.GetTypeId()
-			default:
-				return fmt.Errorf("unexpected type %v: %w", t.OptionalType.Item, utils.ErrDataTypeNotSupported)
-			}
-		default:
-			return fmt.Errorf("unexpected type %v: %w", t, utils.ErrDataTypeNotSupported)
-		}
-
-		var err error
-		switch t := acceptor.(type) {
-		case *pgtype.Bool:
-			err = appendValueToArrowBuilder[bool, uint8, *array.Uint8Builder, utils.BoolConverter](t.Bool, builders[i], t.Valid)
-		case *pgtype.Int2:
-			err = appendValueToArrowBuilder[int16, int16, *array.Int16Builder, utils.Int16Converter](t.Int16, builders[i], t.Valid)
-		case *pgtype.Int4:
-			err = appendValueToArrowBuilder[int32, int32, *array.Int32Builder, utils.Int32Converter](t.Int32, builders[i], t.Valid)
-		case *pgtype.Int8:
-			err = appendValueToArrowBuilder[int64, int64, *array.Int64Builder, utils.Int64Converter](t.Int64, builders[i], t.Valid)
-		case *pgtype.Float4:
-			err = appendValueToArrowBuilder[float32, float32, *array.Float32Builder, utils.Float32Converter](t.Float32, builders[i], t.Valid)
-		case *pgtype.Float8:
-			err = appendValueToArrowBuilder[float64, float64, *array.Float64Builder, utils.Float64Converter](t.Float64, builders[i], t.Valid)
-		case *pgtype.Text:
-			err = appendValueToArrowBuilder[string, string, *array.StringBuilder, utils.StringConverter](t.String, builders[i], t.Valid)
-		case **[]byte:
-			// TODO: Bytea exists in the upstream library, but missing in jackx/pgx:
-			// https://github.com/jackc/pgtype/blob/v1.14.0/bytea.go
-			// https://github.com/jackc/pgx/blob/v5.3.1/pgtype/bytea.go
-			// https://github.com/jackc/pgx/issues/1714
-			if *t != nil {
-				builders[i].(*array.BinaryBuilder).Append(**t)
-			} else {
-				builders[i].(*array.BinaryBuilder).AppendNull()
-			}
-		case *pgtype.Date:
-			switch ydbTypeID {
-			case Ydb.Type_UTF8:
-				err = appendValueToArrowBuilder[utils.Date, string, *array.StringBuilder, utils.DateToStringConverter](utils.Date(t.Time), builders[i], t.Valid)
-			case Ydb.Type_DATE:
-				err = appendValueToArrowBuilder[utils.Date, uint16, *array.Uint16Builder, utils.DateConverter](utils.Date(t.Time), builders[i], t.Valid)
-			default:
-				return fmt.Errorf("unexpected ydb type id %d with acceptor type %T: %w", ydbTypeID, t, utils.ErrDataTypeNotSupported)
-			}
-		case *pgtype.Timestamp:
-			switch ydbTypeID {
-			case Ydb.Type_UTF8:
-				err = appendValueToArrowBuilder[utils.Timestamp, string, *array.StringBuilder, utils.TimestampToStringConverter](utils.Timestamp(t.Time), builders[i], t.Valid)
-			case Ydb.Type_TIMESTAMP:
-				err = appendValueToArrowBuilder[utils.Timestamp, uint64, *array.Uint64Builder, utils.TimestampConverter](utils.Timestamp(t.Time), builders[i], t.Valid)
-			default:
-				return fmt.Errorf("unexpected ydb type id %d with acceptor type %T: %w", ydbTypeID, t, utils.ErrDataTypeNotSupported)
-			}
-		default:
-			return fmt.Errorf("item #%d of a type '%T': %w", i, t, utils.ErrDataTypeNotSupported)
-		}
-
-		if err != nil {
-			return fmt.Errorf("append value to arrow builder: %w", err)
-		}
-	}
-
-	return nil
-}
-
 func NewTypeMapper() utils.TypeMapper { return typeMapper{} }
-
-func acceptorFromOID(oid uint32) (any, error) {
-	switch oid {
-	case pgtype.BoolOID:
-		return new(pgtype.Bool), nil
-	case pgtype.Int2OID:
-		return new(pgtype.Int2), nil
-	case pgtype.Int4OID:
-		return new(pgtype.Int4), nil
-	case pgtype.Int8OID:
-		return new(pgtype.Int8), nil
-	case pgtype.Float4OID:
-		return new(pgtype.Float4), nil
-	case pgtype.Float8OID:
-		return new(pgtype.Float8), nil
-	case pgtype.TextOID, pgtype.BPCharOID, pgtype.VarcharOID:
-		return new(pgtype.Text), nil
-	case pgtype.ByteaOID:
-		return new(*[]byte), nil
-	case pgtype.DateOID:
-		return new(pgtype.Date), nil
-	case pgtype.TimestampOID:
-		return new(pgtype.Timestamp), nil
-	default:
-		return nil, fmt.Errorf("convert type OID %d: %w", oid, utils.ErrDataTypeNotSupported)
-	}
-}

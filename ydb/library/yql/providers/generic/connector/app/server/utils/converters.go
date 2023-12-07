@@ -5,12 +5,8 @@ import (
 	"time"
 )
 
-type Date time.Time
-type Datetime time.Time
-type Timestamp time.Time
-
 type ValueType interface {
-	bool | int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64 | float32 | float64 | string | []byte | Date | Datetime | Timestamp
+	bool | int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64 | float32 | float64 | string | []byte | time.Time
 }
 
 type ValueConverter[IN ValueType, OUT ValueType] interface {
@@ -83,7 +79,7 @@ func (BytesConverter) Convert(in []byte) ([]byte, error) { return in, nil }
 
 type DateConverter struct{}
 
-func (DateConverter) Convert(in Date) (uint16, error) {
+func (DateConverter) Convert(in time.Time) (uint16, error) {
 	inTime := time.Time(in)
 	out, err := TimeToYDBDate(&inTime)
 
@@ -96,13 +92,13 @@ func (DateConverter) Convert(in Date) (uint16, error) {
 
 type DateToStringConverter struct{}
 
-func (DateToStringConverter) Convert(in Date) (string, error) {
+func (DateToStringConverter) Convert(in time.Time) (string, error) {
 	return time.Time(in).Format("2006-01-02"), nil
 }
 
 type DatetimeConverter struct{}
 
-func (DatetimeConverter) Convert(in Datetime) (uint32, error) {
+func (DatetimeConverter) Convert(in time.Time) (uint32, error) {
 	inTime := time.Time(in)
 	out, err := TimeToYDBDatetime(&inTime)
 
@@ -115,13 +111,13 @@ func (DatetimeConverter) Convert(in Datetime) (uint32, error) {
 
 type DatetimeToStringConverter struct{}
 
-func (DatetimeToStringConverter) Convert(in Datetime) (string, error) {
+func (DatetimeToStringConverter) Convert(in time.Time) (string, error) {
 	return time.Time(in).UTC().Format("2006-01-02T15:04:05Z"), nil
 }
 
 type TimestampConverter struct{}
 
-func (TimestampConverter) Convert(in Timestamp) (uint64, error) {
+func (TimestampConverter) Convert(in time.Time) (uint64, error) {
 	inTime := time.Time(in)
 	out, err := TimeToYDBTimestamp(&inTime)
 
@@ -134,6 +130,6 @@ func (TimestampConverter) Convert(in Timestamp) (uint64, error) {
 
 type TimestampToStringConverter struct{}
 
-func (TimestampToStringConverter) Convert(in Timestamp) (string, error) {
+func (TimestampToStringConverter) Convert(in time.Time) (string, error) {
 	return time.Time(in).UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }

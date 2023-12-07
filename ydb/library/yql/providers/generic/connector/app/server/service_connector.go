@@ -218,8 +218,7 @@ func (s *serviceConnector) readSplit(
 		s.memoryAllocator,
 		s.readLimiterFactory,
 		request.Format,
-		split.Select.What,
-		dataSource.TypeMapper())
+		split.Select.What)
 	if err != nil {
 		return fmt.Errorf("new columnar buffer factory: %w", err)
 	}

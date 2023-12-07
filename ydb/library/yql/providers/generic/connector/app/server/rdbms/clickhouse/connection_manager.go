@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb/library/go/core/log"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
@@ -24,7 +25,7 @@ type rows struct {
 	*sql.Rows
 }
 
-func (r rows) MakeAcceptors() ([]any, error) {
+func (r rows) MakeTransformer(ydbTypes []*Ydb.Type) (utils.Transformer, error) {
 	columns, err := r.ColumnTypes()
 	if err != nil {
 		return nil, fmt.Errorf("column types: %w", err)
@@ -35,7 +36,12 @@ func (r rows) MakeAcceptors() ([]any, error) {
 		typeNames = append(typeNames, column.DatabaseTypeName())
 	}
 
-	return acceptorsFromSQLTypes(typeNames)
+	transformer, err := transformerFromSQLTypes(typeNames, ydbTypes)
+	if err != nil {
+		return nil, fmt.Errorf("transformer from sql types: %w", err)
+	}
+
+	return transformer, nil
 }
 
 func (c Connection) Query(ctx context.Context, query string, args ...any) (utils.Rows, error) {

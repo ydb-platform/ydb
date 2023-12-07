@@ -23,6 +23,22 @@ func SelectWhatToYDBTypes(selectWhat *api_service_protos.TSelect_TWhat) ([]*Ydb.
 	return ydbTypes, nil
 }
 
+func YdbTypeToYdbPrimitiveTypeID(ydbType *Ydb.Type) (Ydb.Type_PrimitiveTypeId, error) {
+	switch t := ydbType.Type.(type) {
+	case *Ydb.Type_TypeId:
+		return t.TypeId, nil
+	case *Ydb.Type_OptionalType:
+		switch t.OptionalType.Item.Type.(type) {
+		case *Ydb.Type_TypeId:
+			return t.OptionalType.Item.GetTypeId(), nil
+		default:
+			return Ydb.Type_PRIMITIVE_TYPE_ID_UNSPECIFIED, fmt.Errorf("unexpected type %v: %w", t.OptionalType.Item, ErrDataTypeNotSupported)
+		}
+	default:
+		return Ydb.Type_PRIMITIVE_TYPE_ID_UNSPECIFIED, fmt.Errorf("unexpected type %v: %w", t, ErrDataTypeNotSupported)
+	}
+}
+
 func selectWhatToYDBColumns(selectWhat *api_service_protos.TSelect_TWhat) ([]*Ydb.Column, error) {
 	var columns []*Ydb.Column
 

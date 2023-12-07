@@ -16,14 +16,13 @@ import (
 type columnarBufferArrowIPCStreamingEmptyColumns struct {
 	arrowAllocator memory.Allocator
 	schema         *arrow.Schema
-	typeMapper     utils.TypeMapper
 	rowsAdded      int
 }
 
 // AddRow saves a row obtained from the datasource into the buffer
-func (cb *columnarBufferArrowIPCStreamingEmptyColumns) addRow(acceptors []any) error {
-	if len(acceptors) != 1 {
-		return fmt.Errorf("expected 1 rows acceptor, got %v", len(acceptors))
+func (cb *columnarBufferArrowIPCStreamingEmptyColumns) addRow(transformer utils.Transformer) error {
+	if len(transformer.GetAcceptors()) != 1 {
+		return fmt.Errorf("expected 1 value, got %v", len(transformer.GetAcceptors()))
 	}
 
 	cb.rowsAdded++

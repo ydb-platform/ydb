@@ -168,14 +168,16 @@ TProgressStatEntry operator - (const TProgressStatEntry& l, const TProgressStatE
 }
 
 void UpdateAggr(NDqProto::TDqStatsAggr* aggr, ui64 value) noexcept {
-    if (aggr->GetMin() == 0) {
-        aggr->SetMin(value);
-    } else {
-        aggr->SetMin(std::min(aggr->GetMin(), value));
+    if (value) {
+        if (aggr->GetMin() == 0) {
+            aggr->SetMin(value);
+        } else {
+            aggr->SetMin(std::min(aggr->GetMin(), value));
+        }
+        aggr->SetMax(std::max(aggr->GetMax(), value));
+        aggr->SetSum(aggr->GetSum() + value);
+        aggr->SetCnt(aggr->GetCnt() + 1);
     }
-    aggr->SetMax(std::max(aggr->GetMax(), value));
-    aggr->SetSum(aggr->GetSum() + value);
-    aggr->SetCnt(aggr->GetCnt() + 1);
 }
 
 struct TAsyncGroupStat {
@@ -222,12 +224,14 @@ void UpdateAsyncAggr(NDqProto::TDqAsyncStatsAggr& asyncAggr, const NDqProto::TDq
 }
 
 void UpdateMinMax(NDqProto::TDqStatsMinMax* minMax, ui64 value) noexcept {
-    if (minMax->GetMin() == 0) {
-        minMax->SetMin(value);
-    } else {
-        minMax->SetMin(std::min(minMax->GetMin(), value));
+    if (value) {
+        if (minMax->GetMin() == 0) {
+            minMax->SetMin(value);
+        } else {
+            minMax->SetMin(std::min(minMax->GetMin(), value));
+        }
+        minMax->SetMax(std::max(minMax->GetMax(), value));
     }
-    minMax->SetMax(std::max(minMax->GetMax(), value));
 }
 
 NDqProto::TDqStageStats* GetOrCreateStageStats(const NYql::NDq::TStageId& stageId,

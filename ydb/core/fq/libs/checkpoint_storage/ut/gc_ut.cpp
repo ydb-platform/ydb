@@ -57,7 +57,8 @@ struct TTestRuntime {
         Runtime->SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG);
         SetupTabletServices(*Runtime);
 
-        NConfig::TYdbStorageConfig storageConfig;
+        NConfig::TCheckpointCoordinatorConfig config;
+        auto& storageConfig = *config.MutableStorage();
         storageConfig.SetEndpoint(YdbEndpoint);
         storageConfig.SetDatabase(YdbDatabase);
         storageConfig.SetToken("");
@@ -69,7 +70,7 @@ struct TTestRuntime {
         auto issues = CheckpointStorage->Init().GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
 
-        StateStorage = NewYdbStateStorage(storageConfig, credFactory, yqSharedResources);
+        StateStorage = NewYdbStateStorage(config, credFactory, yqSharedResources);
         issues = StateStorage->Init().GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
 

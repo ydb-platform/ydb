@@ -37,9 +37,30 @@ message TSinkState {
     uint64 OutputIndex = 2;
 }
 
+message TMiniKqlStateItem {
+    bytes Key = 1;
+    bytes Blob = 2;
+}
+
+message TNewMiniKqlStateData {
+    message TSnaphot {
+        bytes MetaData = 1;
+        repeated TMiniKqlStateItem Items = 2;
+    }
+    message TIncrement {
+        repeated TMiniKqlStateItem Updated = 1;
+        repeated bytes DeletedKeys = 2;
+    }
+    oneof State {
+        TSnaphot Snapshot = 1;
+        TIncrement Increment = 2;
+    }
+}
+
 message TMiniKqlProgramState {
     TStateData Data = 1;
     uint64 RuntimeVersion = 2;
+    TNewMiniKqlStateData NewData = 3;
 }
 
 // Checkpoint for single compute actor.

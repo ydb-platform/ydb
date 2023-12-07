@@ -1,0 +1,15 @@
+endpoint {
+    host: "0.0.0.0"
+    port: 50051
+}
+
+tls {
+    ca: "/home/vitalyisaev/arcadia/junk/vitalyisaev/connectors/tls/ca.crt"
+    key: "/home/vitalyisaev/arcadia/junk/vitalyisaev/connectors/tls/server.key"
+    cert: "/home/vitalyisaev/arcadia/junk/vitalyisaev/connectors/tls/server.crt"
+}
+
+logger {
+    log_level: TRACE
+    enable_sql_query_logging: true
+}

@@ -1,0 +1,19 @@
+endpoint {
+    host: "localhost"
+    port: 50051
+}
+
+data_source_instance {
+    kind: CLICKHOUSE
+    endpoint {
+        host: "localhost"
+        port: 9000
+    }
+    database: "dqrun"
+    credentials {
+        basic {
+            username: "crab"
+            password: "qwerty12345"
+        }
+    }
+}

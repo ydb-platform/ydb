@@ -1,0 +1,23 @@
+endpoint {
+    host: "connector.yql-streaming.cloud.yandex.net"
+    port: 50051
+}
+
+data_source_instance {
+    kind: CLICKHOUSE
+    endpoint {
+        host: "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net"
+        port: 9000
+    }
+    database: "dqrun"
+    credentials {
+        basic {
+            username: "admin"
+            password: "password"
+        }
+    }
+}
+
+tls {
+    ca: "/home/vitalyisaev/arcadia/kikimr/deployment/terraform/yc-crt/YandexInternalRootCA.crt"
+}

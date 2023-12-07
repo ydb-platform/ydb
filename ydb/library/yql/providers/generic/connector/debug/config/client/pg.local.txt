@@ -1,0 +1,19 @@
+endpoint {
+    host: "localhost"
+    port: 50051
+}
+
+data_source_instance {
+    kind: POSTGRESQL
+    endpoint {
+        host: "localhost"
+        port: 5432
+    }
+    database: "dqrun"
+    credentials {
+        basic {
+            username: "crab"
+            password: "qwerty12345"
+        }
+    }
+}

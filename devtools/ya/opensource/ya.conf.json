@@ -69,6 +69,19 @@
             },
             "formula": "build/external_resources/gdb/resources.json"
         },
+        "golang": {
+            "executable": {
+                "go": [
+                    "bin",
+                    "go"
+                ],
+                "gofmt": [
+                    "bin",
+                    "gofmt"
+                ]
+            },
+            "formula": "build/external_resources/go_tools/go1.21.json"
+        },
         "python": {
             "executable": {
                 "python": [
@@ -135,7 +148,7 @@
             "params": {
                 "c_compiler": "$(CLANG)/bin/clang",
                 "cxx_compiler": "$(CLANG)/bin/clang++",
-                "gcc_version": "16.0",
+                "gcc_version": "16",
                 "llvm-symbolizer": "$(CLANG)/bin/llvm-symbolizer",
                 "match_root": "CLANG",
                 "objcopy": "$(CLANG)/bin/llvm-objcopy",
@@ -830,6 +843,49 @@
                 "gdb": {
                     "bottle": "gdb",
                     "executable": "gdb"
+                }
+            }
+        },
+        "golang": {
+            "params": {
+                "type": "golang",
+                "version": "1.20.6"
+            },
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                }
+            ],
+            "tools": {
+                "go": {
+                    "bottle": "golang",
+                    "executable": "go"
+                },
+                "gofmt": {
+                    "bottle": "golang",
+                    "executable": "gofmt"
                 }
             }
         },

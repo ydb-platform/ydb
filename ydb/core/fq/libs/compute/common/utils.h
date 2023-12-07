@@ -31,4 +31,16 @@ TString FormatDurationMs(ui64 durationMs);
 TString FormatDurationUs(ui64 durationUs);
 TString FormatInstant(TInstant instant);
 
+struct TPublicStat {
+    std::optional<int> MemoryUsageBytes = 0;
+    std::optional<int> CpuUsageUs = 0;
+    std::optional<int> InputBytes = 0;
+    std::optional<int> OutputBytes = 0;
+    std::optional<int> SourceInputRecords = 0;
+    std::optional<int> SinkOutputRecords = 0;
+    std::optional<int> RunningTasks = 0;
+};
+
+TPublicStat GetPublicStat(const TString& statistics);
+
 } // namespace NFq

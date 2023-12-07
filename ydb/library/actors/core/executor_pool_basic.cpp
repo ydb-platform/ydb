@@ -160,11 +160,11 @@ namespace NActors {
         TWorkerId workerId = wctx.WorkerId;
         Y_DEBUG_ABORT_UNLESS(workerId < PoolThreads);
 
-        TTimers timers;
+        TlsThreadContext->Timers.Reset();
 
         if (Harmonizer) {
             LWPROBE(TryToHarmonize, PoolId, PoolName);
-            Harmonizer->Harmonize(timers.HPStart);
+            Harmonizer->Harmonize(TlsThreadContext->Timers.HPStart);
         }
 
         if (workerId >= 0) {
@@ -176,8 +176,8 @@ namespace NActors {
         while (!StopFlag.load(std::memory_order_acquire)) {
             if (!semaphore.OldSemaphore || semaphore.CurrentSleepThreadCount < 0) {
                 if (workerId < 0 || !wctx.IsNeededToWaitNextActivation) {
-                    timers.HPNow = GetCycleCountFast();
-                    wctx.AddElapsedCycles(ActorSystemIndex, timers.HPNow - timers.HPStart);
+                    TlsThreadContext->Timers.HPNow = GetCycleCountFast();
+                    wctx.AddElapsedCycles(ActorSystemIndex, TlsThreadContext->Timers.HPNow - TlsThreadContext->Timers.HPStart);
                     return 0;
                 }
 
@@ -195,11 +195,11 @@ namespace NActors {
                         Threads[workerId].ExchangeState(TExecutorThreadCtx::WS_RUNNING);
                     }
                     AtomicDecrement(Semaphore);
-                    timers.HPNow = GetCycleCountFast();
-                    timers.Elapsed += timers.HPNow - timers.HPStart;
-                    wctx.AddElapsedCycles(ActorSystemIndex, timers.Elapsed);
-                    if (timers.Parked > 0) {
-                        wctx.AddParkedCycles(timers.Parked);
+                    TlsThreadContext->Timers.HPNow = GetCycleCountFast();
+                    TlsThreadContext->Timers.Elapsed += TlsThreadContext->Timers.HPNow - TlsThreadContext->Timers.HPStart;
+                    wctx.AddElapsedCycles(ActorSystemIndex, TlsThreadContext->Timers.Elapsed);
+                    if (TlsThreadContext->Timers.Parked > 0) {
+                        wctx.AddParkedCycles(TlsThreadContext->Timers.Parked);
                     }
 
                     return activation;

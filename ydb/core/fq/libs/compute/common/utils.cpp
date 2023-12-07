@@ -643,4 +643,84 @@ TString GetV1StatFromV2PlanV2(const TString& plan) {
     return NJson2Yson::ConvertYson2Json(out.Str());
 }
 
+std::optional<int> GetValue(const NJson::TJsonValue& node, const TString& name) {
+    if (auto* keyNode = node.GetValueByPath(name)) {
+        auto result = keyNode->GetInteger();
+        if (result) {
+            return result;
+        }
+    }
+    return {};
+}
+
+void AggregateNode(const NJson::TJsonValue& node, const TString& name, ui64& sum) {
+    if (node.GetType() == NJson::JSON_MAP) {
+        if (auto* subNode = node.GetValueByPath(name)) {
+            if (auto* keyNode = subNode->GetValueByPath("count")) {
+                auto nodeCount = keyNode->GetInteger();
+                if (nodeCount) {
+                    if (auto* keyNode = subNode->GetValueByPath("sum")) {
+                        sum += keyNode->GetInteger();
+                    }
+                }
+            }
+        }
+    }
+}
+
+std::optional<int> GetNodeValue(const NJson::TJsonValue& node, const TString& name, bool aggregate = false) {
+    if (aggregate) {
+        ui64 sum = 0;
+        if (node.GetType() == NJson::JSON_MAP) {
+            for (const auto& p : node.GetMap()) {
+                AggregateNode(p.second, name, sum);
+            }
+        }
+        if (sum) {
+            return sum;
+        }
+        return {};
+    }
+    if (auto* subNode = node.GetValueByPath(name)) {
+        return GetValue(*subNode, "sum");
+    }
+    return {};
+}
+
+std::optional<int> Sum(const std::optional<int>& a, const std::optional<int>& b) {
+    if (!a) {
+        return b;
+    }
+
+    if (!b) {
+        return a;
+    }
+
+    return *a + *b;
+}
+
+TPublicStat GetPublicStat(const TString& statistics) {
+    TPublicStat counters;
+    NJson::TJsonReaderConfig jsonConfig;
+    NJson::TJsonValue stat;
+    if (NJson::ReadJsonTree(statistics, &jsonConfig, &stat)) {
+
+        //  EXP 
+        if (stat.GetValueByPath("Columns")) {
+            return counters;
+        }
+
+        for (const auto& p : stat.GetMap()) {
+            counters.MemoryUsageBytes = Sum(counters.MemoryUsageBytes, GetNodeValue(p.second, "MaxMemoryUsage"));
+            counters.CpuUsageUs = Sum(counters.CpuUsageUs, GetNodeValue(p.second, "CpuTimeUs"));
+            counters.InputBytes = Sum(counters.InputBytes, GetNodeValue(p.second, "InputBytes"));
+            counters.OutputBytes = Sum(counters.OutputBytes, GetNodeValue(p.second, "OutputBytes"));
+            counters.SourceInputRecords = Sum(counters.SourceInputRecords, GetNodeValue(p.second, "InputRows"));
+            counters.SinkOutputRecords = Sum(counters.SinkOutputRecords, GetNodeValue(p.second, "OutputRows"));
+            counters.RunningTasks = Sum(counters.RunningTasks, GetNodeValue(p.second, "TotalTasks", true));
+        }
+    }
+    return counters;
+}
+
 } // namespace NFq

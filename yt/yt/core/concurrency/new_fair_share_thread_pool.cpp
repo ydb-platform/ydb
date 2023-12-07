@@ -257,7 +257,7 @@ struct TExecutionPool
     const TEventTimer TotalTimeCounter;
     const NProfiling::TTimeCounter CumulativeTimeCounter;
     // Execution pool is retained for some after last usage to flush profiling counters.
-    std::atomic<TCpuInstant> LastUsageTime = 0;
+    TCpuInstant LastUsageTime = 0;
 
     // Action count is used to decide whether to reset excess time or not.
     size_t ActionCountInQueue = 0;
@@ -695,7 +695,7 @@ private:
         UnlinkBucketQueue_.FilterElements([&] (TExecutionPool* pool) {
             YT_ASSERT(pool->BucketRefs > 0);
             if (pool->BucketRefs == 1) {
-                auto lastUsageTime = pool->LastUsageTime.load(std::memory_order_acquire);
+                auto lastUsageTime = pool->LastUsageTime;
                 if (CpuDurationToDuration(currentInstant - lastUsageTime) < PoolRetentionTime_) {
                     return true;
                 }
@@ -722,7 +722,7 @@ private:
         threadState->Action = std::move(action);
     }
 
-    void ServeEndExecute(TThreadState* threadState, TCpuInstant /*cpuInstant*/)
+    void ServeEndExecute(TThreadState* threadState, TCpuInstant cpuInstant)
     {
         VERIFY_SPINLOCK_AFFINITY(MainLock_);
 
@@ -740,6 +740,8 @@ private:
 
         auto& pool = *bucket->Pool;
         YT_ASSERT(pool.PoolName == bucket->PoolName);
+
+        pool.LastUsageTime = cpuInstant;
 
         // LastActionsInQueue is used to update SizeCounter outside lock.
         threadState->LastActionsInQueue = --pool.ActionCountInQueue;
@@ -973,7 +975,6 @@ private:
             auto bucketToUndef = std::move(threadState.BucketToUnref);
             if (bucketToUndef) {
                 auto* pool = bucketToUndef->Pool;
-                pool->LastUsageTime.store(cpuInstant, std::memory_order_release);
                 pool->SizeCounter.Record(threadState.LastActionsInQueue);
                 pool->DequeuedCounter.Increment(1);
                 pool->ExecTimeCounter.Record(threadState.TimeFromStart);

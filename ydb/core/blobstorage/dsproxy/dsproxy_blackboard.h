@@ -5,6 +5,7 @@
 
 #include <ydb/core/blobstorage/base/batched_vec.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
 #include <ydb/core/util/fragmented_buffer.h>
 #include <ydb/core/util/interval_set.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -63,12 +64,14 @@ struct TBlobState {
     struct TDiskPart {
         TIntervalSet<i32> Requested;
         ESituation Situation = ESituation::Unknown;
+
         TString ToString() const;
     };
     struct TDisk {
         ui32 OrderNumber;
         bool IsSlow = false;
         TStackVec<TDiskPart, TypicalPartsInBlob> DiskParts;
+
         TString ToString() const;
     };
 
@@ -105,6 +108,8 @@ struct TBlobState {
             NKikimrBlobStorage::EVDiskQueueId queueId,
             ui64 *outWorstNs, ui64 *outNextToWorstNs, i32 *outWorstSubgroupIdx) const;
     TString ToString() const;
+    bool HasWrittenQuorum(const TBlobStorageGroupInfo& info, const TBlobStorageGroupInfo::TGroupVDisks& expired) const;
+            
     static TString SituationToString(ESituation situation);
 };
 
@@ -227,6 +232,8 @@ struct TBlackboard {
             blob.IsChanged = true;
         }
     }
+
+    void InvalidatePartStates(ui32 orderNumber);
 
     void RegisterBlobForPut(const TLogoBlobID& id, std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TSpan *span);
 

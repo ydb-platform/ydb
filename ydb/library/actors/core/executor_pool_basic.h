@@ -2,6 +2,7 @@
 
 #include "actorsystem.h"
 #include "executor_thread.h"
+#include "executor_thread_ctx.h"
 #include "executor_pool_basic_feature_flags.h"
 #include "scheduler_queue.h"
 #include "executor_pool_base.h"
@@ -123,39 +124,12 @@ namespace NActors {
     };
 
     class TBasicExecutorPool: public TExecutorPoolBase {
-        struct TThreadCtx {
-            TAutoPtr<TExecutorThread> Thread;
-            TThreadParkPad WaitingPad;
-            TAtomic WaitingFlag;
-            std::atomic<i64> StartWakingTs;
-            std::atomic<i64> EndWakingTs;
-
-            enum EWaitState {
-                WS_NONE,
-                WS_ACTIVE,
-                WS_BLOCKED,
-                WS_RUNNING
-            };
-
-            TThreadCtx()
-                : WaitingFlag(WS_NONE)
-            {
-            }
-        };
-
-        struct TTimers {
-            NHPTimer::STime Elapsed = 0;
-            NHPTimer::STime Parked = 0;
-            NHPTimer::STime HPStart = GetCycleCountFast();
-            NHPTimer::STime HPNow;
-        };
-
         NThreading::TPadded<std::atomic_bool> AllThreadsSleep = true;
         const ui64 DefaultSpinThresholdCycles;
         std::atomic<ui64> SpinThresholdCycles;
         std::unique_ptr<NThreading::TPadded< std::atomic<ui64>>[]> SpinThresholdCyclesPerThread;
 
-        TArrayHolder<NThreading::TPadded<TThreadCtx>> Threads;
+        TArrayHolder<NThreading::TPadded<TExecutorThreadCtx>> Threads;
         static_assert(sizeof(std::decay_t<decltype(Threads[0])>) == PLATFORM_CACHE_LINE);
         TArrayHolder<NThreading::TPadded<std::queue<ui32>>> LocalQueues;
         TArrayHolder<TWaitingStats<ui64>> WaitingStats;
@@ -283,9 +257,5 @@ namespace NActors {
         void AskToGoToSleep(bool *needToWait, bool *needToBlock);
 
         void WakeUpLoop(i16 currentThreadCount);
-        bool GoToWaiting(TThreadCtx& threadCtx, TTimers &timers, bool needToBlock);
-        ui32 GoToSpin(TThreadCtx& threadCtx, i64 start, i64 &end);
-        bool GoToSleep(TThreadCtx& threadCtx, TTimers &timers);
-        bool GoToBeBlocked(TThreadCtx& threadCtx, TTimers &timers);
     };
 }

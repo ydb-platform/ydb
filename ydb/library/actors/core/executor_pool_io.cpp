@@ -7,7 +7,7 @@
 namespace NActors {
     TIOExecutorPool::TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName, TAffinity* affinity)
         : TExecutorPoolBase(poolId, threads, affinity)
-        , Threads(new TThreadCtx[threads])
+        , Threads(new TExecutorThreadCtx[threads])
         , PoolName(poolName)
     {}
 
@@ -37,17 +37,17 @@ namespace NActors {
 
         const TAtomic x = AtomicDecrement(Semaphore);
         if (x < 0) {
-            TThreadCtx& threadCtx = Threads[workerId];
+            TExecutorThreadCtx& threadCtx = Threads[workerId];
             ThreadQueue.Push(workerId + 1, revolvingCounter);
             hpnow = GetCycleCountFast();
             elapsed += hpnow - hpstart;
-            if (threadCtx.Pad.Park())
+            if (threadCtx.WaitingPad.Park())
                 return 0;
             hpstart = GetCycleCountFast();
             parked += hpstart - hpnow;
         }
 
-        while (!RelaxedLoad(&StopFlag)) {
+        while (!StopFlag.load(std::memory_order_acquire)) {
             if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
                 hpnow = GetCycleCountFast();
                 elapsed += hpnow - hpstart;
@@ -93,7 +93,7 @@ namespace NActors {
             for (;; ++revolvingWriteCounter) {
                 if (const ui32 x = ThreadQueue.Pop(revolvingWriteCounter)) {
                     const ui32 threadIdx = x - 1;
-                    Threads[threadIdx].Pad.Unpark();
+                    Threads[threadIdx].WaitingPad.Unpark();
                     return;
                 }
                 SpinLockPause();
@@ -124,10 +124,10 @@ namespace NActors {
     }
 
     void TIOExecutorPool::PrepareStop() {
-        AtomicStore(&StopFlag, true);
+        StopFlag.store(true, std::memory_order_release);
         for (i16 i = 0; i != PoolThreads; ++i) {
             Threads[i].Thread->StopFlag = true;
-            Threads[i].Pad.Interrupt();
+            Threads[i].WaitingPad.Interrupt();
         }
     }
 

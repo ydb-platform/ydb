@@ -48,7 +48,7 @@ namespace NActors {
         TAtomic Semaphore = 0;
         TUnorderedCache<ui32, 512, 4> Activations;
         TAtomic ActivationsRevolvingCounter = 0;
-        volatile bool StopFlag = false;
+        std::atomic_bool StopFlag = false;
     public:
         TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity);
         ~TExecutorPoolBase();

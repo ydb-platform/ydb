@@ -68,7 +68,6 @@ private:
         return result;
     }
 
-    bool IsSourcesReady();
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
     const ui32 IntervalIdx;
     TAtomicCounter ReadySourcesCount = 0;

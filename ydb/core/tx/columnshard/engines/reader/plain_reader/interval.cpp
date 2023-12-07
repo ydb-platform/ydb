@@ -42,6 +42,19 @@ private:
             LastPK = nullptr;
         }
     }
+
+    bool EmptyFiltersOnly() const {
+        for (auto&& [_, i] : Sources) {
+            if (!i->GetFilterStageData().GetBatch() || !i->GetFilterStageData().GetBatch()->num_rows()) {
+                continue;
+            }
+            auto f = i->GetFilterStageData().GetNotAppliedEarlyFilter();
+            if (!f || !f->IsTotalDenyFilter()) {
+                return false;
+            }
+        }
+        return true;
+    }
 protected:
     virtual bool DoApply(NOlap::IDataReader& indexedDataRead) const override {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoApply")("interval_idx", MergingContext->GetIntervalIdx());
@@ -64,6 +77,10 @@ protected:
             }
             Sources.clear();
             AFL_VERIFY(!!LastPK == (!!ResultBatch && ResultBatch->num_rows()));
+            return true;
+        }
+        if (EmptyFiltersOnly()) {
+            ResultBatch = NArrow::MakeEmptyBatch(Context->GetProgramInputColumns()->GetSchema());
             return true;
         }
         std::shared_ptr<NIndexedReader::TMergePartialStream> merger = Context->BuildMerger();

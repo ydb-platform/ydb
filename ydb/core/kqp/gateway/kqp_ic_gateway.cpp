@@ -427,6 +427,107 @@ private:
     TVector<NYql::NDqProto::TDqExecutionStats> Executions;
 };
 
+class TKqpGenericQueryRequestHandler: public TRequestHandlerBase<
+    TKqpGenericQueryRequestHandler,
+    TEvKqp::TEvQueryRequest,
+    TEvKqp::TEvQueryResponse,
+    IKqpGateway::TQueryResult>
+{
+    struct TResultSetDescription {
+        Ydb::ResultSet ResultSet;
+        ui64 RowCount = 0;
+        ui64 ByteCount = 0;
+        bool Initialized = false;
+    };
+
+public:
+    using TRequest = TEvKqp::TEvQueryRequest;
+    using TResponse = TEvKqp::TEvQueryResponse;
+    using TResult = IKqpGateway::TQueryResult;
+
+    using TBase = TKqpGenericQueryRequestHandler::TBase;
+    using TCallbackFunc = TBase::TCallbackFunc;
+
+    TKqpGenericQueryRequestHandler(TRequest* request, ui64 rowsLimit, ui64 sizeLimit, TPromise<TResult> promise, TCallbackFunc callback)
+        : TBase(request, promise, callback)
+        , RowsLimit(rowsLimit)
+        , SizeLimit(sizeLimit)
+    {}
+
+    void Bootstrap() {
+        ActorIdToProto(SelfId(), Request->Record.MutableRequestActorId());
+        Send(MakeKqpProxyID(SelfId().NodeId()), Request.Release());
+        Become(&TKqpGenericQueryRequestHandler::AwaitState);
+    }
+
+    void Handle(TEvKqpExecuter::TEvStreamData::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+
+        const ui32 resultSetId = record.GetQueryResultIndex();
+        if (resultSetId >= ResultSets.size()) {
+            ResultSets.resize(resultSetId + 1);
+        }
+
+        if (!ResultSets[resultSetId].Initialized) {
+            ResultSets[resultSetId].Initialized = true;
+            for (auto& column : *record.MutableResultSet()->mutable_columns()) {
+                ResultSets[resultSetId].ResultSet.add_columns()->CopyFrom(std::move(column));
+            }
+        }
+
+        if (!ResultSets[resultSetId].ResultSet.truncated()) {
+            for (auto& row : *record.MutableResultSet()->mutable_rows()) {
+                if (RowsLimit && ResultSets[resultSetId].RowCount + 1 > RowsLimit) {
+                    ResultSets[resultSetId].ResultSet.set_truncated(true);
+                    break;
+                }
+
+                auto serializedSize = row.ByteSizeLong();
+                if (SizeLimit && ResultSets[resultSetId].ByteCount + serializedSize > SizeLimit) {
+                    ResultSets[resultSetId].ResultSet.set_truncated(true);
+                    break;
+                }
+
+                ResultSets[resultSetId].RowCount++;
+                ResultSets[resultSetId].ByteCount += serializedSize;
+                *ResultSets[resultSetId].ResultSet.add_rows() = std::move(row);
+            }
+        }
+
+        auto response = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+        response->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        response->Record.SetFreeSpace(SizeLimit && SizeLimit < std::numeric_limits<i64>::max() ? SizeLimit : std::numeric_limits<i64>::max());
+        Send(ev->Sender, response.Release());
+    }
+
+    using TBase::HandleResponse;
+
+    void HandleResponse(TResponse::TPtr &ev, const TActorContext &ctx) {
+        auto& response = *ev->Get()->Record.GetRef().MutableResponse();
+
+        for (auto& resultSet : ResultSets) {
+            ConvertYdbResultToKqpResult(std::move(resultSet.ResultSet), *response.AddResults());
+        }
+
+        TBase::HandleResponse(ev, ctx);
+    }
+
+    STFUNC(AwaitState) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvKqpExecuter::TEvStreamData, Handle);
+            HFunc(TEvKqp::TEvQueryResponse, HandleResponse);
+
+        default:
+            TBase::HandleUnexpectedEvent("TKqpGenericQueryRequestHandler", ev->GetTypeRewrite());
+        }
+    }
+
+private:
+    std::vector<TResultSetDescription> ResultSets;
+    const ui64 RowsLimit;
+    const ui64 SizeLimit;
+};
+
 class TKqpSchemeExecuterRequestHandler: public TActorBootstrapped<TKqpSchemeExecuterRequestHandler> {
 public:
     using TResult = IKqpGateway::TGenericResult;
@@ -597,14 +698,15 @@ private:
 
 public:
     TKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database, std::shared_ptr<IKqpTableMetadataLoader>&& metadataLoader,
-        TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters)
+        TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig)
         : Cluster(cluster)
         , QueryType(queryType)
         , Database(database)
         , ActorSystem(actorSystem)
         , NodeId(nodeId)
         , Counters(counters)
-        , MetadataLoader(std::move(metadataLoader)) {}
+        , MetadataLoader(std::move(metadataLoader))
+        , QueryServiceConfig(queryServiceConfig) {}
 
     bool HasCluster(const TString& cluster) override {
         return cluster == Cluster;
@@ -2000,6 +2102,31 @@ public:
             });
     }
 
+    TFuture<TQueryResult> ExecGenericQuery(const TString& cluster, const TString& query, TQueryData::TPtr params,
+        const TAstQuerySettings& settings, const Ydb::Table::TransactionSettings& txSettings) override
+    {
+        YQL_ENSURE(cluster == Cluster);
+
+        auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
+
+        auto& request = *ev->Record.MutableRequest();
+        request.SetCollectStats(settings.CollectStats);
+
+        FillParameters(std::move(params), request.MutableYdbParameters());
+
+        auto& txControl = *request.MutableTxControl();
+        txControl.mutable_begin_tx()->CopyFrom(txSettings);
+        txControl.set_commit_tx(true);
+
+        return RunGenericQuery(query, NKikimrKqp::QUERY_ACTION_EXECUTE, std::move(ev));
+    }
+
+    TFuture<TQueryResult> ExplainGenericQuery(const TString& cluster, const TString& query) override {
+        YQL_ENSURE(cluster == Cluster);
+
+        return RunGenericQuery(query, NKikimrKqp::QUERY_ACTION_EXPLAIN, MakeHolder<TEvKqp::TEvQueryRequest>());
+    }
+
 private:
     using TDescribeSchemeResponse = TEvSchemeShard::TEvDescribeSchemeResult;
     using TTransactionResponse = TEvTxUserProxy::TEvProposeTransactionStatus;
@@ -2065,6 +2192,17 @@ private:
         return promise.GetFuture();
     }
 
+    TFuture<TQueryResult> SendKqpGenericQueryRequest(TEvKqp::TEvQueryRequest* request, ui64 rowsLimit, ui64 sizeLimit,
+        TKqpGenericQueryRequestHandler::TCallbackFunc callback)
+    {
+        auto promise = NewPromise<TQueryResult>();
+        IActor* requestHandler = new TKqpGenericQueryRequestHandler(request, rowsLimit, sizeLimit,
+            promise, callback);
+        RegisterActor(requestHandler);
+
+        return promise.GetFuture();
+    }
+
     template<typename TRequest, typename TResponse, typename TResult>
     TFuture<TResult> SendActorRequest(const TActorId& actorId, TRequest* request,
         typename TActorRequestHandler<TRequest, TResponse, TResult>::TCallbackFunc callback)
@@ -2099,6 +2237,27 @@ private:
 
             return NThreading::MakeFuture(GenericResultFromSyncOperation(future.GetValue().operation()));
         });
+    }
+
+    TFuture<TQueryResult> RunGenericQuery(const TString& query, NKikimrKqp::EQueryAction action, THolder<TEvKqp::TEvQueryRequest> ev) {
+        if (UserToken) {
+            ev->Record.SetUserToken(UserToken->GetSerializedToken());
+        }
+
+        auto& request = *ev->Record.MutableRequest();
+        request.SetDatabase(Database);
+        request.SetAction(action);
+        request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+        request.SetQuery(query);
+        request.SetKeepSession(false);
+
+        return SendKqpGenericQueryRequest(ev.Release(), QueryServiceConfig.GetScriptResultRowsLimit(), QueryServiceConfig.GetScriptResultSizeLimit(),
+            [] (TPromise<TQueryResult> promise, TEvKqp::TEvQueryResponse&& responseEv) {
+                TQueryResult queryResult;
+                queryResult.ProtobufArenaPtr.reset(new google::protobuf::Arena());
+                KqpResponseToQueryResult(responseEv.Record.GetRef(), queryResult);
+                promise.SetValue(std::move(queryResult));
+            });
     }
 
     bool CheckCluster(const TString& cluster) {
@@ -2252,16 +2411,17 @@ private:
     TAlignedPagePoolCounters AllocCounters;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     std::shared_ptr<IKqpTableMetadataLoader> MetadataLoader;
+    NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
 };
 
 } // namespace
 
 TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database,
     std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader>&& metadataLoader, TActorSystem* actorSystem,
-    ui32 nodeId, TKqpRequestCounters::TPtr counters)
+    ui32 nodeId, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig)
 {
     return MakeIntrusive<TKikimrIcGateway>(cluster, queryType, database, std::move(metadataLoader), actorSystem, nodeId,
-        counters);
+        counters, queryServiceConfig);
 }
 
 bool SplitTablePath(const TString& tableName, const TString& database, std::pair<TString, TString>& pathPair,

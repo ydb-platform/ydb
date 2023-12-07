@@ -153,6 +153,7 @@ public:
             std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
             NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
             TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
+            const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
             const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig)
         : Owner(owner)
         , SessionId(sessionId)
@@ -164,6 +165,7 @@ public:
         , KqpSettings(kqpSettings)
         , Config(CreateConfig(kqpSettings, workerSettings))
         , Transactions(*Config->_KqpMaxActiveTxPerSession.Get(), TDuration::Seconds(*Config->_KqpTxIdleTimeoutSec.Get()))
+        , QueryServiceConfig(queryServiceConfig)
         , MetadataProviderConfig(metadataProviderConfig)
     {
         RequestCounters = MakeIntrusive<TKqpRequestCounters>();
@@ -225,7 +227,7 @@ public:
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {
         if (!WorkerId) {
             std::unique_ptr<IActor> workerActor(CreateKqpWorkerActor(SelfId(), SessionId, KqpSettings, Settings,
-                FederatedQuerySetup, ModuleResolverState, Counters, MetadataProviderConfig));
+                FederatedQuerySetup, ModuleResolverState, Counters, QueryServiceConfig, MetadataProviderConfig));
             WorkerId = RegisterWithSameMailbox(workerActor.release());
         }
         TlsActivationContext->Send(new IEventHandle(*WorkerId, SelfId(), QueryState->RequestEv.release(), ev->Flags, ev->Cookie,
@@ -2208,6 +2210,7 @@ private:
 
     TKqpTempTablesState TempTablesState;
 
+    NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     NKikimrConfig::TMetadataProviderConfig MetadataProviderConfig;
     std::shared_ptr<std::atomic<bool>> CompilationCookie;
 };
@@ -2219,11 +2222,12 @@ IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig)
 {
     return new TKqpSessionActor(owner, sessionId, kqpSettings, workerSettings, federatedQuerySetup,
                                 std::move(asyncIoFactory),  std::move(moduleResolverState), counters,
-                                metadataProviderConfig
+                                queryServiceConfig, metadataProviderConfig
                                 );
 }
 

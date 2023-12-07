@@ -1418,7 +1418,7 @@ private:
 
         auto config = CreateConfig(KqpSettings, workerSettings);
 
-        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, FederatedQuerySetup, AsyncIoFactory, ModuleResolverState, Counters, MetadataProviderConfig);
+        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, FederatedQuerySetup, AsyncIoFactory, ModuleResolverState, Counters, QueryServiceConfig, MetadataProviderConfig);
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(sessionActor, TMailboxType::HTSwap, AppData()->UserPoolId);
         TKqpSessionInfo* sessionInfo = LocalSessions->Create(
             sessionId, workerId, database, dbCounters, supportsBalancing, GetSessionIdleDuration(), pgWire);

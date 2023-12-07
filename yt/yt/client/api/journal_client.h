@@ -36,6 +36,10 @@ struct TJournalWriterPerformanceCounters
     NProfiling::TEventTimer SealChunkTimer;
     NProfiling::TEventTimer WriteQuorumLag;
     NProfiling::TEventTimer MaxReplicaLag;
+
+    NProfiling::TCounter MediumWrittenBytes;
+    NProfiling::TCounter IORequestCount;
+    NProfiling::TCounter JournalWrittenBytes;
 };
 
 struct TJournalWriterOptions

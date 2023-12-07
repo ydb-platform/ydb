@@ -253,7 +253,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         },
         {
             VARCHAROID,
-            false,
+            true,
             [] (auto i) { return Sprintf("varchar %u", i); },
             [] (auto i) { return Sprintf("varchar %u", i); },
             [] (auto s) { return Sprintf("{\"%s\",\"%s\"}", s.c_str(), s.c_str()); }

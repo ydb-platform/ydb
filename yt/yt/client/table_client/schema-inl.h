@@ -131,7 +131,8 @@ inline bool TLockMask::HasNewLocks() const
     return false;
 }
 
-inline bool TLockMask::IsNone() const {
+inline bool TLockMask::IsNone() const
+{
     for (int index = 0; index < GetSize(); ++index) {
         if (Get(index) != ELockType::None) {
             return false;

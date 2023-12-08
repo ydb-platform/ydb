@@ -1,12 +1,14 @@
-#include <random>
+#include <yt/yt/library/tracing/jaeger/tracer.h>
+
+#include <yt/yt/library/tracing/batch_trace.h>
 
 #include <yt/yt/core/tracing/trace_context.h>
 
 #include <util/generic/yexception.h>
 
-#include <yt/yt/library/tracing/jaeger/tracer.h>
-
 #include <util/system/env.h>
+
+#include <random>
 
 using namespace NYT;
 using namespace NYT::NTracing;
@@ -29,9 +31,18 @@ void SubrequestExample(std::optional<TString> endpoint)
 
     Sleep(TDuration::MilliSeconds(2));
     traceContext->AddLogEntry(GetCpuInstant(), "Request finished");
+
+    TBatchTrace batchTrace;
+    batchTrace.Join(traceContext);
+
+    auto [asyncChildTraceContext, asyncChildSampled] = batchTrace.StartSpan("TestBatchTrace");
+    YT_VERIFY(asyncChildSampled);
+
     traceContext->Finish();
 
-    Cout << ToString(traceContext->GetTraceId()) << Endl;
+    asyncChildTraceContext->Finish();
+
+    Cout << ToString(traceContext->GetTraceId()) << '\t' << ToString(asyncChildTraceContext->GetTraceId()) << Endl;
 }
 
 void DelayedSamplingExample(std::optional<TString> endpoint)
@@ -48,8 +59,16 @@ void DelayedSamplingExample(std::optional<TString> endpoint)
 
     auto slowRequestContext = startContext->CreateChild("SlowRequest");
 
+    TBatchTrace batchTrace;
+    batchTrace.Join(slowRequestContext);
+    auto [asyncChildTraceContext, asyncChildSampled] = batchTrace.StartSpan("TestBatchTrace");
+
+    YT_VERIFY(!asyncChildSampled);
+    YT_VERIFY(!slowRequestContext->IsSampled());
+
     traceContext->SetSampled();
     YT_VERIFY(slowRequestContext->IsSampled());
+    YT_VERIFY(!asyncChildTraceContext->IsSampled());
 
     slowRequestContext->Finish();
     traceContext->Finish();

@@ -2,6 +2,7 @@ allowHTML: true
 langs: ['en','ru']
 apply-presets: true
 allowCustomResources: true
+singlePage: true
 resources:
   script:
     - _assets/gtm.js
@@ -11,6 +12,7 @@ docs-viewer:
   # no-index: true # Remove this after the public release
   langs: ['en','ru']
   themes: ['light']
+  pdf: true
   metrika: 88962303
   favicon-src: https://storage.yandexcloud.net/ydb-www-prod-site-assets/favicon/favicon.ico
 

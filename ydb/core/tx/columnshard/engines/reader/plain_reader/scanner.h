@@ -44,7 +44,8 @@ private:
     ui32 SegmentIdxCounter = 0;
     std::vector<TIntervalStat> IntervalStats;
     void DrainSources();
-
+    ui64 InFlightLimit = 1;
+    ui64 ZeroCount = 0;
 public:
 
     TFetchingPlan GetColumnsFetchingPlan(const bool exclusiveSource) const;

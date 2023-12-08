@@ -5,19 +5,19 @@
 
 #include <aws/common/atomics.h>
 #include <aws/common/byte_buf.h>
+#include <aws/common/clock.h>
 #include <aws/common/hash_table.h>
 #include <aws/common/logging.h>
 #include <aws/common/mutex.h>
 #include <aws/common/priority_queue.h>
 #include <aws/common/string.h>
 #include <aws/common/system_info.h>
-#include <aws/common/time.h>
 
 /* describes a single live allocation.
  * allocated by aws_default_allocator() */
 struct alloc_info {
     size_t size;
-    time_t time;
+    uint64_t time;
     uint64_t stack; /* hash of stack frame pointers */
 };
 
@@ -43,8 +43,8 @@ struct stack_trace {
 #endif
 
 /* Tracking structure, used as the allocator impl.
- * This structure, and all its bookkeeping datastructures, are created with the aws_default_allocator().
- * This is not customizeable because it's too expensive for every little allocation to store
+ * This structure, and all its bookkeeping data structures, are created with the aws_default_allocator().
+ * This is not customizable because it's too expensive for every little allocation to store
  * a pointer back to its original allocator. */
 struct alloc_tracer {
     struct aws_allocator *traced_allocator; /* underlying allocator */
@@ -110,7 +110,7 @@ static void s_alloc_tracer_init(
         if (frames_per_stack > 128) {
             frames_per_stack = 128;
         }
-        tracer->frames_per_stack = (frames_per_stack) ? frames_per_stack : 8;
+        tracer->frames_per_stack = frames_per_stack ? frames_per_stack : 8;
         AWS_FATAL_ASSERT(
             AWS_OP_SUCCESS ==
             aws_hash_table_init(
@@ -128,7 +128,7 @@ static void s_alloc_tracer_track(struct alloc_tracer *tracer, void *ptr, size_t 
     struct alloc_info *alloc = aws_mem_calloc(aws_default_allocator(), 1, sizeof(struct alloc_info));
     AWS_FATAL_ASSERT(alloc);
     alloc->size = size;
-    alloc->time = time(NULL);
+    aws_high_res_clock_get_ticks(&alloc->time);
 
     if (tracer->level == AWS_MEMTRACE_STACKS) {
         /* capture stack frames, skip 2 for this function and the allocation vtable function */
@@ -300,14 +300,14 @@ void aws_mem_tracer_dump(struct aws_allocator *trace_allocator) {
 
     size_t num_allocs = aws_hash_table_get_entry_count(&tracer->allocs);
     AWS_LOGF_TRACE(
-        AWS_LS_COMMON_MEMTRACE, "################################################################################\n");
+        AWS_LS_COMMON_MEMTRACE, "################################################################################");
     AWS_LOGF_TRACE(
-        AWS_LS_COMMON_MEMTRACE, "#  BEGIN MEMTRACE DUMP                                                         #\n");
+        AWS_LS_COMMON_MEMTRACE, "#  BEGIN MEMTRACE DUMP                                                         #");
     AWS_LOGF_TRACE(
-        AWS_LS_COMMON_MEMTRACE, "################################################################################\n");
+        AWS_LS_COMMON_MEMTRACE, "################################################################################");
     AWS_LOGF_TRACE(
         AWS_LS_COMMON_MEMTRACE,
-        "tracer: %zu bytes still allocated in %zu allocations\n",
+        "tracer: %zu bytes still allocated in %zu allocations",
         aws_atomic_load_int(&tracer->allocated),
         num_allocs);
 
@@ -333,21 +333,24 @@ void aws_mem_tracer_dump(struct aws_allocator *trace_allocator) {
             &allocs, aws_default_allocator(), num_allocs, sizeof(struct alloc_info *), s_alloc_compare));
     aws_hash_table_foreach(&tracer->allocs, s_insert_allocs, &allocs);
     /* dump allocs by time */
-    AWS_LOGF_TRACE(
-        AWS_LS_COMMON_MEMTRACE, "################################################################################\n");
-    AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "Leaks in order of allocation:\n");
-    AWS_LOGF_TRACE(
-        AWS_LS_COMMON_MEMTRACE, "################################################################################\n");
+    AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+    AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "Leaks in order of allocation:");
+    AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
     while (aws_priority_queue_size(&allocs)) {
         struct alloc_info *alloc = NULL;
         aws_priority_queue_pop(&allocs, &alloc);
-        AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "ALLOC %zu bytes\n", alloc->size);
         if (alloc->stack) {
             struct aws_hash_element *item = NULL;
             AWS_FATAL_ASSERT(
                 AWS_OP_SUCCESS == aws_hash_table_find(&stack_info, (void *)(uintptr_t)alloc->stack, &item));
             struct stack_metadata *stack = item->value;
-            AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "  stacktrace:\n%s\n", (const char *)aws_string_bytes(stack->trace));
+            AWS_LOGF_TRACE(
+                AWS_LS_COMMON_MEMTRACE,
+                "ALLOC %zu bytes, stacktrace:\n%s\n",
+                alloc->size,
+                aws_string_c_str(stack->trace));
+        } else {
+            AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "ALLOC %zu bytes", alloc->size);
         }
     }
 
@@ -365,18 +368,18 @@ void aws_mem_tracer_dump(struct aws_allocator *trace_allocator) {
                                   sizeof(struct stack_metadata *),
                                   s_stack_info_compare_size));
         aws_hash_table_foreach(&stack_info, s_insert_stacks, &stacks_by_size);
-        AWS_LOGF_TRACE(
-            AWS_LS_COMMON_MEMTRACE,
-            "################################################################################\n");
-        AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "Stacks by bytes leaked:\n");
-        AWS_LOGF_TRACE(
-            AWS_LS_COMMON_MEMTRACE,
-            "################################################################################\n");
+        AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+        AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "Stacks by bytes leaked:");
+        AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
         while (aws_priority_queue_size(&stacks_by_size) > 0) {
             struct stack_metadata *stack = NULL;
             aws_priority_queue_pop(&stacks_by_size, &stack);
-            AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "%zu bytes in %zu allocations:\n", stack->size, stack->count);
-            AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "%s\n", (const char *)aws_string_bytes(stack->trace));
+            AWS_LOGF_TRACE(
+                AWS_LS_COMMON_MEMTRACE,
+                "%zu bytes in %zu allocations:\n%s\n",
+                stack->size,
+                stack->count,
+                aws_string_c_str(stack->trace));
         }
         aws_priority_queue_clean_up(&stacks_by_size);
 
@@ -389,30 +392,30 @@ void aws_mem_tracer_dump(struct aws_allocator *trace_allocator) {
                                   num_stacks,
                                   sizeof(struct stack_metadata *),
                                   s_stack_info_compare_count));
-        AWS_LOGF_TRACE(
-            AWS_LS_COMMON_MEMTRACE,
-            "################################################################################\n");
-        AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "Stacks by number of leaks:\n");
-        AWS_LOGF_TRACE(
-            AWS_LS_COMMON_MEMTRACE,
-            "################################################################################\n");
+        AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+        AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "Stacks by number of leaks:");
+        AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
         aws_hash_table_foreach(&stack_info, s_insert_stacks, &stacks_by_count);
         while (aws_priority_queue_size(&stacks_by_count) > 0) {
             struct stack_metadata *stack = NULL;
             aws_priority_queue_pop(&stacks_by_count, &stack);
-            AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "%zu allocations leaking %zu bytes:\n", stack->count, stack->size);
-            AWS_LOGF_TRACE(AWS_LS_COMMON_MEMTRACE, "%s\n", (const char *)aws_string_bytes(stack->trace));
+            AWS_LOGF_TRACE(
+                AWS_LS_COMMON_MEMTRACE,
+                "%zu allocations leaking %zu bytes:\n%s\n",
+                stack->count,
+                stack->size,
+                aws_string_c_str(stack->trace));
         }
         aws_priority_queue_clean_up(&stacks_by_count);
         aws_hash_table_clean_up(&stack_info);
     }
 
     AWS_LOGF_TRACE(
-        AWS_LS_COMMON_MEMTRACE, "################################################################################\n");
+        AWS_LS_COMMON_MEMTRACE, "################################################################################");
     AWS_LOGF_TRACE(
-        AWS_LS_COMMON_MEMTRACE, "#  END MEMTRACE DUMP                                                           #\n");
+        AWS_LS_COMMON_MEMTRACE, "#  END MEMTRACE DUMP                                                           #");
     AWS_LOGF_TRACE(
-        AWS_LS_COMMON_MEMTRACE, "################################################################################\n");
+        AWS_LS_COMMON_MEMTRACE, "################################################################################");
 
     aws_mutex_unlock(&tracer->mutex);
 }
@@ -460,7 +463,7 @@ struct aws_allocator *aws_mem_tracer_new(
     enum aws_mem_trace_level level,
     size_t frames_per_stack) {
 
-    /* deprecated customizeable bookkeeping allocator */
+    /* deprecated customizable bookkeeping allocator */
     (void)deprecated;
 
     struct alloc_tracer *tracer = NULL;

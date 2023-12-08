@@ -1,7 +1,7 @@
 #pragma once
 #include <util/system/types.h>
 
-namespace NKikimr::NSharding {
+namespace NKikimr::NArrow::NHash {
 
 class IHashCalcer {
 public:

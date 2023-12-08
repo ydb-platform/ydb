@@ -56,30 +56,18 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
-// struct WriteBufferFromS3::PartData
-// {
-//     Memory<> memory;
-//     size_t data_size = 0;
-
-//     std::shared_ptr<std::iostream> createAwsBuffer()
-//     {
-//         auto buffer = std::make_shared<StdIStreamFromMemory>(memory.data(), data_size);
-//         buffer->exceptions(std::ios::badbit);
-//         return buffer;
-//     }
-
-//     bool isEmpty() const
-//     {
-//         return data_size == 0;
-//     }
-// };
-
 std::shared_ptr<std::iostream> WriteBufferFromS3::PartData::createAwsBuffer()
 {
     auto buffer = std::make_shared<StdIStreamFromMemory>(memory.data(), data_size);
     buffer->exceptions(std::ios::badbit);
     return buffer;
 }
+
+bool WriteBufferFromS3::PartData::isEmpty() const
+{
+    return data_size == 0;
+}
+
 
 WriteBufferFromS3::WriteBufferFromS3(
     std::shared_ptr<const S3::Client> client_ptr_,

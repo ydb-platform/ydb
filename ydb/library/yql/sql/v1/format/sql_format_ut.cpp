@@ -941,6 +941,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "SELECT\n\t[\n\t\t1, 2,\n\t\t3, 4\n\t];\n"},
             {"select [1,2,\n3,4,]",
              "SELECT\n\t[\n\t\t1, 2,\n\t\t3, 4,\n\t];\n"},
+            {"select [1,2\n,3,\n4\n,5]",
+             "SELECT\n\t[\n\t\t1, 2,\n\t\t3,\n\t\t4,\n\t\t5\n\t];\n"},
         };
 
         TSetup setup;
@@ -1254,7 +1256,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
             {"select tagged<int32,\nfoo>",
              "SELECT\n\ttagged<\n\t\tint32,\n\t\tfoo\n\t>;\n"},
             {"select tagged<int32\n,foo>",
-             "SELECT\n\ttagged<\n\t\tint32, foo\n\t>;\n"},
+             "SELECT\n\ttagged<\n\t\tint32,\n\t\tfoo\n\t>;\n"},
             {"select tagged<\nint32,foo>",
              "SELECT\n\ttagged<\n\t\tint32, foo\n\t>;\n"},
         };
@@ -1270,7 +1272,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
             {"select dict<int32,\nstring>",
              "SELECT\n\tdict<\n\t\tint32,\n\t\tstring\n\t>;\n"},
             {"select dict<int32\n,string>",
-             "SELECT\n\tdict<\n\t\tint32, string\n\t>;\n"},
+             "SELECT\n\tdict<\n\t\tint32,\n\t\tstring\n\t>;\n"},
             {"select dict<\nint32,string>",
              "SELECT\n\tdict<\n\t\tint32, string\n\t>;\n"},
         };
@@ -1290,7 +1292,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
             {"select callable<\n(int32,\ndouble)->int32>",
              "SELECT\n\tcallable<\n\t\t(\n\t\t\tint32,\n\t\t\tdouble\n\t\t) -> int32\n\t>;\n"},
             {"select callable<\n(int32\n,double)->int32>",
-             "SELECT\n\tcallable<\n\t\t(\n\t\t\tint32, double\n\t\t) -> int32\n\t>;\n"},
+             "SELECT\n\tcallable<\n\t\t(\n\t\t\tint32,\n\t\t\tdouble\n\t\t) -> int32\n\t>;\n"},
         };
 
         TSetup setup;
@@ -1411,6 +1413,54 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
              "SELECT\n\tCAST(\n\t\tCASE\n\t\t\tWHEN 1 == 2\n\t\t\t\tTHEN 3\n\t\t\tWHEN 4 == 5\n\t\t\t\tTHEN 6\n\t\t\tELSE 10\n\t\tEND AS String\n\t);\n"},
             {"SELECT CASE x WHEN 1 THEN 2 WHEN 3 THEN 4 WHEN 5 THEN 6 ELSE 10 END;", 
              "SELECT\n\tCASE x\n\t\tWHEN 1\n\t\t\tTHEN 2\n\t\tWHEN 3\n\t\t\tTHEN 4\n\t\tWHEN 5\n\t\t\tTHEN 6\n\t\tELSE 10\n\tEND;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(MultiTokenOperations) {
+        TCases cases = {
+            {"$x = 1 >>| 2;", 
+             "$x = 1 >>| 2;\n"},
+             {"$x = 1 >> 2;", 
+             "$x = 1 >> 2;\n"},
+             {"$x = 1 ?? 2;", 
+             "$x = 1 ?? 2;\n"},
+             {"$x = 1 >  /*comment*/  >  /*comment*/  | 2;", 
+             "$x = 1 >/*comment*/>/*comment*/| 2;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(OperatorNewlines) {
+        TCases cases = {
+            {"$x = TRUE\nOR\nFALSE;", 
+             "$x = TRUE\n\tOR\n\tFALSE;\n"},
+            {"$x = TRUE OR\nFALSE;", 
+             "$x = TRUE OR\n\tFALSE;\n"},
+            {"$x = TRUE\nOR FALSE;", 
+             "$x = TRUE OR\n\tFALSE;\n"},
+            {"$x = 1\n+2\n*3;", 
+             "$x = 1 +\n\t2 *\n\t\t3;\n"},
+            {"$x = 1\n+\n2\n*3\n*5\n+\n4;", 
+             "$x = 1\n\t+\n\t2 *\n\t\t3 *\n\t\t5\n\t+\n\t4;\n"},
+            {"$x = 1\n+2+3+4\n+5+6+7+\n\n8+9+10;", 
+             "$x = 1 +\n\t2 + 3 + 4 +\n\t5 + 6 + 7 +\n\t8 + 9 + 10;\n"},
+            {"$x = TRUE\nAND\nTRUE OR\nFALSE\nAND TRUE\nOR FALSE\nAND TRUE\nOR FALSE;", 
+             "$x = TRUE\n\tAND\n\tTRUE OR\n\tFALSE AND\n\t\tTRUE OR\n\tFALSE AND\n\t\tTRUE OR\n\tFALSE;\n"},
+            {"$x = 1 -- comment\n+ 2;", 
+             "$x = 1-- comment\n\t+\n\t2;\n"},
+             {"$x = 1 -- comment\n+ -- comment\n2;", 
+             "$x = 1-- comment\n\t+-- comment\n\t2;\n"},
+             {"$x = 1 + -- comment\n2;", 
+             "$x = 1 +-- comment\n\t2;\n"},
+             {"$x = 1\n>\n>\n|\n2;", 
+             "$x = 1\n\t>>|\n\t2;\n"},
+             {"$x = 1\n?? 2 ??\n3\n??\n4 +\n5\n*\n6 +\n7 ??\n8;", 
+             "$x = 1 ??\n\t2 ??\n\t3\n\t??\n\t4 +\n\t\t5\n\t\t\t*\n\t\t\t6 +\n\t\t7 ??\n\t8;\n"},
         };
 
         TSetup setup;

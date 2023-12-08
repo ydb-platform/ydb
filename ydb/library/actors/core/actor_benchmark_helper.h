@@ -273,55 +273,22 @@ struct TActorBenchmark {
         setup->CpuManager.Basic.emplace_back(std::move(basic));
     }
 
-    static void AddUnitedPool(THolder<TActorSystemSetup>& setup, ui32 concurrency, bool activateEveryEvent) {
-        TUnitedExecutorPoolConfig united;
-        united.PoolId = setup->GetExecutorsCount();
-        united.PoolName = TStringBuilder() << "u" << united.PoolId;
-        united.Concurrency = concurrency;
-        united.TimePerMailbox = TDuration::Hours(1);
-        if (activateEveryEvent) {
-            united.EventsPerMailbox = 1;
-        } else {
-            united.EventsPerMailbox = ::Max<ui32>();
-        }
-        setup->CpuManager.United.emplace_back(std::move(united));
-    }
-
-    static THolder<TActorSystemSetup> GetActorSystemSetup(ui32 unitedCpuCount, bool preemption) {
+    static THolder<TActorSystemSetup> GetActorSystemSetup() {
         auto setup = MakeHolder<NActors::TActorSystemSetup>();
         setup->NodeId = 1;
-        setup->CpuManager.UnitedWorkers.CpuCount = unitedCpuCount;
-        setup->CpuManager.UnitedWorkers.SpinThresholdUs = TSettings::DefaultSpinThreshold;
-        setup->CpuManager.UnitedWorkers.NoRealtime = TSettings::DefaultNoRealtime;
-        if (preemption) {
-            setup->CpuManager.UnitedWorkers.PoolLimitUs = 500;
-            setup->CpuManager.UnitedWorkers.EventLimitUs = 100;
-            setup->CpuManager.UnitedWorkers.LimitPrecisionUs = 100;
-        } else {
-            setup->CpuManager.UnitedWorkers.PoolLimitUs = 100'000'000'000;
-            setup->CpuManager.UnitedWorkers.EventLimitUs = 10'000'000'000;
-            setup->CpuManager.UnitedWorkers.LimitPrecisionUs = 10'000'000'000;
-        }
         setup->Scheduler = new TBasicSchedulerThread(NActors::TSchedulerConfig(512, 0));
         return setup;
     }
 
     enum class EPoolType {
         Basic,
-        United
     };
 
-    static THolder<TActorSystemSetup> InitActorSystemSetup(EPoolType poolType, ui32 poolsCount, ui32 threads, bool activateEveryEvent, bool preemption) {
+    static THolder<TActorSystemSetup> InitActorSystemSetup(EPoolType poolType, ui32 poolsCount, ui32 threads, bool activateEveryEvent) {
         if (poolType == EPoolType::Basic) {
-            THolder<TActorSystemSetup> setup = GetActorSystemSetup(0, false);
+            THolder<TActorSystemSetup> setup = GetActorSystemSetup();
             for (ui32 i = 0; i < poolsCount; ++i) {
                 AddBasicPool(setup, threads, activateEveryEvent, 0);
-            }
-            return setup;
-        } else if (poolType == EPoolType::United) {
-            THolder<TActorSystemSetup> setup = GetActorSystemSetup(poolsCount * threads, preemption);
-            for (ui32 i = 0; i < poolsCount; ++i) {
-                AddUnitedPool(setup, threads, activateEveryEvent);
             }
             return setup;
         }
@@ -329,7 +296,7 @@ struct TActorBenchmark {
     }
 
     static double BenchSendReceive(bool allocation, NActors::TMailboxType::EType mType, EPoolType poolType, ESendingType sendingType) {
-        THolder<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, 1, false, false);
+        THolder<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, 1, false);
         TActorSystem actorSystem(setup);
         actorSystem.Start();
 
@@ -359,7 +326,7 @@ struct TActorBenchmark {
     }
 
     static double BenchSendActivateReceive(ui32 poolsCount, ui32 threads, bool allocation, EPoolType poolType, ESendingType sendingType) {
-        THolder<TActorSystemSetup> setup = InitActorSystemSetup(poolType, poolsCount, threads, true, false);
+        THolder<TActorSystemSetup> setup = InitActorSystemSetup(poolType, poolsCount, threads, true);
         TActorSystem actorSystem(setup);
         actorSystem.Start();
 
@@ -402,7 +369,7 @@ struct TActorBenchmark {
     }
 
    static double BenchSendActivateReceiveWithMailboxNeighbours(ui32 MailboxNeighbourActors, EPoolType poolType, ESendingType sendingType) {
-        THolder<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, 1, false, false);
+        THolder<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, 1, false);
         TActorSystem actorSystem(setup);
         actorSystem.Start();
 
@@ -454,7 +421,7 @@ struct TActorBenchmark {
     };
 
     static auto BenchContentedThreads(ui32 threads, ui32 actorsPairsCount, EPoolType poolType, ESendingType sendingType, TDuration testDuration = TDuration::Zero(), ui32 inFlight = 1) {
-        THolder<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, threads, false, false);
+        THolder<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, threads, false);
         TActorSystem actorSystem(setup);
         actorSystem.Start();
 
@@ -529,7 +496,7 @@ struct TActorBenchmark {
     }
 
     static auto BenchStarContentedThreads(ui32 threads, ui32 actorsPairsCount, EPoolType poolType, ESendingType sendingType, TDuration testDuration = TDuration::Zero(), ui32 starMultiply=10) {
-        THolder<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, threads, true, false);
+        THolder<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, threads, true);
         TActorSystem actorSystem(setup);
         actorSystem.Start();
 

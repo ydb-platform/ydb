@@ -69,6 +69,30 @@ struct TUnlockHunkStoreOptions
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TIssueLeaseOptions
+    : public TTimeoutOptions
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TRevokeLeaseOptions
+    : public TTimeoutOptions
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TReferenceLeaseOptions
+    : public TTimeoutOptions
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TUnreferenceLeaseOptions
+    : public TTimeoutOptions
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TGetOrderedTabletSafeTrimRowCountOptions
     : public TTimeoutOptions
 { };
@@ -127,6 +151,28 @@ struct IInternalClient
     virtual TFuture<std::vector<TErrorOr<i64>>> GetOrderedTabletSafeTrimRowCount(
         const std::vector<TGetOrderedTabletSafeTrimRowCountRequest>& requests,
         const TGetOrderedTabletSafeTrimRowCountOptions& options = {}) = 0;
+
+    virtual TFuture<void> IssueLease(
+        NHydra::TCellId cellId,
+        NObjectClient::TObjectId leaseId,
+        const TIssueLeaseOptions& options = {}) = 0;
+    virtual TFuture<void> RevokeLease(
+        NHydra::TCellId cellId,
+        NObjectClient::TObjectId leaseId,
+        bool force,
+        const TRevokeLeaseOptions& options = {}) = 0;
+
+    virtual TFuture<void> ReferenceLease(
+        NHydra::TCellId cellId,
+        NObjectClient::TObjectId leaseId,
+        bool persistent,
+        bool force,
+        const TReferenceLeaseOptions& options = {}) = 0;
+    virtual TFuture<void> UnreferenceLease(
+        NHydra::TCellId cellId,
+        NObjectClient::TObjectId leaseId,
+        bool persistent,
+        const TUnreferenceLeaseOptions& options = {}) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IInternalClient)

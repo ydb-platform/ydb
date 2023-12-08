@@ -29,6 +29,7 @@ ENDIF()
 CHECK_DEPENDENT_DIRS(
     ALLOW_ONLY
     PEERDIRS
+    build/internal/platform
     build/platform
     certs
     contrib

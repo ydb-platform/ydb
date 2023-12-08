@@ -85,12 +85,19 @@ typedef struct {
     const unsigned char *json;
     size_t position;
 } error;
+/*
+ * NOTE: the use of this static global variable is not thread-safe,
+ *       hence writing to / reading from it is disabled in this code.
+ *
+ *       See https://cjson.docsforge.com/#thread-safety (concurrent reads)
+ *       See https://github.com/aws/aws-sdk-cpp/pull/2231 (concurrent writes)
 static error global_error = { NULL, 0 };
 
 CJSON_AS4CPP_PUBLIC(const char *) cJSON_AS4CPP_GetErrorPtr(void)
 {
     return (const char*) (global_error.json + global_error.position);
 }
+ */
 
 CJSON_AS4CPP_PUBLIC(char *) cJSON_AS4CPP_GetStringValue(const cJSON * const item)
 {
@@ -120,7 +127,7 @@ CJSON_AS4CPP_PUBLIC(double) cJSON_AS4CPP_GetNumberValue(const cJSON * const item
 CJSON_AS4CPP_PUBLIC(const char*) cJSON_AS4CPP_Version(void)
 {
     static char version[15];
-    sprintf(version, "%i.%i.%i", CJSON_AS4CPP_VERSION_MAJOR, CJSON_AS4CPP_VERSION_MINOR, CJSON_AS4CPP_VERSION_PATCH);
+    snprintf(version, sizeof(version), "%i.%i.%i", CJSON_AS4CPP_VERSION_MAJOR, CJSON_AS4CPP_VERSION_MINOR, CJSON_AS4CPP_VERSION_PATCH);
 
     return version;
 }
@@ -569,27 +576,27 @@ static cJSON_AS4CPP_bool print_number(const cJSON * const item, printbuffer * co
     /* For integer which is out of the range of [INT_MIN, INT_MAX], valuestring is an integer literal. */
     if (item->valuestring)
     {
-        length = sprintf((char*)number_buffer, "%s", item->valuestring);
+        length = snprintf((char*)number_buffer, sizeof(number_buffer), "%s", item->valuestring);
     }
     /* This checks for NaN and Infinity */
     else if (isnan(d) || isinf(d))
     {
-        length = sprintf((char*)number_buffer, "null");
+        length = snprintf((char*)number_buffer, sizeof(number_buffer), "null");
     }
     else
     {
         /* Try 15 decimal places of precision to avoid nonsignificant nonzero digits */
-        length = sprintf((char*)number_buffer, "%1.15g", d);
+        length = snprintf((char*)number_buffer, sizeof(number_buffer), "%1.15g", d);
 
         /* Check whether the original double can be recovered */
         if ((sscanf((char*)number_buffer, "%lg", &test) != 1) || !compare_double((double)test, d))
         {
             /* If not, print with 17 decimal places of precision */
-            length = sprintf((char*)number_buffer, "%1.17g", d);
+            length = snprintf((char*)number_buffer, sizeof(number_buffer), "%1.17g", d);
         }
     }
 
-    /* sprintf failed or buffer overrun occurred */
+    /* snprintf failed or buffer overrun occurred */
     if ((length < 0) || (length > (int)(sizeof(number_buffer) - 1)))
     {
         return false;
@@ -1018,7 +1025,7 @@ static cJSON_AS4CPP_bool print_string_ptr(const unsigned char * const input, pri
                     break;
                 default:
                     /* escape and print as unicode codepoint */
-                    sprintf((char*)output_pointer, "u%04x", *input_pointer);
+                    snprintf((char*)output_pointer, output_buffer->length - (output_pointer - output_buffer->buffer), "u%04x", *input_pointer);
                     output_pointer += 4;
                     break;
             }
@@ -1107,9 +1114,13 @@ CJSON_AS4CPP_PUBLIC(cJSON *) cJSON_AS4CPP_ParseWithLengthOpts(const char *value,
     parse_buffer buffer = { 0, 0, 0, 0, { 0, 0, 0 } };
     cJSON *item = NULL;
 
-    /* reset error position */
+  /* reset error position
+   *
+   * NOTE: disabled due to thread safety (see note at the top of this file).
+   *
     global_error.json = NULL;
     global_error.position = 0;
+   */
 
     if (value == NULL || 0 == buffer_length)
     {
@@ -1175,7 +1186,9 @@ fail:
             *return_parse_end = (const char*)local_error.json + local_error.position;
         }
 
+      /* NOTE: disabled due to thread safety (see note at the top of this file).
         global_error = local_error;
+       */
     }
 
     return NULL;
@@ -2470,7 +2483,7 @@ CJSON_AS4CPP_PUBLIC(cJSON *) cJSON_AS4CPP_CreateInt64(long long num)
         if (num > INT_MAX || num < INT_MIN)
         {
             char buf[21];
-            sprintf(buf, "%lld", num);
+            snprintf(buf, sizeof(buf), "%lld", num);
             item->valuestring = (char*)cJSON_AS4CPP_strdup((const unsigned char*)buf, &global_hooks);
         }
 

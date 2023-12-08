@@ -23,7 +23,7 @@ target_link_libraries(ext_index-metadata-extractor PUBLIC
   yutil
   libs-apache-arrow
   ydb-core-protos
-  core-tx-sharding
+  formats-arrow-hash
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(ext_index-metadata-extractor PRIVATE
@@ -46,7 +46,7 @@ target_link_libraries(ext_index-metadata-extractor.global PUBLIC
   yutil
   libs-apache-arrow
   ydb-core-protos
-  core-tx-sharding
+  formats-arrow-hash
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(ext_index-metadata-extractor.global PRIVATE

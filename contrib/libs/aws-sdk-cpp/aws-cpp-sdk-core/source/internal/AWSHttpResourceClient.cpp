@@ -140,12 +140,12 @@ namespace Aws
                 }
 
                 const Aws::Client::AWSError<Aws::Client::CoreErrors> error = [this, &response]() {
-                    if (response->HasClientError() || response->GetResponseBody().tellp() < 1)
+                    if (response->HasClientError() || response->GetResponseCode() == HttpResponseCode::REQUEST_NOT_MADE)
                     {
                         AWS_LOGSTREAM_ERROR(m_logtag.c_str(), "Http request to retrieve credentials failed");
                         return AWSError<CoreErrors>(CoreErrors::NETWORK_CONNECTION, true); // Retryable
                     }
-                    else if (m_errorMarshaller)
+                    else if (m_errorMarshaller && response->GetResponseBody().tellp() > 0)
                     {
                         return m_errorMarshaller->Marshall(*response);
                     }
@@ -170,14 +170,23 @@ namespace Aws
             }
         }
 
-        EC2MetadataClient::EC2MetadataClient(const char* endpoint)
-            : AWSHttpResourceClient(EC2_METADATA_CLIENT_LOG_TAG), m_endpoint(endpoint), m_tokenRequired(true)
+        EC2MetadataClient::EC2MetadataClient(const char *endpoint) :
+            AWSHttpResourceClient(EC2_METADATA_CLIENT_LOG_TAG),
+            m_endpoint(endpoint),
+            m_disableIMDS(false),
+            m_tokenRequired(true)
         {
+
         }
 
-        EC2MetadataClient::EC2MetadataClient(const Aws::Client::ClientConfiguration &clientConfiguration, const char *endpoint)
-            : AWSHttpResourceClient(clientConfiguration, EC2_METADATA_CLIENT_LOG_TAG), m_endpoint(endpoint), m_tokenRequired(true)
+        EC2MetadataClient::EC2MetadataClient(const Aws::Client::ClientConfiguration &clientConfiguration,
+            const char *endpoint) :
+            AWSHttpResourceClient(clientConfiguration, EC2_METADATA_CLIENT_LOG_TAG),
+            m_endpoint(endpoint),
+            m_disableIMDS(clientConfiguration.disableIMDS),
+            m_tokenRequired(true)
         {
+
         }
 
         EC2MetadataClient::~EC2MetadataClient()
@@ -190,15 +199,20 @@ namespace Aws
             return GetResource(m_endpoint.c_str(), resourcePath, nullptr/*authToken*/);
         }
 
+#if !defined(DISABLE_IMDSV1)
         Aws::String EC2MetadataClient::GetDefaultCredentials() const
         {
+            if (m_disableIMDS) {
+                AWS_LOGSTREAM_TRACE(m_logtag.c_str(), "Skipping call to IMDS Service");
+                return {};
+            }
             std::unique_lock<std::recursive_mutex> locker(m_tokenMutex);
             if (m_tokenRequired)
             {
                 return GetDefaultCredentialsSecurely();
             }
 
-            AWS_LOGSTREAM_TRACE(m_logtag.c_str(), "Getting default credentials for ec2 instance");
+            AWS_LOGSTREAM_TRACE(m_logtag.c_str(), "Getting default credentials for ec2 instance from " << m_endpoint);
             auto result = GetResourceWithAWSWebServiceResult(m_endpoint.c_str(), EC2_SECURITY_CREDENTIALS_RESOURCE, nullptr);
             Aws::String credentialsString = result.GetPayload();
             auto httpResponseCode = result.GetResponseCode();
@@ -232,14 +246,20 @@ namespace Aws
             AWS_LOGSTREAM_DEBUG(m_logtag.c_str(), "Calling EC2MetadataService resource " << ss.str());
             return GetResource(ss.str().c_str());
         }
+#endif
 
         Aws::String EC2MetadataClient::GetDefaultCredentialsSecurely() const
         {
+            if (m_disableIMDS) {
+                AWS_LOGSTREAM_TRACE(m_logtag.c_str(), "Skipping call to IMDS Service");
+                return {};
+            }
             std::unique_lock<std::recursive_mutex> locker(m_tokenMutex);
-            if (!m_tokenRequired)
-            {
+#if !defined(DISABLE_IMDSV1)
+            if (!m_tokenRequired) {
                 return GetDefaultCredentials();
             }
+#endif
 
             Aws::StringStream ss;
             ss << m_endpoint << EC2_IMDS_TOKEN_RESOURCE;
@@ -257,12 +277,14 @@ namespace Aws
             {
                 return {};
             }
+#if !defined(DISABLE_IMDSV1)
             else if (result.GetResponseCode() != HttpResponseCode::OK || trimmedTokenString.empty())
             {
                 m_tokenRequired = false;
                 AWS_LOGSTREAM_TRACE(m_logtag.c_str(), "Calling EC2MetadataService to get token failed, falling back to less secure way.");
                 return GetDefaultCredentials();
             }
+#endif
             m_token = trimmedTokenString;
             locker.unlock();
             ss.str("");
@@ -278,7 +300,7 @@ namespace Aws
 
             AWS_LOGSTREAM_DEBUG(m_logtag.c_str(), "Calling EC2MetadataService resource, " << EC2_SECURITY_CREDENTIALS_RESOURCE
                                                     << " with token returned profile string " << trimmedProfileString);
-            if (securityCredentials.size() == 0)
+            if (securityCredentials.empty())
             {
                 AWS_LOGSTREAM_WARN(m_logtag.c_str(), "Calling EC2Metadataservice to get profiles failed");
                 return {};
@@ -296,6 +318,10 @@ namespace Aws
 
         Aws::String EC2MetadataClient::GetCurrentRegion() const
         {
+            if (m_disableIMDS) {
+                AWS_LOGSTREAM_TRACE(m_logtag.c_str(), "Skipping call to IMDS Service");
+                return {};
+            }
             if (!m_region.empty())
             {
                 return m_region;
@@ -311,6 +337,7 @@ namespace Aws
                 std::lock_guard<std::recursive_mutex> locker(m_tokenMutex);
                 if (m_tokenRequired)
                 {
+                    GetDefaultCredentialsSecurely();
                     regionRequest->SetHeaderValue(EC2_IMDS_TOKEN_HEADER, m_token);
                 }
             }
@@ -351,6 +378,16 @@ namespace Aws
             return region;
         }
 
+        void EC2MetadataClient::SetEndpoint(const Aws::String& endpoint)
+        {
+            m_endpoint = endpoint;
+        }
+
+        Aws::String EC2MetadataClient::GetEndpoint() const
+        {
+            return Aws::String(m_endpoint);
+        }
+
         #ifdef _MSC_VER
             // VS2015 compiler's bug, warning s_ec2metadataClient: symbol will be dynamically initialized (implementation limitation)
             AWS_SUPPRESS_WARNING(4592,
@@ -366,7 +403,39 @@ namespace Aws
             {
                 return;
             }
-            s_ec2metadataClient = Aws::MakeShared<EC2MetadataClient>(EC2_METADATA_CLIENT_LOG_TAG);
+            Aws::String ec2MetadataServiceEndpoint = Aws::Environment::GetEnv("AWS_EC2_METADATA_SERVICE_ENDPOINT");
+            if (ec2MetadataServiceEndpoint.empty())
+            {
+                Aws::String ec2MetadataServiceEndpointMode = Aws::Environment::GetEnv("AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE").c_str();
+                if (ec2MetadataServiceEndpointMode.length() == 0 )
+                {
+                    ec2MetadataServiceEndpoint = "http://169.254.169.254"; //default to IPv4 default endpoint
+                }
+                else
+                {
+                    if (ec2MetadataServiceEndpointMode.length() == 4 )
+                    {
+                        if (Aws::Utils::StringUtils::CaselessCompare(ec2MetadataServiceEndpointMode.c_str(), "ipv4"))
+                        {
+                            ec2MetadataServiceEndpoint = "http://169.254.169.254"; //default to IPv4 default endpoint
+                        }
+                        else if (Aws::Utils::StringUtils::CaselessCompare(ec2MetadataServiceEndpointMode.c_str(), "ipv6"))
+                        {
+                            ec2MetadataServiceEndpoint = "http://[fd00:ec2::254]";
+                        }
+                        else
+                        {
+                            AWS_LOGSTREAM_ERROR(EC2_METADATA_CLIENT_LOG_TAG, "AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE can only be set to ipv4 or ipv6, received: " << ec2MetadataServiceEndpointMode );
+                        }
+                    }
+                    else
+                    {
+                        AWS_LOGSTREAM_ERROR(EC2_METADATA_CLIENT_LOG_TAG, "AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE can only be set to ipv4 or ipv6, received: " << ec2MetadataServiceEndpointMode );
+                    }
+                }
+            }
+            AWS_LOGSTREAM_INFO(EC2_METADATA_CLIENT_LOG_TAG, "Using IMDS endpoint: " << ec2MetadataServiceEndpoint);
+            s_ec2metadataClient = Aws::MakeShared<EC2MetadataClient>(EC2_METADATA_CLIENT_LOG_TAG, ec2MetadataServiceEndpoint.c_str());
         }
 
         void CleanupEC2MetadataClient()
@@ -382,7 +451,6 @@ namespace Aws
         {
             return s_ec2metadataClient;
         }
-
 
         ECSCredentialsClient::ECSCredentialsClient(const char* resourcePath, const char* endpoint, const char* token)
             : AWSHttpResourceClient(ECS_CREDENTIALS_CLIENT_LOG_TAG),
@@ -510,6 +578,17 @@ namespace Aws
         {
             SetErrorMarshaller(Aws::MakeUnique<Aws::Client::JsonErrorMarshaller>(SSO_RESOURCE_CLIENT_LOG_TAG));
 
+            m_endpoint = buildEndpoint(clientConfiguration, "portal.sso.", "federation/credentials");
+            m_oidcEndpoint = buildEndpoint(clientConfiguration, "oidc.", "token");
+
+            AWS_LOGSTREAM_INFO(SSO_RESOURCE_CLIENT_LOG_TAG, "Creating SSO ResourceClient with endpoint: " << m_endpoint);
+        }
+
+        Aws::String SSOCredentialsClient::buildEndpoint(
+            const Aws::Client::ClientConfiguration& clientConfiguration,
+            const Aws::String& domain,
+            const Aws::String& endpoint)
+        {
             Aws::StringStream ss;
             if (clientConfiguration.scheme == Aws::Http::Scheme::HTTP)
             {
@@ -525,15 +604,12 @@ namespace Aws
             auto hash = Aws::Utils::HashingUtils::HashString(clientConfiguration.region.c_str());
 
             AWS_LOGSTREAM_DEBUG(SSO_RESOURCE_CLIENT_LOG_TAG, "Preparing SSO client for region: " << clientConfiguration.region);
-
-            ss << "portal.sso." << clientConfiguration.region << ".amazonaws.com/federation/credentials";
+            ss << domain << clientConfiguration.region << ".amazonaws.com/" << endpoint;
             if (hash == CN_NORTH_1_HASH || hash == CN_NORTHWEST_1_HASH)
             {
                 ss << ".cn";
             }
-            m_endpoint =  ss.str();
-
-            AWS_LOGSTREAM_INFO(SSO_RESOURCE_CLIENT_LOG_TAG, "Creating SSO ResourceClient with endpoint: " << m_endpoint);
+            return ss.str();
         }
 
         SSOCredentialsClient::SSOGetRoleCredentialsResult SSOCredentialsClient::GetSSOCredentials(const SSOGetRoleCredentialsRequest &request)
@@ -569,6 +645,71 @@ namespace Aws
             creds.SetExpiration(roleCredentials.GetInt64("expiration"));
             SSOCredentialsClient::SSOGetRoleCredentialsResult result;
             result.creds = creds;
+            return result;
+        }
+
+        // An internal SSO CreateToken implementation to lightweight core package and not introduce a dependency on sso-oidc
+        SSOCredentialsClient::SSOCreateTokenResult SSOCredentialsClient::CreateToken(const SSOCreateTokenRequest& request)
+        {
+            std::shared_ptr<HttpRequest> httpRequest(CreateHttpRequest(m_oidcEndpoint, HttpMethod::HTTP_POST,
+                                                                       Aws::Utils::Stream::DefaultResponseStreamFactoryMethod));
+            SSOCreateTokenResult result;
+            if(!httpRequest) {
+                AWS_LOGSTREAM_FATAL(SSO_RESOURCE_CLIENT_LOG_TAG, "Failed to CreateHttpRequest: nullptr returned");
+                return result;
+            }
+            httpRequest->SetUserAgent(ComputeUserAgentString());
+
+            Json::JsonValue requestDoc;
+            if(!request.clientId.empty()) {
+                requestDoc.WithString("clientId", request.clientId);
+            }
+            if(!request.clientSecret.empty()) {
+                requestDoc.WithString("clientSecret", request.clientSecret);
+            }
+            if(!request.grantType.empty()) {
+                requestDoc.WithString("grantType", request.grantType);
+            }
+            if(!request.refreshToken.empty()) {
+                requestDoc.WithString("refreshToken", request.refreshToken);
+            }
+
+            std::shared_ptr<Aws::IOStream> body = Aws::MakeShared<Aws::StringStream>("SSO_BEARER_TOKEN_CREATE_TOKEN");
+            if(!body) {
+                AWS_LOGSTREAM_FATAL(SSO_RESOURCE_CLIENT_LOG_TAG, "Failed to allocate body");  // exceptions disabled
+                return result;
+            }
+            *body << requestDoc.View().WriteReadable();;
+
+            httpRequest->AddContentBody(body);
+            body->seekg(0, body->end);
+            auto streamSize = body->tellg();
+            body->seekg(0, body->beg);
+            Aws::StringStream contentLength;
+            contentLength << streamSize;
+            httpRequest->SetContentLength(contentLength.str());
+            httpRequest->SetContentType("application/json");
+
+            Aws::String rawReply = GetResourceWithAWSWebServiceResult(httpRequest).GetPayload();
+            Json::JsonValue refreshTokenDoc(rawReply);
+            Utils::Json::JsonView jsonValue = refreshTokenDoc.View();
+
+            if(jsonValue.ValueExists("accessToken")) {
+                result.accessToken = jsonValue.GetString("accessToken");
+            }
+            if(jsonValue.ValueExists("tokenType")) {
+                result.tokenType = jsonValue.GetString("tokenType");
+            }
+            if(jsonValue.ValueExists("expiresIn")) {
+                result.expiresIn = jsonValue.GetInteger("expiresIn");
+            }
+            if(jsonValue.ValueExists("idToken")) {
+                result.idToken = jsonValue.GetString("idToken");
+            }
+            if(jsonValue.ValueExists("refreshToken")) {
+                result.refreshToken = jsonValue.GetString("refreshToken");
+            }
+
             return result;
         }
     }

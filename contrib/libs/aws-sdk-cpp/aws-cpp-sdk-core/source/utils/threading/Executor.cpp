@@ -14,10 +14,15 @@ using namespace Aws::Utils::Threading;
 
 bool DefaultExecutor::SubmitToThread(std::function<void()>&&  fx)
 {
-    auto main = [fx, this] { 
-        fx(); 
-        Detach(std::this_thread::get_id()); 
-    };
+    // Generalized lambda capture is C++14, using std::bind as a workaround to force moving fx (instead of copying)
+    std::function<void()> main = std::bind(
+            [this](std::function<void()>& storedFx)
+            {
+                storedFx();
+                Detach(std::this_thread::get_id());
+            },
+            std::move(fx)
+        );
 
     State expected;
     do
@@ -25,7 +30,7 @@ bool DefaultExecutor::SubmitToThread(std::function<void()>&&  fx)
         expected = State::Free;
         if(m_state.compare_exchange_strong(expected, State::Locked))
         {
-            std::thread t(main);
+            std::thread t(std::move(main));
             const auto id = t.get_id(); // copy the id before we std::move the thread
             m_threads.emplace(id, std::move(t));
             m_state = State::Free;

@@ -27,6 +27,9 @@ public:
     template <class F>
     bool DequeueAll(bool reverse, F&& functor);
 
+    template <class F>
+    void FilterElements(F&& functor);
+
     bool IsEmpty() const;
 
 private:
@@ -34,7 +37,10 @@ private:
 
     std::atomic<TNode*> Head_ = nullptr;
 
-    void DoEnqueue(TNode* node);
+    void DoEnqueue(TNode* head, TNode* tail);
+
+    template <class F>
+    bool DoDequeueAll(bool reverse, F&& functor);
 };
 
 /////////////////////////////////////////////////////////////////////////////

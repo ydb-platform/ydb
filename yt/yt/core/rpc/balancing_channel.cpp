@@ -204,7 +204,10 @@ public:
 
     TFuture<IChannelPtr> GetChannel(const IClientRequestPtr& request) override
     {
-        if (Config_->Addresses && Config_->Addresses->size() == 1) {
+        if (Config_->DisableBalancingOnSingleAddress &&
+            Config_->Addresses &&
+            Config_->Addresses->size() == 1)
+        {
             // Disable discovery and balancing when just one address is given.
             // This is vital for jobs since node's redirector is incapable of handling
             // Discover requests properly.

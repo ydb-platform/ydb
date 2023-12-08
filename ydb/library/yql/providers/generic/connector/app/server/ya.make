@@ -19,7 +19,6 @@ END()
 RECURSE(
     datasource
     paging
-    rdbms
     streaming
     utils
 )

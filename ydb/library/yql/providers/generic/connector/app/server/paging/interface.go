@@ -1,12 +1,13 @@
 package paging
 
 import (
+	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
 type ColumnarBuffer interface {
 	// addRow saves a row obtained from the datasource into the buffer
-	addRow(acceptors []any) error
+	addRow(transformer utils.Transformer) error
 	// ToResponse returns all the accumulated data and clears buffer
 	ToResponse() (*api_service_protos.TReadSplitsResponse, error)
 	// Release frees resources if buffer is no longer used
@@ -31,7 +32,7 @@ type ReadResult struct {
 // Sink is a destination for a data stream that is read out of an external data source.
 type Sink interface {
 	// AddRow saves the row obtained from a stream incoming from an external data source.
-	AddRow(acceptors []any) error
+	AddRow(transformer utils.Transformer) error
 	// AddError propagates an error occured during the reading from the external data source.
 	AddError(err error)
 	// Finish reports the successful completion of reading the data stream.

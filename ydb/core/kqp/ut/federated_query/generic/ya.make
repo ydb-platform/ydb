@@ -3,7 +3,11 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 
 SRCS(
+    ch_recipe_ut_helpers.cpp
+    connector_recipe_ut_helpers.cpp
+    kqp_generic_plan_ut.cpp
     kqp_generic_provider_join_ut.cpp
+    pg_recipe_ut_helpers.cpp
 )
 
 PEERDIR(

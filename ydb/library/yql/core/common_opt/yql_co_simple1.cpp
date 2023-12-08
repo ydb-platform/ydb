@@ -3649,6 +3649,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             return ctx.SwapWithHead(*node);
         }
 
+        if (node->Head().IsCallable("PgTableContent")) {
+            YQL_CLOG(DEBUG, Core) << "Pushdown ExtractMembers to " << node->Head().Content();
+            return ctx.ChangeChild(node->Head(), 2, node->TailPtr());
+        }
+
         return node;
     };
 

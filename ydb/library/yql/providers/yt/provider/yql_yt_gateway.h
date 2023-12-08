@@ -562,9 +562,9 @@ public:
 
     virtual void OpenSession(TOpenSessionOptions&& options) = 0;
 
-    virtual void CloseSession(TCloseSessionOptions&& options) = 0;
+    virtual NThreading::TFuture<void> CloseSession(TCloseSessionOptions&& options) = 0;
 
-    virtual void CleanupSession(TCleanupSessionOptions&& options) = 0;
+    virtual NThreading::TFuture<void> CleanupSession(TCleanupSessionOptions&& options) = 0;
 
     virtual NThreading::TFuture<TFinalizeResult> Finalize(TFinalizeOptions&& options) = 0;
 

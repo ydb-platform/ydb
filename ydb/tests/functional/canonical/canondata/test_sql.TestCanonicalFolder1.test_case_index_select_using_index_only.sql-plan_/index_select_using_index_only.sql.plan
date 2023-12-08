@@ -19,7 +19,7 @@
                         "Key1 (-\u221e, +\u221e)",
                         "Key2 (-\u221e, +\u221e)"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

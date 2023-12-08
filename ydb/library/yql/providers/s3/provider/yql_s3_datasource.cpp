@@ -1,14 +1,15 @@
 #include "yql_s3_provider_impl.h"
 #include "yql_s3_dq_integration.h"
 
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
-#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
+#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
+#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/proto/credentials.pb.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -43,7 +44,10 @@ public:
         }
 
         if (authMethod == "AWS") {
-            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForBasicAuthWithSecret(properties.Value("awsAccessKeyId", ""), properties.Value("awsSecretAccessKeyReference", ""), properties.Value("awsSecretAccessKey", ""));
+            NS3::TAwsParams params;
+            params.SetAwsAccessKey(properties.Value("awsAccessKeyId", ""));
+            params.SetAwsRegion(properties.Value("awsRegion", ""));
+            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForBasicAuthWithSecret(params.SerializeAsString(), properties.Value("awsSecretAccessKeyReference", ""), properties.Value("awsSecretAccessKey", ""));
             return;
         }
 

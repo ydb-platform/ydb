@@ -412,6 +412,20 @@ FROM Input MATCH_RECOGNIZE(
         UNIT_ASSERT(IsQuotedListOfSize(nestedPattern->GetChild(1), 2));
     }
 
+    Y_UNIT_TEST(PatternManyAlternatives) {
+        const auto stmt = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+PATTERN (
+ 		(A B C D ) | (B A C D ) | (C B A D ) | (B C A D ) | (C A B D ) | (A C B D ) | (D A B C ) | (A D B C ) | (B A D C ) | (A B D C ) | (B D A C ) | (D B A C ) | (C D A B ) | (D C A B ) | (A D C B ) | (D A C B ) | (A C D B ) | (C A D B ) | (B C D A ) | (C B D A ) | (D C B A ) | (C D B A ) | (D B C A ) | (B D C A )
+	)
+    DEFINE A as A
+)
+)";
+        UNIT_ASSERT(MatchRecognizeSqlToYql(stmt).IsOk());
+    }
+
     Y_UNIT_TEST(PatternLimitedNesting) {
         const size_t MaxNesting = 20;
         for (size_t extraNesting = 0; extraNesting <= 1; ++extraNesting) {

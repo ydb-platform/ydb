@@ -100,12 +100,6 @@ func sizeOfValue(v any) (uint64, acceptorKind, error) {
 		// https://cs.opensource.google/go/go/+/refs/tags/go1.21.4:src/time/time.go;l=141-142
 		// Location is ignored.
 		return 16, fixedSize, nil
-	case utils.Date:
-		return 16, fixedSize, nil
-	case utils.Datetime:
-		return 16, fixedSize, nil
-	case utils.Timestamp:
-		return 16, fixedSize, nil
 	case []byte:
 		return uint64(len(t)), variableSize, nil
 	case string:

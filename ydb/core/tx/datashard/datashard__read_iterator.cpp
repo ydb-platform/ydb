@@ -259,7 +259,7 @@ ui64 ResetRowSkips(NTable::TIteratorStats& stats)
 }
 
 // nota that reader captures state reference and must be used only
-// after checking that state is still alife, i.e. read can be aborted
+// after checking that state is still alive, i.e. read can be aborted
 // between Execute() and Complete()
 class TReader {
     const TReadIteratorState& State;

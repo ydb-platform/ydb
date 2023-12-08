@@ -1844,6 +1844,28 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Read Views
+        {
+            auto rowset = db.Table<Schema::View>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TLocalPathId localPathId = rowset.GetValue<Schema::View::PathId>();
+                TPathId pathId(selfId, localPathId);
+
+                auto& view = Self->Views[pathId] = new TViewInfo();
+                view->AlterVersion = rowset.GetValue<Schema::View::AlterVersion>();
+                view->QueryText = rowset.GetValue<Schema::View::QueryText>();
+                Self->IncrementPathDbRefCount(pathId);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         // Read table columns
         {
             TColumnRows columnRows;

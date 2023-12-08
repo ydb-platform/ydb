@@ -10,6 +10,7 @@
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
+#include <ydb/library/yql/providers/yt/lib/schema/schema.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
@@ -431,6 +432,15 @@ public:
         else {
             writer.OnStringScalar("(tmp)");
         }
+    }
+
+    bool WriteSchemaHeader(NYson::TYsonWriter& writer) override {
+        writer.OnKeyedItem("YtSchema");
+        return true;
+    }
+
+    void WriteTypeDetails(NYson::TYsonWriter& writer, const TTypeAnnotationNode& type) override {
+        writer.OnStringScalar(GetTypeV3String(type));
     }
 
     ITrackableNodeProcessor& GetTrackableNodeProcessor() override {

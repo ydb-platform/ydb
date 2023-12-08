@@ -1,0 +1,8 @@
+pragma UseBlocks;
+
+SELECT ch.id as id, ch.col1 as ch_col1, ch.col2 as ch_col2, pg.col1 as pg_col1, pg.col2 as pg_col2
+	FROM rtmr_dev00_clickhouse.example_1 as ch
+	JOIN rtmr_dev00_postgresql.example_2 as pg
+ON ch.id = pg.id
+ORDER BY id;
+

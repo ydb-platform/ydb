@@ -116,12 +116,12 @@ TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs)
 {
 }
 
-TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartbeat& heartbeat)
+TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartbeat&& heartbeat)
     : SeqNo(seqNo)
     , Offset(offset)
     , WriteTimestamp(createTs)
     , CreateTimestamp(createTs)
-    , LastHeartbeat(heartbeat)
+    , LastHeartbeat(std::move(heartbeat))
 {
 }
 

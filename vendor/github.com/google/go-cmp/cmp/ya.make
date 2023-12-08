@@ -4,7 +4,7 @@ LICENSE(BSD-3-Clause)
 
 SRCS(
     compare.go
-    export_unsafe.go
+    export.go
     options.go
     path.go
     report.go

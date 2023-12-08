@@ -248,6 +248,7 @@ NYql::NMatchRecognize::TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTer
             case TRule_row_pattern_primary::kAltRowPatternPrimary4: {
                 if (++PatternNestingLevel <= NYql::NMatchRecognize::MaxPatternNesting) {
                     primary = ParsePattern(primaryVar.GetAlt_row_pattern_primary4().GetBlock2().GetRule_row_pattern1());
+                    --PatternNestingLevel;
                 } else {
                     Ctx.Error(TokenPosition(primaryVar.GetAlt_row_pattern_primary4().GetToken1()))
                             << "To big nesting level in the pattern";

@@ -427,9 +427,12 @@ public:
     TString DumpFullState() const;
 
     bool MarkBlobAsSent(ui64 blobIdx);
-    bool MarkBlobAsSent(TMap<TLogoBlobID, TBlobState>::iterator it);
 
     TString ToString() const;
+
+    void InvalidatePartStates(ui32 orderNumber) {
+        Blackboard.InvalidatePartStates(orderNumber);
+    }
 
 protected:
     bool RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults);

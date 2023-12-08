@@ -25,12 +25,12 @@ namespace S3
 {
 namespace Model
 {
-  class AWS_S3_API DeleteObjectResult
+  class DeleteObjectResult
   {
   public:
-    DeleteObjectResult();
-    DeleteObjectResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
-    DeleteObjectResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API DeleteObjectResult();
+    AWS_S3_API DeleteObjectResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API DeleteObjectResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
 
 
     /**

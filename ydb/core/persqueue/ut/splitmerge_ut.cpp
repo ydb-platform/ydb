@@ -255,7 +255,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
                 UNIT_ASSERT_EQUAL(2, info.PartitionId);
                 UNIT_ASSERT_EQUAL(5, info.SeqNo);
             } else if (info.Data == "message_2.2") {
-                UNIT_ASSERT_EQUAL(1, info.PartitionId);
+                UNIT_ASSERT_EQUAL(2, info.PartitionId);
                 UNIT_ASSERT_EQUAL(7, info.SeqNo);
             } else if (info.Data == "message_3.1") {
                 UNIT_ASSERT_EQUAL(0, info.PartitionId);

@@ -141,4 +141,85 @@ void TGetConnectionConfigCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TIssueLeaseCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("cell_id", &TThis::CellId);
+    registrar.Parameter("lease_id", &TThis::LeaseId);
+}
+
+void TIssueLeaseCommand::DoExecute(ICommandContextPtr context)
+{
+    auto internalClient = context->GetInternalClientOrThrow();
+
+    WaitFor(internalClient->IssueLease(CellId, LeaseId))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TRevokeLeaseCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("cell_id", &TThis::CellId);
+    registrar.Parameter("lease_id", &TThis::LeaseId);
+    registrar.Parameter("force", &TThis::Force)
+        .Default(false);
+}
+
+void TRevokeLeaseCommand::DoExecute(ICommandContextPtr context)
+{
+    auto internalClient = context->GetInternalClientOrThrow();
+
+    WaitFor(internalClient->RevokeLease(CellId, LeaseId, Force))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TReferenceLeaseCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("cell_id", &TThis::CellId);
+    registrar.Parameter("lease_id", &TThis::LeaseId);
+    registrar.Parameter("persistent", &TThis::Persistent);
+    registrar.Parameter("force", &TThis::Force);
+}
+
+void TReferenceLeaseCommand::DoExecute(ICommandContextPtr context)
+{
+    auto internalClient = context->GetInternalClientOrThrow();
+
+    WaitFor(internalClient->ReferenceLease(
+        CellId,
+        LeaseId,
+        Persistent,
+        Force))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TUnreferenceLeaseCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("cell_id", &TThis::CellId);
+    registrar.Parameter("lease_id", &TThis::LeaseId);
+    registrar.Parameter("persistent", &TThis::Persistent);
+}
+
+void TUnreferenceLeaseCommand::DoExecute(ICommandContextPtr context)
+{
+    auto internalClient = context->GetInternalClientOrThrow();
+
+    WaitFor(internalClient->UnreferenceLease(CellId, LeaseId, Persistent))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

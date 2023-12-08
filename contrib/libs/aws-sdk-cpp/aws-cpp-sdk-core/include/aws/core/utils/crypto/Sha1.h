@@ -54,6 +54,15 @@ namespace Aws
                 */
                 virtual HashResult Calculate(Aws::IStream& stream) override;
 
+                /**
+                 * Updates a Hash digest
+                 */
+                virtual void Update(unsigned char* buffer, size_t bufferSize) override;
+
+                /**
+                 * Get the result in the current value
+                 */
+                virtual HashResult GetHash() override;
             private:
 
                 std::shared_ptr< Hash > m_hashImpl;

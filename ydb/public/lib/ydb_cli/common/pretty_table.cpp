@@ -61,28 +61,31 @@ bool TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>& w
             o << " │ ";
         }
 
-        if (const size_t width = widths.at(columnIndex)) {
+        if (size_t width = widths.at(columnIndex)) {
             const auto& column = Columns.at(columnIndex);
 
             TStringBuf data;
+            size_t extraBytes;
             size_t l = 0;
             for (const auto& line : column) {
                 data = line;
+                extraBytes = ExtraBytes(data);
                 while (data && l < lineNumber) {
-                    data.Skip(width);
+                    data.Skip(width + extraBytes);
                     ++l;
                 }
             }
-
-            size_t extraBytes = ExtraBytes(data);
+            extraBytes = ExtraBytes(data);
+            width += extraBytes;
+            
 
             if (data) {
-                o << RightPad(data.SubStr(0, width + extraBytes), width + extraBytes);
+                o << RightPad(data.SubStr(0, width), width);
             } else {
-                o << RightPad(' ', width + extraBytes);
+                o << RightPad(' ', width);
             }
 
-            if (data.size() > width + extraBytes) {
+            if (data.size() > width) {
                 next = true;
             }
         }

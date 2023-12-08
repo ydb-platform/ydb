@@ -58,14 +58,18 @@ namespace NKikimr::NBlobDepot {
             SendToBSProxy(Self->SelfId(), record.GroupId, ev.release(), id);
         }
 
-        if (record.Trash.empty()) {
+        Y_ABORT_UNLESS(generation >= 1);
+        const TGenStep barrierGenStep(generation - 1, Max<ui32>());
+
+        if (record.Trash.empty() && record.IssuedGenStep == barrierGenStep) {
             return; // no trash to collect with soft barrier
         }
 
         Y_ABORT_UNLESS(record.Channel < Self->Channels.size());
         auto& channel = Self->Channels[record.Channel];
 
-        TGenStep nextGenStep = Max(record.IssuedGenStep, TGenStep(*--record.Trash.end()));
+        const TGenStep trashGenStep = record.Trash.empty() ? TGenStep() : TGenStep(*--record.Trash.end());
+        TGenStep nextGenStep = Max(record.IssuedGenStep, trashGenStep, barrierGenStep);
         std::set<TLogoBlobID>::iterator trashEndIter = record.Trash.end();
 
         // step we are going to invalidate (including blobs with this one)
@@ -111,6 +115,7 @@ namespace NKikimr::NBlobDepot {
                 leastExpectedBlobId.Step, record.Channel, 0, 0);
             trashEndIter = record.Trash.lower_bound(maxId);
             nextGenStep = Max(record.IssuedGenStep,
+                barrierGenStep,
                 trashEndIter != record.Trash.begin()
                     ? TGenStep(*std::prev(trashEndIter))
                     : TGenStep());
@@ -146,7 +151,7 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT_UNLESS(nextGenStep >= record.IssuedGenStep);
 
         if (trashInFlight.empty()) {
-            Y_ABORT_UNLESS(keep.empty()); // nothing to do here
+            Y_ABORT_UNLESS(keep.empty() || record.IssuedGenStep != nextGenStep); // nothing to do here
         } else {
             auto keep_ = keep ? std::make_unique<TVector<TLogoBlobID>>(std::move(keep)) : nullptr;
             auto doNotKeep_ = doNotKeep ? std::make_unique<TVector<TLogoBlobID>>(std::move(doNotKeep)) : nullptr;
@@ -231,6 +236,7 @@ namespace NKikimr::NBlobDepot {
             if (info.Hard) {
                 ExecuteHardGC(record.Channel, record.GroupId, info.GenStep);
             } else {
+                record.InitialCollectionComplete = true;
                 record.OnSuccessfulCollect(this);
                 ExecuteConfirmGC(record.Channel, record.GroupId, std::exchange(record.TrashInFlight, {}), 0,
                     record.LastConfirmedGenStep);

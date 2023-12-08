@@ -26,6 +26,10 @@ TJournalWriterPerformanceCounters::TJournalWriterPerformanceCounters(const NProf
 
     WriteQuorumLag = profiler.Timer("/write_quorum_lag");
     MaxReplicaLag = profiler.Timer("/max_replica_lag");
+
+    MediumWrittenBytes = profiler.Counter("/medium_written_bytes");
+    JournalWrittenBytes = profiler.Counter("/journal_written_bytes");
+    IORequestCount = profiler.Counter("/io_request_count");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

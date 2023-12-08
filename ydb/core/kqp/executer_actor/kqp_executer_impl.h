@@ -23,6 +23,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/grpc_services/local_rate_limiter.h>
 
 #include <ydb/services/metadata/secret/fetcher.h>
@@ -117,7 +118,7 @@ public:
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
         TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        ui64 spanVerbosity = 0, TString spanName = "no_name")
+        ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase")
         : Request(std::move(request))
         , Database(database)
         , UserToken(userToken)
@@ -151,7 +152,6 @@ public:
 
         LOG_T("Bootstrap done, become ReadyState");
         this->Become(&TKqpExecuterBase::ReadyState);
-        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterReadyState, ExecuterSpan.GetTraceId(), "ReadyState", NWilson::EFlags::AUTO_END);
     }
 
     TActorId SelfId() {
@@ -181,13 +181,12 @@ protected:
         KqpTableResolverId = {};
 
         if (reply.Status != Ydb::StatusIds::SUCCESS) {
+            ExecuterStateSpan.EndError(TStringBuilder() << Ydb::StatusIds_StatusCode_Name(reply.Status));
             ReplyErrorAndDie(reply.Status, reply.Issues);
             return false;
         }
 
-        if (ExecuterTableResolveSpan) {
-            ExecuterTableResolveSpan.End();
-        }
+        ExecuterStateSpan.EndOk();
 
         return true;
     }
@@ -201,11 +200,14 @@ protected:
         // TODO: count resolve time in CpuTime
 
         if (reply.Status != Ydb::StatusIds::SUCCESS) {
+            ExecuterStateSpan.EndError(Ydb::StatusIds_StatusCode_Name(reply.Status));
+
             LOG_W("Shards nodes resolve failed, status: " << Ydb::StatusIds_StatusCode_Name(reply.Status)
                 << ", issues: " << reply.Issues.ToString());
             ReplyErrorAndDie(reply.Status, reply.Issues);
             return false;
         }
+        ExecuterStateSpan.EndOk();
 
         LOG_D("Shards nodes resolved, success: " << reply.ShardNodes.size() << ", failed: " << reply.Unresolved);
 
@@ -241,6 +243,23 @@ protected:
             << ", task: " << taskId
             << ", state: " << NYql::NDqProto::EComputeState_Name((NYql::NDqProto::EComputeState) state.GetState())
             << ", stats: " << state.GetStats());
+
+        if (Stats && state.HasStats() && Request.ProgressStatsPeriod) {
+            Stats->UpdateTaskStats(taskId, state.GetStats());
+            auto now = TInstant::Now();
+            if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
+                auto progress = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
+                auto& execStats = *progress->Record.MutableQueryStats()->AddExecutions();
+                Stats->ExportExecStats(execStats);
+                for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
+                    const auto& tx = Request.Transactions[txId].Body;
+                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
+                    execStats.AddTxPlansWithStats(planWithStats);
+                }
+                this->Send(Target, progress.Release());
+                LastProgressStats = now;
+            }
+        }
 
         switch (state.GetState()) {
             case NYql::NDqProto::COMPUTE_STATE_UNKNOWN: {
@@ -354,18 +373,14 @@ protected:
             }
         }
 
+        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterTableResolve, ExecuterSpan.GetTraceId(), "WaitForTableResolve", NWilson::EFlags::AUTO_END);
+
         auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, Request.Transactions,
             TasksGraph);
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);
 
         LOG_T("Got request, become WaitResolveState");
         this->Become(&TDerived::WaitResolveState);
-        if (ExecuterStateSpan) {
-            ExecuterStateSpan.End();
-            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterWaitResolveState, ExecuterSpan.GetTraceId(), "WaitResolveState", NWilson::EFlags::AUTO_END);
-        }
-
-        ExecuterTableResolveSpan = NWilson::TSpan(TWilsonKqp::ExecuterTableResolve, ExecuterStateSpan.GetTraceId(), "ExecuterTableResolve", NWilson::EFlags::AUTO_END);
 
         auto now = TAppData::TimeProvider->Now();
         StartResolveTime = now;
@@ -973,7 +988,7 @@ protected:
             if (shardId && Stats) {
                 Stats->AffectedShards.insert(*shardId);
             }
-            
+
             if (limitTasksPerNode) {
                 YQL_ENSURE(shardsResolved);
                 const auto maxScanTasksPerNode = GetScanTasksPerNode(stageInfo, /* isOlapScan */ false, *nodeId);
@@ -1530,9 +1545,8 @@ protected:
 
         LWTRACK(KqpBaseExecuterReplyErrorAndDie, ResponseEv->Orbit, TxId);
 
-        if (ExecuterSpan) {
-            ExecuterSpan.EndError(response.DebugString());
-        }
+        ExecuterSpan.EndError(response.DebugString());
+        ExecuterStateSpan.EndError(response.DebugString());
 
         Request.Transactions.crop(0);
         this->Send(Target, ResponseEv.release());
@@ -1622,10 +1636,6 @@ protected:
             this->Send(this->SelfId(), new TEvents::TEvPoison);
             LOG_T("Terminate, become ZombieState");
             this->Become(&TKqpExecuterBase::ZombieState);
-            if (ExecuterStateSpan) {
-                ExecuterStateSpan.End();
-                ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterZombieState, ExecuterSpan.GetTraceId(), "ZombieState", NWilson::EFlags::AUTO_END);
-            }
         } else {
             IActor::PassAway();
         }
@@ -1678,6 +1688,7 @@ protected:
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpRequestCounters::TPtr Counters;
     std::shared_ptr<TQueryExecutionStats> Stats;
+    TInstant LastProgressStats;
     TInstant StartTime;
     TMaybe<TInstant> Deadline;
     TMaybe<TInstant> CancelAt;
@@ -1699,7 +1710,6 @@ protected:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
     NWilson::TSpan ExecuterSpan;
     NWilson::TSpan ExecuterStateSpan;
-    NWilson::TSpan ExecuterTableResolveSpan;
 
     TMap<ui64, ui64> ShardIdToNodeId;
     TMap<ui64, TVector<ui64>> ShardsOnNode;

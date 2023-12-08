@@ -62,6 +62,13 @@ void TStartQueryCommand::Register(TRegistrar registrar)
             return command->Options.Annotations;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "access_control_object",
+        [] (TThis* command) -> auto& {
+            return command->Options.AccessControlObject;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TStartQueryCommand::DoExecute(ICommandContextPtr context)
@@ -314,6 +321,13 @@ void TAlterQueryCommand::Register(TRegistrar registrar)
         "annotations",
         [] (TThis* command) -> auto& {
             return command->Options.Annotations;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "access_control_object",
+        [] (TThis* command) -> auto& {
+            return command->Options.AccessControlObject;
         })
         .Optional(/*init*/ false);
 }

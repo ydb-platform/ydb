@@ -63,6 +63,7 @@ public:
         , UserToken(userToken)
         , DbCounters(dbCounters)
         , Config(MakeIntrusive<TKikimrConfiguration>())
+        , QueryServiceConfig(queryServiceConfig)
         , MetadataProviderConfig(metadataProviderConfig)
         , CompilationTimeout(TDuration::MilliSeconds(tableServiceConfig.GetCompileTimeoutMs()))
         , UserRequestContext(userRequestContext)
@@ -80,8 +81,8 @@ public:
 
         ApplyServiceConfig(*Config, tableServiceConfig);
 
-        if (QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT) {
-            ui32 scriptResultRowsLimit = queryServiceConfig.GetScriptResultRowsLimit();
+        if (QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT || QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
+            ui32 scriptResultRowsLimit = QueryServiceConfig.GetScriptResultRowsLimit();
             if (scriptResultRowsLimit > 0) {
                 Config->_ResultRowsLimit = scriptResultRowsLimit;
             } else {
@@ -177,7 +178,7 @@ private:
             std::make_shared<TKqpTableMetadataLoader>(
                 TlsActivationContext->ActorSystem(), Config, true, TempTablesState, 2 * TDuration::Seconds(MetadataProviderConfig.GetRefreshPeriodSeconds()));
         Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Settings.QueryType, QueryId.Database, std::move(loader),
-            ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), counters);
+            ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), counters, QueryServiceConfig);
         Gateway->SetToken(QueryId.Cluster, UserToken);
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
@@ -455,6 +456,7 @@ private:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpDbCountersPtr DbCounters;
     TKikimrConfiguration::TPtr Config;
+    TQueryServiceConfig QueryServiceConfig;
     TMetadataProviderConfig MetadataProviderConfig;
     TDuration CompilationTimeout;
     TInstant StartTime;

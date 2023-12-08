@@ -20,7 +20,7 @@ target_link_libraries(ydb-library-yaml_config PUBLIC
   contrib-libs-yaml-cpp
   library-actors-core
   cpp-protobuf-json
-  cpp-yaml-fyamlcpp
+  ydb-library-fyamlcpp
   ydb-core-base
   cms-console-util
   ydb-core-erasure

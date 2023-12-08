@@ -581,7 +581,8 @@ public:
         Replication,
         BlobDepot,
         ExternalTable,
-        ExternalDataSource
+        ExternalDataSource,
+        View
     };
 
     TSchemaObject(TSchemaObject&&) = default;

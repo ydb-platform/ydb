@@ -6,6 +6,14 @@
 namespace NKikimr::NOlap::NPlainReader {
 
 void TScanHead::OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch>& newBatch, const std::shared_ptr<arrow::RecordBatch>& lastPK, const ui32 intervalIdx, TPlainReadData& reader) {
+    if (Context->GetReadMetadata()->Limit && (!newBatch || newBatch->GetRecordsCount() == 0) && InFlightLimit < 1000) {
+        if (++ZeroCount == std::max<ui64>(16, InFlightLimit)) {
+            InFlightLimit *= 2;
+            ZeroCount = 0;
+        }
+    } else {
+        ZeroCount = 0;
+    }
     auto itInterval = FetchingIntervals.find(intervalIdx);
     AFL_VERIFY(itInterval != FetchingIntervals.end());
     if (!Context->GetCommonContext()->GetReadMetadata()->IsSorted()) {
@@ -47,6 +55,7 @@ void TScanHead::OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch
 TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context)
 {
+    InFlightLimit = Context->GetReadMetadata()->Limit ? 1 : Max<ui32>();
     while (sources.size()) {
         auto source = sources.front();
         BorderPoints[source->GetStart()].AddStart(source);
@@ -69,7 +78,7 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
 }
 
 bool TScanHead::BuildNextInterval() {
-    while (BorderPoints.size()) {
+    while (BorderPoints.size() && (FetchingIntervals.size() < InFlightLimit || BorderPoints.begin()->second.GetStartSources().empty())) {
         auto firstBorderPointInfo = std::move(BorderPoints.begin()->second);
         bool includeStart = firstBorderPointInfo.GetStartSources().size();
         for (auto&& i : firstBorderPointInfo.GetStartSources()) {
@@ -131,7 +140,7 @@ void TScanHead::Abort() {
         i.second->Abort();
     }
     FetchingIntervals.clear();
-    AFL_VERIFY(BorderPoints.empty());
+    BorderPoints.clear();
     Y_ABORT_UNLESS(IsFinished());
 }
 

@@ -2512,17 +2512,6 @@ BELONGS ya.make
     Files with this license:
         asm/epapr_hcalls_powerpc.h [9:38]
 
-KEEP     LGPL-2.1-only        44933c631fa154729aabc5abfa30056c
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LGPL-2.1-only
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
-    Files with this license:
-        linux/ndctl.h [4:11]
-
 KEEP     "(GPL-2.0-only WITH Linux-syscall-note OR BSD-3-Clause)" 48945aa01e1c4a40f64a4c747e468b30
 BELONGS ya.make
     License text:
@@ -4037,24 +4026,6 @@ BELONGS ya.make
         Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
     Files with this license:
         LICENSES/preferred/GPL-2.0 [3:3]
-
-KEEP     LGPL-2.0-only        b8fdc0a6085391ac066e32c09bf9df6c
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LGPL-2.0-only
-        Score           : 95.05
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/lgpl-2.0.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-only
-    Files with this license:
-        linux/coda.h [2:49]
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-mulle-kybernetik
-        Score           : 95.05
-        Match type      : NOTICE
-        Links           : http://www.mulle-kybernetik.com/en/index.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mulle-kybernetik.LICENSE
-    Files with this license:
-        linux/coda.h [2:49]
 
 KEEP     GPL-2.0-only WITH Linux-syscall-note b9679a20642be5470391a0db6700fe8e
 BELONGS ya.make

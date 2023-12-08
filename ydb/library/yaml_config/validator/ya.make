@@ -12,7 +12,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/yaml/fyamlcpp
+    ydb/library/fyamlcpp
 )
 
 GENERATE_ENUM_SERIALIZATION(validator_builder.h)

@@ -362,6 +362,15 @@ YT_THREAD_LOCAL(TThreadLocalQueue*) PerThreadQueue;
 
 /////////////////////////////////////////////////////////////////////////////
 
+struct TLocalQueueReclaimer
+{
+    ~TLocalQueueReclaimer();
+};
+
+YT_THREAD_LOCAL(TLocalQueueReclaimer) LocalQueueReclaimer;
+
+/////////////////////////////////////////////////////////////////////////////
+
 class TLogManager::TImpl
     : public ISensorProducer
     , public ILogWriterHost
@@ -1022,6 +1031,7 @@ private:
         if (!PerThreadQueue) {
             PerThreadQueue = new TThreadLocalQueue();
             RegisteredLocalQueues_.Enqueue(GetTlsRef(PerThreadQueue));
+            Y_UNUSED(LocalQueueReclaimer); // Touch thread-local variable so that its destructor is called.
         }
 
         ++EnqueuedEvents_;
@@ -1448,21 +1458,16 @@ private:
     std::vector<std::unique_ptr<TLoggingAnchor>> DynamicAnchors_;
 };
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
-struct TLocalQueueReclaimer
+TLocalQueueReclaimer::~TLocalQueueReclaimer()
 {
-    ~TLocalQueueReclaimer()
-    {
-        if (PerThreadQueue) {
-            auto logManager = TLogManager::Get()->Impl_;
-            logManager->UnregisteredLocalQueues_.Enqueue(GetTlsRef(PerThreadQueue));
-            PerThreadQueue = reinterpret_cast<TThreadLocalQueue*>(ThreadQueueDestroyedSentinel);
-        }
+    if (PerThreadQueue) {
+        auto logManager = TLogManager::Get()->Impl_;
+        logManager->UnregisteredLocalQueues_.Enqueue(GetTlsRef(PerThreadQueue));
+        PerThreadQueue = reinterpret_cast<TThreadLocalQueue*>(ThreadQueueDestroyedSentinel);
     }
-};
-
-YT_THREAD_LOCAL(TLocalQueueReclaimer) LocalQueueReclaimer;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

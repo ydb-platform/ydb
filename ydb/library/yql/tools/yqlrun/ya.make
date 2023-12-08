@@ -44,4 +44,9 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+FILES(
+    ui.sh
+    uig.sh
+)
+
 END()

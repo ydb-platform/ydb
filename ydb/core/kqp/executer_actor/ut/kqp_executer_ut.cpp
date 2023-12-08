@@ -42,7 +42,8 @@ NKqpProto::TKqpPhyTx BuildTxPlan(const TString& sql, TIntrusivePtr<IKqpGateway> 
 TIntrusivePtr<IKqpGateway> MakeIcGateway(const TKikimrRunner& kikimr) {
     auto actorSystem = kikimr.GetTestServer().GetRuntime()->GetAnyNodeActorSystem();
     return CreateKikimrIcGateway(TString(DefaultKikimrClusterName), "/Root", TKqpGatewaySettings(),
-        actorSystem, kikimr.GetTestServer().GetRuntime()->GetNodeId(0), TAlignedPagePoolCounters());
+        actorSystem, kikimr.GetTestServer().GetRuntime()->GetNodeId(0),
+        TAlignedPagePoolCounters(), kikimr.GetTestServer().GetSettings().AppConfig.GetQueryServiceConfig());
 }
 
 [[maybe_unused]]

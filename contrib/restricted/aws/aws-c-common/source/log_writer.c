@@ -27,7 +27,8 @@ static int s_aws_file_writer_write(struct aws_log_writer *writer, const struct a
 
     size_t length = output->len;
     if (fwrite(output->bytes, 1, length, impl->log_file) < length) {
-        return aws_translate_and_raise_io_error(errno);
+        int errno_value = errno; /* Always cache errno before potential side-effect */
+        return aws_translate_and_raise_io_error(errno_value);
     }
 
     return AWS_OP_SUCCESS;
@@ -76,7 +77,7 @@ static int s_aws_file_writer_init_internal(
         impl->log_file = aws_fopen(file_name_to_open, "a+");
         if (impl->log_file == NULL) {
             aws_mem_release(allocator, impl);
-            return aws_translate_and_raise_io_error(errno);
+            return AWS_OP_ERR;
         }
         impl->close_file_on_cleanup = true;
     } else {

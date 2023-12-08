@@ -58,11 +58,13 @@ ENDIF()
         ydb/library/yql/providers/ydb/actors
         ydb/library/yql/providers/ydb/comp_nodes
         ydb/library/yql/providers/ydb/provider
+        ydb/library/yql/providers/pg/provider
 
         ydb/library/yql/public/udf/service/terminate_policy
         ydb/library/yql/utils/backtrace
         ydb/library/yql/utils/bindings
         ydb/library/yql/utils/log
+        ydb/library/yql/utils/failure_injector
         ydb/library/yql/core/url_preprocessing
         ydb/library/yql/core/url_lister
         ydb/library/yql/providers/yt/comp_nodes/dq

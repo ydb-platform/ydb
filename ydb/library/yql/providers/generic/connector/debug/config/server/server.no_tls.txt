@@ -1,0 +1,23 @@
+connector_server {
+    endpoint {
+        host: "0.0.0.0"
+        port: 50051
+    }
+}
+
+logger {
+    log_level: TRACE
+    enable_sql_query_logging: true
+}
+
+pprof_server {
+    endpoint {
+        host: "0.0.0.0"
+        port: 6060
+    }
+}
+
+paging {
+    bytes_per_page: 4194304
+    prefetch_queue_capacity: 2
+}

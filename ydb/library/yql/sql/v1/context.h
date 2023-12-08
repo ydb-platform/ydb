@@ -235,6 +235,7 @@ namespace NSQLTranslationV1 {
         TMap<TString, TNodePtr> UniversalAliases;
         THashSet<TString> Exports;
         THashMap<TString, TString> ImportModuleAliases;
+        THashMap<TString, TString> RequiredModules;
         TMap<TString, TString> SimpleUdfs;
         NSQLTranslation::TIncrementMonCounterFunction IncrementMonCounterFunction;
         TScopedStatePtr Scoped;
@@ -268,8 +269,6 @@ namespace NSQLTranslationV1 {
         TMaybe<bool> JsonQueryReturnsJsonDocument;
         TMaybe<bool> AnsiInForEmptyOrNullableItemsCollections;
         TMaybe<bool> AnsiRankForNullableKeys = true;
-        TMaybe<bool> AnsiOrderByLimitInUnionAll = true;
-        bool EnforceAnsiOrderByLimitInUnionAll = false;
         const bool AnsiQuotedIdentifiers;
         bool AnsiOptionalAs = true;
         bool OrderedColumns = false;

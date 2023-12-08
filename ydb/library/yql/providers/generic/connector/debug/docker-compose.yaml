@@ -1,0 +1,58 @@
+version: '3'
+
+services:
+
+  clickhouse:
+    image: clickhouse/clickhouse-server
+    container_name: yq-connector-clickhouse
+    ports:
+      - '8123:8123'
+      - '9000:9000'
+      - '9009:9009'
+    environment:
+      CLICKHOUSE_DB: dqrun
+      CLICKHOUSE_USER: admin
+      CLICKHOUSE_PASSWORD: password
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - /tmp/yq-connector/clickhouse/data:/var/lib/clickhouse
+      - /tmp/yq-connector/clickhouse/logs:/var/log/clickhouse-server
+      - ./clickhouse/init:/docker-entrypoint-initdb.d
+      - ./clickhouse/config/z_log_disable.xml:/etc/clickhouse-server/config.d/z_log_disable.xml
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  postgresql:
+    image: postgres
+    container_name: yq-connector-postgresql
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_DB: dqrun
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - /tmp/yq-connector/postgresql/data/:/var/lib/postgresql/data/
+      - ./postgresql/init:/docker-entrypoint-initdb.d
+
+  minio:
+    image: minio/minio:latest
+    container_name: yq-connector-minio
+    command: server --console-address ':9001' /data/
+    ports:
+      - '29000:9000'
+      - '29001:9001'
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+    volumes:
+      - /tmp/yq-connector/minio/data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:29000/minio/health/live']
+      interval: 30s
+      timeout: 20s
+      retries: 3

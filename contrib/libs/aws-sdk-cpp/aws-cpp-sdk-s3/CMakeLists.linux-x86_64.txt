@@ -9,29 +9,41 @@
 
 add_library(libs-aws-sdk-cpp-aws-cpp-sdk-s3)
 target_compile_options(libs-aws-sdk-cpp-aws-cpp-sdk-s3 PRIVATE
+  -DAWS_AUTH_USE_IMPORT_EXPORT
   -DAWS_CAL_USE_IMPORT_EXPORT
   -DAWS_CHECKSUMS_USE_IMPORT_EXPORT
   -DAWS_COMMON_USE_IMPORT_EXPORT
+  -DAWS_COMPRESSION_USE_IMPORT_EXPORT
+  -DAWS_CRT_CPP_USE_IMPORT_EXPORT
   -DAWS_EVENT_STREAM_USE_IMPORT_EXPORT
+  -DAWS_HTTP_USE_IMPORT_EXPORT
   -DAWS_IO_USE_IMPORT_EXPORT
+  -DAWS_MQTT_USE_IMPORT_EXPORT
+  -DAWS_MQTT_WITH_WEBSOCKETS
+  -DAWS_S3_USE_IMPORT_EXPORT
+  -DAWS_SDKUTILS_USE_IMPORT_EXPORT
   -DAWS_SDK_VERSION_MAJOR=1
-  -DAWS_SDK_VERSION_MINOR=8
-  -DAWS_SDK_VERSION_PATCH=186
+  -DAWS_SDK_VERSION_MINOR=11
+  -DAWS_SDK_VERSION_PATCH=37
+  -DAWS_TEST_REGION=US_EAST_1
   -DAWS_USE_EPOLL
+  -DENABLED_REQUEST_COMPRESSION
+  -DENABLED_ZLIB_REQUEST_COMPRESSION
   -DENABLE_CURL_CLIENT
   -DENABLE_OPENSSL_ENCRYPTION
   -DHAS_PATHCONF
   -DHAS_UMASK
-  -DS2N_ADX
-  -DS2N_BIKE_R3_AVX2
-  -DS2N_BIKE_R3_AVX512
-  -DS2N_BIKE_R3_PCLMUL
-  -DS2N_BIKE_R3_VPCLMUL
+  -DS2N_CLONE_SUPPORTED
   -DS2N_CPUID_AVAILABLE
   -DS2N_FALL_THROUGH_SUPPORTED
-  -DS2N_HAVE_EXECINFO
+  -DS2N_FEATURES_AVAILABLE
   -DS2N_KYBER512R3_AVX2_BMI2
-  -DS2N_SIKE_P434_R3_ASM
+  -DS2N_LIBCRYPTO_SUPPORTS_EVP_MD5_SHA1_HASH
+  -DS2N_LIBCRYPTO_SUPPORTS_EVP_MD_CTX_SET_PKEY_CTX
+  -DS2N_LIBCRYPTO_SUPPORTS_EVP_RC4
+  -DS2N_MADVISE_SUPPORTED
+  -DS2N_PLATFORM_SUPPORTS_KTLS
+  -DS2N_STACKTRACE
   -DS2N___RESTRICT__SUPPORTED
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
@@ -45,15 +57,22 @@ target_link_libraries(libs-aws-sdk-cpp-aws-cpp-sdk-s3 PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   libs-aws-sdk-cpp-aws-cpp-sdk-core
+  restricted-aws-aws-c-auth
   restricted-aws-aws-c-common
   restricted-aws-aws-c-event-stream
+  restricted-aws-aws-c-io
+  restricted-aws-aws-c-mqtt
+  restricted-aws-aws-c-sdkutils
+  restricted-aws-aws-crt-cpp
 )
 target_sources(libs-aws-sdk-cpp-aws-cpp-sdk-s3 PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/S3ARN.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/S3Client.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/S3Endpoint.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/S3ClientConfiguration.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/S3EndpointProvider.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/S3EndpointRules.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/S3ErrorMarshaller.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/S3Errors.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/S3Request.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/AbortIncompleteMultipartUpload.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/AbortMultipartUploadRequest.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/AbortMultipartUploadResult.cpp
@@ -79,6 +98,9 @@ target_sources(libs-aws-sdk-cpp-aws-cpp-sdk-s3 PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/CORSRule.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/CSVInput.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/CSVOutput.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/Checksum.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/ChecksumAlgorithm.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/ChecksumMode.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/CloudFunctionConfiguration.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/CommonPrefix.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/CompleteMultipartUploadRequest.cpp
@@ -129,6 +151,7 @@ target_sources(libs-aws-sdk-cpp-aws-cpp-sdk-s3 PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/Error.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/ErrorDocument.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/Event.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/EventBridgeConfiguration.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/ExistingObjectReplication.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/ExistingObjectReplicationStatus.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/ExpirationStatus.cpp
@@ -178,6 +201,9 @@ target_sources(libs-aws-sdk-cpp-aws-cpp-sdk-s3 PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/GetBucketWebsiteResult.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/GetObjectAclRequest.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/GetObjectAclResult.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/GetObjectAttributesParts.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/GetObjectAttributesRequest.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/GetObjectAttributesResult.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/GetObjectLegalHoldRequest.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/GetObjectLegalHoldResult.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/GetObjectLockConfigurationRequest.cpp
@@ -262,6 +288,7 @@ target_sources(libs-aws-sdk-cpp-aws-cpp-sdk-s3 PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/NotificationConfigurationDeprecated.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/NotificationConfigurationFilter.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/Object.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/ObjectAttributes.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/ObjectCannedACL.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/ObjectIdentifier.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/ObjectLockConfiguration.cpp
@@ -273,6 +300,7 @@ target_sources(libs-aws-sdk-cpp-aws-cpp-sdk-s3 PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/ObjectLockRetentionMode.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/ObjectLockRule.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/ObjectOwnership.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/ObjectPart.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/ObjectStorageClass.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/ObjectVersion.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/ObjectVersionStorageClass.cpp

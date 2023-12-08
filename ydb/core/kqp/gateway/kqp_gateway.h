@@ -139,6 +139,7 @@ public:
         ui64 MkqlMemoryLimit = 0; // old engine compatibility
         ui64 PerShardKeysSizeLimitBytes = 0;
         Ydb::Table::QueryStatsCollection::Mode StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+        TDuration ProgressStatsPeriod;
         TKqpSnapshot Snapshot = TKqpSnapshot();
         NKikimrKqp::EIsolationLevel IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
         TMaybe<NKikimrKqp::TRlPath> RlPath;
@@ -194,11 +195,17 @@ public:
     virtual NThreading::TFuture<TQueryResult> StreamExecScanQueryAst(const TString& cluster, const TString& query,
          TQueryData::TPtr, const TAstQuerySettings& settings, const NActors::TActorId& target,
          std::shared_ptr<NGRpcService::IRequestCtxMtSafe> rpcCtx) = 0;
+
+    virtual NThreading::TFuture<TQueryResult> ExecGenericQuery(const TString& cluster, const TString& query,
+        TQueryData::TPtr params, const TAstQuerySettings& settings,
+        const Ydb::Table::TransactionSettings& txSettings) = 0;
+
+    virtual NThreading::TFuture<TQueryResult> ExplainGenericQuery(const TString& cluster, const TString& query) = 0;
 };
 
 TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database,
     std::shared_ptr<IKqpGateway::IKqpTableMetadataLoader>&& metadataLoader, NActors::TActorSystem* actorSystem,
-    ui32 nodeId, TKqpRequestCounters::TPtr counters);
+    ui32 nodeId, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig = NKikimrConfig::TQueryServiceConfig());
 
 bool SplitTablePath(const TString& tableName, const TString& database, std::pair<TString, TString>& pathPair,
     TString& error, bool createDir);

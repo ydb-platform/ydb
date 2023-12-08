@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     metadata_initializers.cpp
+    partition_chooser_impl.cpp
     source_id_encoding.cpp
     writer.cpp
 )

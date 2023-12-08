@@ -55,7 +55,6 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"FlexibleTypes", &TContext::FlexibleTypes},
     {"AnsiCurrentRow", &TContext::AnsiCurrentRow},
     {"EmitStartsWith", &TContext::EmitStartsWith},
-    {"EnforceAnsiOrderByLimitInUnionAll", &TContext::EnforceAnsiOrderByLimitInUnionAll},
     {"EmitAggApply", &TContext::EmitAggApply},
     {"AnsiLike", &TContext::AnsiLike},
     {"UseBlocks", &TContext::UseBlocks},
@@ -65,7 +64,6 @@ typedef TMaybe<bool> TContext::*TPragmaMaybeField;
 
 THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
     {"AnsiRankForNullableKeys", &TContext::AnsiRankForNullableKeys},
-    {"AnsiOrderByLimitInUnionAll", &TContext::AnsiOrderByLimitInUnionAll},
     {"AnsiInForEmptyOrNullableItemsCollections", &TContext::AnsiInForEmptyOrNullableItemsCollections},
     {"CompactGroupBy", &TContext::CompactGroupBy},
 };

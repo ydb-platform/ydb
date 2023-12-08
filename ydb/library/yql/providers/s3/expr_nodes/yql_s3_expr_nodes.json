@@ -94,8 +94,7 @@
             "Children": [
                 {"Index": 0, "Name": "Paths", "Type": "TS3Paths"},
                 {"Index": 1, "Name": "Format", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "RowsLimitHint", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Settings", "Type": "TExprBase", "Optional": true}
+                {"Index": 2, "Name": "Settings", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

@@ -37,6 +37,7 @@ IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig
     );
 

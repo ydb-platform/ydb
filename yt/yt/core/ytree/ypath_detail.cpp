@@ -1281,7 +1281,7 @@ const THashSet<TString>& TOpaqueAttributeKeysCache::GetOpaqueAttributeKeys(
 ////////////////////////////////////////////////////////////////////////////////
 
 class TNodeSetterBase
-    : public NYson::TForwardingYsonConsumer
+    : public TTypedConsumer
 {
 public:
     void Commit();
@@ -1289,20 +1289,6 @@ public:
 protected:
     TNodeSetterBase(INode* node, ITreeBuilder* builder);
     ~TNodeSetterBase();
-
-    void ThrowInvalidType(ENodeType actualType);
-    virtual ENodeType GetExpectedType() = 0;
-
-    void OnMyStringScalar(TStringBuf value) override;
-    void OnMyInt64Scalar(i64 value) override;
-    void OnMyUint64Scalar(ui64 value) override;
-    void OnMyDoubleScalar(double value) override;
-    void OnMyBooleanScalar(bool value) override;
-    void OnMyEntity() override;
-
-    void OnMyBeginList() override;
-
-    void OnMyBeginMap() override;
 
     void OnMyBeginAttributes() override;
     void OnMyEndAttributes() override;
@@ -1409,9 +1395,6 @@ public:
 private:
     IMapNode* const Map_;
 
-    TString ItemKey_;
-
-
     ENodeType GetExpectedType() override
     {
         return ENodeType::Map;
@@ -1424,15 +1407,15 @@ private:
 
     void OnMyKeyedItem(TStringBuf key) override
     {
-        ItemKey_ = key;
+        YT_VERIFY(TreeBuilder_);
+
         TreeBuilder_->BeginTree();
-        Forward(TreeBuilder_, std::bind(&TNodeSetter::OnForwardingFinished, this));
+        Forward(TreeBuilder_, std::bind(&TNodeSetter::OnForwardingFinished, this, TString(key)));
     }
 
-    void OnForwardingFinished()
+    void OnForwardingFinished(TString itemKey)
     {
-        YT_VERIFY(Map_->AddChild(ItemKey_, TreeBuilder_->EndTree()));
-        ItemKey_.clear();
+        YT_VERIFY(Map_->AddChild(itemKey, TreeBuilder_->EndTree()));
     }
 
     void OnMyEndMap() override
@@ -1469,6 +1452,8 @@ private:
 
     void OnMyListItem() override
     {
+        YT_VERIFY(TreeBuilder_);
+
         TreeBuilder_->BeginTree();
         Forward(TreeBuilder_, [this] {
             List_->AddChild(TreeBuilder_->EndTree());
@@ -1537,6 +1522,55 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TTypedConsumer::ThrowInvalidType(ENodeType actualType)
+{
+    THROW_ERROR_EXCEPTION("Cannot update %Qlv node with %Qlv value; types must match",
+        GetExpectedType(),
+        actualType);
+}
+
+void TTypedConsumer::OnMyStringScalar(TStringBuf /*exists*/)
+{
+    ThrowInvalidType(ENodeType::String);
+}
+
+void TTypedConsumer::OnMyInt64Scalar(i64 /*exists*/)
+{
+    ThrowInvalidType(ENodeType::Int64);
+}
+
+void TTypedConsumer::OnMyUint64Scalar(ui64 /*exists*/)
+{
+    ThrowInvalidType(ENodeType::Uint64);
+}
+
+void TTypedConsumer::OnMyDoubleScalar(double /*exists*/)
+{
+    ThrowInvalidType(ENodeType::Double);
+}
+
+void TTypedConsumer::OnMyBooleanScalar(bool /*exists*/)
+{
+    ThrowInvalidType(ENodeType::Boolean);
+}
+
+void TTypedConsumer::OnMyEntity()
+{
+    ThrowInvalidType(ENodeType::Entity);
+}
+
+void TTypedConsumer::OnMyBeginList()
+{
+    ThrowInvalidType(ENodeType::List);
+}
+
+void TTypedConsumer::OnMyBeginMap()
+{
+    ThrowInvalidType(ENodeType::Map);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TNodeSetterBase::TNodeSetterBase(INode* node, ITreeBuilder* builder)
     : Node_(node)
     , TreeBuilder_(builder)
@@ -1544,53 +1578,6 @@ TNodeSetterBase::TNodeSetterBase(INode* node, ITreeBuilder* builder)
 { }
 
 TNodeSetterBase::~TNodeSetterBase() = default;
-
-void TNodeSetterBase::ThrowInvalidType(ENodeType actualType)
-{
-    THROW_ERROR_EXCEPTION("Cannot update %Qlv node with %Qlv value; types must match",
-        GetExpectedType(),
-        actualType);
-}
-
-void TNodeSetterBase::OnMyStringScalar(TStringBuf /*exists*/)
-{
-    ThrowInvalidType(ENodeType::String);
-}
-
-void TNodeSetterBase::OnMyInt64Scalar(i64 /*exists*/)
-{
-    ThrowInvalidType(ENodeType::Int64);
-}
-
-void TNodeSetterBase::OnMyUint64Scalar(ui64 /*exists*/)
-{
-    ThrowInvalidType(ENodeType::Uint64);
-}
-
-void TNodeSetterBase::OnMyDoubleScalar(double /*exists*/)
-{
-    ThrowInvalidType(ENodeType::Double);
-}
-
-void TNodeSetterBase::OnMyBooleanScalar(bool /*exists*/)
-{
-    ThrowInvalidType(ENodeType::Boolean);
-}
-
-void TNodeSetterBase::OnMyEntity()
-{
-    ThrowInvalidType(ENodeType::Entity);
-}
-
-void TNodeSetterBase::OnMyBeginList()
-{
-    ThrowInvalidType(ENodeType::List);
-}
-
-void TNodeSetterBase::OnMyBeginMap()
-{
-    ThrowInvalidType(ENodeType::Map);
-}
 
 void TNodeSetterBase::OnMyBeginAttributes()
 {
@@ -1616,7 +1603,6 @@ void SetNodeFromProducer(
     ITreeBuilder* builder)
 {
     YT_VERIFY(node);
-    YT_VERIFY(builder);
 
     switch (node->GetType()) {
         #define XX(type) \

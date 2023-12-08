@@ -102,6 +102,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #include <ydb/core/persqueue/cluster_tracker.h>
+#include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/pq_l2_service.h>
 
@@ -190,7 +191,6 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/executor_pool_io.h>
-#include <ydb/library/actors/core/executor_pool_united.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/log_settings.h>
 #include <ydb/library/actors/core/mon.h>
@@ -286,7 +286,6 @@ void AddExecutorPool(
     const NKikimrConfig::TActorSystemConfig::TExecutor& poolConfig,
     const NKikimrConfig::TActorSystemConfig& systemConfig,
     ui32 poolId,
-    ui32& unitedThreads,
     const NKikimr::TAppData* appData)
 {
     const auto counters = GetServiceCounters(appData->Counters, "utils");
@@ -335,87 +334,19 @@ void AddExecutorPool(
         cpuManager.IO.emplace_back(std::move(io));
         break;
     }
-    case NKikimrConfig::TActorSystemConfig::TExecutor::UNITED: {
-        TUnitedExecutorPoolConfig united;
-        united.PoolId = poolId;
-        united.PoolName = poolConfig.GetName();
-        united.Concurrency = poolConfig.GetConcurrency();
-        united.Weight = (NActors::TPoolWeight)poolConfig.GetWeight();
-        united.Allowed = ParseAffinity(poolConfig.GetAffinity());
-        if (poolConfig.HasTimePerMailboxMicroSecs()) {
-            united.TimePerMailbox = TDuration::MicroSeconds(poolConfig.GetTimePerMailboxMicroSecs());
-        } else if (systemConfig.HasTimePerMailboxMicroSecs()) {
-            united.TimePerMailbox = TDuration::MicroSeconds(systemConfig.GetTimePerMailboxMicroSecs());
-        }
-        if (poolConfig.HasEventsPerMailbox()) {
-            united.EventsPerMailbox = poolConfig.GetEventsPerMailbox();
-        } else if (systemConfig.HasEventsPerMailbox()) {
-            united.EventsPerMailbox = systemConfig.GetEventsPerMailbox();
-        }
-        Y_ABORT_UNLESS(united.EventsPerMailbox != 0);
-        united.Balancing.Cpus = poolConfig.GetThreads();
-        united.Balancing.MinCpus = poolConfig.GetMinThreads();
-        united.Balancing.MaxCpus = poolConfig.GetMaxThreads();
-        united.Balancing.Priority = poolConfig.GetBalancingPriority();
-        united.Balancing.ToleratedLatencyUs = poolConfig.GetToleratedLatencyUs();
-        unitedThreads += united.Balancing.Cpus;
-        cpuManager.United.emplace_back(std::move(united));
-        break;
-    }
     default:
         Y_ABORT();
     }
-}
-
-static TUnitedWorkersConfig CreateUnitedWorkersConfig(const NKikimrConfig::TActorSystemConfig::TUnitedWorkers& config, ui32 unitedThreads) {
-    TUnitedWorkersConfig result;
-    result.CpuCount = unitedThreads;
-    if (config.HasCpuCount()) {
-        result.CpuCount = config.GetCpuCount();
-    }
-    if (config.HasSpinThresholdUs()) {
-        result.SpinThresholdUs = config.GetSpinThresholdUs();
-    }
-    if (config.HasPoolLimitUs()) {
-        result.PoolLimitUs = config.GetPoolLimitUs();
-    }
-    if (config.HasEventLimitUs()) {
-        result.EventLimitUs = config.GetEventLimitUs();
-    }
-    if (config.HasLimitPrecisionUs()) {
-        result.LimitPrecisionUs = config.GetLimitPrecisionUs();
-    }
-    if (config.HasFastWorkerPriority()) {
-        result.FastWorkerPriority = config.GetFastWorkerPriority();
-    }
-    if (config.HasIdleWorkerPriority()) {
-        result.IdleWorkerPriority = config.GetIdleWorkerPriority();
-    }
-    if (config.HasAffinity()) {
-        result.Allowed = ParseAffinity(config.GetAffinity());
-    }
-    if (config.HasNoRealtime()) {
-        result.NoRealtime = config.GetNoRealtime();
-    }
-    if (config.HasNoAffinity()) {
-        result.NoAffinity = config.GetNoAffinity();
-    }
-    if (config.HasBalancerPeriodUs()) {
-        result.Balancer.PeriodUs = config.GetBalancerPeriodUs();
-    }
-    return result;
 }
 
 static TCpuManagerConfig CreateCpuManagerConfig(const NKikimrConfig::TActorSystemConfig& config,
                                                 const NKikimr::TAppData* appData)
 {
     TCpuManagerConfig cpuManager;
-    ui32 unitedThreads = 0;
     cpuManager.PingInfoByPool.resize(config.GetExecutor().size());
     for (int poolId = 0; poolId < config.GetExecutor().size(); poolId++) {
-        AddExecutorPool(cpuManager, config.GetExecutor(poolId), config, poolId, unitedThreads, appData);
+        AddExecutorPool(cpuManager, config.GetExecutor(poolId), config, poolId, appData);
     }
-    cpuManager.UnitedWorkers = CreateUnitedWorkersConfig(config.GetUnitedWorkers(), unitedThreads);
     return cpuManager;
 }
 
@@ -2024,6 +1955,19 @@ void TPersQueueClusterTrackerInitializer::InitializeServices(NActors::TActorSyst
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
+// TPersQueueDirectReadCache
+
+TPersQueueDirectReadCacheInitializer::TPersQueueDirectReadCacheInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
+void TPersQueueDirectReadCacheInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    IActor* actor = NPQ::CreatePQDReadCacheService(appData->Counters);
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+        NPQ::MakePQDReadCacheServiceActorId(),
+        TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
+}
+
 // TMemProfMonitorInitializer
 
 TMemProfMonitorInitializer::TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<TMemObserver> memObserver)
@@ -2176,10 +2120,7 @@ TScanConveyorInitializer::TScanConveyorInitializer(const TKikimrRunConfig& runCo
 void TScanConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     NConveyor::TConfig serviceConfig;
     if (Config.HasScanConveyorConfig()) {
-        AFL_NOTICE(NKikimrServices::TX_CONVEYOR)("event", "initialization")("config", Config.GetScanConveyorConfig().DebugString());
         Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetScanConveyorConfig()));
-    } else {
-        AFL_NOTICE(NKikimrServices::TX_CONVEYOR)("event", "initialization")("config", "no_section");
     }
 
     if (serviceConfig.IsEnabled()) {
@@ -2443,11 +2384,12 @@ TConfigsDispatcherInitializer::TConfigsDispatcherInitializer(const TKikimrRunCon
    , Labels(runConfig.Labels)
    , InitialCmsConfig(runConfig.InitialCmsConfig)
    , InitialCmsYamlConfig(runConfig.InitialCmsYamlConfig)
+   , ConfigInitInfo(runConfig.ConfigInitInfo)
 {
 }
 
 void TConfigsDispatcherInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    IActor* actor = NConsole::CreateConfigsDispatcher(Config, Labels, InitialCmsConfig, InitialCmsYamlConfig);
+    IActor* actor = NConsole::CreateConfigsDispatcher(Config, Labels, InitialCmsConfig, InitialCmsYamlConfig, ConfigInitInfo);
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             NConsole::MakeConfigsDispatcherID(NodeId),
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));

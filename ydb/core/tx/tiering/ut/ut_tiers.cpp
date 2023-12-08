@@ -41,7 +41,7 @@ public:
     using TBase::TBase;
     void CreateTestOlapTable(TString tableName = "olapTable", ui32 tableShardsCount = 3,
         TString storeName = "olapStore", ui32 storeShardsCount = 4,
-        TString shardingFunction = "HASH_FUNCTION_CLOUD_LOGS") {
+        TString shardingFunction = "HASH_FUNCTION_CONSISTENCY_64") {
         TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
         CreateTestOlapStore(sender, Sprintf(R"(
              Name: "%s"
@@ -55,7 +55,7 @@ public:
         )", storeName.c_str(), storeShardsCount, GetTestTableSchema().data()));
 
         TString shardingColumns = "[\"timestamp\", \"uid\"]";
-        if (shardingFunction != "HASH_FUNCTION_CLOUD_LOGS") {
+        if (shardingFunction != "HASH_FUNCTION_CONSISTENCY_64") {
             shardingColumns = "[\"uid\"]";
         }
 
@@ -76,7 +76,7 @@ public:
 
     void CreateTestOlapTableWithTTL(TString tableName = "olapTable", ui32 tableShardsCount = 3,
         TString storeName = "olapStore", ui32 storeShardsCount = 4,
-        TString shardingFunction = "HASH_FUNCTION_CLOUD_LOGS") {
+        TString shardingFunction = "HASH_FUNCTION_CONSISTENCY_64") {
 
         TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
         CreateTestOlapStore(sender, Sprintf(R"(
@@ -91,7 +91,7 @@ public:
         )", storeName.c_str(), storeShardsCount, GetTestTableSchema().data()));
 
         TString shardingColumns = "[\"timestamp\", \"uid\"]";
-        if (shardingFunction != "HASH_FUNCTION_CLOUD_LOGS") {
+        if (shardingFunction != "HASH_FUNCTION_CONSISTENCY_64") {
             shardingColumns = "[\"uid\"]";
         }
 

@@ -24,40 +24,51 @@ void ITransaction::WriteRows(
     const TModifyRowsOptions& options,
     ELockType lockType)
 {
-    THROW_ERROR_EXCEPTION_IF(!IsWriteLock(lockType), "Inappropriate lock type %Qv given for write operation",
+    THROW_ERROR_EXCEPTION_UNLESS(IsWriteLock(lockType), "Inappropriate lock type %Qlv given for write modification",
         lockType);
 
     std::vector<TRowModification> modifications;
     modifications.reserve(rows.Size());
 
-    if (lockType == ELockType::Exclusive) {
-        for (auto row : rows) {
-            modifications.push_back({ERowModificationType::Write, row.ToTypeErasedRow(), TLockMask()});
-        }
-    } else {
-        // NB: This mount revision could differ from the one will be send to tablet node.
-        // However locks correctness will be checked in native transaction.
-        const auto& tableMountCache = GetClient()->GetTableMountCache();
-        auto tableInfo = WaitFor(tableMountCache->GetTableInfo(path))
-            .ValueOrThrow();
-
-        std::vector<int> columnIndexToLockIndex;
-        GetLocksMapping(
-            *tableInfo->Schemas[ETableSchemaKind::Write],
-            GetAtomicity() == NTransactionClient::EAtomicity::Full,
-            &columnIndexToLockIndex);
-
-        for (auto row : rows) {
-            TLockMask lockMask;
-            for (int index = 0; index < static_cast<int>(row.GetCount()); ++index) {
-                auto lockIndex = columnIndexToLockIndex[row[index].Id];
-                if (lockIndex != -1) {
-                    lockMask.Set(lockIndex, lockType);
-                }
+    switch (lockType) {
+        case ELockType::Exclusive: {
+            for (auto row : rows) {
+                modifications.push_back({ERowModificationType::Write, row.ToTypeErasedRow(), TLockMask()});
             }
 
-            modifications.push_back({ERowModificationType::WriteAndLock, row.ToTypeErasedRow(), lockMask});
+            break;
         }
+
+        case ELockType::SharedWrite: {
+            // NB: This mount revision could differ from the one will be sent to tablet node.
+            // However locks correctness will be checked in native transaction.
+            const auto& tableMountCache = GetClient()->GetTableMountCache();
+            auto tableInfo = WaitFor(tableMountCache->GetTableInfo(path))
+                .ValueOrThrow();
+
+            std::vector<int> columnIndexToLockIndex;
+            GetLocksMapping(
+                *tableInfo->Schemas[ETableSchemaKind::Write],
+                GetAtomicity() == NTransactionClient::EAtomicity::Full,
+                &columnIndexToLockIndex);
+
+            for (auto row : rows) {
+                TLockMask lockMask;
+                for (const auto& value : row) {
+                    auto lockIndex = columnIndexToLockIndex[value.Id];
+                    if (lockIndex != -1) {
+                        lockMask.Set(lockIndex, lockType);
+                    }
+                }
+
+                modifications.push_back({ERowModificationType::WriteAndLock, row.ToTypeErasedRow(), lockMask});
+            }
+
+            break;
+        }
+
+        default:
+            YT_ABORT();
     }
 
     ModifyRows(

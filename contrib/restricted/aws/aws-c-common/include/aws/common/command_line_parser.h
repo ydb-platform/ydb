@@ -13,7 +13,7 @@ enum aws_cli_options_has_arg {
 };
 
 /**
- * Invoked when a subcommand is encountered. argc and argv[] begins at the command encounterd.
+ * Invoked when a subcommand is encountered. argc and argv[] begins at the command encountered.
  * command_name is the name of the command being handled.
  */
 typedef int(aws_cli_options_subcommand_fn)(int argc, char *const argv[], const char *command_name, void *user_data);
@@ -56,7 +56,7 @@ AWS_COMMON_API extern const char *aws_cli_positional_arg;
 /**
  * A mostly compliant implementation of posix getopt_long(). Parses command-line arguments. argc is the number of
  * command line arguments passed in argv. optstring contains the legitimate option characters. The option characters
- * coorespond to aws_cli_option::val. If the character is followed by a :, the option requires an argument. If it is
+ * correspond to aws_cli_option::val. If the character is followed by a :, the option requires an argument. If it is
  * followed by '::', the argument is optional (not implemented yet).
  *
  *  longopts, is an array of struct aws_cli_option. These are the allowed options for the program.
@@ -91,7 +91,7 @@ AWS_COMMON_API void aws_cli_reset_state(void);
  * @param parse_cb, optional, specify NULL if you don't want to handle this. This argument is for parsing "meta"
  * commands from the command line options prior to dispatch occurring.
  * @param dispatch_table table containing functions and command name to dispatch on.
- * @param table_length numnber of entries in dispatch_table.
+ * @param table_length number of entries in dispatch_table.
  * @return AWS_OP_SUCCESS(0) on success, AWS_OP_ERR(-1) on failure
  */
 AWS_COMMON_API int aws_cli_dispatch_on_subcommand(

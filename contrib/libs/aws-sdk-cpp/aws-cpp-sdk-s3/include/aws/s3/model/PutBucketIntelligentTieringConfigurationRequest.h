@@ -24,10 +24,10 @@ namespace Model
 
   /**
    */
-  class AWS_S3_API PutBucketIntelligentTieringConfigurationRequest : public S3Request
+  class PutBucketIntelligentTieringConfigurationRequest : public S3Request
   {
   public:
-    PutBucketIntelligentTieringConfigurationRequest();
+    AWS_S3_API PutBucketIntelligentTieringConfigurationRequest();
 
     // Service request name is the Operation name which will send this request out,
     // each operation should has unique request name, so that we can get operation's name from this request.
@@ -35,10 +35,14 @@ namespace Model
     // so we can not get operation's name from response.
     inline virtual const char* GetServiceRequestName() const override { return "PutBucketIntelligentTieringConfiguration"; }
 
-    Aws::String SerializePayload() const override;
+    AWS_S3_API Aws::String SerializePayload() const override;
 
-    void AddQueryStringParameters(Aws::Http::URI& uri) const override;
+    AWS_S3_API void AddQueryStringParameters(Aws::Http::URI& uri) const override;
 
+    /**
+     * Helper function to collect parameters (configurable and static hardcoded) required for endpoint computation.
+     */
+    AWS_S3_API EndpointParameters GetEndpointContextParams() const override;
 
     /**
      * <p>The name of the Amazon S3 bucket whose configuration you want to modify or
@@ -203,16 +207,16 @@ namespace Model
   private:
 
     Aws::String m_bucket;
-    bool m_bucketHasBeenSet;
+    bool m_bucketHasBeenSet = false;
 
     Aws::String m_id;
-    bool m_idHasBeenSet;
+    bool m_idHasBeenSet = false;
 
     IntelligentTieringConfiguration m_intelligentTieringConfiguration;
-    bool m_intelligentTieringConfigurationHasBeenSet;
+    bool m_intelligentTieringConfigurationHasBeenSet = false;
 
     Aws::Map<Aws::String, Aws::String> m_customizedAccessLogTag;
-    bool m_customizedAccessLogTagHasBeenSet;
+    bool m_customizedAccessLogTagHasBeenSet = false;
   };
 
 } // namespace Model

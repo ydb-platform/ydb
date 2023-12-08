@@ -32,15 +32,21 @@ GO_TEST_SRCS(
 )
 
 IF (OS_LINUX)
-    SRCS(command_notwin.go)
+    SRCS(
+        command_notwin.go
+    )
 ENDIF()
 
 IF (OS_DARWIN)
-    SRCS(command_notwin.go)
+    SRCS(
+        command_notwin.go
+    )
 ENDIF()
 
 IF (OS_WINDOWS)
-    SRCS(command_win.go)
+    SRCS(
+        command_win.go
+    )
 ENDIF()
 
 END()

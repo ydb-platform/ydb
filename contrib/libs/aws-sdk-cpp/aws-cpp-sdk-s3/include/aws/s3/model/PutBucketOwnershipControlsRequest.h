@@ -24,10 +24,10 @@ namespace Model
 
   /**
    */
-  class AWS_S3_API PutBucketOwnershipControlsRequest : public S3Request
+  class PutBucketOwnershipControlsRequest : public S3Request
   {
   public:
-    PutBucketOwnershipControlsRequest();
+    AWS_S3_API PutBucketOwnershipControlsRequest();
 
     // Service request name is the Operation name which will send this request out,
     // each operation should has unique request name, so that we can get operation's name from this request.
@@ -35,14 +35,16 @@ namespace Model
     // so we can not get operation's name from response.
     inline virtual const char* GetServiceRequestName() const override { return "PutBucketOwnershipControls"; }
 
-    Aws::String SerializePayload() const override;
+    AWS_S3_API Aws::String SerializePayload() const override;
 
-    void AddQueryStringParameters(Aws::Http::URI& uri) const override;
+    AWS_S3_API void AddQueryStringParameters(Aws::Http::URI& uri) const override;
 
-    Aws::Http::HeaderValueCollection GetRequestSpecificHeaders() const override;
+    AWS_S3_API Aws::Http::HeaderValueCollection GetRequestSpecificHeaders() const override;
 
-    inline bool ShouldComputeContentMd5() const override { return true; }
-
+    /**
+     * Helper function to collect parameters (configurable and static hardcoded) required for endpoint computation.
+     */
+    AWS_S3_API EndpointParameters GetEndpointContextParams() const override;
 
     /**
      * <p>The name of the Amazon S3 bucket whose <code>OwnershipControls</code> you
@@ -95,151 +97,157 @@ namespace Model
 
     /**
      * <p>The MD5 hash of the <code>OwnershipControls</code> request body. </p> <p>For
-     * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
-     * is calculated automatically.</p>
+     * requests made using the Amazon Web Services Command Line Interface (CLI) or
+     * Amazon Web Services SDKs, this field is calculated automatically.</p>
      */
     inline const Aws::String& GetContentMD5() const{ return m_contentMD5; }
 
     /**
      * <p>The MD5 hash of the <code>OwnershipControls</code> request body. </p> <p>For
-     * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
-     * is calculated automatically.</p>
+     * requests made using the Amazon Web Services Command Line Interface (CLI) or
+     * Amazon Web Services SDKs, this field is calculated automatically.</p>
      */
     inline bool ContentMD5HasBeenSet() const { return m_contentMD5HasBeenSet; }
 
     /**
      * <p>The MD5 hash of the <code>OwnershipControls</code> request body. </p> <p>For
-     * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
-     * is calculated automatically.</p>
+     * requests made using the Amazon Web Services Command Line Interface (CLI) or
+     * Amazon Web Services SDKs, this field is calculated automatically.</p>
      */
     inline void SetContentMD5(const Aws::String& value) { m_contentMD5HasBeenSet = true; m_contentMD5 = value; }
 
     /**
      * <p>The MD5 hash of the <code>OwnershipControls</code> request body. </p> <p>For
-     * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
-     * is calculated automatically.</p>
+     * requests made using the Amazon Web Services Command Line Interface (CLI) or
+     * Amazon Web Services SDKs, this field is calculated automatically.</p>
      */
     inline void SetContentMD5(Aws::String&& value) { m_contentMD5HasBeenSet = true; m_contentMD5 = std::move(value); }
 
     /**
      * <p>The MD5 hash of the <code>OwnershipControls</code> request body. </p> <p>For
-     * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
-     * is calculated automatically.</p>
+     * requests made using the Amazon Web Services Command Line Interface (CLI) or
+     * Amazon Web Services SDKs, this field is calculated automatically.</p>
      */
     inline void SetContentMD5(const char* value) { m_contentMD5HasBeenSet = true; m_contentMD5.assign(value); }
 
     /**
      * <p>The MD5 hash of the <code>OwnershipControls</code> request body. </p> <p>For
-     * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
-     * is calculated automatically.</p>
+     * requests made using the Amazon Web Services Command Line Interface (CLI) or
+     * Amazon Web Services SDKs, this field is calculated automatically.</p>
      */
     inline PutBucketOwnershipControlsRequest& WithContentMD5(const Aws::String& value) { SetContentMD5(value); return *this;}
 
     /**
      * <p>The MD5 hash of the <code>OwnershipControls</code> request body. </p> <p>For
-     * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
-     * is calculated automatically.</p>
+     * requests made using the Amazon Web Services Command Line Interface (CLI) or
+     * Amazon Web Services SDKs, this field is calculated automatically.</p>
      */
     inline PutBucketOwnershipControlsRequest& WithContentMD5(Aws::String&& value) { SetContentMD5(std::move(value)); return *this;}
 
     /**
      * <p>The MD5 hash of the <code>OwnershipControls</code> request body. </p> <p>For
-     * requests made using the AWS Command Line Interface (CLI) or AWS SDKs, this field
-     * is calculated automatically.</p>
+     * requests made using the Amazon Web Services Command Line Interface (CLI) or
+     * Amazon Web Services SDKs, this field is calculated automatically.</p>
      */
     inline PutBucketOwnershipControlsRequest& WithContentMD5(const char* value) { SetContentMD5(value); return *this;}
 
 
     /**
      * <p>The account ID of the expected bucket owner. If the bucket is owned by a
-     * different account, the request will fail with an HTTP <code>403 (Access
-     * Denied)</code> error.</p>
+     * different account, the request fails with the HTTP status code <code>403
+     * Forbidden</code> (access denied).</p>
      */
     inline const Aws::String& GetExpectedBucketOwner() const{ return m_expectedBucketOwner; }
 
     /**
      * <p>The account ID of the expected bucket owner. If the bucket is owned by a
-     * different account, the request will fail with an HTTP <code>403 (Access
-     * Denied)</code> error.</p>
+     * different account, the request fails with the HTTP status code <code>403
+     * Forbidden</code> (access denied).</p>
      */
     inline bool ExpectedBucketOwnerHasBeenSet() const { return m_expectedBucketOwnerHasBeenSet; }
 
     /**
      * <p>The account ID of the expected bucket owner. If the bucket is owned by a
-     * different account, the request will fail with an HTTP <code>403 (Access
-     * Denied)</code> error.</p>
+     * different account, the request fails with the HTTP status code <code>403
+     * Forbidden</code> (access denied).</p>
      */
     inline void SetExpectedBucketOwner(const Aws::String& value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner = value; }
 
     /**
      * <p>The account ID of the expected bucket owner. If the bucket is owned by a
-     * different account, the request will fail with an HTTP <code>403 (Access
-     * Denied)</code> error.</p>
+     * different account, the request fails with the HTTP status code <code>403
+     * Forbidden</code> (access denied).</p>
      */
     inline void SetExpectedBucketOwner(Aws::String&& value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner = std::move(value); }
 
     /**
      * <p>The account ID of the expected bucket owner. If the bucket is owned by a
-     * different account, the request will fail with an HTTP <code>403 (Access
-     * Denied)</code> error.</p>
+     * different account, the request fails with the HTTP status code <code>403
+     * Forbidden</code> (access denied).</p>
      */
     inline void SetExpectedBucketOwner(const char* value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner.assign(value); }
 
     /**
      * <p>The account ID of the expected bucket owner. If the bucket is owned by a
-     * different account, the request will fail with an HTTP <code>403 (Access
-     * Denied)</code> error.</p>
+     * different account, the request fails with the HTTP status code <code>403
+     * Forbidden</code> (access denied).</p>
      */
     inline PutBucketOwnershipControlsRequest& WithExpectedBucketOwner(const Aws::String& value) { SetExpectedBucketOwner(value); return *this;}
 
     /**
      * <p>The account ID of the expected bucket owner. If the bucket is owned by a
-     * different account, the request will fail with an HTTP <code>403 (Access
-     * Denied)</code> error.</p>
+     * different account, the request fails with the HTTP status code <code>403
+     * Forbidden</code> (access denied).</p>
      */
     inline PutBucketOwnershipControlsRequest& WithExpectedBucketOwner(Aws::String&& value) { SetExpectedBucketOwner(std::move(value)); return *this;}
 
     /**
      * <p>The account ID of the expected bucket owner. If the bucket is owned by a
-     * different account, the request will fail with an HTTP <code>403 (Access
-     * Denied)</code> error.</p>
+     * different account, the request fails with the HTTP status code <code>403
+     * Forbidden</code> (access denied).</p>
      */
     inline PutBucketOwnershipControlsRequest& WithExpectedBucketOwner(const char* value) { SetExpectedBucketOwner(value); return *this;}
 
 
     /**
-     * <p>The <code>OwnershipControls</code> (BucketOwnerPreferred or ObjectWriter)
-     * that you want to apply to this Amazon S3 bucket.</p>
+     * <p>The <code>OwnershipControls</code> (BucketOwnerEnforced,
+     * BucketOwnerPreferred, or ObjectWriter) that you want to apply to this Amazon S3
+     * bucket.</p>
      */
     inline const OwnershipControls& GetOwnershipControls() const{ return m_ownershipControls; }
 
     /**
-     * <p>The <code>OwnershipControls</code> (BucketOwnerPreferred or ObjectWriter)
-     * that you want to apply to this Amazon S3 bucket.</p>
+     * <p>The <code>OwnershipControls</code> (BucketOwnerEnforced,
+     * BucketOwnerPreferred, or ObjectWriter) that you want to apply to this Amazon S3
+     * bucket.</p>
      */
     inline bool OwnershipControlsHasBeenSet() const { return m_ownershipControlsHasBeenSet; }
 
     /**
-     * <p>The <code>OwnershipControls</code> (BucketOwnerPreferred or ObjectWriter)
-     * that you want to apply to this Amazon S3 bucket.</p>
+     * <p>The <code>OwnershipControls</code> (BucketOwnerEnforced,
+     * BucketOwnerPreferred, or ObjectWriter) that you want to apply to this Amazon S3
+     * bucket.</p>
      */
     inline void SetOwnershipControls(const OwnershipControls& value) { m_ownershipControlsHasBeenSet = true; m_ownershipControls = value; }
 
     /**
-     * <p>The <code>OwnershipControls</code> (BucketOwnerPreferred or ObjectWriter)
-     * that you want to apply to this Amazon S3 bucket.</p>
+     * <p>The <code>OwnershipControls</code> (BucketOwnerEnforced,
+     * BucketOwnerPreferred, or ObjectWriter) that you want to apply to this Amazon S3
+     * bucket.</p>
      */
     inline void SetOwnershipControls(OwnershipControls&& value) { m_ownershipControlsHasBeenSet = true; m_ownershipControls = std::move(value); }
 
     /**
-     * <p>The <code>OwnershipControls</code> (BucketOwnerPreferred or ObjectWriter)
-     * that you want to apply to this Amazon S3 bucket.</p>
+     * <p>The <code>OwnershipControls</code> (BucketOwnerEnforced,
+     * BucketOwnerPreferred, or ObjectWriter) that you want to apply to this Amazon S3
+     * bucket.</p>
      */
     inline PutBucketOwnershipControlsRequest& WithOwnershipControls(const OwnershipControls& value) { SetOwnershipControls(value); return *this;}
 
     /**
-     * <p>The <code>OwnershipControls</code> (BucketOwnerPreferred or ObjectWriter)
-     * that you want to apply to this Amazon S3 bucket.</p>
+     * <p>The <code>OwnershipControls</code> (BucketOwnerEnforced,
+     * BucketOwnerPreferred, or ObjectWriter) that you want to apply to this Amazon S3
+     * bucket.</p>
      */
     inline PutBucketOwnershipControlsRequest& WithOwnershipControls(OwnershipControls&& value) { SetOwnershipControls(std::move(value)); return *this;}
 
@@ -286,19 +294,19 @@ namespace Model
   private:
 
     Aws::String m_bucket;
-    bool m_bucketHasBeenSet;
+    bool m_bucketHasBeenSet = false;
 
     Aws::String m_contentMD5;
-    bool m_contentMD5HasBeenSet;
+    bool m_contentMD5HasBeenSet = false;
 
     Aws::String m_expectedBucketOwner;
-    bool m_expectedBucketOwnerHasBeenSet;
+    bool m_expectedBucketOwnerHasBeenSet = false;
 
     OwnershipControls m_ownershipControls;
-    bool m_ownershipControlsHasBeenSet;
+    bool m_ownershipControlsHasBeenSet = false;
 
     Aws::Map<Aws::String, Aws::String> m_customizedAccessLogTag;
-    bool m_customizedAccessLogTagHasBeenSet;
+    bool m_customizedAccessLogTagHasBeenSet = false;
   };
 
 } // namespace Model

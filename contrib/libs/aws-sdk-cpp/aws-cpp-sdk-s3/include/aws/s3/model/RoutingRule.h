@@ -32,14 +32,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/RoutingRule">AWS API
    * Reference</a></p>
    */
-  class AWS_S3_API RoutingRule
+  class RoutingRule
   {
   public:
-    RoutingRule();
-    RoutingRule(const Aws::Utils::Xml::XmlNode& xmlNode);
-    RoutingRule& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API RoutingRule();
+    AWS_S3_API RoutingRule(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API RoutingRule& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -142,10 +142,10 @@ namespace Model
   private:
 
     Condition m_condition;
-    bool m_conditionHasBeenSet;
+    bool m_conditionHasBeenSet = false;
 
     Redirect m_redirect;
-    bool m_redirectHasBeenSet;
+    bool m_redirectHasBeenSet = false;
   };
 
 } // namespace Model

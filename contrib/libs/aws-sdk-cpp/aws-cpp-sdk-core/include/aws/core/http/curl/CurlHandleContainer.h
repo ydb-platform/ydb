@@ -43,7 +43,7 @@ public:
     void ReleaseCurlHandle(CURL* handle);
 
     /**
-     * When the handle has bad DNS entries, problematic live connections, we need to destory the handle from pool.
+     * When the handle has bad DNS entries, problematic live connections, we need to destroy the handle from pool.
      */
     void DestroyCurlHandle(CURL* handle);
 

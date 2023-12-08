@@ -33,14 +33,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/QueueConfigurationDeprecated">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API QueueConfigurationDeprecated
+  class QueueConfigurationDeprecated
   {
   public:
-    QueueConfigurationDeprecated();
-    QueueConfigurationDeprecated(const Aws::Utils::Xml::XmlNode& xmlNode);
-    QueueConfigurationDeprecated& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API QueueConfigurationDeprecated();
+    AWS_S3_API QueueConfigurationDeprecated(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API QueueConfigurationDeprecated& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     
@@ -160,13 +160,13 @@ namespace Model
   private:
 
     Aws::String m_id;
-    bool m_idHasBeenSet;
+    bool m_idHasBeenSet = false;
 
     Aws::Vector<Event> m_events;
-    bool m_eventsHasBeenSet;
+    bool m_eventsHasBeenSet = false;
 
     Aws::String m_queue;
-    bool m_queueHasBeenSet;
+    bool m_queueHasBeenSet = false;
   };
 
 } // namespace Model

@@ -32,11 +32,14 @@ using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
 /// We have to use YDB types for keys here.
 struct TIndexInfo : public NTable::TScheme::TTableSchema {
 private:
-    mutable THashMap<ui32, TColumnFeatures> ColumnFeatures;
-    mutable THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
+    THashMap<ui32, TColumnFeatures> ColumnFeatures;
+    THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
     TIndexInfo(const TString& name, ui32 id);
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
     TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
+    void BuildSchemaWithSpecials();
+    void BuildArrowSchema();
+    void InitializeCaches();
 public:
     static constexpr const char* SPEC_COL_PLAN_STEP = "_yql_plan_step";
     static constexpr const char* SPEC_COL_TX_ID = "_yql_tx_id";
@@ -106,10 +109,12 @@ public:
         return result;
     }
 
+    std::shared_ptr<arrow::Field> GetColumnFieldOptional(const ui32 columnId) const;
+    std::shared_ptr<arrow::Field> GetColumnFieldVerified(const ui32 columnId) const;
     std::shared_ptr<arrow::Schema> GetColumnSchema(const ui32 columnId) const;
     std::shared_ptr<arrow::Schema> GetColumnsSchema(const std::set<ui32>& columnIds) const;
     TColumnSaver GetColumnSaver(const ui32 columnId, const TSaverContext& context) const;
-    std::shared_ptr<TColumnLoader> GetColumnLoader(const ui32 columnId) const;
+    std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const;
 
     /// Returns an id of the column located by name. The name should exists in the schema.
     ui32 GetColumnId(const std::string& name) const;
@@ -161,7 +166,8 @@ public:
 
     std::shared_ptr<arrow::Schema> ArrowSchema(const std::vector<ui32>& columnIds, bool withSpecials = false) const;
     std::shared_ptr<arrow::Schema> ArrowSchema(const std::vector<TString>& columnNames) const;
-    std::shared_ptr<arrow::Field> ArrowColumnField(ui32 columnId) const;
+    std::shared_ptr<arrow::Field> ArrowColumnFieldOptional(const ui32 columnId) const;
+    std::shared_ptr<arrow::Field> ArrowColumnFieldVerified(const ui32 columnId) const;
     std::shared_ptr<arrow::Field> SpecialColumnField(const ui32 columnId) const;
 
     const THashSet<TString>& GetRequiredColumns() const {
@@ -207,8 +213,8 @@ private:
     ui32 Id;
     ui64 Version = 0;
     TString Name;
-    mutable std::shared_ptr<arrow::Schema> Schema;
-    mutable std::shared_ptr<arrow::Schema> SchemaWithSpecials;
+    std::shared_ptr<arrow::Schema> Schema;
+    std::shared_ptr<arrow::Schema> SchemaWithSpecials;
     std::shared_ptr<arrow::Schema> SortingKey;
     std::shared_ptr<arrow::Schema> ReplaceKey;
     std::shared_ptr<arrow::Schema> ExtendedKey; // Extend PK with snapshot columns to allow old shapshot reads

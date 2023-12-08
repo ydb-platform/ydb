@@ -48,8 +48,9 @@ public:
         : Logger(logger)
         , ValueCounter_(profiler.Counter("/value"))
         , ReleaseCounter_(profiler.Counter("/released"))
-        , QueueSizeCounter_(profiler.Gauge("/queue_size"))
+        , QueueSizeGauge_(profiler.Gauge("/queue_size"))
         , WaitTimer_(profiler.Timer("/wait_time"))
+        , LimitGauge_(profiler.Gauge("/limit"))
     {
         Reconfigure(config);
     }
@@ -228,8 +229,9 @@ private:
 
     NProfiling::TCounter ValueCounter_;
     NProfiling::TCounter ReleaseCounter_;
-    NProfiling::TGauge QueueSizeCounter_;
+    NProfiling::TGauge QueueSizeGauge_;
     NProfiling::TEventTimer WaitTimer_;
+    NProfiling::TGauge LimitGauge_;
 
     std::atomic<TInstant> LastUpdated_ = TInstant::Zero();
     std::atomic<i64> Available_ = 0;
@@ -291,13 +293,13 @@ private:
                 request->Promise.Set(TError(NYT::EErrorCode::Canceled, "Throttled request canceled")
                     << error);
                 QueueTotalAmount_ -= amount;
-                QueueSizeCounter_.Update(QueueTotalAmount_);
+                QueueSizeGauge_.Update(QueueTotalAmount_);
             }
         }));
         request->Promise = std::move(promise);
         Requests_.push(request);
         QueueTotalAmount_ += amount;
-        QueueSizeCounter_.Update(QueueTotalAmount_);
+        QueueSizeGauge_.Update(QueueTotalAmount_);
 
         ScheduleUpdate();
 
@@ -311,7 +313,9 @@ private:
         // Slow lane (only).
         auto guard = Guard(SpinLock_);
 
-        Limit_ = limit.value_or(-1);
+        auto newLimit = limit.value_or(-1);
+        Limit_ = newLimit;
+        LimitGauge_.Update(newLimit);
         Period_ = period;
         TDelayedExecutor::CancelAndClear(UpdateCookie_);
         auto now = GetInstant();
@@ -429,7 +433,7 @@ private:
                 }
                 readyList.push_back(request);
                 QueueTotalAmount_ -= request->Amount;
-                QueueSizeCounter_.Update(QueueTotalAmount_);
+                QueueSizeGauge_.Update(QueueTotalAmount_);
                 WaitTimer_.Record(waitTime);
             }
             Requests_.pop();

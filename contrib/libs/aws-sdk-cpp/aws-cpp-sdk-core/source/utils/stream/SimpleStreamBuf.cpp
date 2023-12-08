@@ -5,6 +5,7 @@
  */
 
 #include <aws/core/utils/stream/SimpleStreamBuf.h>
+#include <aws/core/utils/logging/LogMacros.h>
 
 #include <algorithm>
 #include <cassert>
@@ -123,7 +124,14 @@ bool SimpleStreamBuf::GrowBuffer()
 
     if(currentSize > 0)
     {
-        std::memcpy(newBuffer, m_buffer, currentSize);
+        if(m_buffer)
+        {
+            std::memcpy(newBuffer, m_buffer, currentSize);
+        }
+        else
+        {
+            AWS_LOGSTREAM_FATAL(SIMPLE_STREAMBUF_ALLOCATION_TAG, "Unexpected nullptr m_buffer");
+        }
     }
 
     if(m_buffer)

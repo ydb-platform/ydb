@@ -78,6 +78,7 @@ CHECK_DEPENDENT_DIRS(
     ALLOW_ONLY
     PEERDIRS
     arc/api/public
+    build/internal/platform
     build/platform
     certs
     contrib

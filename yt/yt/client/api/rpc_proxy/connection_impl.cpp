@@ -70,10 +70,7 @@ void ApplyProxyUrlAliasingRules(TString& url, const std::optional<THashMap<TStri
 {
     static const auto rulesFromEnv = ParseProxyUrlAliasingRules(GetEnv("YT_PROXY_URL_ALIASING_CONFIG"));
 
-    const THashMap<TString, TString>& rules =
-        proxyUrlAliasingRules
-        ? proxyUrlAliasingRules.value()
-        : rulesFromEnv;
+    const auto& rules = proxyUrlAliasingRules.value_or(rulesFromEnv);
 
     if (auto ruleIt = rules.find(url); ruleIt != rules.end()) {
         url = ruleIt->second;
@@ -82,7 +79,6 @@ void ApplyProxyUrlAliasingRules(TString& url, const std::optional<THashMap<TStri
 
 TString NormalizeHttpProxyUrl(TString url, const std::optional<THashMap<TString, TString>>& proxyUrlAliasingRules)
 {
-
     ApplyProxyUrlAliasingRules(url, proxyUrlAliasingRules);
 
     if (url.find('.') == TString::npos &&

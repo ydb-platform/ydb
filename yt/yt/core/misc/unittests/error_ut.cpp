@@ -421,6 +421,50 @@ TEST(TErrorTest, SerializationDepthLimit)
     }
 }
 
+TEST(TErrorTest, DoNotDuplicateOriginalErrorDepth)
+{
+    constexpr int Depth = 20;
+    ASSERT_GE(Depth, ErrorSerializationDepthLimit);
+
+    auto error = TError(TErrorCode(Depth), "error");
+    for (int i = Depth; i >= 2; --i) {
+        error = TError(TErrorCode(i), "error") << std::move(error);
+    }
+
+    auto errorYson = ConvertToYsonString(error);
+    error = ConvertTo<TError>(errorYson);
+
+    // Due to reserialization, error already contains "original_error_depth" attribute.
+    // It should not be duplicated after the next serialization.
+    error = TError(TErrorCode(1), "error") << std::move(error);
+
+    // Use intermediate conversion to test YSON parser depth limit simultaneously.
+    errorYson = ConvertToYsonString(error);
+    auto errorNode = ConvertTo<IMapNodePtr>(errorYson);
+
+    error = ConvertTo<TError>(errorYson);
+    for (int index = 0; index < ErrorSerializationDepthLimit - 1; ++index) {
+        ASSERT_FALSE(error.Attributes().Contains("original_error_depth"));
+        error = error.InnerErrors()[0];
+    }
+
+    const auto& children = error.InnerErrors();
+    ASSERT_EQ(std::ssize(children), Depth - ErrorSerializationDepthLimit + 1);
+    for (int index = 0; index < std::ssize(children); ++index) {
+        const auto& child = children[index];
+        if (index == 0) {
+            ASSERT_FALSE(child.Attributes().Contains("original_error_depth"));
+        } else {
+            ASSERT_TRUE(child.Attributes().Contains("original_error_depth"));
+            if (index == 1) {
+                ASSERT_EQ(child.Attributes().Get<i64>("original_error_depth"), index + ErrorSerializationDepthLimit);
+            } else {
+                ASSERT_EQ(child.Attributes().Get<i64>("original_error_depth"), index + ErrorSerializationDepthLimit - 1);
+            }
+        }
+    }
+}
+
 TEST(TErrorTest, ErrorSkeletonStubImplementation)
 {
     TError error("foo");

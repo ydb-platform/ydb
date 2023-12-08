@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build darwin || dragonfly || freebsd || openbsd || netbsd || zos
-// +build darwin dragonfly freebsd openbsd netbsd zos
 
 package unix_test
 

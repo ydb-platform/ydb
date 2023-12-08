@@ -220,6 +220,12 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER EXTERNAL DATA SOURCE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
         return "ALTER TABLE ADD COLUMN DEFAULT";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
+        return "CREATE VIEW";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterView:
+        return "ALTER VIEW";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropView:
+        return "DROP VIEW";
     }
     Y_ABORT("switch should cover all operation types");
 }
@@ -499,6 +505,18 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
         result.emplace_back(tx.GetInitiateColumnBuild().GetTable());
+        break;
+
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateView().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropView:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterView:
+        // TODO: implement
+        break;
+
     }
 
     return result;

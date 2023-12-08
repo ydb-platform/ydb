@@ -8,9 +8,13 @@ SRCS(
     endian_little.go
     parse.go
     runtime_auxv.go
+    runtime_auxv_go121.go
 )
 
-GO_TEST_SRCS(parse_test.go)
+GO_TEST_SRCS(
+    parse_test.go
+    runtime_auxv_go121_test.go
+)
 
 GO_XTEST_SRCS(
     cpu_test.go

@@ -6,6 +6,154 @@ namespace NKikimr::NKqp {
 using namespace NYql;
 using namespace NYql::NDq;
 
+void TAsyncStats::Resize(ui32 taskCount) {
+    Bytes.resize(taskCount);
+    Rows.resize(taskCount);
+    Chunks.resize(taskCount);
+    Splits.resize(taskCount);
+    FirstMessageMs.resize(taskCount);
+    PauseMessageMs.resize(taskCount);
+    ResumeMessageMs.resize(taskCount);
+    LastMessageMs.resize(taskCount);
+    WaitTimeUs.resize(taskCount);
+    WaitPeriods.resize(taskCount);
+    ActiveTimeUs.resize(taskCount);
+}
+
+void TAsyncBufferStats::Resize(ui32 taskCount) {
+    Ingress.Resize(taskCount);
+    Push.Resize(taskCount);
+    Pop.Resize(taskCount);
+    Egress.Resize(taskCount);
+}
+
+void TTableStats::Resize(ui32 taskCount) {
+    ReadRows.resize(taskCount);
+    ReadBytes.resize(taskCount);
+    WriteRows.resize(taskCount);
+    WriteBytes.resize(taskCount);
+    EraseRows.resize(taskCount);
+    EraseBytes.resize(taskCount);
+    AffectedPartitions.resize(taskCount);
+}
+
+void TStageExecutionStats::Resize(ui32 taskCount) {
+    CpuTimeUs.resize(taskCount);
+    SourceCpuTimeUs.resize(taskCount);
+
+    InputRows.resize(taskCount);
+    InputBytes.resize(taskCount);
+    OutputRows.resize(taskCount);
+    OutputBytes.resize(taskCount);
+
+    FirstRowTimeMs.resize(taskCount);
+    FinishTimeMs.resize(taskCount);
+    StartTimeMs.resize(taskCount);
+
+    for (auto& p : Ingress) p.second.Resize(taskCount);
+    for (auto& p : Egress) p.second.Resize(taskCount);
+    for (auto& p : Input) p.second.Resize(taskCount);
+    for (auto& p : Output) p.second.Resize(taskCount);
+
+    MaxMemoryUsage.resize(taskCount);
+}
+
+void TStageExecutionStats::UpdateAsyncStats(i32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats) {
+    aggrAsyncStats.Bytes[index] = asyncStats.GetBytes();
+    aggrAsyncStats.Rows[index] = asyncStats.GetRows();
+    aggrAsyncStats.Chunks[index] = asyncStats.GetChunks();
+    aggrAsyncStats.Splits[index] = asyncStats.GetSplits();
+
+    auto firstMessageMs = asyncStats.GetFirstMessageMs();
+    aggrAsyncStats.FirstMessageMs[index] = firstMessageMs;
+    aggrAsyncStats.PauseMessageMs[index] = asyncStats.GetPauseMessageMs();
+    aggrAsyncStats.ResumeMessageMs[index] = asyncStats.GetResumeMessageMs();
+    auto lastMessageMs = asyncStats.GetLastMessageMs();
+    aggrAsyncStats.LastMessageMs[index] = lastMessageMs;
+    aggrAsyncStats.WaitTimeUs[index] = asyncStats.GetWaitTimeUs();
+    aggrAsyncStats.WaitPeriods[index] = asyncStats.GetWaitPeriods();
+    if (firstMessageMs && lastMessageMs > firstMessageMs) {
+        aggrAsyncStats.ActiveTimeUs[index] = lastMessageMs - firstMessageMs;
+    }
+}
+
+void TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, ui64 maxMemoryUsage) {
+    auto taskId = taskStats.GetTaskId();
+    auto it = Task2Index.find(taskId);
+
+    ui32 taskCount = Task2Index.size();
+
+    ui32 index;
+    if (it == Task2Index.end()) {
+        index = taskCount++;
+        Task2Index.emplace(taskId, index);
+        Resize(taskCount);
+    } else {
+        index = it->second;
+    }
+
+    CpuTimeUs[index] = taskStats.GetCpuTimeUs();
+    SourceCpuTimeUs[index] = taskStats.GetSourceCpuTimeUs();
+
+    InputRows[index] = taskStats.GetInputRows();
+    InputBytes[index] = taskStats.GetInputBytes();
+    OutputRows[index] = taskStats.GetOutputRows();
+    OutputBytes[index] = taskStats.GetOutputBytes();
+
+    StartTimeMs[index] = taskStats.GetStartTimeMs();       // to be reviewed
+    FirstRowTimeMs[index] = taskStats.GetFirstRowTimeMs(); // to be reviewed
+    FinishTimeMs[index] = taskStats.GetFinishTimeMs();     // to be reviewed
+
+    for (auto& tableStat : taskStats.GetTables()) {
+        auto tablePath = tableStat.GetTablePath();
+        auto [it, inserted] = Tables.try_emplace(tablePath, taskCount);
+        auto& aggrTableStats = it->second;
+        aggrTableStats.ReadRows[index] = tableStat.GetReadRows();
+        aggrTableStats.ReadBytes[index] = tableStat.GetReadBytes();
+        aggrTableStats.WriteRows[index] = tableStat.GetWriteRows();
+        aggrTableStats.WriteBytes[index] = tableStat.GetWriteBytes();
+        aggrTableStats.EraseRows[index] = tableStat.GetEraseRows();
+        aggrTableStats.EraseBytes[index] = tableStat.GetEraseBytes();
+        aggrTableStats.AffectedPartitions[index] = tableStat.GetAffectedPartitions();
+    }
+
+    for (auto& sourceStat : taskStats.GetSources()) {
+        auto ingressName = sourceStat.GetIngressName();
+        auto [it, inserted] = Ingress.try_emplace(ingressName, taskCount);
+        auto& asyncBufferStats = it->second;
+        UpdateAsyncStats(index, asyncBufferStats.Ingress, sourceStat.GetIngress());
+        UpdateAsyncStats(index, asyncBufferStats.Push, sourceStat.GetPush());
+        UpdateAsyncStats(index, asyncBufferStats.Pop, sourceStat.GetPop());
+    }
+
+    for (auto& inputChannelStat : taskStats.GetInputChannels()) {
+        auto stageId = inputChannelStat.GetSrcStageId();
+        auto [it, inserted] = Input.try_emplace(stageId, taskCount);
+        auto& asyncBufferStats = it->second;
+        UpdateAsyncStats(index, asyncBufferStats.Push, inputChannelStat.GetPush());
+        UpdateAsyncStats(index, asyncBufferStats.Pop, inputChannelStat.GetPop());
+    }
+
+    for (auto& outputChannelStat : taskStats.GetOutputChannels()) {
+        auto stageId = outputChannelStat.GetDstStageId();
+        auto [it, inserted] = Output.try_emplace(stageId, taskCount);
+        auto& asyncBufferStats = it->second;
+        UpdateAsyncStats(index, asyncBufferStats.Push, outputChannelStat.GetPush());
+        UpdateAsyncStats(index, asyncBufferStats.Pop, outputChannelStat.GetPop());
+    }
+
+    for (auto& sinkStat : taskStats.GetSinks()) {
+        auto egressName = sinkStat.GetEgressName();
+        auto [it, inserted] = Egress.try_emplace(egressName, taskCount);
+        auto& asyncBufferStats = it->second;
+        UpdateAsyncStats(index, asyncBufferStats.Push, sinkStat.GetPush());
+        UpdateAsyncStats(index, asyncBufferStats.Pop, sinkStat.GetPop());
+        UpdateAsyncStats(index, asyncBufferStats.Ingress, sinkStat.GetEgress());
+    }
+
+    MaxMemoryUsage[index] = maxMemoryUsage;
+}
+
 namespace {
 
 TTableStat operator - (const TTableStat& l, const TTableStat& r) {
@@ -20,14 +168,16 @@ TProgressStatEntry operator - (const TProgressStatEntry& l, const TProgressStatE
 }
 
 void UpdateAggr(NDqProto::TDqStatsAggr* aggr, ui64 value) noexcept {
-    if (aggr->GetMin() == 0) {
-        aggr->SetMin(value);
-    } else {
-        aggr->SetMin(std::min(aggr->GetMin(), value));
+    if (value) {
+        if (aggr->GetMin() == 0) {
+            aggr->SetMin(value);
+        } else {
+            aggr->SetMin(std::min(aggr->GetMin(), value));
+        }
+        aggr->SetMax(std::max(aggr->GetMax(), value));
+        aggr->SetSum(aggr->GetSum() + value);
+        aggr->SetCnt(aggr->GetCnt() + 1);
     }
-    aggr->SetMax(std::max(aggr->GetMax(), value));
-    aggr->SetSum(aggr->GetSum() + value);
-    aggr->SetCnt(aggr->GetCnt() + 1);
 }
 
 struct TAsyncGroupStat {
@@ -74,19 +224,19 @@ void UpdateAsyncAggr(NDqProto::TDqAsyncStatsAggr& asyncAggr, const NDqProto::TDq
 }
 
 void UpdateMinMax(NDqProto::TDqStatsMinMax* minMax, ui64 value) noexcept {
-    if (minMax->GetMin() == 0) {
-        minMax->SetMin(value);
-    } else {
-        minMax->SetMin(std::min(minMax->GetMin(), value));
+    if (value) {
+        if (minMax->GetMin() == 0) {
+            minMax->SetMin(value);
+        } else {
+            minMax->SetMin(std::min(minMax->GetMin(), value));
+        }
+        minMax->SetMax(std::max(minMax->GetMax(), value));
     }
-    minMax->SetMax(std::max(minMax->GetMax(), value));
 }
 
-NDqProto::TDqStageStats* GetOrCreateStageStats(const NYql::NDqProto::TDqTaskStats& taskStats,
+NDqProto::TDqStageStats* GetOrCreateStageStats(const NYql::NDq::TStageId& stageId,
     const TKqpTasksGraph& tasksGraph, NDqProto::TDqExecutionStats& execStats)
 {
-    auto& task = tasksGraph.GetTask(taskStats.GetTaskId());
-    auto& stageId = task.StageId;
     auto& stageInfo = tasksGraph.GetStageInfo(stageId);
     auto& stageProto = stageInfo.Meta.Tx.Body->GetStages(stageId.StageId);
 
@@ -101,6 +251,13 @@ NDqProto::TDqStageStats* GetOrCreateStageStats(const NYql::NDqProto::TDqTaskStat
     newStage->SetStageGuid(stageProto.GetStageGuid());
     newStage->SetProgram(stageProto.GetProgramAst());
     return newStage;
+}
+
+NDqProto::TDqStageStats* GetOrCreateStageStats(const NYql::NDqProto::TDqTaskStats& taskStats,
+    const TKqpTasksGraph& tasksGraph, NDqProto::TDqExecutionStats& execStats)
+{
+    auto& task = tasksGraph.GetTask(taskStats.GetTaskId());
+    return GetOrCreateStageStats(task.StageId, tasksGraph, execStats);
 }
 
 NDqProto::TDqTableAggrStats* GetOrCreateTableAggrStats(NDqProto::TDqStageStats* stage, const TString& tablePath) {
@@ -409,6 +566,144 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
             AddComputeActorProfileStatsByTask(*task, stats);
         }
     }
+}
+
+void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats) {
+    Y_ASSERT(stats.GetTasks().size() == 1);
+    const NYql::NDqProto::TDqTaskStats& taskStats = stats.GetTasks(0);
+    Y_ASSERT(taskStats.GetTaskId() == taskId);
+    auto stageId = taskStats.GetStageId();
+    auto [it, inserted] = StageStats.try_emplace(stageId);
+    if (inserted) {
+        it->second.StageId = TasksGraph->GetTask(taskStats.GetTaskId()).StageId;
+    }
+    it->second.UpdateStats(taskStats, stats.GetMaxMemoryUsage());
+}
+
+void ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsMinMax& stats) {
+    ui64 count = 0;
+    ui64 min = 0;
+    ui64 max = 0;
+    for (auto d : data) {
+        if (d) {
+            if (count) {
+                if (min > d) min = d;
+                if (max < d) max = d;
+            } else {
+                min = max = d;
+            }
+            count++;
+        }
+    }
+    if (count) {
+        stats.SetMin(min);
+        stats.SetMax(max);
+    }
+}
+
+void ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsAggr& stats) {
+    ui64 count = 0;
+    ui64 min = 0;
+    ui64 max = 0;
+    ui64 sum = 0;
+    for (auto d : data) {
+        if (d) {
+            if (count) {
+                if (min > d) min = d;
+                if (max < d) max = d;
+            } else {
+                min = max = d;
+            }
+            sum += d;
+            count++;
+        }
+    }
+    if (count) {
+        stats.SetMin(min);
+        stats.SetMax(max);
+        stats.SetSum(sum);
+        stats.SetCnt(count);
+    }
+}
+
+ui64 ExportAggStats(std::vector<ui64>& data) {
+    ui64 sum = 0;
+    for (auto d : data) {
+        sum += d;
+    }
+    return sum;
+}
+
+void ExportAggAsyncStats(TAsyncStats& data, NYql::NDqProto::TDqAsyncStatsAggr& stats) {
+    ExportAggStats(data.Bytes, *stats.MutableBytes());
+    ExportAggStats(data.Rows, *stats.MutableRows());
+    ExportAggStats(data.Chunks, *stats.MutableChunks());
+    ExportAggStats(data.Splits, *stats.MutableSplits());
+    ExportAggStats(data.FirstMessageMs, *stats.MutableFirstMessageMs());
+    ExportAggStats(data.PauseMessageMs, *stats.MutablePauseMessageMs());
+    ExportAggStats(data.ResumeMessageMs, *stats.MutableResumeMessageMs());
+    ExportAggStats(data.LastMessageMs, *stats.MutableLastMessageMs());
+    ExportAggStats(data.WaitTimeUs, *stats.MutableWaitTimeUs());
+    ExportAggStats(data.WaitPeriods, *stats.MutableWaitPeriods());
+    ExportAggStats(data.ActiveTimeUs, *stats.MutableActiveTimeUs());
+}
+
+void ExportAggAsyncBufferStats(TAsyncBufferStats& data, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats) {
+    ExportAggAsyncStats(data.Ingress, *stats.MutableIngress());
+    ExportAggAsyncStats(data.Push, *stats.MutablePush());
+    ExportAggAsyncStats(data.Pop, *stats.MutablePop());
+    ExportAggAsyncStats(data.Egress, *stats.MutableEgress());
+}
+
+void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats) {
+
+    THashMap<ui32, NDqProto::TDqStageStats*> protoStages;
+    for (auto& [stageId, stagetype] : TasksGraph->GetStagesInfo()) {
+        protoStages.emplace(stageId.StageId, GetOrCreateStageStats(stageId, *TasksGraph, stats));
+    }
+
+    for (auto& p : StageStats) {
+        auto& stageStats = *protoStages[p.second.StageId.StageId];
+        stageStats.SetTotalTasksCount(p.second.Task2Index.size());
+
+        ExportAggStats(p.second.CpuTimeUs, *stageStats.MutableCpuTimeUs());
+        ExportAggStats(p.second.SourceCpuTimeUs, *stageStats.MutableSourceCpuTimeUs());
+
+        ExportAggStats(p.second.InputRows, *stageStats.MutableInputRows());
+        ExportAggStats(p.second.InputBytes, *stageStats.MutableInputBytes());
+        ExportAggStats(p.second.OutputRows, *stageStats.MutableOutputRows());
+        ExportAggStats(p.second.OutputBytes, *stageStats.MutableOutputBytes());
+
+        ExportAggStats(p.second.StartTimeMs, *stageStats.MutableStartTimeMs());       // to be reviewed
+        ExportAggStats(p.second.FirstRowTimeMs, *stageStats.MutableFirstRowTimeMs()); // to be reviewed
+        ExportAggStats(p.second.FinishTimeMs, *stageStats.MutableFinishTimeMs());     // to be reviewed
+
+        stageStats.SetDurationUs((stageStats.GetFinishTimeMs().GetMax() - stageStats.GetStartTimeMs().GetMin()) * 1'000);
+
+        for (auto& p2 : p.second.Tables) {
+            auto& table = *stageStats.AddTables();
+            table.SetTablePath(p2.first);
+            ExportAggStats(p2.second.ReadRows, *table.MutableReadRows());
+            ExportAggStats(p2.second.ReadBytes, *table.MutableReadBytes());
+            ExportAggStats(p2.second.WriteRows, *table.MutableWriteRows());
+            ExportAggStats(p2.second.WriteBytes, *table.MutableWriteBytes());
+            ExportAggStats(p2.second.EraseRows, *table.MutableEraseRows());
+            ExportAggStats(p2.second.EraseBytes, *table.MutableEraseBytes());
+            table.SetAffectedPartitions(ExportAggStats(p2.second.AffectedPartitions));
+        }
+        for (auto& p2 : p.second.Ingress) {
+            ExportAggAsyncBufferStats(p2.second, (*stageStats.MutableIngress())[p2.first]);
+        }
+        for (auto& p2 : p.second.Input) {
+            ExportAggAsyncBufferStats(p2.second, (*stageStats.MutableInput())[p2.first]);
+        }
+        for (auto& p2 : p.second.Output) {
+            ExportAggAsyncBufferStats(p2.second, (*stageStats.MutableOutput())[p2.first]);
+        }
+        for (auto& p2 : p.second.Egress) {
+            ExportAggAsyncBufferStats(p2.second, (*stageStats.MutableEgress())[p2.first]);
+        }
+    }    
 }
 
 void TQueryExecutionStats::Finish() {

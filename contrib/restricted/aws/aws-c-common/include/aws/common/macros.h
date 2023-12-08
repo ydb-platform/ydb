@@ -43,7 +43,7 @@ AWS_STATIC_ASSERT(CALL_OVERLOAD_TEST(1, 2, 3) == 3);
 /**
  * Format macro for strings of a specified length.
  * Allows non null-terminated strings to be used with the printf family of functions.
- * Ex: printf("scheme is " PRInSTR, 4, "http://example.org"); // ouputs: "scheme is http"
+ * Ex: printf("scheme is " PRInSTR, 4, "http://example.org"); // outputs: "scheme is http"
  */
 #define PRInSTR "%.*s"
 
@@ -70,7 +70,7 @@ AWS_STATIC_ASSERT(CALL_OVERLOAD_TEST(1, 2, 3) == 3);
 #        if defined(__cplusplus)
 #            define AWS_VARIABLE_LENGTH_ARRAY(type, name, length) type *name = alloca(sizeof(type) * (length))
 #        else
-#            define AWS_VARIABLE_LENGTH_ARRAY(type, name, length) type name[length];
+#            define AWS_VARIABLE_LENGTH_ARRAY(type, name, length) type name[length]
 #        endif /* defined(__cplusplus) */
 #    endif     /*  defined(__GNUC__) || defined(__clang__) */
 #endif         /*  defined(_MSC_VER) */

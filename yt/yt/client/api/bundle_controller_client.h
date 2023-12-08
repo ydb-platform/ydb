@@ -21,8 +21,7 @@ struct TBundleConfigDescriptor
 
 struct IBundleControllerClient
 {
-    virtual ~IBundleControllerClient()
-    { }
+    virtual ~IBundleControllerClient() = default;
 
     virtual TFuture<TBundleConfigDescriptor> GetBundleConfig(
         const TString& bundleName,

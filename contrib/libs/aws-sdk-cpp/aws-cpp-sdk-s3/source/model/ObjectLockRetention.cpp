@@ -50,7 +50,7 @@ ObjectLockRetention& ObjectLockRetention::operator =(const XmlNode& xmlNode)
     XmlNode retainUntilDateNode = resultNode.FirstChild("RetainUntilDate");
     if(!retainUntilDateNode.IsNull())
     {
-      m_retainUntilDate = DateTime(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(retainUntilDateNode.GetText()).c_str()).c_str(), DateFormat::ISO_8601);
+      m_retainUntilDate = DateTime(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(retainUntilDateNode.GetText()).c_str()).c_str(), Aws::Utils::DateFormat::ISO_8601);
       m_retainUntilDateHasBeenSet = true;
     }
   }
@@ -70,7 +70,7 @@ void ObjectLockRetention::AddToNode(XmlNode& parentNode) const
   if(m_retainUntilDateHasBeenSet)
   {
    XmlNode retainUntilDateNode = parentNode.CreateChildElement("RetainUntilDate");
-   retainUntilDateNode.SetText(m_retainUntilDate.ToGmtString(DateFormat::ISO_8601));
+   retainUntilDateNode.SetText(m_retainUntilDate.ToGmtString(Aws::Utils::DateFormat::ISO_8601));
   }
 
 }

@@ -26,7 +26,6 @@ ISecuredServiceAccountCredentialsFactory::TPtr CreateSecuredServiceAccountCreden
 std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFactoryForStructuredToken(
     ISecuredServiceAccountCredentialsFactory::TPtr factory,
     const TString& structuredTokenJson,
-    bool addBearerToToken = false,
-    const std::function<TString(const TString&, const TString&)>& basicToToken = {}
+    bool addBearerToToken = false
 );
 }

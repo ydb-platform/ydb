@@ -48,13 +48,13 @@ protected:
         return true;
     }
     virtual bool DoOnWriteIndexComplete(const ui64 /*tabletId*/, const TString& changeClassName) override {
-        if (changeClassName == "TTL") {
+        if (changeClassName.find("TTL") != TString::npos) {
             AtomicIncrement(TTLFinishedCounter);
         }
         return true;
     }
     virtual bool DoOnWriteIndexStart(const ui64 /*tabletId*/, const TString& changeClassName) override {
-        if (changeClassName == "TTL") {
+        if (changeClassName.find("TTL") != TString::npos) {
             AtomicIncrement(TTLStartedCounter);
         }
         return true;
@@ -631,27 +631,30 @@ public:
 
 std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TString>& blobs,
                                              const std::vector<TTestSchema::TTableSpecials>& specsExt,
-                                             std::optional<ui32> eventLoss = {})
+                                             std::optional<ui32> eventLoss = {}, const bool buildTTL = true)
 {
     auto specs = specsExt;
-    for (auto&& i : specs) {
-        if (!i.HasTtl() && i.HasTiers()) {
-            std::optional<TDuration> d;
-            for (auto&& i : i.Tiers) {
-                if (!d || *d < i.EvictAfter) {
-                    d = i.EvictAfter;
+    if (buildTTL) {
+        for (auto&& i : specs) {
+            if (!i.HasTtl() && i.HasTiers()) {
+                std::optional<TDuration> d;
+                for (auto&& i : i.Tiers) {
+                    if (!d || *d < i.EvictAfter) {
+                        d = i.EvictAfter;
+                    }
                 }
+                Y_ABORT_UNLESS(d);
+                i.SetTtl(*d);
             }
-            Y_ABORT_UNLESS(d);
-            i.SetTtl(*d);
         }
     }
+
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TWaitCompactionController>();
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
-    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_INFO);
+    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime,
@@ -720,6 +723,9 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         bool hasColdEviction = false;
         bool misconfig = false;
         auto expectedReadResult = EExpectedResult::OK;
+        ui32 tIdx = 0;
+        std::optional<ui32> tIdxCorrect;
+        TString originalEndpoint;
         for (auto&& spec : specs[i].Tiers) {
             hasColdEviction = true;
             if (spec.S3.GetEndpoint() != "fake") {
@@ -728,11 +734,14 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
                 if (i > 1) {
                     expectedReadResult = EExpectedResult::ERROR;
                 }
+                originalEndpoint = spec.S3.GetEndpoint();
+                spec.S3.SetEndpoint("fake");
+                tIdxCorrect = tIdx++;
             }
             break;
         }
         if (i) {
-            const ui32 version = i + 1;
+            const ui32 version = 2 * i + 1;
             const bool ok = ProposeSchemaTx(runtime, sender,
                 TTestSchema::AlterTableTxBody(tableId, version, specs[i]),
                 NOlap::TSnapshot(++planStep, ++txId));
@@ -791,6 +800,12 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
             runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
         }
 
+        if (tIdxCorrect) {
+            specs[i].Tiers[*tIdxCorrect].S3.SetEndpoint(originalEndpoint);
+            csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
+        }
+
+
         if (reboots) {
             Cerr << "INTERMEDIATE REBOOT(" << i << ")" << Endl;
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
@@ -829,7 +844,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
             if (resRead.GetFinished()) {
                 UNIT_ASSERT(meta.HasReadStats());
                 auto& readStats = meta.GetReadStats();
-                ui64 numBytes = readStats.GetPortionsBytes(); // compressed bytes in storage
+                const ui64 numBytes = readStats.GetCompactedPortionsBytes() + readStats.GetInsertedPortionsBytes() + readStats.GetCommittedPortionsBytes();
                 specRowsBytes.back().second += numBytes;
                 numExpected = resRead.GetBatch() + 1;
             }
@@ -980,11 +995,11 @@ std::vector<std::pair<ui32, ui64>> TestTiersAndTtl(const TTestSchema::TTableSpec
 
 std::vector<std::pair<ui32, ui64>> TestOneTierExport(const TTestSchema::TTableSpecials& spec,
                                                     const std::vector<TTestSchema::TTableSpecials>& alters,
-                                                    const std::vector<ui64>& ts, bool reboots, std::optional<ui32> loss) {
+                                                    const std::vector<ui64>& ts, bool reboots, std::optional<ui32> loss, const bool buildTTL = true) {
     ui32 overlapSize = 0;
     std::vector<TString> blobs = MakeData(ts, PORTION_ROWS, overlapSize, spec.TtlColumn);
 
-    auto rowsBytes = TestTiers(reboots, blobs, alters, loss);
+    auto rowsBytes = TestTiers(reboots, blobs, alters, loss, buildTTL);
     for (auto&& i : rowsBytes) {
         Cerr << i.first << "/" << i.second << Endl;
     }
@@ -1081,7 +1096,7 @@ void TestExport(bool reboot, TExportTestOpts&& opts = TExportTestOpts{}) {
         alters[alterNo].Tiers.clear();
     }
 
-    auto rowsBytes = TestOneTierExport(spec, alters, ts, reboot, opts.Loss);
+    auto rowsBytes = TestOneTierExport(spec, alters, ts, reboot, opts.Loss, !opts.Misconfig);
     if (!opts.Misconfig) {
         changes.Assert(spec, rowsBytes, 1);
     }

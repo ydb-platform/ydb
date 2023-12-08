@@ -235,7 +235,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             , TableName(tableName)
             , StoreName(storeName)
         {
-            SetShardingMethod("HASH_FUNCTION_MODULO_N");
+            SetShardingMethod("HASH_FUNCTION_CONSISTENCY_64");
         }
 
         void PrintCount() {
@@ -389,6 +389,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     private:
         using TBase = Tests::NCS::THelper;
     public:
+        TLocalHelper& SetShardingMethod(const TString& value) {
+            TBase::SetShardingMethod(value);
+            return *this;
+        }
 
         void CreateTestOlapTable(TString tableName = "olapTable", TString storeName = "olapStore",
             ui32 storeShardsCount = 4, ui32 tableShardsCount = 3) {
@@ -478,7 +482,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 }
                 Sharding {
                     HashSharding {
-                        Function: HASH_FUNCTION_MODULO_N
+                        Function: HASH_FUNCTION_CONSISTENCY_64
                         Columns: "EventTime"
                     }
                 })", tableName.c_str(), shardsCount, PROTO_SCHEMA));
@@ -506,7 +510,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 }
                 Sharding {
                     HashSharding {
-                        Function: HASH_FUNCTION_MODULO_N
+                        Function: HASH_FUNCTION_CONSISTENCY_64
                         Columns: "id"
                     }
                 })", tableName.c_str(), shardsCount, PROTO_SCHEMA));
@@ -1413,6 +1417,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         ui32 rowsCount = 0;
         {
@@ -3692,10 +3697,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         ui32 numShards = NSan::PlainOrUnderSanitizer(1000, 10);
         ui32 numIterations = NSan::PlainOrUnderSanitizer(50, 10);
-        TLocalHelper(*server).CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
+        TLocalHelper(*server).SetShardingMethod("HASH_FUNCTION_CLOUD_LOGS").CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
         ui32 insertRows = 0;
         for(ui64 i = 0; i < numIterations; ++i) {
-            TLocalHelper(*server).SendDataViaActorSystem("/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i*1000000, 2000);
+            TLocalHelper(*server).SendDataViaActorSystem("/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i * 1000000, 2000);
             insertRows += 2000;
         }
 
@@ -3822,7 +3827,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         ui32 numShards = NSan::PlainOrUnderSanitizer(100, 10);
         ui32 numIterations = NSan::PlainOrUnderSanitizer(100, 10);
-        TLocalHelper(*server).CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
+        TLocalHelper(*server).SetShardingMethod("HASH_FUNCTION_CLOUD_LOGS").CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
         ui32 insertRows = 0;
 
         for(ui64 i = 0; i < numIterations; ++i) {

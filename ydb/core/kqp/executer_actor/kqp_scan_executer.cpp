@@ -159,6 +159,7 @@ private:
         }
         if (shardIds) {
             LOG_D("Start resolving tablets nodes... (" << shardIds.size() << ")");
+            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
             auto kqpShardsResolver = CreateKqpShardsResolver(
                 this->SelfId(), TxId, false, std::move(shardIds));
             KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
@@ -183,7 +184,6 @@ private:
 
     void Execute() {
         LWTRACK(KqpScanExecuterStartExecute, ResponseEv->Orbit, TxId);
-        NWilson::TSpan prepareTasksSpan(TWilsonKqp::ScanExecuterPrepareTasks, ExecuterStateSpan.GetTraceId(), "PrepareTasks", NWilson::EFlags::AUTO_END);
 
         auto& tx = Request.Transactions[0];
         for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
@@ -279,19 +279,12 @@ private:
             return;
         }
 
-        if (prepareTasksSpan) {
-            prepareTasksSpan.End();
-        }
-
         LOG_D("TotalShardScans: " << nShardScans);
 
+        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ScanExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
         ExecuteScanTx();
 
         Become(&TKqpScanExecuter::ExecuteState);
-        if (ExecuterStateSpan) {
-            ExecuterStateSpan.End();
-            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ScanExecuterExecuteState, ExecuterSpan.GetTraceId(), "ExecuteState", NWilson::EFlags::AUTO_END);
-        }
     }
 
 public:

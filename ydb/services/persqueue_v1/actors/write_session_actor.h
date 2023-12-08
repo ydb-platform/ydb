@@ -14,6 +14,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/pq_rl_helpers.h>
+#include <ydb/core/persqueue/writer/partition_chooser.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -94,7 +95,6 @@ private:
             HFunc(TEvWrite, Handle)
             HFunc(TEvUpdateToken, Handle)
             HFunc(TEvPQProxy::TEvDone, Handle)
-            HFunc(TEvPersQueue::TEvGetPartitionIdForWriteResponse, Handle)
 
             HFunc(TEvDescribeTopicsResponse, Handle)
 
@@ -106,9 +106,8 @@ private:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
 
-            HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
-            HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
-            HFunc(NMetadata::NProvider::TEvManagerPrepared, Handle);
+            HFunc(NPQ::TEvPartitionChooser::TEvChooseResult, Handle);
+            HFunc(NPQ::TEvPartitionChooser::TEvChooseError, Handle);
 
         default:
             break;
@@ -122,13 +121,6 @@ private:
 
     void Handle(NGRpcService::TGRpcRequestProxy::TEvRefreshTokenResponse::TPtr& ev, const TActorContext &ctx);
 
-
-    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const TActorContext &ctx);
-    void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr &ev, const NActors::TActorContext& ctx);
-    void TryCloseSession(const TActorContext& ctx);
-
-    void Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr &ev, const NActors::TActorContext& ctx);
-
     void CheckACL(const TActorContext& ctx);
     void RecheckACL(const TActorContext& ctx);
     // Requests fresh ACL from 'SchemeCache'
@@ -141,23 +133,9 @@ private:
     void Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
     void LogSession(const TActorContext& ctx);
     void InitAfterDiscovery(const TActorContext& ctx);
-    ui32 CalculateFirstClassPartition(const TActorContext& ctx);
-    void SendCreateManagerRequest(const TActorContext& ctx);
-    void DiscoverPartition(const NActors::TActorContext& ctx);
-    TString GetDatabaseName(const NActors::TActorContext& ctx);
-    void StartSession(const NActors::TActorContext& ctx);
-    void SendSelectPartitionRequest(const TString& topic, const NActors::TActorContext& ctx);
-
-    void UpdateOrProceedPartition(const NActors::TActorContext& ctx);
-    void UpdatePartition(const NActors::TActorContext& ctx);
-    void RequestNextPartition(const NActors::TActorContext& ctx);
-    void GetOrProcessPartition(const NActors::TActorContext& ctx);
 
     void ProceedPartition(const ui32 partition, const NActors::TActorContext& ctx);
 
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeUpdateSourceIdMetadataRequest(const TString& topic,
-                                                                             const NActors::TActorContext& ctx);
-    void SendUpdateSrcIdsRequests(const TActorContext& ctx);
     //void InitCheckACL(const TActorContext& ctx);
 
     void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx);
@@ -169,7 +147,10 @@ private:
     void Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const NActors::TActorContext& ctx);
+
+    void DiscoverPartition(const NActors::TActorContext& ctx);
+    void Handle(NPQ::TEvPartitionChooser::TEvChooseResult::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(NPQ::TEvPartitionChooser::TEvChooseError::TPtr& ev, const NActors::TActorContext& ctx);
 
     void HandlePoison(TEvPQProxy::TEvDieCommand::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
@@ -193,10 +174,7 @@ private:
     enum EState {
         ES_CREATED = 1,
         ES_WAIT_SCHEME = 2,
-        ES_WAIT_SESSION = 3,
-        ES_WAIT_TABLE_REQUEST_1 = 4,
-        ES_WAIT_NEXT_PARTITION = 5,
-        ES_WAIT_TABLE_REQUEST_2 = 6,
+        ES_WAIT_PARTITION = 3,
         ES_WAIT_WRITER_INIT = 7,
         ES_INITED = 8,
         ES_DYING = 9
@@ -212,6 +190,7 @@ private:
     NPersQueue::TDiscoveryConverterPtr DiscoveryConverter;
     NPersQueue::TTopicConverterPtr FullConverter;
     ui32 Partition;
+    ui64 PartitionTabletId;
     ui32 PreferedPartition;
     std::optional<ui32> ExpectedGeneration;
 
@@ -219,7 +198,6 @@ private:
     // 'SourceId' is called 'MessageGroupId' since gRPC data plane API v1
     TString SourceId; // TODO: Replace with 'MessageGroupId' everywhere
     bool UseDeduplication = true;
-    NPQ::NSourceIdEncoding::TEncodedSourceId EncodedSourceId;
 
     TString OwnerCookie;
 
@@ -236,8 +214,6 @@ private:
     std::deque<typename TWriteRequestInfo::TPtr> AcceptedRequests;
 
     bool WritesDone;
-
-    THashMap<ui32, ui64> PartitionToTablet;
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
@@ -271,25 +247,15 @@ private:
     TInstant LastACLCheckTimestamp;
     TInstant LogSessionDeadline;
 
-    ui64 BalancerTabletId;
-    TActorId PipeToBalancer;
-
+    NKikimrSchemeOp::TPersQueueGroupDescription Config;
     // PQ tablet configuration that we get at the time of session initialization
     NKikimrPQ::TPQTabletConfig InitialPQTabletConfig;
 
     NKikimrPQClient::TDataChunk InitMeta;
     TString LocalDC;
     TString ClientDC;
-    TString SelectSourceIdQuery;
-    TString UpdateSourceIdQuery;
-    TString TxId;
-    TString KqpSessionId;
-    ui32 SelectSrcIdsInflight = 0;
-    ui64 MaxSrcIdAccessTime = 0;
 
     TInstant LastSourceIdUpdate;
-    ui64 SourceIdCreateTime;
-    ui32 SourceIdUpdatesInflight = 0;
 
     TVector<NPersQueue::TPQLabelsInfo> Aggr;
     NKikimr::NPQ::TMultiCounter SLITotal;
@@ -299,11 +265,11 @@ private:
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
 
     TInitRequest InitRequest;
-    NPQ::ESourceIdTableGeneration SrcIdTableGeneration;
 
     TDeque<ui64> SeqNoInflight;
 
     TActorId PartitionWriterCache;
+    TActorId PartitionChooser;
 };
 
 }

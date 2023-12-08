@@ -816,8 +816,10 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
         return TTestActorRuntime::EEventAction::PROCESS;
     };
 
-    if (immEvents || DelayedReadSets || DelayedData) {
-        Tester.Runtime.SetObserverFunc(observer);
+    NActors::TTestActorRuntime::TEventObserver prevObserver;
+    bool catchEvents = immEvents || DelayedReadSets || DelayedData;
+    if (catchEvents) {
+        prevObserver = Tester.Runtime.SetObserverFunc(observer);
     }
 
     while (acks || plans || (results && waitForResult) || streams) {
@@ -990,6 +992,10 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
                 break;
             }
         }
+    }
+
+    if (catchEvents) {
+        Tester.Runtime.SetObserverFunc(prevObserver);
     }
 
     return stepId;

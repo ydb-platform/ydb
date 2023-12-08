@@ -4,7 +4,7 @@
 
 #include "validator_checks.h"
 
-#include <library/cpp/yaml/fyamlcpp/fyamlcpp.h>
+#include <ydb/library/fyamlcpp/fyamlcpp.h>
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>

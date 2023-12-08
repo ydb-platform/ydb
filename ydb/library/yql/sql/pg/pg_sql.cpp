@@ -411,7 +411,7 @@ public:
         case T_VariableShowStmt:
             return ParseVariableShowStmt(CAST_NODE(VariableShowStmt, node)) != nullptr;
         case T_TransactionStmt:
-            return true;
+            return ParseTransactionStmt(CAST_NODE(TransactionStmt, node));
         case T_IndexStmt:
             return ParseIndexStmt(CAST_NODE(IndexStmt, node)) != nullptr;
         default:
@@ -946,11 +946,10 @@ public:
                     AddError(TStringBuilder() << "LimitOption unsupported value: " << (int)x->limitOption);
                     return nullptr;
                 }
-            }
 
-            if (ListLength(x->lockingClause) > 0) {
-                AddError("SelectStmt: not supported lockingClause");
-                return nullptr;
+                if (ListLength(x->lockingClause) > 0) {
+                    AddWarning(TIssuesIds::PG_NO_LOCKING_SUPPORT, "SelectStmt: lockingClause is ignored");
+                }
             }
 
             TVector<TAstNode*> res;
@@ -1054,8 +1053,7 @@ public:
         }
 
         if (ListLength(value->lockingClause) > 0) {
-            AddError("SelectStmt: not supported lockingClause");
-            return nullptr;
+            AddWarning(TIssuesIds::PG_NO_LOCKING_SUPPORT, "SelectStmt: lockingClause is ignored");
         }
 
         TAstNode* limit = nullptr;
@@ -1462,15 +1460,21 @@ public:
 
 #pragma region CreateTable
 private:
+
+    struct TColumnInfo {
+        TString Name;
+        TString Type;
+        bool Serial = false;
+        bool NotNull = false;
+        TAstNode* Default = nullptr;
+    };
+
     struct TCreateTableCtx {
-        std::vector<TAstNode*> Columns;
-        std::unordered_set<TString> ColumnsSet;
+        std::unordered_map<TString, TColumnInfo> ColumnsSet;
+        std::vector<TString> ColumnOrder;
         std::vector<TAstNode*> PrimaryKey;
-        std::vector<TAstNode*> NotNullColumns;
         std::vector<std::vector<TAstNode*>> UniqConstr;
-        std::unordered_set<TString> NotNullColSet;
         bool isTemporary;
-        std::vector<TAstNode*> SerialColumns;
         bool ifNotExists;
     };
 
@@ -1518,11 +1522,12 @@ private:
             auto node = ListNodeNth(pk->keys, i);
             auto nodeName = StrVal(node);
 
-            if (!ctx.ColumnsSet.contains(nodeName)) {
+            auto it = ctx.ColumnsSet.find(nodeName);
+            if (it == ctx.ColumnsSet.end()) {
                 AddError("PK column does not belong to table");
                 return false;
             }
-            AddNonNullColumn(ctx, nodeName);
+            it->second.NotNull = true;
             ctx.PrimaryKey.push_back(QA(StrVal(node)));
         }
 
@@ -1556,14 +1561,6 @@ private:
         return true;
     }
 
-    bool AddNonNullColumn(TCreateTableCtx& ctx, const char* colName) {
-        auto [it, inserted] = ctx.NotNullColSet.insert(colName);
-        if (inserted)
-            ctx.NotNullColumns.push_back(QA(colName));
-
-        return inserted;
-    }
-
     const TString& FindColumnTypeAlias(const TString& colType, bool& isTypeSerial) {
         const static std::unordered_map<TString, TString> aliasMap {
             {"smallserial", "int2"},
@@ -1583,6 +1580,8 @@ private:
     }
 
     bool AddColumn(TCreateTableCtx& ctx, const ColumnDef* node) {
+        TColumnInfo cinfo{.Name = node->colname};
+
         if (node->constraints) {
             for (ui32 i = 0; i < ListLength(node->constraints); ++i) {
                 auto constraintNode =
@@ -1590,7 +1589,7 @@ private:
 
                 switch (constraintNode->contype) {
                     case CONSTR_NOTNULL:
-                        AddNonNullColumn(ctx, node->colname);
+                        cinfo.NotNull = true;
                         break;
 
                     case CONSTR_PRIMARY: {
@@ -1598,12 +1597,22 @@ private:
                             AddError("Only a single PK is allowed per table");
                             return false;
                         }
-                        AddNonNullColumn(ctx, node->colname);
+                        cinfo.NotNull = true;
                         ctx.PrimaryKey.push_back(QA(node->colname));
                     } break;
 
                     case CONSTR_UNIQUE: {
                         ctx.UniqConstr.push_back({QA(node->colname)});
+                    } break;
+
+                    case CONSTR_DEFAULT: {
+                        TExprSettings settings;
+                        settings.AllowColumns = false;
+                        settings.Scope = "DEFAULT";
+                        cinfo.Default = ParseExpr(constraintNode->raw_expr, settings);
+                        if (!cinfo.Default) {
+                            return false;
+                        }
                     } break;
 
                     default:
@@ -1612,26 +1621,19 @@ private:
                 }
             }
         }
-        auto [it, inserted] = ctx.ColumnsSet.insert(node->colname);
+
+        // for now we pass just the last part of the type name
+        auto colTypeVal = StrVal( ListNodeNth(node->typeName->names,
+                                           ListLength(node->typeName->names) - 1));
+
+        cinfo.Type = FindColumnTypeAlias(colTypeVal, cinfo.Serial);
+        auto [it, inserted] = ctx.ColumnsSet.emplace(node->colname, cinfo);
         if (!inserted) {
             AddError("duplicated column names found");
             return false;
         }
 
-        // for now we pass just the last part of the type name
-        auto colTypeVal = StrVal( ListNodeNth(node->typeName->names,
-                                           ListLength(node->typeName->names) - 1));
-        bool isTypeSerial = false;
-        const auto colType = FindColumnTypeAlias(colTypeVal, isTypeSerial);
-
-        if (isTypeSerial) {
-            ctx.SerialColumns.push_back(QA(node->colname));
-        }
-
-        ctx.Columns.push_back(
-                QL(QA(node->colname), L(A("PgType"), QA(colType)))
-                );
-
+        ctx.ColumnOrder.push_back(node->colname);
         return true;
     }
 
@@ -1663,20 +1665,42 @@ private:
         return true;
     }
 
+    TAstNode* BuildColumnsOptions(TCreateTableCtx& ctx) {
+        std::vector<TAstNode*> columns;
+
+        for(const auto& name: ctx.ColumnOrder) {
+            auto it = ctx.ColumnsSet.find(name);
+            Y_ENSURE(it != ctx.ColumnsSet.end());
+
+            const auto& cinfo = it->second;
+
+            std::vector<TAstNode*> constraints;
+            if (cinfo.Serial) {
+                constraints.push_back(QL(QA("serial")));
+            }
+
+            if (cinfo.NotNull) {
+                constraints.push_back(QL(QA("not_null")));   
+            }
+
+            if (cinfo.Default) {
+                constraints.push_back(QL(QA("default"), cinfo.Default));
+            }
+
+            columns.push_back(QL(QA(cinfo.Name), L(A("PgType"), QA(cinfo.Type)), QL(QA("columnConstraints"), QVL(constraints.data(), constraints.size()))));
+        }
+
+        return QVL(columns.data(), columns.size());
+    }
+
     TAstNode* BuildCreateTableOptions(TCreateTableCtx& ctx) {
         std::vector<TAstNode*> options;
 
         TString mode = (ctx.ifNotExists) ? "create_if_not_exists" : "create";
         options.push_back(QL(QA("mode"), QA(mode)));
-        options.push_back(QL(QA("columns"), QVL(ctx.Columns.data(), ctx.Columns.size())));
+        options.push_back(QL(QA("columns"), BuildColumnsOptions(ctx)));
         if (!ctx.PrimaryKey.empty()) {
             options.push_back(QL(QA("primarykey"), QVL(ctx.PrimaryKey.data(), ctx.PrimaryKey.size())));
-        }
-        if (!ctx.NotNullColumns.empty()) {
-            options.push_back(QL(QA("notnull"), QVL(ctx.NotNullColumns.data(), ctx.NotNullColumns.size())));
-        }
-        if (!ctx.SerialColumns.empty()) {
-            options.push_back(QL(QA("serialColumns"), QVL(ctx.SerialColumns.data(), ctx.SerialColumns.size())));
         }
         for (auto& uniq : ctx.UniqConstr) {
             auto columns = QVL(uniq.data(), uniq.size());
@@ -2225,6 +2249,26 @@ public:
     }
 
     [[nodiscard]]
+    bool ParseTransactionStmt(const TransactionStmt* value) {
+        switch (value->kind) {
+        case TRANS_STMT_BEGIN: [[fallthrough]] ;
+        case TRANS_STMT_START:
+            return true;
+        case TRANS_STMT_COMMIT:
+            Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
+                A("world"))));
+            return true;
+        case TRANS_STMT_ROLLBACK:
+            Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
+                A("world"), QL(QL(QA("mode"), QA("rollback"))))));
+            return true;
+        default:
+            AddError(TStringBuilder() << "TransactionStmt: kind is not supported: " << (int)value->kind);
+            return false;
+        }
+    }
+
+    [[nodiscard]]
     TAstNode* ParseIndexStmt(const IndexStmt* value) {
         if (value->unique) {
             AddError("unique index creation is not supported yet");
@@ -2379,7 +2423,7 @@ public:
         return {};
       }
 
-      const auto cluster = !schemaname.Empty() ? schemaname : Settings.DefaultCluster;
+      const auto cluster = !schemaname.Empty() && schemaname != "public" ? schemaname : Settings.DefaultCluster;
       const auto sinkOrSource = BuildClusterSinkOrSourceExpression(isSink, cluster);
       const auto key = BuildTableKeyExpression(relname, isScheme);
       return {sinkOrSource, key};
@@ -2406,7 +2450,7 @@ public:
             return {};
         }
 
-        const auto cluster = !schemaname.Empty() ? schemaname : Settings.DefaultCluster;
+        const auto cluster = !schemaname.Empty() && schemaname != "public" ? schemaname : Settings.DefaultCluster;
         const auto sinkOrSource = BuildClusterSinkOrSourceExpression(true, cluster);
         const auto key = BuildPgObjectExpression(objectName, pgObjectType);
         return {sinkOrSource, key};

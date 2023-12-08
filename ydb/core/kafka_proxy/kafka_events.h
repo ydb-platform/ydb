@@ -27,6 +27,7 @@ struct TEvKafka {
         EvHeartbeatRequest,
         EvLeaveGroupRequest,
         EvKillReadSession,
+        EvCommitedOffsetsResponse,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -204,6 +205,16 @@ struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResp
     {}
 
     TVector<TPartitionOffsetsInfo> Partitions;
+};
+
+struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffsetsResponse, EvTopicOffsetsResponse> 
+                           , public NKikimr::NGRpcProxy::V1::TEvPQProxy::TLocalResponseBase
+{
+    TEvCommitedOffsetsResponse()
+    {}
+
+    TString TopicName;
+    std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, ui32>>> PartitionIdToOffsets;
 };
 
 };

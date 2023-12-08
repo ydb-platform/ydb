@@ -1,0 +1,4 @@
+-- SELECT col_15_date32 FROM rtmr_dev00_clickhouse_native.primitives;
+-- SELECT MIN(LEN(col)) FROM rtmr_dev00_clickhouse_native.benchmark_1g;
+-- SELECT MIN(LEN(col1)+ LEN(col2)) FROM rtmr_dev00_clickhouse_native.benchmark_2g;
+SELECT * FROM rtmr_dev00_clickhouse_native.example_1;

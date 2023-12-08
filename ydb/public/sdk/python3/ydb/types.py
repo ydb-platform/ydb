@@ -1,76 +1,94 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+
 import abc
 import enum
 import json
 from . import _utilities, _apis
 from datetime import date, datetime, timedelta
+import typing
 import uuid
 import struct
 from google.protobuf import struct_pb2
+
+from . import table
+
+
+# Workaround for good IDE and universal for runtime
+if typing.TYPE_CHECKING:
+    from ._grpc.v4.protos import ydb_value_pb2
+else:
+    from ._grpc.common.protos import ydb_value_pb2
 
 
 _SECONDS_IN_DAY = 60 * 60 * 24
 _EPOCH = datetime(1970, 1, 1)
 
 
-def _from_date(x, table_client_settings):
+def _from_date(x: ydb_value_pb2.Value, table_client_settings: table.TableClientSettings) -> typing.Union[date, int]:
     if table_client_settings is not None and table_client_settings._native_date_in_result_sets:
         return _EPOCH.date() + timedelta(days=x.uint32_value)
     return x.uint32_value
 
 
-def _to_date(pb, value):
+def _to_date(pb: ydb_value_pb2.Value, value: typing.Union[date, int]) -> None:
     if isinstance(value, date):
         pb.uint32_value = (value - _EPOCH.date()).days
     else:
         pb.uint32_value = value
 
 
-def _from_datetime_number(x, table_client_settings):
+def _from_datetime_number(
+    x: typing.Union[float, datetime], table_client_settings: table.TableClientSettings
+) -> datetime:
     if table_client_settings is not None and table_client_settings._native_datetime_in_result_sets:
         return datetime.utcfromtimestamp(x)
     return x
 
 
-def _from_json(x, table_client_settings):
+def _from_json(x: typing.Union[str, bytearray, bytes], table_client_settings: table.TableClientSettings):
     if table_client_settings is not None and table_client_settings._native_json_in_result_sets:
         return json.loads(x)
     return x
 
 
-def _to_uuid(value_pb, table_client_settings):
+def _to_uuid(value_pb: ydb_value_pb2.Value, table_client_settings: table.TableClientSettings) -> uuid.UUID:
     return uuid.UUID(bytes_le=struct.pack("QQ", value_pb.low_128, value_pb.high_128))
 
 
-def _from_uuid(pb, value):
+def _from_uuid(pb: ydb_value_pb2.Value, value: uuid.UUID):
     pb.low_128 = struct.unpack("Q", value.bytes_le[0:8])[0]
     pb.high_128 = struct.unpack("Q", value.bytes_le[8:16])[0]
 
 
-def _from_interval(value_pb, table_client_settings):
+def _from_interval(
+    value_pb: ydb_value_pb2.Value, table_client_settings: table.TableClientSettings
+) -> typing.Union[timedelta, int]:
     if table_client_settings is not None and table_client_settings._native_interval_in_result_sets:
         return timedelta(microseconds=value_pb.int64_value)
     return value_pb.int64_value
 
 
-def _timedelta_to_microseconds(value):
+def _timedelta_to_microseconds(value: timedelta) -> int:
     return (value.days * _SECONDS_IN_DAY + value.seconds) * 1000000 + value.microseconds
 
 
-def _to_interval(pb, value):
+def _to_interval(pb: ydb_value_pb2.Value, value: typing.Union[timedelta, int]):
     if isinstance(value, timedelta):
         pb.int64_value = _timedelta_to_microseconds(value)
     else:
         pb.int64_value = value
 
 
-def _from_timestamp(value_pb, table_client_settings):
+def _from_timestamp(
+    value_pb: ydb_value_pb2.Value, table_client_settings: table.TableClientSettings
+) -> typing.Union[datetime, int]:
     if table_client_settings is not None and table_client_settings._native_timestamp_in_result_sets:
         return _EPOCH + timedelta(microseconds=value_pb.uint64_value)
     return value_pb.uint64_value
 
 
-def _to_timestamp(pb, value):
+def _to_timestamp(pb: ydb_value_pb2.Value, value: typing.Union[datetime, int]):
     if isinstance(value, datetime):
         pb.uint64_value = _timedelta_to_microseconds(value - _EPOCH)
     else:
@@ -129,13 +147,15 @@ class PrimitiveType(enum.Enum):
 
     DyNumber = _apis.primitive_types.DYNUMBER, "text_value"
 
-    def __init__(self, idn, proto_field, to_obj=None, from_obj=None):
+    def __init__(
+        self, idn: ydb_value_pb2.Type.PrimitiveTypeId, proto_field: typing.Optional[str], to_obj=None, from_obj=None
+    ):
         self._idn_ = idn
         self._to_obj = to_obj
         self._from_obj = from_obj
         self._proto_field = proto_field
 
-    def get_value(self, value_pb, table_client_settings):
+    def get_value(self, value_pb: ydb_value_pb2.Value, table_client_settings: table.TableClientSettings):
         """
         Extracts value from protocol buffer
         :param value_pb: A protocol buffer
@@ -149,7 +169,7 @@ class PrimitiveType(enum.Enum):
 
         return getattr(value_pb, self._proto_field)
 
-    def set_value(self, pb, value):
+    def set_value(self, pb: ydb_value_pb2.Value, value):
         """
         Sets value in a protocol buffer
         :param pb: A protocol buffer
@@ -176,7 +196,9 @@ class PrimitiveType(enum.Enum):
 class DataQuery(object):
     __slots__ = ("yql_text", "parameters_types", "name")
 
-    def __init__(self, query_id, parameters_types, name=None):
+    def __init__(
+        self, query_id: str, parameters_types: "dict[str, ydb_value_pb2.Type]", name: typing.Optional[str] = None
+    ):
         self.yql_text = query_id
         self.parameters_types = parameters_types
         self.name = _utilities.get_query_hash(self.yql_text) if name is None else name
@@ -259,7 +281,7 @@ class NullType(AbstractTypeBuilder):
 class OptionalType(AbstractTypeBuilder):
     __slots__ = ("_repr", "_proto", "_item")
 
-    def __init__(self, optional_type):
+    def __init__(self, optional_type: typing.Union[AbstractTypeBuilder, PrimitiveType]):
         """
         Represents optional type that wraps inner type
         :param optional_type: An instance of an inner type
@@ -291,7 +313,7 @@ class OptionalType(AbstractTypeBuilder):
 class ListType(AbstractTypeBuilder):
     __slots__ = ("_repr", "_proto")
 
-    def __init__(self, list_type):
+    def __init__(self, list_type: typing.Union[AbstractTypeBuilder, PrimitiveType]):
         """
         :param list_type: List item type builder
         """
@@ -313,7 +335,11 @@ class ListType(AbstractTypeBuilder):
 class DictType(AbstractTypeBuilder):
     __slots__ = ("__repr", "__proto")
 
-    def __init__(self, key_type, payload_type):
+    def __init__(
+        self,
+        key_type: typing.Union[AbstractTypeBuilder, PrimitiveType],
+        payload_type: typing.Union[AbstractTypeBuilder, PrimitiveType],
+    ):
         """
         :param key_type: Key type builder
         :param payload_type: Payload type builder
@@ -341,7 +367,7 @@ class TupleType(AbstractTypeBuilder):
         self.__elements_repr = []
         self.__proto = _apis.ydb_value.Type(tuple_type=_apis.ydb_value.TupleType())
 
-    def add_element(self, element_type):
+    def add_element(self, element_type: typing.Union[AbstractTypeBuilder, PrimitiveType]):
         """
         :param element_type: Adds additional element of tuple
         :return: self
@@ -366,7 +392,7 @@ class StructType(AbstractTypeBuilder):
         self.__members_repr = []
         self.__proto = _apis.ydb_value.Type(struct_type=_apis.ydb_value.StructType())
 
-    def add_member(self, name, member_type):
+    def add_member(self, name: str, member_type: typing.Union[AbstractTypeBuilder, PrimitiveType]):
         """
         :param name:
         :param member_type:
@@ -393,7 +419,7 @@ class BulkUpsertColumns(AbstractTypeBuilder):
         self.__columns_repr = []
         self.__proto = _apis.ydb_value.Type(struct_type=_apis.ydb_value.StructType())
 
-    def add_column(self, name, column_type):
+    def add_column(self, name: str, column_type: typing.Union[AbstractTypeBuilder, PrimitiveType]):
         """
         :param name: A column name
         :param column_type: A column type

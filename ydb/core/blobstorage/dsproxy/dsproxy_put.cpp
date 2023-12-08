@@ -70,6 +70,12 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
 
     bool RequireExtraBlockChecks = false;
 
+    struct TIncarnationRecord {
+        ui64 IncarnationGuid;
+        TMonotonic ExpirationTimestamp;
+    };
+    std::vector<std::optional<TIncarnationRecord>> IncarnationRecords;
+
     void SanityCheck() {
         if (RequestsSent <= MaxSaneRequests) {
             return;
@@ -89,29 +95,58 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         SanityCheck(); // May Die
     }
 
+    template<typename TEvent, typename TCookie>
+    void SendPuts(auto&& callback) {
+        TDeque<std::unique_ptr<TEvent>> v;
+        callback(v);
+        UpdatePengingVDiskResponseCount<TEvent, TCookie>(v);
+        RequestsSent += v.size();
+        CountPuts(v);
+        SendToQueues(v, TimeStatsEnabled);
+    }
+
     void Accelerate() {
         if (IsAccelerated) {
             return;
         }
         IsAccelerated = true;
 
+        auto callback = [this](auto& v) {
+            PutImpl.Accelerate(LogCtx, v);
+            *(IsMultiPutMode ? Mon->NodeMon->AccelerateEvVMultiPutCount : Mon->NodeMon->AccelerateEvVPutCount) += v.size();
+        };
+
         if (IsMultiPutMode) {
-            TDeque<std::unique_ptr<TEvBlobStorage::TEvVMultiPut>> vMultiPuts;
-            PutImpl.Accelerate(LogCtx, vMultiPuts);
-            UpdatePengingVDiskResponseCount<TEvBlobStorage::TEvVMultiPut, TVMultiPutCookie>(vMultiPuts);
-            RequestsSent += vMultiPuts.size();
-            *Mon->NodeMon->AccelerateEvVMultiPutCount += vMultiPuts.size();
-            CountPuts(vMultiPuts);
-            SendToQueues(vMultiPuts, TimeStatsEnabled);
+            SendPuts<TEvBlobStorage::TEvVMultiPut, TVMultiPutCookie>(callback);
         } else {
-            TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
-            PutImpl.Accelerate(LogCtx, vPuts);
-            UpdatePengingVDiskResponseCount<TEvBlobStorage::TEvVPut, TBlobCookie>(vPuts);
-            RequestsSent += vPuts.size();
-            *Mon->NodeMon->AccelerateEvVPutCount += vPuts.size();
-            CountPuts(vPuts);
-            SendToQueues(vPuts, TimeStatsEnabled);
+            SendPuts<TEvBlobStorage::TEvVPut, TBlobCookie>(callback);
         }
+    }
+
+    void HandleIncarnation(TMonotonic timestamp, ui32 orderNumber, ui64 incarnationGuid) {
+        Y_ABORT_UNLESS(orderNumber < IncarnationRecords.size());
+        if (auto& record = IncarnationRecords[orderNumber]; !record) {
+            record = TIncarnationRecord{
+                .IncarnationGuid = incarnationGuid,
+                .ExpirationTimestamp = timestamp,
+            };
+        } else if (record->IncarnationGuid != incarnationGuid) {
+            PutImpl.InvalidatePartStates(orderNumber);
+            record->IncarnationGuid = incarnationGuid;
+            record->ExpirationTimestamp = timestamp;
+        } else if (record->ExpirationTimestamp < timestamp) {
+            record->ExpirationTimestamp = timestamp;
+        }
+    }
+
+    TBlobStorageGroupInfo::TGroupVDisks CreateExpiredVDiskSet(TMonotonic timestamp) const {
+        TBlobStorageGroupInfo::TGroupVDisks res(&Info->GetTopology());
+        for (ui32 i = 0; i < IncarnationRecords.size(); ++i) {
+            if (auto& record = IncarnationRecords[i]; record && record->ExpirationTimestamp <= timestamp) {
+                res |= {&Info->GetTopology(), Info->GetVDiskId(i)};
+            }
+        }
+        return res;
     }
 
     void Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev) {
@@ -148,6 +183,10 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         TVDiskID vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         const TVDiskIdShort shortId(vDiskId);
 
+        if (record.HasIncarnationGuid()) {
+            HandleIncarnation(TActivationContext::Monotonic(), Info->GetOrderNumber(shortId), record.GetIncarnationGuid());
+        }
+
         LWPROBE(DSProxyVDiskRequestDuration, TEvBlobStorage::EvVPut, blob.BlobSize(), blob.TabletID(),
                 Info->GroupID, blob.Channel(), Info->GetFailDomainOrderNumber(shortId),
                 GetStartTime(record.GetTimestamps()),
@@ -162,13 +201,10 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
                 GetVDiskTimeMs(record.GetTimestamps()));
         }
 
-        TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
         TPutImpl::TPutResultVec putResults;
-        PutImpl.OnVPutEventResult(LogCtx, ev->Sender, *ev->Get(), vPuts, putResults);
-        UpdatePengingVDiskResponseCount<TEvBlobStorage::TEvVPut, TBlobCookie>(vPuts);
-        RequestsSent += vPuts.size();
-        CountPuts(vPuts);
-        SendToQueues(vPuts, TimeStatsEnabled);
+        SendPuts<TEvBlobStorage::TEvVPut, TBlobCookie>([&](auto& v) {
+            PutImpl.OnVPutEventResult(LogCtx, ev->Sender, *ev->Get(), v, putResults);
+        });
         if (ReplyAndDieWithLastResponse(putResults)) {
             return;
         }
@@ -208,6 +244,10 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         Y_ABORT_UNLESS(record.HasVDiskID());
         TVDiskID vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         const TVDiskIdShort shortId(vDiskId);
+
+        if (record.HasIncarnationGuid()) {
+            HandleIncarnation(TActivationContext::Monotonic(), Info->GetOrderNumber(shortId), record.GetIncarnationGuid());
+        }
 
         Y_ABORT_UNLESS(record.HasCookie());
         TVMultiPutCookie cookie(record.GetCookie());
@@ -277,12 +317,9 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         }
         putResults.clear();
 
-        TDeque<std::unique_ptr<TEvBlobStorage::TEvVMultiPut>> vMultiPuts;
-        PutImpl.OnVPutEventResult(LogCtx, ev->Sender, *ev->Get(), vMultiPuts, putResults);
-        UpdatePengingVDiskResponseCount<TEvBlobStorage::TEvVMultiPut, TVMultiPutCookie>(vMultiPuts);
-        RequestsSent += vMultiPuts.size();
-        CountPuts(vMultiPuts);
-        SendToQueues(vMultiPuts, TimeStatsEnabled);
+        SendPuts<TEvBlobStorage::TEvVMultiPut, TVMultiPutCookie>([&](auto& v) {
+            PutImpl.OnVPutEventResult(LogCtx, ev->Sender, *ev->Get(), v, putResults);
+        });
         if (ReplyAndDieWithLastResponse(putResults)) {
             return;
         }
@@ -443,6 +480,7 @@ public:
         , IsAccelerateScheduled(false)
         , IsMultiPutMode(false)
         , RequireExtraBlockChecks(!ev->ExtraBlockChecks.empty())
+        , IncarnationRecords(info->GetTotalVDisksNum())
     {
         if (ev->Orbit.HasShuttles()) {
             RootCauseTrack.IsOn = true;
@@ -486,6 +524,7 @@ public:
         , IsAccelerated(false)
         , IsAccelerateScheduled(false)
         , IsMultiPutMode(true)
+        , IncarnationRecords(info->GetTotalVDisksNum())
     {
         Y_DEBUG_ABORT_UNLESS(events.size() <= MaxBatchedPutRequests);
         for (auto &ev : events) {
@@ -606,24 +645,13 @@ public:
         }
     }
 
-    template<typename TEvV, typename TCookie>
-    struct TIssue {
-        void operator ()(TThis& self) {
-            TDeque<std::unique_ptr<TEvV>> events;
-            self.PutImpl.GenerateInitialRequests(self.LogCtx, self.PartSets, events);
-            self.UpdatePengingVDiskResponseCount<TEvV, TCookie>(events);
-            self.RequestsSent += events.size();
-            self.CountPuts(events);
-            self.SendToQueues(events, self.TimeStatsEnabled);
-        }
-    };
-
     void ResumeBootstrap() {
         if (EncodeQuantum()) {
+            auto callback = [this](auto& v) { PutImpl.GenerateInitialRequests(LogCtx, PartSets, v); };
             if (IsMultiPutMode) {
-                TIssue<TEvBlobStorage::TEvVMultiPut, TVMultiPutCookie>()(*this);
+                SendPuts<TEvBlobStorage::TEvVMultiPut, TVMultiPutCookie>(callback);
             } else {
-                TIssue<TEvBlobStorage::TEvVPut, TBlobCookie>()(*this);
+                SendPuts<TEvBlobStorage::TEvVPut, TBlobCookie>(callback);
             }
         } else {
             TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvResume, 0, SelfId(), {}, nullptr, 0));

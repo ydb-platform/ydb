@@ -11,7 +11,7 @@ PEERDIR(
     contrib/libs/yaml-cpp
     ydb/library/actors/core
     library/cpp/protobuf/json
-    library/cpp/yaml/fyamlcpp
+    ydb/library/fyamlcpp
 )
 
 END()

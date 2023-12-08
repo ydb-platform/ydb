@@ -29,14 +29,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/RedirectAllRequestsTo">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API RedirectAllRequestsTo
+  class RedirectAllRequestsTo
   {
   public:
-    RedirectAllRequestsTo();
-    RedirectAllRequestsTo(const Aws::Utils::Xml::XmlNode& xmlNode);
-    RedirectAllRequestsTo& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API RedirectAllRequestsTo();
+    AWS_S3_API RedirectAllRequestsTo(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API RedirectAllRequestsTo& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -119,10 +119,10 @@ namespace Model
   private:
 
     Aws::String m_hostName;
-    bool m_hostNameHasBeenSet;
+    bool m_hostNameHasBeenSet = false;
 
     Protocol m_protocol;
-    bool m_protocolHasBeenSet;
+    bool m_protocolHasBeenSet = false;
   };
 
 } // namespace Model

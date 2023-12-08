@@ -1,5 +1,0 @@
-test-host: test
-
-networks:
-  example_network_go_test:
-    ipv6: true

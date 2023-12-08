@@ -1,12 +1,15 @@
 #pragma once
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/federated_query/common/common.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 
-#include <util/string/cast.h>
-#include <util/system/env.h>
+#include <library/cpp/testing/unittest/registar.h>
 
-inline const TString GetConnectorHost() {
-    return GetEnv("YQL_RECIPE_CONNECTOR_GRPC_HOST", "localhost");
-}
+namespace NTestUtils {
 
-inline ui32 GetConnectorPort() {
-    return FromString<ui32>(GetEnv("YQL_RECIPE_CONNECTOR_GRPC_PORT"));
-}
+    TString GetConnectorHost();
+    ui32 GetConnectorPort();
+
+    std::shared_ptr<NKikimr::NKqp::TKikimrRunner> MakeKikimrRunnerWithConnector();
+
+} // namespace NTestUtils

@@ -72,10 +72,7 @@ private:
 
         std::shared_ptr<std::iostream> createAwsBuffer();
 
-        bool isEmpty() const
-        {
-            return data_size == 0;
-        }
+        bool isEmpty() const;
     };
 
     void hidePartialData();

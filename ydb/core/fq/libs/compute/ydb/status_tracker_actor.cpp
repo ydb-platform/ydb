@@ -96,6 +96,11 @@ public:
     void Handle(const TEvents::TEvForwardPingResponse::TPtr& ev) {
         auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
         pingCounters->InFly->Dec();
+
+        if (ev->Cookie) {
+            return;
+        }
+
         pingCounters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
         if (ev.Get()->Get()->Success) {
             pingCounters->Ok->Inc();
@@ -119,12 +124,15 @@ public:
             return;
         }
 
+        ReportPublicCounters(response.QueryStats);
         StartTime = TInstant::Now();
         LOG_D("Execution status: " << static_cast<int>(response.ExecStatus));
         switch (response.ExecStatus) {
             case NYdb::NQuery::EExecStatus::Unspecified:
             case NYdb::NQuery::EExecStatus::Starting:
                 SendGetOperation(TDuration::MilliSeconds(BackoffTimer.NextBackoffMs()));
+                QueryStats = response.QueryStats;
+                UpdateProgress();
                 break;
             case NYdb::NQuery::EExecStatus::Aborted:
             case NYdb::NQuery::EExecStatus::Canceled:
@@ -146,8 +154,61 @@ public:
         }
     }
 
+    void ReportPublicCounters(const Ydb::TableStats::QueryStats& stats) {
+        auto stat = GetPublicStat(GetV1StatFromV2Plan(stats.query_plan()));
+        auto publicCounters = GetPublicCounters();
+
+        if (stat.MemoryUsageBytes) {
+            auto& counter = *publicCounters->GetNamedCounter("name", "query.memory_usage_bytes");
+            counter = *stat.MemoryUsageBytes;
+        }
+
+        if (stat.CpuUsageUs) {
+            auto& counter = *publicCounters->GetNamedCounter("name", "query.cpu_usage_us", true);
+            counter = *stat.CpuUsageUs;
+        }
+
+        if (stat.InputBytes) {
+            auto& counter = *publicCounters->GetNamedCounter("name", "query.input_bytes", true);
+            counter = *stat.InputBytes;
+        }
+
+        if (stat.OutputBytes) {
+            auto& counter = *publicCounters->GetNamedCounter("name", "query.output_bytes", true);
+            counter = *stat.OutputBytes;
+        }
+
+        if (stat.SourceInputRecords) {
+            auto& counter = *publicCounters->GetNamedCounter("name", "query.source_input_records", true);
+            counter = *stat.SourceInputRecords;
+        }
+
+        if (stat.SinkOutputRecords) {
+            auto& counter = *publicCounters->GetNamedCounter("name", "query.sink_output_records", true);
+            counter = *stat.SinkOutputRecords;
+        }
+
+        if (stat.RunningTasks) {
+            auto& counter = *publicCounters->GetNamedCounter("name", "query.running_tasks");
+            counter = *stat.RunningTasks;
+        }
+    }
+
     void SendGetOperation(const TDuration& delay = TDuration::Zero()) {
         Register(new TRetryActor<TEvYdbCompute::TEvGetOperationRequest, TEvYdbCompute::TEvGetOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_GET_OPERATION), delay, SelfId(), Connector, OperationId));
+    }
+
+    void UpdateProgress() {
+        auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
+        pingCounters->InFly->Inc();
+        Fq::Private::PingTaskRequest pingTaskRequest;
+        PrepareAstAndPlan(pingTaskRequest, QueryStats.query_plan(), QueryStats.query_ast());
+        try {
+            pingTaskRequest.set_statistics(GetV1StatFromV2Plan(QueryStats.query_plan()));
+        } catch(const NJson::TJsonException& ex) {
+            LOG_E("Error statistics conversion: " << ex.what());
+        }
+        Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest), 0, 1);
     }
 
     void Failed() {
@@ -158,6 +219,11 @@ public:
         NYql::IssuesToMessage(Issues, pingTaskRequest.mutable_issues());
         pingTaskRequest.set_pending_status_code(StatusCode);
         PrepareAstAndPlan(pingTaskRequest, QueryStats.query_plan(), QueryStats.query_ast());
+        try {
+            pingTaskRequest.set_statistics(GetV1StatFromV2Plan(QueryStats.query_plan()));
+        } catch(const NJson::TJsonException& ex) {
+            LOG_E("Error statistics conversion: " << ex.what());
+        }
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
     }
 

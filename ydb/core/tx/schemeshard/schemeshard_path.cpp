@@ -51,6 +51,18 @@ const TPath::TChecker& TPath::TChecker::IsResolved(EStatus status) const {
         << ": '" << nearest.PathString() << "' (id: " << nearest.GetPathIdSafe() << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::HasResolvedPrefix(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (!Path.Elements.empty()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "root not found");
+}
+
 const TPath::TChecker& TPath::TChecker::NotEmpty(EStatus status) const {
     if (Failed) {
         return *this;
@@ -791,6 +803,21 @@ const TPath::TChecker& TPath::TChecker::IsExternalDataSource(EStatus status) con
 
     return Fail(status, TStringBuilder() << "path is not a external data source"
         << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
+const TPath::TChecker& TPath::TChecker::IsView(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsView()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a view"
+        << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
+
 }
 
 const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus status) const {

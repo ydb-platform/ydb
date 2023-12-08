@@ -1176,6 +1176,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildSimpleType(TContext& ctx, TPosition pos, const TString& typeName, bool dataOnly);
     TNodePtr BuildIsNullOp(TPosition pos, TNodePtr a);
     TNodePtr BuildBinaryOp(TContext& ctx, TPosition pos, const TString& opName, TNodePtr a, TNodePtr b);
+    TNodePtr BuildBinaryOpRaw(TPosition pos, const TString& opName, TNodePtr a, TNodePtr b);
 
     TNodePtr BuildCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr call);
     TNodePtr BuildYsonOptionsNode(TPosition pos, bool autoConvert, bool strict, bool fastYson);

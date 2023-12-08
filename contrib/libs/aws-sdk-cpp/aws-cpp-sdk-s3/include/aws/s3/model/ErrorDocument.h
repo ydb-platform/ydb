@@ -27,14 +27,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/ErrorDocument">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API ErrorDocument
+  class ErrorDocument
   {
   public:
-    ErrorDocument();
-    ErrorDocument(const Aws::Utils::Xml::XmlNode& xmlNode);
-    ErrorDocument& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API ErrorDocument();
+    AWS_S3_API ErrorDocument(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API ErrorDocument& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -112,7 +112,7 @@ namespace Model
   private:
 
     Aws::String m_key;
-    bool m_keyHasBeenSet;
+    bool m_keyHasBeenSet = false;
   };
 
 } // namespace Model

@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#if _MSC_VER
+#ifdef _MSC_VER
 #    pragma warning(disable : 4221) /* aggregate initializer using local variable addresses */
 #    pragma warning(disable : 4204) /* non-constant aggregate initializer */
 #endif
@@ -264,7 +264,7 @@ int aws_uri_query_string_params(const struct aws_uri *uri, struct aws_array_list
 }
 
 static void s_parse_scheme(struct uri_parser *parser, struct aws_byte_cursor *str) {
-    uint8_t *location_of_colon = memchr(str->ptr, ':', str->len);
+    const uint8_t *location_of_colon = memchr(str->ptr, ':', str->len);
 
     if (!location_of_colon) {
         parser->state = ON_AUTHORITY;
@@ -292,8 +292,8 @@ static void s_parse_scheme(struct uri_parser *parser, struct aws_byte_cursor *st
 }
 
 static void s_parse_authority(struct uri_parser *parser, struct aws_byte_cursor *str) {
-    uint8_t *location_of_slash = memchr(str->ptr, '/', str->len);
-    uint8_t *location_of_qmark = memchr(str->ptr, '?', str->len);
+    const uint8_t *location_of_slash = memchr(str->ptr, '/', str->len);
+    const uint8_t *location_of_qmark = memchr(str->ptr, '?', str->len);
 
     if (!location_of_slash && !location_of_qmark && str->len) {
         parser->uri->authority.ptr = str->ptr;
@@ -309,7 +309,7 @@ static void s_parse_authority(struct uri_parser *parser, struct aws_byte_cursor 
         aws_raise_error(AWS_ERROR_MALFORMED_INPUT_STRING);
         return;
     } else {
-        uint8_t *end = str->ptr + str->len;
+        const uint8_t *end = str->ptr + str->len;
         if (location_of_slash) {
             parser->state = ON_PATH;
             end = location_of_slash;
@@ -325,7 +325,7 @@ static void s_parse_authority(struct uri_parser *parser, struct aws_byte_cursor 
 
     if (authority_parse_csr.len) {
         /* RFC-3986 section 3.2: authority = [ userinfo "@" ] host [ ":" port ] */
-        uint8_t *userinfo_delim = memchr(authority_parse_csr.ptr, '@', authority_parse_csr.len);
+        const uint8_t *userinfo_delim = memchr(authority_parse_csr.ptr, '@', authority_parse_csr.len);
         if (userinfo_delim) {
 
             parser->uri->userinfo =
@@ -351,7 +351,7 @@ static void s_parse_authority(struct uri_parser *parser, struct aws_byte_cursor 
         /* RFC-3986 section 3.2: host identified by IPv6 literal address is
          * enclosed within square brackets. We must ignore any colons within
          * IPv6 literals and only search for port delimiter after closing bracket.*/
-        uint8_t *port_search_start = authority_parse_csr.ptr;
+        const uint8_t *port_search_start = authority_parse_csr.ptr;
         size_t port_search_len = authority_parse_csr.len;
         if (authority_parse_csr.len > 0 && authority_parse_csr.ptr[0] == '[') {
             port_search_start = memchr(authority_parse_csr.ptr, ']', authority_parse_csr.len);
@@ -363,7 +363,7 @@ static void s_parse_authority(struct uri_parser *parser, struct aws_byte_cursor 
             port_search_len = authority_parse_csr.len - (port_search_start - authority_parse_csr.ptr);
         }
 
-        uint8_t *port_delim = memchr(port_search_start, ':', port_search_len);
+        const uint8_t *port_delim = memchr(port_search_start, ':', port_search_len);
 
         if (!port_delim) {
             parser->uri->port = 0;
@@ -407,7 +407,7 @@ static void s_parse_authority(struct uri_parser *parser, struct aws_byte_cursor 
 static void s_parse_path(struct uri_parser *parser, struct aws_byte_cursor *str) {
     parser->uri->path_and_query = *str;
 
-    uint8_t *location_of_q_mark = memchr(str->ptr, '?', str->len);
+    const uint8_t *location_of_q_mark = memchr(str->ptr, '?', str->len);
 
     if (!location_of_q_mark) {
         parser->uri->path.ptr = str->ptr;
@@ -540,8 +540,8 @@ static int s_encode_cursor_to_buffer(
     struct aws_byte_buf *buffer,
     const struct aws_byte_cursor *cursor,
     unchecked_append_canonicalized_character_fn *append_canonicalized_character) {
-    uint8_t *current_ptr = cursor->ptr;
-    uint8_t *end_ptr = cursor->ptr + cursor->len;
+    const uint8_t *current_ptr = cursor->ptr;
+    const uint8_t *end_ptr = cursor->ptr + cursor->len;
 
     /*
      * reserve room up front for the worst possible case: everything gets % encoded

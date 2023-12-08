@@ -1,4 +1,5 @@
 RECURSE_FOR_TESTS(
+    http_api
     mem_alloc
     multi_plane
     plans

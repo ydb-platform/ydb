@@ -170,8 +170,11 @@ class TopicClientAsyncIO:
         consumer: str,
         buffer_size_bytes: int = 50 * 1024 * 1024,
         # decoders: map[codec_code] func(encoded_bytes)->decoded_bytes
+        # the func will be called from multiply threads in parallel
         decoders: Union[Mapping[int, Callable[[bytes], bytes]], None] = None,
-        decoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
+        # custom decoder executor for call builtin and custom decoders. If None - use shared executor pool.
+        # if max_worker in the executor is 1 - then decoders will be called from the thread without parallel
+        decoder_executor: Optional[concurrent.futures.Executor] = None,
     ) -> TopicReaderAsyncIO:
 
         if not decoder_executor:
@@ -194,8 +197,12 @@ class TopicClientAsyncIO:
         auto_seqno: bool = True,
         auto_created_at: bool = True,
         codec: Optional[TopicCodec] = None,  # default mean auto-select
+        # encoders: map[codec_code] func(encoded_bytes)->decoded_bytes
+        # the func will be called from multiply threads in parallel.
         encoders: Optional[Mapping[_ydb_topic_public_types.PublicCodec, Callable[[bytes], bytes]]] = None,
-        encoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
+        # custom encoder executor for call builtin and custom decoders. If None - use shared executor pool.
+        # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
+        encoder_executor: Optional[concurrent.futures.Executor] = None,
     ) -> TopicWriterAsyncIO:
         args = locals().copy()
         del args["self"]
@@ -319,7 +326,10 @@ class TopicClient:
         consumer: str,
         buffer_size_bytes: int = 50 * 1024 * 1024,
         # decoders: map[codec_code] func(encoded_bytes)->decoded_bytes
+        # the func will be called from multiply threads in parallel
         decoders: Union[Mapping[int, Callable[[bytes], bytes]], None] = None,
+        # custom decoder executor for call builtin and custom decoders. If None - use shared executor pool.
+        # if max_worker in the executor is 1 - then decoders will be called from the thread without parallel
         decoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
     ) -> TopicReader:
         if not decoder_executor:
@@ -343,7 +353,11 @@ class TopicClient:
         auto_seqno: bool = True,
         auto_created_at: bool = True,
         codec: Optional[TopicCodec] = None,  # default mean auto-select
+        # encoders: map[codec_code] func(encoded_bytes)->decoded_bytes
+        # the func will be called from multiply threads in parallel.
         encoders: Optional[Mapping[_ydb_topic_public_types.PublicCodec, Callable[[bytes], bytes]]] = None,
+        # custom encoder executor for call builtin and custom decoders. If None - use shared executor pool.
+        # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
         encoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
     ) -> TopicWriter:
         args = locals().copy()
@@ -373,7 +387,11 @@ class TopicClient:
 
 @dataclass
 class TopicClientSettings:
-    encode_decode_threads_count: int = 4
+    # ATTENTION
+    # When set the encode_decode_threads_count - all custom encoders/decoders for topic reader/writer
+    # MUST be thread-safe
+    # because they will be called from parallel threads
+    encode_decode_threads_count: int = 1
 
 
 class TopicError(issues.Error):

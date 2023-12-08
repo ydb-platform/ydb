@@ -58,7 +58,7 @@ namespace NYql {
             , ClusterName(clusterName)
             , YtWrapper(ytWrapper)
             , ParentId(parentId)
-            , OperationId(NYT::NScheduler::TOperationId::FromString(operationId))
+            , OperationId(NYT::NScheduler::TOperationId(NYT::TGuid::FromString(operationId)))
             , MutationId(mutationId)
             , Counters(counters)
         { }

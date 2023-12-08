@@ -229,6 +229,8 @@ public:
     //! If you want to set bigger values, you must also increase MaxPeerCount to accommodate more peers.
     int MinPeerCountForPriorityAwareness;
 
+    bool EnablePowerOfTwoChoicesStrategy;
+
     REGISTER_YSON_STRUCT(TViablePeerRegistryConfig);
 
     static void Register(TRegistrar registrar);
@@ -290,6 +292,7 @@ class TBalancingChannelConfig
 public:
     //! First option: static list of addresses.
     std::optional<std::vector<TString>> Addresses;
+    bool DisableBalancingOnSingleAddress;
 
     //! Second option: SD endpoints.
     TServiceDiscoveryEndpointsConfigPtr Endpoints;

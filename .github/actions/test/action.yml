@@ -93,8 +93,13 @@ runs:
     run: |
       RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       BRANCH_TAG="$GITHUB_REF_NAME"
-      TESTMO_SOURCE="${{ inputs.log_suffix }}"
-      TESTMO_SOURCE="${TESTMO_SOURCE/_/-}"
+      ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
+      LOG_SUFFIX="${{ inputs.log_suffix }}"
+      TESTMO_SOURCE="cmake-${ARCH}"
+
+      if [ ! -z "${LOG_SUFFIX}" ]; then
+        TESTMO_SOURCE="${TESTMO_SOURCE}-${LOG_SUFFIX/_/-}"
+      fi
 
       case $GITHUB_EVENT_NAME in
         workflow_dispatch)

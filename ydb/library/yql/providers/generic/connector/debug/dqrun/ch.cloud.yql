@@ -1,0 +1,1 @@
+SELECT * FROM clickhouse_streaming.example_1;

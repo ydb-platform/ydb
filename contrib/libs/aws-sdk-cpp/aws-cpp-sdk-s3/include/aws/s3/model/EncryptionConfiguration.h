@@ -28,108 +28,116 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/EncryptionConfiguration">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API EncryptionConfiguration
+  class EncryptionConfiguration
   {
   public:
-    EncryptionConfiguration();
-    EncryptionConfiguration(const Aws::Utils::Xml::XmlNode& xmlNode);
-    EncryptionConfiguration& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API EncryptionConfiguration();
+    AWS_S3_API EncryptionConfiguration(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API EncryptionConfiguration& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
-     * <p>Specifies the ID (Key ARN or Alias ARN) of the customer managed customer
-     * master key (CMK) stored in AWS Key Management Service (KMS) for the destination
-     * bucket. Amazon S3 uses this key to encrypt replica objects. Amazon S3 only
-     * supports symmetric customer managed CMKs. For more information, see <a
+     * <p>Specifies the ID (Key ARN or Alias ARN) of the customer managed Amazon Web
+     * Services KMS key stored in Amazon Web Services Key Management Service (KMS) for
+     * the destination bucket. Amazon S3 uses this key to encrypt replica objects.
+     * Amazon S3 only supports symmetric, customer managed KMS keys. For more
+     * information, see <a
      * href="https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html">Using
-     * Symmetric and Asymmetric Keys</a> in the <i>AWS Key Management Service Developer
-     * Guide</i>.</p>
+     * symmetric and asymmetric keys</a> in the <i>Amazon Web Services Key Management
+     * Service Developer Guide</i>.</p>
      */
     inline const Aws::String& GetReplicaKmsKeyID() const{ return m_replicaKmsKeyID; }
 
     /**
-     * <p>Specifies the ID (Key ARN or Alias ARN) of the customer managed customer
-     * master key (CMK) stored in AWS Key Management Service (KMS) for the destination
-     * bucket. Amazon S3 uses this key to encrypt replica objects. Amazon S3 only
-     * supports symmetric customer managed CMKs. For more information, see <a
+     * <p>Specifies the ID (Key ARN or Alias ARN) of the customer managed Amazon Web
+     * Services KMS key stored in Amazon Web Services Key Management Service (KMS) for
+     * the destination bucket. Amazon S3 uses this key to encrypt replica objects.
+     * Amazon S3 only supports symmetric, customer managed KMS keys. For more
+     * information, see <a
      * href="https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html">Using
-     * Symmetric and Asymmetric Keys</a> in the <i>AWS Key Management Service Developer
-     * Guide</i>.</p>
+     * symmetric and asymmetric keys</a> in the <i>Amazon Web Services Key Management
+     * Service Developer Guide</i>.</p>
      */
     inline bool ReplicaKmsKeyIDHasBeenSet() const { return m_replicaKmsKeyIDHasBeenSet; }
 
     /**
-     * <p>Specifies the ID (Key ARN or Alias ARN) of the customer managed customer
-     * master key (CMK) stored in AWS Key Management Service (KMS) for the destination
-     * bucket. Amazon S3 uses this key to encrypt replica objects. Amazon S3 only
-     * supports symmetric customer managed CMKs. For more information, see <a
+     * <p>Specifies the ID (Key ARN or Alias ARN) of the customer managed Amazon Web
+     * Services KMS key stored in Amazon Web Services Key Management Service (KMS) for
+     * the destination bucket. Amazon S3 uses this key to encrypt replica objects.
+     * Amazon S3 only supports symmetric, customer managed KMS keys. For more
+     * information, see <a
      * href="https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html">Using
-     * Symmetric and Asymmetric Keys</a> in the <i>AWS Key Management Service Developer
-     * Guide</i>.</p>
+     * symmetric and asymmetric keys</a> in the <i>Amazon Web Services Key Management
+     * Service Developer Guide</i>.</p>
      */
     inline void SetReplicaKmsKeyID(const Aws::String& value) { m_replicaKmsKeyIDHasBeenSet = true; m_replicaKmsKeyID = value; }
 
     /**
-     * <p>Specifies the ID (Key ARN or Alias ARN) of the customer managed customer
-     * master key (CMK) stored in AWS Key Management Service (KMS) for the destination
-     * bucket. Amazon S3 uses this key to encrypt replica objects. Amazon S3 only
-     * supports symmetric customer managed CMKs. For more information, see <a
+     * <p>Specifies the ID (Key ARN or Alias ARN) of the customer managed Amazon Web
+     * Services KMS key stored in Amazon Web Services Key Management Service (KMS) for
+     * the destination bucket. Amazon S3 uses this key to encrypt replica objects.
+     * Amazon S3 only supports symmetric, customer managed KMS keys. For more
+     * information, see <a
      * href="https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html">Using
-     * Symmetric and Asymmetric Keys</a> in the <i>AWS Key Management Service Developer
-     * Guide</i>.</p>
+     * symmetric and asymmetric keys</a> in the <i>Amazon Web Services Key Management
+     * Service Developer Guide</i>.</p>
      */
     inline void SetReplicaKmsKeyID(Aws::String&& value) { m_replicaKmsKeyIDHasBeenSet = true; m_replicaKmsKeyID = std::move(value); }
 
     /**
-     * <p>Specifies the ID (Key ARN or Alias ARN) of the customer managed customer
-     * master key (CMK) stored in AWS Key Management Service (KMS) for the destination
-     * bucket. Amazon S3 uses this key to encrypt replica objects. Amazon S3 only
-     * supports symmetric customer managed CMKs. For more information, see <a
+     * <p>Specifies the ID (Key ARN or Alias ARN) of the customer managed Amazon Web
+     * Services KMS key stored in Amazon Web Services Key Management Service (KMS) for
+     * the destination bucket. Amazon S3 uses this key to encrypt replica objects.
+     * Amazon S3 only supports symmetric, customer managed KMS keys. For more
+     * information, see <a
      * href="https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html">Using
-     * Symmetric and Asymmetric Keys</a> in the <i>AWS Key Management Service Developer
-     * Guide</i>.</p>
+     * symmetric and asymmetric keys</a> in the <i>Amazon Web Services Key Management
+     * Service Developer Guide</i>.</p>
      */
     inline void SetReplicaKmsKeyID(const char* value) { m_replicaKmsKeyIDHasBeenSet = true; m_replicaKmsKeyID.assign(value); }
 
     /**
-     * <p>Specifies the ID (Key ARN or Alias ARN) of the customer managed customer
-     * master key (CMK) stored in AWS Key Management Service (KMS) for the destination
-     * bucket. Amazon S3 uses this key to encrypt replica objects. Amazon S3 only
-     * supports symmetric customer managed CMKs. For more information, see <a
+     * <p>Specifies the ID (Key ARN or Alias ARN) of the customer managed Amazon Web
+     * Services KMS key stored in Amazon Web Services Key Management Service (KMS) for
+     * the destination bucket. Amazon S3 uses this key to encrypt replica objects.
+     * Amazon S3 only supports symmetric, customer managed KMS keys. For more
+     * information, see <a
      * href="https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html">Using
-     * Symmetric and Asymmetric Keys</a> in the <i>AWS Key Management Service Developer
-     * Guide</i>.</p>
+     * symmetric and asymmetric keys</a> in the <i>Amazon Web Services Key Management
+     * Service Developer Guide</i>.</p>
      */
     inline EncryptionConfiguration& WithReplicaKmsKeyID(const Aws::String& value) { SetReplicaKmsKeyID(value); return *this;}
 
     /**
-     * <p>Specifies the ID (Key ARN or Alias ARN) of the customer managed customer
-     * master key (CMK) stored in AWS Key Management Service (KMS) for the destination
-     * bucket. Amazon S3 uses this key to encrypt replica objects. Amazon S3 only
-     * supports symmetric customer managed CMKs. For more information, see <a
+     * <p>Specifies the ID (Key ARN or Alias ARN) of the customer managed Amazon Web
+     * Services KMS key stored in Amazon Web Services Key Management Service (KMS) for
+     * the destination bucket. Amazon S3 uses this key to encrypt replica objects.
+     * Amazon S3 only supports symmetric, customer managed KMS keys. For more
+     * information, see <a
      * href="https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html">Using
-     * Symmetric and Asymmetric Keys</a> in the <i>AWS Key Management Service Developer
-     * Guide</i>.</p>
+     * symmetric and asymmetric keys</a> in the <i>Amazon Web Services Key Management
+     * Service Developer Guide</i>.</p>
      */
     inline EncryptionConfiguration& WithReplicaKmsKeyID(Aws::String&& value) { SetReplicaKmsKeyID(std::move(value)); return *this;}
 
     /**
-     * <p>Specifies the ID (Key ARN or Alias ARN) of the customer managed customer
-     * master key (CMK) stored in AWS Key Management Service (KMS) for the destination
-     * bucket. Amazon S3 uses this key to encrypt replica objects. Amazon S3 only
-     * supports symmetric customer managed CMKs. For more information, see <a
+     * <p>Specifies the ID (Key ARN or Alias ARN) of the customer managed Amazon Web
+     * Services KMS key stored in Amazon Web Services Key Management Service (KMS) for
+     * the destination bucket. Amazon S3 uses this key to encrypt replica objects.
+     * Amazon S3 only supports symmetric, customer managed KMS keys. For more
+     * information, see <a
      * href="https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html">Using
-     * Symmetric and Asymmetric Keys</a> in the <i>AWS Key Management Service Developer
-     * Guide</i>.</p>
+     * symmetric and asymmetric keys</a> in the <i>Amazon Web Services Key Management
+     * Service Developer Guide</i>.</p>
      */
     inline EncryptionConfiguration& WithReplicaKmsKeyID(const char* value) { SetReplicaKmsKeyID(value); return *this;}
 
   private:
 
     Aws::String m_replicaKmsKeyID;
-    bool m_replicaKmsKeyIDHasBeenSet;
+    bool m_replicaKmsKeyIDHasBeenSet = false;
   };
 
 } // namespace Model

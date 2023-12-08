@@ -4,7 +4,7 @@ LICENSE(BSD-3-Clause)
 
 SRCS(
     name.go
-    pointer_unsafe.go
+    pointer.go
     sort.go
 )
 
@@ -16,4 +16,6 @@ GO_XTEST_SRCS(
 
 END()
 
-RECURSE(gotest)
+RECURSE(
+    gotest
+)

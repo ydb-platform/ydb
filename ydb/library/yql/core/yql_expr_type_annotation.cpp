@@ -4871,13 +4871,17 @@ bool IsPureIsolatedLambdaImpl(const TExprNode& lambdaBody, TNodeSet& visited, TS
 
     if (syncList) {
         if (auto right = TMaybeNode<TCoRight>(&lambdaBody)) {
-            auto cons = right.Cast().Input().Maybe<TCoCons>();
-            if (!cons) {
-                return false;
+            if (auto cons = right.Cast().Input().Maybe<TCoCons>()) {
+                syncList->emplace(cons.Cast().World().Ptr(), syncList->size());
+                return IsPureIsolatedLambdaImpl(cons.Cast().Input().Ref(), visited, syncList);
             }
 
-            syncList->emplace(cons.Cast().World().Ptr(), syncList->size());
-            return IsPureIsolatedLambdaImpl(cons.Cast().Input().Ref(), visited, syncList);
+            if (right.Cast().Input().Ref().IsCallable("PgReadTable!")) {
+                syncList->emplace(right.Cast().Input().Ref().HeadPtr(), syncList->size());
+                return true;
+            }
+
+            return false;
         }
     }
 

@@ -7,7 +7,7 @@
 #include <IO/S3/URI.h>
 #include <IO/S3/ProviderType.h>
 
-// #include <aws/core/endpoint/EndpointParameter.h>
+#include <aws/core/endpoint/EndpointParameter.h>
 #include <aws/s3/model/HeadObjectRequest.h>
 #include <aws/s3/model/ListObjectsV2Request.h>
 #include <aws/s3/model/ListObjectsRequest.h>
@@ -31,21 +31,21 @@ template <typename BaseRequest>
 class ExtendedRequest : public BaseRequest
 {
 public:
-    // Aws::Endpoint::EndpointParameters GetEndpointContextParams() const override
-    // {
-    //     auto params = BaseRequest::GetEndpointContextParams();
-    //     if (!region_override.empty())
-    //         params.emplace_back("Region", region_override);
+    Aws::Endpoint::EndpointParameters GetEndpointContextParams() const override
+    {
+        auto params = BaseRequest::GetEndpointContextParams();
+        if (!region_override.empty())
+            params.emplace_back("Region", region_override);
 
-    //     if (uri_override.has_value())
-    //     {
-    //         static const Aws::String AWS_S3_FORCE_PATH_STYLE = "ForcePathStyle";
-    //         params.emplace_back(AWS_S3_FORCE_PATH_STYLE, !uri_override->is_virtual_hosted_style);
-    //         params.emplace_back("Endpoint", uri_override->endpoint);
-    //     }
+        if (uri_override.has_value())
+        {
+            static const Aws::String AWS_S3_FORCE_PATH_STYLE = "ForcePathStyle";
+            params.emplace_back(AWS_S3_FORCE_PATH_STYLE, !uri_override->is_virtual_hosted_style);
+            params.emplace_back("Endpoint", uri_override->endpoint);
+        }
 
-    //     return params;
-    // }
+        return params;
+    }
 
     void overrideRegion(std::string region) const
     {
@@ -106,7 +106,7 @@ public:
 
     AWS_S3_API Aws::Http::HeaderValueCollection GetRequestSpecificHeaders() const override;
 
-    // AWS_S3_API EndpointParameters GetEndpointContextParams() const override;
+    AWS_S3_API EndpointParameters GetEndpointContextParams() const override;
 
     const Aws::String & GetBucket() const;
     bool BucketHasBeenSet() const;

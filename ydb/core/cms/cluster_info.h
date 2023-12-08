@@ -297,6 +297,7 @@ public:
     std::list<TScheduledLock> ScheduledLocks;
     TVector<TTemporaryLock> TempLocks;
     ui64 DeactivatedLocksOrder = Max<ui64>();
+    THashSet<NKikimrCms::EMarker> Markers;
 };
 
 using TLockableItemPtr = TIntrusivePtr<TLockableItem>;
@@ -901,6 +902,9 @@ public:
     }
 
     ui64 AddExternalLocks(const TNotificationInfo &notification, const TActorContext *ctx);
+
+    void SetHostMarkers(const TString &hostName, const THashSet<NKikimrCms::EMarker> &markers);
+    void ResetHostMarkers(const TString &hostName);
 
     void ApplyDowntimes(const TDowntimes &downtimes);
     void UpdateDowntimes(TDowntimes &downtimes, const TActorContext &ctx);

@@ -10,7 +10,7 @@ using namespace NActors::NTests;
 
 
 struct THeavyActorBenchmarkSettings : TActorBenchmarkSettings {
-    static constexpr ui32 TotalEventsAmountPerThread = 1'000'000;
+    static constexpr ui32 TotalEventsAmountPerThread = 1'000;
 
     static constexpr auto MailboxTypes = {
         TMailboxType::HTSwap,

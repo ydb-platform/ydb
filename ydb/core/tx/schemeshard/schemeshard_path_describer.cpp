@@ -863,6 +863,18 @@ void TPathDescriber::DescribeExternalDataSource(const TActorContext&, TPathId pa
     entry->MutableProperties()->CopyFrom(externalDataSourceInfo->Properties);
 }
 
+void TPathDescriber::DescribeView(const TActorContext&, TPathId pathId, TPathElement::TPtr pathEl) {
+    auto it = Self->Views.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "View is not found");
+    TViewInfo::TPtr viewInfo = *it;
+
+    auto entry = Result->Record.MutablePathDescription()->MutableViewDescription();
+    entry->SetName(pathEl->Name);
+    PathIdFromPathId(pathId, entry->MutablePathId());
+    entry->SetVersion(viewInfo->AlterVersion);
+    entry->SetQueryText(viewInfo->QueryText);
+}
+
 static bool ConsiderAsDropped(const TPath& path) {
     Y_ABORT_UNLESS(path.IsResolved());
 
@@ -1014,6 +1026,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             break;
         case NKikimrSchemeOp::EPathTypeExternalDataSource:
             DescribeExternalDataSource(ctx, base->PathId, base);
+            break;
+        case NKikimrSchemeOp::EPathTypeView:
+            DescribeView(ctx, base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();

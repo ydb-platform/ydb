@@ -112,6 +112,9 @@ void TConnectionConfig::Register(TRegistrar registrar)
     registrar.Parameter("udf_registry_path", &TThis::UdfRegistryPath)
         .Optional();
 
+    registrar.Parameter("enable_select_query_tracing_tag", &TThis::EnableSelectQueryTracingTag)
+        .Default(false);
+
     registrar.Postprocessor([] (TThis* config) {
         if (!config->ProxyEndpoints && !config->ClusterUrl && !config->ProxyAddresses && !config->ProxyUnixDomainSocket) {
             THROW_ERROR_EXCEPTION("Either \"endpoints\" or \"cluster_url\" or \"proxy_addresses\" or \"proxy_unix_domain_socket\" must be specified");

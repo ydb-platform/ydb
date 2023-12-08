@@ -36,6 +36,16 @@ namespace Aws
                 */
                 virtual HashResult Calculate(Aws::IStream& stream) = 0;
 
+                /**
+                 * Updates a Hash digest
+                 */
+                virtual void Update(unsigned char*, size_t bufferSize) = 0;
+
+                /**
+                 * Get the result in the current value
+                 */
+                virtual HashResult GetHash() = 0;
+
                 // when hashing streams, this is the size of our internal buffer we read the stream into
                 static const uint32_t INTERNAL_HASH_STREAM_BUFFER_SIZE = 8192;
             };

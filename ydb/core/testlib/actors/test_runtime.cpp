@@ -150,6 +150,7 @@ namespace NActors {
             nodeAppData->ColumnShardConfig = app0->ColumnShardConfig;
             nodeAppData->MeteringConfig = app0->MeteringConfig;
             nodeAppData->AwsCompatibilityConfig = app0->AwsCompatibilityConfig;
+            nodeAppData->S3ProxyResolverConfig = app0->S3ProxyResolverConfig;
             nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot;
             nodeAppData->IoContextFactory = app0->IoContextFactory;
             if (KeyConfigGenerator) {

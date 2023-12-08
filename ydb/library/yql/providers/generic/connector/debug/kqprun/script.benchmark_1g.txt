@@ -1,0 +1,5 @@
+SELECT MAX(length(ch.col) + length(pg.col))
+    FROM clickhouse_cloud.benchmark_1g as ch
+    JOIN postgresql_cloud.benchmark_1g as pg
+ON ch.id = pg.id;
+

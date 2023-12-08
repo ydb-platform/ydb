@@ -1631,7 +1631,7 @@ int aws_byte_buf_append_and_update(struct aws_byte_buf *to, struct aws_byte_curs
         return AWS_OP_ERR;
     }
 
-    from_and_update->ptr = to->buffer + (to->len - from_and_update->len);
+    from_and_update->ptr = to->buffer == NULL ? NULL : to->buffer + (to->len - from_and_update->len);
     return AWS_OP_SUCCESS;
 }
 

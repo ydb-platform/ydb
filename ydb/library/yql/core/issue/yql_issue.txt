@@ -643,3 +643,7 @@ ids {
   code: YQL_HINT_INVALID_PARAMETERS
   severity: S_WARNING
 }
+ids {
+  code: PG_NO_LOCKING_SUPPORT
+  severity: S_WARNING
+}

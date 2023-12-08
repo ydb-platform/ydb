@@ -29,6 +29,7 @@
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet/tablet_metrics.h>
 #include <ydb/core/util/queue_oneone_inplace.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -293,9 +294,12 @@ struct TExecutorStatsImpl : public TExecutorStats {
 
 struct TTransactionWaitPad : public TPrivatePageCacheWaitPad {
     THolder<TSeat> Seat;
+    NWilson::TSpan WaitingSpan;
 
     TTransactionWaitPad(THolder<TSeat> seat);
     ~TTransactionWaitPad();
+
+    NWilson::TTraceId GetWaitingTraceId() const noexcept;
 };
 
 struct TCompactionReadWaitPad : public TPrivatePageCacheWaitPad {

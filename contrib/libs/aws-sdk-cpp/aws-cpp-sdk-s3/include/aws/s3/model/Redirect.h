@@ -29,14 +29,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Redirect">AWS API
    * Reference</a></p>
    */
-  class AWS_S3_API Redirect
+  class Redirect
   {
   public:
-    Redirect();
-    Redirect(const Aws::Utils::Xml::XmlNode& xmlNode);
-    Redirect& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API Redirect();
+    AWS_S3_API Redirect(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API Redirect& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -386,19 +386,19 @@ namespace Model
   private:
 
     Aws::String m_hostName;
-    bool m_hostNameHasBeenSet;
+    bool m_hostNameHasBeenSet = false;
 
     Aws::String m_httpRedirectCode;
-    bool m_httpRedirectCodeHasBeenSet;
+    bool m_httpRedirectCodeHasBeenSet = false;
 
     Protocol m_protocol;
-    bool m_protocolHasBeenSet;
+    bool m_protocolHasBeenSet = false;
 
     Aws::String m_replaceKeyPrefixWith;
-    bool m_replaceKeyPrefixWithHasBeenSet;
+    bool m_replaceKeyPrefixWithHasBeenSet = false;
 
     Aws::String m_replaceKeyWith;
-    bool m_replaceKeyWithHasBeenSet;
+    bool m_replaceKeyWithHasBeenSet = false;
   };
 
 } // namespace Model

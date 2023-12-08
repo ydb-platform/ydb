@@ -53,6 +53,14 @@ target_sources(yqlrun PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/yqlrun.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/gateway_spec.cpp
 )
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/ui.sh
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/yqlrun/ui.sh
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/uig.sh
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/tools/yqlrun/uig.sh
+)
 target_allocator(yqlrun
   cpp-malloc-jemalloc
 )

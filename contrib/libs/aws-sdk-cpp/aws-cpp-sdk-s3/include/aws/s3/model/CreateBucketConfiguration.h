@@ -27,14 +27,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/CreateBucketConfiguration">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API CreateBucketConfiguration
+  class CreateBucketConfiguration
   {
   public:
-    CreateBucketConfiguration();
-    CreateBucketConfiguration(const Aws::Utils::Xml::XmlNode& xmlNode);
-    CreateBucketConfiguration& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API CreateBucketConfiguration();
+    AWS_S3_API CreateBucketConfiguration(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API CreateBucketConfiguration& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -82,7 +82,7 @@ namespace Model
   private:
 
     BucketLocationConstraint m_locationConstraint;
-    bool m_locationConstraintHasBeenSet;
+    bool m_locationConstraintHasBeenSet = false;
   };
 
 } // namespace Model

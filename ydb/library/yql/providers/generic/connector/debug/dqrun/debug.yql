@@ -1,0 +1,1 @@
+SELECT col_14_date, col_16_datetime , col_17_date64 FROM rtmr_dev00_clickhouse.primitives;

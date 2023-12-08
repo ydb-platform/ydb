@@ -36,14 +36,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/LifecycleRule">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API LifecycleRule
+  class LifecycleRule
   {
   public:
-    LifecycleRule();
-    LifecycleRule(const Aws::Utils::Xml::XmlNode& xmlNode);
-    LifecycleRule& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API LifecycleRule();
+    AWS_S3_API LifecycleRule(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API LifecycleRule& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -136,7 +136,7 @@ namespace Model
      * <p>The <code>Filter</code> is used to identify objects that a Lifecycle Rule
      * applies to. A <code>Filter</code> must have exactly one of <code>Prefix</code>,
      * <code>Tag</code>, or <code>And</code> specified. <code>Filter</code> is required
-     * if the <code>LifecycleRule</code> does not containt a <code>Prefix</code>
+     * if the <code>LifecycleRule</code> does not contain a <code>Prefix</code>
      * element.</p>
      */
     inline const LifecycleRuleFilter& GetFilter() const{ return m_filter; }
@@ -145,7 +145,7 @@ namespace Model
      * <p>The <code>Filter</code> is used to identify objects that a Lifecycle Rule
      * applies to. A <code>Filter</code> must have exactly one of <code>Prefix</code>,
      * <code>Tag</code>, or <code>And</code> specified. <code>Filter</code> is required
-     * if the <code>LifecycleRule</code> does not containt a <code>Prefix</code>
+     * if the <code>LifecycleRule</code> does not contain a <code>Prefix</code>
      * element.</p>
      */
     inline bool FilterHasBeenSet() const { return m_filterHasBeenSet; }
@@ -154,7 +154,7 @@ namespace Model
      * <p>The <code>Filter</code> is used to identify objects that a Lifecycle Rule
      * applies to. A <code>Filter</code> must have exactly one of <code>Prefix</code>,
      * <code>Tag</code>, or <code>And</code> specified. <code>Filter</code> is required
-     * if the <code>LifecycleRule</code> does not containt a <code>Prefix</code>
+     * if the <code>LifecycleRule</code> does not contain a <code>Prefix</code>
      * element.</p>
      */
     inline void SetFilter(const LifecycleRuleFilter& value) { m_filterHasBeenSet = true; m_filter = value; }
@@ -163,7 +163,7 @@ namespace Model
      * <p>The <code>Filter</code> is used to identify objects that a Lifecycle Rule
      * applies to. A <code>Filter</code> must have exactly one of <code>Prefix</code>,
      * <code>Tag</code>, or <code>And</code> specified. <code>Filter</code> is required
-     * if the <code>LifecycleRule</code> does not containt a <code>Prefix</code>
+     * if the <code>LifecycleRule</code> does not contain a <code>Prefix</code>
      * element.</p>
      */
     inline void SetFilter(LifecycleRuleFilter&& value) { m_filterHasBeenSet = true; m_filter = std::move(value); }
@@ -172,7 +172,7 @@ namespace Model
      * <p>The <code>Filter</code> is used to identify objects that a Lifecycle Rule
      * applies to. A <code>Filter</code> must have exactly one of <code>Prefix</code>,
      * <code>Tag</code>, or <code>And</code> specified. <code>Filter</code> is required
-     * if the <code>LifecycleRule</code> does not containt a <code>Prefix</code>
+     * if the <code>LifecycleRule</code> does not contain a <code>Prefix</code>
      * element.</p>
      */
     inline LifecycleRule& WithFilter(const LifecycleRuleFilter& value) { SetFilter(value); return *this;}
@@ -181,7 +181,7 @@ namespace Model
      * <p>The <code>Filter</code> is used to identify objects that a Lifecycle Rule
      * applies to. A <code>Filter</code> must have exactly one of <code>Prefix</code>,
      * <code>Tag</code>, or <code>And</code> specified. <code>Filter</code> is required
-     * if the <code>LifecycleRule</code> does not containt a <code>Prefix</code>
+     * if the <code>LifecycleRule</code> does not contain a <code>Prefix</code>
      * element.</p>
      */
     inline LifecycleRule& WithFilter(LifecycleRuleFilter&& value) { SetFilter(std::move(value)); return *this;}
@@ -386,28 +386,28 @@ namespace Model
   private:
 
     LifecycleExpiration m_expiration;
-    bool m_expirationHasBeenSet;
+    bool m_expirationHasBeenSet = false;
 
     Aws::String m_iD;
-    bool m_iDHasBeenSet;
+    bool m_iDHasBeenSet = false;
 
     LifecycleRuleFilter m_filter;
-    bool m_filterHasBeenSet;
+    bool m_filterHasBeenSet = false;
 
     ExpirationStatus m_status;
-    bool m_statusHasBeenSet;
+    bool m_statusHasBeenSet = false;
 
     Aws::Vector<Transition> m_transitions;
-    bool m_transitionsHasBeenSet;
+    bool m_transitionsHasBeenSet = false;
 
     Aws::Vector<NoncurrentVersionTransition> m_noncurrentVersionTransitions;
-    bool m_noncurrentVersionTransitionsHasBeenSet;
+    bool m_noncurrentVersionTransitionsHasBeenSet = false;
 
     NoncurrentVersionExpiration m_noncurrentVersionExpiration;
-    bool m_noncurrentVersionExpirationHasBeenSet;
+    bool m_noncurrentVersionExpirationHasBeenSet = false;
 
     AbortIncompleteMultipartUpload m_abortIncompleteMultipartUpload;
-    bool m_abortIncompleteMultipartUploadHasBeenSet;
+    bool m_abortIncompleteMultipartUploadHasBeenSet = false;
   };
 
 } // namespace Model

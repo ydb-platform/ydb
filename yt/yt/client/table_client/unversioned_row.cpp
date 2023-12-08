@@ -1242,12 +1242,12 @@ bool ValidateNonKeyColumnsAgainstLock(
     const TLockMask& locks,
     const TTableSchema& schema,
     const TNameTableToSchemaIdMapping& idMapping,
-    const TNameTablePtr nameTable,
+    const TNameTablePtr& nameTable,
     const std::vector<int>& columnIndexToLockIndex,
     bool allowSharedWriteLocks)
 {
     bool hasNonKeyColumns = false;
-    for (const auto value : row) {
+    for (const auto& value : row) {
         int mappedId = ApplyIdMapping(value, &idMapping);
         if (mappedId < 0 || mappedId >= std::ssize(schema.Columns())) {
             int size = nameTable->GetSize();

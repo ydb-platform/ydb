@@ -21,9 +21,9 @@ class Collection(object):
             'select_missing_database': select_missing_database.Factory().make_test_cases(),
             'select_missing_table': select_missing_table.Factory().make_test_cases(),
             'select_positive_postgresql': select_positive_postgresql.Factory().make_test_cases()
-            + select_positive_common.Factory().make_test_cases(EDataSourceKind.POSTGRESQL),
+            + select_positive_common.Factory(ss).make_test_cases(EDataSourceKind.POSTGRESQL),
             'select_positive_clickhouse': select_positive_clickhouse.Factory().make_test_cases()
-            + select_positive_common.Factory().make_test_cases(EDataSourceKind.CLICKHOUSE),
+            + select_positive_common.Factory(ss).make_test_cases(EDataSourceKind.CLICKHOUSE),
             'select_datetime': select_datetime.Factory().make_test_cases(),
             'select_pg_schema': select_pg_schema.Factory().make_test_cases(),
         }

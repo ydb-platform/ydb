@@ -385,6 +385,9 @@ void TTransaction::ModifyRows(
     req->set_sequence_number_source_id(SequenceNumberSourceId_);
     ToProto(req->mutable_transaction_id(), GetId());
     req->set_path(path);
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        req->TracingTags().emplace_back("yt.table_path", path);
+    }
     req->set_require_sync_replica(options.RequireSyncReplica);
     ToProto(req->mutable_upstream_replica_id(), options.UpstreamReplicaId);
     req->set_allow_missing_key_columns(options.AllowMissingKeyColumns);

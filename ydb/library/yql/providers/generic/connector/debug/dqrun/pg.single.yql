@@ -1,0 +1,2 @@
+SELECT COL1 FROM rtmr_dev00_postgresql.column_projection;
+

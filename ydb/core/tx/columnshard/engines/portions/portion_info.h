@@ -560,7 +560,7 @@ public:
         columns.reserve(arrowResultSchema->num_fields());
         const ui32 rowsCount = NumRows();
         for (auto&& i : arrowResultSchema->fields()) {
-            columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i->name()), resultSchema.GetColumnLoader(i->name()));
+            columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i->name()), resultSchema.GetColumnLoaderOptional(i->name()));
         }
         {
             int skipColumnId = -1;

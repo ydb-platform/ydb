@@ -33,11 +33,16 @@ void TSession::Close() {
     if (OperationSemaphore) {
         OperationSemaphore->Cancel();
     }
+
     try {
         TxCache_.AbortAll();
     } catch (...) {
         YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+        OpTracker_->Stop();
+        Queue_->Stop();
+        throw;
     }
+
     OpTracker_->Stop();
     Queue_->Stop();
 }

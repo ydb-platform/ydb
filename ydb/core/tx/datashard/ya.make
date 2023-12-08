@@ -216,6 +216,7 @@ RESOURCE(
 PEERDIR(
     contrib/libs/zstd
     ydb/library/actors/core
+    ydb/library/actors/http
     library/cpp/containers/absl_flat_hash
     library/cpp/containers/stack_vector
     library/cpp/digest/md5

@@ -214,7 +214,9 @@ Y_UNIT_TEST_SUITE(YdbLongTx) {
         }
 
         // Write
-        TString data = TestBlob();
+        auto batch = TTestOlap::SampleBatch(false, 10000);
+        const TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
+
         {
             NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(resBeginTx.Status().GetStatus(), EStatus::SUCCESS);
@@ -232,8 +234,8 @@ Y_UNIT_TEST_SUITE(YdbLongTx) {
         // Read after write
         auto sharded = SplitData(data, 2);
         UNIT_ASSERT_VALUES_EQUAL(sharded.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(sharded[0]->num_rows(), 54);
-        UNIT_ASSERT_VALUES_EQUAL(sharded[1]->num_rows(), 46);
+        UNIT_ASSERT_VALUES_EQUAL(sharded[0]->num_rows(), 4990);
+        UNIT_ASSERT_VALUES_EQUAL(sharded[1]->num_rows(), 5010);
 
         TVector<TString> expected;
         for (auto batch : sharded) {

@@ -36,7 +36,7 @@ TIntrusivePtr<NKqp::IKqpGateway> GetIcGateway(Tests::TServer& server) {
     counters->TxProxyMon = new NTxProxy::TTxProxyMon(server.GetRuntime()->GetAppData(0).Counters);
     std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(server.GetRuntime()->GetAnyNodeActorSystem(),TIntrusivePtr<NYql::TKikimrConfiguration>(nullptr),false);
     return NKqp::CreateKikimrIcGateway(TestCluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, "/Root", std::move(loader), server.GetRuntime()->GetAnyNodeActorSystem(),
-        server.GetRuntime()->GetNodeId(0), counters);
+        server.GetRuntime()->GetNodeId(0), counters, server.GetSettings().AppConfig.GetQueryServiceConfig());
 }
 
 TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> gateway,
@@ -248,10 +248,10 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
             auto indexTableAccess = CountPlanNodesByKv(plan, "Table", "tg/tg_index/indexImplTable");
             UNIT_ASSERT_VALUES_EQUAL(indexTableAccess, 1);
 
-            auto filterOnIndex = CountPlanNodesByKv(plan, "Node Type", "Limit-Filter-TablePointLookup");
+            auto filterOnIndex = CountPlanNodesByKv(plan, "Node Type", "Limit-Filter-TableRangeScan");
             UNIT_ASSERT_VALUES_EQUAL(filterOnIndex, 1);
 
-            auto limitFilterNode = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TablePointLookup");
+            auto limitFilterNode = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TableRangeScan");
             auto val = FindPlanNodes(limitFilterNode, "Limit");
             UNIT_ASSERT_VALUES_EQUAL(val.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(val[0], "11");

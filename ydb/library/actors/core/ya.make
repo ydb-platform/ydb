@@ -27,8 +27,6 @@ SRCS(
     ask.cpp
     ask.h
     av_bootstrapped.cpp
-    balancer.h
-    balancer.cpp
     buffer.cpp
     buffer.h
     callstack.cpp
@@ -53,8 +51,6 @@ SRCS(
     executor_pool_basic.h
     executor_pool_io.cpp
     executor_pool_io.h
-    executor_pool_united.cpp
-    executor_pool_united.h
     executor_thread.cpp
     executor_thread.h
     harmonizer.cpp

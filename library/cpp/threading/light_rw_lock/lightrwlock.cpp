@@ -1,7 +1,7 @@
 #include "lightrwlock.h"
 #include <util/system/spinlock.h>
 
-#if defined(_linux_)
+#if defined(_linux_) && !defined(_tsan_enabled_)
 
 using namespace NS_LightRWLock;
 

@@ -364,7 +364,7 @@ public:
         return MakeFuture();
     }
 
-    void CloseSession(const TString& sessionId) {
+    TFuture<void> CloseSession(const TString& sessionId) {
         Yql::DqsProto::CloseSessionRequest request;
         request.SetSession(sessionId);
 
@@ -380,6 +380,8 @@ public:
 
         Service->DoRequest<Yql::DqsProto::CloseSessionRequest, Yql::DqsProto::CloseSessionResponse>(
             request, callback, &Yql::DqsProto::DqService::Stub::AsyncCloseSession);
+
+        return MakeFuture();
     }
 
     void OnRequestQueryStatus(const TString& sessionId, const TString& status, bool ok) {
@@ -535,9 +537,9 @@ public:
         return Impl->OpenSession(sessionId, username);
     }
 
-    void CloseSession(const TString& sessionId) override
+    TFuture<void> CloseSessionAsync(const TString& sessionId) override
     {
-        Impl->CloseSession(sessionId);
+        return Impl->CloseSession(sessionId);
     }
 
     TFuture<TResult> ExecutePlan(const TString& sessionId, NDqs::TPlan&& plan, const TVector<TString>& columns,

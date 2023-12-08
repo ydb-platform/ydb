@@ -10,6 +10,7 @@
 add_library(restricted-aws-aws-c-common)
 target_compile_options(restricted-aws-aws-c-common PRIVATE
   -DAWS_COMMON_USE_IMPORT_EXPORT
+  -DAWS_PTHREAD_GETNAME_TAKES_3ARGS
   -DAWS_PTHREAD_SETNAME_TAKES_2ARGS
   -DCJSON_HIDE_SYMBOLS
   -DHAVE_SYSCONF
@@ -31,7 +32,6 @@ target_sources(restricted-aws-aws-c-common PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/allocator_sba.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/array_list.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/assert.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/bus.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/byte_buf.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/cache.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/codegen.c

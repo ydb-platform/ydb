@@ -3,7 +3,7 @@
 #if USE_AWS_S3
 
 #include <Common/logger_useful.h>
-// #include <aws/core/endpoint/EndpointParameter.h>
+#include <aws/core/endpoint/EndpointParameter.h>
 #include <aws/core/utils/xml/XmlSerializer.h>
 
 namespace DB::S3
@@ -82,14 +82,14 @@ Aws::Http::HeaderValueCollection ComposeObjectRequest::GetRequestSpecificHeaders
     return {Aws::Http::HeaderValuePair(Aws::Http::CONTENT_TYPE_HEADER, content_type)};
 }
 
-// Aws::Endpoint::EndpointParameters ComposeObjectRequest::GetEndpointContextParams() const
-// {
-//     EndpointParameters parameters;
-//     if (BucketHasBeenSet())
-//         parameters.emplace_back("Bucket", GetBucket(), Aws::Endpoint::EndpointParameter::ParameterOrigin::OPERATION_CONTEXT);
+Aws::Endpoint::EndpointParameters ComposeObjectRequest::GetEndpointContextParams() const
+{
+    EndpointParameters parameters;
+    if (BucketHasBeenSet())
+        parameters.emplace_back("Bucket", GetBucket(), Aws::Endpoint::EndpointParameter::ParameterOrigin::OPERATION_CONTEXT);
 
-//     return parameters;
-// }
+    return parameters;
+}
 
 const Aws::String & ComposeObjectRequest::GetBucket() const
 {

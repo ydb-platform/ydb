@@ -15,9 +15,7 @@ LICENSE(
     GPL-2.0-only WITH Linux-syscall-note AND
     GPL-2.0-or-later WITH Linux-syscall-note AND
     ISC AND
-    LGPL-2.0-only AND
     LGPL-2.0-or-later WITH Linux-syscall-note AND
-    LGPL-2.1-only AND
     LGPL-2.1-only WITH Linux-syscall-note AND
     LGPL-2.1-or-later WITH Linux-syscall-note AND
     Linux-OpenIB AND

@@ -129,6 +129,20 @@ public:
         Terminated_.Unsubscribe(callback);
     }
 
+    int GetInflightRequestCount() override
+    {
+        int requestCount = 0;
+
+        for (auto& bucket : Buckets_) {
+            auto guard = ReaderGuard(bucket.Lock);
+            for (const auto& session : bucket.Sessions) {
+                requestCount += session->GetInflightRequestCount();
+            }
+        }
+
+        return requestCount;
+    }
+
 private:
     class TSession;
     using TSessionPtr = TIntrusivePtr<TSession>;
@@ -260,7 +274,6 @@ private:
 
     private:
         const TWeakPtr<TSession> Session_;
-
     };
 
     //! Directs requests sent via a channel to go through its underlying bus.
@@ -294,7 +307,7 @@ private:
 
             // Mark the channel as terminated to disallow any further usage.
             for (auto& bucket : RequestBuckets_) {
-                auto guard = Guard(bucket.Lock);
+                auto guard = Guard(bucket);
 
                 bucket.Terminated = true;
 
@@ -385,7 +398,7 @@ private:
 
             IClientResponseHandlerPtr responseHandler;
             {
-                auto guard = Guard(bucket->Lock);
+                auto guard = Guard(*bucket);
 
                 auto it = bucket->ActiveRequestMap.find(requestId);
                 if (it == bucket->ActiveRequestMap.end()) {
@@ -502,7 +515,7 @@ private:
 
             IClientResponseHandlerPtr responseHandler;
             {
-                auto guard = Guard(bucket->Lock);
+                auto guard = Guard(*bucket);
 
                 if (!requestControl->IsActive(guard)) {
                     return;
@@ -542,7 +555,7 @@ private:
 
             IClientResponseHandlerPtr responseHandler;
             {
-                auto guard = Guard(bucket->Lock);
+                auto guard = Guard(*bucket);
 
                 if (!requestControl->IsActive(guard)) {
                     return;
@@ -600,18 +613,48 @@ private:
             }
         }
 
+        int GetInflightRequestCount()
+        {
+            int requestCount = 0;
+
+            for (auto& bucket : RequestBuckets_) {
+                requestCount += bucket.ActiveRequestCount.load(
+                    std::memory_order::relaxed);
+            }
+
+            return requestCount;
+        }
+
     private:
         const TTosLevel TosLevel_;
 
         IBusPtr Bus_;
         std::atomic<bool> BusReady_ = false;
 
-        struct TBucket
+        class TBucket
         {
-            YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
+        public:
             IBusPtr Bus;
             bool Terminated = false;
             THashMap<TRequestId, TClientRequestControlPtr> ActiveRequestMap;
+            std::atomic<int> ActiveRequestCount = 0;
+
+            void Acquire() noexcept
+            {
+                Lock.Acquire();
+            }
+
+            void Release() noexcept
+            {
+                if (std::ssize(ActiveRequestMap) != ActiveRequestCount.load(std::memory_order::relaxed)) {
+                    ActiveRequestCount.store(std::ssize(ActiveRequestMap), std::memory_order::relaxed);
+                }
+
+                Lock.Release();
+            }
+
+        private:
+            YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
         };
 
         static constexpr size_t BucketCount = 64;
@@ -687,7 +730,7 @@ private:
             VERIFY_THREAD_AFFINITY_ANY();
 
             auto* bucket = GetBucketForRequest(requestId);
-            auto guard = Guard(bucket->Lock);
+            auto guard = Guard(*bucket);
 
             auto it = bucket->ActiveRequestMap.find(requestId);
             if (it == bucket->ActiveRequestMap.end()) {
@@ -719,7 +762,7 @@ private:
             TClientRequestControlPtr existingRequestControl;
             IClientResponseHandlerPtr existingResponseHandler;
             {
-                auto guard = Guard(bucket->Lock);
+                auto guard = Guard(*bucket);
 
                 if (!requestControl->IsActive(guard)) {
                     return;
@@ -826,7 +869,7 @@ private:
             TClientRequestControlPtr requestControl;
             IClientResponseHandlerPtr responseHandler;
             {
-                auto guard = Guard(bucket->Lock);
+                auto guard = Guard(*bucket);
 
                 if (bucket->Terminated) {
                     YT_LOG_WARNING("Response received via a terminated channel (RequestId: %v)",
@@ -972,7 +1015,7 @@ private:
             TClientRequestControlPtr requestControl;
             IClientResponseHandlerPtr responseHandler;
             {
-                auto guard = Guard(bucket->Lock);
+                auto guard = Guard(*bucket);
 
                 auto it = bucket->ActiveRequestMap.find(requestId);
                 if (it == bucket->ActiveRequestMap.end()) {
@@ -1120,7 +1163,8 @@ private:
             return TraceContext_.MakeTraceContextGuard();
         }
 
-        bool IsActive(const TGuard<NThreading::TSpinLock>&) const
+        template <typename TLock>
+        bool IsActive(const TGuard<TLock>&) const
         {
             return static_cast<bool>(ResponseHandler_);
         }
@@ -1142,12 +1186,14 @@ private:
             TDelayedExecutor::CancelAndClear(AcknowledgementTimeoutCookie_);
         }
 
-        IClientResponseHandlerPtr GetResponseHandler(const TGuard<NThreading::TSpinLock>&)
+        template <typename TLock>
+        IClientResponseHandlerPtr GetResponseHandler(const TGuard<TLock>&)
         {
             return ResponseHandler_;
         }
 
-        IClientResponseHandlerPtr Finalize(const TGuard<NThreading::TSpinLock>&)
+        template <typename TLock>
+        IClientResponseHandlerPtr Finalize(const TGuard<TLock>&)
         {
             TotalTime_ = ProfileComplete();
             TDelayedExecutor::CancelAndClear(TimeoutCookie_);

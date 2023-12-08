@@ -61,7 +61,6 @@ message TActorSystemConfig {
         enum EType {
             BASIC = 1;
             IO = 2;
-            UNITED = 3;
         };
 
         optional EType Type = 1;
@@ -74,17 +73,9 @@ message TActorSystemConfig {
         optional uint32 EventsPerMailbox = 8;
         optional uint32 RealtimePriority = 9;
 
-        // Actorsystem 2.0: cpu sharing by different pools with preemption
-        optional uint32 Concurrency = 10; // Limits simultaneously running mailboxes of UNITED pool
-        optional uint32 Weight = 11; // Weight of UNITED pool in cpu-local scheduler (default value is NActors::DefPoolWeight)
-
-        // Actorsystem 1.5: cpu balancing between pools
+        // Actorsystem 1.4
         optional uint32 MinThreads = 12; // Lower balancing bound, should be at least 1, and not greater than `Threads`
         optional uint32 MaxThreads = 13; // Higher balancing bound, should be not lower than `Threads`
-        optional uint32 BalancingPriority = 14; // Priority of pool to obtain cpu due to balancing (higher is better)
-        optional uint64 ToleratedLatencyUs = 15; // p100-latency threshold indicating that more cpus are required by pool
-
-        // Actorsystem 1.4
         optional int32 Priority = 16;
         optional int32 MaxAvgPingDeviation = 17;
     }
@@ -114,22 +105,6 @@ message TActorSystemConfig {
     optional uint32 TimePerMailboxMicroSecs = 8;
     optional uint32 EventsPerMailbox = 9;
     optional uint32 SelfPingInterval = 10; // in microseconds
-
-    message TUnitedWorkers {
-        optional uint32 CpuCount = 1; // Total CPUs running united workers (TExecutor.Threads analog), should be set to zero to use actorsystem 1.5, and >0 for actorsystem 2.0
-        optional uint64 SpinThresholdUs = 2; // Limit for active spinning in case all pools became idle
-        optional uint64 PoolLimitUs = 3; // Soft limit on pool execution
-        optional uint64 EventLimitUs = 4; // Hard limit on last event execution exceeding pool limit
-        optional uint64 LimitPrecisionUs = 5; // Maximum delay of timer on limit excess (delay needed to avoid settimer syscall on every pool switch)
-        optional uint64 FastWorkerPriority = 6; // Real-time priority of workers not exceeding hard limits
-        optional uint64 IdleWorkerPriority = 7; // Real-time priority of standby workers waiting for hard preemption on timers (should be greater than FastWorkerPriority)
-        optional TAffinity Affinity = 8; // Cpu set for workers (every worker has affinity for exactly one cpu)
-        optional bool NoRealtime = 9; // Do not use RT-priority for worker threads
-        optional bool NoAffinity = 10; // Do not use affinity for worker threads
-        optional uint64 BalancerPeriodUs = 11; // Time between balancer steps (see default in NActors::TBalancerConfig)
-    }
-
-    optional TUnitedWorkers UnitedWorkers = 11;
 
     optional bool UseAutoConfig = 12;
 
@@ -752,6 +727,25 @@ message THttpProxyConfig {
     optional string JwtFile = 10;
 }
 
+message TS3ProxyResolverConfig {
+    message THttpResolverConfig {
+        // resolve proxy host to connect to that endpoint using this url
+        optional string ResolveUrl = 1;
+        // use resolved proxy through these ports
+        optional uint32 HttpPort = 2;
+        optional uint32 HttpsPort = 3;
+    }
+
+    message TEndpoint {
+        // S3 endpoint
+        optional string Endpoint = 1;
+        oneof Resolver {
+            THttpResolverConfig HttpResolver = 2;
+        }
+    }
+
+    repeated TEndpoint Endpoints = 1;
+}
 
 message TSqsConfig {
     optional bool EnableSqs = 5;
@@ -1040,6 +1034,7 @@ message TQueryServiceConfig {
     optional bool MdbTransformHost = 10;
     optional NYql.TGenericGatewayConfig Generic = 11;
     optional TFinalizeScriptServiceConfig FinalizeScriptServiceConfig = 12;
+    optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
 }
 
 // Config describes immediate controls and allows
@@ -1670,6 +1665,7 @@ message TAppConfig {
     optional TQueryServiceConfig QueryServiceConfig = 73;
     optional TConveyorConfig InsertConveyorConfig = 74;
     optional bool AllowEditYamlInUi = 75;
+    optional TS3ProxyResolverConfig S3ProxyResolverConfig = 76;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

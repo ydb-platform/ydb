@@ -8,9 +8,6 @@ namespace NKikimr::NArrow {
 class THashConstructor {
 public:
     static bool BuildHashUI64(std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName);
-
-    static size_t TypedHash(const std::vector<std::shared_ptr<arrow::Array>>& ar, const int pos);
-    static size_t TypedHash(const arrow::Array& ar, const int pos);
 };
 
 class TShardedRecordBatch {

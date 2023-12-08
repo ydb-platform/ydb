@@ -28,8 +28,6 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
         return;
     }
 
-    YQL_CLOG(TRACE, CoreDq) << "Right side of the map join: " << rightArg.Raw()->Dump();
-
     TVector<TString> leftJoinKeys;
     TVector<TString> rightJoinKeys;
 

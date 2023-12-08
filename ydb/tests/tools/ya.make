@@ -1,4 +1,5 @@
 RECURSE(
+    canondata_sync
     datastreams_helpers
     fq_runner
     idx_test

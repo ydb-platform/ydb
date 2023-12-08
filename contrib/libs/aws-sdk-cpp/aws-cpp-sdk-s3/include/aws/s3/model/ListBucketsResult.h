@@ -26,46 +26,46 @@ namespace S3
 {
 namespace Model
 {
-  class AWS_S3_API ListBucketsResult
+  class ListBucketsResult
   {
   public:
-    ListBucketsResult();
-    ListBucketsResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
-    ListBucketsResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API ListBucketsResult();
+    AWS_S3_API ListBucketsResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API ListBucketsResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
 
 
     /**
-     * <p>The list of buckets owned by the requestor.</p>
+     * <p>The list of buckets owned by the requester.</p>
      */
     inline const Aws::Vector<Bucket>& GetBuckets() const{ return m_buckets; }
 
     /**
-     * <p>The list of buckets owned by the requestor.</p>
+     * <p>The list of buckets owned by the requester.</p>
      */
     inline void SetBuckets(const Aws::Vector<Bucket>& value) { m_buckets = value; }
 
     /**
-     * <p>The list of buckets owned by the requestor.</p>
+     * <p>The list of buckets owned by the requester.</p>
      */
     inline void SetBuckets(Aws::Vector<Bucket>&& value) { m_buckets = std::move(value); }
 
     /**
-     * <p>The list of buckets owned by the requestor.</p>
+     * <p>The list of buckets owned by the requester.</p>
      */
     inline ListBucketsResult& WithBuckets(const Aws::Vector<Bucket>& value) { SetBuckets(value); return *this;}
 
     /**
-     * <p>The list of buckets owned by the requestor.</p>
+     * <p>The list of buckets owned by the requester.</p>
      */
     inline ListBucketsResult& WithBuckets(Aws::Vector<Bucket>&& value) { SetBuckets(std::move(value)); return *this;}
 
     /**
-     * <p>The list of buckets owned by the requestor.</p>
+     * <p>The list of buckets owned by the requester.</p>
      */
     inline ListBucketsResult& AddBuckets(const Bucket& value) { m_buckets.push_back(value); return *this; }
 
     /**
-     * <p>The list of buckets owned by the requestor.</p>
+     * <p>The list of buckets owned by the requester.</p>
      */
     inline ListBucketsResult& AddBuckets(Bucket&& value) { m_buckets.push_back(std::move(value)); return *this; }
 

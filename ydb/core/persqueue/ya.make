@@ -36,6 +36,7 @@ SRCS(
     utils.cpp
     write_meta.cpp
     microseconds_sliding_window.cpp
+    dread_cache_service/caching_service.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(sourceid.h)
@@ -66,5 +67,6 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    dread_cache_service/ut
     ut/slow
 )

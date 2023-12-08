@@ -5,7 +5,6 @@
 #include <util/generic/yexception.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
-#include <ydb/library/yql/utils/aws_credentials.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <thread>
@@ -101,7 +100,7 @@ public:
         size_t bodySize = 0,
         const TCurlInitConfig& config = TCurlInitConfig(),
         TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
-        : Headers(headers)
+        : Headers(std::move(headers))
         , Method(method)
         , Offset(offset)
         , SizeLimit(sizeLimit)
@@ -113,13 +112,8 @@ public:
         , ErrorBuffer(static_cast<size_t>(CURL_ERROR_SIZE), '\0')
         , DnsCache(dnsCache)
         , Url(url) {
-        PrepareHeaders();
         InitHandles();
         Counter->Inc();
-    }
-
-    void PrepareHeaders() {
-        AwsCredentials = ExtractAwsCredentials(Headers);
     }
 
     virtual ~TEasyCurl() {
@@ -170,19 +164,22 @@ public:
         curl_easy_setopt(Handle, CURLOPT_LOW_SPEED_LIMIT, Config.LowSpeedLimit);
         curl_easy_setopt(Handle, CURLOPT_ERRORBUFFER, ErrorBuffer.data());
 
-        if (AwsCredentials) {
-            curl_easy_setopt(Handle, CURLOPT_AWS_SIGV4, "aws:amz:ru-central1:s3");
-            curl_easy_setopt(Handle, CURLOPT_USERPWD, AwsCredentials.c_str());
+        if (Headers.Options.AwsSigV4) {
+            curl_easy_setopt(Handle, CURLOPT_AWS_SIGV4, Headers.Options.AwsSigV4.c_str());
+        }
+
+        if (Headers.Options.UserPwd) {
+            curl_easy_setopt(Handle, CURLOPT_USERPWD, Headers.Options.UserPwd.c_str());
         }
 
         if (DnsCache != nullptr) {
             curl_easy_setopt(Handle, CURLOPT_RESOLVE, DnsCache.get());
         }
 
-        if (!Headers.empty()) {
+        if (!Headers.Fields.empty()) {
             CurlHeaders = std::accumulate(
-                Headers.cbegin(),
-                Headers.cend(),
+                Headers.Fields.cbegin(),
+                Headers.Fields.cend(),
                 CurlHeaders,
                 std::bind(
                     &curl_slist_append,
@@ -216,7 +213,7 @@ public:
             curl_easy_cleanup(Handle);
             Handle = nullptr;
         }
-        if (Headers) {
+        if (Headers.Fields) {
             curl_slist_free_all(CurlHeaders);
             CurlHeaders = nullptr;
         }
@@ -273,7 +270,6 @@ private:
         return res;
     };
 
-    TString AwsCredentials;
     IHTTPGateway::THeaders Headers;
     const EMethod Method;
     const size_t Offset;
@@ -315,7 +311,7 @@ public:
               downloadedBytes,
               uploadededBytes,
               url,
-              headers,
+              std::move(headers),
               method,
               offset,
               sizeLimit,
@@ -454,7 +450,7 @@ public:
         const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter,
         const TCurlInitConfig& config = TCurlInitConfig(),
         TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
-        : TEasyCurl(counter, downloadedBytes, uploadededBytes, url, headers, EMethod::GET, offset, sizeLimit, 0ULL, std::move(config), std::move(dnsCache))
+        : TEasyCurl(counter, downloadedBytes, uploadededBytes, url, std::move(headers), EMethod::GET, offset, sizeLimit, 0ULL, std::move(config), std::move(dnsCache))
         , OnStart(std::move(onStart))
         , OnNewData(std::move(onNewData))
         , OnFinish(std::move(onFinish))
@@ -567,7 +563,9 @@ public:
         const auto& headers = std::get<2U>(key);
         auto initHash = CombineHashes(CombineHashes(Hash(std::get<0U>(key)), std::get<1U>(key)), Hash(std::get<3U>(key)));
         initHash = CombineHashes(HashPtr(std::get<4U>(key)), initHash);
-        return std::accumulate(headers.cbegin(), headers.cend(), initHash,
+        initHash = CombineHashes(Hash(headers.Options.UserPwd), initHash);
+        initHash = CombineHashes(Hash(headers.Options.AwsSigV4), initHash);
+        return std::accumulate(headers.Fields.cbegin(), headers.Fields.cend(), initHash,
             [this](size_t hash, const TString& item) { return CombineHashes(hash, Hash(item)); });
     }
 private:
@@ -1049,23 +1047,26 @@ IHTTPGateway::Make(const THttpGatewayConfig* httpGatewaysCfg, ::NMonitoring::TDy
     return gateway;
 }
 
-IHTTPGateway::THeaders IHTTPGateway::MakeYcHeaders(const TString& requestId, const TString& token, const TString& contentType) {
+IHTTPGateway::THeaders IHTTPGateway::MakeYcHeaders(
+    const TString& requestId,
+    const TString& token,
+    const TString& contentType,
+    const TString& userPwd,
+    const TString& awsSigV4) {
 
-    IHTTPGateway::THeaders result;
+    IHTTPGateway::THeaders result{.Options{userPwd, awsSigV4}};
 
     if (requestId.empty()) {
         throw yexception() << "RequestId is mandatory";
     }
-    result.push_back(TString("X-Request-ID:") + requestId);
+    result.Fields.push_back(TString("X-Request-ID:") + requestId);
 
-    if (TString header = PrepareAwsHeader(token)) {
-        result.push_back(header);
-    } else if (!token.empty()) {
-        result.push_back(TString("X-YaCloud-SubjectToken:") + token);
+    if (!token.empty()) {
+        result.Fields.push_back(TString("X-YaCloud-SubjectToken:") + token);
     }
 
     if (!contentType.empty()) {
-        result.push_back(TString("Content-Type:") + contentType);
+        result.Fields.push_back(TString("Content-Type:") + contentType);
     }
 
     return result;

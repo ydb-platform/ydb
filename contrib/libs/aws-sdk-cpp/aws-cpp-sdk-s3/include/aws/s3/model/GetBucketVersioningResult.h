@@ -25,12 +25,12 @@ namespace S3
 {
 namespace Model
 {
-  class AWS_S3_API GetBucketVersioningResult
+  class GetBucketVersioningResult
   {
   public:
-    GetBucketVersioningResult();
-    GetBucketVersioningResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
-    GetBucketVersioningResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API GetBucketVersioningResult();
+    AWS_S3_API GetBucketVersioningResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API GetBucketVersioningResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
 
 
     /**

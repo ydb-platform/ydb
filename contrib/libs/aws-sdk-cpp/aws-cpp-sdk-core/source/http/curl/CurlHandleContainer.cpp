@@ -43,7 +43,7 @@ CURL* CurlHandleContainer::AcquireCurlHandle()
     }
 
     CURL* handle = m_handleContainer.Acquire();
-    AWS_LOGSTREAM_INFO(CURL_HANDLE_CONTAINER_TAG, "Connection has been released. Continuing.");
+    AWS_LOGSTREAM_DEBUG(CURL_HANDLE_CONTAINER_TAG, "Connection has been released. Continuing.");
     AWS_LOGSTREAM_DEBUG(CURL_HANDLE_CONTAINER_TAG, "Returning connection handle " << handle);
     return handle;
 }
@@ -52,6 +52,9 @@ void CurlHandleContainer::ReleaseCurlHandle(CURL* handle)
 {
     if (handle)
     {
+#if LIBCURL_VERSION_NUM >= 0x074D00 // 7.77.0
+        curl_easy_setopt(handle, CURLOPT_COOKIEFILE, NULL); // workaround a mem leak on curl
+#endif
         curl_easy_reset(handle);
         SetDefaultOptionsOnHandle(handle);
         AWS_LOGSTREAM_DEBUG(CURL_HANDLE_CONTAINER_TAG, "Releasing curl handle " << handle);

@@ -32,6 +32,10 @@ ui64 TopicPartitionReserveThroughput(const NKikimrPQ::TPQTabletConfig& config) {
     return config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
 }
 
+bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {
+    return config.GetPartitionStrategy().GetMinPartitionCount() < config.GetPartitionStrategy().GetMaxPartitionCount(); // TODO
+}
+
 static constexpr ui64 PUT_UNIT_SIZE = 40960u; // 40Kb
 
 ui64 PutUnitsSize(const ui64 size) {

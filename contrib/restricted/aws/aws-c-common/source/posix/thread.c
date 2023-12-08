@@ -23,9 +23,11 @@
 #include <time.h>
 #include <unistd.h>
 
-#if defined(__FreeBSD__) || defined(__NETBSD__)
+#if defined(__FreeBSD__) || defined(__NetBSD__)
 #    include <pthread_np.h>
 typedef cpuset_t cpu_set_t;
+#elif defined(__OpenBSD__)
+#    include <pthread_np.h>
 #endif
 
 #if !defined(AWS_AFFINITY_METHOD)
@@ -128,6 +130,8 @@ static void s_set_thread_name(pthread_t thread_id, const char *name) {
     pthread_setname_np(name);
 #elif defined(AWS_PTHREAD_SETNAME_TAKES_2ARGS)
     pthread_setname_np(thread_id, name);
+#elif defined(AWS_PTHREAD_SET_NAME_TAKES_2ARGS)
+    pthread_set_name_np(thread_id, name);
 #elif defined(AWS_PTHREAD_SETNAME_TAKES_3ARGS)
     pthread_setname_np(thread_id, name, NULL);
 #else
@@ -165,8 +169,9 @@ static void *thread_fn(void *arg) {
          * and makes sure the numa node of the cpu we launched this thread on is where memory gets allocated. However,
          * we don't want to fail the application if this fails, so make the call, and ignore the result. */
         long resp = g_set_mempolicy_ptr(AWS_MPOL_PREFERRED_ALIAS, NULL, 0);
+        int errno_value = errno; /* Always cache errno before potential side-effect */
         if (resp) {
-            AWS_LOGF_WARN(AWS_LS_COMMON_THREAD, "call to set_mempolicy() failed with errno %d", errno);
+            AWS_LOGF_WARN(AWS_LS_COMMON_THREAD, "call to set_mempolicy() failed with errno %d", errno_value);
         }
     }
     wrapper.func(wrapper.arg);
@@ -274,7 +279,7 @@ int aws_thread_launch(
 
 /* AFAIK you can't set thread affinity on apple platforms, and it doesn't really matter since all memory
  * NUMA or not is setup in interleave mode.
- * Thread afinity is also not supported on Android systems, and honestly, if you're running android on a NUMA
+ * Thread affinity is also not supported on Android systems, and honestly, if you're running android on a NUMA
  * configuration, you've got bigger problems. */
 #if AWS_AFFINITY_METHOD == AWS_AFFINITY_METHOD_PTHREAD_ATTR
         if (options->cpu_id >= 0) {
@@ -459,4 +464,33 @@ int aws_thread_current_at_exit(aws_thread_atexit_fn *callback, void *user_data) 
     cb->next = tl_wrapper->atexit;
     tl_wrapper->atexit = cb;
     return AWS_OP_SUCCESS;
+}
+
+int aws_thread_current_name(struct aws_allocator *allocator, struct aws_string **out_name) {
+    return aws_thread_name(allocator, aws_thread_current_thread_id(), out_name);
+}
+
+#define THREAD_NAME_BUFFER_SIZE 256
+int aws_thread_name(struct aws_allocator *allocator, aws_thread_id_t thread_id, struct aws_string **out_name) {
+    *out_name = NULL;
+#if defined(AWS_PTHREAD_GETNAME_TAKES_2ARGS) || defined(AWS_PTHREAD_GETNAME_TAKES_3ARGS) ||                            \
+    defined(AWS_PTHREAD_GET_NAME_TAKES_2_ARGS)
+    char name[THREAD_NAME_BUFFER_SIZE] = {0};
+#    ifdef AWS_PTHREAD_GETNAME_TAKES_3ARGS
+    if (pthread_getname_np(thread_id, name, THREAD_NAME_BUFFER_SIZE)) {
+#    elif AWS_PTHREAD_GETNAME_TAKES_2ARGS
+    if (pthread_getname_np(thread_id, name)) {
+#    elif AWS_PTHREAD_GET_NAME_TAKES_2ARGS
+    if (pthread_get_name_np(thread_id, name)) {
+#    endif
+
+        return aws_raise_error(AWS_ERROR_SYS_CALL_FAILURE);
+    }
+
+    *out_name = aws_string_new_from_c_str(allocator, name);
+    return AWS_OP_SUCCESS;
+#else
+
+    return aws_raise_error(AWS_ERROR_PLATFORM_NOT_SUPPORTED);
+#endif
 }

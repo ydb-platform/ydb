@@ -3,8 +3,8 @@
 #include "flat_part_overlay.h"
 #include "flat_part_keys.h"
 #include "util_fmt_abort.h"
-
-#include <typeinfo>
+#include "ydb/core/base/appdata_fwd.h"
+#include "ydb/core/base/feature_flags.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -78,16 +78,18 @@ void TLoader::StageParseMeta() noexcept
 
         BTreeGroupIndexes.clear();
         BTreeHistoricIndexes.clear();
-        for (bool history : {false, true}) {
-            for (const auto &meta : history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
-                NPage::TBtreeIndexMeta converted{{
-                    meta.GetRootPageId(), 
-                    meta.GetCount(), 
-                    meta.GetErasedCount(), 
-                    meta.GetDataSize()}, 
-                    meta.GetLevelsCount(), 
-                    meta.GetIndexSize()};
-                (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
+        if (AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex()) {
+            for (bool history : {false, true}) {
+                for (const auto &meta : history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
+                    NPage::TBtreeIndexMeta converted{{
+                        meta.GetRootPageId(), 
+                        meta.GetCount(), 
+                        meta.GetDataSize(), 
+                        meta.GetErasedCount()}, 
+                        meta.GetLevelsCount(), 
+                        meta.GetIndexSize()};
+                    (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
+                }
             }
         }
 

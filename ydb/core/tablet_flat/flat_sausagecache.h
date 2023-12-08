@@ -167,6 +167,7 @@ public:
     TPage::TWaitQueuePtr ProvideBlock(NSharedCache::TEvResult::TLoaded&& loaded, TInfo *collectionInfo);
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> DetachPrivatePageCache();
     THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> GetPrepareSharedTouched();
+
 private:
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> PageCollections;
     THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> ToTouchShared;

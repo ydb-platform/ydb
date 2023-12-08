@@ -29,14 +29,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/ObjectLockConfiguration">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API ObjectLockConfiguration
+  class ObjectLockConfiguration
   {
   public:
-    ObjectLockConfiguration();
-    ObjectLockConfiguration(const Aws::Utils::Xml::XmlNode& xmlNode);
-    ObjectLockConfiguration& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API ObjectLockConfiguration();
+    AWS_S3_API ObjectLockConfiguration(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API ObjectLockConfiguration& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -139,10 +139,10 @@ namespace Model
   private:
 
     ObjectLockEnabled m_objectLockEnabled;
-    bool m_objectLockEnabledHasBeenSet;
+    bool m_objectLockEnabledHasBeenSet = false;
 
     ObjectLockRule m_rule;
-    bool m_ruleHasBeenSet;
+    bool m_ruleHasBeenSet = false;
   };
 
 } // namespace Model

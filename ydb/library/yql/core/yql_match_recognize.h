@@ -14,7 +14,7 @@ inline TRowPattern ConvertPattern(const TExprNode::TPtr& pattern, TExprContext &
             result.back().push_back(TRowPatternFactor{
                 factor->ChildRef(0)->IsAtom() ?
                     TRowPatternPrimary(TString(factor->ChildRef(0)->Content())) :
-                    ConvertPattern(factor->ChildRef(0), ctx, ++nestingLevel),
+                    ConvertPattern(factor->ChildRef(0), ctx, nestingLevel + 1),
                 FromString<ui64>(factor->ChildRef(1)->Content()),
                 FromString<ui64>(factor->ChildRef(2)->Content()),
                 FromString<bool>(factor->ChildRef(3)->Content()),

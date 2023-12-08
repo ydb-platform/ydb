@@ -63,3 +63,13 @@ Aws::Http::HeaderValueCollection GetBucketNotificationConfigurationRequest::GetR
 
   return headers;
 }
+
+GetBucketNotificationConfigurationRequest::EndpointParameters GetBucketNotificationConfigurationRequest::GetEndpointContextParams() const
+{
+    EndpointParameters parameters;
+    // Operation context parameters
+    if (BucketHasBeenSet()) {
+        parameters.emplace_back(Aws::String("Bucket"), this->GetBucket(), Aws::Endpoint::EndpointParameter::ParameterOrigin::OPERATION_CONTEXT);
+    }
+    return parameters;
+}

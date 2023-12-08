@@ -1,0 +1,25 @@
+-- streaming instances
+
+CREATE OBJECT clickhouse_streaming_password (TYPE SECRET) WITH (value=password);
+CREATE EXTERNAL DATA SOURCE clickhouse_streaming WITH (
+    SOURCE_TYPE="ClickHouse",
+    MDB_CLUSTER_ID="c9ql09h4firghvrv49jt",
+    DATABASE_NAME="dqrun",
+    PROTOCOL="HTTP",
+    AUTH_METHOD="BASIC",
+    LOGIN="admin",
+    PASSWORD_SECRET_NAME="clickhouse_streaming_password",
+    USE_TLS="TRUE"
+);
+
+CREATE OBJECT postgresql_streaming_password (TYPE SECRET) WITH (value=password);
+CREATE EXTERNAL DATA SOURCE postgresql_streaming WITH (
+    SOURCE_TYPE="PostgreSQL",
+    MDB_CLUSTER_ID="c9qb2bjghs8onbncpamk",
+    DATABASE_NAME="dqrun",
+    PROTOCOL="NATIVE",
+    AUTH_METHOD="BASIC",
+    LOGIN="crab",
+    PASSWORD_SECRET_NAME="postgresql_streaming_password",
+    USE_TLS="TRUE"
+);

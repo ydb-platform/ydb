@@ -36,7 +36,7 @@ struct ServerSideEncryptionKMSConfig
 #include <aws/core/Aws.h>
 #include <aws/core/client/DefaultRetryStrategy.h>
 #include <aws/s3/S3Client.h>
-// #include <aws/s3/S3ServiceClientModel.h>
+#include <aws/s3/S3ServiceClientModel.h>
 #include <aws/core/client/AWSErrorMarshaller.h>
 #include <aws/core/client/RetryStrategy.h>
 
@@ -174,7 +174,7 @@ public:
 
         void GetSendToken() override;
 
-        // bool HasSendToken() override;
+        bool HasSendToken() override;
 
         void RequestBookkeeping(const Aws::Client::HttpResponseOutcome& httpResponseOutcome) override;
         void RequestBookkeeping(const Aws::Client::HttpResponseOutcome& httpResponseOutcome, const Aws::Client::AWSError<Aws::Client::CoreErrors>& lastError) override;

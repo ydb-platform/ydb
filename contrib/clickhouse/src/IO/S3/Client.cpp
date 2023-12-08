@@ -9,9 +9,9 @@
 #include <aws/s3/model/HeadObjectRequest.h>
 #include <aws/s3/model/ListObjectsV2Request.h>
 #include <aws/core/client/AWSErrorMarshaller.h>
-// #include <aws/core/endpoint/EndpointParameter.h>
+#include <aws/core/endpoint/EndpointParameter.h>
 #include <aws/core/utils/HashingUtils.h>
-// #include <aws/core/utils/logging/ErrorMacros.h>
+#include <aws/core/utils/logging/ErrorMacros.h>
 
 #include <Poco/Net/NetException.h>
 
@@ -51,8 +51,8 @@ namespace S3
 Client::RetryStrategy::RetryStrategy(std::shared_ptr<Aws::Client::RetryStrategy> wrapped_strategy_)
     : wrapped_strategy(std::move(wrapped_strategy_))
 {
-    // if (!wrapped_strategy)
-    //     wrapped_strategy = Aws::Client::InitRetryStrategy();
+    if (!wrapped_strategy)
+        wrapped_strategy = Aws::Client::InitRetryStrategy();
 }
 
 /// NOLINTNEXTLINE(google-runtime-int)
@@ -81,10 +81,10 @@ void Client::RetryStrategy::GetSendToken()
     return wrapped_strategy->GetSendToken();
 }
 
-// bool Client::RetryStrategy::HasSendToken()
-// {
-//     return wrapped_strategy->HasSendToken();
-// }
+bool Client::RetryStrategy::HasSendToken()
+{
+    return wrapped_strategy->HasSendToken();
+}
 
 void Client::RetryStrategy::RequestBookkeeping(const Aws::Client::HttpResponseOutcome& httpResponseOutcome)
 {
@@ -166,11 +166,9 @@ Client::Client(
     , sse_kms_config(std::move(sse_kms_config_))
     , log(&Poco::Logger::get("S3Client"))
 {
-#if 0
     auto * endpoint_provider = dynamic_cast<Aws::S3::Endpoint::S3DefaultEpProviderBase *>(accessEndpointProvider().get());
     endpoint_provider->GetBuiltInParameters().GetParameter("Region").GetString(explicit_region);
     endpoint_provider->GetBuiltInParameters().GetParameter("Endpoint").GetString(initial_endpoint);
-#endif
 
     provider_type = deduceProviderType(initial_endpoint);
     LOG_TRACE(log, "Provider type: {}", toString(provider_type));
@@ -408,14 +406,12 @@ Model::CompleteMultipartUploadOutcome Client::CompleteMultipartUpload(const Comp
     compose_req.SetKey(key);
     compose_req.SetComponentNames({key});
     compose_req.SetContentType("binary/octet-stream");
-#if 0
     auto compose_outcome = ComposeObject(compose_req);
 
     if (compose_outcome.IsSuccess())
         LOG_TRACE(log, "Composing object was successful");
     else
         LOG_INFO(log, "Failed to compose object. Message: {}, Key: {}, Bucket: {}", compose_outcome.GetError().GetMessage(), key, bucket);
-#endif
 
     return outcome;
 }
@@ -456,7 +452,6 @@ Model::DeleteObjectsOutcome Client::DeleteObjects(const DeleteObjectsRequest & r
         request, [this](const Model::DeleteObjectsRequest & req) { return DeleteObjects(req); });
 }
 
-#if 0
 Client::ComposeObjectOutcome Client::ComposeObject(const ComposeObjectRequest & request) const
 {
     auto request_fn = [this](const ComposeObjectRequest & req)
@@ -486,7 +481,6 @@ Client::ComposeObjectOutcome Client::ComposeObject(const ComposeObjectRequest & 
     return doRequestWithRetryNetworkErrors</*IsReadMethod*/ false>(
         request, request_fn);
 }
-#endif
 
 template <typename RequestType, typename RequestFn>
 std::invoke_result_t<RequestFn, RequestType>
@@ -662,7 +656,9 @@ std::string Client::getRegionForBucket(const std::string & bucket, bool force_de
     if (outcome.IsSuccess())
     {
         const auto & result = outcome.GetResult();
-        // region = result.GetRegion();
+#if 0
+        region = result.GetRegion();
+#endif
     }
     else
     {
@@ -687,8 +683,6 @@ std::string Client::getRegionForBucket(const std::string & bucket, bool force_de
 
 std::optional<S3::URI> Client::getURIFromError(const Aws::S3::S3Error & error) const
 {
-    return std::nullopt;
-#if 0
     auto endpoint = GetErrorMarshaller()->ExtractEndpoint(error);
     if (endpoint.empty())
         return std::nullopt;
@@ -704,7 +698,6 @@ std::optional<S3::URI> Client::getURIFromError(const Aws::S3::S3Error & error) c
     uri.SetAuthority(endpoint);
 
     return S3::URI(uri.GetURIString());
-#endif
 }
 
 // Do a list request because head requests don't have body in response
@@ -799,13 +792,13 @@ ClientFactory::ClientFactory()
 {
     aws_options = Aws::SDKOptions{};
     Aws::InitAPI(aws_options);
-    // Aws::Utils::Logging::InitializeAWSLogging(std::make_shared<AWSLogger>(false));
+    Aws::Utils::Logging::InitializeAWSLogging(std::make_shared<AWSLogger>(false));
     Aws::Http::SetHttpClientFactory(std::make_shared<PocoHTTPClientFactory>());
 }
 
 ClientFactory::~ClientFactory()
 {
-    // Aws::Utils::Logging::ShutdownAWSLogging();
+    Aws::Utils::Logging::ShutdownAWSLogging();
     Aws::ShutdownAPI(aws_options);
 }
 

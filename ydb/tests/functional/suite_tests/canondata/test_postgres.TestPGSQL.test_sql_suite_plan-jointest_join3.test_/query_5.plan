@@ -25,14 +25,22 @@
                                 "Plans": [
                                     {
                                         "CTE Name": "precompute_4_0",
-                                        "Node Type": "Limit-InnerJoin (MapJoin)-Filter-TablePointLookup-ConstantExpr",
+                                        "Node Type": "Limit-InnerJoin (MapJoin)-ConstantExpr-Filter-TablePointLookup-ConstantExpr",
                                         "Operators": [
                                             {
                                                 "Limit": "1001",
                                                 "Name": "Limit"
                                             },
                                             {
+                                                "Inputs": [
+                                                    2,
+                                                    3
+                                                ],
                                                 "Name": "InnerJoin (MapJoin)"
+                                            },
+                                            {
+                                                "Name": "ToFlow",
+                                                "ToFlow": "precompute_3_0"
                                             },
                                             {
                                                 "Name": "Filter",

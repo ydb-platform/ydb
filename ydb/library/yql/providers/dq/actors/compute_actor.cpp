@@ -23,7 +23,8 @@ IActor* CreateComputeActor(
     const TString& computeActorType,
     const NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
     ::NMonitoring::TDynamicCounterPtr taskCounters,
-    NDqProto::EDqStatsMode statsMode)
+    NDqProto::EDqStatsMode statsMode,
+    bool enableSpilling)
 {
     auto memoryLimits = NDq::TComputeMemoryLimits();
     memoryLimits.ChannelBufferSize = 1000000;
@@ -40,7 +41,7 @@ IActor* CreateComputeActor(
     computeRuntimeSettings.ExtraMemoryAllocationPool = 3;
     computeRuntimeSettings.FailOnUndelivery = false;
     computeRuntimeSettings.StatsMode = (statsMode != NDqProto::DQ_STATS_MODE_UNSPECIFIED) ? statsMode : NDqProto::DQ_STATS_MODE_FULL;
-    computeRuntimeSettings.UseSpilling = options.UseSpilling;
+    computeRuntimeSettings.UseSpilling = enableSpilling;
     computeRuntimeSettings.AsyncInputPushLimit = 64_MB;
 
     // clear fake actorids

@@ -18,6 +18,7 @@ RECURSE(
     graph_params
     health
     hmac
+    http_api_client
     init
     logs
     mock

@@ -1,5 +1,5 @@
 #include "hash.h"
 
-namespace NKikimr::NSharding {
+namespace NKikimr::NArrow::NHash {
 
 }

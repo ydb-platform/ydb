@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     using TSendReceiveActorParams = TActorBenchmark::TSendReceiveActorParams;
 
     Y_UNIT_TEST(WithSharedExecutors) {
-        THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup(0, false);
+        THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
          TActorBenchmark::AddBasicPool(setup, 2, 1, 0);
          TActorBenchmark::AddBasicPool(setup, 2, 1, 1);
 
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     }
 
     Y_UNIT_TEST(WithoutSharedExecutors) {
-        THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup(0, false);
+        THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
          TActorBenchmark::AddBasicPool(setup, 2, 1, 0);
          TActorBenchmark::AddBasicPool(setup, 2, 1, 0);
 
@@ -169,23 +169,6 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         }
     }
 
-    Y_UNIT_TEST(SendReceive1Pool1ThreadAllocUnited) {
-        for (const auto& mType : TSettings::MailboxTypes) {
-            auto stats =  TActorBenchmark::CountStats([mType] {
-                return  TActorBenchmark::BenchSendReceive(true, mType, TActorBenchmark::EPoolType::United, ESendingType::Common);
-            });
-            Cerr << stats.ToString() << " " << mType << Endl;
-            stats =  TActorBenchmark::CountStats([mType] {
-                return  TActorBenchmark::BenchSendReceive(true, mType, TActorBenchmark::EPoolType::United, ESendingType::Lazy);
-            });
-            Cerr << stats.ToString() << " " << mType << " Lazy" << Endl;
-            stats =  TActorBenchmark::CountStats([mType] {
-                return  TActorBenchmark::BenchSendReceive(true, mType, TActorBenchmark::EPoolType::United, ESendingType::Tail);
-            });
-            Cerr << stats.ToString() << " " << mType << " Tail" << Endl;
-        }
-    }
-
     Y_UNIT_TEST(SendReceive1Pool1ThreadNoAlloc) {
         for (const auto& mType : TSettings::MailboxTypes) {
             auto stats =  TActorBenchmark::CountStats([mType] {
@@ -203,87 +186,38 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         }
     }
 
-    Y_UNIT_TEST(SendReceive1Pool1ThreadNoAllocUnited) {
-        for (const auto& mType : TSettings::MailboxTypes) {
-            auto stats =  TActorBenchmark::CountStats([mType] {
-                return  TActorBenchmark::BenchSendReceive(false, mType, TActorBenchmark::EPoolType::United, ESendingType::Common);
-            });
-            Cerr << stats.ToString() << " " << mType << Endl;
-            stats =  TActorBenchmark::CountStats([mType] {
-                return  TActorBenchmark::BenchSendReceive(false, mType, TActorBenchmark::EPoolType::United, ESendingType::Lazy);
-            });
-            Cerr << stats.ToString() << " " << mType << " Lazy" << Endl;
-            stats =  TActorBenchmark::CountStats([mType] {
-                return  TActorBenchmark::BenchSendReceive(false, mType, TActorBenchmark::EPoolType::United, ESendingType::Tail);
-            });
-            Cerr << stats.ToString() << " " << mType << " Tail" << Endl;
-        }
-    }
-
     Y_UNIT_TEST(SendActivateReceive1Pool1ThreadAlloc) {
          TActorBenchmark::RunBenchSendActivateReceive(1, 1, true, TActorBenchmark::EPoolType::Basic);
-    }
-
-    Y_UNIT_TEST(SendActivateReceive1Pool1ThreadAllocUnited) {
-         TActorBenchmark::RunBenchSendActivateReceive(1, 1, true, TActorBenchmark::EPoolType::United);
     }
 
     Y_UNIT_TEST(SendActivateReceive1Pool1ThreadNoAlloc) {
          TActorBenchmark::RunBenchSendActivateReceive(1, 1, false, TActorBenchmark::EPoolType::Basic);
     }
 
-    Y_UNIT_TEST(SendActivateReceive1Pool1ThreadNoAllocUnited) {
-         TActorBenchmark::RunBenchSendActivateReceive(1, 1, false, TActorBenchmark::EPoolType::United);
-    }
-
     Y_UNIT_TEST(SendActivateReceive1Pool2ThreadsAlloc) {
          TActorBenchmark::RunBenchSendActivateReceive(1, 2, true, TActorBenchmark::EPoolType::Basic);
-    }
-
-    Y_UNIT_TEST(SendActivateReceive1Pool2ThreadsAllocUnited) {
-         TActorBenchmark::RunBenchSendActivateReceive(1, 2, true, TActorBenchmark::EPoolType::United);
     }
 
     Y_UNIT_TEST(SendActivateReceive1Pool2ThreadsNoAlloc) {
          TActorBenchmark::RunBenchSendActivateReceive(1, 2, false, TActorBenchmark::EPoolType::Basic);
     }
 
-    Y_UNIT_TEST(SendActivateReceive1Pool2ThreadsNoAllocUnited) {
-         TActorBenchmark::RunBenchSendActivateReceive(1, 2, false, TActorBenchmark::EPoolType::United);
-    }
-
     Y_UNIT_TEST(SendActivateReceive2Pool1ThreadAlloc) {
          TActorBenchmark::RunBenchSendActivateReceive(2, 1, true, TActorBenchmark::EPoolType::Basic);
-    }
-
-    Y_UNIT_TEST(SendActivateReceive2Pool1ThreadAllocUnited) {
-         TActorBenchmark::RunBenchSendActivateReceive(2, 1, true, TActorBenchmark::EPoolType::United);
     }
 
     Y_UNIT_TEST(SendActivateReceive2Pool1ThreadNoAlloc) {
          TActorBenchmark::RunBenchSendActivateReceive(2, 1, false, TActorBenchmark::EPoolType::Basic);
     }
 
-    Y_UNIT_TEST(SendActivateReceive2Pool1ThreadNoAllocUnited) {
-         TActorBenchmark::RunBenchSendActivateReceive(2, 1, false, TActorBenchmark::EPoolType::United);
-    }
-
     Y_UNIT_TEST(SendActivateReceive1Pool1Threads)       {  TActorBenchmark::RunBenchContentedThreads(1, TActorBenchmark::EPoolType::Basic);  }
-    Y_UNIT_TEST(SendActivateReceive1Pool1ThreadsUnited) {  TActorBenchmark::RunBenchContentedThreads(1, TActorBenchmark::EPoolType::United); }
     Y_UNIT_TEST(SendActivateReceive1Pool2Threads)       {  TActorBenchmark::RunBenchContentedThreads(2, TActorBenchmark::EPoolType::Basic);  }
-    Y_UNIT_TEST(SendActivateReceive1Pool2ThreadsUnited) {  TActorBenchmark::RunBenchContentedThreads(2, TActorBenchmark::EPoolType::United); }
     Y_UNIT_TEST(SendActivateReceive1Pool3Threads)       {  TActorBenchmark::RunBenchContentedThreads(3, TActorBenchmark::EPoolType::Basic);  }
-    Y_UNIT_TEST(SendActivateReceive1Pool3ThreadsUnited) {  TActorBenchmark::RunBenchContentedThreads(3, TActorBenchmark::EPoolType::United); }
     Y_UNIT_TEST(SendActivateReceive1Pool4Threads)       {  TActorBenchmark::RunBenchContentedThreads(4, TActorBenchmark::EPoolType::Basic);  }
-    Y_UNIT_TEST(SendActivateReceive1Pool4ThreadsUnited) {  TActorBenchmark::RunBenchContentedThreads(4, TActorBenchmark::EPoolType::United); }
     Y_UNIT_TEST(SendActivateReceive1Pool5Threads)       {  TActorBenchmark::RunBenchContentedThreads(5, TActorBenchmark::EPoolType::Basic);  }
-    Y_UNIT_TEST(SendActivateReceive1Pool5ThreadsUnited) {  TActorBenchmark::RunBenchContentedThreads(5, TActorBenchmark::EPoolType::United); }
     Y_UNIT_TEST(SendActivateReceive1Pool6Threads)       {  TActorBenchmark::RunBenchContentedThreads(6, TActorBenchmark::EPoolType::Basic);  }
-    Y_UNIT_TEST(SendActivateReceive1Pool6ThreadsUnited) {  TActorBenchmark::RunBenchContentedThreads(6, TActorBenchmark::EPoolType::United); }
     Y_UNIT_TEST(SendActivateReceive1Pool7Threads)       {  TActorBenchmark::RunBenchContentedThreads(7, TActorBenchmark::EPoolType::Basic);  }
-    Y_UNIT_TEST(SendActivateReceive1Pool7ThreadsUnited) {  TActorBenchmark::RunBenchContentedThreads(7, TActorBenchmark::EPoolType::United); }
     Y_UNIT_TEST(SendActivateReceive1Pool8Threads)       {  TActorBenchmark::RunBenchContentedThreads(8, TActorBenchmark::EPoolType::Basic);  }
-    Y_UNIT_TEST(SendActivateReceive1Pool8ThreadsUnited) {  TActorBenchmark::RunBenchContentedThreads(8, TActorBenchmark::EPoolType::United); }
 
     Y_UNIT_TEST(SendActivateReceiveCSV) {
         std::vector<ui32> threadsList;
@@ -310,24 +244,6 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             Cerr << stats.ToString() << " neighbourActors: " << neighbour << " Lazy" << Endl;
             stats =  TActorBenchmark::CountStats([neighbour] {
                 return  TActorBenchmark::BenchSendActivateReceiveWithMailboxNeighbours(neighbour, TActorBenchmark::EPoolType::Basic, ESendingType::Tail);
-            });
-            Cerr << stats.ToString() << " neighbourActors: " << neighbour << " Tail" << Endl;
-        }
-    }
-
-    Y_UNIT_TEST(SendActivateReceiveWithMailboxNeighboursUnited) {
-        TVector<ui32> NeighbourActors = {0, 1, 2, 3, 4, 5, 6, 7, 8, 16, 32, 64, 128, 256};
-        for (const auto& neighbour : NeighbourActors) {
-            auto stats =  TActorBenchmark::CountStats([neighbour] {
-                return  TActorBenchmark::BenchSendActivateReceiveWithMailboxNeighbours(neighbour, TActorBenchmark::EPoolType::United, ESendingType::Common);
-            });
-            Cerr << stats.ToString() << " neighbourActors: " << neighbour << Endl;
-            stats =  TActorBenchmark::CountStats([neighbour] {
-                return  TActorBenchmark::BenchSendActivateReceiveWithMailboxNeighbours(neighbour, TActorBenchmark::EPoolType::United, ESendingType::Lazy);
-            });
-            Cerr << stats.ToString() << " neighbourActors: " << neighbour << " Lazy" << Endl;
-            stats =  TActorBenchmark::CountStats([neighbour] {
-                return  TActorBenchmark::BenchSendActivateReceiveWithMailboxNeighbours(neighbour, TActorBenchmark::EPoolType::United, ESendingType::Tail);
             });
             Cerr << stats.ToString() << " neighbourActors: " << neighbour << " Tail" << Endl;
         }

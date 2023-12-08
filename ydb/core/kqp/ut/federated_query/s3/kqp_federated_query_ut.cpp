@@ -1,17 +1,10 @@
-#include <util/system/env.h>
-
-#include <aws/core/auth/AWSCredentialsProvider.h>
-#include <aws/core/Aws.h>
-#include <aws/s3/model/CreateBucketRequest.h>
-#include <aws/s3/model/GetObjectRequest.h>
-#include <aws/s3/model/ListObjectsRequest.h>
-#include <aws/s3/model/PutObjectRequest.h>
-#include <aws/s3/S3Client.h>
+#include "s3_recipe_ut_helpers.h"
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
@@ -19,158 +12,16 @@
 
 #include <fmt/format.h>
 
-#include <library/cpp/testing/hook/hook.h>
-
-
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NQuery;
 using namespace NKikimr::NKqp::NFederatedQueryTest;
-
-constexpr TStringBuf TEST_CONTENT =
-R"({"key": "1", "value": "trololo"}
-{"key": "2", "value": "hello world"}
-)"sv;
-
-constexpr TStringBuf TEST_CONTENT_KEYS =
-R"({"key": "1"}
-{"key": "3"}
-)"sv;
-
-const TString TEST_SCHEMA = R"(["StructType";[["key";["DataType";"Utf8";];];["value";["DataType";"Utf8";];];];])";
-
-const TString TEST_SCHEMA_IDS = R"(["StructType";[["key";["DataType";"Utf8";];];];])";
-
-Aws::S3::S3Client MakeS3Client() {
-    Aws::Client::ClientConfiguration s3ClientConfig;
-    s3ClientConfig.endpointOverride = GetEnv("S3_ENDPOINT");
-    s3ClientConfig.scheme = Aws::Http::Scheme::HTTP;
-    return Aws::S3::S3Client(
-        std::make_shared<Aws::Auth::AnonymousAWSCredentialsProvider>(),
-        s3ClientConfig,
-        Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
-        /*useVirtualAddressing=*/ true);
-}
-
-void CreateBucket(const TString& bucket, Aws::S3::S3Client& s3Client) {
-    Aws::S3::Model::CreateBucketRequest req;
-    req.SetBucket(bucket);
-    req.SetACL(Aws::S3::Model::BucketCannedACL::public_read_write);
-    const Aws::S3::Model::CreateBucketOutcome result = s3Client.CreateBucket(req);
-    UNIT_ASSERT_C(result.IsSuccess(), "Error creating bucket \"" << bucket << "\": " << result.GetError().GetExceptionName() << ": " << result.GetError().GetMessage());
-}
-
-void CreateBucket(const TString& bucket) {
-    Aws::S3::S3Client s3Client = MakeS3Client();
-
-    CreateBucket(bucket, s3Client);
-}
-
-void UploadObject(const TString& bucket, const TString& object, const TStringBuf& content, Aws::S3::S3Client& s3Client) {
-    Aws::S3::Model::PutObjectRequest req;
-    req.WithBucket(bucket).WithKey(object);
-
-    auto inputStream = std::make_shared<std::stringstream>();
-    *inputStream << content;
-    req.SetBody(inputStream);
-    const Aws::S3::Model::PutObjectOutcome result = s3Client.PutObject(req);
-    UNIT_ASSERT_C(result.IsSuccess(), "Error uploading object \"" << object << "\" to a bucket \"" << bucket << "\": " << result.GetError().GetExceptionName() << ": " << result.GetError().GetMessage());
-}
-
-void UploadObject(const TString& bucket, const TString& object, const TStringBuf& content) {
-    Aws::S3::S3Client s3Client = MakeS3Client();
-
-    UploadObject(bucket, object, content, s3Client);
-}
-
-void CreateBucketWithObject(const TString& bucket, const TString& object, const TStringBuf& content, Aws::S3::S3Client& s3Client) {
-    CreateBucket(bucket, s3Client);
-    UploadObject(bucket, object, content, s3Client);
-}
-
-void CreateBucketWithObject(const TString& bucket, const TString& object, const TStringBuf& content) {
-    Aws::S3::S3Client s3Client = MakeS3Client();
-
-    CreateBucketWithObject(bucket, object, content, s3Client);
-}
-
-TString GetObject(const TString& bucket, const TString& object, Aws::S3::S3Client& s3Client) {
-    Aws::S3::Model::GetObjectRequest req;
-    req.WithBucket(bucket).WithKey(object);
-
-    Aws::S3::Model::GetObjectOutcome outcome = s3Client.GetObject(req);
-    UNIT_ASSERT(outcome.IsSuccess());
-    Aws::S3::Model::GetObjectResult& result = outcome.GetResult();
-    std::istreambuf_iterator<char> eos;
-    std::string objContent(std::istreambuf_iterator<char>(result.GetBody()), eos);
-    Cerr << "Got object content from \"" << bucket << "." << object << "\"\n" << objContent << Endl;
-    return objContent;
-}
-
-TString GetObject(const TString& bucket, const TString& object) {
-    Aws::S3::S3Client s3Client = MakeS3Client();
-
-    return GetObject(bucket, object, s3Client);
-}
-
-std::vector<TString> GetObjectKeys(const TString& bucket, Aws::S3::S3Client& s3Client) {
-    Aws::S3::Model::ListObjectsRequest listReq;
-    listReq.WithBucket(bucket);
-
-    Aws::S3::Model::ListObjectsOutcome outcome = s3Client.ListObjects(listReq);
-    UNIT_ASSERT(outcome.IsSuccess());
-
-    std::vector<TString> keys;
-    for (auto& obj : outcome.GetResult().GetContents()) {
-        keys.push_back(TString(obj.GetKey()));
-        Cerr << "Found S3 object: \"" << obj.GetKey() << "\"" << Endl;
-    }
-    return keys;
-}
-
-std::vector<TString> GetObjectKeys(const TString& bucket) {
-    Aws::S3::S3Client s3Client = MakeS3Client();
-
-    return GetObjectKeys(bucket, s3Client);
-}
-
-TString GetAllObjects(const TString& bucket, TStringBuf separator, Aws::S3::S3Client& s3Client) {
-    std::vector<TString> keys = GetObjectKeys(bucket, s3Client);
-    TString result;
-    bool firstObject = true;
-    for (const TString& key : keys) {
-        result += GetObject(bucket, key, s3Client);
-        if (!firstObject) {
-            result += separator;
-        }
-        firstObject = false;
-    }
-    return result;
-}
-
-TString GetAllObjects(const TString& bucket, TStringBuf separator = "") {
-    Aws::S3::S3Client s3Client = MakeS3Client();
-
-    return GetAllObjects(bucket, separator, s3Client);
-}
-
-TString GetBucketLocation(const TStringBuf bucket) {
-    return TStringBuilder() << GetEnv("S3_ENDPOINT") << '/' << bucket << '/';
-}
-
-Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
-    Aws::InitAPI(Aws::SDKOptions());
-}
-
-Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
-    Aws::ShutdownAPI(Aws::SDKOptions());
-}
+using namespace NTestUtils;
+using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     Y_UNIT_TEST(ExecuteScriptWithExternalTableResolve) {
-        using namespace fmt::literals;
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket1";
@@ -233,7 +84,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(ExecuteQueryWithExternalTableResolve) {
-        using namespace fmt::literals;
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket_execute_query";
@@ -305,8 +155,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
     }
 
-        Y_UNIT_TEST(ExecuteScriptWithS3ReadNotCached) {
-        using namespace fmt::literals;
+    Y_UNIT_TEST(ExecuteScriptWithS3ReadNotCached) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket1";
@@ -362,7 +211,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(ExecuteScriptWithDataSource) {
-        using namespace fmt::literals;
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString bucket = "test_bucket3";
 
@@ -412,7 +260,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(ExecuteScriptWithDataSourceJoinYdb) {
-        using namespace fmt::literals;
         const TString externalDataSourceName = "/Root/external_data_source_2";
         const TString ydbTable = "/Root/ydb_table";
         const TString bucket = "test_bucket4";
@@ -487,7 +334,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(ExecuteScriptWithExternalTableResolveCheckPragma) {
-        using namespace fmt::literals;
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket5";
@@ -550,7 +396,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(ExecuteScriptWithDataSourceJoinYdbCheckPragma) {
-        using namespace fmt::literals;
         const TString externalDataSourceName = "/Root/external_data_source_2";
         const TString ydbTable = "/Root/ydb_table";
         const TString bucket = "test_bucket6";
@@ -628,7 +473,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(ExecuteScriptWithDataSourceAndTablePathPrefix) {
-        using namespace fmt::literals;
         const TString externalDataSourceName = "external_data_source";
         const TString bucket = "test_bucket7";
 
@@ -678,7 +522,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     std::pair<NYdb::NQuery::TScriptExecutionOperation, TFetchScriptResultsResult> ExecuteScriptOverBinding(NKikimrConfig::TTableServiceConfig::EBindingsMode mode) {
-        using namespace fmt::literals;
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket1";
@@ -785,7 +628,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(InsertIntoBucket) {
-        using namespace fmt::literals;
         const TString readDataSourceName = "/Root/read_data_source";
         const TString readTableName = "/Root/read_binding";
         const TString readBucket = "test_bucket_read";
@@ -865,7 +707,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     void ExecuteInsertQuery(TQueryClient& client, const TString& writeTableName, const TString&  readTableName, bool expectCached) {
-        using namespace fmt::literals;
         const TString sql = fmt::format(R"(
                 INSERT INTO `{write_table}`
                 SELECT * FROM `{read_table}`;
@@ -881,7 +722,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
      Y_UNIT_TEST(InsertIntoBucketCaching) {
-        using namespace fmt::literals;
         const TString writeDataSourceName = "/Root/write_data_source";
         const TString writeTableName = "/Root/write_binding";
         const TString writeBucket = "test_bucket_cache";
@@ -965,7 +805,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(UpdateExternalTable) {
-        using namespace fmt::literals;
         const TString readDataSourceName = "/Root/read_data_source";
         const TString readTableName = "/Root/read_binding";
         const TString readBucket = "test_bucket_read";
@@ -1013,7 +852,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(JoinTwoSources) {
-        using namespace fmt::literals;
         const TString dataSource = "/Root/data_source";
         const TString bucket = "test_bucket_mixed";
         const TString dataTable = "/Root/data";
@@ -1088,7 +926,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(ExecuteScriptWithExternalTableResolveCheckPartitionedBy) {
-        using namespace fmt::literals;
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket1";
@@ -1149,7 +986,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(ExecuteScriptWithEmptyCustomPartitioning) {
-        using namespace fmt::literals;
         const TString bucket = "test_bucket1";
         const TString object = "year=2021/test_object";
 
@@ -1213,8 +1049,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(ExecuteScriptWithTruncatedMultiplyResults) {
-        using namespace fmt::literals;
-
         const TString bucket = "test_bucket";
         CreateBucket(bucket);
 
@@ -1278,7 +1112,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(ForbiddenCallablesForYdbTables) {
-        using namespace fmt::literals;
         const TString readDataSourceName = "/Root/read_data_source";
         const TString readTableName = "/Root/read_table";
         const TString readBucket = "test_read_bucket_forbidden_callables";
@@ -1385,7 +1218,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(ExecuteScriptWithLocationWithoutSlashAtTheEnd) {
-        using namespace fmt::literals;
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
         const TString bucket = "test_bucket_with_location_without_slash_at_the_end";
@@ -1444,7 +1276,71 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("year").GetUint32(), 1);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("month").GetUint32(), 2);
     }
+
+    TString CreateSimpleGenericQuery(std::shared_ptr<TKikimrRunner> kikimr, const TString& bucket) {
+        using namespace fmt::literals;
+        const TString externalDataSourceName = "/Root/external_data_source";
+        const TString object = "test_object";
+        const TString content = "key\n1";
+
+        CreateBucketWithObject(bucket, object, content);
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            );)",
+            "external_source"_a = externalDataSourceName,
+            "location"_a = GetBucketLocation(bucket)
+            );
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        return fmt::format(R"(
+                SELECT * FROM `{external_source}`.`/` WITH (
+                    FORMAT="csv_with_names",
+                    SCHEMA (
+                        key Int NOT NULL
+                    )
+                )
+            )", "external_source"_a=externalDataSourceName);
+    }
+
+    Y_UNIT_TEST(ExecuteScriptWithGenericAutoDetection) {
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+        const TString sql = CreateSimpleGenericQuery(kikimr, "test_bucket_execute_generic_auto_detection");
+
+        auto driver = kikimr->GetDriver();
+        NScripting::TScriptingClient yqlScriptClient(driver);
+
+        auto scriptResult = yqlScriptClient.ExecuteYqlScript(sql).GetValueSync();
+        UNIT_ASSERT_C(scriptResult.IsSuccess(), scriptResult.GetIssues().ToString());
+
+        TResultSetParser resultSet(scriptResult.GetResultSet(0));
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+
+        UNIT_ASSERT(resultSet.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("key").GetInt32(), 1);
+    }
+
+    Y_UNIT_TEST(ExplainScriptWithGenericAutoDetection) {
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+        const TString sql = CreateSimpleGenericQuery(kikimr, "test_bucket_explain_generic_auto_detection");
+
+        auto driver = kikimr->GetDriver();
+        NScripting::TScriptingClient yqlScriptClient(driver);
+
+        NScripting::TExplainYqlRequestSettings settings;
+        settings.Mode(NScripting::ExplainYqlRequestMode::Plan);
+
+        auto scriptResult = yqlScriptClient.ExplainYqlScript(sql, settings).GetValueSync();
+        UNIT_ASSERT_C(scriptResult.IsSuccess(), scriptResult.GetIssues().ToString());
+        UNIT_ASSERT(scriptResult.GetPlan());
+    }
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

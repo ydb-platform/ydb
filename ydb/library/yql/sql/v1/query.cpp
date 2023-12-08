@@ -17,7 +17,7 @@ namespace NSQLTranslationV1 {
 
 bool ValidateView(TPosition pos, TContext& ctx, TStringBuf service, TViewDescription& view) {
     if (view.PrimaryFlag && !(service == KikimrProviderName || service == YdbProviderName)) {
-        ctx.Error(pos) << "@primary is not supported for " << service << " tables";
+        ctx.Error(pos) << "primary view is not supported for " << service << " tables";
         return false;
     }
     return true;
@@ -241,7 +241,7 @@ public:
         }
 
         TCiString func(Func);
-        if (func != "object") {
+        if (func != "object" && func != "walkfolders") {
             for (auto& arg: Args) {
                 if (arg.Expr->GetLabel()) {
                     ctx.Error(Pos) << "Named arguments are not supported for table function " << to_upper(Func);
@@ -479,6 +479,115 @@ public:
             folder = L(folder, Args[0].Id.Build());
             folder = L(folder, Args.size() > 1 ? Args[1].Id.Build() : BuildQuotedAtom(Pos, ""));
             return folder;
+        }
+        else if (func == "walkfolders") {
+            const size_t minPositionalArgs = 1;
+            const size_t maxPositionalArgs = 2;
+
+            size_t positionalArgsCnt = 0;
+            for (const auto& arg : Args) {
+                if (!arg.Expr->GetLabel()) {
+                    positionalArgsCnt++;
+                } else {
+                    break;
+                }
+            }
+            if (positionalArgsCnt < minPositionalArgs || positionalArgsCnt > maxPositionalArgs) {
+                ctx.Error(Pos) << Func << " requires from " << minPositionalArgs
+                << " to " << maxPositionalArgs
+                << " positional arguments, but got: " << positionalArgsCnt;
+                return nullptr;
+            }
+
+            constexpr auto walkFoldersModuleName = "walk_folders_module";
+            ctx.RequiredModules.emplace(walkFoldersModuleName, "/lib/yql/walk_folders.yql");
+
+            auto& rootFolderArg = Args[0];
+            if (rootFolderArg.HasAt) {
+                ctx.Error(Pos) << "Temporary tables are not supported here";
+                return nullptr;
+            }
+            if (!rootFolderArg.View.empty()) {
+                ctx.Error(Pos) << Func << " doesn't supports views";
+                return nullptr;
+            }
+            ExtractTableName(ctx, rootFolderArg);
+
+            const auto initState =
+                positionalArgsCnt > 1
+                    ? Args[1].Expr
+                    : Y("List", Y("ListType", Y("DataType", Q("String"))));
+
+            TNodePtr rootAttributes;
+            TNodePtr preHandler;
+            TNodePtr resolveHandler;
+            TNodePtr diveHandler;
+            TNodePtr postHandler;
+            for (auto it = Args.begin() + positionalArgsCnt; it != Args.end(); ++it) {
+                auto& arg = *it;
+                const auto label = arg.Expr->GetLabel();
+                if (label == "RootAttributes") {
+                    ExtractTableName(ctx, arg);
+                    rootAttributes = arg.Id.Build();
+                }
+                else if (label == "PreHandler") {
+                    preHandler = arg.Expr;
+                }
+                else if (label == "ResolveHandler") {
+                    resolveHandler = arg.Expr;
+                }
+                else if (label == "DiveHandler") {
+                    diveHandler = arg.Expr;
+                }
+                else if (label == "PostHandler") {
+                    postHandler = arg.Expr;
+                }
+                else {
+                    ctx.Warning(Pos, DEFAULT_ERROR) << "Unsupported named argument: " 
+                        << label << " in " << Func;
+                }
+            }
+            if (rootAttributes == nullptr) {
+                rootAttributes = BuildQuotedAtom(Pos, "");
+            }
+
+            if (preHandler != nullptr || postHandler != nullptr) {
+                const auto makePrePostHandlerType = BuildBind(Pos, walkFoldersModuleName, "MakePrePostHandlersType");
+                const auto prePostHandlerType = Y("EvaluateType", Y("TypeHandle", Y("Apply", makePrePostHandlerType, Y("TypeOf", initState))));
+
+                if (preHandler != nullptr) {
+                    preHandler = Y("Callable", prePostHandlerType, preHandler);
+                }
+                if (postHandler != nullptr) {
+                    postHandler = Y("Callable", prePostHandlerType, postHandler);
+                }
+            }
+            if (preHandler == nullptr) {
+                preHandler = Y("Void");
+            }
+            if (postHandler == nullptr) {
+                postHandler = Y("Void");
+            }
+            
+            const auto makeResolveDiveHandlerType = BuildBind(Pos, walkFoldersModuleName, "MakeResolveDiveHandlersType");
+            const auto resolveDiveHandlerType = Y("EvaluateType", Y("TypeHandle", Y("Apply", makeResolveDiveHandlerType, Y("TypeOf", initState))));
+            if (resolveHandler == nullptr) {
+                resolveHandler = BuildBind(Pos, walkFoldersModuleName, "AnyNodeDiveHandler");
+            }
+            if (diveHandler == nullptr) {
+                diveHandler = BuildBind(Pos, walkFoldersModuleName, "AnyNodeDiveHandler");
+            }
+
+            resolveHandler = Y("Callable", resolveDiveHandlerType, resolveHandler);
+            diveHandler = Y("Callable", resolveDiveHandlerType, diveHandler);
+
+            const auto initStateType = Y("EvaluateType", Y("TypeHandle", Y("TypeOf", initState)));
+            const auto pickledInitState = Y("Pickle", initState);
+
+            const auto initPath = rootFolderArg.Id.Build();
+
+            return Y("MrWalkFolders", initPath, rootAttributes, pickledInitState, initStateType,
+                preHandler, resolveHandler, diveHandler, postHandler);
         }
         else if (func == "tables") {
             if (!Args.empty()) {
@@ -812,34 +921,29 @@ public:
             opts = L(opts, Q(Y(Q("columnFamilies"), Q(columnFamilies))));
         }
 
-        THashSet<TString> notNullColumnsSet;
-        auto notNullColumns = Y();
         auto columns = Y();
-        THashSet<TString> serialColumnsSet;
         THashSet<TString> columnsWithDefaultValue;
         auto columnsDefaultValueSettings = Y();
 
-        auto serialColumns = Y();
         for (auto& col : Params.Columns) {
             auto columnDesc = Y();
             columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
             auto type = col.Type;
-            if (col.Serial) {
-                if (serialColumnsSet.insert(col.Name).second)
-                    serialColumns = L(serialColumns, BuildQuotedAtom(Pos, col.Name));
-            }
+
             if (col.Nullable) {
                 type = Y("AsOptionalType", type);
-            } else {
-                if (notNullColumnsSet.insert(col.Name).second)
-                    notNullColumns = L(notNullColumns, BuildQuotedAtom(Pos, col.Name));
             }
 
             columnDesc = L(columnDesc, type);
 
             auto columnConstraints = Y();
+
+            if (!col.Nullable) {
+                columnConstraints = L(columnConstraints, Q(Y(Q("not_null"))));
+            }
+
             if (col.Serial) {
-                columnConstraints = L(columnConstraints, Q(Y(Q("serial"), Q("true"))));
+                columnConstraints = L(columnConstraints, Q(Y(Q("serial"))));
             }
 
             if (col.DefaultExpr) {
@@ -896,14 +1000,6 @@ public:
                 ctx.Error() << "PRIMARY KEY cannot be used with ORDER BY, use PARTITION BY instead";
                 return false;
             }
-        }
-
-        if (!notNullColumnsSet.empty()) {
-            opts = L(opts, Q(Y(Q("notnull"), Q(notNullColumns))));
-        }
-
-        if (!serialColumnsSet.empty()) {
-            opts = L(opts, Q(Y(Q("serialColumns"), Q(serialColumns))));
         }
 
         if (!Params.PartitionByColumns.empty()) {
@@ -1089,8 +1185,12 @@ public:
 
                 columnDesc = L(columnDesc, type);
                 auto columnConstraints = Y();
+                if (!col.Nullable) {
+                    columnConstraints = L(columnConstraints, Q(Y(Q("not_null"))));
+                }
+
                 if (col.Serial) {
-                    columnConstraints = L(columnConstraints, Q(Y(Q("serial"), Q("true"))));
+                    columnConstraints = L(columnConstraints, Q(Y(Q("serial"))));
                 }
 
                 if (col.DefaultExpr) {
@@ -2627,6 +2727,12 @@ public:
                 }
                 Nodes.insert(Nodes.end(), preparedNodes.begin(), preparedNodes.end());
             }
+
+            decltype(Nodes) imports;
+            for (const auto& [alias, path]: ctx.RequiredModules) {
+                imports.push_back(Y("import", alias, BuildQuotedAtom(Pos, path)));
+            }
+            Nodes.insert(Nodes.begin(), std::make_move_iterator(imports.begin()), std::make_move_iterator(imports.end()));
 
             for (const auto& symbol: ctx.Exports) {
                 Add(Y("export", symbol));

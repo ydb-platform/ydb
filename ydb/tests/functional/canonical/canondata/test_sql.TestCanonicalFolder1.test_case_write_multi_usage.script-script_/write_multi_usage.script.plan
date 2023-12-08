@@ -176,7 +176,7 @@
                             "scan_by": [
                                 "Name (-\u221e, +\u221e)"
                             ],
-                            "type": "Lookup"
+                            "type": "Scan"
                         }
                     ],
                     "writes": [
@@ -285,11 +285,11 @@
                                                         "ReadColumns": [
                                                             "Amount"
                                                         ],
-                                                        "Name": "TablePointLookup",
+                                                        "Name": "TableRangeScan",
                                                         "Table": "base_write_multi_usage_script_script/Input1"
                                                     }
                                                 ],
-                                                "Node Type": "TablePointLookup"
+                                                "Node Type": "TableRangeScan"
                                             }
                                         ],
                                         "Node Type": "UnionAll",

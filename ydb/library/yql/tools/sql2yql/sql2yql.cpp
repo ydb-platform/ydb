@@ -172,6 +172,7 @@ int BuildAST(int argc, char* argv[]) {
     TString outFileNameFormat;
     THashMap<TString, TString> clusterMapping;
     clusterMapping["plato"] = NYql::YtProviderName;
+    clusterMapping["pg_catalog"] = NYql::PgProviderName;
 
     THashMap<TString, TString> tables;
     THashSet<TString> flags;

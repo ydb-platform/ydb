@@ -6,7 +6,6 @@
 #include "helpers.h"
 
 #include <ydb/services/metadata/manager/common.h>
-#include <ydb/core/persqueue/writer/metadata_initializers.h>
 
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/core/persqueue/pq_database.h>
@@ -16,9 +15,7 @@
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
-#include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/library/actors/core/log.h>
-#include <library/cpp/digest/md5/md5.h>
 #include <google/protobuf/util/time_util.h>
 #include <util/string/hex.h>
 #include <util/string/vector.h>
@@ -198,11 +195,8 @@ TWriteSessionActor<UseMigrationProtocol>::TWriteSessionActor(
     , RequestNotChecked(false)
     , LastACLCheckTimestamp(TInstant::Zero())
     , LogSessionDeadline(TInstant::Zero())
-    , BalancerTabletId(0)
     , ClientDC(clientDC ? *clientDC : "other")
     , LastSourceIdUpdate(TInstant::Zero())
-    , SourceIdCreateTime(0)
-    , SourceIdUpdatesInflight(0)
 {
     Y_ASSERT(Request);
 }
@@ -211,13 +205,6 @@ template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Bootstrap(const TActorContext& ctx) {
 
     Y_ABORT_UNLESS(Request);
-    //ToDo !! - Set proper table paths.
-    const auto& pqConfig = AppData(ctx)->PQConfig;
-    SrcIdTableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping
-                                                                    : ESourceIdTableGeneration::SrcIdMeta2;
-    SelectSourceIdQuery = GetSelectSourceIdQueryFromPath(pqConfig.GetSourceIdTablePath(),SrcIdTableGeneration);
-    UpdateSourceIdQuery = GetUpdateSourceIdQueryFromPath(pqConfig.GetSourceIdTablePath(), SrcIdTableGeneration);
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "Select srcid query: " << SelectSourceIdQuery);
 
     Request->GetStreamCtx()->Attach(ctx.SelfID);
     if (!Request->GetStreamCtx()->Read()) {
@@ -307,26 +294,13 @@ void TWriteSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
     ctx.Send(GetPQWriteServiceActorID(), new TEvPQProxy::TEvSessionDead(Cookie));
 
     DestroyPartitionWriterCache(ctx);
-
-    if (State == ES_WAIT_SESSION) { // final die will be done later, on session discover
-        State = ES_DYING;
-        return;
+    if (PartitionChooser) {
+        ctx.Send(PartitionChooser,  new TEvents::TEvPoison());
     }
 
     State = ES_DYING;
 
-    TryCloseSession(ctx);
     TActorBootstrapped<TWriteSessionActor>::Die(ctx);
-}
-
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::TryCloseSession(const TActorContext& ctx) {
-    if (KqpSessionId) {
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
-        ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-        KqpSessionId = "";
-    }
 }
 
 template<bool UseMigrationProtocol>
@@ -491,17 +465,9 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::InitAfterDiscovery(const TActorContext& ctx) {
-    if (!SourceId.empty()) {
-        try {
-            EncodedSourceId = NSourceIdEncoding::EncodeSrcId(
-                    FullConverter->GetTopicForSrcIdHash(), SourceId, SrcIdTableGeneration
-            );
-        } catch (yexception &e) {
-            CloseSession(TStringBuilder() << "incorrect sourceId \"" << SourceId << "\": " << e.what(),
-                         PersQueue::ErrorCode::BAD_REQUEST, ctx);
-            return;
-        }
-    } else {
+    Y_UNUSED(ctx);
+
+    if (SourceId.empty()) {
         Y_ABORT_UNLESS(!UseDeduplication);
     }
 
@@ -592,16 +558,16 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
         return;
     }
     Y_ABORT_UNLESS(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
-    const auto& description = entry.PQGroupInfo->Description;
-    Y_ABORT_UNLESS(description.PartitionsSize() > 0);
-    Y_ABORT_UNLESS(description.HasPQTabletConfig());
-    InitialPQTabletConfig = description.GetPQTabletConfig();
+    Config = std::move(entry.PQGroupInfo->Description);
+    Y_ABORT_UNLESS(Config.PartitionsSize() > 0);
+    Y_ABORT_UNLESS(Config.HasPQTabletConfig());
+    InitialPQTabletConfig = Config.GetPQTabletConfig();
     if (!DiscoveryConverter->IsValid()) {
         errorReason = Sprintf("Internal server error with topic '%s', Marker# PQ503", DiscoveryConverter->GetPrintableString().c_str());
         CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
         return;
     }
-    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() && !description.GetPQTabletConfig().GetLocalDC()) {
+    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() && !Config.GetPQTabletConfig().GetLocalDC()) {
         errorReason = Sprintf("Write to mirrored topic '%s' is forbidden", DiscoveryConverter->GetPrintableString().c_str());
         CloseSession(errorReason, PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
@@ -611,15 +577,8 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
                                                                AppData(ctx)->PQConfig.GetTestDatabaseRoot());
     InitAfterDiscovery(ctx);
 
-    BalancerTabletId = description.GetBalancerTabletID();
-
-    for (ui32 i = 0; i < description.PartitionsSize(); ++i) {
-        const auto& pi = description.GetPartitions(i);
-        PartitionToTablet[pi.GetPartitionId()] = pi.GetTabletId();
-    }
-
     if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        const auto& tabletConfig = description.GetPQTabletConfig();
+        const auto& tabletConfig = Config.GetPQTabletConfig();
         SetupCounters(tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
                         tabletConfig.GetYdbDatabasePath(), entry.DomainInfo->IsServerless(),
                       tabletConfig.GetYcFolderId());
@@ -631,7 +590,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
     ACL.Reset(new TAclWrapper(entry.SecurityObject));
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " describe result for acl check");
 
-    const auto meteringMode = description.GetPQTabletConfig().GetMeteringMode();
+    const auto meteringMode = Config.GetPQTabletConfig().GetMeteringMode();
     if (meteringMode != GetMeteringMode().GetOrElse(meteringMode)) {
         return CloseSession("Metering mode has been changed", PersQueue::ErrorCode::OVERLOAD, ctx);
     }
@@ -661,352 +620,31 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
 }
 
 template<bool UseMigrationProtocol>
-ui32 TWriteSessionActor<UseMigrationProtocol>::CalculateFirstClassPartition(const TActorContext&) {
-    return NKikimr::NDataStreams::V1::ShardFromDecimal(
-            NKikimr::NDataStreams::V1::HexBytesToDecimal(MD5::Calc(SourceId)), PartitionToTablet.size()
-    );
-}
-
-template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::DiscoverPartition(const NActors::TActorContext& ctx) {
-    const auto &pqConfig = AppData(ctx)->PQConfig;
-    if (!UseDeduplication) {
-        return GetOrProcessPartition(ctx);
-    }
-    if (pqConfig.GetTopicsAreFirstClassCitizen()) {
-        if (pqConfig.GetUseSrcIdMetaMappingInFirstClass()) {
-            return SendCreateManagerRequest(ctx);
-        }
-        auto partitionId = PreferedPartition < Max<ui32>() ? PreferedPartition : CalculateFirstClassPartition(ctx);
+    State = ES_WAIT_PARTITION;
 
-        ProceedPartition(partitionId, ctx);
-        return;
-    }
-    else {
-        StartSession(ctx);
-    }
+    std::optional<ui32> preferedPartition = PreferedPartition == Max<ui32>() ? std::nullopt : std::optional(PreferedPartition);
+    PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID, Config, FullConverter, SourceId, preferedPartition));
 }
 
 template<bool UseMigrationProtocol>
-TString TWriteSessionActor<UseMigrationProtocol>::GetDatabaseName(const NActors::TActorContext& ctx) {
-    switch (SrcIdTableGeneration) {
-        case ESourceIdTableGeneration::SrcIdMeta2:
-            return NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig);
-        case ESourceIdTableGeneration::PartitionMapping:
-            return AppData(ctx)->TenantName;
-    }
+void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionChooser::TEvChooseResult::TPtr& ev, const NActors::TActorContext& ctx) {
+    auto* r = ev->Get();
+    PartitionTabletId = r->TabletId;
+    LastSourceIdUpdate = ctx.Now();
+
+    ProceedPartition(r->PartitionId, ctx);
 }
 
 template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::StartSession(const NActors::TActorContext& ctx) {
-
-    auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
-    ev->Record.MutableRequest()->SetDatabase(GetDatabaseName(ctx));
-    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-
-    State = ES_WAIT_SESSION;
-}
-
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::SendCreateManagerRequest(const TActorContext& ctx) {
-    ctx.Send(
-            NMetadata::NProvider::MakeServiceId(ctx.SelfID.NodeId()),
-            new NMetadata::NProvider::TEvPrepareManager(TSrcIdMetaInitManager::GetInstant())
-    );
-}
-
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(
-        NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx
-) {
-    StartSession(ctx);
-}
-
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr &ev, const NActors::TActorContext& ctx)
-{
-    Y_ABORT_UNLESS(State == ES_WAIT_SESSION || State == ES_DYING);
-    const auto& record = ev->Get()->Record;
-    KqpSessionId = record.GetResponse().GetSessionId();
-
-    if (State == ES_DYING) {
-        TryCloseSession(ctx);
-        TActorBootstrapped<TWriteSessionActor>::Die(ctx);
-        return;
-    }
-
-    State = ES_WAIT_TABLE_REQUEST_1;
-
-    if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        TStringBuilder errorReason;
-        errorReason << "kqp error Marker# PQ53 : " <<  record;
-
-        CloseSession(errorReason, PersQueue::ErrorCode::INITIALIZING, ctx);
-        return;
-    }
-
-    Y_ABORT_UNLESS(!KqpSessionId.empty());
-
-    SendSelectPartitionRequest(FullConverter->GetClientsideName(), ctx);
-}
-
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::SendSelectPartitionRequest(const TString& topic, const NActors::TActorContext& ctx) {
-    Y_ABORT_UNLESS(UseDeduplication);
-    //read from DS
-    auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-    ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-    ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-    ev->Record.MutableRequest()->SetQuery(SelectSourceIdQuery);
-
-    ev->Record.MutableRequest()->SetDatabase(GetDatabaseName(ctx));
-    // fill tx settings: set commit tx flag & begin new serializable tx.
-    ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
-    ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(false);
-    ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-    // keep compiled query in cache.
-    ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
-
-    NYdb::TParamsBuilder paramsBuilder = NYdb::TParamsBuilder();
-
-    SetHashToTParamsBuilder(paramsBuilder, EncodedSourceId);
-
-    paramsBuilder
-        .AddParam("$Topic")
-            .Utf8(topic)
-            .Build()
-        .AddParam("$SourceId")
-            .Utf8(EncodedSourceId.EscapedSourceId)
-            .Build();
-
-    NYdb::TParams params = paramsBuilder.Build();
-    
-    ev->Record.MutableRequest()->MutableYdbParameters()->swap(*(NYdb::TProtoAccessor::GetProtoMapPtr(params)));
-
-    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-    SelectSrcIdsInflight++;
-}
-
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::UpdateOrProceedPartition(const TActorContext& ctx) {
-    if (UseDeduplication) {
-        UpdatePartition(ctx);
-    } else {
-        ProceedPartition(Partition, ctx);
-    }
-}
-
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::UpdatePartition(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(State == ES_WAIT_TABLE_REQUEST_1 || State == ES_WAIT_NEXT_PARTITION);
-    Y_ABORT_UNLESS(UseDeduplication);
-    SendUpdateSrcIdsRequests(ctx);
-    State = ES_WAIT_TABLE_REQUEST_2;
-}
-
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::RequestNextPartition(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(State == ES_WAIT_TABLE_REQUEST_1);
-    State = ES_WAIT_NEXT_PARTITION;
-    THolder<TEvPersQueue::TEvGetPartitionIdForWrite> x(new TEvPersQueue::TEvGetPartitionIdForWrite);
-    Y_ABORT_UNLESS(!PipeToBalancer);
-    Y_ABORT_UNLESS(BalancerTabletId);
-    NTabletPipe::TClientConfig clientConfig;
-    clientConfig.RetryPolicy = {
-        .RetryLimitCount = 6,
-        .MinRetryTime = TDuration::MilliSeconds(10),
-        .MaxRetryTime = TDuration::MilliSeconds(100),
-        .BackoffMultiplier = 2,
-        .DoFirstRetryInstantly = true
-    };
-    PipeToBalancer = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, BalancerTabletId, clientConfig));
-
-    NTabletPipe::SendData(ctx, PipeToBalancer, x.Release());
-}
-
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const TActorContext& ctx) {
-    Y_ABORT_UNLESS(State == ES_WAIT_NEXT_PARTITION);
-    Partition = ev->Get()->Record.GetPartitionId();
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie
-                                                      << ". Got next partition from server: " << Partition);
-    UpdateOrProceedPartition(ctx);
-}
-
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::GetOrProcessPartition(const TActorContext& ctx) {
-    if (!UseDeduplication) {
-        Y_ABORT_UNLESS(!PartitionFound);
-    }
-    if (!PartitionFound) {
-        const auto& pqConfig = AppData(ctx)->PQConfig;
-        auto partition = GetPartitionFromConfigOptions(
-                PreferedPartition, EncodedSourceId, PartitionToTablet.size(),
-                pqConfig.GetTopicsAreFirstClassCitizen(),
-                pqConfig.GetRoundRobinPartitionMapping() || SourceId.empty()
-                //Empty SrcId = No-dedup mode and no msg-group id provided, so always use RoundRobin;
-        );
-        if (partition.Defined()) {
-            PartitionFound = true;
-            Partition = *partition;
-        }
-    }
-    if (PartitionFound) {
-        UpdateOrProceedPartition(ctx);
-    } else {
-        State = ES_WAIT_TABLE_REQUEST_1;
-        RequestNextPartition(ctx);
-    }
-
-}
-
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const TActorContext &ctx) {
-    auto& record = ev->Get()->Record.GetRef();
-    if (record.GetYdbStatus() == Ydb::StatusIds::ABORTED) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " messageGroupId "
-            << SourceId << " escaped " << EncodedSourceId.EscapedSourceId << " discover partition race, retrying");
-        DiscoverPartition(ctx);
-        return;
-    }
-
-    if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        TStringBuilder errorReason;
-        errorReason << "kqp error Marker# PQ50 : " <<  record;
-        if (State == EState::ES_INITED) {
-            LOG_WARN_S(ctx, NKikimrServices::PQ_WRITE_PROXY, errorReason);
-            SourceIdUpdatesInflight--;
-        } else {
-            CloseSession(errorReason, PersQueue::ErrorCode::INITIALIZING, ctx);
-        }
-        return;
-    }
-
-    if (State == EState::ES_WAIT_TABLE_REQUEST_1) {
-        SelectSrcIdsInflight--;
-        auto& t = record.GetResponse().GetResults(0).GetValue().GetStruct(0);
-
-        TxId = record.GetResponse().GetTxMeta().id();
-        Y_ABORT_UNLESS(!TxId.empty());
-
-        if (t.ListSize() != 0) {
-            auto& tt = t.GetList(0).GetStruct(0);
-            if (tt.HasOptional() && tt.GetOptional().HasUint32()) { //already got partition
-                auto accessTime = t.GetList(0).GetStruct(2).GetOptional().GetUint64();
-                if (accessTime > MaxSrcIdAccessTime) { // AccessTime
-                    Partition = tt.GetOptional().GetUint32();
-                    PartitionFound = true;
-                    SourceIdCreateTime = t.GetList(0).GetStruct(1).GetOptional().GetUint64();
-                    MaxSrcIdAccessTime = accessTime;
-                }
-            }
-        }
-        if (SelectSrcIdsInflight != 0) {
-            return;
-        }
-        if (PartitionFound && PreferedPartition < Max<ui32>() && Partition != PreferedPartition) {
-            CloseSession(TStringBuilder() << "MessageGroupId " << SourceId << " is already bound to PartitionGroupId "
-                                          << (Partition + 1) << ", but client provided " << (PreferedPartition + 1)
-                                          << ". MessageGroupId->PartitionGroupId binding cannot be changed, either use "
-                                             "another MessageGroupId, specify PartitionGroupId " << (Partition + 1)
-                                          << ", or do not specify PartitionGroupId at all.",
-                         PersQueue::ErrorCode::BAD_REQUEST, ctx);
-            return;
-        }
-        if (SourceIdCreateTime == 0) {
-            SourceIdCreateTime = TInstant::Now().MilliSeconds();
-        }
-
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " messageGroupId "
-            << SourceId << " escaped " << EncodedSourceId.EscapedSourceId << " partition " << Partition << " partitions "
-            << PartitionToTablet.size() << "(" << EncodedSourceId.Hash % PartitionToTablet.size() << ") create " << SourceIdCreateTime << " result " << t);
-
-        GetOrProcessPartition(ctx);
-        return;
-    } else if (State == EState::ES_WAIT_TABLE_REQUEST_2) {
-        SourceIdUpdatesInflight--;
-        if (!SourceIdUpdatesInflight) {
-            LastSourceIdUpdate = ctx.Now();
-            TryCloseSession(ctx);
-            ProceedPartition(Partition, ctx);
-        }
-    } else if (State == EState::ES_INITED) {
-        SourceIdUpdatesInflight--;
-        if (!SourceIdUpdatesInflight) {
-            LastSourceIdUpdate = ctx.Now();
-        }
-    } else {
-        Y_ABORT("Wrong state");
-    }
-}
-
-template<bool UseMigrationProtocol>
-THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor<UseMigrationProtocol>::MakeUpdateSourceIdMetadataRequest(
-        const TString& topic, const NActors::TActorContext& ctx
-) {
-
-    auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-
-    ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-    ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-    ev->Record.MutableRequest()->SetQuery(UpdateSourceIdQuery);
-    ev->Record.MutableRequest()->SetDatabase(GetDatabaseName(ctx));
-    // fill tx settings: set commit tx flag & begin new serializable tx.
-    ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
-    if (KqpSessionId) {
-        ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
-    }
-    if (TxId) {
-        ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);
-        TxId = "";
-    } else {
-        ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-    }
-    // keep compiled query in cache.
-    ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
-
-    NYdb::TParamsBuilder paramsBuilder = NYdb::TParamsBuilder();
-
-    SetHashToTParamsBuilder(paramsBuilder, EncodedSourceId);
-
-    paramsBuilder
-        .AddParam("$Topic")
-            .Utf8(topic)
-            .Build()
-        .AddParam("$SourceId")
-            .Utf8(EncodedSourceId.EscapedSourceId)
-            .Build()
-        .AddParam("$CreateTime")
-            .Uint64(SourceIdCreateTime)
-            .Build()
-        .AddParam("$AccessTime")
-            .Uint64(TInstant::Now().MilliSeconds())
-            .Build()
-        .AddParam("$Partition")
-            .Uint32(Partition)
-            .Build();
-
-    NYdb::TParams params = paramsBuilder.Build();
-    
-    ev->Record.MutableRequest()->MutableYdbParameters()->swap(*(NYdb::TProtoAccessor::GetProtoMapPtr(params)));
-
-    return ev;
-}
-
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::SendUpdateSrcIdsRequests(const TActorContext& ctx) {
-    auto ev = MakeUpdateSourceIdMetadataRequest(FullConverter->GetClientsideName(), ctx);
-
-    SourceIdUpdatesInflight++;
-    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionChooser::TEvChooseError::TPtr& ev, const NActors::TActorContext& ctx) {
+    CloseSession(ev->Get()->ErrorMessage, ev->Get()->Code, ctx);
 }
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::ProceedPartition(const ui32 partition, const TActorContext& ctx) {
     Partition = partition;
-    auto it = PartitionToTablet.find(Partition);
 
-    ui64 PartitionTabletId = it != PartitionToTablet.end() ? it->second : 0;
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "ProceedPartition. session cookie: " << Cookie << " sessionId: " << OwnerCookie << " partition: " << Partition << " expectedGeneration: " << ExpectedGeneration);
 
     if (!PartitionTabletId) {
@@ -1057,13 +695,10 @@ void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const 
         }
     }
 
-    auto it = PartitionToTablet.find(Partition);
-    ui64 tabletId = it != PartitionToTablet.end() ? it->second : 0;
-
     auto actor =
         std::make_unique<TPartitionWriterCacheActor>(ctx.SelfID,
                                                      Partition,
-                                                     tabletId,
+                                                     PartitionTabletId,
                                                      ExpectedGeneration,
                                                      SourceId,
                                                      opts);
@@ -1856,21 +1491,20 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::RecheckACL(const TActorContext& ctx) {
     Y_ABORT_UNLESS(State == ES_INITED);
+
+    auto now = ctx.Now();
+
     ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetACLRetryTimeoutSec()), new TEvents::TEvWakeup(EWakeupTag::RecheckAcl));
-    if (Token && !ACLCheckInProgress && RequestNotChecked && (ctx.Now() - LastACLCheckTimestamp > TDuration::Seconds(AppData(ctx)->PQConfig.GetACLRetryTimeoutSec()))) {
+    if (Token && !ACLCheckInProgress && RequestNotChecked && (now - LastACLCheckTimestamp > TDuration::Seconds(AppData(ctx)->PQConfig.GetACLRetryTimeoutSec()))) {
         RequestNotChecked = false;
         InitCheckSchema(ctx);
     }
-    const auto& pqConfig = AppData(ctx)->PQConfig;
-    // ToDo[migration] - separate flag for having config tables
-    if ((!pqConfig.GetTopicsAreFirstClassCitizen() || pqConfig.GetUseSrcIdMetaMappingInFirstClass())
-                                && !SourceIdUpdatesInflight
-                                && ctx.Now() - LastSourceIdUpdate > SOURCEID_UPDATE_PERIOD
-                                && UseDeduplication
-    ) {
-        SendUpdateSrcIdsRequests(ctx);
+
+    if (PartitionChooser && now > LastSourceIdUpdate) {
+        ctx.Send(PartitionChooser, new NPQ::TEvPartitionChooser::TEvRefreshRequest());
+        LastSourceIdUpdate = now + SOURCEID_UPDATE_PERIOD;
     }
-    if (ctx.Now() >= LogSessionDeadline) {
+    if (now >= LogSessionDeadline) {
         LogSession(ctx);
     }
 }

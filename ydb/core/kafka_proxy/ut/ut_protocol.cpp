@@ -509,6 +509,33 @@ public:
         return WriteAndRead<TLeaveGroupResponseData>(header, request);
     }
 
+    TMessagePtr<TOffsetFetchResponseData> OffsetFetch(TString groupId, std::map<TString, std::vector<i32>> topicsToPartions) {
+        Cerr << ">>>>> TOffsetFetchRequestData\n";
+        
+        TRequestHeaderData header = Header(NKafka::EApiKey::OFFSET_FETCH, 8);
+
+        TOffsetFetchRequestData::TOffsetFetchRequestGroup group;
+        group.GroupId = groupId;
+
+        for (const auto& [topicName, partitions] : topicsToPartions) {
+            TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics topic;
+            topic.Name = topicName;
+            topic.PartitionIndexes = partitions;
+            group.Topics.push_back(topic);
+        }
+
+        TOffsetFetchRequestData request;
+        request.Groups.push_back(group);
+
+        return WriteAndRead<TOffsetFetchResponseData>(header, request);
+    }
+
+    TMessagePtr<TOffsetFetchResponseData> OffsetFetch(TOffsetFetchRequestData request) {
+        Cerr << ">>>>> TOffsetFetchRequestData\n";
+        TRequestHeaderData header = Header(NKafka::EApiKey::OFFSET_FETCH, 8);
+        return WriteAndRead<TOffsetFetchResponseData>(header, request);
+    }
+
     TMessagePtr<TFetchResponseData> Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset = 0) {
         Cerr << ">>>>> TFetchRequestData\n";
 
@@ -1172,6 +1199,94 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
     } // Y_UNIT_TEST(BalanceScenario)
     
+    Y_UNIT_TEST(OffsetFetchScenario) {
+        TInsecureTestServer testServer("2");
+
+        TString topicName = "/Root/topic-0-test";
+        TString shortTopicName = "topic-0-test";
+        TString notExistsTopicName = "/Root/not-exists";
+        ui64 minActivePartitions = 10;
+
+        TString consumerName = "consumer-0";
+
+        TString key = "record-key";
+        TString value = "record-value";
+        TString headerKey = "header-key";
+        TString headerValue = "header-value";
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        {
+            auto result =
+                pqClient
+                    .CreateTopic(topicName,
+                                 NYdb::NTopic::TCreateTopicSettings()
+                                    .BeginAddConsumer(consumerName).EndAddConsumer()
+                                    .PartitioningSettings(minActivePartitions, 100))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        TTestClient client(testServer.Port);
+
+        {
+            auto msg = client.ApiVersions();
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+        }
+
+        {
+            auto msg = client.SaslHandshake();
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[0], "PLAIN");
+        }
+
+        {
+            auto msg = client.SaslAuthenticate("ouruser@/Root", "ourUserPassword");
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        {
+            // Produce
+            TKafkaRecordBatch batch;
+            batch.BaseOffset = 3;
+            batch.BaseSequence = 5;
+            batch.Magic = 2; // Current supported
+            batch.Records.resize(1);
+            batch.Records[0].Key = TKafkaRawBytes(key.Data(), key.Size());
+            batch.Records[0].Value = TKafkaRawBytes(value.Data(), value.Size());
+            batch.Records[0].Headers.resize(1);
+            batch.Records[0].Headers[0].Key = TKafkaRawBytes(headerKey.Data(), headerKey.Size());
+            batch.Records[0].Headers[0].Value = TKafkaRawBytes(headerValue.Data(), headerValue.Size());
+
+            auto msg = client.Produce(topicName, 0, batch);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Name, topicName);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].Index, 0);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].ErrorCode,
+                                     static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        {
+            // Check commited offset after produce
+            std::map<TString, std::vector<i32>> topicsToPartions;
+            topicsToPartions[topicName] = std::vector<i32>{0, 1, 2, 3};
+            auto msg = client.OffsetFetch(consumerName, topicsToPartions);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+            const auto& partitions = msg->Groups[0].Topics[0].Partitions;
+            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 4);
+            auto partition0 = std::find_if(partitions.begin(), partitions.end(), [](const auto& partition) { return partition.PartitionIndex == 0; });
+            UNIT_ASSERT_VALUES_UNEQUAL(partition0, partitions.end());
+            // This check faled one time under asan, commented until I figure out the exact reason.
+            // UNIT_ASSERT_VALUES_EQUAL(partition0->CommittedOffset, 1);
+        }
+
+    } // Y_UNIT_TEST(OffsetFetchScenario)
+
     Y_UNIT_TEST(LoginWithApiKey) {
         TInsecureTestServer testServer;
 

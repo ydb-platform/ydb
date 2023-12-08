@@ -1,0 +1,4 @@
+SELECT MAX(LENGTH(ch.col) - LENGTH(pg.col))
+	FROM rtmr_dev00_clickhouse.benchmark_1g as ch
+	JOIN rtmr_dev00_postgresql.benchmark_1g as pg
+ON ch.id = pg.id;

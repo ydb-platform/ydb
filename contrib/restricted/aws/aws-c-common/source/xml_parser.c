@@ -151,13 +151,13 @@ int aws_xml_parser_parse(
 
     /* burn everything that precedes the actual xml nodes. */
     while (parser->doc.len) {
-        uint8_t *start = memchr(parser->doc.ptr, '<', parser->doc.len);
+        const uint8_t *start = memchr(parser->doc.ptr, '<', parser->doc.len);
         if (!start) {
             AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document is invalid.");
             return aws_raise_error(AWS_ERROR_MALFORMED_INPUT_STRING);
         }
 
-        uint8_t *location = memchr(parser->doc.ptr, '>', parser->doc.len);
+        const uint8_t *location = memchr(parser->doc.ptr, '>', parser->doc.len);
 
         if (!location) {
             AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document is invalid.");
@@ -312,14 +312,14 @@ int aws_xml_node_traverse(
     /* look for the next node at the current level. do this until we encounter the parent node's
      * closing tag. */
     while (!parser->stop_parsing && !parser->error) {
-        uint8_t *next_location = memchr(parser->doc.ptr, '<', parser->doc.len);
+        const uint8_t *next_location = memchr(parser->doc.ptr, '<', parser->doc.len);
 
         if (!next_location) {
             AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document is invalid.");
             return aws_raise_error(AWS_ERROR_MALFORMED_INPUT_STRING);
         }
 
-        uint8_t *end_location = memchr(parser->doc.ptr, '>', parser->doc.len);
+        const uint8_t *end_location = memchr(parser->doc.ptr, '>', parser->doc.len);
 
         if (!end_location) {
             AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document is invalid.");
@@ -409,14 +409,14 @@ int aws_xml_node_get_attribute(
 int s_node_next_sibling(struct aws_xml_parser *parser) {
     AWS_PRECONDITION(parser);
 
-    uint8_t *next_location = memchr(parser->doc.ptr, '<', parser->doc.len);
+    const uint8_t *next_location = memchr(parser->doc.ptr, '<', parser->doc.len);
 
     if (!next_location) {
         return parser->error;
     }
 
     aws_byte_cursor_advance(&parser->doc, next_location - parser->doc.ptr);
-    uint8_t *end_location = memchr(parser->doc.ptr, '>', parser->doc.len);
+    const uint8_t *end_location = memchr(parser->doc.ptr, '>', parser->doc.len);
 
     if (!end_location) {
         AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document is invalid.");

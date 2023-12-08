@@ -64,6 +64,11 @@ GetBucketNotificationConfigurationResult& GetBucketNotificationConfigurationResu
       }
 
     }
+    XmlNode eventBridgeConfigurationNode = resultNode.FirstChild("EventBridgeConfiguration");
+    if(!eventBridgeConfigurationNode.IsNull())
+    {
+      m_eventBridgeConfiguration = eventBridgeConfigurationNode;
+    }
   }
 
   return *this;

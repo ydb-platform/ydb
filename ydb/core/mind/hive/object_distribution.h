@@ -13,7 +13,18 @@ namespace NKikimr {
 namespace NHive {
 
 struct TObjectDistribution {
-    std::multiset<i64> SortedDistribution;
+    struct CountOnNode {
+        i64 Count;
+        TNodeId Node;
+
+        CountOnNode(i64 count, TNodeId node) : Count(count), Node(node) {}
+
+        bool operator<(const CountOnNode& other) const {
+            return std::tie(Count, Node) < std::tie(other.Count, other.Node);
+        }
+    };
+
+    std::set<CountOnNode> SortedDistribution;
     std::unordered_map<TNodeId, i64> Distribution;
     const TFullObjectId Id;
     double Mean = 0;
@@ -29,8 +40,8 @@ struct TObjectDistribution {
         if (SortedDistribution.empty()) {
             return 0;
         }
-        i64 minVal = *SortedDistribution.begin();
-        i64 maxVal = *SortedDistribution.rbegin();
+        i64 minVal = SortedDistribution.begin()->Count;
+        i64 maxVal = SortedDistribution.rbegin()->Count;
         if (maxVal == 0) {
             return 0;
         }
@@ -44,43 +55,44 @@ struct TObjectDistribution {
         return VarianceNumerator / Distribution.size();
     }
 
-    void RemoveFromSortedDistribution(i64 value) {
+    void RemoveFromSortedDistribution(CountOnNode value) {
+        auto cnt = value.Count;
         i64 numNodes = Distribution.size();
         auto it = SortedDistribution.find(value);
+        if (it == SortedDistribution.end()) {
+            return;
+        }
         SortedDistribution.erase(it);
         double meanWithoutNode = 0;
         if (numNodes > 1) {
-            meanWithoutNode = (Mean * numNodes - value) / (numNodes - 1);
+            meanWithoutNode = (Mean * numNodes - cnt) / (numNodes - 1);
         }
-        VarianceNumerator -= (Mean - value) * (meanWithoutNode - value);
+        VarianceNumerator -= (Mean - cnt) * (meanWithoutNode - cnt);
         Mean = meanWithoutNode;
     }
 
     void UpdateCount(const TNodeInfo& node, i64 diff) {
         if (!node.MatchesFilter(NodeFilter) || !node.IsAllowedToRunTablet()) {
+            // We should not use this node for computing imbalance, hence we ignore it in SortedDistribution
+            // But we still account for it in Distribution, because it might become relevant later
+            Distribution[node.Id] += diff;
             return;
         }
         auto [it, newNode] = Distribution.insert({node.Id, 0});
         i64& value = it->second;
         i64 numNodes = Distribution.size();
         if (!newNode) {
-            RemoveFromSortedDistribution(value);
+            RemoveFromSortedDistribution({value, node.Id});
         }
         if (diff + value < 0) {
             BLOG_ERROR("UpdateObjectCount: new value " << diff + value << " is negative");
         }
         Y_DEBUG_ABORT_UNLESS(diff + value >= 0);
         value += diff;
-        SortedDistribution.insert(value);
+        SortedDistribution.emplace(value, node.Id);
         double newMean = (Mean * (numNodes - 1) + value) / numNodes;
         VarianceNumerator += (Mean - value) * (newMean - value);
         Mean = newMean;
-    }
-
-    void SetCount(const TNodeInfo& node, i64 value) {
-        auto it = Distribution.find(node.Id);
-        i64 oldValue = (it == Distribution.end()) ? 0 : it->second;
-        UpdateCount(node, value - oldValue);
     }
 
     void RemoveNode(TNodeId node) {
@@ -88,8 +100,7 @@ struct TObjectDistribution {
         if (it == Distribution.end()) {
             return;
         }
-        RemoveFromSortedDistribution(it->second);
-        Distribution.erase(node);
+        RemoveFromSortedDistribution({it->second, node});
     }
 
     bool operator<(const TObjectDistribution& other) const {
@@ -126,7 +137,7 @@ struct TObjectDistributions {
             return TObjectToBalance(TFullObjectId());
         }
         const auto& dist = *SortedDistributions.rbegin();
-        i64 maxCnt = *dist.SortedDistribution.rbegin();
+        i64 maxCnt = dist.SortedDistribution.rbegin()->Count;
         TObjectToBalance result(dist.Id);
         for (const auto& [node, cnt] : dist.Distribution) {
             if (cnt == maxCnt) {
@@ -206,13 +217,6 @@ struct TObjectDistributions {
         }
         for (const auto& [obj, it] : Distributions) {
             UpdateCount(obj, node, 0);
-        }
-        for (const auto& [obj, tablets] : node.TabletsOfObject) {
-            ui64 cnt = tablets.size();
-            auto updateFunc = [&](TObjectDistribution& dist) {
-                dist.SetCount(node, cnt);
-            };
-            UpdateDistribution(obj, updateFunc);
         }
     }
 

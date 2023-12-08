@@ -16,7 +16,9 @@
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
+#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
@@ -715,6 +717,7 @@ public:
 
                 auto queryAstStr = SerializeExpr(ctx, *query);
 
+                bool useGenericQuery = ShouldUseGenericQuery(dataQueryBlocks);
                 bool useScanQuery = ShouldUseScanQuery(dataQueryBlocks, settings);
 
                 IKqpGateway::TAstQuerySettings querySettings;
@@ -723,7 +726,16 @@ public:
                 TFuture<TQueryResult> future;
                 switch (queryType) {
                 case EKikimrQueryType::YqlScript:
-                    if (useScanQuery) {
+                    if (useGenericQuery) {
+                        Ydb::Table::TransactionSettings txSettings;
+                        txSettings.mutable_serializable_read_write();
+                        if (SessionCtx->Query().PrepareOnly) {
+                            future = Gateway->ExplainGenericQuery(Cluster, SessionCtx->Query().PreparingQuery->GetText());
+                        } else {
+                            future = Gateway->ExecGenericQuery(Cluster, SessionCtx->Query().PreparingQuery->GetText(), CollectParameters(query),
+                                querySettings, txSettings);
+                        }
+                    } else if (useScanQuery) {
                         ui64 rowsLimit = 0;
                         if (dataQueryBlocks.ArgCount() && !dataQueryBlocks.Arg(0).Results().Empty()) {
                             const auto& queryBlock = dataQueryBlocks.Arg(0);
@@ -797,6 +809,24 @@ private:
         });
 
         return result;
+    }
+
+    bool ShouldUseGenericQuery(const TKiDataQueryBlocks& queryBlocks) {
+        const auto& queryBlock = queryBlocks.Arg(0);
+
+        bool hasFederatedSorcesOrSinks = false;
+        VisitExpr(queryBlock.Ptr(), [&hasFederatedSorcesOrSinks](const TExprNode::TPtr& exprNode) {
+            auto node = TExprBase(exprNode);
+
+            hasFederatedSorcesOrSinks = hasFederatedSorcesOrSinks
+                || node.Maybe<TS3DataSource>() 
+                || node.Maybe<TS3DataSink>() 
+                || node.Maybe<TGenDataSource>();
+
+            return !hasFederatedSorcesOrSinks;
+        });
+
+        return hasFederatedSorcesOrSinks;
     }
 
     bool ShouldUseScanQuery(const TKiDataQueryBlocks& queryBlocks, const TExecuteSettings& settings) {
@@ -1351,6 +1381,7 @@ private:
         SessionCtx->Query().Deadlines = settings.Deadlines;
         SessionCtx->Query().StatsMode = settings.StatsMode;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+        SessionCtx->Query().PreparingQuery->SetText(script.Text);
         SessionCtx->Query().PreparedQuery.reset();
 
         TMaybe<TSqlVersion> sqlVersion;
@@ -1395,6 +1426,7 @@ private:
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().SuppressDdlChecks = true;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+        SessionCtx->Query().PreparingQuery->SetText(script.Text);
         SessionCtx->Query().PreparedQuery.reset();
 
         TMaybe<TSqlVersion> sqlVersion;
@@ -1420,6 +1452,7 @@ private:
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().SuppressDdlChecks = true;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+        SessionCtx->Query().PreparingQuery->SetText(script.Text);
 
         TMaybe<TSqlVersion> sqlVersion;
         auto scriptExpr = CompileYqlQuery(script, true, true, ctx, sqlVersion, {});
@@ -1492,7 +1525,9 @@ private:
         TypesCtx->AddDataSource(providerNames, kikimrDataSource);
         TypesCtx->AddDataSink(providerNames, kikimrDataSink);
 
-        if ((queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query) && FederatedQuerySetup) {
+        bool addExternalDataSources = queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
+            || queryType == EKikimrQueryType::YqlScript && AppData()->FeatureFlags.GetEnableExternalDataSources();
+        if (addExternalDataSources && FederatedQuerySetup) {
             InitS3Provider(queryType);
             InitGenericProvider();
         }

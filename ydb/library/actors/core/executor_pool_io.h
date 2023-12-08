@@ -2,6 +2,7 @@
 
 #include "actorsystem.h"
 #include "executor_thread.h"
+#include "executor_thread_ctx.h"
 #include "scheduler_queue.h"
 #include "executor_pool_base.h"
 #include <ydb/library/actors/actor_type/indexes.h>
@@ -12,12 +13,7 @@
 
 namespace NActors {
     class TIOExecutorPool: public TExecutorPoolBase {
-        struct TThreadCtx {
-            TAutoPtr<TExecutorThread> Thread;
-            TThreadParkPad Pad;
-        };
-
-        TArrayHolder<TThreadCtx> Threads;
+        TArrayHolder<TExecutorThreadCtx> Threads;
         TUnorderedCache<ui32, 512, 4> ThreadQueue;
 
         THolder<NSchedulerQueue::TQueueType> ScheduleQueue;

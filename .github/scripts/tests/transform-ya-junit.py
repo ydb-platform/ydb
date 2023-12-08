@@ -54,8 +54,13 @@ class YTestReportTrace:
         self.traces = {}
 
     def load(self, subdir):
-        test_results_dir = f"{subdir}/test-results/"
-        for folder in os.listdir(os.path.join(self.out_root, test_results_dir)):
+        test_results_dir = os.path.join(self.out_root, f"{subdir}/test-results/")
+
+        if not os.path.isdir(test_results_dir):
+            print(f"Directory {test_results_dir} doesn't exist")
+            return
+
+        for folder in os.listdir(test_results_dir):
             fn = os.path.join(self.out_root, test_results_dir, folder, "ytest.report.trace")
 
             if not os.path.isfile(fn):

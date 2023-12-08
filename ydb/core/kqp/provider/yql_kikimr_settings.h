@@ -36,6 +36,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui32, false> _KqpMaxComputeActors;
     NCommon::TConfSetting<bool, false> _KqpEnableSpilling;
     NCommon::TConfSetting<bool, false> _KqpDisableLlvmForUdfStages;
+    NCommon::TConfSetting<ui64, false> _KqpYqlCombinerMemoryLimit;
 
     /* No op just to avoid errors in Cloud Logging until they remove this from their queries */
     NCommon::TConfSetting<bool, false> KqpPushOlapProcess;
@@ -62,6 +63,8 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
     NCommon::TConfSetting<bool, false> OptEnableCostBasedOptimization;
+    NCommon::TConfSetting<bool, false> OptEnableConstantFolding;
+
     NCommon::TConfSetting<ui32, false> MaxDPccpDPTableSize;
 
 
@@ -87,6 +90,8 @@ struct TKikimrSettings {
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
     bool HasOptEnableCostBasedOptimization() const;
+    bool HasOptEnableConstantFolding() const;
+
 
     EOptionalFlag GetOptPredicateExtract() const;
     EOptionalFlag GetUseLlvm() const;

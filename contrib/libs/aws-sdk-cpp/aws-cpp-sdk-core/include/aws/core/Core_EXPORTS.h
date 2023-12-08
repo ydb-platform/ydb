@@ -21,8 +21,14 @@
     #else // USE_IMPORT_EXPORT
         #define AWS_CORE_API
     #endif // USE_IMPORT_EXPORT
+    #define AWS_CORE_LOCAL
 #else // defined (USE_WINDOWS_DLL_SEMANTICS) || defined (_WIN32)
     #define AWS_CORE_API
+    #if __GNUC__ >= 4
+        #define AWS_CORE_LOCAL __attribute__((visibility("hidden")))
+    #else
+        #define AWS_CORE_LOCAL
+  #endif
 #endif // defined (USE_WINDOWS_DLL_SEMANTICS) || defined (_WIN32)
 
 #ifdef _MSC_VER

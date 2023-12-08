@@ -1,6 +1,6 @@
 from os import environ
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Sequence
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
@@ -12,6 +12,8 @@ class Settings:
     class Connector:
         grpc_host: str
         grpc_port: int
+        paging_bytes_per_page: int
+        paging_prefetch_queue_capacity: int
 
     connector: Connector
 
@@ -42,8 +44,10 @@ class Settings:
     def from_env(cls) -> 'Settings':
         return cls(
             connector=cls.Connector(
-                grpc_host=environ['YQL_RECIPE_CONNECTOR_GRPC_HOST'],
-                grpc_port=int(environ['YQL_RECIPE_CONNECTOR_GRPC_PORT']),
+                grpc_host=environ['YDB_CONNECTOR_RECIPE_GRPC_HOST'],
+                grpc_port=int(environ['YDB_CONNECTOR_RECIPE_GRPC_PORT']),
+                paging_bytes_per_page=int(environ['YDB_CONNECTOR_RECIPE_GRPC_PAGING_BYTES_PER_PAGE']),
+                paging_prefetch_queue_capacity=int(environ['YDB_CONNECTOR_RECIPE_GRPC_PAGING_PREFETCH_QUEUE_CAPACITY']),
             ),
             clickhouse=cls.ClickHouse(
                 cluster_name='clickhouse_integration_test',
@@ -84,7 +88,7 @@ class GenericSettings:
         database: str
         protocol: EProtocol
 
-    clickhouse_clusters: list[ClickHouseCluster]
+    clickhouse_clusters: Sequence[ClickHouseCluster]
 
     @dataclass
     class PostgreSQLCluster:
@@ -94,6 +98,6 @@ class GenericSettings:
         database: str
         schema: str
 
-    postgresql_clusters: list[PostgreSQLCluster]
+    postgresql_clusters: Sequence[PostgreSQLCluster]
 
     date_time_format: EDateTimeFormat

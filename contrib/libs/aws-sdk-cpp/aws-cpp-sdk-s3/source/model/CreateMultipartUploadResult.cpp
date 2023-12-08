@@ -19,14 +19,16 @@ using namespace Aws;
 CreateMultipartUploadResult::CreateMultipartUploadResult() : 
     m_serverSideEncryption(ServerSideEncryption::NOT_SET),
     m_bucketKeyEnabled(false),
-    m_requestCharged(RequestCharged::NOT_SET)
+    m_requestCharged(RequestCharged::NOT_SET),
+    m_checksumAlgorithm(ChecksumAlgorithm::NOT_SET)
 {
 }
 
 CreateMultipartUploadResult::CreateMultipartUploadResult(const Aws::AmazonWebServiceResult<XmlDocument>& result) : 
     m_serverSideEncryption(ServerSideEncryption::NOT_SET),
     m_bucketKeyEnabled(false),
-    m_requestCharged(RequestCharged::NOT_SET)
+    m_requestCharged(RequestCharged::NOT_SET),
+    m_checksumAlgorithm(ChecksumAlgorithm::NOT_SET)
 {
   *this = result;
 }
@@ -59,7 +61,7 @@ CreateMultipartUploadResult& CreateMultipartUploadResult::operator =(const Aws::
   const auto& abortDateIter = headers.find("x-amz-abort-date");
   if(abortDateIter != headers.end())
   {
-    m_abortDate = DateTime(abortDateIter->second, DateFormat::RFC822);
+    m_abortDate = DateTime(abortDateIter->second, Aws::Utils::DateFormat::RFC822);
   }
 
   const auto& abortRuleIdIter = headers.find("x-amz-abort-rule-id");
@@ -108,6 +110,12 @@ CreateMultipartUploadResult& CreateMultipartUploadResult::operator =(const Aws::
   if(requestChargedIter != headers.end())
   {
     m_requestCharged = RequestChargedMapper::GetRequestChargedForName(requestChargedIter->second);
+  }
+
+  const auto& checksumAlgorithmIter = headers.find("x-amz-checksum-algorithm");
+  if(checksumAlgorithmIter != headers.end())
+  {
+    m_checksumAlgorithm = ChecksumAlgorithmMapper::GetChecksumAlgorithmForName(checksumAlgorithmIter->second);
   }
 
   return *this;

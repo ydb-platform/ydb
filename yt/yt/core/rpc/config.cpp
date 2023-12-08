@@ -143,6 +143,9 @@ void TViablePeerRegistryConfig::Register(TRegistrar registrar)
         .GreaterThanOrEqual(0)
         .Default(0);
 
+    registrar.Parameter("enable_power_of_two_choices_strategy", &TThis::EnablePowerOfTwoChoicesStrategy)
+        .Default(false);
+
     registrar.Postprocessor([] (TThis* config) {
         if (config->MinPeerCountForPriorityAwareness > config->MaxPeerCount) {
             THROW_ERROR_EXCEPTION(
@@ -205,6 +208,8 @@ void TBalancingChannelConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("addresses", &TThis::Addresses)
         .Optional();
+    registrar.Parameter("disable_balancing_on_single_address", &TThis::DisableBalancingOnSingleAddress)
+        .Default(true);
     registrar.Parameter("endpoints", &TThis::Endpoints)
         .Optional();
     registrar.Parameter("hedging_delay", &TThis::HedgingDelay)

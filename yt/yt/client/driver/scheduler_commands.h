@@ -35,8 +35,9 @@ public:
             .Default();
 
         registrar.Postprocessor([] (TThis* command) {
-            if (!command->OperationId.IsEmpty() && command->OperationAlias.operator bool() ||
-                command->OperationId.IsEmpty() && !command->OperationAlias.operator bool())
+            auto operationId = command->OperationId;
+            if (operationId && command->OperationAlias.has_value() ||
+                !operationId && !command->OperationAlias.has_value())
             {
                 THROW_ERROR_EXCEPTION("Exactly one of \"operation_id\" and \"operation_alias\" should be set")
                     << TErrorAttribute("operation_id", command->OperationId)

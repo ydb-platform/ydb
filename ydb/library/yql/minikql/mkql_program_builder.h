@@ -693,6 +693,10 @@ public:
     TRuntimeNode WithContext(TRuntimeNode input, const std::string_view& contextType);
     TRuntimeNode PgInternal0(TType* returnType);
     TRuntimeNode PgArray(const TArrayRef<const TRuntimeNode>& args, TType* returnType);
+    TRuntimeNode PgTableContent(
+        const std::string_view& cluster,
+        const std::string_view& table,
+        TType* returnType);
 
     TRuntimeNode ScalarApply(const TArrayRef<const TRuntimeNode>& args, const TArrayLambda& handler);
 

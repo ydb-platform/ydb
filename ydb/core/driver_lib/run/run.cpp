@@ -1093,6 +1093,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->AwsCompatibilityConfig = runConfig.AppConfig.GetAwsCompatibilityConfig();
     }
 
+    if (runConfig.AppConfig.HasS3ProxyResolverConfig()) {
+        AppData->S3ProxyResolverConfig = runConfig.AppConfig.GetS3ProxyResolverConfig();
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())
@@ -1443,6 +1447,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
     if (serviceMask.EnablePersQueueClusterTracker) {
         sil->AddServiceInitializer(new TPersQueueClusterTrackerInitializer(runConfig));
+    }
+
+    if (serviceMask.EnablePersQueueDirectReadCache) {
+        sil->AddServiceInitializer(new TPersQueueDirectReadCacheInitializer(runConfig));
     }
 
     if (serviceMask.EnableIcNodeCacheService) {

@@ -26,7 +26,7 @@ namespace Aws
             /**
              * @brief This function lets you do preparation work when a http attempt(request) starts. It returns a pointer to an implementation defined context which will be
              * passed down with the other facilities that completes the request's lifetime. This context can be used to track the lifetime of the request and record metrics
-             * specific to this particular request. You are responsible for deleteing the context during your OnFinish call.
+             * specific to this particular request. You are responsible for deleting the context during your OnFinish call.
              * @param serviceName, the service client who initiates this http attempt. like "s3", "ec2", etc.
              * @param requestName, the operation or API name of this http attempt, like "GetObject" in s3.
              * @param request, the actual Http Request.

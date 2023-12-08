@@ -215,7 +215,7 @@ auto TPartitionWriterCacheActor::GetPartitionWriter(const TString& sessionId, co
         return p->second.get();
     }
 
-    if (Writers.size() >= MAX_TRANSACTIONS_COUNT) {
+    if (Writers.size() >= (1 + MAX_TRANSACTIONS_COUNT)) {
         if (!TryDeleteOldestWriter(ctx)) {
             return nullptr;
         }
@@ -237,7 +237,12 @@ bool TPartitionWriterCacheActor::TryDeleteOldestWriter(const TActorContext& ctx)
     auto oldest = Writers.end();
 
     for (auto p = Writers.begin(); p != Writers.end(); ++p) {
+        auto& tx = p->first;
         auto& writer = *p->second;
+
+        if ((tx.first == "") && (tx.second == "")) {
+            continue;
+        }
 
         if ((writer.LastActivity < minLastActivity) && !writer.HasPendingRequests()) {
             minLastActivity = writer.LastActivity;

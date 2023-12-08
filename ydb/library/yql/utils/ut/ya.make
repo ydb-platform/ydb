@@ -1,7 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/utils)
 
 SRCS(
-    aws_credentials_ut.cpp
     fp_bits_ut.cpp
     md5_stream_ut.cpp
     multi_resource_lock_ut.cpp

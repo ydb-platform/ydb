@@ -3105,6 +3105,34 @@
             "uri": "https://{canondata_backend}/1900335/4871e48d29e4933514d3ed0c9c5d19de571eda1f/resource.tar.gz#test.test_like-regexp_clause--Results_/results.txt"
         }
     ],
+    "test.test[lineage-nested_lambda_fields-default.txt-Debug]": [
+        {
+            "checksum": "b2c3fb3345ce583bf1f7484f6d75c067",
+            "size": 1595,
+            "uri": "https://{canondata_backend}/1871002/6e0d911110d361003b7b42e0f8d60544da3e8401/resource.tar.gz#test.test_lineage-nested_lambda_fields-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[lineage-nested_lambda_fields-default.txt-Lineage]": [
+        {
+            "checksum": "d1aa35d780e50196cc693156608fa3bd",
+            "size": 1232,
+            "uri": "https://{canondata_backend}/1871002/6e0d911110d361003b7b42e0f8d60544da3e8401/resource.tar.gz#test.test_lineage-nested_lambda_fields-default.txt-Lineage_/results.txt"
+        }
+    ],
+    "test.test[lineage-nested_lambda_fields-default.txt-Plan]": [
+        {
+            "checksum": "5fb9569d3f2c86ed9c9a7a85c93cfef3",
+            "size": 5114,
+            "uri": "https://{canondata_backend}/1871002/6e0d911110d361003b7b42e0f8d60544da3e8401/resource.tar.gz#test.test_lineage-nested_lambda_fields-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[lineage-nested_lambda_fields-default.txt-Results]": [
+        {
+            "checksum": "52c638c8c836a17d7c1d84ab95e21836",
+            "size": 80,
+            "uri": "https://{canondata_backend}/1871002/6e0d911110d361003b7b42e0f8d60544da3e8401/resource.tar.gz#test.test_lineage-nested_lambda_fields-default.txt-Results_/Output.txt"
+        }
+    ],
     "test.test[lineage-select_group_by_key-default.txt-Debug]": [
         {
             "checksum": "57d55d2339b5b53be558a0906642c6b5",
@@ -3114,9 +3142,9 @@
     ],
     "test.test[lineage-select_group_by_key-default.txt-Lineage]": [
         {
-            "checksum": "d206604c4213f59d58459213458663f0",
-            "size": 1005,
-            "uri": "https://{canondata_backend}/1937367/20cf7c53120f5dc778f37887b8cf90e1ff28bc0f/resource.tar.gz#test.test_lineage-select_group_by_key-default.txt-Lineage_/results.txt"
+            "checksum": "2f4388c32e2079752296709aa51ffa2e",
+            "size": 1328,
+            "uri": "https://{canondata_backend}/1937492/cd988abba8ecb60e2569d3dc25c564d6962909a9/resource.tar.gz#test.test_lineage-select_group_by_key-default.txt-Lineage_/results.txt"
         }
     ],
     "test.test[lineage-select_group_by_key-default.txt-Plan]": [
@@ -4927,30 +4955,6 @@
             "checksum": "e203df5e93e326a181dc93a03d0e2809",
             "size": 2192,
             "uri": "https://{canondata_backend}/1900335/4871e48d29e4933514d3ed0c9c5d19de571eda1f/resource.tar.gz#test.test_union_all-union_all_with_parenthesis-default.txt-Results_/results.txt"
-        }
-    ],
-    "test.test[union_all-union_all_with_top_level_limits-default.txt-Debug]": [
-        {
-            "checksum": "43fe2e6b1f08e0cb1ef90abf4112e387",
-            "size": 1380,
-            "uri": "https://{canondata_backend}/1781765/de147e1386c9b98546ba3e14eb71ae4a038b981c/resource.tar.gz#test.test_union_all-union_all_with_top_level_limits-default.txt-Debug_/opt.yql"
-        }
-    ],
-    "test.test[union_all-union_all_with_top_level_limits-default.txt-Plan]": [
-        {
-            "checksum": "3a72baf0c1032d2e1b3c713096d8873e",
-            "size": 5161,
-            "uri": "https://{canondata_backend}/1900335/4871e48d29e4933514d3ed0c9c5d19de571eda1f/resource.tar.gz#test.test_union_all-union_all_with_top_level_limits-default.txt-Plan_/plan.txt"
-        }
-    ],
-    "test.test[union_all-union_all_with_top_level_limits-default.txt-Results]": [
-        {
-            "checksum": "5b53edff6d8f7dd8cbcdd120f139f5dd",
-            "size": 1924,
-            "uri": "https://{canondata_backend}/1900335/4871e48d29e4933514d3ed0c9c5d19de571eda1f/resource.tar.gz#test.test_union_all-union_all_with_top_level_limits-default.txt-Results_/results.txt"
-        },
-        {
-            "uri": "file://test.test_union_all-union_all_with_top_level_limits-default.txt-Results_/extracted"
         }
     ],
     "test.test[view-file_eval--Debug]": [],

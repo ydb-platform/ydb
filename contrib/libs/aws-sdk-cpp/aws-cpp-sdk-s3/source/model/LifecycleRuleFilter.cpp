@@ -23,6 +23,10 @@ namespace Model
 LifecycleRuleFilter::LifecycleRuleFilter() : 
     m_prefixHasBeenSet(false),
     m_tagHasBeenSet(false),
+    m_objectSizeGreaterThan(0),
+    m_objectSizeGreaterThanHasBeenSet(false),
+    m_objectSizeLessThan(0),
+    m_objectSizeLessThanHasBeenSet(false),
     m_andHasBeenSet(false)
 {
 }
@@ -30,6 +34,10 @@ LifecycleRuleFilter::LifecycleRuleFilter() :
 LifecycleRuleFilter::LifecycleRuleFilter(const XmlNode& xmlNode) : 
     m_prefixHasBeenSet(false),
     m_tagHasBeenSet(false),
+    m_objectSizeGreaterThan(0),
+    m_objectSizeGreaterThanHasBeenSet(false),
+    m_objectSizeLessThan(0),
+    m_objectSizeLessThanHasBeenSet(false),
     m_andHasBeenSet(false)
 {
   *this = xmlNode;
@@ -52,6 +60,18 @@ LifecycleRuleFilter& LifecycleRuleFilter::operator =(const XmlNode& xmlNode)
     {
       m_tag = tagNode;
       m_tagHasBeenSet = true;
+    }
+    XmlNode objectSizeGreaterThanNode = resultNode.FirstChild("ObjectSizeGreaterThan");
+    if(!objectSizeGreaterThanNode.IsNull())
+    {
+      m_objectSizeGreaterThan = StringUtils::ConvertToInt64(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(objectSizeGreaterThanNode.GetText()).c_str()).c_str());
+      m_objectSizeGreaterThanHasBeenSet = true;
+    }
+    XmlNode objectSizeLessThanNode = resultNode.FirstChild("ObjectSizeLessThan");
+    if(!objectSizeLessThanNode.IsNull())
+    {
+      m_objectSizeLessThan = StringUtils::ConvertToInt64(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(objectSizeLessThanNode.GetText()).c_str()).c_str());
+      m_objectSizeLessThanHasBeenSet = true;
     }
     XmlNode andNode = resultNode.FirstChild("And");
     if(!andNode.IsNull())
@@ -77,6 +97,22 @@ void LifecycleRuleFilter::AddToNode(XmlNode& parentNode) const
   {
    XmlNode tagNode = parentNode.CreateChildElement("Tag");
    m_tag.AddToNode(tagNode);
+  }
+
+  if(m_objectSizeGreaterThanHasBeenSet)
+  {
+   XmlNode objectSizeGreaterThanNode = parentNode.CreateChildElement("ObjectSizeGreaterThan");
+   ss << m_objectSizeGreaterThan;
+   objectSizeGreaterThanNode.SetText(ss.str());
+   ss.str("");
+  }
+
+  if(m_objectSizeLessThanHasBeenSet)
+  {
+   XmlNode objectSizeLessThanNode = parentNode.CreateChildElement("ObjectSizeLessThan");
+   ss << m_objectSizeLessThan;
+   objectSizeLessThanNode.SetText(ss.str());
+   ss.str("");
   }
 
   if(m_andHasBeenSet)

@@ -87,7 +87,7 @@ AWS_COMMON_API const struct aws_byte_cursor *aws_uri_scheme(const struct aws_uri
 AWS_COMMON_API const struct aws_byte_cursor *aws_uri_authority(const struct aws_uri *uri);
 
 /**
- * Returns the path portion of the uri. If the original value was empty, this value will be "/".
+ * Returns the path portion of the uri, including any leading '/'. If not present, this value will be empty.
  */
 AWS_COMMON_API const struct aws_byte_cursor *aws_uri_path(const struct aws_uri *uri);
 

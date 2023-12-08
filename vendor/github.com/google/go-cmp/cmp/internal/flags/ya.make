@@ -2,6 +2,8 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
-SRCS(flags.go)
+SRCS(
+    flags.go
+)
 
 END()

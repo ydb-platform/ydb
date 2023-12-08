@@ -387,6 +387,11 @@ public:
         BackupChannel_->UnsubscribeTerminated(callback);
     }
 
+    int GetInflightRequestCount() override
+    {
+        YT_UNIMPLEMENTED();
+    }
+
 private:
     const IChannelPtr PrimaryChannel_;
     const IChannelPtr BackupChannel_;

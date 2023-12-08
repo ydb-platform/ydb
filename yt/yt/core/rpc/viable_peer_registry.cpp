@@ -213,6 +213,8 @@ public:
     static THashSet<int> GetRandomIndexes(int max, int count = 1)
     {
         THashSet<int> result;
+        count = std::min(count, max);
+        result.reserve(count);
         while (std::ssize(result) < count) {
             result.insert(static_cast<int>(RandomNumber<unsigned int>(max)));
         }
@@ -248,6 +250,28 @@ public:
         return peers;
     }
 
+    IChannelPtr PickChannelFromTwoRandom(const IClientRequestPtr& request) const
+    {
+        auto peers = PickRandomPeers(/*peerCount*/ 2);
+        const auto& channelOne = peers.front();
+        const auto& channelTwo = peers.back();
+
+        auto getLoad = [] (const auto& channel) {
+            return channel.second->GetInflightRequestCount();
+        };
+
+        const auto& theWinner = getLoad(channelOne) < getLoad(channelTwo) ? channelOne : channelTwo;
+
+        YT_LOG_DEBUG(
+            "Selected a peer via the power of two choices strategy (RequestId: %v, Peer1: %v, Peer2: %v, Winner: %v)",
+            request ? request->GetRequestId() : TRequestId(),
+            channelOne.first,
+            channelTwo.first,
+            theWinner.first);
+
+        return theWinner.second;
+    }
+
     IChannelPtr PickRandomChannel(
         const IClientRequestPtr& request,
         const std::optional<THedgingChannelOptions>& hedgingOptions) const override
@@ -273,6 +297,8 @@ public:
                 request ? request->GetRequestId() : TRequestId(),
                 primaryPeer.first,
                 backupPeer.first);
+        } else if (Config_->EnablePowerOfTwoChoicesStrategy && ActivePeerToPriority_.Size() >= 2) {
+            return PickChannelFromTwoRandom(request);
         } else {
             auto peer = PickRandomPeers()[0];
             channel = peer.second;

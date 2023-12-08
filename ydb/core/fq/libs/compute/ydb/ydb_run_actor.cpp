@@ -197,6 +197,7 @@ public:
     }
 
     void ResignAndPassAway(const NYql::TIssues& issues) {
+        Send(FetcherId, new NActors::TEvents::TEvPoisonTaken());
         Fq::Private::PingTaskRequest pingTaskRequest;
         NYql::IssuesToMessage(issues, pingTaskRequest.mutable_transient_issues());
         pingTaskRequest.set_resign_query(true);
@@ -208,6 +209,7 @@ public:
     }
 
     void FinishAndPassAway() {
+        Send(FetcherId, new NActors::TEvents::TEvPoisonTaken());
         Send(Connector, new NActors::TEvents::TEvPoisonPill());
         PassAway();
     }

@@ -19,7 +19,7 @@ from uuid import UUID, SafeUUID
 from libc.string cimport memcpy
 from datetime import tzinfo
 
-from clickhouse_connect.driver.exceptions import DataError
+from clickhouse_connect.driver.errors import NONE_IN_NULLABLE_COLUMN
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -255,7 +255,7 @@ cdef inline extend_byte_array(target: bytearray, int start, object source, Py_ss
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def write_str_col(column: Sequence, nullable: bool, encoding: Optional[str], dest: bytearray):
+def write_str_col(column: Sequence, nullable: bool, encoding: Optional[str], dest: bytearray) -> int:
     cdef unsigned long long buff_size = len(column) << 5
     cdef unsigned long long buff_loc = 0, sz = 0, dsz = 0
     cdef unsigned long long array_size = PyByteArray_GET_SIZE(dest)
@@ -268,7 +268,7 @@ def write_str_col(column: Sequence, nullable: bool, encoding: Optional[str], des
         for x in column:
             if not x:
                 if not nullable and x is None:
-                    raise DataError('Invalid None value in non-Nullable column')
+                    return NONE_IN_NULLABLE_COLUMN
                 temp_buff[buff_loc] = 0
                 buff_loc += 1
                 if buff_loc == buff_size:
@@ -315,3 +315,4 @@ def write_str_col(column: Sequence, nullable: bool, encoding: Optional[str], des
     finally:
         mv.release()
         PyMem_Free(<void *>temp_buff)
+    return 0

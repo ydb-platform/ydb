@@ -10730,6 +10730,13 @@
             "uri": "https://{canondata_backend}/1599023/af9c2f81df0601cf266a0926b5ce73b6101b9115/resource.tar.gz#test_sql2yql.test_pg-distinct_on_single_projection_order_expr_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-drop_table]": [
+        {
+            "checksum": "a17122997a6bf872af77c286174322eb",
+            "size": 1072,
+            "uri": "https://{canondata_backend}/1773845/51dddb62bab338531c7d40a97ff817188ae84088/resource.tar.gz#test_sql2yql.test_pg-drop_table_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-equals_where_over_cross2]": [
         {
             "checksum": "d841f0531fcd35f49398d967ddc8968f",

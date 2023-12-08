@@ -30,7 +30,9 @@
 #include <sys/prctl.h>
 #include <sys/syscall.h>
 #include <sys/socket.h>
+#ifndef GRND_RANDOM
 #include <sys/random.h>
+#endif
 
 #include <linux/filter.h>
 #include <linux/seccomp.h>

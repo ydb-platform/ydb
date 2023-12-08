@@ -393,12 +393,13 @@ private:
             return TStatus::Error;
         }
 
-        THashSet<TString> autoincrementColumns;
+        THashSet<TString> defaultConstraintColumnsSet;
         for (auto& keyColumnName : table->Metadata->KeyColumnNames) {
             const auto& columnInfo = table->Metadata->Columns.at(keyColumnName);
             if (rowType->FindItem(keyColumnName)) {
                 continue;
             }
+
             if (!columnInfo.IsDefaultKindDefined())  {
                 ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                     << "Missing key column in input: " << keyColumnName
@@ -406,7 +407,21 @@ private:
                 return TStatus::Error;
             }
 
-            autoincrementColumns.emplace(keyColumnName);
+            defaultConstraintColumnsSet.emplace(keyColumnName);
+        }
+
+        for(const auto& [name, info] : table->Metadata->Columns) {
+            if (rowType->FindItem(name)) {
+                continue;
+            }
+
+            if (op == TYdbOperation::UpdateOn) {
+                continue;
+            }
+
+            if (info.IsDefaultKindDefined()) {
+                defaultConstraintColumnsSet.emplace(name);
+            }
         }
 
         if (op == TYdbOperation::InsertAbort || op == TYdbOperation::InsertRevert ||
@@ -460,9 +475,9 @@ private:
                 columns.push_back(ctx.NewAtom(node.Pos(), item->GetName()));
             }
 
-            TExprNode::TListType autoincrementColumnsList;
-            for(auto& autoincrement: autoincrementColumns) {
-                autoincrementColumnsList.push_back(ctx.NewAtom(node.Pos(), autoincrement));
+            TExprNode::TListType defaultConstraintColumns;
+            for(auto& generatedColumn: defaultConstraintColumnsSet) {
+                defaultConstraintColumns.push_back(ctx.NewAtom(node.Pos(), generatedColumn));
             }
 
             node.Ptr()->ChildRef(TKiWriteTable::idx_Settings) = Build<TCoNameValueTupleList>(ctx, node.Pos())
@@ -474,9 +489,9 @@ private:
                         .Build()
                     .Build()
                 .Add()
-                    .Name().Build("autoincrement_columns")
+                    .Name().Build("default_constraint_columns")
                     .Value<TCoAtomList>()
-                        .Add(autoincrementColumnsList)
+                        .Add(defaultConstraintColumns)
                         .Build()
                     .Build()
                 .Done()

@@ -1269,23 +1269,15 @@ TStatus AnnotateSequencer(const TExprNode::TPtr& node, TExprContext& ctx, const 
 
     auto table = resolveResult.second;
     YQL_ENSURE(rowType);
-    absl::flat_hash_set<TString, THash<TString>> missingKeyColumns;
-    for(const auto& key: table->Metadata->KeyColumnNames) {
-        if (rowType->FindItem(key)) {
-            continue;
-        }
-
-        const auto& infoIt = table->Metadata->Columns.find(key);
-        YQL_ENSURE(infoIt != table->Metadata->Columns.end());
-        const auto& info = infoIt->second;
-        if (info.IsDefaultKindDefined()) {
-            auto [_, inserted] = missingKeyColumns.emplace(key);
-            YQL_ENSURE(inserted, "unexpected duplicates in key columns.");
-        }
+    absl::flat_hash_set<TString, THash<TString>> columnsToGenerate;
+    TCoAtomList generatedOnWriteColumns (node->Child(TKqlSequencer::idx_DefaultConstraintColumns)); 
+    for(const auto& col : generatedOnWriteColumns) {
+        auto [_, inserted] = columnsToGenerate.emplace(TString(col.Value()));
+        YQL_ENSURE(inserted, "unexpected duplicates in the names of columns.");
     }
 
     TVector<const TItemExprType *> seqRowTypeItems = rowType->GetItems();
-    for (auto &column : missingKeyColumns) {
+    for (auto &column : columnsToGenerate) {
         auto columnType = table->GetColumnType(column);
         YQL_ENSURE(columnType);
         seqRowTypeItems.push_back(
@@ -1508,7 +1500,7 @@ TStatus AnnotateSequencerConnection(const TExprNode::TPtr& node, TExprContext& c
         return TStatus::Error;
     }
 
-    if (!EnsureTupleOfAtoms(*node->Child(TKqpCnSequencer::idx_AutoIncrementColumns), ctx)) {
+    if (!EnsureTupleOfAtoms(*node->Child(TKqpCnSequencer::idx_DefaultConstraintColumns), ctx)) {
         return TStatus::Error;
     }
 

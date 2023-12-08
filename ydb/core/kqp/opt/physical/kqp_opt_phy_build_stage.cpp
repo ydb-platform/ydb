@@ -514,7 +514,7 @@ NYql::NNodes::TExprBase KqpBuildSequencerStages(NYql::NNodes::TExprBase node, NY
             .Build()
             .Table(sequencer.Table())
             .Columns(sequencer.Columns())
-            .AutoIncrementColumns(sequencer.AutoIncrementColumns())
+            .DefaultConstraintColumns(sequencer.DefaultConstraintColumns())
             .InputItemType(sequencer.InputItemType())
             .Done();
     } else if (sequencer.Input().Maybe<TDqCnUnionAll>()) {
@@ -524,7 +524,7 @@ NYql::NNodes::TExprBase KqpBuildSequencerStages(NYql::NNodes::TExprBase node, NY
             .Output(output)
             .Table(sequencer.Table())
             .Columns(sequencer.Columns())
-            .AutoIncrementColumns(sequencer.AutoIncrementColumns())
+            .DefaultConstraintColumns(sequencer.DefaultConstraintColumns())
             .InputItemType(sequencer.InputItemType())
             .Done();
 

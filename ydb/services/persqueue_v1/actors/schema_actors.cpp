@@ -678,6 +678,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
 }
 
 void TDescribeTopicActorImpl::RequestReadSessionsInfo(const TActorContext& ctx) {
+    Y_ABORT_UNLESS(Settings.Mode == TDescribeTopicActorSettings::EMode::DescribeConsumer);
     NTabletPipe::SendData(
             ctx, *BalancerPipe,
                     new TEvPersQueue::TEvGetReadSessionsInfo(NPersQueue::ConvertNewConsumerName(Settings.Consumer, ctx))

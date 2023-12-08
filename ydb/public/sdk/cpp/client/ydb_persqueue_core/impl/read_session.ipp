@@ -894,6 +894,10 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnReadDone(NYdbGrpc::T
                     case TServerMessage<false>::kStartPartitionSessionRequest:
                         OnReadDoneImpl(std::move(*ServerMessage->mutable_start_partition_session_request()), deferred);
                         break;
+                    case TServerMessage<false>::kUpdatePartitionSession:
+                        OnReadDoneImpl(std::move(*ServerMessage->mutable_update_partition_session()), deferred);
+                        break;
+
                     case TServerMessage<false>::kStopPartitionSessionRequest:
                         OnReadDoneImpl(std::move(*ServerMessage->mutable_stop_partition_session_request()), deferred);
                         break;
@@ -907,6 +911,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnReadDone(NYdbGrpc::T
                         OnReadDoneImpl(std::move(*ServerMessage->mutable_update_token_response()), deferred);
                         break;
                     case TServerMessage<false>::SERVER_MESSAGE_NOT_SET:
+                        errorStatus = TPlainStatus::Internal("Server message is not set");
+                        break;
+                    default:
                         errorStatus = TPlainStatus::Internal("Unexpected response from server");
                         break;
                     }
@@ -1315,6 +1322,21 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         AbortImpl();
         return;
     }
+}
+
+template <>
+template <>
+inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
+    Ydb::Topic::StreamReadMessage::UpdatePartitionSession&& msg,
+    TDeferredActions<false>& deferred) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+    Y_UNUSED(deferred);
+
+    auto partitionStreamIt = PartitionStreams.find(msg.partition_session_id());
+    if (partitionStreamIt == PartitionStreams.end()) {
+        return;
+    }
+    //TODO: update generation/nodeid info
 }
 
 template <>

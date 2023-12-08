@@ -137,13 +137,14 @@ void AddCheckDiskRequest(TEvKeyValue::TEvRequest *request, ui32 numChannels) {
     }
 }
 
-TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
+TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
                        const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                        const NKikimrPQ::TPQTabletConfig& tabletConfig, const TTabletCountersBase& counters, bool subDomainOutOfSpace, ui32 numChannels,
                        bool newPartition,
                        TVector<TTransaction> distrTxs)
     : Initializer(this)
     , TabletID(tabletId)
+    , TabletGeneration(tabletGeneration)
     , Partition(partition)
     , TabletConfig(tabletConfig)
     , Counters(counters)
@@ -468,7 +469,6 @@ void TPartition::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx)
     Die(ctx);
 }
 
-
 bool CheckDiskStatus(const TStorageStatusFlags status) {
     return !status.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop);
 }
@@ -581,6 +581,7 @@ void TPartition::Handle(TEvPQ::TEvPipeDisconnected::TPtr& ev, const TActorContex
         DropOwner(it, ctx);
         ProcessChangeOwnerRequests(ctx);
     }
+
 }
 
 void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx) {
@@ -929,7 +930,7 @@ void TPartition::ProcessMaxSeqNoRequest(const TActorContext& ctx) {
         auto& ev =  MaxSeqNoRequests.front();
 
         auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie);
-        NKikimrClient::TResponse& resp = response->Response;
+        NKikimrClient::TResponse& resp = *response->Response;
 
         resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
         resp.SetErrorCode(NPersQueue::NErrorCode::OK);
@@ -969,15 +970,18 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
 
     auto it = ReadInfo.find(cookie);
     Y_ABORT_UNLESS(it != ReadInfo.end());
+    
     TReadInfo info = std::move(it->second);
     ReadInfo.erase(it);
 
     //make readinfo class
+    auto& userInfo = UsersInfoStorage->GetOrCreate(info.User, ctx);
     TReadAnswer answer(info.FormAnswer(
-        ctx, *ev->Get(), EndOffset, Partition, &UsersInfoStorage->GetOrCreate(info.User, ctx),
+        ctx, *ev->Get(), EndOffset, Partition, &userInfo,
         info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode()
     ));
-
+    const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
+    
     if (HasError(*ev->Get())) {
         if (info.IsSubscription) {
             TabletCounters.Cumulative()[COUNTER_PQ_READ_SUBSCRIPTION_ERROR].Increment(1);
@@ -988,10 +992,9 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
         if (info.IsSubscription) {
             TabletCounters.Cumulative()[COUNTER_PQ_READ_SUBSCRIPTION_OK].Increment(1);
         }
-        const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
         TabletCounters.Cumulative()[COUNTER_PQ_READ_OK].Increment(1);
         TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_OK].IncrementFor((ctx.Now() - info.Timestamp).MilliSeconds());
-        TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp.ByteSize());
+        TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp->ByteSize());
     }
     ctx.Send(info.Destination != 0 ? Tablet : ctx.SelfID, answer.Event.Release());
     OnReadRequestFinished(cookie, answer.Size, info.User, ctx);
@@ -1693,7 +1696,7 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
 
         ui64 rrGen = i < config.ReadRuleGenerationsSize() ? config.GetReadRuleGenerations(i) : 0;
         if (userInfo.ReadRuleGeneration != rrGen) {
-            TEvPQ::TEvSetClientInfo act(0, consumer, 0, "", 0, 0,
+            TEvPQ::TEvSetClientInfo act(0, consumer, 0, "", 0, 0, 0, TActorId{},
                                         TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE, rrGen);
 
             ProcessUserAct(act, ctx);
@@ -1703,8 +1706,8 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
 
     for (auto& consumer : hasReadRule) {
         GetOrCreatePendingUser(consumer);
-        TEvPQ::TEvSetClientInfo act(0, consumer,
-                                    0, "", 0, 0, TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE, 0);
+        TEvPQ::TEvSetClientInfo act(0, consumer, 0, "", 0, 0, 0, TActorId{},
+                                    TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE, 0);
 
         ProcessUserAct(act, ctx);
     }
@@ -1991,10 +1994,16 @@ void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
         return;
     }
 
-    if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION && act.SessionId == userInfo.Session) { //this is retry of current request, answer ok
-        auto *ui = UsersInfoStorage->GetIfExists(userInfo.User);
+    if ( //this is retry of current request, answer ok
+            act.Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION
+            && act.SessionId == userInfo.Session
+            && act.Generation == userInfo.Generation
+            && act.Step == userInfo.Step
+    ) {
+        auto* ui = UsersInfoStorage->GetIfExists(userInfo.User);
         auto ts = ui ? GetTime(*ui, userInfo.Offset) : std::make_pair<TInstant, TInstant>(TInstant::Zero(), TInstant::Zero());
 
+        userInfo.PipeClient = act.PipeClient;
         ScheduleReplyGetClientOffsetOk(act.Cookie,
                                        userInfo.Offset,
                                        ts.first, ts.second);
@@ -2113,6 +2122,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
 
         userInfo.ReadRuleGeneration = readRuleGeneration;
         userInfo.Session = "";
+        userInfo.PartitionSessionId = 0;
         userInfo.Generation = userInfo.Step = 0;
         userInfo.Offset = 0;
 
@@ -2136,10 +2146,14 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
             userInfo.Session = session;
             userInfo.Generation = generation;
             userInfo.Step = step;
-        } else if (dropSession || strictCommitOffset) {
+            userInfo.PipeClient = act.PipeClient;
+            userInfo.PartitionSessionId = act.PartitionSessionId;
+        } else if ((dropSession && act.PipeClient == userInfo.PipeClient) || strictCommitOffset) {
             userInfo.Session = "";
+            userInfo.PartitionSessionId = 0;
             userInfo.Generation = 0;
             userInfo.Step = 0;
+            userInfo.PipeClient = {};
         }
 
         Y_ABORT_UNLESS(offset <= (ui64)Max<i64>(), "Unexpected Offset: %" PRIu64, offset);
@@ -2293,7 +2307,8 @@ void TPartition::AddCmdWriteUserInfos(NKikimrClient::TKeyValueRequest& request)
             auto *ui = UsersInfoStorage->GetIfExists(user);
             AddCmdWrite(request,
                         ikey, ikeyDeprecated,
-                        userInfo->Offset, userInfo->Generation, userInfo->Step, userInfo->Session,
+                        userInfo->Offset, userInfo->Generation, userInfo->Step,
+                        userInfo->Session,
                         ui ? ui->ReadOffsetRewindSum : 0,
                         userInfo->ReadRuleGeneration);
         } else {
@@ -2327,11 +2342,13 @@ TUserInfoBase& TPartition::GetOrCreatePendingUser(const TString& user,
     auto i = PendingUsersInfo.find(user);
     if (i == PendingUsersInfo.end()) {
         auto ui = UsersInfoStorage->GetIfExists(user);
-        auto [p, _] = PendingUsersInfo.emplace(user, UsersInfoStorage->CreateUserInfo(user,
-                                                                                      readRuleGeneration));
+        auto [p, _] = PendingUsersInfo.emplace(user, UsersInfoStorage->CreateUserInfo(user, readRuleGeneration));
 
         if (ui) {
             p->second.Session = ui->Session;
+            p->second.PartitionSessionId = ui->PartitionSessionId;
+            p->second.PipeClient = ui->PipeClient;
+
             p->second.Generation = ui->Generation;
             p->second.Step = ui->Step;
             p->second.Offset = ui->Offset;
@@ -2362,7 +2379,7 @@ TUserInfoBase* TPartition::GetPendingUserIfExists(const TString& user)
 THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyOk(const ui64 dst)
 {
     auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
-    NKikimrClient::TResponse& resp = response->Response;
+    NKikimrClient::TResponse& resp = *response->Response;
 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
@@ -2375,7 +2392,7 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
                                                                         const TInstant writeTimestamp, const TInstant createTimestamp)
 {
     auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
-    NKikimrClient::TResponse& resp = response->Response;
+    NKikimrClient::TResponse& resp = *response->Response;
 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);

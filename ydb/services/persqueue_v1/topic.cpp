@@ -85,6 +85,27 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 );
     }
 
+    {
+        using TBiRequest = Ydb::Topic::StreamDirectReadMessage::FromClient;
+
+        using TBiResponse = Ydb::Topic::StreamDirectReadMessage::FromServer;
+
+        using TStreamGRpcRequest = NGRpcServer::TGRpcStreamingRequest<
+                    TBiRequest,
+                    TBiResponse,
+                    TGRpcTopicService,
+                    NKikimrServices::GRPC_SERVER>;
+
+
+        TStreamGRpcRequest::Start(this, this->GetService(), CQ_, &Ydb::Topic::V1::TopicService::AsyncService::RequestStreamDirectRead,
+                    [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
+                        ActorSystem_->Send(GRpcRequestProxyId_, new NKikimr::NGRpcService::TEvStreamTopicDirectReadRequest(context, IsRlAllowed()));
+                    },
+                    *ActorSystem_, "TopicService/StreamDirectRead", getCounterBlock("topic", "StreamDirectRead", true), nullptr
+                );
+    }
+
+
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif

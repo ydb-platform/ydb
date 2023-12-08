@@ -809,6 +809,8 @@ message TUserInfo {
     optional string Session = 4;
     optional uint64 OffsetRewindSum = 5;
     optional uint64 ReadRuleGeneration = 6;
+    optional uint64 PartitionSessionId = 7;
+
 }
 
 message TPartitionClientInfo {

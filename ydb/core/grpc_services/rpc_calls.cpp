@@ -37,6 +37,12 @@ void FillYdbStatus(Ydb::Topic::StreamReadMessage::FromServer& resp, const NYql::
 }
 
 template <>
+void FillYdbStatus(Ydb::Topic::StreamDirectReadMessage::FromServer& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status) {
+    resp.set_status(status);
+    NYql::IssuesToMessage(issues, resp.mutable_issues());
+}
+
+template <>
 void FillYdbStatus(Draft::Dummy::PingResponse& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status) {
     Y_UNUSED(resp);
     Y_UNUSED(issues);

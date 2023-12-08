@@ -102,6 +102,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #include <ydb/core/persqueue/cluster_tracker.h>
+#include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/pq_l2_service.h>
 
@@ -1951,6 +1952,19 @@ void TPersQueueClusterTrackerInitializer::InitializeServices(NActors::TActorSyst
     IActor* actor = NPQ::NClusterTracker::CreateClusterTracker();
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
         NPQ::NClusterTracker::MakeClusterTrackerID(),
+        TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
+}
+
+// TPersQueueDirectReadCache
+
+TPersQueueDirectReadCacheInitializer::TPersQueueDirectReadCacheInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
+void TPersQueueDirectReadCacheInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    IActor* actor = NPQ::CreatePQDReadCacheService(appData->Counters);
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+        NPQ::MakePQDReadCacheServiceActorId(),
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
 }
 

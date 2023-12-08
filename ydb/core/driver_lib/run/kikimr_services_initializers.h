@@ -355,6 +355,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
+class TPersQueueDirectReadCacheInitializer : public IKikimrServicesInitializer {
+public:
+    TPersQueueDirectReadCacheInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TMemProfMonitorInitializer : public IKikimrServicesInitializer {
     TIntrusivePtr<TMemObserver> MemObserver;
 

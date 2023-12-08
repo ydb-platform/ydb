@@ -988,17 +988,31 @@ public:
         THolder<NMsgBusProxy::TBusPersQueue> alterRequest = requestDescr.GetRequest();
 
         ui32 prevVersion = GetTopicVersionFromMetadata(name);
+        while (prevVersion == 0) {
+            Sleep(TDuration::MilliSeconds(500));
 
+            prevVersion = GetTopicVersionFromMetadata(name);
+        }
         CallPersQueueGRPC(alterRequest->Record);
+        Cerr << "Alter got " << prevVersion << "\n";
 
         const TInstant start = TInstant::Now();
         AlterTopic();
-        while (GetTopicVersionFromMetadata(name, cacheSize) != prevVersion + 1) {
+        auto ver = GetTopicVersionFromMetadata(name, cacheSize);
+        while (ver != prevVersion + 1) {
+            Cerr << "Alter1 got " << ver << "\n";
+
             Sleep(TDuration::MilliSeconds(500));
+            ver = GetTopicVersionFromMetadata(name, cacheSize);
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
-        while (GetTopicVersionFromPath(name) != prevVersion + 1) {
+        auto ver2 = GetTopicVersionFromPath(name);
+        while (ver2 != prevVersion + 1) {
+            Cerr << "Alter2 got " << ver << "\n";
+
             Sleep(TDuration::MilliSeconds(500));
+            ver2 = GetTopicVersionFromPath(name);
+
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
 
@@ -1412,6 +1426,8 @@ public:
         auto settings = NYdb::NPersQueue::TCreateTopicSettings().PartitionsCount(params.PartsCount).ClientWriteDisabled(!params.CanWrite);
         settings.FederationAccount(params.Account);
         settings.SupportedCodecs(params.Codecs);
+        //settings.MaxPartitionWriteSpeed(50_MB);
+        //settings.MaxPartitionWriteBurst(50_MB);
         TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings;
         for (auto &user : params.ReadRules) {
             rrSettings.push_back({NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName(user)});

@@ -127,4 +127,6 @@ struct TDataKey {
     ui64 CumulativeSize;
 };
 
-} // namespace NKikimr
+
+} // namespace NKikimr::NPQ
+

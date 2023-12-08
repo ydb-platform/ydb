@@ -12,7 +12,6 @@ TVector<NPersQueue::TPQLabelsInfo> GetLabelsForCustomCluster(const TTopicConvert
 TVector<std::pair<TString, TString>> GetSubgroupsForTopic(const TTopicConverterPtr& topic, const TString& cloudId,
                                                       const TString& dbId, const TString& dbPath,
                                                       const TString& folderId);
-
 ::NMonitoring::TDynamicCounterPtr GetCounters(::NMonitoring::TDynamicCounterPtr counters,
                                             const TString& subsystem,
                                             const TTopicConverterPtr& topic);

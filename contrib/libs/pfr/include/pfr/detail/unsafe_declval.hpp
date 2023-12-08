@@ -1,10 +1,11 @@
-// Copyright (c) 2019-2021 Antony Polukhin.
+// Copyright (c) 2019-2023 Antony Polukhin.
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
 #ifndef PFR_DETAIL_UNSAFE_DECLVAL_HPP
 #define PFR_DETAIL_UNSAFE_DECLVAL_HPP
+#pragma once
 
 #include <pfr/detail/config.hpp>
 
@@ -24,7 +25,7 @@ template <class T>
 constexpr T unsafe_declval() noexcept {
     report_if_you_see_link_error_with_this_function();
 
-    typename std::remove_reference<T>::type* ptr = 0;
+    typename std::remove_reference<T>::type* ptr = nullptr;
     ptr += 42; // suppresses 'null pointer dereference' warnings
     return static_cast<T>(*ptr);
 }

@@ -29,6 +29,7 @@
   ".github/scripts/tests/log_parser.py":"ydb/github_toplevel/.github/scripts/tests/log_parser.py",
   ".github/scripts/tests/mute_utils.py":"ydb/github_toplevel/.github/scripts/tests/mute_utils.py",
   ".github/scripts/tests/pytest-postprocess.py":"ydb/github_toplevel/.github/scripts/tests/pytest-postprocess.py",
+  ".github/scripts/tests/split-junit.py":"ydb/github_toplevel/.github/scripts/tests/split-junit.py",
   ".github/scripts/tests/templates/summary.html":"ydb/github_toplevel/.github/scripts/tests/templates/summary.html",
   ".github/scripts/tests/transform-ya-junit.py":"ydb/github_toplevel/.github/scripts/tests/transform-ya-junit.py",
   ".github/workflows/allowed_dirs.yml":"ydb/github_toplevel/.github/workflows/allowed_dirs.yml",

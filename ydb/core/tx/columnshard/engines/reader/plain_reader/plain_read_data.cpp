@@ -12,7 +12,9 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<NOlap::TReadContext>& conte
     const auto& committed = GetReadMetadata()->CommittedBlobs;
     auto itCommitted = committed.begin();
     auto itPortion = portionsOrdered.begin();
-    ui64 portionsBytes = 0;
+    ui64 committedPortionsBytes = 0;
+    ui64 insertedPortionsBytes = 0;
+    ui64 compactedPortionsBytes = 0;
     while (itCommitted != committed.end() || itPortion != portionsOrdered.end()) {
         bool movePortion = false;
         if (itCommitted == committed.end()) {
@@ -26,7 +28,11 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<NOlap::TReadContext>& conte
         }
 
         if (movePortion) {
-            portionsBytes += (*itPortion)->BlobsBytes();
+            if ((*itPortion)->GetMeta().GetProduced() == NPortion::EProduced::COMPACTED || (*itPortion)->GetMeta().GetProduced() == NPortion::EProduced::SPLIT_COMPACTED) {
+                compactedPortionsBytes += (*itPortion)->BlobsBytes();
+            } else {
+                insertedPortionsBytes += (*itPortion)->BlobsBytes();
+            }
             auto start = GetReadMetadata()->BuildSortedPosition((*itPortion)->IndexKeyStart());
             auto finish = GetReadMetadata()->BuildSortedPosition((*itPortion)->IndexKeyEnd());
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", start.DebugJson())("finish", finish.DebugJson());
@@ -36,6 +42,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<NOlap::TReadContext>& conte
             auto start = GetReadMetadata()->BuildSortedPosition(itCommitted->GetFirstVerified());
             auto finish = GetReadMetadata()->BuildSortedPosition(itCommitted->GetLastVerified());
             sources.emplace_back(std::make_shared<TCommittedDataSource>(sourceIdx++, *itCommitted, SpecialReadContext, start, finish));
+            committedPortionsBytes += itCommitted->GetSize();
             ++itCommitted;
         }
     }
@@ -46,7 +53,9 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<NOlap::TReadContext>& conte
     stats->IndexBatches = GetReadMetadata()->NumIndexedBlobs();
     stats->CommittedBatches = GetReadMetadata()->CommittedBlobs.size();
     stats->SchemaColumns = (*SpecialReadContext->GetProgramInputColumns() - *SpecialReadContext->GetSpecColumns()).GetSize();
-    stats->PortionsBytes = portionsBytes;
+    stats->CommittedPortionsBytes = committedPortionsBytes;
+    stats->InsertedPortionsBytes = insertedPortionsBytes;
+    stats->CompactedPortionsBytes = compactedPortionsBytes;
 
 }
 

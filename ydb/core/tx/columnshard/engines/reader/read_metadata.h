@@ -30,7 +30,9 @@ struct TReadStats {
     ui64 IndexPortions{0};
     ui64 IndexBatches{0};
     ui64 CommittedBatches{0};
-    ui64 PortionsBytes{ 0 };
+    ui64 CommittedPortionsBytes = 0;
+    ui64 InsertedPortionsBytes = 0;
+    ui64 CompactedPortionsBytes = 0;
     ui64 DataFilterBytes{ 0 };
     ui64 DataAdditionalBytes{ 0 };
 

@@ -844,7 +844,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
             if (resRead.GetFinished()) {
                 UNIT_ASSERT(meta.HasReadStats());
                 auto& readStats = meta.GetReadStats();
-                ui64 numBytes = readStats.GetPortionsBytes(); // compressed bytes in storage
+                const ui64 numBytes = readStats.GetCompactedPortionsBytes() + readStats.GetInsertedPortionsBytes() + readStats.GetCommittedPortionsBytes();
                 specRowsBytes.back().second += numBytes;
                 numExpected = resRead.GetBatch() + 1;
             }

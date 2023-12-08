@@ -94,10 +94,12 @@ void TReadStats::PrintToLog() {
         ("schema_columns", SchemaColumns)
         ("filter_columns", FilterColumns)
         ("additional_columns", AdditionalColumns)
-        ("portions_bytes", PortionsBytes)
+        ("compacted_portions_bytes", CompactedPortionsBytes)
+        ("inserted_portions_bytes", InsertedPortionsBytes)
+        ("committed_portions_bytes", CommittedPortionsBytes)
         ("data_filter_bytes", DataFilterBytes)
         ("data_additional_bytes", DataAdditionalBytes)
-        ("delta_bytes", PortionsBytes - DataFilterBytes - DataAdditionalBytes)
+        ("delta_bytes", CompactedPortionsBytes + InsertedPortionsBytes + CommittedPortionsBytes - DataFilterBytes - DataAdditionalBytes)
         ("selected_rows", SelectedRows)
         ;
 }

@@ -15,6 +15,7 @@
 #include <ydb/library/yql/utils/log/proto/logger_config.pb.h>
 #include <ydb/library/yql/core/url_preprocessing/url_preprocessing.h>
 #include <ydb/library/yql/utils/actor_system/manager.h>
+#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 
 #include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
@@ -423,6 +424,7 @@ int RunMain(int argc, const char* argv[])
         }
     }
     THashMap<TString, TString> customTokens;
+    THashMap<TString, std::pair<ui32, ui32>> failureInjections;
     TString folderId;
 
     TRunOptions runOptions;
@@ -545,6 +547,18 @@ int RunMain(int argc, const char* argv[])
     opts.AddLongOption("metrics-pusher-config", "Metrics Pusher Config")
         .StoreResult(&mestricsPusherConfig);
     opts.AddLongOption("enable-spilling", "Enable disk spilling").NoArgument();
+    opts.AddLongOption("failure-inject", "Activate failure injection")
+        .Optional()
+        .RequiredArgument("INJECTION_NAME=FAIL_COUNT or INJECTION_NAME=SKIP_COUNT/FAIL_COUNT")
+        .KVHandler([&failureInjections](TString key, TString value) {
+            TStringBuf fail = value;
+            TStringBuf skip;
+            if (TStringBuf(value).TrySplit('/', skip, fail)) {
+                failureInjections[key] = std::make_pair(FromString<ui32>(skip), FromString<ui32>(fail));
+            } else {
+                failureInjections[key] = std::make_pair(ui32(0), FromString<ui32>(fail));
+            }
+        });
     opts.AddHelpOption('h');
 
     opts.SetFreeArgsNum(0);
@@ -620,6 +634,13 @@ int RunMain(int argc, const char* argv[])
     if (emulateYt && dqPort) {
         YQL_LOG(ERROR) << "Remote DQ instance cannot work with the emulated YT cluster";
         return 1;
+    }
+
+    if (!failureInjections.empty()) {
+        TFailureInjector::Activate();
+        for (auto& [name, count]: failureInjections) {
+            TFailureInjector::Set(name, count.first, count.second);
+        }
     }
 
     runOptions.ResultsFormat =

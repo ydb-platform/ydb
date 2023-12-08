@@ -5,17 +5,21 @@ namespace NKikimr::NOlap::NBlobOperations::NRead {
 TAtomicCounter TActor::WaitingBlobsCount = 0;
 
 void TActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) {
+    if (!Task) {
+        return;
+    }
     ACFL_TRACE("event", "TEvReadBlobRangeResult")("blob_id", ev->Get()->BlobRange);
 
     auto& event = *ev->Get();
-    WaitingBlobsCount.Dec();
 
     bool aborted = false;
     if (event.Status != NKikimrProto::EReplyStatus::OK) {
+        WaitingBlobsCount.Sub(Task->GetWaitingCount());
         if (!Task->AddError(event.BlobRange, IBlobsReadingAction::TErrorStatus::Fail(event.Status, "cannot get blob"))) {
             aborted = true;
         }
     } else {
+        WaitingBlobsCount.Dec();
         Task->AddData(event.BlobRange, event.Data);
     }
     if (aborted || Task->IsFinished()) {

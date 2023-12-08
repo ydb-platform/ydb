@@ -2,15 +2,16 @@
 
 PY3_LIBRARY()
 
-VERSION(1.1.0)
+VERSION(1.2.0)
 
 LICENSE(BSD-3-Clause)
 
 PEERDIR(
-    contrib/python/setuptools
+    contrib/python/cppy
 )
 
 ADDINCL(
+    contrib/python/cppy/cppy/include
     contrib/python/kiwisolver/py3
 )
 

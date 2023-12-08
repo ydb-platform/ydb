@@ -1,11 +1,12 @@
 import asyncio
 import logging
 import random
+import typing
 
 from ydb import issues
 from ydb.pool import ConnectionsCache as _ConnectionsCache, IConnectionPool
 
-from .connection import Connection
+from .connection import Connection, EndpointKey
 
 from . import resolver
 
@@ -21,7 +22,7 @@ class ConnectionsCache(_ConnectionsCache):
 
         self._fast_fail_error = None
 
-    async def get(self, preferred_endpoint=None, fast_fail=False, wait_timeout=10):
+    async def get(self, preferred_endpoint: typing.Optional[EndpointKey] = None, fast_fail=False, wait_timeout=10):
 
         if fast_fail:
             await asyncio.wait_for(self._fast_fail_event.wait(), timeout=wait_timeout)
@@ -34,7 +35,7 @@ class ConnectionsCache(_ConnectionsCache):
             return self.connections_by_node_id[preferred_endpoint.node_id]
 
         if preferred_endpoint is not None and preferred_endpoint.endpoint in self.connections:
-            return self.connections[preferred_endpoint]
+            return self.connections[preferred_endpoint.endpoint]
 
         for conn_lst in self.conn_lst_order:
             try:

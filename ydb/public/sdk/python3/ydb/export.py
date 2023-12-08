@@ -83,6 +83,7 @@ class ExportToYTSettings(s_impl.BaseRequestSettings):
         self.host = None
         self.port = None
         self.uid = None
+        self.use_type_v3 = False
 
     def with_port(self, port):
         self.port = port
@@ -116,6 +117,10 @@ class ExportToYTSettings(s_impl.BaseRequestSettings):
 
     def with_items(self, *items):
         self.items.extend(items)
+        return self
+
+    def with_use_type_v3(self, use_type_v3):
+        self.use_type_v3 = use_type_v3
         return self
 
 
@@ -191,6 +196,9 @@ def _export_to_yt_request_factory(settings):
 
     if settings.port:
         request.settings.port = settings.port
+
+    if settings.use_type_v3:
+        request.settings.use_type_v3 = settings.use_type_v3
 
     for source_path, destination_path in settings.items:
         request.settings.items.add(source_path=source_path, destination_path=destination_path)

@@ -1,6 +1,5 @@
 #include "columnshard_ut_common.h"
 #include <ydb/core/base/tablet.h>
-#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/services/metadata/service.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -20,7 +19,6 @@ namespace NKikimr {
 
 using namespace NTxUT;
 using namespace NColumnShard;
-using NWrappers::NTestHelpers::TS3Mock;
 
 enum class EInitialEviction {
     None,
@@ -1045,12 +1043,6 @@ void TestTwoHotTiers(bool reboot, bool changeTtl, const EInitialEviction initial
 }
 
 void TestHotAndColdTiers(bool reboot, const EInitialEviction initial) {
-    TPortManager portManager;
-    const ui16 port = portManager.GetPort();
-
-    TS3Mock s3Mock({}, TS3Mock::TSettings(port));
-    UNIT_ASSERT(s3Mock.Start());
-
     TTestSchema::TTableSpecials spec;
     spec.SetTtlColumn("timestamp");
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier0").SetTtlColumn("timestamp"));
@@ -1067,12 +1059,6 @@ struct TExportTestOpts {
 };
 
 void TestExport(bool reboot, TExportTestOpts&& opts = TExportTestOpts{}) {
-    TPortManager portManager;
-    const ui16 port = portManager.GetPort();
-
-    TS3Mock s3Mock({}, TS3Mock::TSettings(port));
-    UNIT_ASSERT(s3Mock.Start());
-
     TTestSchema::TTableSpecials spec;
     spec.SetTtlColumn("timestamp");
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("cold").SetTtlColumn("timestamp"));

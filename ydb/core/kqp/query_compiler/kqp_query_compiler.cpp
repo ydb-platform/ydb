@@ -1092,7 +1092,7 @@ private:
             const auto inputItemType = inputNodeType->Cast<TListExprType>()->GetItemType();
             sequencerProto.SetInputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *inputItemType), TypeEnv));
 
-            auto autoIncrementColumns = sequencer.AutoIncrementColumns();
+            auto autoIncrementColumns = sequencer.DefaultConstraintColumns();
             for(const auto& column : autoIncrementColumns) {
                 sequencerProto.AddAutoIncrementColumns(column.StringValue());
             }

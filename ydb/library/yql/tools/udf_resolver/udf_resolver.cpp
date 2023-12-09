@@ -37,7 +37,9 @@
 #include <linux/filter.h>
 #include <linux/seccomp.h>
 #include <linux/audit.h>
+#ifndef GRND_RANDOM
 #include <linux/random.h>
+#endif
 
 #ifndef __SI_MAX_SIZE
 #define __SI_MAX_SIZE        128

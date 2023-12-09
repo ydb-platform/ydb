@@ -57,7 +57,9 @@ runs:
         echo "LOG_DIR=$TMP_DIR/logs" >> $GITHUB_ENV
         echo "OUT_DIR=$TMP_DIR/out" >> $GITHUB_ENV
         echo "ARTIFACTS_DIR=$TMP_DIR/artifacts" >> $GITHUB_ENV
+        echo "REPORTS_ARTIFACTS_DIR=$TMP_DIR/artifacts/test_reports" >> $GITHUB_ENV
         echo "JUNIT_REPORT_XML=$TMP_DIR/junit.xml" >> $GITHUB_ENV
+        echo "JUNIT_REPORT_PARTS=$TMP_DIR/junit-split" >> $GITHUB_ENV
         echo "TESTMO_TOKEN=${{ inputs.testman_token }}" >> $GITHUB_ENV
         echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$(mktemp)" >> $GITHUB_ENV
@@ -65,8 +67,8 @@ runs:
     - name: prepare
       shell: bash
       run: |
-        rm -rf $TMP_DIR $JUNIT_REPORT_XML
-        mkdir -p $TMP_DIR $OUT_DIR $ARTIFACTS_DIR $LOG_DIR
+        rm -rf $TMP_DIR $JUNIT_REPORT_XML $JUNIT_REPORT_PARTS $REPORTS_ARTIFACTS_DIR
+        mkdir -p $TMP_DIR $OUT_DIR $ARTIFACTS_DIR $LOG_DIR $JUNIT_REPORT_PARTS $REPORTS_ARTIFACTS_DIR
     
     - name: Install Node required for Testmo CLI
       uses: actions/setup-node@v3
@@ -210,6 +212,11 @@ runs:
             fi
         )
 
+    - name: archive unitest reports (orig)
+      shell: bash
+      run: |
+        gzip -c $JUNIT_REPORT_XML > $REPORTS_ARTIFACTS_DIR/orig_junit.xml.gz
+    
     - name: postprocess junit report
       shell: bash
       run: |
@@ -220,6 +227,43 @@ runs:
           --log-url-prefix "$S3_URL_PREFIX/logs/" \
           --log-out-dir "$ARTIFACTS_DIR/logs/" \
           "$JUNIT_REPORT_XML"
+    
+        .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
+    
+    - name: archive unitest reports (transformed)
+      shell: bash
+      run: |
+        tar -C $JUNIT_REPORT_PARTS/.. -czf $REPORTS_ARTIFACTS_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
+
+    - name: Unit test history upload results
+      if: inputs.testman_token
+      shell: bash
+      run: |
+        PROXY_ADDR=127.0.0.1:8888
+        openssl req -x509 -newkey rsa:2048 \
+          -keyout $TMP_DIR/key.pem -out $TMP_DIR/cert.pem \
+          -sha256 -days 1 -nodes -subj "/CN=127.0.0.1"
+        
+        ./ydb/ci/testmo-proxy/testmo-proxy.py -l $PROXY_ADDR \
+          --cert-file "$TMP_DIR/cert.pem" \
+          --cert-key "$TMP_DIR/key.pem" \
+          --target-timeout 3,10 \
+          --max-request-time 55 \
+          "$TESTMO_URL" &
+        
+        proxy_pid=$!
+        
+        NODE_TLS_REJECT_UNAUTHORIZED=0 testmo automation:run:submit-thread \
+          --instance "https://$PROXY_ADDR" --run-id ${{ steps.th.outputs.runid }} \
+          --results "$JUNIT_REPORT_PARTS/*.xml"
+        
+        kill $proxy_pid
+
+    - name: Test history run complete
+      if: always() && inputs.testman_token
+      shell: bash
+      run: |
+        testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{ steps.th.outputs.runid }}
 
     - name: write tests summary
       shell: bash
@@ -227,7 +271,7 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
         mkdir $ARTIFACTS_DIR/summary/
-
+        
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         
         platform_name=$(uname | tr '[:upper:]' '[:lower:]')-$(arch)
@@ -239,23 +283,14 @@ runs:
           --build-preset "${platform_name}-${{ inputs.build_preset }}" \
           "Tests" ya-test.html "$JUNIT_REPORT_XML"
 
-
-    - name: Unit test history upload results
-      if: inputs.testman_token
-      shell: bash
-      run: |
-        testmo automation:run:submit-thread \
-          --instance "$TESTMO_URL" --run-id ${{ steps.th.outputs.runid }} \
-          --results "$JUNIT_REPORT_XML"
-
     - name: sync test results to s3
       if: always()
       shell: bash
       run: |
         echo "::group::s3-sync"
-        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$ARTIFACTS_DIR/" "$S3_BUCKET_PATH/"
+        s3cmd sync -r --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$ARTIFACTS_DIR/" "$S3_BUCKET_PATH/"
         echo "::endgroup::"
-
+    
     - name: sync logs results to s3
       if: always()
       shell: bash
@@ -263,14 +298,7 @@ runs:
         echo "::group::s3-sync"
         s3cmd sync --follow-symlinks --acl-private --no-progress --stats --no-check-md5 "$LOG_DIR/" "$S3_BUCKET_PATH/test_logs/"
         echo "::endgroup::"
-
-
-    - name: Test history run complete
-      if: always() && inputs.testman_token
-      shell: bash
-      run: |
-        testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{ steps.th.outputs.runid }}
-
+        
     - name: check test results
       shell: bash
       run: |

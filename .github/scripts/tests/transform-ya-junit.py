@@ -57,7 +57,7 @@ class YTestReportTrace:
         test_results_dir = os.path.join(self.out_root, f"{subdir}/test-results/")
 
         if not os.path.isdir(test_results_dir):
-            print(f"Directory {test_results_dir} doesn't exist")
+            log_print(f"Directory {test_results_dir} doesn't exist")
             return
 
         for folder in os.listdir(test_results_dir):

@@ -123,7 +123,7 @@ struct TDomainsInfo : public TThrRefBase {
                             defaultStateStorageGroup, defaultSchemeBoardGroup,
                             TVectorUi32(stateStorageGroups.begin(), stateStorageGroups.end()),
                             MakeCoordinatorsIds(TVectorUi64(coordinatorUids.begin(), coordinatorUids.end()), domainUid),
-                            MakeMediatrosIds(TVectorUi64(mediatorUids.begin(), mediatorUids.end()), domainUid),
+                            MakeMediatorsIds(TVectorUi64(mediatorUids.begin(), mediatorUids.end()), domainUid),
                             MakeAllocatorsIds(TVectorUi64(allocatorUids.begin(), allocatorUids.end()), domainUid),
                             defaultHiveUid, TVectorUi32(hiveUids.begin(), hiveUids.end()),
                             planResolution, &poolTypes);
@@ -144,7 +144,7 @@ struct TDomainsInfo : public TThrRefBase {
                             defaultStateStorageGroup, defaultSchemeBoardGroup,
                             TVectorUi32(stateStorageGroups.begin(), stateStorageGroups.end()),
                             MakeCoordinatorsIds(TVectorUi64(coordinatorUids.begin(), coordinatorUids.end()), domainUid),
-                            MakeMediatrosIds(TVectorUi64(mediatorUids.begin(), mediatorUids.end()), domainUid),
+                            MakeMediatorsIds(TVectorUi64(mediatorUids.begin(), mediatorUids.end()), domainUid),
                             MakeAllocatorsIds(TVectorUi64(allocatorUids.begin(), allocatorUids.end()), domainUid),
                             defaultHiveUid, TVectorUi32(hiveUids.begin(), hiveUids.end()),
                             planResolution, nullptr);
@@ -237,12 +237,12 @@ struct TDomainsInfo : public TThrRefBase {
             return MakeCoordinatorsIds(TransformIntoVectorUids(count), domainUid);
         }
 
-        static TVector<ui64> MakeMediatrosIds(TVector<ui64> &&uids, ui32 domainUid) {
+        static TVector<ui64> MakeMediatorsIds(TVector<ui64> &&uids, ui32 domainUid) {
             return TransformUids(std::move(uids), [&domainUid](ui32 uid) { return MakeTxMediatorID(domainUid, uid); });
         }
 
-        static TVector<ui64> MakeMediatrosIds(ui32 count, ui32 domainUid) {
-            return MakeMediatrosIds(TransformIntoVectorUids(count), domainUid);
+        static TVector<ui64> MakeMediatorsIds(ui32 count, ui32 domainUid) {
+            return MakeMediatorsIds(TransformIntoVectorUids(count), domainUid);
         }
 
         static TVector<ui64> MakeAllocatorsIds(TVector<ui64> &&uids, ui32 domainUid) {

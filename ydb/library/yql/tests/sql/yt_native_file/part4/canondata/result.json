@@ -3451,6 +3451,21 @@
             "uri": "file://test.test_params-no_optional_param-default.txt-Results_/extracted"
         }
     ],
+    "test.test[pg-drop_table--Debug]": [
+        {
+            "checksum": "ca9540ca7a9b99aac52ae5d266daa9b7",
+            "size": 2181,
+            "uri": "https://{canondata_backend}/1942525/e3a940019ce30db1abd11733965d1a08d079b0b0/resource.tar.gz#test.test_pg-drop_table--Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-drop_table--Plan]": [
+        {
+            "checksum": "ba9681deb327593f55fb446c8635c0f3",
+            "size": 7494,
+            "uri": "https://{canondata_backend}/1942525/e3a940019ce30db1abd11733965d1a08d079b0b0/resource.tar.gz#test.test_pg-drop_table--Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-drop_table--Results]": [],
     "test.test[pg-in_sorted-default.txt-Debug]": [
         {
             "checksum": "c8d67b6c2624cf5a0c3a52aec9da61ac",

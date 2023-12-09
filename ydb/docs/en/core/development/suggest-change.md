@@ -25,6 +25,17 @@ sudo apt-get update
 sudo apt-get install git
 ```
 
+### Build dependencies {#build_dependencies}
+
+You need to have some libraries installed on the development machine.
+
+To install it under Linux/Ubuntu run:
+
+```
+sudo apt-get update
+sudo apt-get install libidn11-dev libaio-dev libc6-dev
+```
+
 ### GitHub CLI {#gh_cli}
 
 Using GitHub CLI enables you to create Pull Requests and manage repositories from a command line. You can also use GitHub UI for such actions.

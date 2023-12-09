@@ -50,10 +50,10 @@ with_kotlinc_plugin_serialization="bool"
 
 [attrs.induced]
 consumer_classpath="list"
-"consumer.classpath"="list"
-"consumer.jar"="list"
-"consumer.type"="list"
-"consumer.prebuilt"="flag"
+consumer-classpath="str"
+consumer-jar="str"
+consumer-type="str"
+consumer-prebuilt="flag"
 
 [merge]
 test=[

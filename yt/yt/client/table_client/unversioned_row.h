@@ -450,7 +450,7 @@ bool ValidateNonKeyColumnsAgainstLock(
     const TLockMask& locks,
     const TTableSchema& schema,
     const TNameTableToSchemaIdMapping& idMapping,
-    const TNameTablePtr nameTable,
+    const TNameTablePtr& nameTable,
     const std::vector<int>& columnIndexToLockIndex,
     bool allowSharedWriteLocks);
 

@@ -411,7 +411,7 @@ public:
         case T_VariableShowStmt:
             return ParseVariableShowStmt(CAST_NODE(VariableShowStmt, node)) != nullptr;
         case T_TransactionStmt:
-            return true;
+            return ParseTransactionStmt(CAST_NODE(TransactionStmt, node));
         case T_IndexStmt:
             return ParseIndexStmt(CAST_NODE(IndexStmt, node)) != nullptr;
         default:
@@ -2246,6 +2246,26 @@ public:
         Statements.push_back(L(A("let"), A("world"), L(A("Commit!"),
             A("world"), A("result_sink"))));
         return Statements.back();
+    }
+
+    [[nodiscard]]
+    bool ParseTransactionStmt(const TransactionStmt* value) {
+        switch (value->kind) {
+        case TRANS_STMT_BEGIN: [[fallthrough]] ;
+        case TRANS_STMT_START:
+            return true;
+        case TRANS_STMT_COMMIT:
+            Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
+                A("world"))));
+            return true;
+        case TRANS_STMT_ROLLBACK:
+            Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
+                A("world"), QL(QL(QA("mode"), QA("rollback"))))));
+            return true;
+        default:
+            AddError(TStringBuilder() << "TransactionStmt: kind is not supported: " << (int)value->kind);
+            return false;
+        }
     }
 
     [[nodiscard]]

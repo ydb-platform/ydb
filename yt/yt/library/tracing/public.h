@@ -8,6 +8,8 @@ namespace NYT::NTracing {
 
 DECLARE_REFCOUNTED_STRUCT(ITracer)
 
+class TBatchTrace;
+
 class TAsyncQueueTrace;
 class TAsyncQueueTraceGuard;
 

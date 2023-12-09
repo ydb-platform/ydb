@@ -1179,7 +1179,7 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
                 source->Reset();
             }
             TypeCtx_->Reset();
-            CleanupLastSession();
+            CleanupLastSession().GetValueSync();
 
             std::function<void(const TIssuePtr& issue)> toInfo = [&](const TIssuePtr& issue) {
                 if (issue->Severity == TSeverityIds::S_ERROR

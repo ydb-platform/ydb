@@ -29,7 +29,7 @@ THashSet<TStringBuf> KEY_CALLABLES = {
 
 }
 
-bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx) {
+bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
     using namespace NNodes;
     if (!key.IsCallable(EXT_KEY_CALLABLES)) {
         ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), TStringBuf("Expected key")));
@@ -122,6 +122,9 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx) {
         if (key.ChildrenSize() > 3) {
             ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), "Too many tags"));
             return false;
+        }
+        if (isOutput) {
+            Type = EType::Table;
         }
     } else {
         ctx.AddError(TIssue(ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag: ") + tagName));
@@ -267,7 +270,7 @@ bool TYtOutputKey::Parse(const TExprNode& keyNode, TExprContext& ctx) {
     if (!keyNode.IsCallable(KEY_CALLABLES)) {
         return true;
     }
-    if (!TYtKey::Parse(keyNode, ctx)) {
+    if (!TYtKey::Parse(keyNode, ctx, true)) {
         return false;
     }
 

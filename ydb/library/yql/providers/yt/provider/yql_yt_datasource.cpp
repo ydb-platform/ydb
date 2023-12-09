@@ -217,7 +217,9 @@ public:
     }
 
     void PostRewriteIO() final {
-        State_->TablesData->CleanupCompiledSQL();
+        if (!State_->Types->EvaluationInProgress) {
+            State_->TablesData->CleanupCompiledSQL();
+        }
     }
 
     void Reset() final {
@@ -671,6 +673,7 @@ private:
 
             if (tableDesc.View) {
                 auto root = tableDesc.View->CompiledSql;
+                YQL_ENSURE(root);
                 if (readNode.World().Ref().Type() != TExprNode::World) {
                     // Inject original Read! dependencies
                     auto status = OptimizeExpr(root, root, [&readNode](const TExprNode::TPtr& node, TExprContext& ctx) {

@@ -317,6 +317,7 @@ SRCS(
     src/IO/OpenedFile.cpp
     src/IO/ParallelReadBuffer.cpp
     src/IO/PeekableReadBuffer.cpp
+    src/IO/PeekableWriteBuffer.cpp
     src/IO/Progress.cpp
     src/IO/ReadBuffer.cpp
     src/IO/ReadBufferFromEncryptedFile.cpp

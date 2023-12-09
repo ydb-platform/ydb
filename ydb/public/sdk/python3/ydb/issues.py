@@ -1,9 +1,18 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+
 from google.protobuf import text_format
 import enum
 import queue
+import typing
 
 from . import _apis
+
+# Workaround for good IDE and universal for runtime
+if typing.TYPE_CHECKING:
+    from _grpc.v4.protos import ydb_issue_message_pb2, ydb_operation_pb2
+else:
+    from ._grpc.common.protos import ydb_issue_message_pb2, ydb_operation_pb2
 
 
 _TRANSPORT_STATUSES_FIRST = 401000
@@ -44,10 +53,19 @@ class StatusCode(enum.IntEnum):
     SESSION_POOL_EMPTY = _CLIENT_STATUSES_FIRST + 40
 
 
+# TODO: convert from proto IssueMessage
+class _IssueMessage:
+    def __init__(self, message: str, issue_code: int, severity: int, issues) -> None:
+        self.message = message
+        self.issue_code = issue_code
+        self.severity = severity
+        self.issues = issues
+
+
 class Error(Exception):
     status = None
 
-    def __init__(self, message, issues=None):
+    def __init__(self, message: str, issues: typing.Optional[typing.Iterable[_IssueMessage]] = None):
         super(Error, self).__init__(message)
         self.issues = issues
         self.message = message
@@ -166,14 +184,14 @@ class UnexpectedGrpcMessage(Error):
         super().__init__(message)
 
 
-def _format_issues(issues):
+def _format_issues(issues: typing.Iterable[ydb_issue_message_pb2.IssueMessage]) -> str:
     if not issues:
         return ""
 
     return " ,".join(text_format.MessageToString(issue, as_utf8=False, as_one_line=True) for issue in issues)
 
 
-def _format_response(response):
+def _format_response(response: ydb_operation_pb2.Operation) -> str:
     fmt_issues = _format_issues(response.issues)
     return f"{fmt_issues} (server_code: {response.status})"
 
@@ -202,7 +220,7 @@ _server_side_error_map = {
 }
 
 
-def _process_response(response_proto):
+def _process_response(response_proto: ydb_operation_pb2.Operation) -> None:
     if response_proto.status not in _success_status_codes:
         exc_obj = _server_side_error_map.get(response_proto.status)
         raise exc_obj(_format_response(response_proto), response_proto.issues)

@@ -2,20 +2,18 @@
 
 #include <yt/yql/plugin/bridge/interface.h>
 
-#include <util/generic/hash.h>
-#include <util/generic/string.h>
-
 #include <library/cpp/logger/log.h>
 
 #include <library/cpp/yt/string/guid.h>
 
 #include <library/cpp/yt/yson_string/string.h>
 
+#include <util/generic/hash.h>
+#include <util/generic/string.h>
+
 #include <optional>
 
 namespace NYT::NYqlPlugin {
-
-using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -26,10 +24,10 @@ using TQueryId = TGuid;
 class TYqlPluginOptions
 {
 public:
-    TYsonString SingletonsConfig;
-    TYsonString GatewayConfig;
-    TYsonString FileStorageConfig;
-    TYsonString OperationAttributes;
+    NYson::TYsonString SingletonsConfig;
+    NYson::TYsonString GatewayConfig;
+    NYson::TYsonString FileStorageConfig;
+    NYson::TYsonString OperationAttributes;
 
     TString YTTokenPath;
 
@@ -57,6 +55,12 @@ struct TQueryFile
     EQueryFileContentType Type;
 };
 
+struct TAbortResult
+{
+    //! YSON representation of a YT error.
+    std::optional<TString> YsonError;
+};
+
 //! This interface encapsulates YT <-> YQL integration.
 //! There are two major implementation: one of them is based
 //! on YQL code and another wraps the pure C bridge interface, which
@@ -66,8 +70,15 @@ struct TQueryFile
 */
 struct IYqlPlugin
 {
-    virtual TQueryResult Run(TQueryId queryId, TString impersonationUser, TString queryText, TYsonString settings, std::vector<TQueryFile> files) noexcept = 0;
+    virtual TQueryResult Run(
+        TQueryId queryId,
+        TString impersonationUser,
+        TString queryText,
+        NYson::TYsonString settings,
+        std::vector<TQueryFile> files) noexcept = 0;
     virtual TQueryResult GetProgress(TQueryId queryId) noexcept = 0;
+
+    virtual TAbortResult Abort(TQueryId queryId) noexcept = 0;
 
     virtual ~IYqlPlugin() = default;
 };

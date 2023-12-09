@@ -5,6 +5,8 @@ BridgeFreeQueryResult
 BridgeRun
 BridgeGetProgress
 BridgeGetAbiVersion
+BridgeAbort
+BridgeFreeAbortResult
 
 # YQL <-> YQL UDFs interface.
 UdfAllocateWithSize

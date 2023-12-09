@@ -972,19 +972,29 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
             auto& readStats = meta.GetReadStats();
 
             if (ydbSchema == TTestSchema::YdbSchema()) {
-                Cerr << codec << "/" << readStats.GetPortionsBytes() << Endl;
-//                if (codec == "" || codec == "lz4") {
-//                    UNIT_ASSERT_GE(readStats.GetPortionsBytes() / 100000, 40);
-//                    UNIT_ASSERT_LE(readStats.GetPortionsBytes() / 100000, 50);
-//                } else if (codec == "none") {
-//                    UNIT_ASSERT_GE(readStats.GetPortionsBytes() / 100000, 65);
-//                    UNIT_ASSERT_LE(readStats.GetPortionsBytes() / 100000, 78);
-//                } else if (codec == "zstd") {
-//                    UNIT_ASSERT_GE(readStats.GetPortionsBytes() / 100000, 20);
-//                    UNIT_ASSERT_LE(readStats.GetPortionsBytes() / 100000, 30);
-//                } else {
-//                    UNIT_ASSERT(false);
-//                }
+                Cerr << codec << "/" << readStats.GetCompactedPortionsBytes() << "/" << readStats.GetInsertedPortionsBytes() << "/" << readStats.GetCommittedPortionsBytes() << Endl;
+                if (readStats.GetInsertedPortionsBytes()) {
+                    UNIT_ASSERT_GE(readStats.GetInsertedPortionsBytes() / 100000, 40);
+                    UNIT_ASSERT_LE(readStats.GetInsertedPortionsBytes() / 100000, 50);
+                }
+                if (readStats.GetCommittedPortionsBytes()) {
+                    UNIT_ASSERT_GE(readStats.GetCommittedPortionsBytes() / 100000, 65);
+                    UNIT_ASSERT_LE(readStats.GetCommittedPortionsBytes() / 100000, 78);
+                }
+                if (readStats.GetCompactedPortionsBytes()) {
+                    if (codec == "" || codec == "lz4") {
+                        UNIT_ASSERT_GE(readStats.GetCompactedPortionsBytes() / 100000, 40);
+                        UNIT_ASSERT_LE(readStats.GetCompactedPortionsBytes() / 100000, 50);
+                    } else if (codec == "none") {
+                        UNIT_ASSERT_GE(readStats.GetCompactedPortionsBytes() / 100000, 65);
+                        UNIT_ASSERT_LE(readStats.GetCompactedPortionsBytes() / 100000, 78);
+                    } else if (codec == "zstd") {
+                        UNIT_ASSERT_GE(readStats.GetCompactedPortionsBytes() / 100000, 20);
+                        UNIT_ASSERT_LE(readStats.GetCompactedPortionsBytes() / 100000, 30);
+                    } else {
+                        UNIT_ASSERT(false);
+                    }
+                }
             }
         }
     }

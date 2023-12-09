@@ -178,20 +178,6 @@ LINE 1: CREATE TABLE withoid() WITH OIDS;
 -- but explicitly not adding oids is still supported
 CREATE TEMP TABLE withoutoid() WITHOUT OIDS;
 DROP TABLE withoutoid;
--- Verify that subtransaction rollback restores rd_createSubid.
-BEGIN;
-CREATE TABLE remember_create_subid (c int);
-SAVEPOINT q;
-DROP TABLE remember_create_subid;
-ROLLBACK TO q;
-COMMIT;
--- Verify that subtransaction rollback restores rd_firstRelfilenodeSubid.
-CREATE TABLE remember_node_subid (c int);
-BEGIN;
-SAVEPOINT q;
-DROP TABLE remember_node_subid;
-ROLLBACK TO q;
-COMMIT;
 -- syntax does not allow empty list of values for list partitions
 CREATE TABLE fail_part PARTITION OF list_parted FOR VALUES IN ();
 ERROR:  syntax error at or near ")"

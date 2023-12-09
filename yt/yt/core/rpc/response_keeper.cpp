@@ -23,11 +23,6 @@ using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto EvictionPeriod = TDuration::Seconds(1);
-static constexpr auto EvictionTickTimeCheckPeriod = 1024;
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TResponseKeeper
     : public IResponseKeeper
 {
@@ -47,7 +42,7 @@ public:
         EvictionExecutor_ = New<TPeriodicExecutor>(
             Invoker_,
             BIND(&TResponseKeeper::OnEvict, MakeWeak(this)),
-            EvictionPeriod);
+            Config_->EvictionPeriod);
         EvictionExecutor_->Start();
 
         profiler.AddFuncGauge("/response_keeper/kept_response_count", MakeStrong(this), [this] {
@@ -361,7 +356,7 @@ private:
                 break;
             }
 
-            if (++counter % EvictionTickTimeCheckPeriod == 0) {
+            if (++counter % Config_->EvictionTickTimeCheckPeriod == 0) {
                 if (timer.GetElapsedTime() > Config_->MaxEvictionTickTime) {
                     YT_LOG_DEBUG("Response Keeper eviction tick interrupted (ResponseCount: %v)",
                         counter);

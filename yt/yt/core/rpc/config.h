@@ -350,8 +350,16 @@ public:
     //! For how long responses are kept in memory.
     TDuration ExpirationTime;
 
+    //! How often an eviction tick is initiated. Eviction drops old responses
+    //! that need no longer be kept in memory.
+    TDuration EvictionPeriod;
+
     //! Maximum time an eviction tick can spend.
     TDuration MaxEvictionTickTime;
+
+    //! The number of responses to evict between checking whether the tick is
+    //! taking too long (longer than MaxEvictionTickTime).
+    int EvictionTickTimeCheckPeriod;
 
     //! If |true| then initial warmup is enabled. In particular, #WarmupTime and #ExpirationTime are
     //! checked against each other. If |false| then initial warmup is disabled and #WarmupTime is ignored.

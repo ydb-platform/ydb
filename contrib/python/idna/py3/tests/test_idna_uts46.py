@@ -124,7 +124,7 @@ class TestIdnaTest(unittest.TestCase):
 
     def runTest(self):
         if not self.fields:
-            return ''
+            return
         source, to_unicode, to_unicode_status, to_ascii, to_ascii_status, to_ascii_t, to_ascii_t_status = self.fields
         if source in _SKIP_TESTS:
             return

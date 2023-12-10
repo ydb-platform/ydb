@@ -317,6 +317,11 @@ bool TTablesManager::TryFinalizeDropPath(NTabletFlatExecutor::TTransactionContex
     PathsToDrop.erase(itDrop);
     NIceDb::TNiceDb db(txc.DB);
     NColumnShard::Schema::EraseTableInfo(db, pathId);
+    const auto& table = Tables.find(pathId);
+    Y_ABORT_UNLESS(table != Tables.end(), "No schema for path %lu", pathId); 
+    for (auto&& tableVersion : table->second.GetVersions()) {
+        NColumnShard::Schema::EraseTableVersionInfo(db, pathId, tableVersion.first);
+    }
     return true;
 }
 

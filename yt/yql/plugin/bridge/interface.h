@@ -9,7 +9,8 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// NB(mpereskokova): don't forget to update min_required_abi_version at yt/yql/agent/config.cpp and abi_version in yt/yql/plugin/dynamic/impl.cpp during breaking changes
+// NB(mpereskokova): Do not forget to update EYqlPluginAbiVersion and supported versions
+// during ABI changes.
 using TFuncBridgeGetAbiVersion = ssize_t();
 
 ////////////////////////////////////////////////////////////////////////////////

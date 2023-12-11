@@ -477,6 +477,10 @@ namespace {
                 if (!AddFileByUrl(pos, args, ctx)) {
                     return false;
                 }
+            } else if (name == "SetFileOption") {
+                if (!SetFileOption(pos, args, ctx)) {
+                    return false;
+                }
             } else if (name == "AddFolderByUrl") {
                 if (!AddFolderByUrl(pos, args, ctx)) {
                     return false;
@@ -977,6 +981,25 @@ namespace {
             }
 
             return AddFileByUrlImpl(args[0], args[1], token, pos, ctx);
+        }
+
+        bool SetFileOptionImpl(const TStringBuf alias, const TString& key, const TString& value, const TPosition& pos, TExprContext& ctx) {
+            const auto dataKey = TUserDataStorage::ComposeUserDataKey(alias);
+            const auto dataBlock = Types.UserDataStorage->FindUserDataBlock(dataKey);
+            if (!dataBlock) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "No such file '" << alias << "'"));
+                return false;
+            }
+            dataBlock->Options[key] = value;
+            return true;
+        }
+
+        bool SetFileOption(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+            if (args.size() != 3) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 3 arguments, but got " << args.size()));
+                return false;
+            }
+            return SetFileOptionImpl(args[0], ToString(args[1]), ToString(args[2]), pos, ctx);
         }
 
         bool SetPackageVersion(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {

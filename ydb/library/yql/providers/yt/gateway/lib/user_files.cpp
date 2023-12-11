@@ -27,6 +27,15 @@ void TUserFiles::AddFile(const TUserDataKey& key, const TUserDataBlock& block) {
     TFileInfo userFile;
     userFile.IsUdf = block.Usage.Test(EUserDataBlockUsage::Udf);
 
+    if (block.Options.contains("bypass_artifact_cache")) {
+        auto option = block.Options.at(TString("bypass_artifact_cache"));
+        try {
+            userFile.BypassArtifactCache = FromString<bool>(option);
+        } catch (const TFromStringException &) {
+            YQL_LOG_CTX_THROW yexception() << "FileOption: invalid value for option bypass_artifact_cache: " << option;
+        }
+    }
+
     // we can optimize file copy if file resides on the same cluster
     // and provide only link
     TString cluster;

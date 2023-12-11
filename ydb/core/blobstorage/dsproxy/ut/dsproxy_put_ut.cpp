@@ -119,7 +119,7 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
         NKikimrProto::EReplyStatus status = group.OnVPut(vPut);
         vPutResult.MakeError(status, TString(), vPut.Record);
 
-        putImpl.OnVPutEventResult(logCtx, sender, vPutResult, nextVPuts, putResults);
+        putImpl.OnVPutEventResult(logCtx, sender, vPutResult, nextVPuts, putResults, {&group.GetInfo()->GetTopology()});
 
         if (putResults.size()) {
             break;
@@ -131,7 +131,7 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
     auto& [_, result] = putResults.front();
     UNIT_ASSERT(result->Status == NKikimrProto::OK);
     UNIT_ASSERT(result->Id == blobId);
-    UNIT_ASSERT(putImpl.GetHandoffPartsSent() == 7);
+    UNIT_ASSERT_VALUES_EQUAL(putImpl.GetHandoffPartsSent(), 2);
 }
 
 Y_UNIT_TEST(TestBlock42MaxPartCountOnHandoff) {
@@ -275,7 +275,7 @@ struct TTestPutAllOk {
 
             TActorId sender;
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts2;
-            putImpl.OnVPutEventResult(LogCtx, sender, *vPutResults[resIdx], vPuts2, putResults);
+            putImpl.OnVPutEventResult(LogCtx, sender, *vPutResults[resIdx], vPuts2, putResults, &Group.GetInfo()->GetTopology());
             if (putResults.size()) {
                 break;
             }
@@ -306,7 +306,8 @@ struct TTestPutAllOk {
 
             TActorId sender;
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVMultiPut>> vMultiPuts2;
-            putImpl.OnVPutEventResult(LogCtx, sender, *vMultiPutResults[resIdx], vMultiPuts2, putResults);
+            putImpl.OnVPutEventResult(LogCtx, sender, *vMultiPutResults[resIdx], vMultiPuts2, putResults,
+                &Group.GetInfo()->GetTopology());
             if (putResults.size() == BlobIds.size()) {
                 break;
             }

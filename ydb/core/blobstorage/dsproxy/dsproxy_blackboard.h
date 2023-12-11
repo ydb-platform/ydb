@@ -84,7 +84,6 @@ struct TBlobState {
     ui8 BlobIdx;
     NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
     bool IsChanged = false;
-    bool IsDone = false;
     std::vector<std::pair<ui64, ui32>> *ExtraBlockChecks = nullptr;
     NWilson::TSpan *Span = nullptr;
     bool Keep = false;
@@ -196,7 +195,6 @@ struct TBlackboard {
     const NKikimrBlobStorage::EPutHandleClass PutHandleClass;
     const NKikimrBlobStorage::EGetHandleClass GetHandleClass;
     const bool IsAllRequestsTogether;
-    ui64 DoneCount = 0;
 
     TBlackboard(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &groupQueues,
             NKikimrBlobStorage::EPutHandleClass putHandleClass, NKikimrBlobStorage::EGetHandleClass getHandleClass,
@@ -219,7 +217,10 @@ struct TBlackboard {
     void AddNoDataResponse(const TLogoBlobID &id, ui32 orderNumber);
     void AddErrorResponse(const TLogoBlobID &id, ui32 orderNumber);
     void AddNotYetResponse(const TLogoBlobID &id, ui32 orderNumber, bool keep, bool doNotKeep);
-    EStrategyOutcome RunStrategy(TLogContext &logCtx, const IStrategy& s, TBatchedVec<TBlobStates::value_type*> *finished = nullptr);
+    EStrategyOutcome RunStrategies(TLogContext& logCtx, const TStackVec<IStrategy*, 1>& strategies,
+        TBatchedVec<TBlobStates::value_type*> *finished = nullptr, const TBlobStorageGroupInfo::TGroupVDisks *expired = nullptr);
+    EStrategyOutcome RunStrategy(TLogContext &logCtx, const IStrategy& s, TBatchedVec<TBlobStates::value_type*> *finished = nullptr,
+            const TBlobStorageGroupInfo::TGroupVDisks *expired = nullptr);
     TBlobState& GetState(const TLogoBlobID &id);
     ssize_t AddPartMap(const TLogoBlobID &id, ui32 diskOrderNumber, ui32 requestIndex);
     void ReportPartMapStatus(const TLogoBlobID &id, ssize_t partMapIndex, ui32 responseIndex, NKikimrProto::EReplyStatus status);

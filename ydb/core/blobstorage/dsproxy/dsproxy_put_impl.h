@@ -189,11 +189,10 @@ public:
         }
 
         TPutResultVec putResults;
-        bool workDone = Step(logCtx, outVPuts, putResults);
+        Step(logCtx, outVPuts, putResults, {&Info->GetTopology()});
         IsInitialized = true;
         Y_ABORT_UNLESS(!outVPuts.empty());
         Y_ABORT_UNLESS(putResults.empty());
-        Y_ABORT_UNLESS(workDone);
     }
 
     template <typename TEvent>
@@ -321,7 +320,8 @@ public:
 
     template <typename TVPutEvent, typename TVPutEventResult>
     void OnVPutEventResult(TLogContext &logCtx, TActorId sender, TVPutEventResult &ev,
-            TDeque<std::unique_ptr<TVPutEvent>> &outVPutEvents, TPutResultVec &outPutResults)
+            TDeque<std::unique_ptr<TVPutEvent>> &outVPutEvents, TPutResultVec &outPutResults,
+            const TBlobStorageGroupInfo::TGroupVDisks& expired)
     {
         constexpr bool isVPut = std::is_same_v<TVPutEvent, TEvBlobStorage::TEvVPut>;
         constexpr bool isVMultiPut = std::is_same_v<TVPutEvent, TEvBlobStorage::TEvVMultiPut>;
@@ -388,14 +388,7 @@ public:
             return;
         }
 
-        Step(logCtx, outVPutEvents, outPutResults);
-        Y_VERIFY_S(DoneBlobs == Blobs.size() || requests > responses,
-                "No put result while"
-                << " Type# " << putType
-                << " DoneBlobs# " << DoneBlobs
-                << " requests# " << requests
-                << " responses# " << responses
-                << " Blackboard# " << Blackboard.ToString());
+        Step(logCtx, outVPutEvents, outPutResults, expired);
     }
 
     void PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logCtx, TString errorReason,
@@ -434,25 +427,19 @@ public:
         Blackboard.InvalidatePartStates(orderNumber);
     }
 
-protected:
-    bool RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults);
-    bool RunStrategy(TLogContext &logCtx, const IStrategy& strategy, TPutResultVec &outPutResults);
-
-    // Returns true if there are additional requests to send
     template <typename TVPutEvent>
-    bool Step(TLogContext &logCtx, TDeque<std::unique_ptr<TVPutEvent>> &outVPuts,
-            TPutResultVec &outPutResults) {
-        if (!RunStrategies(logCtx, outPutResults)) {
-            const ui32 numRequests = outVPuts.size();
-            PrepareVPuts(logCtx, outVPuts);
-            return outVPuts.size() > numRequests;
-        } else {
+    void Step(TLogContext &logCtx, TDeque<std::unique_ptr<TVPutEvent>> &outVPuts, TPutResultVec &outPutResults,
+            const TBlobStorageGroupInfo::TGroupVDisks& expired) {
+        if (RunStrategies(logCtx, outPutResults, expired)) {
             Y_ABORT_UNLESS(outPutResults.size());
-            PrepareVPuts(logCtx, outVPuts);
-            return false;
         }
+        PrepareVPuts(logCtx, outVPuts);
     }
 
+protected:
+    bool RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults, const TBlobStorageGroupInfo::TGroupVDisks& expired);
+    bool RunStrategy(TLogContext &logCtx, const IStrategy& strategy, TPutResultVec &outPutResults,
+        const TBlobStorageGroupInfo::TGroupVDisks& expired);
 
     template <typename TVPutEvent>
     void PrepareVPuts(TLogContext &logCtx, TDeque<std::unique_ptr<TVPutEvent>> &outVPutEvents) {

@@ -6,7 +6,6 @@
 namespace NKikimr {
     class TReader {
     private:
-        const TActorId NotifyId;
         const size_t BatchSize;
         TPDiskCtxPtr PDiskCtx;
         TQueue<TPartInfo> Parts;
@@ -21,9 +20,8 @@ namespace NKikimr {
             FINISHED,
         };
 
-        TReader(TActorId notifyId, size_t batchSize, TPDiskCtxPtr pDiskCtx, TQueue<TPartInfo> parts, TReplQuoter::TPtr replPDiskReadQuoter)
-            : NotifyId(notifyId)
-            , BatchSize(batchSize)
+        TReader(size_t batchSize, TPDiskCtxPtr pDiskCtx, TQueue<TPartInfo> parts, TReplQuoter::TPtr replPDiskReadQuoter)
+            : BatchSize(batchSize)
             , PDiskCtx(pDiskCtx)
             , Parts(std::move(parts))
             , Quoter(replPDiskReadQuoter)
@@ -85,6 +83,7 @@ namespace NKikimr {
             ++Responses;
             auto *msg = ev->Get();
             if (msg->Status != NKikimrProto::EReplyStatus::OK) {
+                Y_ABORT("aasdf");
                 return;
             }
             ui64 i = reinterpret_cast<ui64>(msg->Cookie);

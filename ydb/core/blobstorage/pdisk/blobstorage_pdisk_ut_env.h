@@ -82,6 +82,10 @@ public:
         UpdateConfigRecreatePDisk(cfg);
     }
 
+    TTestActorRuntime* GetRuntime() {
+        return Runtime.Get();
+    }
+
     TIntrusivePtr<TPDiskConfig> GetPDiskConfig() {
         if (!Settings.UsePDiskMock) {
             return GetPDisk()->Cfg;

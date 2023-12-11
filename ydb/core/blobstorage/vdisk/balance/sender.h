@@ -57,7 +57,7 @@ namespace NKikimr {
         )
             : QueueActorMapPtr(queueActorMapPtr)
             , Ctx(ctx)
-            , Reader(SelfId(), 32, Ctx->PDiskCtx, std::move(parts), ctx->VCtx->ReplPDiskReadQuoter)
+            , Reader(32, Ctx->PDiskCtx, std::move(parts), ctx->VCtx->ReplPDiskReadQuoter)
         {}
 
         void Bootstrap() {

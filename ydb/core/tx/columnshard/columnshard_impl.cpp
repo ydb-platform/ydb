@@ -84,11 +84,15 @@ bool ValidateTableSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) {
 
     for (const NKikimrSchemeOp::TOlapColumnDescription& column : schema.GetColumns()) {
         TString name = column.GetName();
-        keyColumns.erase(name);
-
+        /*
+        if (column.GetNotNull() && keyColumns.contains(name)) {
+            return false;
+        }
+        */
         if (name == firstKeyColumn && !supportedTypes.contains(column.GetTypeId())) {
             return false;
         }
+        keyColumns.erase(name);
     }
 
     if (!keyColumns.empty()) {

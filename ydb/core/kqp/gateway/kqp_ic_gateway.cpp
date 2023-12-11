@@ -2398,6 +2398,16 @@ private:
             tableDesc.SetColumnShardCount(*metadata->TableSettings.MinPartitions);
         }
 
+        if (metadata->TableSettings.TtlSettings.Defined() && metadata->TableSettings.TtlSettings.IsSet()) {
+            const auto& inputSettings = metadata->TableSettings.TtlSettings.GetValueSet();
+            auto& resultSettings = *tableDesc.MutableTtlSettings();
+            resultSettings.MutableEnabled()->SetColumnName(inputSettings.ColumnName);
+            resultSettings.MutableEnabled()->SetExpireAfterSeconds(inputSettings.ExpireAfter.Seconds());
+            if (inputSettings.ColumnUnit) {
+                resultSettings.MutableEnabled()->SetColumnUnit(static_cast<NKikimrSchemeOp::TTTLSettings::EUnit>(*inputSettings.ColumnUnit));
+            }
+        }
+
         return true;
     }
 

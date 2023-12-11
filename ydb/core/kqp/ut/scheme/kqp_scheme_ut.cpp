@@ -5149,6 +5149,63 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
     }
 
+    Y_UNIT_TEST(CreateTableWithTtl) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id_second").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32),
+            TTestHelper::TColumnSchema().SetName("created_at").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id", "id_second"}).SetSharding({"id"}).SetSchema(schema).SetTTL("created_at", "Interval(\"PT1H\")");
+        testHelper.CreateTable(testTable);
+
+        {
+            auto settings = TDescribeTableSettings().WithTableStatistics(true);
+            auto describeResult = testHelper.GetSession().DescribeTable("/Root/ColumnTableTest", settings).GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+
+            const auto& description = describeResult.GetTableDescription();
+            auto columns = description.GetTableColumns();
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 4);
+            UNIT_ASSERT(description.GetTtlSettings());
+            UNIT_ASSERT_VALUES_EQUAL(description.GetTtlSettings()->GetDateTypeColumn().GetExpireAfter(), TDuration::Hours(1));
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableWithoutTtl) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id_second").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32),
+            TTestHelper::TColumnSchema().SetName("created_at").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id", "id_second"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            auto settings = TDescribeTableSettings().WithTableStatistics(true);
+            auto describeResult = testHelper.GetSession().DescribeTable("/Root/ColumnTableTest", settings).GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+
+            const auto& description = describeResult.GetTableDescription();
+            auto columns = description.GetTableColumns();
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 4);
+            UNIT_ASSERT(!description.GetTtlSettings());
+        }
+    }
+
     Y_UNIT_TEST(AddColumnWithTtl) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;

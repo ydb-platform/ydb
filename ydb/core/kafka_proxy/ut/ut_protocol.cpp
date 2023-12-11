@@ -1208,6 +1208,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         ui64 minActivePartitions = 10;
 
         TString consumerName = "consumer-0";
+        TString consumer1Name = "consumer-1";
 
         TString key = "record-key";
         TString value = "record-value";
@@ -1221,6 +1222,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                     .CreateTopic(topicName,
                                  NYdb::NTopic::TCreateTopicSettings()
                                     .BeginAddConsumer(consumerName).EndAddConsumer()
+                                    .BeginAddConsumer(consumer1Name).EndAddConsumer()
                                     .PartitioningSettings(minActivePartitions, 100))
                     .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -1271,6 +1273,36 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
 
         {
+            // Commit offset for consumer-0
+            auto settings = NTopic::TReadSessionSettings()
+                .AppendTopics(NTopic::TTopicReadSettings(topicName))
+                .ConsumerName("consumer-0");
+            auto topicReader = pqClient.CreateReadSession(settings);
+
+            auto m = Read(topicReader);
+            UNIT_ASSERT_EQUAL(m.size(), 1);
+
+            UNIT_ASSERT_EQUAL(m[0].GetMessages().size(), 1);
+            auto& m0 = m[0].GetMessages()[0];
+            m0.Commit();
+        }
+
+        {
+            // Commit offset for consumer-1
+            auto settings = NTopic::TReadSessionSettings()
+                .AppendTopics(NTopic::TTopicReadSettings(topicName))
+                .ConsumerName("consumer-1");
+            auto topicReader = pqClient.CreateReadSession(settings);
+
+            auto m = Read(topicReader);
+            UNIT_ASSERT_EQUAL(m.size(), 1);
+
+            UNIT_ASSERT_EQUAL(m[0].GetMessages().size(), 1);
+            auto& m0 = m[0].GetMessages()[0];
+            m0.Commit();
+        }
+
+        {
             // Check commited offset after produce
             std::map<TString, std::vector<i32>> topicsToPartions;
             topicsToPartions[topicName] = std::vector<i32>{0, 1, 2, 3};
@@ -1281,10 +1313,64 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 4);
             auto partition0 = std::find_if(partitions.begin(), partitions.end(), [](const auto& partition) { return partition.PartitionIndex == 0; });
             UNIT_ASSERT_VALUES_UNEQUAL(partition0, partitions.end());
-            // This check faled one time under asan, commented until I figure out the exact reason.
-            // UNIT_ASSERT_VALUES_EQUAL(partition0->CommittedOffset, 1);
+            UNIT_ASSERT_VALUES_EQUAL(partition0->CommittedOffset, 1);
         }
 
+        {
+            // Check with nonexistent topic
+            std::map<TString, std::vector<i32>> topicsToPartions;
+            topicsToPartions["nonexTopic"] = std::vector<i32>{0, 1};
+            auto msg = client.OffsetFetch(consumerName, topicsToPartions);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 2);
+            for (const auto& partition : msg->Groups[0].Topics[0].Partitions) {
+                UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, UNKNOWN_TOPIC_OR_PARTITION);
+            }
+        }
+
+        {
+            // Check with nonexistent consumer 
+            std::map<TString, std::vector<i32>> topicsToPartions;
+            topicsToPartions[topicName] = std::vector<i32>{0, 1};
+            auto msg = client.OffsetFetch("nonexConsumer", topicsToPartions);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 2);
+            for (const auto& partition : msg->Groups[0].Topics[0].Partitions) {
+                UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, RESOURCE_NOT_FOUND);
+            }
+        }
+
+        {
+            // Check with 2 consumers
+            TOffsetFetchRequestData request;
+
+            TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics topic;
+            topic.Name = topicName;
+            auto partitionIndexes = std::vector<int>{0};
+            topic.PartitionIndexes = partitionIndexes;
+
+            TOffsetFetchRequestData::TOffsetFetchRequestGroup group0;
+            group0.GroupId = consumerName;
+            group0.Topics.push_back(topic);
+            request.Groups.push_back(group0);
+
+            TOffsetFetchRequestData::TOffsetFetchRequestGroup group1;
+            group1.GroupId = consumer1Name;
+            group1.Topics.push_back(topic);
+            request.Groups.push_back(group1);
+
+            auto msg = client.OffsetFetch(request);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 2);
+            for (const auto& group: msg->Groups) {
+                UNIT_ASSERT_VALUES_EQUAL(group.Topics.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(group.Topics[0].Partitions.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(group.Topics[0].Partitions[0].CommittedOffset, 1);
+                UNIT_ASSERT_VALUES_EQUAL(group.Topics[0].Partitions[0].ErrorCode, NONE_ERROR);
+            }
+        }
     } // Y_UNIT_TEST(OffsetFetchScenario)
 
     Y_UNIT_TEST(LoginWithApiKey) {

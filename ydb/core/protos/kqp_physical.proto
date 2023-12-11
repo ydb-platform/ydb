@@ -389,9 +389,6 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateUser = 5;
         NKikimrSchemeOp.TModifyScheme AlterUser = 6;
         NKikimrSchemeOp.TModifyScheme DropUser = 7;
-
-        string Type = 9;
-        uint64 Flags = 10;
     }
 }
 

@@ -44,6 +44,10 @@ ELSEIF (OS_DARWIN)
         -framework
         CoreFoundation
     )
+ELSEIF (OS_WINDOWS)
+    CFLAGS(
+        -DAWS_COMMON_EXPORTS
+    )
 ELSE()
     CFLAGS(
         -DAWS_AFFINITY_METHOD=AWS_AFFINITY_METHOD_PTHREAD_ATTR
@@ -87,17 +91,6 @@ SRCS(
     source/lru_cache.c
     source/math.c
     source/memtrace.c
-    source/posix/clock.c
-    source/posix/condition_variable.c
-    source/posix/device_random.c
-    source/posix/environment.c
-    source/posix/file.c
-    source/posix/mutex.c
-    source/posix/process.c
-    source/posix/rw_lock.c
-    source/posix/system_info.c
-    source/posix/thread.c
-    source/posix/time.c
     source/priority_queue.c
     source/process_common.c
     source/promise.c
@@ -123,6 +116,22 @@ ELSEIF (ARCH_X86_64)
         source/arch/intel/cpuid.c
     )
     SRC_C_AVX2(source/arch/intel/encoding_avx2.c)
+ENDIF()
+
+IF (NOT OS_WINDOWS)
+    SRCS(
+        source/posix/clock.c
+        source/posix/condition_variable.c
+        source/posix/device_random.c
+        source/posix/environment.c
+        source/posix/file.c
+        source/posix/mutex.c
+        source/posix/process.c
+        source/posix/rw_lock.c
+        source/posix/system_info.c
+        source/posix/thread.c
+        source/posix/time.c
+    )
 ENDIF()
 
 END()

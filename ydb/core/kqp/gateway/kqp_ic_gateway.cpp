@@ -12,6 +12,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -653,7 +654,7 @@ private:
 
 template<typename TResult>
 TFuture<TResult> InvalidCluster(const TString& cluster) {
-    return MakeFuture(ResultFromError<TResult>("Invalid cluster:" + cluster));
+    return MakeFuture(ResultFromError<TResult>("Invalid cluster: " + cluster));
 }
 
 void KqpResponseToQueryResult(const NKikimrKqp::TEvQueryResponse& response, IKqpGateway::TQueryResult& queryResult) {
@@ -1212,7 +1213,7 @@ public:
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalTable);
 
             NKikimrSchemeOp::TExternalTableDescription& externalTableDesc = *schemeTx.MutableCreateExternalTable();
-            FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, settings);
+            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, settings);
             return SendSchemeRequest(ev.Release(), true);
         }
         catch (yexception& e) {
@@ -2300,13 +2301,13 @@ private:
     }
 
     bool GetDatabaseForLoginOperation(TString& database) {
-        return SetDatabaseForLoginOperation(database, GetDomainLoginOnly(), GetDomainName(), GetDatabase());
+        return NSchemeHelpers::SetDatabaseForLoginOperation(database, GetDomainLoginOnly(), GetDomainName(), GetDatabase());
     }
 
     bool GetPathPair(const TString& tableName, std::pair<TString, TString>& pathPair,
         TString& error, bool createDir)
     {
-        return SplitTablePath(tableName, Database, pathPair, error, createDir);
+        return NSchemeHelpers::SplitTablePath(tableName, Database, pathPair, error, createDir);
     }
 
 private:
@@ -2355,33 +2356,6 @@ private:
         }
 
         schema.SetEngine(NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES);
-    }
-
-    static void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescription& externalTableDesc,
-                                                  const TString& name,
-                                                  const NYql::TCreateExternalTableSettings& settings)
-    {
-        externalTableDesc.SetName(name);
-        externalTableDesc.SetDataSourcePath(settings.DataSourcePath);
-        externalTableDesc.SetLocation(settings.Location);
-        externalTableDesc.SetSourceType("General");
-
-        Y_ENSURE(settings.ColumnOrder.size() == settings.Columns.size());
-        for (const auto& name : settings.ColumnOrder) {
-            auto columnIt = settings.Columns.find(name);
-            Y_ENSURE(columnIt != settings.Columns.end());
-
-            TColumnDescription& columnDesc = *externalTableDesc.AddColumns();
-            columnDesc.SetName(columnIt->second.Name);
-            columnDesc.SetType(columnIt->second.Type);
-            columnDesc.SetNotNull(columnIt->second.NotNull);
-        }
-        NKikimrExternalSources::TGeneral general;
-        auto& attributes = *general.mutable_attributes();
-        for (const auto& [key, value]: settings.SourceTypeParameters) {
-            attributes.insert({key, value});
-        }
-        externalTableDesc.SetContent(general.SerializeAsString());
     }
 
     static void FillParameters(TQueryData::TPtr params, ::google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>* output) {
@@ -2468,27 +2442,6 @@ TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, NKikimr
     return MakeIntrusive<TKikimrIcGateway>(cluster, queryType, database, std::move(metadataLoader), actorSystem, nodeId,
         counters, queryServiceConfig);
 }
-
-bool SplitTablePath(const TString& tableName, const TString& database, std::pair<TString, TString>& pathPair,
-    TString& error, bool createDir)
-{
-    if (createDir) {
-        return TrySplitPathByDb(tableName, database, pathPair, error);
-    } else {
-        return IKqpGateway::TrySplitTablePath(tableName, pathPair, error);
-    }
-}
-
-bool SetDatabaseForLoginOperation(TString& result, bool getDomainLoginOnly, TMaybe<TString> domainName,
-    const TString& database)
-{
-    if (getDomainLoginOnly && !domainName) {
-        return false;
-    }
-    result = domainName ? "/" + *domainName : database;
-    return true;
-}
-
 
 } // namespace NKqp
 } // namespace NKikimr

@@ -41,6 +41,7 @@ TIntrusivePtr<NKqp::IKqpGateway> GetIcGateway(Tests::TServer& server) {
 
 TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, NYql::IModuleResolver::TPtr moduleResolver,
+    NActors::TActorSystem* actorSystem,
     const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry = nullptr,
     const TVector<NKikimrKqp::TKqpSetting>& settings = {}, bool keepConfigChanges = false)
 {
@@ -54,7 +55,7 @@ TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> ga
 
     auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}});
     return NKqp::CreateKqpHost(gateway, cluster, "/Root", kikimrConfig, moduleResolver,
-                               federatedQuerySetup, funcRegistry, funcRegistry, keepConfigChanges);
+                               federatedQuerySetup, funcRegistry, funcRegistry, keepConfigChanges, nullptr, actorSystem);
 }
 
 NYql::NNodes::TExprBase GetExpr(const TString& ast, NYql::TExprContext& ctx, NYql::IModuleResolver* moduleResolver) {
@@ -95,7 +96,7 @@ void CreateTableWithIndexWithState(
     metadata->KeyColumnNames.push_back("key");
 
     {
-        auto gatewayProxy = CreateKqpGatewayProxy(gateway, nullptr);
+        auto gatewayProxy = CreateKqpGatewayProxy(gateway, nullptr, server.GetRuntime()->GetAnyNodeActorSystem());
         auto result = gatewayProxy->CreateTable(metadata, true).ExtractValueSync();
         UNIT_ASSERT(result.Success());
     }
@@ -125,7 +126,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         NYql::IModuleResolver::TPtr moduleResolver;
         YQL_ENSURE(GetYqlDefaultModuleResolver(moduleCtx, moduleResolver));
         auto qp = CreateKikimrQueryProcessor(gateway, TestCluster, moduleResolver,
-            server.GetFunctionRegistry());
+            server.GetRuntime()->GetAnyNodeActorSystem(), server.GetFunctionRegistry());
 
         {
             const TString query = Q_(R"(
@@ -281,7 +282,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         NYql::IModuleResolver::TPtr moduleResolver;
         YQL_ENSURE(GetYqlDefaultModuleResolver(moduleCtx, moduleResolver));
         auto qp = CreateKikimrQueryProcessor(gateway, TestCluster, moduleResolver,
-            server.GetFunctionRegistry());
+            server.GetRuntime()->GetAnyNodeActorSystem(), server.GetFunctionRegistry());
 
         {
             const TString query = Q_(R"(
@@ -1869,7 +1870,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             {
                 auto settings = TExplainDataQuerySettings();
                 settings.WithCollectFullDiagnostics(true);
-            
+
                 auto result = session.ExplainDataQuery(
                     query, settings)
                     .ExtractValueSync();
@@ -1902,7 +1903,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             {
                 auto settings = TExplainDataQuerySettings();
-            
+
                 auto result = session.ExplainDataQuery(
                     query, settings)
                     .ExtractValueSync();

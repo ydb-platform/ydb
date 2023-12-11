@@ -10,6 +10,7 @@ SRCS(
 PEERDIR(
     ydb/services/metadata/manager
     ydb/core/formats/arrow/compression
+    ydb/core/kqp/gateway/utils
     ydb/core/protos
 )
 

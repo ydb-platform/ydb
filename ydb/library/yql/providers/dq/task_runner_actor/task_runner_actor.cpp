@@ -111,7 +111,7 @@ private:
                     } else if (line.Contains("No such transaction")) {
                         // YQL-15542
                         fallback = true;
-                    } else if (line.Contains("(NYT::TErrorException) Request timed out")) {
+                    } else if (line.Contains("YT RPC Reader exception:")) {
                         // RPC reader fallback to YT
                         fallback = true;
                     } else if (line.Contains("Transaction") && line.Contains("aborted")) {

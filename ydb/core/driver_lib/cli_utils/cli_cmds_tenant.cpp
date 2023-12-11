@@ -304,6 +304,8 @@ public:
             for (auto &unit : result.registered_resources()) {
                 Cout << "    " << unit.host() << ":" << unit.port() << " - " << unit.unit_kind() << Endl;
             }
+            Cout << "  Data size hard quota: " << result.database_quotas().data_size_hard_quota() << Endl;
+            Cout << "  Data size soft quota: " << result.database_quotas().data_size_soft_quota() << Endl;
         }
     }
 };
@@ -317,6 +319,8 @@ class TClientCommandTenantCreate
     TVector<TString> Attributes;
     bool Shared = false;
     bool Serverless = false;
+    uint64_t DataSizeHardQuota;
+    uint64_t DataSizeSoftQuota;
 
 public:
     TClientCommandTenantCreate()
@@ -331,6 +335,10 @@ public:
             .NoArgument();
         config.Opts->AddLongOption("attr", "Attach attribute name=value to database")
             .RequiredArgument("NAME=VALUE").AppendTo(&Attributes);
+        config.Opts->AddLongOption("data-size-hard-quota", "A maximum data size in bytes, new data will be rejected when exceeded")
+            .OptionalArgument("NUM").StoreResult(&DataSizeHardQuota);
+        config.Opts->AddLongOption("data-size-soft-quota", "Data size in bytes (lower than data_size_hard_quota), at this value new data ingestion is re-enabled again")
+            .OptionalArgument("NUM").StoreResult(&DataSizeSoftQuota);
         config.Opts->AddLongOption("shared", "Create a shared database")
             .NoArgument().StoreTrue(&Shared);
         config.Opts->AddLongOption("serverless", "Create a serverless database (free arg must specify shared database for resources)")
@@ -376,6 +384,12 @@ public:
             protoPool.set_unit_kind(pool.first);
             protoPool.set_count(pool.second);
         }
+
+        if (config.ParseResult->Has("data-size-hard-quota"))
+            GRpcRequest.mutable_database_quotas()->set_data_size_hard_quota(DataSizeHardQuota);
+
+        if (config.ParseResult->Has("data-size-soft-quota"))
+            GRpcRequest.mutable_database_quotas()->set_data_size_soft_quota(DataSizeSoftQuota);
     }
 };
 
@@ -606,6 +620,40 @@ public:
     }
 };
 
+class TClientCommandTenantChangeQuotas
+    : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService,
+                                      Ydb::Cms::AlterDatabaseRequest,
+                                      Ydb::Cms::AlterDatabaseResponse,
+                                      decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase),
+                                      &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase> {
+
+    uint64_t DataSizeHardQuota;
+    uint64_t DataSizeSoftQuota;
+public:
+    TClientCommandTenantChangeQuotas()
+        : TTenantClientGRpcCommand("quotas", {}, "Change data size quotas for database")
+    {}
+
+    void Config(TConfig& config) override {
+        TTenantClientGRpcCommand::Config(config);
+        config.SetFreeArgsMin(0);
+        config.Opts->AddLongOption("data-size-hard-quota", "A maximum data size in bytes, new data will be rejected when exceeded")
+            .RequiredArgument("NUM").StoreResult(&DataSizeHardQuota);
+        config.Opts->AddLongOption("data-size-soft-quota", "Data size in bytes (lower than data_size_hard_quota), at this value new data ingestion is re-enabled again")
+            .OptionalArgument("NUM").StoreResult(&DataSizeSoftQuota);
+    }
+
+    void Parse(TConfig& config) override
+    {
+        TTenantClientGRpcCommand::Parse(config);
+
+        GRpcRequest.mutable_database_quotas()->set_data_size_hard_quota(DataSizeHardQuota);
+
+        if (config.ParseResult->Has("data-size-soft-quota"))
+            GRpcRequest.mutable_database_quotas()->set_data_size_soft_quota(DataSizeSoftQuota);
+    }
+};
+
 class TClientCommandTenantUnits : public TClientCommandTree {
 public:
     TClientCommandTenantUnits()
@@ -627,6 +675,15 @@ public:
     }
 };
 
+class TClientCommandTenantQuotas : public TClientCommandTree {
+public:
+    TClientCommandTenantQuotas()
+        : TClientCommandTree("quotas", {}, "")
+    {
+        AddCommand(std::make_unique<TClientCommandTenantChangeQuotas>());
+    }
+};
+
 class TClientCommandTenantName : public TClientCommandTree {
 public:
     TClientCommandTenantName()
@@ -637,6 +694,7 @@ public:
         AddCommand(std::make_unique<TClientCommandTenantRemove>());
         AddCommand(std::make_unique<TClientCommandTenantStatus>());
         AddCommand(std::make_unique<TClientCommandTenantUnits>());
+        AddCommand(std::make_unique<TClientCommandTenantQuotas>());
     }
 
     virtual void Parse(TConfig& config) override {

@@ -9,10 +9,12 @@ namespace NConsoleClient {
 
 class TCsvParser {
 public:
-    TCsvParser(TString&& headerRow, const char delimeter, const std::map<TString, TType>& paramTypes, const std::map<TString, TString>& paramSources);
+    TCsvParser(TString&& headerRow, const char delimeter,
+               const std::map<TString, TType>& paramTypes, const std::map<TString, TString>* paramSources = nullptr);
 
     void GetParams(TString&& data, TParamsBuilder& builder);
-    void GetValue(TString&& data, const TType& type, TValueBuilder& builder);
+    void GetValue(TString&& data, TValueBuilder& builder, const TType& type);
+    TType GetColumnsType();
 
 private:
     TValue FieldToValue(TTypeParser& parser, TStringBuf token);
@@ -21,7 +23,7 @@ private:
     TString HeaderRow;
     const char Delimeter;
     const std::map<TString, TType>& ParamTypes;
-    const std::map<TString, TString>& ParamSources;
+    const std::map<TString, TString>* ParamSources;
 };
 
 }

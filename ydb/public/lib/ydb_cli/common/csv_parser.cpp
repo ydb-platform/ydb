@@ -40,12 +40,12 @@ public:
         size_t cnt;
         try {
             auto value = StringToArithmetic<T>(token, cnt);
-            if (cnt != token.Size() || value < std::numeric_limits<T>::min() || value > std::numeric_limits<T>::max()) {
+            if (cnt != token.Size() || value < std::numeric_limits<T>::lowest() || value > std::numeric_limits<T>::max()) {
                 throw yexception();
             }
             return static_cast<T>(value);
         } catch (std::exception& e) {
-           throw TMisuseException() << "Expected " << Parser.GetPrimitive() << " value, recieved: \"" << token << "\".";
+            throw TMisuseException() << "Expected " << Parser.GetPrimitive() << " value, recieved: \"" << token << "\".";
         }
     }
 
@@ -240,7 +240,8 @@ private:
 
 }
 
-TCsvParser::TCsvParser(TString&& headerRow, const char delimeter, const std::map<TString, TType>& paramTypes, const std::map<TString, TString>& paramSources) 
+TCsvParser::TCsvParser(TString&& headerRow, const char delimeter,
+                       const std::map<TString, TType>& paramTypes, const std::map<TString, TString>* paramSources) 
     : HeaderRow(std::move(headerRow))
     , Delimeter(delimeter)
     , ParamTypes(paramTypes)
@@ -269,9 +270,11 @@ void TCsvParser::GetParams(TString&& data, TParamsBuilder& builder) {
             ++headerIt;
             continue;
         }
-        auto paramSource = ParamSources.find(fullname);
-        if (paramSource != ParamSources.end()) {
-            throw TMisuseException() << "Parameter " << fullname << " value found in more than one source: stdin, " << paramSource->second << ".";
+        if (ParamSources) {
+            auto paramSource = ParamSources->find(fullname);
+            if (paramSource != ParamSources->end()) {
+                throw TMisuseException() << "Parameter " << fullname << " value found in more than one source: stdin, " << paramSource->second << ".";
+            }
         }
         TTypeParser parser(paramIt->second);
         builder.AddParam(fullname, FieldToValue(parser, token));
@@ -283,20 +286,20 @@ void TCsvParser::GetParams(TString&& data, TParamsBuilder& builder) {
     }
 }
 
-void TCsvParser::GetValue(TString&& data, const TType& type, TValueBuilder& builder) {
+void TCsvParser::GetValue(TString&& data, TValueBuilder& builder, const TType& type) {
     NCsvFormat::CsvSplitter splitter(data, Delimeter);
-    auto headerIt = Header.begin();
+    auto headerIt = Header.cbegin();
     std::map<TString, TStringBuf> fields;
     do {
         TStringBuf token = splitter.Consume();
-        if (headerIt == Header.end()) {
+        if (headerIt == Header.cend()) {
             throw TMisuseException() << "Header contains less fields than data. Header: \"" << HeaderRow << "\", data: \"" << data << "\"";
         }
         fields[*headerIt] = token;
         ++headerIt;
     } while (splitter.Step());
 
-    if (headerIt != Header.end()) {
+    if (headerIt != Header.cend()) {
         throw TMisuseException() << "Header contains more fields than data. Header: \"" << HeaderRow << "\", data: \"" << data << "\"";
     }
     builder.BeginStruct();
@@ -312,6 +315,16 @@ void TCsvParser::GetValue(TString&& data, const TType& type, TValueBuilder& buil
     }
     parser.CloseStruct();
     builder.EndStruct();
+}
+
+TType TCsvParser::GetColumnsType() {
+    TTypeBuilder builder;
+    builder.BeginStruct();
+    for (const auto& colName : Header) {
+        builder.AddMember(colName, ParamTypes.at(colName));
+    }
+    builder.EndStruct();
+    return builder.Build();
 }
 
 }

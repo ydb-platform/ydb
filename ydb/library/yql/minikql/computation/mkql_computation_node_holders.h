@@ -679,7 +679,7 @@ public:
     NUdf::TUnboxedValuePod RangeAsArray(TForwardIterator first, TForwardIterator last) const {
         auto count = std::distance(first, last);
         if (count == 0)
-            return GetEmptyContainer();
+            return GetEmptyContainerLazy();
 
         NUdf::TUnboxedValue* itemsPtr = nullptr;
         auto tuple = CreateDirectArrayHolder(count, itemsPtr);
@@ -796,9 +796,7 @@ public:
         return MemInfo;
     }
 
-    NUdf::TUnboxedValuePod GetEmptyContainer() const {
-        return static_cast<const NUdf::TUnboxedValuePod&>(EmptyContainer);
-    }
+    NUdf::TUnboxedValuePod GetEmptyContainerLazy() const;
 
     void CleanupModulesOnTerminate() const {
         if (FunctionRegistry) {
@@ -826,7 +824,7 @@ private:
     TAllocState* const CurrentAllocState;
     TMemoryUsageInfo& MemInfo;
     const IFunctionRegistry* const FunctionRegistry;
-    const NUdf::TUnboxedValue EmptyContainer;
+    mutable TMaybe<NUdf::TUnboxedValue> EmptyContainer;
 
     mutable TTypeOperationsRegistry<NUdf::IHash> HashRegistry;
     mutable TTypeOperationsRegistry<NUdf::IEquate> EquateRegistry;

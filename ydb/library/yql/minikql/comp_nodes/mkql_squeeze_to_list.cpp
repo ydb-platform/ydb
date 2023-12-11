@@ -22,7 +22,7 @@ public:
 
         NUdf::TUnboxedValuePod Pull(TComputationContext& ctx) {
             if (Accumulator.empty())
-                return ctx.HolderFactory.GetEmptyContainer();
+                return ctx.HolderFactory.GetEmptyContainerLazy();
 
             NUdf::TUnboxedValue* items = nullptr;
             const auto list = ctx.HolderFactory.CreateDirectArrayHolder(Accumulator.size(), items);

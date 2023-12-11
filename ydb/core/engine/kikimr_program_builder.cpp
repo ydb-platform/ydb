@@ -54,7 +54,7 @@ TReadRangeOptions::TReadRangeOptions(ui32 valueType, const TTypeEnvironment& env
     , BytesLimit(BuildDataLiteral(NUdf::TUnboxedValuePod((ui64)0), NUdf::EDataSlot::Uint64, env), true)
     , InitValue(BuildEmptyOptionalDataLiteral(valueType, env), true)
     , TermValue(BuildEmptyOptionalDataLiteral(valueType, env), true)
-    , PayloadStruct(env.GetEmptyStruct(), true)
+    , PayloadStruct(env.GetEmptyStructLazy(), true)
     , Flags(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)TFlags::Default), NUdf::EDataSlot::Uint32, env), true)
 {
 }
@@ -145,7 +145,7 @@ void TUpdateRowBuilder::InplaceUpdateColumn(
 
 void TUpdateRowBuilder::EraseColumn(ui32 columnId)
 {
-    Builder.Add(ToString(columnId), TRuntimeNode(Env.GetVoid(), true));
+    Builder.Add(ToString(columnId), TRuntimeNode(Env.GetVoidLazy(), true));
 }
 
 TRuntimeNode TUpdateRowBuilder::Build()
@@ -393,7 +393,7 @@ TRuntimeNode TKikimrProgramBuilder::UpdateRow(
 {
     auto rows = FixKeysType(keyTypes, row);
 
-    TCallableBuilder builder(Env, "UpdateRow", Env.GetTypeOfVoid());
+    TCallableBuilder builder(Env, "UpdateRow", Env.GetTypeOfVoidLazy());
 
     builder.Add(BuildTableId(tableId));
     builder.Add(NewTuple(TKeyColumnValues(rows)));
@@ -408,7 +408,7 @@ TRuntimeNode TKikimrProgramBuilder::EraseRow(
 {
     auto rows = FixKeysType(keyTypes, row);
 
-    TCallableBuilder builder(Env, "EraseRow", Env.GetTypeOfVoid());
+    TCallableBuilder builder(Env, "EraseRow", Env.GetTypeOfVoidLazy());
 
     builder.Add(BuildTableId(tableId));
     builder.Add(NewTuple(TKeyColumnValues(rows)));
@@ -491,7 +491,7 @@ TRuntimeNode TKikimrProgramBuilder::FlatMapParameter(
 TRuntimeNode TKikimrProgramBuilder::AcquireLocks(TRuntimeNode lockTxId) {
     MKQL_ENSURE(AS_TYPE(TDataType, lockTxId)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "LockTxId must be ui64");
 
-    TCallableBuilder callableBuilder(Env, "AcquireLocks", Env.GetTypeOfVoid());
+    TCallableBuilder callableBuilder(Env, "AcquireLocks", Env.GetTypeOfVoidLazy());
     callableBuilder.Add(lockTxId);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
@@ -506,7 +506,7 @@ TRuntimeNode TKikimrProgramBuilder::CombineByKeyMerge(TRuntimeNode list) {
 }
 
 TRuntimeNode TKikimrProgramBuilder::Diagnostics() {
-    TCallableBuilder callableBuilder(Env, "Diagnostics", Env.GetTypeOfVoid());
+    TCallableBuilder callableBuilder(Env, "Diagnostics", Env.GetTypeOfVoidLazy());
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -646,7 +646,7 @@ TRuntimeNode TKikimrProgramBuilder::Build(TRuntimeNode listOfVoid, ui32 bindFlag
 }
 
 TRuntimeNode TKikimrProgramBuilder::Abort() {
-    TCallableBuilder callableBuilder(Env, "Abort", Env.GetVoid()->GetGenericType());
+    TCallableBuilder callableBuilder(Env, "Abort", Env.GetVoidLazy()->GetGenericType());
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -664,7 +664,7 @@ TRuntimeNode TKikimrProgramBuilder::SetResult(const TStringBuf& label, TRuntimeN
     MKQL_ENSURE(!label.empty(), "label must not be empty");
     MKQL_ENSURE(CanExportType(payload.GetStaticType(), Env),
         TStringBuilder() << "Failed to export type:" << *payload.GetStaticType());
-    TCallableBuilder builder(Env, "SetResult", Env.GetTypeOfVoid());
+    TCallableBuilder builder(Env, "SetResult", Env.GetTypeOfVoidLazy());
     builder.Add(TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::String>(label));
     builder.Add(payload);
     return TRuntimeNode(builder.Build(), false);

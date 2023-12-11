@@ -146,7 +146,7 @@ TStructTypeBuilder& TStructTypeBuilder::Add(const TStringBuf& name, TType* type,
 
 TStructType* TStructTypeBuilder::Build() {
     if (Members.empty())
-        return Env->GetEmptyStruct()->GetType();
+        return Env->GetEmptyStructLazy()->GetType();
 
     Sort(Members.begin(), Members.end());
     return TStructType::Create(Members.size(), Members.data(), *Env);
@@ -185,7 +185,7 @@ TStructLiteralBuilder& TStructLiteralBuilder::Add(const TStringBuf& name, TRunti
 TStructLiteral* TStructLiteralBuilder::Build() {
     Y_DEBUG_ABORT_UNLESS(Members.size() == Values.size());
     if (Members.empty())
-        return Env->GetEmptyStruct();
+        return Env->GetEmptyStructLazy();
 
     TVector<std::pair<TStringBuf, ui32>> sortedIndicies(Members.size());
     for (ui32 i = 0, e = Members.size(); i < e; ++i) {

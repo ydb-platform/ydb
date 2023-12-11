@@ -300,7 +300,7 @@ TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
     } else {
         ref = value.AsStringRef();
     }
-    if (!isPg && (!copy && !value.IsEmbedded() || value.IsString() || TCell::CanInline(ref.Size()))) {
+    if (!isPg && !copy && !value.IsEmbedded() && (value.IsString() || TCell::CanInline(ref.Size()))) {
         return TCell(ref.Data(), ref.Size());
     }
 

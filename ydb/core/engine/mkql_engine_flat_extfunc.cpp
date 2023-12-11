@@ -76,7 +76,7 @@ namespace {
     public:
         TEmptyRangeHolder(const THolderFactory& holderFactory)
             : TComputationValue(&holderFactory.GetMemInfo())
-            , EmptyContainer(holderFactory.GetEmptyContainer())
+            , EmptyContainer(holderFactory.GetEmptyContainerLazy())
         {
         }
     private:

@@ -776,7 +776,7 @@ static NUdf::TUnboxedValue CreateEmptyRange(const THolderFactory& holderFactory)
     NUdf::TUnboxedValue* itemsPtr = nullptr;
     auto res = holderFactory.CreateDirectArrayHolder(4, itemsPtr);
     // Empty list (data container)
-    itemsPtr[0] = NUdf::TUnboxedValue(holderFactory.GetEmptyContainer());
+    itemsPtr[0] = NUdf::TUnboxedValue(holderFactory.GetEmptyContainerLazy());
     // Truncated flag
     itemsPtr[1] = NUdf::TUnboxedValuePod(false);
     // First key

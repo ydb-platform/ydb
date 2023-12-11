@@ -273,7 +273,7 @@ namespace {
             if (mapping.Field->label() == FieldDescriptor::LABEL_REPEATED) {
                 const auto size = static_cast<ui32>(reflection->FieldSize(*source, mapping.Field));
                 if (size == 0) {
-                    destination[i] = factory.GetEmptyContainer();
+                    destination[i] = factory.GetEmptyContainerLazy();
                 } else {
                     TUnboxedValue* inplace = nullptr;
                     destination[i] = factory.CreateDirectArrayHolder(size, inplace);

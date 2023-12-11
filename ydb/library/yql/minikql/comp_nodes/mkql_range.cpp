@@ -498,7 +498,7 @@ public:
         }
         for (size_t i = 1; i < expandedLists.size(); ++i) {
             if (expandedLists[i].empty()) {
-                return ctx.HolderFactory.GetEmptyContainer();
+                return ctx.HolderFactory.GetEmptyContainerLazy();
             }
             if (!DoMultiply(ctx, limit, current, expandedLists[i], currentComponentsCompare, TypeInfos[i])) {
                 return FullRange(ctx);

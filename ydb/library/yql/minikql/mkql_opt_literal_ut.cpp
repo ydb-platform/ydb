@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         auto pgmReturn = pgmBuilder.FlatMap(list,
             [&](TRuntimeNode item) {
                 Y_UNUSED(item);
-                return pgmBuilder.NewEmptyOptional(pgmBuilder.NewOptionalType(env.GetTypeOfVoid()));
+                return pgmBuilder.NewEmptyOptional(pgmBuilder.NewOptionalType(env.GetTypeOfVoidLazy()));
             });
 
         auto pgm = LiteralPropagationOptimization(pgmReturn, env, true).GetNode();

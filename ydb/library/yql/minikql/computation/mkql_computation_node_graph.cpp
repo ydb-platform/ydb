@@ -360,11 +360,11 @@ private:
     }
 
     void Visit(TEmptyList& node) override {
-        AddNode(node, NodeFactory->CreateImmutableNode(PatternNodes->HolderFactory->GetEmptyContainer()));
+        AddNode(node, NodeFactory->CreateImmutableNode(PatternNodes->HolderFactory->GetEmptyContainerLazy()));
     }
 
     void Visit(TEmptyDict& node) override {
-        AddNode(node, NodeFactory->CreateImmutableNode(PatternNodes->HolderFactory->GetEmptyContainer()));
+        AddNode(node, NodeFactory->CreateImmutableNode(PatternNodes->HolderFactory->GetEmptyContainerLazy()));
     }
 
     void Visit(TDataLiteral& node) override {

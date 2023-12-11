@@ -109,7 +109,7 @@ public:
     private:
         NUdf::TUnboxedValue GetListIterator() const override {
             if (Lists.empty()) {
-                return Ctx.HolderFactory.GetEmptyContainer();
+                return Ctx.HolderFactory.GetEmptyContainerLazy();
             }
 
             TUnboxedValueVector iters;
@@ -184,7 +184,7 @@ public:
         const auto size = *(All ? std::max_element(sizes.cbegin(), sizes.cend()) : std::min_element(sizes.cbegin(), sizes.cend()));
 
         if (!size)
-            return ctx.HolderFactory.GetEmptyContainer();
+            return ctx.HolderFactory.GetEmptyContainerLazy();
 
         NUdf::TUnboxedValue *listItems = nullptr;
         const auto list = ctx.HolderFactory.CreateDirectArrayHolder(size, listItems);

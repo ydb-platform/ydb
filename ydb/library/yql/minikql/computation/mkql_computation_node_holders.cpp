@@ -14,6 +14,7 @@
 #include <ydb/library/yql/public/udf/udf_value.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <util/generic/singleton.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -705,7 +706,7 @@ public:
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.GetEmptyContainer();
+        return ctx.HolderFactory.GetEmptyContainerLazy();
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -713,7 +714,7 @@ public:
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
         const auto factory = ctx.GetFactory();
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::GetEmptyContainer));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::GetEmptyContainerLazy));
 
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
             const auto funType = FunctionType::get(valueType, {factory->getType()}, false);
@@ -3183,7 +3184,7 @@ public:
 
     NUdf::TUnboxedValue Build() override {
         if (Items_.empty())
-            return HolderFactory_.GetEmptyContainer();
+            return HolderFactory_.GetEmptyContainerLazy();
 
         if (DictFlags_ & NUdf::TDictFlags::Hashed) {
             auto prepareFn = (DictFlags_ & NUdf::TDictFlags::Multi)
@@ -3319,7 +3320,6 @@ private:
     TKeyPayloadPairVector Items_;
 };
 
-
 //////////////////////////////////////////////////////////////////////////////
 // THolderFactory
 //////////////////////////////////////////////////////////////////////////////
@@ -3330,24 +3330,31 @@ THolderFactory::THolderFactory(
     : CurrentAllocState(&allocState)
     , MemInfo(memInfo)
     , FunctionRegistry(functionRegistry)
-    , EmptyContainer(NUdf::TUnboxedValuePod(AllocateOn<TEmptyContainerHolder>(CurrentAllocState, &MemInfo)))
 {
-    CurrentAllocState->LockObject(EmptyContainer);
 }
 
 THolderFactory::~THolderFactory() {
-    CurrentAllocState->UnlockObject(EmptyContainer);
+    if (EmptyContainer) {
+        CurrentAllocState->UnlockObject(*EmptyContainer);
+    }
 }
 
-NUdf::TUnboxedValuePod THolderFactory::CreateTypeHolder(TType* type) const
-{
+NUdf::TUnboxedValuePod THolderFactory::GetEmptyContainerLazy() const {
+    if (!EmptyContainer) {
+        EmptyContainer.ConstructInPlace(
+            NUdf::TUnboxedValuePod(AllocateOn<TEmptyContainerHolder>(CurrentAllocState, &MemInfo)));
+        CurrentAllocState->LockObject(*EmptyContainer);
+    }
+    return *EmptyContainer;
+}
+
+NUdf::TUnboxedValuePod THolderFactory::CreateTypeHolder(TType* type) const {
     return NUdf::TUnboxedValuePod(AllocateOn<TTypeHolder>(CurrentAllocState, &MemInfo, type));
 }
 
-NUdf::TUnboxedValuePod THolderFactory::CreateDirectListHolder(TDefaultListRepresentation&& items) const
-{
+NUdf::TUnboxedValuePod THolderFactory::CreateDirectListHolder(TDefaultListRepresentation&& items) const{
     if (!items.GetLength())
-        return GetEmptyContainer();
+        return GetEmptyContainerLazy();
 
     return NUdf::TUnboxedValuePod(AllocateOn<TDirectListHolder>(CurrentAllocState, &MemInfo, std::move(items)));
 }
@@ -3355,7 +3362,7 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectListHolder(TDefaultListRepres
 NUdf::TUnboxedValuePod THolderFactory::CreateDirectArrayHolder(ui64 size, NUdf::TUnboxedValue*& itemsPtr) const {
     if (!size) {
         itemsPtr = nullptr;
-        return GetEmptyContainer();
+        return GetEmptyContainerLazy();
     }
 
     const auto buffer = MKQLAllocFastWithSize(
@@ -3373,7 +3380,7 @@ NUdf::TUnboxedValuePod THolderFactory::CreateArrowBlock(arrow::Datum&& datum) co
 
 NUdf::TUnboxedValuePod THolderFactory::VectorAsArray(TUnboxedValueVector& values) const {
     if (values.empty())
-        return GetEmptyContainer();
+        return GetEmptyContainerLazy();
 
     NUdf::TUnboxedValue* itemsPtr = nullptr;
     auto tuple = CreateDirectArrayHolder(values.size(), itemsPtr);
@@ -3427,7 +3434,7 @@ NUdf::TUnboxedValuePod THolderFactory::CloneArray(const NUdf::TUnboxedValuePod l
         }
     } else {
         items = nullptr;
-        return GetEmptyContainer();
+        return GetEmptyContainerLazy();
     }
 }
 
@@ -3457,7 +3464,7 @@ NUdf::TUnboxedValuePod THolderFactory::CreateLimitedList(
         TMaybe<ui64> knownLength) const
 {
     if (take && !take.GetRef()) {
-        return GetEmptyContainer();
+        return GetEmptyContainerLazy();
     }
 
     if (skip && !skip.GetRef()) {
@@ -3466,7 +3473,7 @@ NUdf::TUnboxedValuePod THolderFactory::CreateLimitedList(
 
     if (knownLength && skip) {
         if (skip.GetRef() >= knownLength.GetRef()) {
-            return GetEmptyContainer();
+            return GetEmptyContainerLazy();
         }
     }
 
@@ -3603,7 +3610,7 @@ NUdf::TUnboxedValuePod THolderFactory::Prepend(NUdf::TUnboxedValuePod first, NUd
 
 NUdf::TUnboxedValuePod THolderFactory::ExtendStream(NUdf::TUnboxedValue* data, ui64 size) const {
     if (!data || !size) {
-        return GetEmptyContainer();
+        return GetEmptyContainerLazy();
     }
 
     TUnboxedValueVector values(size);
@@ -3614,7 +3621,7 @@ NUdf::TUnboxedValuePod THolderFactory::ExtendStream(NUdf::TUnboxedValue* data, u
 template<>
 NUdf::TUnboxedValuePod THolderFactory::ExtendList<true>(NUdf::TUnboxedValue* data, ui64 size) const {
     if (!data || !size) {
-        return GetEmptyContainer();
+        return GetEmptyContainerLazy();
     }
 
     TUnboxedValueVector values;
@@ -3626,7 +3633,7 @@ NUdf::TUnboxedValuePod THolderFactory::ExtendList<true>(NUdf::TUnboxedValue* dat
 template<>
 NUdf::TUnboxedValuePod THolderFactory::ExtendList<false>(NUdf::TUnboxedValue* data, ui64 size) const {
     if (!data || !size) {
-        return GetEmptyContainer();
+        return GetEmptyContainerLazy();
     }
 
     using TElementsAndSize = std::tuple<const NUdf::TUnboxedValuePod*, ui64, ui64>;
@@ -3649,7 +3656,7 @@ NUdf::TUnboxedValuePod THolderFactory::ExtendList<false>(NUdf::TUnboxedValue* da
 
     if (!total) {
         std::fill_n(data, size, NUdf::TUnboxedValue());
-        return GetEmptyContainer();
+        return GetEmptyContainerLazy();
     }
 
     if (1U == elements.size()) {
@@ -4004,7 +4011,7 @@ TContainerCacheOnContext::TContainerCacheOnContext(TComputationMutables& mutable
 
 NUdf::TUnboxedValuePod TContainerCacheOnContext::NewArray(TComputationContext& ctx, ui64 size, NUdf::TUnboxedValue*& items) const {
     if (!size)
-        return ctx.HolderFactory.GetEmptyContainer();
+        return ctx.HolderFactory.GetEmptyContainerLazy();
 
     auto& index = ctx.MutableValues[Index];
     if (index.IsInvalid())

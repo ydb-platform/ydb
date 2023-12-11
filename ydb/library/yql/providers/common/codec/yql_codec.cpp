@@ -1263,7 +1263,7 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
         CHECK_EXPECTED(cmd, BeginListSymbol);
         cmd = buf.Read();
         CHECK_EXPECTED(cmd, EndListSymbol);
-        return holderFactory.GetEmptyContainer();
+        return holderFactory.GetEmptyContainerLazy();
     }
 
     case TType::EKind::EmptyDict: {
@@ -1276,7 +1276,7 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
             CHECK_EXPECTED(cmd, EndMapSymbol);
         }
 
-        return holderFactory.GetEmptyContainer();
+        return holderFactory.GetEmptyContainerLazy();
     }
 
     case TType::EKind::Pg: {
@@ -1817,7 +1817,7 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* ty
     }
 
     if (type->IsEmptyList() || type->IsEmptyDict()) {
-        return holderFactory.GetEmptyContainer();
+        return holderFactory.GetEmptyContainerLazy();
     }
 
     if (type->IsDict()) {

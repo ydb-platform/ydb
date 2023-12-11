@@ -818,7 +818,7 @@ public:
             if (const auto size = list.GetListLength())
                 itemsCountHint = size;
             else
-                return ctx.HolderFactory.GetEmptyContainer();
+                return ctx.HolderFactory.GetEmptyContainerLazy();
         }
 
         TSetAccumulator accumulator(KeyType, KeyTypes, IsTuple, Encoded, Compare.Get(), Equate.Get(), Hash.Get(),
@@ -1349,7 +1349,7 @@ public:
             if (const auto size = list.GetListLength())
                 itemsCountHint = size;
             else
-                return ctx.HolderFactory.GetEmptyContainer();
+                return ctx.HolderFactory.GetEmptyContainerLazy();
         }
 
         TMapAccumulator accumulator(KeyType, PayloadType, KeyTypes, IsTuple, Encoded,

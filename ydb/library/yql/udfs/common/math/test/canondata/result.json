@@ -26,5 +26,10 @@
             "size": 10168,
             "uri": "https://storage.yandex-team.ru/get-devtools/1937429/e098bd35e45d8b2d18b6958e5e9b0a875d6a03f1/resource.tar.gz#test.test_IR_LLVM_OFF_/results.txt"
         }
+    ],
+    "test.test[NearbyInt]": [
+        {
+            "uri": "file://test.test_NearbyInt_/results.txt"
+        }
     ]
 }

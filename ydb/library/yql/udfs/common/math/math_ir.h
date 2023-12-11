@@ -15,7 +15,11 @@ namespace NUdf {
 #define CONST_FUNCS(XX)                             \
     XX(Pi, M_PI)                                    \
     XX(E, M_E)                                      \
-    XX(Eps, std::numeric_limits<double>::epsilon())
+    XX(Eps, std::numeric_limits<double>::epsilon()) \
+    XX(RoundDownward, 0) \
+    XX(RoundToNearest, 1) \
+    XX(RoundTowardZero, 2) \
+    XX(RoundUpward, 3)
 
 #define SINGLE_ARG_FUNCS(XX)            \
     XX(Abs, Abs)                        \
@@ -133,6 +137,12 @@ void ModIR(const IBoxedValue* /*pThis*/, TUnboxedValuePod* result, const IValueB
 extern "C" UDF_ALWAYS_INLINE
 void RemIR(const IBoxedValue* /*pThis*/, TUnboxedValuePod* result, const IValueBuilder* /*valueBuilder*/, const TUnboxedValuePod* args) {
     const auto val = NMathUdf::Rem(args[0].Get<i64>(), args[1].Get<i64>());
+    *result = val ? TUnboxedValuePod(*val) : TUnboxedValuePod();
+}
+
+extern "C" UDF_ALWAYS_INLINE
+void NearbyIntIR(const IBoxedValue* /*pThis*/, TUnboxedValuePod* result, const IValueBuilder* /*valueBuilder*/, const TUnboxedValuePod* args) {
+    const auto val = NMathUdf::NearbyInt(args[0].Get<double>(), args[1].Get<ui32>());
     *result = val ? TUnboxedValuePod(*val) : TUnboxedValuePod();
 }
 

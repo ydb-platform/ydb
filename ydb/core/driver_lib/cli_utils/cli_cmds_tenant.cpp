@@ -631,7 +631,7 @@ class TClientCommandTenantChangeQuotas
     uint64_t DataSizeSoftQuota;
 public:
     TClientCommandTenantChangeQuotas()
-        : TTenantClientGRpcCommand("quotas", {}, "Change data size quotas for database")
+        : TTenantClientGRpcCommand("change", {}, "Change data size quotas for database")
     {}
 
     void Config(TConfig& config) override {

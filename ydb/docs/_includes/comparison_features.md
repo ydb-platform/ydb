@@ -4,7 +4,7 @@
 |{% if lang == 'en' %} SSL/TLS support (custom certificates) {% else %} {% if lang == 'ru' %} Поддержка SSL/TLS (кастомные сертификаты) {% else %} Unsupported language {% endif %}
 {% endif %}|\+|\+|\+|\+|\+|\-|\-|\+|
 |{% if lang == 'en' %} Configure/enable GRPC KeepAlive (keeping the connection alive in the background) {% else %} {% if lang == 'ru' %} Возможность настроить/включить GRPC KeepAlive (фоновое поддержание живости соединения) {% else %} Unsupported language {% endif %} {% endif %}|\+|\+|\+|?||\-|\-|\-|
-|{% if lang == 'en' %} Regular SLO testing on the latest code version {% else %} {% if lang == 'ru' %} Регулярный прогон тестов SLO на последней версии кода {% else %} Unsupported language {% endif %} {% endif %}|\+|\+/-|\+|\+|\+/-|\-|\-|\-|
+|{% if lang == 'en' %} Regular SLO testing on the latest code version {% else %} {% if lang == 'ru' %} Регулярный прогон тестов SLO на последней версии кода {% else %} Unsupported language {% endif %} {% endif %}|new|new|new|new|new|new|\-|\-|
 |{% if lang == 'en' %} Issue templates on GitHub {% else %} {% if lang == 'ru' %} Шаблоны Issue в GitHub {% else %} Unsupported language {% endif %} {% endif %}|\-|?|\+|\-|\+|\+|\-|\+|
 |{% if lang == 'en' %} **Client-side balancing** {% else %} {% if lang == 'ru' %} **Клиентская балансировка** {% else %} **Unsupported language** {% endif %} {% endif %}|||||||||
 |{% if lang == 'en' %} Load balancer initialization through Discovery/ListEndpoints {% else %} {% if lang == 'ru' %} Инициализация балансировщика через Discovery/ListEndpoints {% else %} Unsupported language {% endif %} {% endif %}|\+|\+|\+|\+|\+|\+|\+|\+|
@@ -70,8 +70,9 @@
 |DropTable|\+|\+|\+|\+|\+|\-|\-|\+|
 |AlterTable|\+|\+|\+|\+|\+|\-|\-|\+|
 |CopyTable|\+|\+|\+|\+|\-|\-|\-|\+|
-|CopyTables|\+|\+|\+|\-|\-|\-|\-|\+|
+|CopyTables|\+|\+|new|\-|\-|\-|\-|\+|
 |DescribeTable|\+|\+|\+|\+|\+|\-|\-|\+|
+|QueryService|\-|\-|\-|soon|soon|new|\-|\-|
 |ExplainDataQuery|\+|\+|\+|\+|\-|\-|\-|\+|
 |PrepareDataQuery|\+|\+|\+|\+|\+|\-|\-|\+|
 |ExecuteDataQuery|\+|\+|\+|\+|\+|\+|\+|\+|
@@ -87,6 +88,7 @@
 |StreamExecuteScanQuery|\+|\+|\+|\+|\+|\+|\+|\+|
 |StreamReadTable|\+|\+|\+|\+|\+|\+|\-|\+|
 |BulkUpsert|\+|\+|\+|\+|\+|\-|\-|\+|
+|ReadRows|new|\-|new|new|\-|\-|\-|\-|
 |**Operation**|||||||||
 |{% if lang == 'en' %} Consumed Units from metadata of a response to a grpc-request request (for the user to obtain this) {% else %} {% if lang == 'ru' %} Consumed Units из метаданных ответа на grpc-запрос (чтобы пользователь мог получить это) {% else %} Unsupported language {% endif %} {% endif %}|\+|\+|\-|\+|\+|\-|\-|\-|
 |{% if lang == 'en' %} Obtaining OperationId of the operation for a long-polling status of operation execution {% else %} {% if lang == 'ru' %} Получение OperationId операции для long-polling статуса выполнения операции {% else %} Unsupported language {% endif %} {% endif %}|\+|\+|\+|\-|\-|\+|\-|\-|
@@ -99,14 +101,15 @@
 |AlterNode|\+|?|\+|\-|\-|\-|\-|\-|
 |DropNode|\+|?|\+|\-|\-|\-|\-|\-|
 |DescribeNode|\+|?|\+|\-|\-|\-|\-|\-|
-|{% if lang == 'en' %} Session (leader election, distributed lock) {% else %} {% if lang == 'ru' %} Session (leader election, распределенный лок) {% else %} Unsupported language {% endif %} {% endif %}|\+|?|\-|\-|\-|\-|\-|\-|
+|{% if lang == 'en' %} Session (leader election, distributed lock) {% else %} {% if lang == 'ru' %} Session (leader election, распределенный лок) {% else %} Unsupported language {% endif %} {% endif %}|\+|?|\-|soon|\-|\-|\-|\-|
 |**Topic service**|||||||||
-|CreateTopic|\+|\+|\+|\-|\-|\-|\-|\-|
-|DescribeTopic|\+|\+|\+|\-|\-|\-|\-|\-|
-|AlterTopic|\+|\-|\+|\-|\-|\-|\-|\-|
-|DropTopic|\+|\+|\+|\-|\-|\-|\-|\-|
-|StreamWrite|\+|\+|\+|\-|\-|\-|\-|\-|
-|StreamRead|\+|\+|\+|\-|\-|\-|\-|\-|
+|CreateTopic|\+|\+|\+|new|\-|\-|\-|\-|
+|DescribeTopic|\+|\+|\+|new|\-|\-|\-|\-|
+|AlterTopic|\+|\-|\+|new|\-|\-|\-|\-|
+|DropTopic|\+|\+|\+|new|\-|\-|\-|\-|
+|StreamWrite|\+|\+|\+|new|\-|\-|\-|\-|
+|StreamRead|\+|\+|\+|new|\-|\-|\-|\-|
+|{% if lang == 'en' %} Federated Topic SDK {% else %} {% if lang == 'ru' %} Федеративный SDK для Topic {% else %} Unsupported language {% endif %} {% endif %}|\-|\-|soon|soon|\-|\-|\-|\-|
 |**Ratelimiter service**|||||||||
 |CreateResource|\+|?|\+|\-|\-|\-|\-|\-|
 |AlterResource|\+|?|\+|\-|\-|\-|\-|\-|
@@ -119,7 +122,7 @@
 |Prometheus|\-|?|\+|\-|\-|\-|\-|\-|
 |{% if lang == 'en' %} SDK event **logging** {% else %} {% if lang == 'ru' %} **Логирование** событий SDK {% else %} Unsupported language {% endif %} {% endif %}|\-|?|\+|\+|\+|\+|\+|\+|
 |{% if lang == 'en' %} SDK event **tracing** {% else %} {% if lang == 'ru' %} **Трассировка** событий SDK {% else %} Unsupported language {% endif %} {% endif %}|||||||||
-|{% if lang == 'en' %} in OpenTelemetry {% else %} {% if lang == 'ru' %} в OpenTelemetry {% else %} Unsupported language {% endif %} {% endif %}|\-|?|\-|\-|\-|\-|\-|\-|
+|{% if lang == 'en' %} in OpenTelemetry {% else %} {% if lang == 'ru' %} в OpenTelemetry {% else %} Unsupported language {% endif %} {% endif %}|\-|?|soon|\-|\-|\-|\-|\-|
 |{% if lang == 'en' %} in OpenTracing {% else %} {% if lang == 'ru' %} в OpenTracing {% else %} Unsupported language {% endif %} {% endif %}|\-|?|\+|\-|\-|\-|\-|\-|
 |**Examples**|||||||||
 |Auth|||||||||

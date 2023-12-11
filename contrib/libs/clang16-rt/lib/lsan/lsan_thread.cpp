@@ -59,12 +59,21 @@ void ThreadFinish() {
   SetCurrentThread(kInvalidTid);
 }
 
+struct ThreadsGuard {
+  ThreadsGuard() {
+    LockThreadRegistry();
+  }
+  ~ThreadsGuard() {
+    UnlockThreadRegistry();
+  }
+};
+
 ThreadContext *CurrentThreadContext() {
   if (!thread_registry)
     return nullptr;
   if (GetCurrentThread() == kInvalidTid)
     return nullptr;
-  // No lock needed when getting current thread.
+  ThreadsGuard lock;
   return (ThreadContext *)thread_registry->GetThreadLocked(GetCurrentThread());
 }
 

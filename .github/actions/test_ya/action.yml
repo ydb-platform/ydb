@@ -205,10 +205,16 @@ runs:
           --canonization-backend=ydb-canondata.storage.yandexcloud.net \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" "${extra_params[@]}" || (
             RC=$?
-            if [[ $RC -ge 10 && $RC -le 14 ]]; then
-              echo "ya test returned failed tests status, recovering.."
-            else
-              exit $RC
+            if [ $RC -ne 0 ]; then
+              echo "ya test returned $RC, check existence $JUNIT_REPORT_XML"
+              if [ -s "$JUNIT_REPORT_XML" ]; then
+                echo "$JUNIT_REPORT_XML exists"
+                ls -la "$JUNIT_REPORT_XML"
+              else
+                echo "$JUNIT_REPORT_XML doesn't exist or has zero size"
+                ls -la "$JUNIT_REPORT_XML" || true
+                exit $RC
+              fi
             fi
         )
 

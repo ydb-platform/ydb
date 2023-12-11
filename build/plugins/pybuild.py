@@ -172,7 +172,8 @@ def add_python_lint_checks(unit, py_ver, files):
             flake8_cfg = 'build/config/tests/flake8/flake8.conf'
             migrations_cfg = 'build/rules/flake8/migrations.yaml'
             resource = "build/external_resources/flake8_py{}".format(py_ver)
-            lint_name = "py{}_flake8".format(py_ver)
+            # TODO YA-1534: Replace py3_flake8 by flake8 after ya-bin release
+            lint_name = "py2_flake8" if py_ver == 2 else "py3_flake8"
             params = [lint_name, "tools/flake8_linter/flake8_linter"]
             params += ["FILES"] + resolved_files
             params += ["GLOBAL_RESOURCES", resource]

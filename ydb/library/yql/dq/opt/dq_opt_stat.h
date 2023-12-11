@@ -17,5 +17,7 @@ void InferStatisticsForDqSource(const TExprNode::TPtr& input, TTypeAnnotationCon
 void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 double ComputePredicateSelectivity(const NNodes::TExprBase& input, const std::shared_ptr<TOptimizerStatistics>& stats);
+bool NeedCalc(NNodes::TExprBase node);
+bool IsConstantExpr(const TExprNode::TPtr& input);
 
 } // namespace NYql::NDq {

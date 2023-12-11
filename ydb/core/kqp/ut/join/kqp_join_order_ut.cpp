@@ -19,6 +19,7 @@ static void CreateSampleTable(TSession session) {
         CREATE TABLE `/Root/R` (
             id Int32,
             payload1 String,
+            ts Date,
             PRIMARY KEY (id)
         );
     )").GetValueSync().IsSuccess());
@@ -57,8 +58,8 @@ static void CreateSampleTable(TSession session) {
 
         UNIT_ASSERT(session.ExecuteDataQuery(R"(
 
-        REPLACE INTO `/Root/R` (id, payload1) VALUES
-            (1, "blah");
+        REPLACE INTO `/Root/R` (id, payload1, ts) VALUES
+            (1, "blah", CAST("1998-12-01" AS Date) );
 
         REPLACE INTO `/Root/S` (id, payload2) VALUES
             (1, "blah");
@@ -420,6 +421,32 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
                      `/Root/V` as V
                   ON U.id = V.id
                 WHERE R.payload1 = 'bl' || Cast(1 as String?) AND V.payload5 = 'blah'
+            )");
+
+            auto result = session.ExplainDataQuery(query).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            Cout << result.GetPlan();
+        }
+    }
+
+    Y_UNIT_TEST(DatetimeConstantFold) {
+
+        auto kikimr = GetKikimrWithJoinSettings();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTable(session);
+
+        /* join with parameters */
+        {
+            const TString query = Q_(R"(
+                SELECT *
+                FROM `/Root/R` as R
+                WHERE CAST(R.ts AS Timestamp) = (CAST('1998-12-01' AS Date) - Interval("P100D"))
             )");
 
             auto result = session.ExplainDataQuery(query).ExtractValueSync();

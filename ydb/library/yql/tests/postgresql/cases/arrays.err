@@ -1,0 +1,127 @@
+<sql-statement>
+--
+-- ARRAYS
+--
+CREATE TABLE arrtest (
+	a 			int2[],
+	b 			int4[][][],
+	c 			name[],
+	d			text[][],
+	e 			float8[],
+	f			char(5)[],
+	g			varchar(5)[]
+);
+</sql-statement>
+<sql-statement>
+--
+-- only the 'e' array is 0-based, the others are 1-based.
+--
+INSERT INTO arrtest (a[1:5], b[1:1][1:2][1:2], c, d, f, g)
+   VALUES ('{1,2,3,4,5}', '{{{0,0},{1,2}}}', '{}', '{}', '{}', '{}');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	--
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type smallint: "{1,2,3,4,5}"
+
+        	--
+	^
+<sql-statement>
+UPDATE arrtest SET e[0] = '1.1';
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    
+<sql-statement>
+UPDATE arrtest SET e[1] = '2.2';
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    
+<sql-statement>
+INSERT INTO arrtest (f)
+   VALUES ('{"too long"}');
+</sql-statement>
+<sql-statement>
+INSERT INTO arrtest (a, b[1:2][1:2], c, d, e, f, g)
+   VALUES ('{11,12,23}', '{{3,4},{4,5}}', '{"foobar"}',
+           '{{"elt1", "elt2"}}', '{"3.4", "6.7"}',
+           '{"abc","abcde"}', '{"abc","abcde"}');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO arrtest (a, b[1:2][1:2], c, d, e, f, g)
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type smallint: "{11,12,23}"
+
+        	INSERT INTO arrtest (a, b[1:2][1:2], c, d, e, f, g)
+	^
+<sql-statement>
+INSERT INTO arrtest (a, b[1:2], c, d[1:2])
+   VALUES ('{}', '{3,4}', '{foo,bar}', '{bar,foo}');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO arrtest (a, b[1:2], c, d[1:2])
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type smallint: "{}"
+
+        	INSERT INTO arrtest (a, b[1:2], c, d[1:2])
+	^
+<sql-statement>
+INSERT INTO arrtest (b[2]) VALUES(now());  -- error, type mismatch
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: YtWriteTable!
+    	INSERT INTO arrtest (b[2]) VALUES(now());  -- error, type mismatch
+	^
+        -stdin-:<main>:1:1: Error: Failed to convert type: List<Struct<'b':pgtimestamptz>> to List<Struct<'a':pgint2,'b':pgint4,'c':pgname,'d':pgtext,'e':pgfloat8,'f':pgbpchar,'g':pgvarchar>>
+        	INSERT INTO arrtest (b[2]) VALUES(now());  -- error, type mismatch
+	^
+            -stdin-:<main>:1:1: Error: Failed to convert 'b': pgtimestamptz to pgint4
+            	INSERT INTO arrtest (b[2]) VALUES(now());  -- error, type mismatch
+	^
+        -stdin-:<main>:1:1: Error: Table "arrtest" row type differs from the written row type: Struct<-a:pgint2,b:pgint4!=pgtimestamptz,-c:pgname,-d:pgtext,-e:pgfloat8,-f:pgbpchar,-g:pgvarchar>
+        	INSERT INTO arrtest (b[2]) VALUES(now());  -- error, type mismatch
+	^
+<sql-statement>
+INSERT INTO arrtest (b[1:2]) VALUES(now());  -- error, type mismatch
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: YtWriteTable!
+    	INSERT INTO arrtest (b[1:2]) VALUES(now());  -- error, type mismatch
+	^
+        -stdin-:<main>:1:1: Error: Failed to convert type: List<Struct<'b':pgtimestamptz>> to List<Struct<'a':pgint2,'b':pgint4,'c':pgname,'d':pgtext,'e':pgfloat8,'f':pgbpchar,'g':pgvarchar>>
+        	INSERT INTO arrtest (b[1:2]) VALUES(now());  -- error, type mismatch
+	^
+            -stdin-:<main>:1:1: Error: Failed to convert 'b': pgtimestamptz to pgint4
+            	INSERT INTO arrtest (b[1:2]) VALUES(now());  -- error, type mismatch
+	^
+        -stdin-:<main>:1:1: Error: Table "arrtest" row type differs from the written row type: Struct<-a:pgint2,b:pgint4!=pgtimestamptz,-c:pgname,-d:pgtext,-e:pgfloat8,-f:pgbpchar,-g:pgvarchar>
+        	INSERT INTO arrtest (b[1:2]) VALUES(now());  -- error, type mismatch
+	^
+<sql-statement>
+SELECT * FROM arrtest;
+</sql-statement>
+BackTrace(void**, unsigned long)+29 (0x14033ECD)
+TBackTrace::Capture()+30 (0x1403443E)
+TWithBackTrace<yexception>::TWithBackTrace<>()+72 (0x13FD0568)
+NYT::TNode::TTypeError::TTypeError()+25 (0x144DC3E9)
+NYT::TNode::CheckType(NYT::TNode::EType) const+267 (0x144DD9BB)
+NYT::TNode::AsString() const+30 (0x144DC53E)
+WriteTableToStream(IOutputStream&, TVector<NYT::TNode, std::__y1::allocator<NYT::TNode> > const&, TVector<NYT::TNode, std::__y1::allocator<NYT::TNode> > const&)+830 (0x13EBBB7E)
+Main(int, char**)+5748 (0x13EC0FB4)
+main+273 (0x13EC2761)
+??+0 (0x7FE693C29D90)
+__libc_start_main+128 (0x7FE693C29E40)
+??+0 (0x13E4C029)
+
+(NYT::TNode::TTypeError) library/cpp/yson/node/node.cpp:829: TNode type string_node expected, actual type null

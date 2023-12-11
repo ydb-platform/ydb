@@ -1,0 +1,176 @@
+<sql-statement>
+--
+-- OID
+--
+CREATE TABLE OID_TBL(f1 oid);
+</sql-statement>
+<sql-statement>
+INSERT INTO OID_TBL(f1) VALUES ('1234');
+</sql-statement>
+<sql-statement>
+INSERT INTO OID_TBL(f1) VALUES ('1235');
+</sql-statement>
+<sql-statement>
+INSERT INTO OID_TBL(f1) VALUES ('987');
+</sql-statement>
+<sql-statement>
+INSERT INTO OID_TBL(f1) VALUES ('-1040');
+</sql-statement>
+<sql-statement>
+INSERT INTO OID_TBL(f1) VALUES ('99999999');
+</sql-statement>
+<sql-statement>
+INSERT INTO OID_TBL(f1) VALUES ('5     ');
+</sql-statement>
+<sql-statement>
+INSERT INTO OID_TBL(f1) VALUES ('   10  ');
+</sql-statement>
+<sql-statement>
+-- leading/trailing hard tab is also allowed
+INSERT INTO OID_TBL(f1) VALUES ('	  15 	  ');
+</sql-statement>
+<sql-statement>
+-- bad inputs
+INSERT INTO OID_TBL(f1) VALUES ('');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- bad inputs
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type oid: ""
+
+        	-- bad inputs
+	^
+<sql-statement>
+INSERT INTO OID_TBL(f1) VALUES ('    ');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO OID_TBL(f1) VALUES ('    ');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type oid: "    "
+
+        	INSERT INTO OID_TBL(f1) VALUES ('    ');
+	^
+<sql-statement>
+INSERT INTO OID_TBL(f1) VALUES ('asdfasd');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO OID_TBL(f1) VALUES ('asdfasd');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type oid: "asdfasd"
+
+        	INSERT INTO OID_TBL(f1) VALUES ('asdfasd');
+	^
+<sql-statement>
+INSERT INTO OID_TBL(f1) VALUES ('99asdfasd');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO OID_TBL(f1) VALUES ('99asdfasd');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type oid: "99asdfasd"
+
+        	INSERT INTO OID_TBL(f1) VALUES ('99asdfasd');
+	^
+<sql-statement>
+INSERT INTO OID_TBL(f1) VALUES ('5    d');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO OID_TBL(f1) VALUES ('5    d');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type oid: "5    d"
+
+        	INSERT INTO OID_TBL(f1) VALUES ('5    d');
+	^
+<sql-statement>
+INSERT INTO OID_TBL(f1) VALUES ('    5d');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO OID_TBL(f1) VALUES ('    5d');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type oid: "    5d"
+
+        	INSERT INTO OID_TBL(f1) VALUES ('    5d');
+	^
+<sql-statement>
+INSERT INTO OID_TBL(f1) VALUES ('5    5');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO OID_TBL(f1) VALUES ('5    5');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type oid: "5    5"
+
+        	INSERT INTO OID_TBL(f1) VALUES ('5    5');
+	^
+<sql-statement>
+INSERT INTO OID_TBL(f1) VALUES (' - 500');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO OID_TBL(f1) VALUES (' - 500');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type oid: " - 500"
+
+        	INSERT INTO OID_TBL(f1) VALUES (' - 500');
+	^
+<sql-statement>
+INSERT INTO OID_TBL(f1) VALUES ('32958209582039852935');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO OID_TBL(f1) VALUES ('32958209582039852935');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "32958209582039852935" is out of range for type oid
+
+        	INSERT INTO OID_TBL(f1) VALUES ('32958209582039852935');
+	^
+<sql-statement>
+INSERT INTO OID_TBL(f1) VALUES ('-23582358720398502385');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO OID_TBL(f1) VALUES ('-23582358720398502385');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-23582358720398502385" is out of range for type oid
+
+        	INSERT INTO OID_TBL(f1) VALUES ('-23582358720398502385');
+	^
+<sql-statement>
+SELECT * FROM OID_TBL;
+</sql-statement>
+<sql-statement>
+SELECT o.* FROM OID_TBL o WHERE o.f1 = 1234;
+</sql-statement>
+<sql-statement>
+SELECT o.* FROM OID_TBL o WHERE o.f1 <> '1234';
+</sql-statement>
+<sql-statement>
+SELECT o.* FROM OID_TBL o WHERE o.f1 <= '1234';
+</sql-statement>
+<sql-statement>
+SELECT o.* FROM OID_TBL o WHERE o.f1 < '1234';
+</sql-statement>
+<sql-statement>
+SELECT o.* FROM OID_TBL o WHERE o.f1 >= '1234';
+</sql-statement>
+<sql-statement>
+SELECT o.* FROM OID_TBL o WHERE o.f1 > '1234';
+</sql-statement>
+<sql-statement>
+DROP TABLE OID_TBL;
+</sql-statement>

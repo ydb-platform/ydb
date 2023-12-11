@@ -1,0 +1,45 @@
+<sql-statement>
+CREATE TABLE delete_test (
+    id SERIAL PRIMARY KEY,
+    a INT,
+    b text
+);
+</sql-statement>
+<sql-statement>
+INSERT INTO delete_test (a) VALUES (10);
+</sql-statement>
+<sql-statement>
+INSERT INTO delete_test (a, b) VALUES (50, repeat('x', 10000));
+</sql-statement>
+<sql-statement>
+INSERT INTO delete_test (a) VALUES (100);
+</sql-statement>
+<sql-statement>
+-- allow an alias to be specified for DELETE's target table
+DELETE FROM delete_test AS dt WHERE dt.a > 75;
+</sql-statement>
+VERIFY failed (2023-12-07T19:23:19.174482+0300): 
+  ydb/library/yql/ast/yql_ast.h:163
+  NewList(): requirement poolChildren[index] failed
+BackTrace(void**, unsigned long)+29 (0x14033ECD)
+FormatBackTrace(IOutputStream*)+32 (0x140343A0)
+PrintBackTrace()+17 (0x140343F1)
+NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long)+995 (0x1407A6A3)
+NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...)+418 (0x1406D812)
+NYql::TAstNode::NewList(NYql::TPosition, NYql::TAstNode**, unsigned int, TMemoryPool&)+329 (0x149F4389)
+NYql::TAstNode* NSQLTranslationPG::TConverter::L<NYql::TAstNode*, NYql::TAstNode*, NYql::TAstNode*, NYql::TAstNode*, NYql::TAstNode*, NYql::TAstNode*>(NYql::TAstNode*, NYql::TAstNode*, NYql::TAstNode*, NYql::TAstNode*, NYql::TAstNode*, NYql::TAstNode*)+276 (0x15564054)
+NSQLTranslationPG::TConverter::ParseDeleteStmt(DeleteStmt const*)+6165 (0x15559BE5)
+NSQLTranslationPG::TConverter::ParseRawStmt(RawStmt const*)+1054 (0x1554AFBE)
+NSQLTranslationPG::TConverter::ParseResult(List const*)+1256 (0x155494D8)
+NSQLTranslationPG::TConverter::OnResult(List const*)+83 (0x155468F3)
+NYql::PGParse(TBasicString<char, std::__y1::char_traits<char> > const&, NYql::IPGParseEvents&)+1043 (0x1B72E0F3)
+NSQLTranslationPG::PGToYql(TBasicString<char, std::__y1::char_traits<char> > const&, NSQLTranslation::TTranslationSettings const&)+131 (0x15545223)
+NSQLTranslation::SqlToYql(TBasicString<char, std::__y1::char_traits<char> > const&, NSQLTranslation::TTranslationSettings const&, TVector<NYql::TWarningRule, std::__y1::allocator<NYql::TWarningRule> >*, unsigned short*)+749 (0x155413DD)
+NYql::TProgram::ParseSql(NSQLTranslation::TTranslationSettings const&)+676 (0x16BB7634)
+Main(int, char**)+3099 (0x13EC055B)
+main+273 (0x13EC2761)
+??+0 (0x7F1696829D90)
+__libc_start_main+128 (0x7F1696829E40)
+??+0 (0x13E4C029)
+pthread_kill at ./nptl/./nptl/pthread_kill.c:43:17
+?? at ??:0:0

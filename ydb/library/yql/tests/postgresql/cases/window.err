@@ -1,0 +1,330 @@
+<sql-statement>
+--
+-- WINDOW FUNCTIONS
+--
+CREATE TEMPORARY TABLE empsalary (
+    depname varchar,
+    empno bigint,
+    salary int,
+    enroll_date date
+);
+</sql-statement>
+<sql-statement>
+INSERT INTO empsalary VALUES
+('develop', 10, 5200, '2007-08-01'),
+('sales', 1, 5000, '2006-10-01'),
+('personnel', 5, 3500, '2007-12-10'),
+('sales', 4, 4800, '2007-08-08'),
+('personnel', 2, 3900, '2006-12-23'),
+('develop', 7, 4200, '2008-01-01'),
+('develop', 9, 4500, '2008-01-01'),
+('sales', 3, 4800, '2007-08-01'),
+('develop', 8, 6000, '2006-10-01'),
+('develop', 11, 5200, '2007-08-15');
+</sql-statement>
+<sql-statement>
+SELECT depname, empno, salary, sum(salary) OVER (PARTITION BY depname) FROM empsalary ORDER BY depname, salary;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: Sort, At function: PgReplaceUnknown, At function: OrderedMap, At function: CalcOverWindow
+    	SELECT depname, empno, salary, sum(salary) OVER (PARTITION BY depname) FROM empsalary ORDER BY depname, salary;
+	^
+        -stdin-:<main>:1:1: Error: Expected hashable and equatable type for key column: _yql_partition_key_0_0, but got: pgvarchar
+        	SELECT depname, empno, salary, sum(salary) OVER (PARTITION BY depname) FROM empsalary ORDER BY depname, salary;
+	^
+<sql-statement>
+SELECT depname, empno, salary, rank() OVER (PARTITION BY depname ORDER BY salary) FROM empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: CalcOverWindow
+    	SELECT depname, empno, salary, rank() OVER (PARTITION BY depname ORDER BY salary) FROM empsalary;
+	^
+        -stdin-:<main>:1:1: Error: Expected hashable and equatable type for key column: _yql_partition_key_0_0, but got: pgvarchar
+        	SELECT depname, empno, salary, rank() OVER (PARTITION BY depname ORDER BY salary) FROM empsalary;
+	^
+<sql-statement>
+-- with GROUP BY
+SELECT four, ten, SUM(SUM(four)) OVER (PARTITION BY four), AVG(ten) FROM tenk1
+GROUP BY four, ten ORDER BY four, ten;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: CalcOverWindow
+    	SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname);
+	^
+        -stdin-:<main>:1:1: Error: Expected hashable and equatable type for key column: _yql_partition_key_0_0, but got: pgvarchar
+        	SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname);
+	^
+<sql-statement>
+SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY rank() OVER w;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:121: Error: Over is not allowed in: ORDER BY
+    	SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY rank() OVER w;
+	                                                                                                                        ^
+<sql-statement>
+-- empty window specification
+SELECT COUNT(*) OVER () FROM tenk1 WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT COUNT(*) OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS ();
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+-- no window operation
+SELECT four FROM tenk1 WHERE FALSE WINDOW w AS (PARTITION BY ten);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+-- cumulative aggregate
+SELECT sum(four) OVER (PARTITION BY ten ORDER BY unique2) AS sum_1, ten, four FROM tenk1 WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT row_number() OVER (ORDER BY unique2) FROM tenk1 WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT rank() OVER (PARTITION BY four ORDER BY ten) AS rank_1, ten, four FROM tenk1 WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT dense_rank() OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT percent_rank() OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT cume_dist() OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT ntile(3) OVER (ORDER BY ten, four), ten, four FROM tenk1 WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT ntile(NULL) OVER (ORDER BY ten, four), ten, four FROM tenk1 LIMIT 2;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT lag(ten) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT lag(ten, four) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT lag(ten, four, 0) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT lag(ten, four, 0.7) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT lead(ten) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT lead(ten * 2, 1) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT lead(ten * 2, 1, -1) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT lead(ten * 2, 1, -1.4) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT first_value(ten) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+-- last_value returns the last row of the frame, which is CURRENT ROW in ORDER BY window.
+SELECT last_value(four) OVER (ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT last_value(ten) OVER (PARTITION BY four), ten, four FROM
+	(SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten)s
+	ORDER BY four, ten;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT nth_value(ten, four + 1) OVER (PARTITION BY four), ten, four
+	FROM (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten)s;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT ten, two, sum(hundred) AS gsum, sum(sum(hundred)) OVER (PARTITION BY two ORDER BY ten) AS wsum
+FROM tenk1 GROUP BY ten, two;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT count(*) OVER (PARTITION BY four), four FROM (SELECT * FROM tenk1 WHERE two = 1)s WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT (count(*) OVER (PARTITION BY four ORDER BY ten) +
+  sum(hundred) OVER (PARTITION BY four ORDER BY ten))::varchar AS cntsum
+  FROM tenk1 WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+-- opexpr with different windows evaluation.
+SELECT * FROM(
+  SELECT count(*) OVER (PARTITION BY four ORDER BY ten) +
+    sum(hundred) OVER (PARTITION BY two ORDER BY ten) AS total,
+    count(*) OVER (PARTITION BY four ORDER BY ten) AS fourcount,
+    sum(hundred) OVER (PARTITION BY two ORDER BY ten) AS twosum
+    FROM tenk1
+)sub
+WHERE total <> fourcount + twosum;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT avg(four) OVER (PARTITION BY four ORDER BY thousand / 100) FROM tenk1 WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT ten, two, sum(hundred) AS gsum, sum(sum(hundred)) OVER win AS wsum
+FROM tenk1 GROUP BY ten, two WINDOW win AS (PARTITION BY two ORDER BY ten);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+-- more than one window with GROUP BY
+SELECT sum(salary),
+	row_number() OVER (ORDER BY depname),
+	sum(sum(salary)) OVER (ORDER BY depname DESC)
+FROM empsalary GROUP BY depname;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: CalcOverWindow, At function: CalcOverWindow, At function: UnionAll, At function: Aggregate
+    	-- more than one window with GROUP BY
+	^
+        -stdin-:<main>:1:1: Error: Expected hashable and equatable type for key column: _alias_empsalary.depname, but got: pgvarchar
+        	-- more than one window with GROUP BY
+	^
+<sql-statement>
+-- identical windows with different names
+SELECT sum(salary) OVER w1, count(*) OVER w2
+FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary);
+</sql-statement>
+BackTrace(void**, unsigned long)+29 (0x14033ECD)
+TBackTrace::Capture()+30 (0x1403443E)
+TWithBackTrace<yexception>::TWithBackTrace<>()+72 (0x13FD0568)
+NYT::TNode::TTypeError::TTypeError()+25 (0x144DC3E9)
+NYT::TNode::CheckType(NYT::TNode::EType) const+267 (0x144DD9BB)
+NYT::TNode::AsString() const+30 (0x144DC53E)
+WriteTableToStream(IOutputStream&, TVector<NYT::TNode, std::__y1::allocator<NYT::TNode> > const&, TVector<NYT::TNode, std::__y1::allocator<NYT::TNode> > const&)+830 (0x13EBBB7E)
+Main(int, char**)+5748 (0x13EC0FB4)
+main+273 (0x13EC2761)
+??+0 (0x7F2872029D90)
+__libc_start_main+128 (0x7F2872029E40)
+??+0 (0x13E4C029)
+
+(NYT::TNode::TTypeError) library/cpp/yson/node/node.cpp:829: TNode type string_node expected, actual type null

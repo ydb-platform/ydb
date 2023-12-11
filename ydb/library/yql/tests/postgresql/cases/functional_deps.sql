@@ -15,3 +15,23 @@ CREATE TEMP TABLE articles_in_category (
 -- example from documentation
 CREATE TEMP TABLE products (product_id int, name text, price numeric);
 CREATE TEMP TABLE sales (product_id int, units int);
+-- Drupal example, http://drupal.org/node/555530
+CREATE TEMP TABLE node (
+    nid SERIAL,
+    vid integer NOT NULL default '0',
+    type varchar(32) NOT NULL default '',
+    title varchar(128) NOT NULL default '',
+    uid integer NOT NULL default '0',
+    status integer NOT NULL default '1',
+    created integer NOT NULL default '0',
+    -- snip
+    PRIMARY KEY (nid, vid)
+);
+CREATE TEMP TABLE users (
+    uid integer NOT NULL default '0',
+    name varchar(60) NOT NULL default '',
+    pass varchar(32) NOT NULL default '',
+    -- snip
+    PRIMARY KEY (uid),
+    UNIQUE (name)
+);

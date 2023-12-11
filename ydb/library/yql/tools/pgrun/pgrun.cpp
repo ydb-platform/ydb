@@ -993,6 +993,8 @@ int Main(int argc, char* argv[])
         const auto stmt = GetFormattedStmt(raw_stmt);
         Cout << stmt << '\n';
 
+        Cerr << "<sql-statement>\n" << stmt << "\n</sql-statement>\n";
+
         if (stmt[0] == '\\') {
             ProcessMetaCmd(stmt);
             continue;

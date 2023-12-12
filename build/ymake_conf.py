@@ -64,7 +64,7 @@ class Platform(object):
 
         self.is_armv7 = self.arch in ('armv7', 'armv7a', 'armv7ahf', 'armv7a_neon', 'arm', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv8 = self.arch in ('armv8', 'armv8a', 'arm64', 'aarch64', 'armv8a_cortex_a35', 'armv8a_cortex_a53')
-        self.is_armv8m = self.arch in ('armv8m_cortex_m33',)
+        self.is_armv8m = self.arch in ('armv8m_cortex_m33', 'armv8m_cortex_m23')
         self.is_armv7em = self.arch in ('armv7em_cortex_m4', 'armv7em_cortex_m7')
         self.is_arm64 = self.arch in ('arm64',)
         self.is_arm = self.is_armv7 or self.is_armv8 or self.is_armv8m or self.is_armv7em
@@ -89,6 +89,7 @@ class Platform(object):
         self.is_cortex_a35 = self.arch in ('armv7ahf_cortex_a35', 'armv8a_cortex_a35')
         self.is_cortex_a53 = self.arch in ('armv7ahf_cortex_a53', 'armv8a_cortex_a53')
         self.is_cortex_m33 = self.arch in ('armv8m_cortex_m33',)
+        self.is_cortex_m23 = self.arch in ('armv8m_cortex_m23',)
         self.is_cortex_m4 = self.arch in ('armv7em_cortex_m4',)
         self.is_cortex_m7 = self.arch in ('armv7em_cortex_m7')
 
@@ -1228,6 +1229,9 @@ class GnuToolchain(Toolchain):
 
         elif target.is_cortex_m7:
             self.c_flags_platform.append('-mcpu=cortex-m7 -mfpu=fpv5-sp-d16')
+
+        elif target.is_cortex_m23:
+            self.c_flags_platform.append('-mcpu=cortex-m23')
 
         elif target.is_cortex_m33:
             self.c_flags_platform.append('-mcpu=cortex-m33 -mfpu=fpv5-sp-d16')

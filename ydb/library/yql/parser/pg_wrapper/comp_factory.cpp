@@ -31,6 +31,8 @@ extern "C" {
 #include "access/xact.h"
 #include "catalog/pg_type_d.h"
 #include "catalog/pg_collation_d.h"
+#include "catalog/pg_tablespace_d.h"
+#include "catalog/pg_database_d.h"
 #include "utils/builtins.h"
 #include "utils/memutils.h"
 #include "utils/array.h"
@@ -38,6 +40,7 @@ extern "C" {
 #include "utils/lsyscache.h"
 #include "utils/datetime.h"
 #include "utils/typcache.h"
+#include "mb/pg_wchar.h"
 #include "nodes/execnodes.h"
 #include "executor/executor.h"
 #include "lib/stringinfo.h"
@@ -268,8 +271,7 @@ public:
     {
         YQL_ENSURE(Cluster_ == "pg_catalog");
         if (Table_ == "pg_type") {
-            PgTypeFillers_.resize(ItemType_->GetMembersCount());
-            static const std::pair<const char*, TPgTypeFiller> AllFillers[] = {
+            static const std::pair<const char*, TPgTypeFiller> AllPgTypeFillers[] = {
                 {"oid", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.TypeId)); }},
                 {"typname", [](const NPg::TTypeDesc& desc) { return PointerDatumToPod((Datum)(MakeFixedString(desc.Name, NAMEDATALEN))); }},
                 {"typinput", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.InFuncId)); }},
@@ -277,11 +279,48 @@ public:
                 {"typtype", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.TypType)); }},
             };
 
-            for (size_t i = 0; i < Y_ARRAY_SIZE(AllFillers); ++i) {
-                const auto& [name, func] = AllFillers[i];
-                if (auto pos = ItemType_->FindMemberIndex(name)) {
-                    PgTypeFillers_[*pos] = func;
-                }
+            ApplyFillers(AllPgTypeFillers, Y_ARRAY_SIZE(AllPgTypeFillers), PgTypeFillers_);
+        } else if (Table_ == "pg_database") {
+            static const std::pair<const char*, TPgDatabaseFiller> AllPgDatabaseFillers[] = {
+                {"oid", [](ui32 index) { return ScalarDatumToPod(ObjectIdGetDatum(index)); }},
+                {"datdba", [](ui32) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                {"datistemplate", [](ui32 index) { return ScalarDatumToPod(BoolGetDatum(index < 3)); }},
+                {"datallowconn", [](ui32 index) { return ScalarDatumToPod(BoolGetDatum(index != 2)); }},
+                {"datname", [](ui32 index) { return PointerDatumToPod((Datum)(MakeFixedString(
+                    index == 1 ? "template1" : (index == 2 ? "template0" : "postgres"), NAMEDATALEN))); }},
+                {"encoding", [](ui32) { return ScalarDatumToPod(Int32GetDatum(PG_UTF8)); }},
+            };
+
+            ApplyFillers(AllPgDatabaseFillers, Y_ARRAY_SIZE(AllPgDatabaseFillers), PgDatabaseFillers_);
+        } else if (Table_ == "pg_tablespace") {
+            static const std::pair<const char*, TPgTablespaceFiller> AllPgTablespaceFillers[] = {
+                {"oid", [](ui32 index) { return ScalarDatumToPod(ObjectIdGetDatum(index == 1 ? DEFAULTTABLESPACE_OID : GLOBALTABLESPACE_OID)); }},
+                {"spcname", [](ui32 index) { return PointerDatumToPod((Datum)(MakeFixedString(index == 1 ? "pg_default" : "pg_global", NAMEDATALEN))); }},
+            };
+
+            ApplyFillers(AllPgTablespaceFillers, Y_ARRAY_SIZE(AllPgTablespaceFillers), PgTablespaceFillers_);
+        } else if (Table_ == "pg_shdescription") {
+            static const std::pair<const char*, TPgShDescriptionFiller> AllPgShDescriptionFillers[] = {
+                {"objoid", [](ui32 index) { return ScalarDatumToPod(ObjectIdGetDatum(index)); }},
+                {"classoid", [](ui32) { return ScalarDatumToPod(ObjectIdGetDatum(DatabaseRelationId)); }},
+                {"description", [](ui32 index) { return PointerDatumToPod((Datum)MakeVar(
+                    index == 1 ? "default template for new databases" :
+                    (index == 2 ? "unmodifiable empty database" :
+                    "default administrative connection database")
+                )); }},
+            };
+
+            ApplyFillers(AllPgShDescriptionFillers, Y_ARRAY_SIZE(AllPgShDescriptionFillers), PgShDescriptionFillers_);
+        }
+    }
+
+    template <typename T, typename F>
+    void ApplyFillers(const T* allFillers, size_t n, TVector<F>& fillers) {
+        fillers.resize(ItemType_->GetMembersCount());
+        for (size_t i = 0; i < n; ++i) {
+            const auto& [name, func] = allFillers[i];
+            if (auto pos = ItemType_->FindMemberIndex(name)) {
+                fillers[*pos] = func;
             }
         }
     }
@@ -302,6 +341,36 @@ public:
 
                 rows.emplace_back(row);
             });
+        } else if (Table_ == "pg_database") {
+            for (ui32 index = 1; index <= 3; ++index) {
+                NUdf::TUnboxedValue* items;
+                auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgDatabaseFillers_.size(), items);
+                for (ui32 i = 0; i < PgDatabaseFillers_.size(); ++i) {
+                    items[i] = PgDatabaseFillers_[i](index);
+                }
+
+                rows.emplace_back(row);
+            }
+        } else if (Table_ == "pg_tablespace") {
+            for (ui32 index = 1; index <= 2; ++index) {
+                NUdf::TUnboxedValue* items;
+                auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgTablespaceFillers_.size(), items);
+                for (ui32 i = 0; i < PgTablespaceFillers_.size(); ++i) {
+                    items[i] = PgTablespaceFillers_[i](index);
+                }
+
+                rows.emplace_back(row);
+            }
+        } else if (Table_ == "pg_shdescription") {
+            for (ui32 index = 1; index <= 3; ++index) {
+                NUdf::TUnboxedValue* items;
+                auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgShDescriptionFillers_.size(), items);
+                for (ui32 i = 0; i < PgShDescriptionFillers_.size(); ++i) {
+                    items[i] = PgShDescriptionFillers_[i](index);
+                }
+
+                rows.emplace_back(row);
+            }
         }
 
         return compCtx.HolderFactory.VectorAsVectorHolder(std::move(rows));
@@ -317,6 +386,12 @@ private:
 
     using TPgTypeFiller = NUdf::TUnboxedValuePod(*)(const NPg::TTypeDesc& desc);
     TVector<TPgTypeFiller> PgTypeFillers_;
+    using TPgDatabaseFiller = NUdf::TUnboxedValuePod(*)(ui32 index);
+    TVector<TPgDatabaseFiller> PgDatabaseFillers_;
+    using TPgTablespaceFiller = NUdf::TUnboxedValuePod(*)(ui32 index);
+    TVector<TPgTablespaceFiller> PgTablespaceFillers_;
+    using TPgShDescriptionFiller = NUdf::TUnboxedValuePod(*)(ui32 index);
+    TVector<TPgShDescriptionFiller> PgShDescriptionFillers_;
 };
 
 class TFunctionCallInfo {

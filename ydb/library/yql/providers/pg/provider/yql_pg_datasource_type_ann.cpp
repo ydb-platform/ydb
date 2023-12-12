@@ -109,6 +109,12 @@ public:
         TVector<const TItemExprType*> items;
         if (tableName == "pg_type") {
             FillPgTypeSchema(items, ctx);
+        } else if (tableName == "pg_database") {
+            FillPgDatabaseSchema(items, ctx);
+        } else if (tableName == "pg_tablespace") {
+            FillPgTablespaceSchema(items, ctx);
+        } else if (tableName == "pg_shdescription") {
+            FillPgShDescriptionSchema(items, ctx);
         } else {
             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TPgReadTable::idx_Table)->Pos()), TStringBuilder() << "Unsupported table: " << tableName));
             return TStatus::Error;
@@ -146,6 +152,26 @@ private:
         AddColumn(items, ctx, "typinput", "regproc");
         AddColumn(items, ctx, "typnamespace", "oid");
         AddColumn(items, ctx, "typtype", "char");
+    }
+
+    void FillPgDatabaseSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
+        AddColumn(items, ctx, "oid", "oid");
+        AddColumn(items, ctx, "datname", "name");
+        AddColumn(items, ctx, "encoding", "int4");
+        AddColumn(items, ctx, "datallowconn", "bool");
+        AddColumn(items, ctx, "datistemplate", "bool");
+        AddColumn(items, ctx, "datdba", "oid");
+    }
+
+    void FillPgTablespaceSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
+        AddColumn(items, ctx, "oid", "oid");
+        AddColumn(items, ctx, "spcname", "name");
+    }
+
+    void FillPgShDescriptionSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
+        AddColumn(items, ctx, "objoid", "oid");
+        AddColumn(items, ctx, "classoid", "oid");
+        AddColumn(items, ctx, "description", "text");
     }
 
     void AddColumn(TVector<const TItemExprType*>& items, TExprContext& ctx, const TString& name, const TString& type) {

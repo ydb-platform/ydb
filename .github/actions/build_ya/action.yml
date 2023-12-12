@@ -51,7 +51,7 @@ runs:
         if [ ! -z "${{ inputs.bazel_remote_username }}" ]; then
           extra_params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
           extra_params+=(--bazel-remote-password "${{ inputs.bazel_remote_password }}")
-          extra_params+=(--bazel-remote-put --dist-cache-evict-bins --add-result .o)
+          extra_params+=(--bazel-remote-put --dist-cache-evict-bins --add-result .o --add-result .a)
         fi
         
         case "${{ inputs.build_preset }}" in
@@ -81,6 +81,15 @@ runs:
             exit 1
             ;;
         esac
+        
+        # FIXME: remove after 5014029 merge
+        if [ "${{ runner.arch }}" == "X64" ]; then
+          curl -s https://storage.yandexcloud.net/ydb-tech-ci/tools/ya-bin-test-cache-patched-amd64 -o ./ya
+          chmod +x ./ya
+        fi
+
+        echo "::debug::get version"
+        ./ya --version
         
         ./ya make -k --build "${build_type}" --force-build-depends -D'BUILD_LANGUAGES=CPP PY3 PY2 GO' -T --stat  \
           --log-file "$TMP_DIR/ya_log.txt" --evlog-file "$TMP_DIR/ya_evlog.jsonl" \

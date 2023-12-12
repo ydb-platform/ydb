@@ -1429,14 +1429,17 @@ private:
     }
 
     IDqGateway::TDqProgressWriter MakeDqProgressWriter(const TPublicIds::TPtr& publicIds) const {
-        IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, publicIds](const TString& stage) {
-            for (const auto& publicId : publicIds->AllPublicIds) {
-                auto p = TOperationProgress(TString(DqProviderName), publicId.first, TOperationProgress::EState::InProgress, stage);
-                if (publicId.second) {
-                    p.Counters.ConstructInPlace();
-                    p.Counters->Running = p.Counters->Total = publicId.second;
+        IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, publicIds, current = std::make_shared<TString>()](const TString& stage) {
+            if (*current != stage) {
+                for (const auto& publicId : publicIds->AllPublicIds) {
+                    auto p = TOperationProgress(TString(DqProviderName), publicId.first, TOperationProgress::EState::InProgress, stage);
+                    if (publicId.second) {
+                        p.Counters.ConstructInPlace();
+                        p.Counters->Running = p.Counters->Total = publicId.second;
+                    }
+                    progressWriter(p);
                 }
-                progressWriter(p);
+                *current = stage;
             }
         };
         return dqProgressWriter;

@@ -38,7 +38,7 @@ namespace NKikimr {
             auto status = PartsRequester.DoJobQuant(ctx);
             if (status == TPartsRequester::EState::FINISHED && Stats.PartsDecidedToDelete == Stats.PartsMarkedDeleted) {
                 Send(NotifyId, new NActors::TEvents::TEvCompleted(DELETER_ID));
-                Die(ctx);
+                Send(SelfId(), new NActors::TEvents::TEvPoison);
             }
         }
 
@@ -56,6 +56,7 @@ namespace NKikimr {
             CFunc(NActors::TEvents::TEvWakeup::EventType, DoJobQuant)
             hFunc(TEvBlobStorage::TEvVGetResult, PartsRequester.Handle)
             hFunc(TEvDelLogoBlobDataSyncLogResult, Handle)
+            CFunc(NActors::TEvents::TEvPoison::EventType, Die)
         );
 
     public:

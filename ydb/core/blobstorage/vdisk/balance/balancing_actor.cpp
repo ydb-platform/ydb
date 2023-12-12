@@ -18,6 +18,7 @@ namespace NKikimr {
         TLogoBlobsSnapshot::TForwardIterator It;
         TQueueActorMapPtr QueueActorMapPtr;
         TActiveActors ActiveActors;
+        THashSet<TVDiskID> ConnectedVDisks;
 
         TActorId SenderId;
         TActorId DeleterId;
@@ -47,44 +48,43 @@ namespace NKikimr {
             TQueue<TPartInfo> sendOnMainParts, tryDeleteParts;
 
             for (It.SeekToFirst(); It.Valid(); It.Next()) {
-                TMerger merger(Ctx->GInfo->GetTopology().GType);
+                TPartsCollectorMerger merger(Ctx->GInfo->GetTopology().GType);
                 It.PutToMerger(&merger);
 
                 auto collectPartsByPredicate = [&](const TVector<ui8>& partIdxs, TQueue<TPartInfo>& queue) {
                     for (ui8 partIdx: partIdxs) {
-                        if (!merger.Parts[partIdx].has_value()) {
+                        if (!merger.Parts[partIdx - 1].has_value()) {
                             continue;  // something strange
                         }
                         queue.push(TPartInfo{
                             .Key=TLogoBlobID(It.GetCurKey().LogoBlobID(), partIdx),
                             .Ingress=merger.Ingress,
-                            .PartData=*merger.Parts[partIdx]
+                            .PartData=*merger.Parts[partIdx - 1]
                         });
                     }
                 };
-                collectPartsByPredicate(PartsToSendOnMain(merger.Ingress), sendOnMainParts);
-                collectPartsByPredicate(PartsToSendOnMain(merger.Ingress), sendOnMainParts);
+                collectPartsByPredicate(PartsToSendOnMain(Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, It.GetCurKey().LogoBlobID(), merger.Ingress), sendOnMainParts);
+                collectPartsByPredicate(PartsToDelete(Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, It.GetCurKey().LogoBlobID(), merger.Ingress), tryDeleteParts);
 
                 merger.Clear();
             }
             return {sendOnMainParts, tryDeleteParts};
         }
 
-        void StartBalancing() {
+        void StartBalancing(const TActorContext &ctx) {
             if (!Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(Ctx->VDiskCfg->BaseInfo.PDiskId))) {
-                HandleReplToken();
+                HandleReplToken(ctx);
             }
         }
 
-        void HandleReplToken() {
-            DoJobQuant();
+        void HandleReplToken(const TActorContext &ctx) {
+            DoJobQuant(ctx);
             Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
-            if (!Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(Ctx->VDiskCfg->BaseInfo.PDiskId))) {
-                HandleReplToken();
-            }
+            // StartBalancing(ctx);
+            Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup());
         }
 
-        void Handle(NActors::TEvents::TEvCompleted::TPtr ev, const TActorContext &ctx) {
+        void Handle(NActors::TEvents::TEvCompleted::TPtr ev) {
             switch (ev->Get()->Id) {
                 case SENDER_ID: {
                     Stats.SendCompleted = true;
@@ -99,18 +99,36 @@ namespace NKikimr {
             }
             if (Stats.SendCompleted && Stats.DeleteCompleted) {
                 Send(Ctx->SkeletonId, new TEvStartBalancing());
-                Die(ctx);
+                Send(SelfId(), new NActors::TEvents::TEvPoison);
             }
         }
 
-        void DoJobQuant() {
-            Send(SenderId, new NActors::TEvents::TEvWakeup());
-            Send(DeleterId, new NActors::TEvents::TEvWakeup());
+        void Handle(TEvProxyQueueState::TPtr ev) {
+            const TVDiskID& vdiskId = ev->Get()->VDiskId;
+            if (ev->Get()->IsConnected) {
+                ConnectedVDisks.insert(vdiskId);
+            } else {
+                ConnectedVDisks.erase(vdiskId);
+            }
+        }
+
+        void DoJobQuant(const TActorContext &ctx) {
+            if (ConnectedVDisks.size() == Ctx->GInfo->GetTotalVDisksNum() - 1) {
+                Send(SenderId, new NActors::TEvents::TEvWakeup());
+                Send(DeleterId, new NActors::TEvents::TEvWakeup());
+            } else {
+                LOG_WARN_S(ctx, NKikimrServices::BS_SKELETON,
+                    "Balancing actor could not do a job quant, some vdisks are disconnected: "
+                    << ConnectedVDisks.size() << " < " << Ctx->GInfo->GetTotalVDisksNum());
+            }
         }
 
         STRICT_STFUNC(StateFunc,
-            cFunc(TEvReplToken::EventType, HandleReplToken)
-            HFunc(NActors::TEvents::TEvCompleted, Handle)
+            CFunc(TEvReplToken::EventType, HandleReplToken)
+            hFunc(NActors::TEvents::TEvCompleted, Handle)
+            hFunc(TEvProxyQueueState, Handle)
+            CFunc(NActors::TEvents::TEvWakeup::EventType, StartBalancing)
+            CFunc(NActors::TEvents::TEvPoison::EventType, Die)
         );
 
     public:
@@ -132,6 +150,7 @@ namespace NKikimr {
             ActiveActors.Insert(DeleterId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
 
             Become(&TThis::StateFunc);
+            Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup());
         }
     };
 

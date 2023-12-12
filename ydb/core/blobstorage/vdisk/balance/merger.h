@@ -2,18 +2,15 @@
 
 #include "defs.h"
 
-// #include <ydb/core/blobstorage/vdisk/common/vdisk_queues.h>
-// #include <ydb/core/blobstorage/base/vdisk_sync_common.h>
-
 
 namespace NKikimr {
-    struct TMerger {
+    struct TPartsCollectorMerger {
         const TBlobStorageGroupType GType;
 
         TIngress Ingress;
         TVector<std::optional<std::variant<TDiskPart, TRope>>> Parts;
 
-        TMerger(const TBlobStorageGroupType gType)
+        TPartsCollectorMerger(const TBlobStorageGroupType gType)
             : GType(gType)
         {
             Parts.resize(GType.TotalPartCount());
@@ -48,7 +45,7 @@ namespace NKikimr {
                 auto diskBlob = TDiskBlob(data, local, GType, key.LogoBlobID());
                 TDiskBlob::TPartIterator it(&diskBlob, local.FirstPosition());
                 for (ui32 i = 0; i < local.CountBits(); ++i, ++it) {
-                    Parts[it.GetPartId()] = it.GetPart();
+                    Parts[it.GetPartId() - 1] = it.GetPart();
                 }
             } else {
                 TDiskDataExtractor extr;

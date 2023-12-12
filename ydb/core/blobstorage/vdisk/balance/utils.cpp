@@ -7,7 +7,7 @@ namespace NKikimr {
         auto parts = vec & mask;
         TVector<ui8> res(Reserve(parts.CountBits()));
         for (ui8 i = parts.FirstPosition(); i != parts.GetSize(); i = parts.NextPosition(i)) {
-            res.push_back(i);
+            res.push_back(i + 1);
         }
         return res;
     }

@@ -30,7 +30,7 @@ namespace NKikimr {
             auto status = Reader.DoJobQuant(ctx);
             if (status == TReader::EReaderState::FINISHED && Stats.PartsRead == Stats.PartsSent) {
                 Send(NotifyId, new NActors::TEvents::TEvCompleted(SENDER_ID));
-                Die(ctx);
+                Send(SelfId(), new NActors::TEvents::TEvPoison);
             }
         }
 
@@ -59,6 +59,7 @@ namespace NKikimr {
             CFunc(NActors::TEvents::TEvWakeup::EventType, DoJobQuant)
             hFunc(NPDisk::TEvChunkReadResult, Reader.Handle)
             hFunc(TEvBlobStorage::TEvVPutResult, Handle)
+            CFunc(NActors::TEvents::TEvPoison::EventType, Die)
         );
 
     public:

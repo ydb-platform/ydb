@@ -14,8 +14,20 @@
 namespace NActors {
     class IActor;
     class TActorSystem;
+    struct TExecutorThreadCtx;
+    class TExecutorPoolBaseMailboxed;
 
     class TExecutorThread: public ISimpleThread {
+        enum class EState : ui64 {
+            Running = 0,
+            NeedToReloadPools,
+        };
+
+        struct TProcessingResult {
+            bool IsPreempted = false;
+            bool WasWorking = false;
+        };
+
     public:
         static constexpr TDuration DEFAULT_TIME_PER_MAILBOX =
             TDuration::MilliSeconds(10);
@@ -26,6 +38,7 @@ namespace NActors {
                         TActorSystem* actorSystem,
                         IExecutorPool* executorPool,
                         TMailboxTable* mailboxTable,
+                        TExecutorThreadCtx *threadCtx,
                         const TString& threadName,
                         TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
                         ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX);
@@ -34,21 +47,25 @@ namespace NActors {
                         TActorSystem* actorSystem,
                         IExecutorPool* executorPool,
                         TMailboxTable* mailboxTable,
+                        TExecutorThreadCtx *threadCtx,
                         const TString& threadName,
                         TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
                         ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX)
-            : TExecutorThread(workerId, 0, actorSystem, executorPool, mailboxTable, threadName, timePerMailbox, eventsPerMailbox)
+            : TExecutorThread(workerId, 0, actorSystem, executorPool, mailboxTable, threadCtx, threadName, timePerMailbox, eventsPerMailbox)
         {}
 
         TExecutorThread(TWorkerId workerId,
                     TActorSystem* actorSystem,
-                    TVector<IExecutorPool*> executorPools,
+                    TExecutorThreadCtx *threadCtx,
+                    i16 poolCount,
                     const TString& threadName,
                     ui64 softProcessingDurationTs,
                     TDuration timePerMailbox,
                     ui32 eventsPerMailbox);
 
         virtual ~TExecutorThread();
+
+        void UpdatePools();
 
         template <ESendingType SendingType = ESendingType::Common>
         TActorId RegisterActor(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>(),
@@ -67,6 +84,7 @@ namespace NActors {
         bool Send(TAutoPtr<IEventHandle> ev);
 
         void GetCurrentStats(TExecutorThreadStats& statsCopy) const;
+        void GetSharedStats(i16 poolId, TExecutorThreadStats &stats) const;
 
         TThreadId GetThreadId() const; // blocks, must be called after Start()
         TWorkerId GetWorkerId() const;
@@ -74,10 +92,11 @@ namespace NActors {
     private:
         void* ThreadProc();
 
-        void ProcessExecutorPool(IExecutorPool *pool, bool isSharedThread);
+        TProcessingResult ProcessExecutorPool(IExecutorPool *pool);
+        TProcessingResult ProcessSharedExecutorPool(TExecutorPoolBaseMailboxed *pool);
 
         template <typename TMailbox>
-        bool Execute(TMailbox* mailbox, ui32 hint, bool isTailExecution);
+        TProcessingResult Execute(TMailbox* mailbox, ui32 hint, bool isTailExecution);
 
     public:
         TActorSystem* const ActorSystem;
@@ -86,7 +105,7 @@ namespace NActors {
     private:
         // Pool-specific
         IExecutorPool* ExecutorPool;
-        TVector<IExecutorPool*> AvailableExecutorPools;
+        TExecutorThreadCtx *ThreadCtx;
 
         // Event-specific (currently executing)
         TVector<THolder<IActor>> DyingActors;
@@ -99,10 +118,14 @@ namespace NActors {
         ui64 RevolvingWriteCounter = 0;
         const TString ThreadName;
         volatile TThreadId ThreadId = UnknownThreadId;
+        bool IsSharedThread = false;
 
         TDuration TimePerMailbox;
         ui32 EventsPerMailbox;
         ui64 SoftProcessingDurationTs;
+
+        std::atomic<EState> NeedToReloadPools = EState::NeedToReloadPools;
+        std::vector<TExecutorThreadStats> SharedStats;
     };
 
     template <typename TMailbox>

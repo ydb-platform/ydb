@@ -3803,9 +3803,9 @@
     ],
     "test.test[pg-aggregate_emit_agg_apply-default.txt-Debug]": [
         {
-            "checksum": "27b1feae4ab7a76a0e172c0069eaf485",
-            "size": 927,
-            "uri": "https://{canondata_backend}/1942671/20130f6e788bf66bfb8f36d47e71efd45c3811a9/resource.tar.gz#test.test_pg-aggregate_emit_agg_apply-default.txt-Debug_/opt.yql_patched"
+            "checksum": "e74d2e29187d86c060201db09349149d",
+            "size": 900,
+            "uri": "https://{canondata_backend}/1775059/15bc12d026b54bf6a6f878bd78c4b4a5bf02f3b2/resource.tar.gz#test.test_pg-aggregate_emit_agg_apply-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-aggregate_emit_agg_apply-default.txt-Plan]": [
@@ -4595,9 +4595,9 @@
     ],
     "test.test[pg-tpch-q12-default.txt-Debug]": [
         {
-            "checksum": "777da0f7cb38ff7258b72bf2145e2886",
-            "size": 8324,
-            "uri": "https://{canondata_backend}/1130705/757d10cb32f3f15562b523da2252a50eeaba7592/resource.tar.gz#test.test_pg-tpch-q12-default.txt-Debug_/opt.yql_patched"
+            "checksum": "82253358b5bab27007ab4cfbabe57312",
+            "size": 8302,
+            "uri": "https://{canondata_backend}/1775059/15bc12d026b54bf6a6f878bd78c4b4a5bf02f3b2/resource.tar.gz#test.test_pg-tpch-q12-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpch-q12-default.txt-Plan]": [
@@ -4617,9 +4617,9 @@
     ],
     "test.test[pg-tpch-q16-default.txt-Debug]": [
         {
-            "checksum": "5e0ecf8f1c1971f870710b2da320ab75",
-            "size": 11542,
-            "uri": "https://{canondata_backend}/1130705/757d10cb32f3f15562b523da2252a50eeaba7592/resource.tar.gz#test.test_pg-tpch-q16-default.txt-Debug_/opt.yql_patched"
+            "checksum": "ba2c88322cb460359f64246bd529a784",
+            "size": 11447,
+            "uri": "https://{canondata_backend}/1775059/15bc12d026b54bf6a6f878bd78c4b4a5bf02f3b2/resource.tar.gz#test.test_pg-tpch-q16-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-tpch-q16-default.txt-Plan]": [

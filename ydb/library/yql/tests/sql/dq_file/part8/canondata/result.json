@@ -4048,9 +4048,9 @@
     ],
     "test.test[pg-pg_array_cast-default.txt-Debug]": [
         {
-            "checksum": "f9ad4b67bbc9421398ecd2a5dce2b458",
-            "size": 1079,
-            "uri": "https://{canondata_backend}/937458/16aada0323abcf968d3612e9d7bdb39e28bb67f9/resource.tar.gz#test.test_pg-pg_array_cast-default.txt-Debug_/opt.yql_patched"
+            "checksum": "47c102a361d55075d080803065a31723",
+            "size": 1055,
+            "uri": "https://{canondata_backend}/1889210/084e90712790a8b88d6411c0965093f72cfd32fb/resource.tar.gz#test.test_pg-pg_array_cast-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-pg_array_cast-default.txt-Plan]": [
@@ -4070,9 +4070,9 @@
     ],
     "test.test[pg-pg_like--Debug]": [
         {
-            "checksum": "6e0d3df62fd65153a422cb5d50773784",
-            "size": 3081,
-            "uri": "https://{canondata_backend}/937458/16aada0323abcf968d3612e9d7bdb39e28bb67f9/resource.tar.gz#test.test_pg-pg_like--Debug_/opt.yql_patched"
+            "checksum": "3742490a569a528f4ebd4d94bab4c292",
+            "size": 2840,
+            "uri": "https://{canondata_backend}/1889210/084e90712790a8b88d6411c0965093f72cfd32fb/resource.tar.gz#test.test_pg-pg_like--Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-pg_like--Plan]": [
@@ -4114,9 +4114,9 @@
     ],
     "test.test[pg-range_function_scalar-default.txt-Debug]": [
         {
-            "checksum": "802c7c21bd1c8fb5c3bd038a98dcc0a9",
-            "size": 749,
-            "uri": "https://{canondata_backend}/1031349/32c5a05a4f669a0e389209454bf4e269c8e25678/resource.tar.gz#test.test_pg-range_function_scalar-default.txt-Debug_/opt.yql_patched"
+            "checksum": "09508aac6f527e783f5cfb06d61402d9",
+            "size": 722,
+            "uri": "https://{canondata_backend}/1889210/084e90712790a8b88d6411c0965093f72cfd32fb/resource.tar.gz#test.test_pg-range_function_scalar-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-range_function_scalar-default.txt-Plan]": [

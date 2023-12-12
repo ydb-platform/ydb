@@ -3425,9 +3425,9 @@
     ],
     "test.test[pg-aggregate_emit_agg_apply-default.txt-Debug]": [
         {
-            "checksum": "172352f4ac1d4054e57d98e921478058",
-            "size": 881,
-            "uri": "https://{canondata_backend}/1600758/54387da32fd6d764c1cf91de73ba427d46e5a600/resource.tar.gz#test.test_pg-aggregate_emit_agg_apply-default.txt-Debug_/opt.yql"
+            "checksum": "e647eb84829133906c5574e30a355873",
+            "size": 854,
+            "uri": "https://{canondata_backend}/937458/1c9ebee7ec34bc71f177662b35cb18b16cbeeb95/resource.tar.gz#test.test_pg-aggregate_emit_agg_apply-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-aggregate_emit_agg_apply-default.txt-Plan]": [
@@ -4181,9 +4181,9 @@
     ],
     "test.test[pg-tpch-q12-default.txt-Debug]": [
         {
-            "checksum": "01c7fa5bcf3a4182f9c5254cab212f24",
-            "size": 7644,
-            "uri": "https://{canondata_backend}/1817427/010dfd9dba1f8f4d9d3c42acda1bfdbd800a18d2/resource.tar.gz#test.test_pg-tpch-q12-default.txt-Debug_/opt.yql"
+            "checksum": "96d322b1b5cc279a72b8cc5564ea1473",
+            "size": 7620,
+            "uri": "https://{canondata_backend}/937458/1c9ebee7ec34bc71f177662b35cb18b16cbeeb95/resource.tar.gz#test.test_pg-tpch-q12-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-tpch-q12-default.txt-Plan]": [
@@ -4202,9 +4202,9 @@
     ],
     "test.test[pg-tpch-q16-default.txt-Debug]": [
         {
-            "checksum": "0fda09334ec2c2931d8a8a98141752cf",
-            "size": 13642,
-            "uri": "https://{canondata_backend}/1942671/e8060ecf236697f97ba732d3b73b31632091e72c/resource.tar.gz#test.test_pg-tpch-q16-default.txt-Debug_/opt.yql"
+            "checksum": "208a9d6c6c79884b1e6bf0c8b7eaee7e",
+            "size": 13524,
+            "uri": "https://{canondata_backend}/937458/1c9ebee7ec34bc71f177662b35cb18b16cbeeb95/resource.tar.gz#test.test_pg-tpch-q16-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-tpch-q16-default.txt-Plan]": [

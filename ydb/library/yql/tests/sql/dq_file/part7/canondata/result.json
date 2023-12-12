@@ -3651,9 +3651,9 @@
     ],
     "test.test[pg-pg_array_literal-default.txt-Debug]": [
         {
-            "checksum": "6bc4765899e551d2df00fc8f9ae16ddc",
-            "size": 1447,
-            "uri": "https://{canondata_backend}/1942278/88abeb041875301791ff5bebafc2ff28aefe4f41/resource.tar.gz#test.test_pg-pg_array_literal-default.txt-Debug_/opt.yql_patched"
+            "checksum": "c2095f02ae1dbe8797d5e463818c7ad9",
+            "size": 1336,
+            "uri": "https://{canondata_backend}/1942525/6114915c87b465994a463a4ddb43a80561342b04/resource.tar.gz#test.test_pg-pg_array_literal-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-pg_array_literal-default.txt-Plan]": [
@@ -3673,9 +3673,9 @@
     ],
     "test.test[pg-pg_column_case--Debug]": [
         {
-            "checksum": "a34794daf53a760fb33b15a2cfa3a1c9",
-            "size": 2112,
-            "uri": "https://{canondata_backend}/1817427/bdf8a9232c0b03359cc825928f232aca1eecdc9a/resource.tar.gz#test.test_pg-pg_column_case--Debug_/opt.yql_patched"
+            "checksum": "7b6fce36507805c6831cba36c49027fa",
+            "size": 2085,
+            "uri": "https://{canondata_backend}/1942525/6114915c87b465994a463a4ddb43a80561342b04/resource.tar.gz#test.test_pg-pg_column_case--Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-pg_column_case--Plan]": [
@@ -3739,9 +3739,9 @@
     ],
     "test.test[pg-pg_types_window1-default.txt-Debug]": [
         {
-            "checksum": "341a07997ab8fe13f4f91d0b8dd5ee75",
-            "size": 1494,
-            "uri": "https://{canondata_backend}/1937150/ccea38e2b87125be205d99a9b6f64d33133b8508/resource.tar.gz#test.test_pg-pg_types_window1-default.txt-Debug_/opt.yql_patched"
+            "checksum": "5a7f6125ec9bdc57dcef5a66b25d9ce6",
+            "size": 1416,
+            "uri": "https://{canondata_backend}/1942525/6114915c87b465994a463a4ddb43a80561342b04/resource.tar.gz#test.test_pg-pg_types_window1-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-pg_types_window1-default.txt-Plan]": [

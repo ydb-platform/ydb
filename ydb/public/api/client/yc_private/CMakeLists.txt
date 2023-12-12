@@ -8,6 +8,7 @@
 
 add_subdirectory(compute)
 add_subdirectory(iam)
+add_subdirectory(kms)
 add_subdirectory(operation)
 add_subdirectory(resourcemanager)
 add_subdirectory(servicecontrol)

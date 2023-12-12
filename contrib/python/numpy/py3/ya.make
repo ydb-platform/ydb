@@ -35,8 +35,8 @@ NO_LINT()
 NO_CHECK_IMPORTS(
     numpy._pyinstaller.*
     numpy.core.umath_tests
-    numpy.distutils.command.*
-    numpy.distutils.msvc9compiler
+    numpy.distutils.*
+    numpy.f2py.*
 )
 
 CFLAGS(

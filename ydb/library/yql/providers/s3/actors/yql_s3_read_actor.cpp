@@ -918,6 +918,7 @@ private:
 
             // in TS3ReadActor all files (aka Splits) are loaded in single Chunks
             IngressStats.Bytes += size;
+            IngressStats.Rows++;
             IngressStats.Chunks++;
             IngressStats.Splits++;
             IngressStats.Resume();
@@ -2670,28 +2671,32 @@ private:
 
     void HandleNextBlock(TEvPrivate::TEvNextBlock::TPtr& next) {
         YQL_ENSURE(!ReadSpec->Arrow);
+        auto rows = next->Get()->Block.rows();
         IngressStats.Bytes += next->Get()->IngressDelta;
+        IngressStats.Rows += rows;
         IngressStats.Chunks++;
         IngressStats.Resume();
         CpuTime += next->Get()->CpuTimeDelta;
         if (Counters) {
             QueueBlockCount->Inc();
         }
-        StopLoadsIfEnough(next->Get()->Block.rows());
+        StopLoadsIfEnough(rows);
         Blocks.emplace_back(next);
         Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
     }
 
     void HandleNextRecordBatch(TEvPrivate::TEvNextRecordBatch::TPtr& next) {
         YQL_ENSURE(ReadSpec->Arrow);
+        auto rows = next->Get()->Batch->num_rows();
         IngressStats.Bytes += next->Get()->IngressDelta;
+        IngressStats.Rows += rows;
         IngressStats.Chunks++;
         IngressStats.Resume();
         CpuTime += next->Get()->CpuTimeDelta;
         if (Counters) {
             QueueBlockCount->Inc();
         }
-        StopLoadsIfEnough(next->Get()->Batch->num_rows());
+        StopLoadsIfEnough(rows);
         Blocks.emplace_back(next);
         Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
     }

@@ -92,23 +92,13 @@ class TestS3Formats:
 
         stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
         if yq_version == "v1":
-            assert stat["Graph=0"]["TaskRunner"]["Source=0"]["Stage=Total"]["PushChunks"]["sum"] == 1
-            assert stat["Graph=0"]["TaskRunner"]["Source=0"]["Stage=Total"]["PopChunks"]["sum"] == 1
-            if type_format == "parquet":
-                assert stat["Graph=0"]["TaskRunner"]["Source=0"]["Stage=Total"]["PushRows"]["sum"] == 3
-                assert stat["Graph=0"]["TaskRunner"]["Source=0"]["Stage=Total"]["PopRows"]["sum"] == 3
-            elif type_format != "json_list":
-                assert "PushRows" not in stat["Graph=0"]["TaskRunner"]["Source=0"]["Stage=Total"]
-                assert "PopRows" not in stat["Graph=0"]["TaskRunner"]["Source=0"]["Stage=Total"]
+            assert stat["Graph=0"]["TaskRunner"]["Stage=Total"]["IngressBytes"]["sum"] > 0
+            if type_format != "json_list":
+                assert stat["Graph=0"]["TaskRunner"]["Stage=Total"]["IngressRows"]["sum"] == 3
         else:  # v2
-            assert stat["ResultSet"]["01_1_Stage-Source"]["Ingress=S3Source"]["Push"]["Chunks"]["sum"] == 1
-            assert stat["ResultSet"]["01_1_Stage-Source"]["Ingress=S3Source"]["Pop"]["Chunks"]["sum"] == 1
-            if type_format == "parquet":
-                assert stat["ResultSet"]["01_1_Stage-Source"]["Ingress=S3Source"]["Push"]["Rows"]["sum"] == 3
-                assert stat["ResultSet"]["01_1_Stage-Source"]["Ingress=S3Source"]["Pop"]["Rows"]["sum"] == 3
-            elif type_format != "json_list":
-                assert "Rows" not in stat["ResultSet"]["01_1_Stage-Source"]["Ingress=S3Source"]["Push"]
-                assert "Rows" not in stat["ResultSet"]["01_1_Stage-Source"]["Ingress=S3Source"]["Pop"]
+            assert stat["ResultSet"]["IngressBytes"]["sum"] > 0
+            if type_format != "json_list":
+                assert stat["ResultSet"]["IngressRows"]["sum"] == 3
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

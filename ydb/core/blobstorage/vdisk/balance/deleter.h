@@ -13,20 +13,33 @@
 namespace NKikimr {
 
     class TDeleter : public TActorBootstrapped<TDeleter> {
+        TActorId NotifyId;
         std::shared_ptr<TBalancingCtx> Ctx;
         TPartsRequester PartsRequester;
         ui32 OrderId = 0;
-        ui32 DoneOrderId = 0;
+
+        struct TStats {
+            ui32 PartsRequested = 0;
+            ui32 PartsDecidedToDelete = 0;
+            ui32 PartsMarkedDeleted = 0;
+        };
+        TStats Stats;
 
         void DoJobQuant(const TActorContext &ctx) {
             if (auto batch = PartsRequester.TryGetResults()) {
+                Stats.PartsRequested += batch->size();
                 for (auto& part: *batch) {
                     if (part.HasOnMain) {
+                        ++Stats.PartsDecidedToDelete;
                         DeleteLocal(ctx, part.Key, part.Ingress);
                     }
                 }
             }
-            PartsRequester.DoJobQuant(ctx);
+            auto status = PartsRequester.DoJobQuant(ctx);
+            if (status == TPartsRequester::EState::FINISHED && Stats.PartsDecidedToDelete == Stats.PartsMarkedDeleted) {
+                Send(NotifyId, new NActors::TEvents::TEvCompleted(DELETER_ID));
+                Die(ctx);
+            }
         }
 
         void DeleteLocal(const TActorContext &ctx, const TLogoBlobID& key, TIngress& ingress) {
@@ -36,7 +49,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvDelLogoBlobDataSyncLogResult::TPtr ev) {
-            Y_VERIFY(ev->Get()->OrderId == DoneOrderId++);
+            Y_VERIFY(ev->Get()->OrderId == Stats.PartsMarkedDeleted++);
         }
 
         STRICT_STFUNC(StateFunc,
@@ -48,11 +61,13 @@ namespace NKikimr {
     public:
         TDeleter() = default;
         TDeleter(
+            TActorId notifyId,
             TQueue<TPartInfo> parts,
             TQueueActorMapPtr queueActorMapPtr,
             std::shared_ptr<TBalancingCtx> ctx
         )
-            : Ctx(ctx)
+            : NotifyId(notifyId)
+            , Ctx(ctx)
             , PartsRequester(SelfId(), 32, std::move(parts), Ctx->VCtx->ReplNodeRequestQuoter, queueActorMapPtr)
         {
         }

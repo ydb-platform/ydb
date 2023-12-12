@@ -12,13 +12,29 @@ namespace NKikimr {
         TPDiskCtxPtr PDiskCtx;
         TActorId SkeletonId;
         NMonGroup::TBalancingGroup MonGroup;
-        const TIntrusivePtr<TLsnMngr> LsnMngr;
-        std::shared_ptr<THullLogCtx> HullLogCtx;
 
         NKikimr::THullDsSnap Snap;
 
         TIntrusivePtr<TVDiskConfig> VDiskCfg;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
+
+        TBalancingCtx(
+            TIntrusivePtr<TVDiskContext> vCtx,
+            TPDiskCtxPtr pDiskCtx,
+            TActorId skeletonId,
+            NKikimr::THullDsSnap snap,
+            TIntrusivePtr<TVDiskConfig> vDiskCfg,
+            TIntrusivePtr<TBlobStorageGroupInfo> gInfo
+        )
+            : VCtx(std::move(vCtx))
+            , PDiskCtx(std::move(pDiskCtx))
+            , SkeletonId(skeletonId)
+            , MonGroup(VCtx->VDiskCounters, "subsystem", "balancing")
+            , Snap(std::move(snap))
+            , VDiskCfg(std::move(vDiskCfg))
+            , GInfo(std::move(gInfo))
+        {
+        }
     };
 
     struct TPartInfo {
@@ -38,4 +54,9 @@ namespace NKikimr {
         TIngress Ingress;
         bool HasOnMain;
     };
+
+    constexpr ui32 SENDER_ID = 0;
+    constexpr ui32 DELETER_ID = 1;
+
+    struct TEvStartBalancing : TEventLocal<TEvStartBalancing, TEvBlobStorage::EvStartBalancing> {};
 } // NKikimr

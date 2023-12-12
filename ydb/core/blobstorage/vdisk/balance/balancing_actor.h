@@ -4,5 +4,5 @@
 
 
 namespace NKikimr {
-    IActor* CreateBalancingActor(std::shared_ptr<TBalancingCtx> &ctx);
+    IActor* CreateBalancingActor(std::shared_ptr<TBalancingCtx> ctx);
 } // NKikimr

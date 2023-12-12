@@ -37,7 +37,6 @@ namespace NKikimr {
 
             TVDiskMock mock(&testCtx);
             mock.InitFull();
-            TQueue<TPartInfo> parts;
             auto dsk = MakeIntrusive<TPDiskParams>(
                 mock.PDiskParams->Owner,
                 mock.PDiskParams->OwnerRound,
@@ -46,28 +45,40 @@ namespace NKikimr {
             auto pDiskId = testCtx.GetPDisk()->PDiskActor;
             auto pdiskCtx = std::make_shared<TPDiskCtx>(dsk, pDiskId, "");
 
-            mock.ReserveChunk();
-            const ui32 chunk = *mock.Chunks[EChunkState::RESERVED].begin();
-            TString data{"asdfg"};
-            TString dataCopy = data;
-            testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
-            chunk, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(dataCopy), nullptr, false, 0),
-            NKikimrProto::OK);
-            mock.CommitReservedChunks();
-            parts.push(
-                TPartInfo{.Key=TLogoBlobID(), .PartData=TDiskPart(chunk, 0, data.size())}
-            );
-            UNIT_ASSERT_VALUES_EQUAL(data.size(), 5);
-            UNIT_ASSERT_VALUES_EQUAL(std::get<TDiskPart>(parts.front().PartData).Size, 5);
+            TVector<std::pair<TString, bool>> inputData{{"asdfg", true}, {"qwer", false}, {"jsdfnj", true}, {"jlsnfgj", true}, {"lsdmn", true}};
+            TQueue<TPartInfo> parts;
+            for (const auto& [data, isDiskPart]: inputData) {
+                if (isDiskPart) {
+                    mock.ReserveChunk();
+                    const ui32 chunkIdx = *mock.Chunks[EChunkState::RESERVED].begin();
+                    TString dataCopy = data;
+                    testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
+                    chunkIdx, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(dataCopy), nullptr, false, 0),
+                    NKikimrProto::OK);
+                    mock.CommitReservedChunks();
+                    parts.push(TPartInfo{.Key=TLogoBlobID(), .PartData=TDiskPart(chunkIdx, 0, data.size())});
+                } else {
+                    parts.push(TPartInfo{.Key=TLogoBlobID(), .PartData=TRope(data)});
+                }
+            }
 
+            ui32 batchSize = 2;
             auto reader = std::make_shared<TReader>(
-                1, pdiskCtx, parts, std::make_shared<TReplQuoter>(10)
+                batchSize, pdiskCtx, parts, std::make_shared<TReplQuoter>(10)
             );
             const TActorId readerActorId = runtime->Register(new TReaderWrapperActor(reader));
             UNIT_ASSERT(!reader->TryGetResults().has_value());
-            runtime->Send(new IEventHandle(readerActorId, testCtx.Sender, new NActors::TEvents::TEvWakeup()));
-            Sleep(TDuration::Seconds(1));
-            UNIT_ASSERT(reader->TryGetResults().has_value());
+            for (ui32 i = 0; i < inputData.size(); i += batchSize) {
+                runtime->Send(new IEventHandle(readerActorId, testCtx.Sender, new NActors::TEvents::TEvWakeup()));
+                Sleep(TDuration::Seconds(1));
+                auto res = reader->TryGetResults();
+                UNIT_ASSERT(res.has_value());
+                UNIT_ASSERT_VALUES_EQUAL(res->size(), Min(batchSize, static_cast<ui32>(inputData.size() - i)));
+                for (ui32 k = i; k < i + batchSize && k < inputData.size(); ++k) {
+                    UNIT_ASSERT_VALUES_EQUAL(res->at(k - i).PartData.ConvertToString(), inputData[k].first);
+                }
+                UNIT_ASSERT(!reader->TryGetResults().has_value());
+            }
         }
 
     }

@@ -20,8 +20,8 @@ namespace NKikimr {
         ui32 Responses;
         ui32 ExpectedResponses;
     public:
-        enum EReaderState {
-            WAITING_PDISK_RESPONSES,
+        enum EState {
+            WAITING_RESPONSES,
             FINISHED,
         };
 
@@ -35,9 +35,9 @@ namespace NKikimr {
             , Responses(0)
         {}
 
-        EReaderState DoJobQuant(const TActorContext &ctx) {
+        EState DoJobQuant(const TActorContext &ctx) {
             if (ExpectedResponses != 0) {
-                return WAITING_PDISK_RESPONSES;
+                return WAITING_RESPONSES;
             }
             if (Parts.empty()) {
                 return FINISHED;
@@ -66,7 +66,7 @@ namespace NKikimr {
                 );
                 ++ExpectedResponses;
             }
-            return WAITING_PDISK_RESPONSES;
+            return WAITING_RESPONSES;
         }
 
         std::optional<TVector<TPartOnMain>> TryGetResults() {

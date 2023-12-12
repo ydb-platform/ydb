@@ -83,7 +83,6 @@ namespace NKikimr {
             ++Responses;
             auto *msg = ev->Get();
             if (msg->Status != NKikimrProto::EReplyStatus::OK) {
-                Y_ABORT("aasdf");
                 return;
             }
             ui64 i = reinterpret_cast<ui64>(msg->Cookie);

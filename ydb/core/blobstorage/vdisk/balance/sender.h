@@ -11,15 +11,27 @@
 namespace NKikimr {
 
     class TSender : public TActorBootstrapped<TSender> {
+        TActorId NotifyId;
         TQueueActorMapPtr QueueActorMapPtr;
         std::shared_ptr<TBalancingCtx> Ctx;
         TReader Reader;
 
+        struct TStats {
+            ui32 PartsRead = 0;
+            ui32 PartsSent = 0;
+        };
+        TStats Stats;
+
         void DoJobQuant(const TActorContext &ctx) {
             if (auto batch = Reader.TryGetResults()) {
+                Stats.PartsRead += batch->size();
                 SendParts(*batch);
             }
-            Reader.DoJobQuant(ctx);
+            auto status = Reader.DoJobQuant(ctx);
+            if (status == TReader::EReaderState::FINISHED && Stats.PartsRead == Stats.PartsSent) {
+                Send(NotifyId, new NActors::TEvents::TEvCompleted(SENDER_ID));
+                Die(ctx);
+            }
         }
 
         void SendParts(const TVector<TPart>& batch) {
@@ -40,7 +52,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr) {
-
+            Stats.PartsSent += 1;
         }
 
         STRICT_STFUNC(StateFunc,
@@ -51,11 +63,13 @@ namespace NKikimr {
 
     public:
         TSender(
+            TActorId notifyId,
             TQueue<TPartInfo> parts,
             TQueueActorMapPtr queueActorMapPtr,
             std::shared_ptr<TBalancingCtx> ctx
         )
-            : QueueActorMapPtr(queueActorMapPtr)
+            : NotifyId(notifyId)
+            , QueueActorMapPtr(queueActorMapPtr)
             , Ctx(ctx)
             , Reader(32, Ctx->PDiskCtx, std::move(parts), ctx->VCtx->ReplPDiskReadQuoter)
         {}

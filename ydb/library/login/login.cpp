@@ -160,7 +160,12 @@ TLoginProvider::TBasicResponse TLoginProvider::AddGroupMembership(const TAddGrou
     }
 
     TSidRecord& group = itGroupModify->second;
-    group.Members.insert(request.Member);
+
+    if (group.Members.count(request.Member)) {
+        response.Notice = "Role \"" + request.Member + "\" is already a member of role \"" + group.Name + "\"";
+    } else {
+        group.Members.insert(request.Member);
+    }
 
     ChildToParentIndex[request.Member].insert(request.Group);
 
@@ -177,9 +182,65 @@ TLoginProvider::TBasicResponse TLoginProvider::RemoveGroupMembership(const TRemo
     }
 
     TSidRecord& group = itGroupModify->second;
-    group.Members.erase(request.Member);
+
+    if (!group.Members.count(request.Member)) {
+        response.Warning = "Role \"" + request.Member + "\" is not a member of role \"" + group.Name + "\"";
+    } else {
+        group.Members.erase(request.Member);
+    }
 
     ChildToParentIndex[request.Member].erase(request.Group);
+
+    return response;
+}
+
+TLoginProvider::TRenameGroupResponse TLoginProvider::RenameGroup(const TRenameGroupRequest& request) {
+    TRenameGroupResponse response;
+
+    if (request.Options.CheckName && !CheckAllowedName(request.NewName)) {
+        response.Error = "Name is not allowed";
+        return response;
+    }
+
+    auto itGroupModify = Sids.find(request.Group);
+    if (itGroupModify == Sids.end() || itGroupModify->second.Type != ESidType::GROUP) {
+        response.Error = "Group not found";
+        return response;
+    }
+
+    auto itGroupCreate = Sids.emplace(request.NewName, TSidRecord{.Type = ESidType::GROUP});
+    if (!itGroupCreate.second) {
+        if (itGroupCreate.first->second.Type == ESidType::GROUP) {
+            response.Error = "Group already exists";
+        } else {
+            response.Error = "Account already exists";
+        }
+        return response;
+    }
+
+    TSidRecord& group = itGroupCreate.first->second;
+    group.Name = request.NewName;
+
+    auto itChildToParentIndex = ChildToParentIndex.find(request.Group);
+    if (itChildToParentIndex != ChildToParentIndex.end()) {
+        ChildToParentIndex[request.NewName] = itChildToParentIndex->second;
+        for (const TString& parent : ChildToParentIndex[request.NewName]) {
+            auto itGroup = Sids.find(parent);
+            if (itGroup != Sids.end()) {
+                response.TouchedGroups.emplace_back(itGroup->first);
+                itGroup->second.Members.erase(request.Group);
+                itGroup->second.Members.insert(request.NewName);
+            }
+        }
+        ChildToParentIndex.erase(itChildToParentIndex);
+    }
+
+    for (const TString& member : itGroupModify->second.Members) {
+        ChildToParentIndex[member].erase(request.Group);
+        ChildToParentIndex[member].insert(request.NewName);
+    }
+
+    Sids.erase(itGroupModify);
 
     return response;
 }
@@ -189,7 +250,9 @@ TLoginProvider::TRemoveGroupResponse TLoginProvider::RemoveGroup(const TRemoveGr
 
     auto itGroupModify = Sids.find(request.Group);
     if (itGroupModify == Sids.end() || itGroupModify->second.Type != ESidType::GROUP) {
-        response.Error = "Group not found";
+        if (!request.MissingOk) {
+            response.Error = "Group not found";
+        }
         return response;
     }
 

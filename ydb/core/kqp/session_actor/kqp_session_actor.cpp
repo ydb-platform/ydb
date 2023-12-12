@@ -1286,6 +1286,10 @@ public:
             exec->Swap(executerResults.MutableStats());
         }
 
+        if (!response->GetIssues().empty()){
+            NYql::IssuesFromMessage(response->GetIssues(), QueryState->Issues);
+        }
+
         ExecuteOrDefer();
     }
 
@@ -1456,6 +1460,8 @@ public:
         if (QueryState->CompileResult) {
             AddQueryIssues(*response, QueryState->CompileResult->Issues);
         }
+
+        AddQueryIssues(*response, QueryState->Issues);
 
         FillStats(record);
 

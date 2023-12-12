@@ -74,6 +74,7 @@ struct TWriteTopicSettings {
 struct TWriteRoleSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TCoAtomList> Roles;
+    NNodes::TMaybeNode<NNodes::TCoAtom> NewName;
     NNodes::TCoNameValueTupleList Other;
 
     TWriteRoleSettings(const NNodes::TCoNameValueTupleList& other)

@@ -9,6 +9,7 @@
 #include <ydb/core/protos/tx_scheme.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 #include <library/cpp/object_factory/object_factory.h>
@@ -224,6 +225,16 @@ struct TEvSchemeShard {
         void SetError(EStatus status, const TString& errStr) {
             Record.SetStatus(status);
             Record.SetReason(errStr);
+        }
+
+        void AddWarningIssue(const TString& text) {
+            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::WARNING, text);
+            NYql::IssueToMessage(issue, Record.AddIssues());
+        }
+
+        void AddNoticeIssue(const TString& text) {
+            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::INFO, text);
+            NYql::IssueToMessage(issue, Record.AddIssues());
         }
 
         void SetPathCreateTxId(ui64 txId) { Record.SetPathCreateTxId(txId); }

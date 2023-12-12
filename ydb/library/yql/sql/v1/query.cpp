@@ -1770,6 +1770,17 @@ public:
             return false;
         }
 
+        TVector<TNodePtr> roles;
+        if (Params && !Params->Roles.empty()) {
+            for (auto& item : Params->Roles) {
+                roles.push_back(item.Build());
+                if (!roles.back()->Init(ctx, FakeSource.Get())) {
+                    return false;
+                }
+            }
+        }
+
+
         auto options = Y(Q(Y(Q("mode"), Q(IsUser ? "createUser" : "createGroup"))));
         if (Params) {
             if (Params->IsPasswordEncrypted) {
@@ -1779,6 +1790,9 @@ public:
                 options = L(options, Q(Y(Q("password"), password)));
             } else {
                 options = L(options, Q(Y(Q("nullPassword"))));
+            }
+            if (!Params->Roles.empty()) {
+                options = L(options, Q(Y(Q("roles"), Q(new TAstListNodeImpl(Pos, std::move(roles))))));
             }
         }
 
@@ -1809,9 +1823,9 @@ TNodePtr BuildCreateUser(TPosition pos, const TString& service, const TDeferredA
     return new TCreateRole(pos, isUser, service, cluster, name, params, scoped);
 }
 
-TNodePtr BuildCreateGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, TScopedStatePtr scoped) {
+TNodePtr BuildCreateGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TRoleParameters>& params, TScopedStatePtr scoped) {
     bool isUser = false;
-    return new TCreateRole(pos, isUser, service, cluster, name, {}, scoped);
+    return new TCreateRole(pos, isUser, service, cluster, name, params, scoped);
 }
 
 class TAlterUser final: public TAstListNode {

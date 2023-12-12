@@ -1161,7 +1161,7 @@ public:
                     ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats));
                 }
             }
-            
+
             LOG_D("Forwarded TEvExecuterProgress to " << QueryState->RequestActorId);
             Send(QueryState->RequestActorId, ev->Release().Release(), 0, QueryState->ProxyRequestId);
         }
@@ -1206,6 +1206,7 @@ public:
         if (!QueryState->PreparedQuery) {
             return;
         }
+
         auto tx = QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx - 1);
         if (!tx) {
             return;

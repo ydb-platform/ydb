@@ -365,6 +365,7 @@ public:
                 break;
             }
             result.emplace_back(i);
+            currentSize += i->GetBlobBytes();
         }
         if (result.size() < sorted.size()) {
             separatePoint = sorted[result.size()]->IndexKeyStart();
@@ -708,7 +709,7 @@ public:
         }
         std::optional<NArrow::TReplaceKey> stopPoint;
         std::optional<TInstant> stopInstant;
-        std::vector<std::shared_ptr<TPortionInfo>> portions = Others.GetOptimizerTaskPortions(128 * 1024 * 1024, stopPoint);
+        std::vector<std::shared_ptr<TPortionInfo>> portions = Others.GetOptimizerTaskPortions(512 * 1024 * 1024, stopPoint);
         if (nextBorder) {
             if (MainPortion) {
                 portions.emplace_back(MainPortion);

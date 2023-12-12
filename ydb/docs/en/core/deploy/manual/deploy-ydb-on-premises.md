@@ -17,7 +17,7 @@ The network configuration must allow TCP connections on the following ports (the
 * 19001, 19002: Interconnect for intra-cluster node interaction
 * 8765, 8766: HTTP interface of {{ ydb-short-name }} Embedded UI.
 
-When hosting multiple dynamic nodes on the single server, separate ports are necessary for the GRPC, Interconnect and HTTP interface of each dynamic node within the server.
+Distinct ports are necessary for GRPC, Interconnect and HTTP interface of each dynamic node when hosting multiple dynamic nodes on a single server.
 
 Make sure that the system clocks running on all the cluster's servers are synced by `ntpd` or `chrony`. We recommend using the same time source for all servers in the cluster to maintain consistent leap seconds processing.
 

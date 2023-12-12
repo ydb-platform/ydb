@@ -2385,6 +2385,27 @@
             "uri": "file://test.test_insert-select_operate_with_columns--Results_/extracted"
         }
     ],
+    "test.test[join-anyjoin_common_dup--Debug]": [
+        {
+            "checksum": "3ab12fcb50a85f95b1231cb93a45abff",
+            "size": 7595,
+            "uri": "https://{canondata_backend}/1936842/fd32f204cf92d07ec90f2a50a26edddf6812895e/resource.tar.gz#test.test_join-anyjoin_common_dup--Debug_/opt.yql"
+        }
+    ],
+    "test.test[join-anyjoin_common_dup--Plan]": [
+        {
+            "checksum": "c0ca576d74ad014a5a7d4d96ba19914e",
+            "size": 20088,
+            "uri": "https://{canondata_backend}/1777230/74d7deaff9a66eb962abec24e8e0e2d018d91504/resource.tar.gz#test.test_join-anyjoin_common_dup--Plan_/plan.txt"
+        }
+    ],
+    "test.test[join-anyjoin_common_dup--Results]": [
+        {
+            "checksum": "60b092e649f37f42511945b5a31b5e44",
+            "size": 19972,
+            "uri": "https://{canondata_backend}/1936842/fd32f204cf92d07ec90f2a50a26edddf6812895e/resource.tar.gz#test.test_join-anyjoin_common_dup--Results_/results.txt"
+        }
+    ],
     "test.test[join-bush_in_in--Debug]": [
         {
             "checksum": "ca35b528dd8ed7ace3fa8f3051a4a1dd",

@@ -267,20 +267,37 @@ public:
         , ItemType_(AS_TYPE(TStructType, AS_TYPE(TListType, returnType)->GetItemType()))
     {
         YQL_ENSURE(Cluster_ == "pg_catalog");
+        if (Table_ == "pg_type") {
+            PgTypeFillers_.resize(ItemType_->GetMembersCount());
+            static const std::pair<const char*, TPgTypeFiller> AllFillers[] = {
+                {"oid", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.TypeId)); }},
+                {"typname", [](const NPg::TTypeDesc& desc) { return PointerDatumToPod((Datum)(MakeFixedString(desc.Name, NAMEDATALEN))); }},
+                {"typinput", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.InFuncId)); }},
+                {"typnamespace", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                {"typtype", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.TypType)); }},
+            };
+
+            for (size_t i = 0; i < Y_ARRAY_SIZE(AllFillers); ++i) {
+                const auto& [name, func] = AllFillers[i];
+                if (auto pos = ItemType_->FindMemberIndex(name)) {
+                    PgTypeFillers_[*pos] = func;
+                }
+            }
+        }
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         TUnboxedValueVector rows;
         if (Table_ == "pg_type") {
             NPg::EnumTypes([&](ui32 oid, const NPg::TTypeDesc& desc) {
-                NUdf::TUnboxedValue* items;
-                auto row = compCtx.HolderFactory.CreateDirectArrayHolder(ItemType_->GetMembersCount(), items);
-                if (auto oidPos = ItemType_->FindMemberIndex("oid")) {
-                    items[*oidPos] = ScalarDatumToPod(Datum(oid));
+                if (desc.ArrayTypeId == desc.TypeId) {
+                    return;
                 }
 
-                if (auto typnamePos = ItemType_->FindMemberIndex("typname")) {
-                    items[*typnamePos] = PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN));
+                NUdf::TUnboxedValue* items;
+                auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgTypeFillers_.size(), items);
+                for (ui32 i = 0; i < PgTypeFillers_.size(); ++i) {
+                    items[i] = PgTypeFillers_[i](desc);
                 }
 
                 rows.emplace_back(row);
@@ -297,6 +314,9 @@ private:
     const std::string_view Cluster_;
     const std::string_view Table_;
     TStructType* const ItemType_;
+
+    using TPgTypeFiller = NUdf::TUnboxedValuePod(*)(const NPg::TTypeDesc& desc);
+    TVector<TPgTypeFiller> PgTypeFillers_;
 };
 
 class TFunctionCallInfo {

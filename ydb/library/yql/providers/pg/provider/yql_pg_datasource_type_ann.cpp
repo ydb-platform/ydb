@@ -143,6 +143,9 @@ private:
     void FillPgTypeSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
         AddColumn(items, ctx, "oid", "oid");
         AddColumn(items, ctx, "typname", "name");
+        AddColumn(items, ctx, "typinput", "regproc");
+        AddColumn(items, ctx, "typnamespace", "oid");
+        AddColumn(items, ctx, "typtype", "char");
     }
 
     void AddColumn(TVector<const TItemExprType*>& items, TExprContext& ctx, const TString& name, const TString& type) {

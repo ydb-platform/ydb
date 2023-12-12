@@ -23,6 +23,10 @@ using TStatus = IGraphTransformer::TStatus;
 
 namespace {
 
+bool RightJoinSideAllowed(const TStringBuf& joinType) {
+    return joinType != "LeftOnly";
+}
+
 const TTypeAnnotationNode* MakeKqpEffectType(TExprContext& ctx) {
     return ctx.MakeType<TResourceExprType>(KqpEffectTag);
 }
@@ -1363,6 +1367,7 @@ TStatus AnnotateStreamIdxLookupJoin(const TExprNode::TPtr& node, TExprContext& c
     }
 
     TCoAtom rightLabel(node->Child(TKqlStreamIdxLookupJoin::idx_RightLabel));
+    TCoAtom joinType(node->Child(TKqlStreamIdxLookupJoin::idx_JoinType));
 
     const TStructExprType* leftDataType = leftInputTupleType->GetItems()[1]->Cast<TStructExprType>();
     TVector<const TItemExprType*> resultStructItems;
@@ -1372,10 +1377,12 @@ TStatus AnnotateStreamIdxLookupJoin(const TExprNode::TPtr& node, TExprContext& c
         );
     }
 
-    for (const auto& member : rightDataType->Cast<TStructExprType>()->GetItems()) {
-        resultStructItems.emplace_back(
-            ctx.MakeType<TItemExprType>(TString::Join(rightLabel.Value(), ".", member->GetName()), member->GetItemType())
-        );
+    if (RightJoinSideAllowed(joinType.Value())) {
+        for (const auto& member : rightDataType->Cast<TStructExprType>()->GetItems()) {
+            resultStructItems.emplace_back(
+                ctx.MakeType<TItemExprType>(TString::Join(rightLabel.Value(), ".", member->GetName()), member->GetItemType())
+            );
+        }
     }
 
     auto rowType = ctx.MakeType<TStructExprType>(resultStructItems);
@@ -1686,6 +1693,7 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
     }
 
     TCoAtom rightLabel(node->Child(TKqpIndexLookupJoin::idx_RightLabel));
+    TCoAtom joinType(node->Child(TKqpIndexLookupJoin::idx_JoinType));
 
     TVector<const TItemExprType*> resultStructItems;
     for (const auto& item : leftRowType->GetItems()) {
@@ -1694,10 +1702,12 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
         );
     }
 
-    for (const auto& item : rightRowType->Cast<TStructExprType>()->GetItems()) {
-        resultStructItems.emplace_back(
-            ctx.MakeType<TItemExprType>(TString::Join(rightLabel.Value(), ".", item->GetName()), item->GetItemType())
-        );
+    if (RightJoinSideAllowed(joinType.Value())) {
+        for (const auto& item : rightRowType->Cast<TStructExprType>()->GetItems()) {
+            resultStructItems.emplace_back(
+                ctx.MakeType<TItemExprType>(TString::Join(rightLabel.Value(), ".", item->GetName()), item->GetItemType())
+            );
+        }
     }
 
     auto outputRowType = ctx.MakeType<TStructExprType>(resultStructItems);

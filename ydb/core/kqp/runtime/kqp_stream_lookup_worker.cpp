@@ -779,7 +779,8 @@ private:
             resultRowItems[1] = NUdf::TUnboxedValuePod();
         }
 
-        rowStats.ReadRowsCount += (rightRowSize > 0 ? 1 : 0);
+        rowStats.ReadRowsCount += (leftRowInfo.RightRowExist ? 1 : 0);
+        // TODO: use datashard statistics KIKIMR-16924
         rowStats.ReadBytesCount += rightRowSize;
         rowStats.ResultRowsCount += 1;
         rowStats.ResultBytesCount += leftRowSize + rightRowSize;

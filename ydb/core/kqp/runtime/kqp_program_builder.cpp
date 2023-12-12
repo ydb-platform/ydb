@@ -159,6 +159,10 @@ EJoinKind GetIndexLookupJoinKind(const TString& joinKind) {
     }
 }
 
+bool RightJoinSideAllowed(const TString& joinType) {
+    return joinType != "LeftOnly";
+}
+
 } // namespace
 
 TKqpProgramBuilder::TKqpProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry)
@@ -347,10 +351,12 @@ TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, c
         rowTypeBuilder.Add(newMemberName, leftRowType->GetMemberType(i));
     }
 
-    for (ui32 i = 0; i < rightRowType->GetMembersCount(); ++i) {
-        TString newMemberName = rightLabel.empty() ? TString(rightRowType->GetMemberName(i))
-            : TString::Join(rightLabel, ".", rightRowType->GetMemberName(i));
-        rowTypeBuilder.Add(newMemberName, rightRowType->GetMemberType(i));
+    if (RightJoinSideAllowed(joinType)) {
+        for (ui32 i = 0; i < rightRowType->GetMembersCount(); ++i) {
+            TString newMemberName = rightLabel.empty() ? TString(rightRowType->GetMemberName(i))
+                : TString::Join(rightLabel, ".", rightRowType->GetMemberName(i));
+            rowTypeBuilder.Add(newMemberName, rightRowType->GetMemberType(i));
+        }
     }
 
     auto returnType = NewStreamType(rowTypeBuilder.Build());

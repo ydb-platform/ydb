@@ -50,7 +50,9 @@ inline std::optional<i64> NearbyIntImpl(double value, decltype(FE_DOWNWARD) mode
     ::fesetround(mode);
     auto res = ::nearbyint(value);
     ::fesetround(prevMode);
-    if (res < std::numeric_limits<i64>::min() || res > std::numeric_limits<i64>::max()) {
+    // cast to i64 gives wrong sign above 9223372036854774784
+    // lower bound is adjusted to -9223372036854774784 as well
+    if (res < double(std::numeric_limits<i64>::min() + 513) || res > double(std::numeric_limits<i64>::max() - 512)) {
         return {};
     }
    

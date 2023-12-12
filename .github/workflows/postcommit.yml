@@ -1,0 +1,27 @@
+name: Postcommit check
+on: 
+  push:
+    branches:
+      - 'main'
+      - 'stable-*'
+    paths-ignore:
+      - 'ydb/docs/**'
+      - '.github/**'
+      - '*'
+jobs:
+  build_and_test:
+    strategy:
+      fail-fast: false
+      matrix:
+        build_preset: ["relwithdebinfo", "release-asan"]
+    name: Build and test ${{ matrix.build_preset }}
+    uses: ./.github/workflows/build_and_test_ya_provisioned.yml
+    with:
+      build_preset: ${{ matrix.build_preset }}
+      build_target: "ydb/"
+      test_size: "small,medium"
+      test_type: "unittest,py3test,py2test,pytest"
+      test_threads: 52
+      runner_label: auto-provisioned
+      put_build_results_to_cache: true
+    secrets: inherit

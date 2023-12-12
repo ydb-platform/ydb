@@ -43,6 +43,7 @@
   ".github/workflows/docs_preview.yaml":"ydb/github_toplevel/.github/workflows/docs_preview.yaml",
   ".github/workflows/docs_release.yaml":"ydb/github_toplevel/.github/workflows/docs_release.yaml",
   ".github/workflows/nightly_run.yaml":"ydb/github_toplevel/.github/workflows/nightly_run.yaml",
+  ".github/workflows/postcommit.yml":"ydb/github_toplevel/.github/workflows/postcommit.yml",
   ".github/workflows/pr_check.yml":"ydb/github_toplevel/.github/workflows/pr_check.yml",
   ".github/workflows/prewarm-ccache.yml":"ydb/github_toplevel/.github/workflows/prewarm-ccache.yml",
   ".github/workflows/prewarm-debug.yaml":"ydb/github_toplevel/.github/workflows/prewarm-debug.yaml",

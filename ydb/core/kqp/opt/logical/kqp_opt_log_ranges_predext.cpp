@@ -265,14 +265,23 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
 
     if (!indexName.IsValid() && !readSettings.ForcePrimary && kqpCtx.Config->IndexAutoChooserMode != NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_DISABLED) {
         using TIndexComparisonKey = std::tuple<bool, size_t, bool, size_t, bool>;
-        auto calcKey = [&](NYql::IPredicateRangeExtractor::TBuildResult buildResult, size_t descriptionKeyColumns, bool needsJoin) -> TIndexComparisonKey {
+        auto calcNeedsJoin = [&] (const TKikimrTableMetadataPtr& keyTable) -> bool {
+            bool needsJoin = false;
+            for (auto&& column : read.Columns()) {
+                if (!keyTable->Columns.contains(column.Value())) {
+                    needsJoin = true;
+                }
+            }
+            return needsJoin;
+        };
 
+        auto calcKey = [&](NYql::IPredicateRangeExtractor::TBuildResult buildResult, size_t descriptionKeyColumns, bool needsJoin) -> TIndexComparisonKey {
             return std::make_tuple(
                 buildResult.PointPrefixLen >= descriptionKeyColumns,
                 buildResult.PointPrefixLen,
                 buildResult.UsedPrefixLen >= descriptionKeyColumns,
                 buildResult.UsedPrefixLen,
-                needsJoin);
+                !needsJoin);
         };
 
         TMaybe<TString> chosenIndex;
@@ -284,15 +293,16 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                 if (index.Type != TIndexDescription::EType::GlobalAsync) {
                     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(TString(index.Name)).first->Name);
                     auto buildResult = extractor->BuildComputeNode(tableDesc.Metadata->KeyColumnNames, ctx, typesCtx);
+                    bool needsJoin = calcNeedsJoin(tableDesc.Metadata);
 
-                    if (kqpCtx.Config->IndexAutoChooserMode == NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_ONLY_FULL_KEY && buildResult.PointPrefixLen < index.KeyColumns.size()) {
+                    if (needsJoin && kqpCtx.Config->IndexAutoChooserMode == NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_ONLY_FULL_KEY && buildResult.PointPrefixLen < index.KeyColumns.size()) {
                         continue;
                     }
-                    if (kqpCtx.Config->IndexAutoChooserMode == NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_ONLY_POINTS && buildResult.PointPrefixLen == 0) {
+                    if (needsJoin && kqpCtx.Config->IndexAutoChooserMode == NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_ONLY_POINTS && buildResult.PointPrefixLen == 0) {
                         continue;
                     }
 
-                    auto key = calcKey(buildResult, index.KeyColumns.size(), true);
+                    auto key = calcKey(buildResult, index.KeyColumns.size(), needsJoin);
                     if (key > maxKey) {
                         maxKey = key;
                         chosenIndex = index.Name;

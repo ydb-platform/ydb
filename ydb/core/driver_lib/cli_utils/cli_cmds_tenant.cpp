@@ -336,9 +336,9 @@ public:
         config.Opts->AddLongOption("attr", "Attach attribute name=value to database")
             .RequiredArgument("NAME=VALUE").AppendTo(&Attributes);
         config.Opts->AddLongOption("data-size-hard-quota", "A maximum data size in bytes, new data will be rejected when exceeded")
-            .OptionalArgument("NUM").StoreResult(&DataSizeHardQuota);
+            .RequiredArgument("NUM").StoreResult(&DataSizeHardQuota);
         config.Opts->AddLongOption("data-size-soft-quota", "Data size in bytes (lower than data_size_hard_quota), at this value new data ingestion is re-enabled again")
-            .OptionalArgument("NUM").StoreResult(&DataSizeSoftQuota);
+            .RequiredArgument("NUM").StoreResult(&DataSizeSoftQuota);
         config.Opts->AddLongOption("shared", "Create a shared database")
             .NoArgument().StoreTrue(&Shared);
         config.Opts->AddLongOption("serverless", "Create a serverless database (free arg must specify shared database for resources)")
@@ -640,7 +640,7 @@ public:
         config.Opts->AddLongOption("data-size-hard-quota", "A maximum data size in bytes, new data will be rejected when exceeded")
             .RequiredArgument("NUM").StoreResult(&DataSizeHardQuota);
         config.Opts->AddLongOption("data-size-soft-quota", "Data size in bytes (lower than data_size_hard_quota), at this value new data ingestion is re-enabled again")
-            .OptionalArgument("NUM").StoreResult(&DataSizeSoftQuota);
+            .RequiredArgument("NUM").StoreResult(&DataSizeSoftQuota);
     }
 
     void Parse(TConfig& config) override

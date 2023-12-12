@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	ydb "github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
+	rdbms_utils "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/datasource/rdbms/utils"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
@@ -17,7 +18,7 @@ func TestMakeDescribeTableQuery(t *testing.T) {
 	dsi := &common.TDataSourceInstance{Options: &common.TDataSourceInstance_PgOptions{PgOptions: &common.TPostgreSQLDataSourceOptions{Schema: "schema"}}}
 	request := &api.TDescribeTableRequest{Table: "table", DataSourceInstance: dsi}
 
-	output, args := utils.MakeDescribeTableQuery(logger, formatter, request)
+	output, args := rdbms_utils.MakeDescribeTableQuery(logger, formatter, request)
 	require.Equal(t, "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = $1 AND table_schema = $2", output)
 	require.Equal(t, args, []any{"table", "schema"})
 }
@@ -412,7 +413,7 @@ func TestMakeReadSplitQuery(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.testName, func(t *testing.T) {
-			output, outputArgs, err := utils.MakeReadSplitQuery(logger, formatter, tc.selectReq)
+			output, outputArgs, err := rdbms_utils.MakeReadSplitQuery(logger, formatter, tc.selectReq)
 			require.Equal(t, tc.outputQuery, output)
 			require.Equal(t, tc.outputArgs, outputArgs)
 

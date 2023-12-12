@@ -2,6 +2,7 @@ GO_LIBRARY()
 
 SRCS(
     data_source.go
+    data_source_factory.go
     doc.go
     schema_builder.go
 )
@@ -16,6 +17,7 @@ END()
 RECURSE(
     clickhouse
     postgresql
+    utils
 )
 
 RECURSE_FOR_TESTS(ut)

@@ -8,9 +8,9 @@ import (
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
-type TrafficTracker struct {
+type TrafficTracker[T utils.Acceptor] struct {
 	pagination  *config.TPagingConfig
-	sizePattern *sizePattern
+	sizePattern *sizePattern[T]
 
 	// cumulative sums of bytes passed and rows handled since the start of the request
 	bytesTotal *utils.Counter[uint64]
@@ -25,7 +25,7 @@ type TrafficTracker struct {
 // would exceed the limits on the page size.
 // If there's enough space in buffer, it returns true and increases the internal counters.
 // Otherwise it return false, but doesn't change internal state.
-func (tt *TrafficTracker) tryAddRow(acceptors []any) (bool, error) {
+func (tt *TrafficTracker[T]) tryAddRow(acceptors []T) (bool, error) {
 	if err := tt.maybeInit(acceptors); err != nil {
 		return false, fmt.Errorf("maybe init: %w", err)
 	}
@@ -50,7 +50,7 @@ func (tt *TrafficTracker) tryAddRow(acceptors []any) (bool, error) {
 	return true, nil
 }
 
-func (tt *TrafficTracker) maybeInit(acceptors []any) error {
+func (tt *TrafficTracker[T]) maybeInit(acceptors []T) error {
 	if tt.sizePattern == nil {
 		// lazy initialization when the first row is ready
 		var err error
@@ -64,7 +64,7 @@ func (tt *TrafficTracker) maybeInit(acceptors []any) error {
 	return nil
 }
 
-func (tt *TrafficTracker) checkPageSizeLimit(bytesDelta, rowsDelta uint64) (bool, error) {
+func (tt *TrafficTracker[T]) checkPageSizeLimit(bytesDelta, rowsDelta uint64) (bool, error) {
 	if tt.pagination.BytesPerPage != 0 {
 		// almost impossible case, but have to check
 		if bytesDelta > tt.pagination.BytesPerPage {
@@ -91,12 +91,12 @@ func (tt *TrafficTracker) checkPageSizeLimit(bytesDelta, rowsDelta uint64) (bool
 	return false, nil
 }
 
-func (tt *TrafficTracker) refreshCounters() {
+func (tt *TrafficTracker[T]) refreshCounters() {
 	tt.bytesCurr = tt.bytesTotal.MakeChild()
 	tt.rowsCurr = tt.rowsTotal.MakeChild()
 }
 
-func (tt *TrafficTracker) DumpStats(total bool) *api_service_protos.TReadSplitsResponse_TStats {
+func (tt *TrafficTracker[T]) DumpStats(total bool) *api_service_protos.TReadSplitsResponse_TStats {
 	rowsCounter := tt.rowsCurr
 	bytesCounter := tt.bytesCurr
 
@@ -113,8 +113,8 @@ func (tt *TrafficTracker) DumpStats(total bool) *api_service_protos.TReadSplitsR
 	return result
 }
 
-func NewTrafficTracker(pagination *config.TPagingConfig) *TrafficTracker {
-	tt := &TrafficTracker{
+func NewTrafficTracker[T utils.Acceptor](pagination *config.TPagingConfig) *TrafficTracker[T] {
+	tt := &TrafficTracker[T]{
 		pagination: pagination,
 		bytesTotal: utils.NewCounter[uint64](),
 		rowsTotal:  utils.NewCounter[uint64](),

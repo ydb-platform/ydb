@@ -40,6 +40,10 @@ func ValidateReadSplitsRequest(logger log.Logger, request *api_service_protos.TR
 		return fmt.Errorf("validate data source instance: %w", err)
 	}
 
+	if len(request.Splits) == 0 {
+		return fmt.Errorf("splits are empty: %w", utils.ErrInvalidRequest)
+	}
+
 	return nil
 }
 
@@ -92,7 +96,7 @@ func validateDataSourceInstance(logger log.Logger, dsi *api_common.TDataSourceIn
 			return fmt.Errorf("schema field is empty: %w", utils.ErrInvalidRequest)
 		}
 
-	case api_common.EDataSourceKind_CLICKHOUSE:
+	case api_common.EDataSourceKind_CLICKHOUSE, api_common.EDataSourceKind_S3:
 		break
 	default:
 		return fmt.Errorf("unsupported data source: %w", utils.ErrInvalidRequest)

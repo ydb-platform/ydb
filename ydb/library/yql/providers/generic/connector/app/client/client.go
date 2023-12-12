@@ -109,16 +109,26 @@ func callServer(logger log.Logger, cfg *config.ClientConfig) error {
 
 	connectorClient := api_service.NewConnectorClient(conn)
 
-	// DescribeTable
-	schema, err := describeTable(logger, connectorClient, cfg.DataSourceInstance)
-	if err != nil {
-		return fmt.Errorf("describe table: %w", err)
-	}
+	var splits []*api_service_protos.TSplit
 
-	// ListSplits - we want to SELECT *
-	splits, err := listSplits(logger, schema, connectorClient, cfg.DataSourceInstance)
-	if err != nil {
-		return fmt.Errorf("list splits: %w", err)
+	switch cfg.DataSourceInstance.Kind {
+	case api_common.EDataSourceKind_CLICKHOUSE, api_common.EDataSourceKind_POSTGRESQL:
+		// DescribeTable
+		schema, err := describeTable(logger, connectorClient, cfg.DataSourceInstance)
+		if err != nil {
+			return fmt.Errorf("describe table: %w", err)
+		}
+
+		// ListSplits - we want to SELECT *
+		splits, err = listSplits(logger, schema, connectorClient, cfg.DataSourceInstance)
+		if err != nil {
+			return fmt.Errorf("list splits: %w", err)
+		}
+
+	case api_common.EDataSourceKind_S3:
+		return fmt.Errorf("unexpected data source kind %v", cfg.DataSourceInstance.Kind)
+	default:
+		return fmt.Errorf("unexpected data source kind %v", cfg.DataSourceInstance.Kind)
 	}
 
 	// ReadSplits
@@ -278,6 +288,8 @@ func dumpReadResponses(
 
 			reader.Release()
 		}
+
+		return nil
 	}
 
 	return fmt.Errorf("unknown format: %v", format)

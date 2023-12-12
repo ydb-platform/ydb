@@ -5,11 +5,11 @@ import (
 	"strings"
 
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
-	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
+	rdbms_utils "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/datasource/rdbms/utils"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
-var _ utils.SQLFormatter = (*sqlFormatter)(nil)
+var _ rdbms_utils.SQLFormatter = (*sqlFormatter)(nil)
 
 type sqlFormatter struct {
 }
@@ -90,6 +90,6 @@ func (f sqlFormatter) SanitiseIdentifier(ident string) string {
 	return sanitizedIdent
 }
 
-func NewSQLFormatter() utils.SQLFormatter {
+func NewSQLFormatter() rdbms_utils.SQLFormatter {
 	return sqlFormatter{}
 }

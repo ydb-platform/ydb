@@ -152,21 +152,6 @@ Y_UNIT_TEST_SUITE(Login) {
             UNIT_ASSERT(Count(groups, "group5") == 1);
         }
         {
-            auto response1 = provider.AddGroupMembership({.Group = "group2", .Members = {"group4"}});
-            UNIT_ASSERT(!response1.Error);
-            UNIT_ASSERT(response1.Notice == "Role \"group4\" is already a member of role \"group2\"");
-        }
-        {
-            auto response1 = provider.RemoveGroupMembership({.Group = "group2", .Members = {"group4"}});
-            UNIT_ASSERT(!response1.Error);
-            UNIT_ASSERT(!response1.Warning);
-        }
-        {
-            auto response1 = provider.RemoveGroupMembership({.Group = "group2", .Members = {"group4"}});
-            UNIT_ASSERT(!response1.Error);
-            UNIT_ASSERT(response1.Warning == "Role \"group4\" is not a member of role \"group2\"");
-        }
-        {
             auto response1 = provider.RenameGroup({.Group = "group3", .NewName = "group33"});
             UNIT_ASSERT(!response1.Error);
 
@@ -200,6 +185,21 @@ Y_UNIT_TEST_SUITE(Login) {
             UNIT_ASSERT(groups.size() == 2);
             UNIT_ASSERT(Count(groups, "group2") == 1);
             UNIT_ASSERT(Count(groups, "group1") == 1);
+        }
+        {
+            auto response1 = provider.AddGroupMembership({.Group = "group2", .Member = {"group4"}});
+            UNIT_ASSERT(!response1.Error);
+            UNIT_ASSERT(response1.Notice == "Role \"group4\" is already a member of role \"group2\"");
+        }
+        {
+            auto response1 = provider.RemoveGroupMembership({.Group = "group2", .Member = {"group4"}});
+            UNIT_ASSERT(!response1.Error);
+            UNIT_ASSERT(!response1.Warning);
+        }
+        {
+            auto response1 = provider.RemoveGroupMembership({.Group = "group2", .Member = {"group4"}});
+            UNIT_ASSERT(!response1.Error);
+            UNIT_ASSERT(response1.Warning == "Role \"group4\" is not a member of role \"group2\"");
         }
         {
             auto groups = provider.GetGroupsMembership("user1");

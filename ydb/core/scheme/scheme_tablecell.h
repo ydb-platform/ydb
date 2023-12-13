@@ -567,6 +567,8 @@ public:
     TSerializedCellMatrix(const TSerializedCellMatrix& other)
         : Buf(other.Buf)
         , Cells(other.Cells)
+        , RowCount(other.RowCount)
+        , ColCount(other.ColCount)
     {
         Y_ABORT_UNLESS(Buf.data() == other.Buf.data(), "Buffer must be shared");
     }
@@ -595,6 +597,8 @@ public:
         Buf = std::move(other.Buf);
         Y_ABORT_UNLESS(Buf.data() == otherPtr, "Buffer address must not change");
         Cells = std::move(other.Cells);
+        RowCount = std::move(other.RowCount);
+        ColCount = std::move(other.ColCount);
         return *this;
     }
 

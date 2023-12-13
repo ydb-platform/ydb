@@ -282,12 +282,18 @@ TString GetPrettyStatistics(const TString& statistics) {
             else {
                 writer.OnKeyedItem(p.first);
                 writer.OnBeginMap();
-                    AggregateNode(writer, p.second, "TotalTasks", "TasksCount");
-                    AggregateNode(writer, p.second, "TotalCpuTimeUs", "CpuTimeUs");
-                    AggregateNode(writer, p.second, "Ingress=S3Source.Ingress.Bytes", "IngressObjectStorageBytes");
-                    AggregateNode(writer, p.second, "Egress=S3Sink.Egress.Bytes", "EgressObjectStorageBytes");
+                    AggregateNode(writer, p.second, "Tasks", "Tasks");
+                    AggregateNode(writer, p.second, "CpuTimeUs", "CpuTimeUs");
                     RemapNode(writer, p.second, "IngressBytes", "IngressBytes");
+                    RemapNode(writer, p.second, "IngressRows", "IngressRows");
+                    RemapNode(writer, p.second, "InputBytes", "InputBytes");
+                    RemapNode(writer, p.second, "InputRows", "InputRows");
+                    RemapNode(writer, p.second, "OutputBytes", "OutputBytes");
+                    RemapNode(writer, p.second, "OutputRows", "OutputRows");
+                    RemapNode(writer, p.second, "ResultBytes", "ResultBytes");
+                    RemapNode(writer, p.second, "ResultRows", "ResultRows");
                     RemapNode(writer, p.second, "EgressBytes", "EgressBytes");
+                    RemapNode(writer, p.second, "EgressRows", "EgressRows");
                 writer.OnEndMap();
             }
         }

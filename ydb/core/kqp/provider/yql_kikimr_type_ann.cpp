@@ -747,16 +747,33 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                             return TStatus::Error;
                         }
 
-                        if (defaultType->HasOptionalOrNull() && columnMeta.NotNull) {
+                        if (defaultType->HasNull() && columnMeta.NotNull) {
                             ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
                                 << " is nullable or optional, but column has not null constraint. "));
                             return TStatus::Error;
                         }
 
-                        if (!IsSameAnnotation(*defaultType, *actualType)) {
+                        if (defaultType->GetKind() != actualType->GetKind()) {
                             ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
-                                << " type mismatch, expected: " << (*type) << ", actual: " << *(actualType)));
+                                << " type mismatch, expected: " << (*actualType) << ", actual: " << *(defaultType)));
+                            
                             return TStatus::Error;
+                        }
+
+                        bool skipAnnotationValidation = false;
+                        if (defaultType->GetKind() == ETypeAnnotationKind::Pg) {
+                            auto defaultPgType = defaultType->Cast<TPgExprType>();
+                            if (defaultPgType->GetName() == "unknown") {
+                                skipAnnotationValidation = true;
+                            }
+                        }
+
+                        if (!skipAnnotationValidation) {
+                            if (!IsSameAnnotation(*defaultType, *actualType)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
+                                    << " type mismatch, expected: " << (*actualType) << ", actual: " << *(defaultType)));
+                                return TStatus::Error;
+                            }
                         }
 
                         if (columnMeta.IsDefaultKindDefined()) {
@@ -767,7 +784,40 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         }
 
                         columnMeta.SetDefaultFromLiteral();
-                        FillLiteralProto(constraint.Value().Cast<TCoDataCtor>(), columnMeta.DefaultFromLiteral);
+
+                        if (auto pgConst = constraint.Value().Maybe<TCoPgConst>()) {
+                            auto actualPgType = actualType->Cast<TPgExprType>();
+                            YQL_ENSURE(actualPgType);
+
+                            auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
+                            if (!typeDesc) {
+                                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                    TStringBuilder() << "Failed to parse default expr typename " << actualPgType->GetName()));
+                                return TStatus::Error;
+                            }
+
+                            TString content = TString(pgConst.Cast().Value().Value());
+                            auto parseResult = NKikimr::NPg::PgNativeBinaryFromNativeText(content, typeDesc);
+                            if (parseResult.Error) {
+                                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                    TStringBuilder() << "Failed to parse default expr for typename " << actualPgType->GetName()
+                                    << ", error reason: " << *parseResult.Error));
+                                return TStatus::Error;
+                            }
+
+                            columnMeta.DefaultFromLiteral.mutable_value()->set_bytes_value(parseResult.Str);
+                            auto* pg = columnMeta.DefaultFromLiteral.mutable_type()->mutable_pg_type();
+                            
+                            pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
+                            pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
+                        } else if (auto literal = constraint.Value().Maybe<TCoDataCtor>()) {
+                            FillLiteralProto(constraint.Value().Cast<TCoDataCtor>(), columnMeta.DefaultFromLiteral);
+                        } else {
+                            ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                TStringBuilder() << "Unsupported type of default value " << constraint.Value().Cast().Ptr()->Content()));
+                            return TStatus::Error;
+                        }
+                        
                     } else if (constraint.Name().Value() == "serial") {
 
                         if (columnMeta.IsDefaultKindDefined()) {

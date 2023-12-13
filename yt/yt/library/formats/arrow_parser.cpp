@@ -525,7 +525,7 @@ private:
         } else {
             Writer_->WriteBeginList();
             for (int elementIndex = 0; elementIndex < structArray->num_fields(); elementIndex++) {
-                auto elementColumn = structArray->field(RowIndex_);
+                auto elementColumn = structArray->field(elementIndex);
                 ArrayCompositeVisitor elementVisitor(elementColumn, Writer_, RowIndex_);
                 ThrowOnError(elementColumn->type()->Accept(&elementVisitor));
 

@@ -42,6 +42,7 @@ bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataSto
     CommittedBlobs = dataAccessor.GetCommitedBlobs(readDescription, ResultIndexSchema->GetIndexInfo().GetReplaceKey());
 
     SelectInfo = dataAccessor.Select(readDescription);
+    StatsMode = readDescription.StatsMode;
     return true;
 }
 

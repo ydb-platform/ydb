@@ -97,6 +97,7 @@ public:
         , Stats(NTracing::TTraceClient::GetLocalClient("SHARD", ::ToString(TabletId)/*, "SCAN_TXID:" + ::ToString(TxId)*/))
         , ComputeShardingPolicy(computeShardingPolicy)
     {
+        AFL_VERIFY(ReadMetadataRanges.size() == 1);
         KeyYqlSchema = ReadMetadataRanges[ReadMetadataIndex]->GetKeyYqlSchema();
     }
 
@@ -396,7 +397,25 @@ private:
         return singleRowWriter.Row;
     }
 
-    bool SendResult(bool pageFault, bool lastBatch){
+    class TScanStatsOwner: public NKqp::TEvKqpCompute::IShardScanStats {
+    private:
+        YDB_READONLY_DEF(NOlap::TReadStats, Stats);
+    public:
+        TScanStatsOwner(const NOlap::TReadStats& stats)
+            : Stats(stats) {
+
+        }
+
+        virtual THashMap<TString, ui64> GetMetrics() const override {
+            THashMap<TString, ui64> result;
+            result["compacted_bytes"] = Stats.CompactedPortionsBytes;
+            result["inserted_bytes"] = Stats.InsertedPortionsBytes;
+            result["committed_bytes"] = Stats.CommittedPortionsBytes;
+            return result;
+        }
+    };
+
+    bool SendResult(bool pageFault, bool lastBatch) {
         if (Finished) {
             return true;
         }
@@ -429,6 +448,7 @@ private:
                 << " bytes: " << Bytes << "/" << BytesSum << " rows: " << Rows << "/" << RowsSum << " page faults: " << Result->PageFaults
                 << " finished: " << Result->Finished << " pageFault: " << Result->PageFault
                 << " stats:" << Stats->ToJson() << ";iterator:" << (ScanIterator ? ScanIterator->DebugString(false) : "NO");
+            Result->StatsOnFinished = std::make_shared<TScanStatsOwner>(ScanIterator->GetStats());
         } else {
             Y_ABORT_UNLESS(ChunksLimiter.Take(Bytes));
             Result->RequestedBytesLimitReached = !ChunksLimiter.HasMore();
@@ -696,6 +716,7 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
     bool isIndexStats = read.TableName.EndsWith(NOlap::TIndexInfo::STORE_INDEX_STATS_TABLE) ||
         read.TableName.EndsWith(NOlap::TIndexInfo::TABLE_INDEX_STATS_TABLE);
     read.ColumnIds.assign(record.GetColumnTags().begin(), record.GetColumnTags().end());
+    read.StatsMode = record.GetStatsMode();
 
     const NOlap::TIndexInfo* indexInfo = nullptr;
     if (!isIndexStats) {
@@ -745,6 +766,7 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
         ReadMetadataRanges.emplace_back(newRange);
     }
     Y_ABORT_UNLESS(ReadMetadataRanges.size() == 1);
+
     return true;
 }
 
@@ -773,8 +795,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     const ui32 scanGen = request.GetGeneration();
     TString table = request.GetTablePath();
     auto dataFormat = request.GetDataFormat();
-    TDuration timeout = TDuration::MilliSeconds(request.GetTimeoutMs());
-
+    const TDuration timeout = TDuration::MilliSeconds(request.GetTimeoutMs());
     if (scanGen > 1) {
         Self->IncCounter(COUNTER_SCAN_RESTARTED);
     }
@@ -783,8 +804,6 @@ void TTxScan::Complete(const TActorContext& ctx) {
     if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD)) {
         detailedInfo << " read metadata: (" << TContainerPrinter(ReadMetadataRanges) << ")" << " req: " << request;
     }
-    std::vector<NOlap::TReadMetadata::TConstPtr> rMetadataRanges;
-
     if (ReadMetadataRanges.empty()) {
         LOG_S_DEBUG("TTxScan failed "
                 << " txId: " << txId
@@ -858,6 +877,10 @@ void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext
     ScanTxInFlight.insert({txId, LastAccessTime});
     SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
     Execute(new TTxScan(this, ev), ctx);
+}
+
+const NKikimr::NOlap::TReadStats& TScanIteratorBase::GetStats() const {
+    return Default<NOlap::TReadStats>();
 }
 
 }

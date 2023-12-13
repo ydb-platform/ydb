@@ -50,8 +50,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 response = requests.request(method, url, data=body, headers=headers, timeout=self._timeout)
                 break
-            except requests.exceptions.ConnectionError as e:
-                self.log_message("! catch IOError(%s), retry", e)
+            except requests.exceptions.RequestException as e:
+                self.log_message("! catch %s, retry", e)
                 time.sleep(0.25)
                 continue
 

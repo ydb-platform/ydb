@@ -28,6 +28,16 @@ TIndexInfo::TIndexInfo(const TString& name, ui32 id)
     , Name(name)
 {}
 
+bool TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
+    if (!other.GetReplaceKey()->Equals(GetReplaceKey())) {
+        return false;
+    }
+    if (!other.GetIndexKey()->Equals(GetIndexKey())) {
+        return false;
+    }
+    return true;
+}
+
 std::shared_ptr<arrow::RecordBatch> TIndexInfo::AddSpecialColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot) {
     Y_ABORT_UNLESS(batch);
     i64 numColumns = batch->num_columns();

@@ -305,9 +305,9 @@ public:
         return it == SnapshotByVersion.end() ? nullptr : it->second;
     }
 
-    ISnapshotSchema::TPtr GetSchemaUnsafe(const ui64 version) const {
+    ISnapshotSchema::TPtr GetSchemaVerified(const ui64 version) const {
         auto it = SnapshotByVersion.find(version);
-        Y_ABORT_UNLESS(it != SnapshotByVersion.end());
+        Y_ABORT_UNLESS(it != SnapshotByVersion.end(), "no schema for version %lu", version);
         return it->second;
     }
 
@@ -331,23 +331,21 @@ public:
         return IndexKey;
     }
 
-    void AddIndex(const TSnapshot& version, TIndexInfo&& indexInfo) {
+    void AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
         if (Snapshots.empty()) {
             IndexKey = indexInfo.GetIndexKey();
         } else {
             Y_ABORT_UNLESS(IndexKey->Equals(indexInfo.GetIndexKey()));
         }
-        auto it = Snapshots.emplace(version, std::make_shared<TSnapshotSchema>(std::move(indexInfo), version));
-        Y_ABORT_UNLESS(it.second);
-        auto newVersion = it.first->second->GetVersion();
 
-        if (SnapshotByVersion.contains(newVersion)) {
-            Y_VERIFY_S(LastSchemaVersion != 0, TStringBuilder() << "Last: " << LastSchemaVersion);
-            Y_VERIFY_S(LastSchemaVersion == newVersion, TStringBuilder() << "Last: " << LastSchemaVersion << ";New: " << newVersion);
+        auto newVersion = indexInfo.GetVersion();
+        auto itVersion = SnapshotByVersion.emplace(newVersion, std::make_shared<TSnapshotSchema>(std::move(indexInfo), snapshot));
+        if (!itVersion.second) {
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("message", "Skip registered version")("version", LastSchemaVersion);
         }
-
-        SnapshotByVersion[newVersion] = it.first->second;
-        LastSchemaVersion = newVersion;
+        auto itSnap = Snapshots.emplace(snapshot, itVersion.first->second);
+        Y_ABORT_UNLESS(itSnap.second);
+        LastSchemaVersion = std::max(newVersion, LastSchemaVersion);
     }
 };
 
@@ -378,8 +376,7 @@ public:
     virtual std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction, const THashSet<TPortionAddress>& busyPortions,
                                                            ui64 maxBytesToEvict = TCompactionLimits::DEFAULT_EVICTION_BYTES) noexcept = 0;
     virtual bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
-    virtual void UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
-    //virtual void UpdateTableSchema(ui64 pathId, const TSnapshot& snapshot, TIndexInfo&& info) = 0; // TODO
+    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
     virtual const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const = 0;
     virtual const TColumnEngineStats& GetTotalStats() = 0;
     virtual ui64 MemoryUsage() const { return 0; }

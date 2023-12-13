@@ -91,7 +91,6 @@ public:
     }
 
 public:
-
     static TIndexInfo BuildDefault() {
         TIndexInfo result("dummy", 0);
         return result;
@@ -208,6 +207,8 @@ public:
     ui64 GetVersion() const {
         return Version;
     }
+
+    bool CheckCompatible(const TIndexInfo& other) const;
 
 private:
     ui32 Id;

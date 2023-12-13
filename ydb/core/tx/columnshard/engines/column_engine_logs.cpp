@@ -129,13 +129,16 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
     }
 }
 
-void TColumnEngineForLogs::UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) {
+void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
     if (!ColumnsTable) {
-        ui32 indexId = info.GetId();
+        ui32 indexId = indexInfo.GetId();
         ColumnsTable = std::make_shared<TColumnsTable>(indexId);
         CountersTable = std::make_shared<TCountersTable>(indexId);
+    } else {
+        const NOlap::TIndexInfo& lastIndexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
+        Y_ABORT_UNLESS(lastIndexInfo.CheckCompatible(indexInfo));
     }
-    VersionedIndex.AddIndex(snapshot, std::move(info));
+    VersionedIndex.AddIndex(snapshot, std::move(indexInfo));
 }
 
 bool TColumnEngineForLogs::Load(IDbWrapper& db) {
@@ -143,6 +146,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
     Loaded = true;
     THashMap<ui64, ui64> granuleToPathIdDecoder;
     {
+        TMemoryProfileGuard g("TTxInit/LoadColumns");
         auto guard = GranulesStorage->StartPackModification();
         if (!LoadColumns(db)) {
             return false;

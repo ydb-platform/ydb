@@ -141,9 +141,7 @@ public:
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
                       const TSnapshot& snapshot) noexcept override;
 
-    void UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) override;
-
-
+    void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) override;
 
     std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                         const TPKRangesFilter& pkRangesFilter) const override;

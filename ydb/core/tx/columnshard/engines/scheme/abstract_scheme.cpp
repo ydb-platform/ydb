@@ -29,8 +29,8 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::NormalizeBatch(const ISnaps
     if (dataSchema.GetSnapshot() == GetSnapshot()) {
         return batch;
     }
-    const std::shared_ptr<arrow::Schema>& resultArrowSchema = GetSchema();
     Y_ABORT_UNLESS(dataSchema.GetSnapshot() < GetSnapshot());
+    const std::shared_ptr<arrow::Schema>& resultArrowSchema = GetSchema();
     std::vector<std::shared_ptr<arrow::Array>> newColumns;
     newColumns.reserve(resultArrowSchema->num_fields());
 

@@ -219,7 +219,7 @@ bool TTablesManager::RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIc
     return true;
 }
 
-void TTablesManager::AddPresetVersion(const ui32 presetId, const TRowVersion& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db) {
+void TTablesManager::AddSchemaVersion(const ui32 presetId, const TRowVersion& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db) {
     Y_ABORT_UNLESS(SchemaPresets.contains(presetId));
     auto preset = SchemaPresets.at(presetId);
 
@@ -250,10 +250,10 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const TRowVersion& versi
         if (SchemaPresets.empty()) {
             TSchemaPreset fakePreset;
             Y_ABORT_UNLESS(RegisterSchemaPreset(fakePreset, db));
-            AddPresetVersion(fakePreset.GetId(), version, versionInfo.GetSchema(), db);
+            AddSchemaVersion(fakePreset.GetId(), version, versionInfo.GetSchema(), db);
         } else {
             Y_ABORT_UNLESS(SchemaPresets.contains(fakePreset.GetId()));
-            AddPresetVersion(fakePreset.GetId(), version, versionInfo.GetSchema(), db);
+            AddSchemaVersion(fakePreset.GetId(), version, versionInfo.GetSchema(), db);
         }
     }
 
@@ -267,7 +267,6 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const TRowVersion& versi
         if (PrimaryIndex) {
             PrimaryIndex->OnTieringModified(nullptr, Ttl);
         }
-
     }
     Schema::SaveTableVersionInfo(db, pathId, version, versionInfo);
     table.AddVersion(version, versionInfo);
@@ -280,12 +279,8 @@ void TTablesManager::IndexSchemaVersion(const TRowVersion& version, const NKikim
     const bool isFirstPrimaryIndexInitialization = !PrimaryIndex;
     if (!PrimaryIndex) {
         PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, NOlap::TCompactionLimits(), StoragesManager);
-    } else {
-        const NOlap::TIndexInfo& lastIndexInfo = PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetIndexInfo();
-        Y_ABORT_UNLESS(lastIndexInfo.GetReplaceKey()->Equals(indexInfo.GetReplaceKey()));
-        Y_ABORT_UNLESS(lastIndexInfo.GetIndexKey()->Equals(indexInfo.GetIndexKey()));
     }
-    PrimaryIndex->UpdateDefaultSchema(snapshot, std::move(indexInfo));
+    PrimaryIndex->RegisterSchemaVersion(snapshot, std::move(indexInfo));
     if (isFirstPrimaryIndexInitialization) {
         for (auto&& i : Tables) {
             PrimaryIndex->RegisterTable(i.first);

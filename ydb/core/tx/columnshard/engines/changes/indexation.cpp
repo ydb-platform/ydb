@@ -70,7 +70,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
     for (auto& inserted : DataToIndex) {
         const TBlobRange& blobRange = inserted.GetBlobRange();
 
-        auto blobSchema = context.SchemaVersions.GetSchema(inserted.GetSchemaVersion());
+        auto blobSchema = context.SchemaVersions.GetSchemaVerified(inserted.GetSchemaVersion());
         auto& indexInfo = blobSchema->GetIndexInfo();
         Y_ABORT_UNLESS(indexInfo.IsSorted());
 
@@ -88,7 +88,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
             ;
         }
 
-        batch = AddSpecials(batch, blobSchema->GetIndexInfo(), inserted);
+        batch = AddSpecials(batch, indexInfo, inserted);
         batch = resultSchema->NormalizeBatch(*blobSchema, batch);
         pathBatches[inserted.PathId].push_back(batch);
         Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(pathBatches[inserted.PathId].back(), resultSchema->GetIndexInfo().GetReplaceKey()));

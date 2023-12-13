@@ -739,6 +739,7 @@ public:
             }
 
             request.StatsMode = queryState->GetStatsMode();
+            request.ProgressStatsPeriod = queryState->GetProgressStatsPeriod();
         }
 
         const auto& limits = GetQueryLimits(Settings);
@@ -1127,6 +1128,28 @@ public:
 
         TTimerGuard timer(this);
         ProcessExecuterResult(ev->Get());
+    }
+
+    void HandleExecute(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
+        if (QueryState && QueryState->RequestActorId) {
+            if (ExecuterId != ev->Sender) {
+                return;
+            }
+
+            if (QueryState->ReportStats()) {
+                if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
+                    NKqpProto::TKqpStatsQuery& stats = *ev->Get()->Record.MutableQueryStats();
+                    NKqpProto::TKqpStatsQuery executionStats;
+                    executionStats.Swap(&stats);
+                    stats = QueryState->Stats;
+                    stats.MutableExecutions()->MergeFrom(executionStats.GetExecutions());
+                    ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats));
+                }
+            }
+            
+            LOG_D("Forwarded TEvExecuterProgress to " << QueryState->RequestActorId);
+            Send(QueryState->RequestActorId, ev->Release().Release(), 0, QueryState->ProxyRequestId);
+        }
     }
 
     std::optional<TKqpTempTablesState::TTempTableInfo> GetTemporaryTableInfo(TKqpPhyTxHolder::TConstPtr tx) {
@@ -1971,6 +1994,7 @@ public:
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleNoop);
+                hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop)
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
                 // message from KQP proxy in case of our reply just after kqp proxy timer tick
@@ -2018,6 +2042,7 @@ public:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqp::TEvQueryRequest, HandleExecute);
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleExecute);
+                hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleExecute)
 
                 hFunc(TEvKqpExecuter::TEvStreamData, HandleExecute);
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleExecute);
@@ -2071,6 +2096,7 @@ public:
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvCloseSessionResponse, HandleCleanup);
                 hFunc(TEvKqp::TEvQueryResponse, HandleNoop);
+                hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop)
             default:
                 UnexpectedEvent("CleanupState", ev);
             }

@@ -274,6 +274,14 @@ public:
         return UserRequestContext;
     }
 
+    void SetProgressStatsPeriod(TDuration progressStatsPeriod) {
+        ProgressStatsPeriod = progressStatsPeriod;
+    }
+
+    TDuration GetProgressStatsPeriod() const {
+        return ProgressStatsPeriod;
+    }
+
     mutable NKikimrKqp::TEvQueryRequest Record;
 
 private:
@@ -301,6 +309,7 @@ private:
     TDuration CancelAfter;
     const ::Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
+    TDuration ProgressStatsPeriod;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

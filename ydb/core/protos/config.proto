@@ -1039,6 +1039,7 @@ message TQueryServiceConfig {
     optional bool MdbTransformHost = 10;
     optional NYql.TGenericGatewayConfig Generic = 11;
     optional TFinalizeScriptServiceConfig FinalizeScriptServiceConfig = 12;
+    optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
 }
 
 // Config describes immediate controls and allows

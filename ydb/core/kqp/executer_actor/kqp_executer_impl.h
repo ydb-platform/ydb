@@ -23,6 +23,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/grpc_services/local_rate_limiter.h>
 
 #include <ydb/services/metadata/secret/fetcher.h>
@@ -241,6 +242,23 @@ protected:
             << ", task: " << taskId
             << ", state: " << NYql::NDqProto::EComputeState_Name((NYql::NDqProto::EComputeState) state.GetState())
             << ", stats: " << state.GetStats());
+
+        if (Stats && state.HasStats() && Request.ProgressStatsPeriod) {
+            Stats->UpdateTaskStats(taskId, state.GetStats());
+            auto now = TInstant::Now();
+            if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
+                auto progress = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
+                auto& execStats = *progress->Record.MutableQueryStats()->AddExecutions();
+                Stats->ExportExecStats(execStats);
+                for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
+                    const auto& tx = Request.Transactions[txId].Body;
+                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
+                    execStats.AddTxPlansWithStats(planWithStats);
+                }
+                this->Send(Target, progress.Release());
+                LastProgressStats = now;
+            }
+        }
 
         switch (state.GetState()) {
             case NYql::NDqProto::COMPUTE_STATE_UNKNOWN: {
@@ -1678,6 +1696,7 @@ protected:
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpRequestCounters::TPtr Counters;
     std::shared_ptr<TQueryExecutionStats> Stats;
+    TInstant LastProgressStats;
     TInstant StartTime;
     TMaybe<TInstant> Deadline;
     TMaybe<TInstant> CancelAt;

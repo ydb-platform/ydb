@@ -1651,6 +1651,11 @@ public:
     )
 
     void Handle(TEvSaveScriptResultMetaFinished::TPtr& ev) {
+        if (ev->Get()->Status == Ydb::StatusIds::ABORTED) {
+            Register(new TSaveScriptExecutionResultMetaQuery(Database, ExecutionId, SerializedMetas));
+            return;
+        }
+
         Send(ev->Forward(ReplyActorId));
         PassAway();
     }
@@ -2584,6 +2589,54 @@ private:
     NYql::TIssues OperationIssues;
 };
 
+class TScriptProgressActor : public TQueryBase {
+public:
+    TScriptProgressActor(const TString& database, const TString& executionId, const TString& queryPlan, const TString&)
+    : Database(database), ExecutionId(executionId), QueryPlan(queryPlan)
+    {
+        KQP_PROXY_LOG_D(queryPlan);
+    }
+
+    void OnRunQuery() override {
+        TString sql = R"(
+            -- TScriptProgressActor::OnRunQuery
+            DECLARE $execution_id AS Text;
+            DECLARE $database AS Text;
+            DECLARE $plan AS JsonDocument;
+
+            UPSERT INTO `.metadata/script_executions` (execution_id, database, plan)
+            VALUES ($execution_id, $database, $plan);
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$execution_id")
+                .Utf8(ExecutionId)
+                .Build()
+            .AddParam("$database")
+                .Utf8(Database)
+                .Build()
+            .AddParam("$plan")
+                .JsonDocument(QueryPlan)
+                .Build();
+
+        RunDataQuery(sql, &params);
+    }
+
+    void OnQueryResult() override {
+        Finish();
+    }
+
+    void OnFinish(Ydb::StatusIds::StatusCode, NYql::TIssues&&) override {
+    }
+
+private:
+    TString Database;
+    TString ExecutionId;
+    TString QueryPlan;
+};
+
+
 } // anonymous namespace
 
 NActors::IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters, TDuration maxRunTime) {
@@ -2636,6 +2689,10 @@ NActors::IActor* CreateSaveScriptFinalStatusActor(TEvScriptFinalizeRequest::TPtr
 
 NActors::IActor* CreateScriptFinalizationFinisherActor(const TString& executionId, const TString& database, std::optional<Ydb::StatusIds::StatusCode> operationStatus, NYql::TIssues operationIssues) {
     return new TScriptFinalizationFinisherActor(executionId, database, operationStatus, std::move(operationIssues));
+}
+
+NActors::IActor* CreateScriptProgressActor(const TString& executionId, const TString& database, const TString& queryPlan, const TString& queryStats) {
+    return new TScriptProgressActor(database, executionId, queryPlan, queryStats);
 }
 
 namespace NPrivate {

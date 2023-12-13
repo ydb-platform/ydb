@@ -44,6 +44,17 @@ namespace NActors {
                         ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX);
 
         TExecutorThread(TWorkerId workerId,
+                        TWorkerId cpuId,
+                        TActorSystem* actorSystem,
+                        IExecutorPool* executorPool,
+                        TMailboxTable* mailboxTable,
+                        const TString& threadName,
+                        TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
+                        ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX)
+            : TExecutorThread(workerId, cpuId, actorSystem, executorPool, mailboxTable, nullptr, threadName, timePerMailbox, eventsPerMailbox)
+        {}
+
+        TExecutorThread(TWorkerId workerId,
                         TActorSystem* actorSystem,
                         IExecutorPool* executorPool,
                         TMailboxTable* mailboxTable,
@@ -52,6 +63,16 @@ namespace NActors {
                         TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
                         ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX)
             : TExecutorThread(workerId, 0, actorSystem, executorPool, mailboxTable, threadCtx, threadName, timePerMailbox, eventsPerMailbox)
+        {}
+
+        TExecutorThread(TWorkerId workerId,
+                        TActorSystem* actorSystem,
+                        IExecutorPool* executorPool,
+                        TMailboxTable* mailboxTable,
+                        const TString& threadName,
+                        TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
+                        ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX)
+            : TExecutorThread(workerId, 0, actorSystem, executorPool, mailboxTable, nullptr, threadName, timePerMailbox, eventsPerMailbox)
         {}
 
         TExecutorThread(TWorkerId workerId,

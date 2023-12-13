@@ -45,6 +45,12 @@ void TStageExecutionStats::Resize(ui32 taskCount) {
     InputBytes.resize(taskCount);
     OutputRows.resize(taskCount);
     OutputBytes.resize(taskCount);
+    ResultRows.resize(taskCount);
+    ResultBytes.resize(taskCount);
+    IngressRows.resize(taskCount);
+    IngressBytes.resize(taskCount);
+    EgressRows.resize(taskCount);
+    EgressBytes.resize(taskCount);
 
     FirstRowTimeMs.resize(taskCount);
     FinishTimeMs.resize(taskCount);
@@ -99,6 +105,12 @@ void TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
     InputBytes[index] = taskStats.GetInputBytes();
     OutputRows[index] = taskStats.GetOutputRows();
     OutputBytes[index] = taskStats.GetOutputBytes();
+    ResultRows[index] = taskStats.GetResultRows();
+    ResultBytes[index] = taskStats.GetResultBytes();
+    IngressRows[index] = taskStats.GetIngressRows();
+    IngressBytes[index] = taskStats.GetIngressBytes();
+    EgressRows[index] = taskStats.GetEgressRows();
+    EgressBytes[index] = taskStats.GetEgressBytes();
 
     StartTimeMs[index] = taskStats.GetStartTimeMs();       // to be reviewed
     FirstRowTimeMs[index] = taskStats.GetFirstRowTimeMs(); // to be reviewed
@@ -322,6 +334,12 @@ void TQueryExecutionStats::AddComputeActorFullStatsByTask(
     UpdateAggr(stageStats->MutableInputBytes(), task.GetInputBytes());
     UpdateAggr(stageStats->MutableOutputRows(), task.GetOutputRows());
     UpdateAggr(stageStats->MutableOutputBytes(), task.GetOutputBytes());
+    UpdateAggr(stageStats->MutableResultRows(), task.GetResultRows());
+    UpdateAggr(stageStats->MutableResultBytes(), task.GetResultBytes());
+    UpdateAggr(stageStats->MutableIngressRows(), task.GetIngressRows());
+    UpdateAggr(stageStats->MutableIngressBytes(), task.GetIngressBytes());
+    UpdateAggr(stageStats->MutableEgressRows(), task.GetEgressRows());
+    UpdateAggr(stageStats->MutableEgressBytes(), task.GetEgressBytes());
 
     UpdateMinMax(stageStats->MutableStartTimeMs(), task.GetStartTimeMs());       // to be reviewed
     UpdateMinMax(stageStats->MutableFirstRowTimeMs(), task.GetFirstRowTimeMs()); // to be reviewed
@@ -360,6 +378,7 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
 //    Cerr << (TStringBuilder() << "::AddComputeActorStats " << stats.DebugString() << Endl);
 
     Result->SetCpuTimeUs(Result->GetCpuTimeUs() + stats.GetCpuTimeUs());
+
     TotalTasks += stats.GetTasks().size();
 
     UpdateAggr(ExtraStats.MutableComputeCpuTimeUs(), stats.GetCpuTimeUs());
@@ -367,6 +386,8 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
     auto longTasks = TVector<NYql::NDqProto::TDqTaskStats*>(Reserve(stats.GetTasks().size()));
 
     for (auto& task : *stats.MutableTasks()) {
+        ResultBytes += task.GetResultBytes();
+        ResultRows += task.GetResultRows();
         for (auto& table : task.GetTables()) {
             NYql::NDqProto::TDqTableStats* tableAggr = nullptr;
             if (auto it = TableStats.find(table.GetTablePath()); it != TableStats.end()) {
@@ -669,6 +690,12 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         ExportAggStats(p.second.InputBytes, *stageStats.MutableInputBytes());
         ExportAggStats(p.second.OutputRows, *stageStats.MutableOutputRows());
         ExportAggStats(p.second.OutputBytes, *stageStats.MutableOutputBytes());
+        ExportAggStats(p.second.ResultRows, *stageStats.MutableResultRows());
+        ExportAggStats(p.second.ResultBytes, *stageStats.MutableResultBytes());
+        ExportAggStats(p.second.IngressRows, *stageStats.MutableIngressRows());
+        ExportAggStats(p.second.IngressBytes, *stageStats.MutableIngressBytes());
+        ExportAggStats(p.second.EgressRows, *stageStats.MutableEgressRows());
+        ExportAggStats(p.second.EgressBytes, *stageStats.MutableEgressBytes());
 
         ExportAggStats(p.second.StartTimeMs, *stageStats.MutableStartTimeMs());       // to be reviewed
         ExportAggStats(p.second.FirstRowTimeMs, *stageStats.MutableFirstRowTimeMs()); // to be reviewed
@@ -705,11 +732,18 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
 void TQueryExecutionStats::Finish() {
 //    Cerr << (TStringBuilder() << "-- finish: executerTime: " << ExecuterCpuTime.MicroSeconds() << Endl);
 
+    THashMap<ui32, NDqProto::TDqStageStats*> protoStages;
+    for (auto& [stageId, stagetype] : TasksGraph->GetStagesInfo()) {
+        GetOrCreateStageStats(stageId, *TasksGraph, *Result);
+    }
+
     Result->SetCpuTimeUs(Result->GetCpuTimeUs() + ExecuterCpuTime.MicroSeconds());
     Result->SetDurationUs(FinishTs.MicroSeconds() - StartTs.MicroSeconds());
 
-    Result->SetResultBytes(ResultBytes);
-    Result->SetResultRows(ResultRows);
+    // Result->Result* feilds are (temporary?) commented out in proto due to lack of use
+    // 
+    // Result->SetResultBytes(ResultBytes);
+    // Result->SetResultRows(ResultRows);
 
     ExtraStats.SetAffectedShards(AffectedShards.size());
     if (CollectStatsByLongTasks || CollectProfileStats(StatsMode)) {

@@ -1966,6 +1966,12 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
         SetNonZero(node, "InputBytes", taskStats.GetInputBytes());
         SetNonZero(node, "OutputRows", taskStats.GetOutputRows());
         SetNonZero(node, "OutputBytes", taskStats.GetOutputBytes());
+        SetNonZero(node, "ResultRows", taskStats.GetResultRows());
+        SetNonZero(node, "ResultBytes", taskStats.GetResultBytes());
+        SetNonZero(node, "IngressRows", taskStats.GetIngressRows());
+        SetNonZero(node, "IngressBytes", taskStats.GetIngressBytes());
+        SetNonZero(node, "EgressRows", taskStats.GetEgressRows());
+        SetNonZero(node, "EgressBytes", taskStats.GetEgressBytes());
 
         // equals to max if there was no first row
         if(taskStats.GetFirstRowTimeMs() != std::numeric_limits<ui64>::max()) {
@@ -2027,22 +2033,46 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                     stats["UseLlvm"] = "undefined";
                 }
 
-                stats["TotalTasks"] = (*stat)->GetTotalTasksCount();
+                stats["Tasks"] = (*stat)->GetTotalTasksCount();
+                
                 stats["TotalDurationMs"] = (*stat)->GetDurationUs() / 1000;
-                stats["TotalCpuTimeUs"] = (*stat)->GetCpuTimeUs().GetSum();
-                stats["TotalInputRows"] = (*stat)->GetInputRows().GetSum();
-                stats["TotalInputBytes"] = (*stat)->GetInputBytes().GetSum();
-                stats["TotalOutputRows"] = (*stat)->GetOutputRows().GetSum();
-                stats["TotalOutputBytes"] = (*stat)->GetOutputBytes().GetSum();
 
+                if ((*stat)->HasInputRows()) {
+                    FillAggrStat(stats, (*stat)->GetInputRows(), "InputRows");
+                }
+                if ((*stat)->HasInputBytes()) {
+                    FillAggrStat(stats, (*stat)->GetInputBytes(), "InputBytes");
+                }
+                if ((*stat)->HasOutputRows()) {
+                    FillAggrStat(stats, (*stat)->GetOutputRows(), "OutputRows");
+                }
+                if ((*stat)->HasOutputBytes()) {
+                    FillAggrStat(stats, (*stat)->GetOutputBytes(), "OutputBytes");
+                }
+                if ((*stat)->HasResultRows()) {
+                    FillAggrStat(stats, (*stat)->GetResultRows(), "ResultRows");
+                }
+                if ((*stat)->HasResultBytes()) {
+                    FillAggrStat(stats, (*stat)->GetResultBytes(), "ResultBytes");
+                }
+                if ((*stat)->HasIngressRows()) {
+                    FillAggrStat(stats, (*stat)->GetIngressRows(), "IngressRows");
+                }
+                if ((*stat)->HasIngressBytes()) {
+                    FillAggrStat(stats, (*stat)->GetIngressBytes(), "IngressBytes");
+                }
+                if ((*stat)->HasEgressRows()) {
+                    FillAggrStat(stats, (*stat)->GetEgressRows(), "EgressRows");
+                }
+                if ((*stat)->HasEgressBytes()) {
+                    FillAggrStat(stats, (*stat)->GetEgressBytes(), "EgressBytes");
+                }
                 if ((*stat)->HasCpuTimeUs()) {
                     FillAggrStat(stats, (*stat)->GetCpuTimeUs(), "CpuTimeUs");
                 }
-
                 if ((*stat)->HasSourceCpuTimeUs()) {
                     FillAggrStat(stats, (*stat)->GetSourceCpuTimeUs(), "SourceCpuTimeUs");
                 }
-
                 if ((*stat)->HasMaxMemoryUsage()) {
                     FillAggrStat(stats, (*stat)->GetMaxMemoryUsage(), "MaxMemoryUsage");
                 }

@@ -537,7 +537,7 @@ public:
 
         TString errStr;
 
-        if ((schema.HasTemporary() && schema.GetTemporary()) && !AppData()->FeatureFlags.GetEnableTempTables()) {
+        if ((schema.HasTemporary() && schema.GetTemporary()) && !context.SS->EnableTempTables) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 TStringBuilder() << "It is not allowed to create temp table: " << schema.GetName());
             return result;
@@ -691,6 +691,17 @@ public:
 
         context.SS->ClearDescribePathCaches(dstPath.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
+
+        if (schema.HasTemporary() && schema.GetTemporary()) {
+            const auto& sessionActorIdStr = schema.GetSessionActorId();
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Processing create temp table with Name: " << name
+                    << ", WorkingDir: " << parentPathStr
+                    << ", SessionActorId: " << sessionActorIdStr);
+            TActorId sessionActorId;
+            sessionActorId.Parse(sessionActorIdStr.c_str(), sessionActorIdStr.size());
+            context.OnComplete.UpdateTempTablesToCreateState(sessionActorId, {parentPathStr, name, context.UserToken});
+        }
 
         Y_ABORT_UNLESS(shardsToCreate == txState.Shards.size());
         dstPath.DomainInfo()->IncPathsInside();

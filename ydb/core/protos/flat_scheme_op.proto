@@ -36,6 +36,8 @@ message TDrop {
     optional string Name = 1;
     optional EDropWaitPolicy WaitPolicy = 2;
     optional uint64 Id = 3;
+    optional bool Temporary = 4;
+    optional string SessionActorId = 5;
 }
 
 enum EColumnCodec {
@@ -387,7 +389,9 @@ message TTableDescription {
     repeated TSequenceDescription Sequences = 39;
 
     optional TTableReplicationConfig ReplicationConfig = 40;
+
     optional bool Temporary = 41;
+    optional string SessionActorId = 42;
 }
 
 message TDictionaryEncodingSettings {

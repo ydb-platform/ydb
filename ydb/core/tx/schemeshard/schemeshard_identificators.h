@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/util/ui64id.h>
 
@@ -39,6 +40,48 @@ public:
     }
 };
 constexpr TShardIdx InvalidShardIdx = TShardIdx(InvalidOwnerId, InvalidLocalShardIdx);
+
+class TBackgroundCleaningInfo: public std::pair<std::pair<TString, TString>, TActorId> {
+    using TBase = std::pair<std::pair<TString, TString>, TActorId>;
+
+    TMaybe<NACLib::TUserToken> UserToken;
+
+public:
+    using TBase::TBase;
+
+    TBackgroundCleaningInfo(
+        TString workingDir, TString name, TActorId sessionActorId, TMaybe<NACLib::TUserToken> userToken)
+    : TBase({{std::move(workingDir), std::move(name)}, sessionActorId}), UserToken(std::move(userToken)) {
+    }
+
+    TActorId GetSessionId() const {
+        return second;
+    }
+
+    TString GetPath() const {
+        return first.second;
+    }
+
+    TString GetDatabase() const {
+        return first.first;
+    }
+
+    ui32 GetNodeId() const {
+        return second.NodeId();
+    }
+
+    TMaybe<NACLib::TUserToken> GetUserToken() {
+        return UserToken;
+    }
+
+    ui64 Hash() const noexcept {
+        return ::THash<std::pair<TString, TString>>()(first);
+    }
+
+    bool operator==(const TBackgroundCleaningInfo& info) const {
+        return first.first == info.first.first && first.second == first.second;
+    }
+};
 
 STRONG_UI64_TYPE_DEF_DV(TStepId, 0, 0);
 constexpr TStepId InvalidStepId = TStepId();
@@ -118,6 +161,21 @@ public:
     using TBase::TBase;
 };
 
+struct TTempTableId {
+    TString WorkingDir;
+    TString Name;
+    TMaybe<NACLib::TUserToken> UserToken;
+
+    ui32 Hash() const noexcept {
+        auto hasher = ::THash<TString>();
+        return CombineHashes(hasher(WorkingDir), hasher(Name));
+    }
+
+    bool operator==(const NKikimr::NSchemeShard::TTempTableId& rhs) const {
+        return WorkingDir == rhs.WorkingDir && Name == rhs.Name;
+    }
+};
+
 }
 }
 
@@ -149,3 +207,17 @@ template<>
 inline void Out<NKikimr::NSchemeShard::TShardIdx>(IOutputStream &o, const NKikimr::NSchemeShard::TShardIdx &x) {
     o << x.GetOwnerId() << ":" << x.GetLocalId();
 }
+
+template<>
+struct THash<NKikimr::NSchemeShard::TBackgroundCleaningInfo> {
+    inline ui64 operator()(const NKikimr::NSchemeShard::TBackgroundCleaningInfo &x) const noexcept {
+        return x.Hash();
+    }
+};
+
+template<>
+struct THash<NKikimr::NSchemeShard::TTempTableId> {
+    inline ui32 operator()(const NKikimr::NSchemeShard::TTempTableId& x) const noexcept {
+        return x.Hash();
+    }
+};

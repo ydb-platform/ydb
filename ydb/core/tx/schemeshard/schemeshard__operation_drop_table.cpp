@@ -597,6 +597,17 @@ public:
             context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
         }
 
+        if (drop.HasTemporary() && drop.GetTemporary()) {
+            const auto& sessionActorIdStr = drop.GetSessionActorId();
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Processing drop temp table with Name: " << name
+                    << ", WorkingDir: " << parentPathStr
+                    << ", SessionActorId: " << sessionActorIdStr);
+            TActorId sessionActorId;
+            sessionActorId.Parse(sessionActorIdStr.c_str(), sessionActorIdStr.size());
+            context.OnComplete.UpdateTempTablesToDropState(sessionActorId, {parentPathStr, name, context.UserToken});
+        }
+
         context.OnComplete.ActivateTx(OperationId);
 
         SetState(NextState());

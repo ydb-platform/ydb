@@ -134,6 +134,31 @@ private:
         TSchemeShard* Self;
     };
 
+    using TBackgroundCleaningQueue = NOperationQueue::TOperationQueueWithTimer<
+        TBackgroundCleaningInfo,
+        TFifoQueue<TBackgroundCleaningInfo>,
+        TEvPrivate::EvRunBackgroundCleaning,
+        NKikimrServices::FLAT_TX_SCHEMESHARD,
+        NKikimrServices::TActivity::SCHEMESHARD_BACKGROUND_CLEANING>;
+
+    class TBackgroundCleaningStarter : public TBackgroundCleaningQueue::IStarter {
+    public:
+        TBackgroundCleaningStarter(TSchemeShard* self)
+            : Self(self)
+        { }
+
+        NOperationQueue::EStartStatus StartOperation(const TBackgroundCleaningInfo& info) override {
+            return Self->StartBackgroundCleaning(info);
+        }
+
+        void OnTimeout(const TBackgroundCleaningInfo& info) override {
+            Self->OnBackgroundCleaningTimeout(info);
+        }
+
+    private:
+        TSchemeShard* Self;
+    };
+
 public:
     static constexpr ui32 DefaultPQTabletPartitionsCount = 1;
     static constexpr ui32 MaxPQTabletPartitionsCount = 1000;
@@ -219,6 +244,8 @@ public:
     THashMap<TPathId, TExternalDataSourceInfo::TPtr> ExternalDataSources;
     THashMap<TPathId, TViewInfo::TPtr> Views;
 
+    TTempTablesState TempTablesState;
+
     TTablesStorage ColumnTables;
 
     // it is only because we need to manage undo of upgrade subdomain, finally remove it
@@ -257,6 +284,11 @@ public:
     TBorrowedCompactionStarter BorrowedCompactionStarter;
     TBorrowedCompactionQueue* BorrowedCompactionQueue = nullptr;
 
+    TBackgroundCleaningStarter BackgroundCleaningStarter;
+    TBackgroundCleaningQueue* BackgroundCleaningQueue = nullptr;
+    THashMap<ui64, TTempTableId> BackgroundCleaningTxs;
+    NKikimrConfig::TBackgroundCleaningConfig::TRetrySettings BackgroundCleaningRetrySettings;
+
     // shardIdx -> clientId
     THashMap<TShardIdx, TActorId> RunningBorrowedCompactions;
 
@@ -272,6 +304,7 @@ public:
     bool EnableTablePgTypes = false;
     bool EnableServerlessExclusiveDynamicNodes = false;
     bool EnableAddColumsWithDefaults = false;
+    bool EnableTempTables = false;
 
     TShardDeleter ShardDeleter;
 
@@ -410,6 +443,10 @@ public:
 
     void ConfigureBorrowedCompactionQueue(
         const NKikimrConfig::TCompactionConfig::TBorrowedCompactionConfig& config,
+        const TActorContext &ctx);
+
+    void ConfigureBackgroundCleaningQueue(
+        const NKikimrConfig::TBackgroundCleaningConfig& config,
         const TActorContext &ctx);
 
     void StartStopCompactionQueues();
@@ -814,6 +851,9 @@ public:
     void EnqueueBorrowedCompaction(const TShardIdx& shardIdx);
     void RemoveBorrowedCompaction(const TShardIdx& shardIdx);
 
+    void EnqueueBackgroundCleaning(const TBackgroundCleaningInfo& info);
+    void RemoveBackgroundCleaning(const TBackgroundCleaningInfo& info);
+
     void UpdateShardMetrics(const TShardIdx& shardIdx, const TPartitionStats& newStats);
     void RemoveShardMetrics(const TShardIdx& shardIdx);
 
@@ -827,6 +867,19 @@ public:
     void OnBorrowedCompactionTimeout(const TShardIdx& shardIdx);
     void BorrowedCompactionHandleDisconnect(TTabletId tabletId, const TActorId& clientId);
     void UpdateBorrowedCompactionQueueMetrics();
+
+    NOperationQueue::EStartStatus StartBackgroundCleaning(const TBackgroundCleaningInfo& info);
+    void OnBackgroundCleaningTimeout(const TBackgroundCleaningInfo& info);
+    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
+    bool CheckSessionUndelivered(TEvents::TEvUndelivered::TPtr& ev);
+    void RetryNodeSubscribe(ui32 nodeId);
+    void Handle(TEvPrivate::TEvRetryNodeSubscribe::TPtr& ev, const TActorContext& ctx);
+    void HandleBackgroundCleaningTransactionResult(
+        TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& result);
+    void HandleBackgroundCleaningCompletionResult(ui64 txId);
+    void Handle(TEvPrivate::TEvDropTempTable::TPtr& ev, const TActorContext& ctx);
+    void RemoveBackgroundCleaningInfo(const TBackgroundCleaningInfo& info);
+    void ClearTempTablesState();
 
     struct TTxCleanDroppedSubDomains;
     NTabletFlatExecutor::ITransaction* CreateTxCleanDroppedSubDomains();
@@ -1283,6 +1336,8 @@ public:
     void ResolveSA();
     void ConnectToSA();
     void SendBaseStatsToSA();
+
+
 
 public:
     void ChangeStreamShardsCount(i64 delta) override;

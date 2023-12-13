@@ -127,6 +127,7 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
     ScheduleCleanDroppedSubDomains();
 
     StartStopCompactionQueues();
+    BackgroundCleaningQueue->Start();
 
     ctx.Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
 
@@ -383,6 +384,8 @@ void TSchemeShard::Clear() {
         BorrowedCompactionQueue->Clear();
         UpdateBorrowedCompactionQueueMetrics();
     }
+
+    ClearTempTablesState();
 
     ShardsWithBorrowed.clear();
     ShardsWithLoaned.clear();
@@ -4131,6 +4134,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     , PipeTracker(*PipeClientCache)
     , CompactionStarter(this)
     , BorrowedCompactionStarter(this)
+    , BackgroundCleaningStarter(this)
     , ShardDeleter(info->TabletID)
     , TableStatsQueue(this,
             COUNTER_STATS_QUEUE_SIZE,
@@ -4226,8 +4230,14 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     if (CompactionQueue)
         CompactionQueue->Shutdown(ctx);
 
-    if (BorrowedCompactionQueue)
+    if (BorrowedCompactionQueue) {
         BorrowedCompactionQueue->Shutdown(ctx);
+    }
+
+    ClearTempTablesState();
+    if (BackgroundCleaningQueue) {
+        BackgroundCleaningQueue->Shutdown(ctx);
+    }
 
     return IActor::Die(ctx);
 }
@@ -4272,10 +4282,13 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableTablePgTypes = appData->FeatureFlags.GetEnableTablePgTypes();
     EnableServerlessExclusiveDynamicNodes = appData->FeatureFlags.GetEnableServerlessExclusiveDynamicNodes();
     EnableAddColumsWithDefaults = appData->FeatureFlags.GetEnableAddColumsWithDefaults();
+    EnableTempTables = appData->FeatureFlags.GetEnableTempTables();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
     ConfigureStatsOperations(appData->SchemeShardConfig, ctx);
+
+    ConfigureBackgroundCleaningQueue(appData->BackgroundCleaningConfig, ctx);
 
     if (appData->ChannelProfiles) {
         ChannelProfiles = appData->ChannelProfiles;
@@ -4545,6 +4558,11 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         HFuncTraced(TEvPrivate::TEvSendBaseStatsToSA, Handle);
+
+        // for subscriptions on sessions
+        HFuncTraced(TEvInterconnect::TEvNodeDisconnected, Handle);
+        HFuncTraced(TEvPrivate::TEvDropTempTable, Handle);
+        HFuncTraced(TEvPrivate::TEvRetryNodeSubscribe, Handle);
 
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -5458,7 +5476,7 @@ void TSchemeShard::Handle(TEvHive::TEvUpdateDomainReply::TPtr &ev, const TActorC
                        << ", at schemeshard: " << TabletID());
         return;
     }
-    
+
     Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
 }
 
@@ -6164,6 +6182,8 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr
         return Execute(CreateTxReply(ev), ctx);
     }
 
+    HandleBackgroundCleaningTransactionResult(ev);
+
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                "no able to determine destination for message TEvModifySchemeTransactionResult: "
                    << " txId: " << txId
@@ -6216,6 +6236,8 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
         Execute(CreateTxReply(txId), ctx);
         executed = true;
     }
+
+    HandleBackgroundCleaningCompletionResult(ev->Get()->Record.GetTxId());
 
     if (executed) {
         return;
@@ -6693,7 +6715,10 @@ void TSchemeShard::Handle(TEvPrivate::TEvConsoleConfigsTimeout::TPtr&, const TAc
     LoadTableProfiles(nullptr, ctx);
 }
 
-void TSchemeShard::Handle(TEvents::TEvUndelivered::TPtr&, const TActorContext& ctx) {
+void TSchemeShard::Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
+    if (CheckSessionUndelivered(ev)) {
+        return;
+    }
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot subscribe to console configs");
     LoadTableProfiles(nullptr, ctx);
 }
@@ -6706,6 +6731,11 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
     if (appConfig.HasCompactionConfig()) {
         const auto& compactionConfig = appConfig.GetCompactionConfig();
         ConfigureCompactionQueues(compactionConfig, ctx);
+    }
+
+    if (appConfig.HasBackgroundCleaningConfig()) {
+        const auto& backgroundCleaningConfig = appConfig.GetBackgroundCleaningConfig();
+        ConfigureBackgroundCleaningQueue(backgroundCleaningConfig, ctx);
     }
 
     if (appConfig.HasSchemeShardConfig()) {
@@ -6727,6 +6757,9 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
 
     if (IsSchemeShardConfigured()) {
         StartStopCompactionQueues();
+        if (BackgroundCleaningQueue) {
+            BackgroundCleaningQueue->Start();
+        }
     }
 }
 
@@ -6750,6 +6783,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableTablePgTypes = featureFlags.GetEnableTablePgTypes();
     EnableServerlessExclusiveDynamicNodes = featureFlags.GetEnableServerlessExclusiveDynamicNodes();
     EnableAddColumsWithDefaults = featureFlags.GetEnableAddColumsWithDefaults();
+    EnableTempTables = featureFlags.GetEnableTempTables();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {
@@ -6874,6 +6908,38 @@ void TSchemeShard::ConfigureBorrowedCompactionQueue(
                  << ", Rate# " << BorrowedCompactionQueue->GetRate()
                  << ", WakeupInterval# " << compactionConfig.WakeupInterval
                  << ", InflightLimit# " << compactionConfig.InflightLimit);
+}
+
+void TSchemeShard::ConfigureBackgroundCleaningQueue(
+    const NKikimrConfig::TBackgroundCleaningConfig& config,
+    const TActorContext &ctx)
+{
+    TBackgroundCleaningQueue::TConfig cleaningConfig;
+
+    cleaningConfig.IsCircular = false;
+    cleaningConfig.Timeout = TDuration::Seconds(config.GetTimeoutSeconds());
+    cleaningConfig.MinWakeupInterval = TDuration::MilliSeconds(config.GetMinWakeupIntervalMs());
+    cleaningConfig.InflightLimit = config.GetInflightLimit();
+    cleaningConfig.MaxRate = config.GetMaxRate();
+
+    if (config.HasRetrySettings()) {
+        BackgroundCleaningRetrySettings = config.GetRetrySettings();
+    }
+
+    if (BackgroundCleaningQueue) {
+        BackgroundCleaningQueue->UpdateConfig(cleaningConfig);
+    } else {
+        BackgroundCleaningQueue = new TBackgroundCleaningQueue(
+            cleaningConfig,
+            BackgroundCleaningStarter);
+        ctx.RegisterWithSameMailbox(BackgroundCleaningQueue);
+    }
+
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                 "BackgroundCleaningQueue configured: Timeout# " << cleaningConfig.Timeout
+                 << ", Rate# " << BackgroundCleaningQueue->GetRate()
+                 << ", WakeupInterval# " << cleaningConfig.WakeupInterval
+                 << ", InflightLimit# " << cleaningConfig.InflightLimit);
 }
 
 void TSchemeShard::StartStopCompactionQueues() {

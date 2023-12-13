@@ -107,6 +107,7 @@ public:
                     }
                     tableDesc->SetName(tableDesc->GetName() + SessionId);
                     tableDesc->SetPath(tableDesc->GetPath() + SessionId);
+                    tableDesc->SetSessionActorId(Target.ToString());
                 }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;

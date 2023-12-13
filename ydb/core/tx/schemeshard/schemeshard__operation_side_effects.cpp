@@ -53,6 +53,24 @@ void TSideEffects::UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TPipeMess
     BindedMessageAcks.push_back(TBindMsgAck(opId, dst, cookie));
 }
 
+void  TSideEffects::UpdateTempTablesToCreateState(const TActorId& sessionActorId, const TTempTableId& data) {
+    auto it = TempTablesToCreateState.find(sessionActorId);
+    if (it == TempTablesToCreateState.end()) {
+        TempTablesToCreateState[sessionActorId] = { data };
+    } else {
+        it->second.push_back(data);
+    }
+}
+
+void  TSideEffects::UpdateTempTablesToDropState(const TActorId& sessionActorId, const TTempTableId& data) {
+    auto it = TempTablesToDropState.find(sessionActorId);
+    if (it == TempTablesToDropState.end()) {
+        TempTablesToDropState[sessionActorId] = { data };
+    } else {
+        it->second.push_back(data);
+    }
+}
+
 void TSideEffects::RouteByTabletsFromOperation(TOperationId opId) {
     RelationsByTabletsFromOperation.push_back(opId);
 }
@@ -192,6 +210,9 @@ void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
 
     DoWaitPublication(ss, ctx);
     DoPublishToSchemeBoard(ss, ctx);
+
+    DoUpdateTempTablesToCreateState(ss, ctx);
+    DoUpdateTempTablesToDropState(ss, ctx);
 
     DoSend(ss, ctx);
     DoBindMsg(ss, ctx);
@@ -753,6 +774,90 @@ void TSideEffects::DoReleasePathState(TSchemeShard *ss, const TActorContext &) {
 void TSideEffects::DoPersistDeleteShards(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &) {
     NIceDb::TNiceDb db(txc.DB);
     ss->PersistShardsToDelete(db, ToDeleteShards);
+}
+
+void TSideEffects::DoUpdateTempTablesToCreateState(TSchemeShard* ss, const TActorContext &ctx) {
+    for (auto& [sessionActorId, tempTables]: TempTablesToCreateState) {
+
+        auto& tempTablesBySession = ss->TempTablesState.TempTablesBySession;
+        auto& nodeStates = ss->TempTablesState.NodeStates;
+
+        auto it = tempTablesBySession.find(sessionActorId);
+
+        auto nodeId = sessionActorId.NodeId();
+
+        auto itNodeStates = nodeStates.find(nodeId);
+        if (itNodeStates == nodeStates.end()) {
+            auto& nodeState = nodeStates[nodeId];
+            nodeState.Sessions.insert(sessionActorId);
+            nodeState.RetryState.CurrentDelay =
+                TDuration::MilliSeconds(ss->BackgroundCleaningRetrySettings.GetStartDelayMs());
+        } else {
+            itNodeStates->second.Sessions.insert(sessionActorId);
+        }
+
+        if (it == tempTablesBySession.end()) {
+            ctx.Send(new IEventHandle(sessionActorId, ss->SelfId(),
+                new TEvSchemeShard::TEvSessionActorAck(),
+                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
+
+            auto& currentTempTables = tempTablesBySession[sessionActorId];
+
+            for (auto& tempTableId : tempTables) {
+                currentTempTables.insert(std::move(tempTableId));
+            }
+            continue;
+        }
+
+        for (auto& tempTableId : tempTables) {
+            it->second.insert(std::move(tempTableId));
+        }
+    }
+}
+
+void TSideEffects::DoUpdateTempTablesToDropState(TSchemeShard* ss, const TActorContext& ctx) {
+    for (auto& [sessionActorId, tempTables]: TempTablesToDropState) {
+        auto& tempTablesBySession = ss->TempTablesState.TempTablesBySession;
+
+        auto it = tempTablesBySession.find(sessionActorId);
+        if (it == tempTablesBySession.end()) {
+            continue;
+        }
+
+        for (auto& tempTableId : tempTables) {
+            auto tempTableIt = it->second.find(std::move(tempTableId));
+            if (tempTableIt == it->second.end()) {
+                continue;
+            }
+            it->second.erase(tempTableIt);
+            ss->RemoveBackgroundCleaning(TBackgroundCleaningInfo(
+                std::move(tempTableId.WorkingDir),
+                std::move(tempTableId.Name),
+                sessionActorId,
+                std::move(tempTableId.UserToken))
+            );
+        }
+
+        if (it->second.empty()) {
+            tempTablesBySession.erase(it);
+
+            auto& nodeStates = ss->TempTablesState.NodeStates;
+
+            auto nodeId = sessionActorId.NodeId();
+            auto itStates = nodeStates.find(nodeId);
+            if (itStates != nodeStates.end()) {
+                auto itSession = itStates->second.Sessions.find(sessionActorId);
+                if (itSession != itStates->second.Sessions.end()) {
+                    itStates->second.Sessions.erase(itSession);
+                }
+                if (itStates->second.Sessions.empty()) {
+                    nodeStates.erase(itStates);
+                    ctx.Send(new IEventHandle(TActivationContext::InterconnectProxy(nodeId), ss->SelfId(),
+                        new TEvents::TEvUnsubscribe, 0));
+                }
+            }
+        }
+    }
 }
 
 void TSideEffects::ResumeLongOps(TSchemeShard *ss, const TActorContext &ctx) {

@@ -17,6 +17,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
 #include <ydb/core/util/ulid.h>
@@ -1194,6 +1195,7 @@ public:
         if (!tx) {
             return;
         }
+
         auto optInfo = GetTemporaryTableInfo(tx);
         if (optInfo) {
             auto [isCreate, info] = *optInfo;
@@ -1999,6 +2001,7 @@ public:
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);
 
+                hFunc(NSchemeShard::TEvSchemeShard::TEvSessionActorAck, HandleNoop);
             default:
                 UnexpectedEvent("ReadyState", ev);
             }
@@ -2038,6 +2041,8 @@ public:
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvQueryResponse, ForwardResponse);
+
+                hFunc(NSchemeShard::TEvSchemeShard::TEvSessionActorAck, HandleNoop);
             default:
                 UnexpectedEvent("ExecuteState", ev);
             }
@@ -2075,6 +2080,8 @@ public:
                 hFunc(TEvKqp::TEvCloseSessionResponse, HandleCleanup);
                 hFunc(TEvKqp::TEvQueryResponse, HandleNoop);
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop)
+
+                hFunc(NSchemeShard::TEvSchemeShard::TEvSessionActorAck, HandleNoop);
             default:
                 UnexpectedEvent("CleanupState", ev);
             }

@@ -1580,6 +1580,25 @@ message TCompactionConfig {
     optional TBorrowedCompactionConfig BorrowedCompactionConfig = 2;
 }
 
+message TBackgroundCleaningConfig {
+    optional double MaxRate = 1 [default = 0]; // unlimitted
+    optional uint64 InflightLimit = 2 [default = 10]; // TODO: consider more?
+
+    // After this interval we will try to restart
+    optional uint64 TimeoutSeconds = 3 [default = 15];
+
+    // Do not wakeup earlier, than this interval
+    optional uint64 MinWakeupIntervalMs = 4 [default = 10];
+
+    message TRetrySettings {
+        optional uint32 StartDelayMs = 1 [default = 100];
+        optional uint32 MaxDelayMs = 2 [default = 2000];
+        optional uint32 MaxRetryNumber = 3 [default = 5];
+    }
+
+    optional TRetrySettings RetrySettings = 5;
+}
+
 message TTracingConfig {
     message TAuthConfig {
         message TTvm {
@@ -1758,6 +1777,7 @@ message TAppConfig {
     optional TConveyorConfig InsertConveyorConfig = 74;
     optional bool AllowEditYamlInUi = 75;
     optional TS3ProxyResolverConfig S3ProxyResolverConfig = 76;
+    optional TBackgroundCleaningConfig BackgroundCleaningConfig = 77;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

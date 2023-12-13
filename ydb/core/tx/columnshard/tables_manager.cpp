@@ -6,12 +6,37 @@
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
+#include <library/cpp/protobuf/json/proto2json.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+
 
 namespace NKikimr::NColumnShard {
 
 void TSchemaPreset::Deserialize(const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto) {
     Id = presetProto.GetId();
     Name = presetProto.GetName();
+}
+
+bool TTablesManager::FillMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, NJson::TJsonValue& json) {
+    NIceDb::TNiceDb db(txc.DB);
+    {
+        auto& schemaJson = json.InsertValue("schema_versions", NJson::JSON_ARRAY);
+        auto rowset = db.Table<Schema::SchemaPresetVersionInfo>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+
+        while (!rowset.EndOfSet()) {
+            TSchemaPreset::TSchemaPresetVersionInfo info;
+            Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
+            NProtobufJson::Proto2Json(info, schemaJson.AppendValue(NJson::JSON_MAP));
+
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {

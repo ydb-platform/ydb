@@ -23,6 +23,7 @@ SRCS(
     columnshard_common.cpp
     columnshard_private_events.cpp
     columnshard_schema.cpp
+    columnshard_view.cpp
     counters.cpp
     defs.cpp
     read_actor.cpp

@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
             paramTypes.insert({name, value.GetType()});
         }
         std::map<TString, TString> paramSources;
-        TCsvParser parser(std::move(header), ',', paramTypes, paramSources);
+        TCsvParser parser(std::move(header), ',', "", &paramTypes, &paramSources);
         TParamsBuilder paramBuilder;
         parser.GetParams(std::move(data), paramBuilder);
         auto values = paramBuilder.Build().GetValues();
@@ -40,9 +40,9 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
             paramTypes.insert({member.name(), member.type()});
         }
 
-        TCsvParser parser(std::move(header), ',', paramTypes, {});
+        TCsvParser parser(std::move(header), ',', "", &paramTypes, nullptr);
         TValueBuilder valueBuilder;
-        parser.GetValue(std::move(data), result.GetType(), valueBuilder);
+        parser.GetValue(std::move(data), valueBuilder, result.GetType());
         UNIT_ASSERT(CompareValues(valueBuilder.Build(), result));
     }
 
@@ -105,6 +105,7 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
         CommonTestParams("name", "\"{\"\"a\"\":10, \"\"b\"\":\"\"string\"\"}\"", {{"$name", TValueBuilder().Json("{\"a\":10, \"b\":\"string\"}").Build()}});
         CommonTestParams("name", "строка", {{"$name", TValueBuilder().OptionalUtf8("строка").Build()}});
         CommonTestParams("name", "\"\"", {{"$name", TValueBuilder().OptionalUtf8({}).Build()}});
+        CommonTestParams("name", "данные", {{"$name", TValueBuilder().Pg(TPgValue(TPgValue::VK_TEXT, "данные", TPgType("some_type"))).Build()}});
     }
 
     Y_UNIT_TEST(OtherPrimitiveTypesTestValue) {
@@ -120,6 +121,7 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
         CommonTestValue("name", "\"{\"\"a\"\":10, \"\"b\"\":\"\"string\"\"}\"", MakeStruct("name", TValueBuilder().Json("{\"a\":10, \"b\":\"string\"}").Build()));
         CommonTestValue("name", "строка", MakeStruct("name", TValueBuilder().OptionalUtf8("строка").Build()));
         CommonTestValue("name", "\"\"", MakeStruct("name", TValueBuilder().OptionalUtf8({}).Build()));
+        CommonTestValue("name", "данные", MakeStruct("name", TValueBuilder().Pg(TPgValue(TPgValue::VK_TEXT, "данные", TPgType("some_type"))).Build()));
     }
 
     Y_UNIT_TEST(EdgeValuesTestParams) {
@@ -137,6 +139,11 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
         CommonTestParams("name", "-32768", {{"$name", TValueBuilder().Int16(-32768).Build()}});
         CommonTestParams("name", "-2147483648", {{"$name", TValueBuilder().Int32(-2147483648).Build()}});
         CommonTestParams("name", "-9223372036854775808", {{"$name", TValueBuilder().Int64(std::numeric_limits<i64>::min()).Build()}});
+
+        double minDouble = std::numeric_limits<double>::lowest();
+        double maxDouble = std::numeric_limits<double>::max();
+        CommonTestParams("name", std::to_string(minDouble), {{"$name", TValueBuilder().Double(minDouble).Build()}});
+        CommonTestParams("name", std::to_string(maxDouble), {{"$name", TValueBuilder().Double(maxDouble).Build()}});
     }
 
     Y_UNIT_TEST(MultipleFields) {

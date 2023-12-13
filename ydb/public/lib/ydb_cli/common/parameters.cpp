@@ -227,7 +227,7 @@ bool TCommandWithParameters::GetNextParams(THolder<TParamsBuilder>& paramBuilder
                 }
                 --SkipRows;
             }
-            CsvParser = TCsvParser(std::move(headerRow), Delimiter, " ", &ParamTypes, &ParameterSources);
+            CsvParser = TCsvParser(std::move(headerRow), Delimiter, "", &ParamTypes, &ParameterSources);
         } else {
             Input = MakeHolder<TSimpleParamStream>();
         }

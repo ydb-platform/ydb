@@ -123,7 +123,7 @@ runs:
             ;;
           release-msan)
             params+=(
-              --build "memory" --sanitize="thread"
+              --build "release" --sanitize="memory"
               -DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY
             )
             ;;
@@ -295,6 +295,7 @@ runs:
 
     - name: write tests summary
       shell: bash
+      if: always()
       env:
         GITHUB_TOKEN: ${{ github.token }}
       run: |

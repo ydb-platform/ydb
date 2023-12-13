@@ -80,7 +80,7 @@ void TNodeWarden::RemoveDrivesWithBadSerialsAndReport(TVector<NPDisk::TDriveData
 
         // Output bad serial number in base64 encoding.
         STLOG(PRI_WARN, BS_NODE, NW03, "Bad serial number", (Path, path), (SerialBase64, encoded.Quote()), (Details, details.Str()));
-        
+
         mapIt->second.BadSerialsRead->Inc();
     }
 

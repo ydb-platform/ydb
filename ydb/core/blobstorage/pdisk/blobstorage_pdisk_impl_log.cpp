@@ -220,7 +220,7 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
             << " ErrorReason# " << errorReason
             << " Marker# BPD47");
-        
+
         return false;
     }
     ui64 remainingSize = lastSysLogRecord.size();
@@ -431,7 +431,7 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
 
         if (!suppressCompatibilityCheck) {
             auto storedCompatibilityInfo = NKikimrConfig::TStoredCompatibilityInfo();
-        
+
             bool success = storedCompatibilityInfo.ParseFromArray(compatibilityInfo, protoSize);
             Y_ABORT_UNLESS(success);
 
@@ -452,7 +452,7 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
 
         if (!isCompatible) {
             LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
-                << " Stored compatibility info is absent, current version is incompatible with the default stored version of PDisk," 
+                << " Stored compatibility info is absent, current version is incompatible with the default stored version of PDisk,"
                 << " ErrorReason# " << errorReason);
             return false;
         }
@@ -576,7 +576,7 @@ void TPDisk::ProcessLogReadQueue() {
                 endLogChunkIdx = logEndPos.ChunkIdx;
                 endLogSectorIdx = logEndPos.SectorIdx;
             }
-     
+
             ownerData.LogReader = new TLogReader(false,
                         this, ActorSystem, logRead.Sender, logRead.Owner, logStartPosition,
                         logRead.OwnerGroupType,logRead.Position,
@@ -1270,7 +1270,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
 
     for (const auto& chunkIdx : req.ChunksToRelease) {
         BlockDevice->EraseCacheRange(
-            Format.Offset(chunkIdx, 0), 
+            Format.Offset(chunkIdx, 0),
             Format.Offset(chunkIdx + 1, 0));
     }
 

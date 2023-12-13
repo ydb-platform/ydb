@@ -58,6 +58,7 @@ class TimeoutFlag:
     def __bool__(self):
         return self.value
 
+
 class VMQuotaError(Exception):
     pass
 
@@ -73,7 +74,7 @@ class ScaleController:
         self.ch = ch
         self.gh = gh
         self.yc = yc
-        self.maximum_vms = DynamicValue(20)
+        self.maximum_vms = DynamicValue(40)
         self.resource_exhausted = TimeoutFlag(self.resource_exhausted_pause)
         self.fresh_runners = defaultdict(lambda: ExpireItemsSet(60, "fresh_runners"))
         self.wait_for_runners = defaultdict(lambda: ExpireItemsSet(600, "wait_for_runners"))

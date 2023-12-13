@@ -1479,7 +1479,7 @@
         {
             "checksum": "6cbf312cad031e66f9b438541821c09b",
             "size": 5391,
-            "uri": "https://{canondata_backend}/1937027/d467c683292423d8a40039f4803bb61721a8cd03/resource.tar.gz#test.test_dq-blacklisted_pragmas1--Analyze_/plan.txt"
+            "uri": "https://{canondata_backend}/1937027/4993073f253c4402c43ec90285bef30ff79516ac/resource.tar.gz#test.test_dq-blacklisted_pragmas1--Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_dq-blacklisted_pragmas1--Analyze_/extracted"

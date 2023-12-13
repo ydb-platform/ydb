@@ -10,6 +10,7 @@
 
 #include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
+#include <ydb/library/yql/providers/common/config/yql_dispatch.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
@@ -31,7 +32,8 @@
 
 namespace NYql {
 
-static const THashSet<TStringBuf> UNSUPPORTED_YT_PRAGMAS = {"maxrowweight", "pooltrees", "layerpaths", "operationspec"};
+static const THashSet<TStringBuf> UNSUPPORTED_YT_PRAGMAS = {"maxrowweight",  "layerpaths", "operationspec"};
+static const THashSet<TStringBuf> POOL_TREES_WHITELIST = {"physical",  "cloud", "cloud_default"};
 
 using namespace NNodes;
 
@@ -260,11 +262,23 @@ public:
                 }
             }
 
-            if (node.ChildrenSize() >= 4) {
-                if (node.Child(2)->Content() == "Attr" && UNSUPPORTED_YT_PRAGMAS.contains(node.Child(3)->Content())) {
-                    AddInfo(ctx, TStringBuilder() << "unsupported yt pragma: " << node.Child(3)->Content(), skipIssues);
+            if (node.ChildrenSize() >= 4 && node.Child(2)->Content() == "Attr") {
+                auto pragma = node.Child(3)->Content();
+                if (UNSUPPORTED_YT_PRAGMAS.contains(pragma)) {
+                    AddInfo(ctx, TStringBuilder() << "unsupported yt pragma: " << pragma, skipIssues);
                     State_->OnlyNativeExecution = true;
                     return false;
+                }
+
+                if (pragma == "pooltrees") {
+                    auto pools = NPrivate::GetDefaultParser<TVector<TString>>()(TString{node.Child(4)->Content()});
+                    for (const auto& pool : pools) {
+                        if (!POOL_TREES_WHITELIST.contains(pool)) {
+                            AddInfo(ctx, TStringBuilder() << "unsupported pool tree: " << pool, skipIssues);
+                            State_->OnlyNativeExecution = true;
+                            return false;
+                        }
+                    }
                 }
             }
         }

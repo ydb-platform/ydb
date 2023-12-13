@@ -374,25 +374,8 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
 
     TCountingInput countInput(&input);
     NCsvFormat::TLinesSplitter splitter(countInput);
-    TString headerRow;
+    TCsvParser parser;
     bool RemoveLastDelimiter = false;
-    if (settings.Header_ || settings.HeaderRow_) {
-        if (settings.Header_) {
-            headerRow = splitter.ConsumeLine();
-        }
-        if (settings.HeaderRow_) {
-            headerRow = settings.HeaderRow_;
-        }
-        if (headerRow.EndsWith(settings.Delimiter_)) {
-            RemoveLastDelimiter = true;
-            headerRow.erase(headerRow.Size() - settings.Delimiter_.Size());
-        }
-    }
-
-    // Do not use csvSettings.skip_rows.
-    for (ui32 i = 0; i < settings.SkipRows_; ++i) {
-        splitter.ConsumeLine();
-    }
 
     NTable::TCreateSessionResult sessionResult = TableClient->GetSession(NTable::TCreateSessionSettings()).GetValueSync();
     if (!sessionResult.IsSuccess())
@@ -402,7 +385,35 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
         return tableResult;
 
     auto columnTypes = GetColumnTypes(tableResult.GetTableDescription());
-    TCsvParser parser(std::move(headerRow), settings.Delimiter_[0], columnTypes);
+
+    if (settings.Header_ || settings.HeaderRow_) {
+        TString headerRow;
+        if (settings.Header_) {
+            headerRow = splitter.ConsumeLine();
+        }
+        if (settings.HeaderRow_) {
+            headerRow = settings.HeaderRow_;
+        }
+        if (headerRow.back() == '\n') {
+            headerRow.pop_back();
+        }
+        if (headerRow.EndsWith(settings.Delimiter_)) {
+            RemoveLastDelimiter = true;
+            headerRow.erase(headerRow.Size() - settings.Delimiter_.Size());
+        }
+        parser = TCsvParser(std::move(headerRow), settings.Delimiter_[0], settings.NullValue_, &columnTypes);
+    } else {
+        TVector<TString> columns;
+        for (const auto& column : tableResult.GetTableDescription().GetColumns()) {
+            columns.push_back(column.Name);
+        }
+        parser = TCsvParser(std::move(columns), settings.Delimiter_[0], settings.NullValue_, &columnTypes);
+    }
+
+    for (ui32 i = 0; i < settings.SkipRows_; ++i) {
+        splitter.ConsumeLine();
+    }
+
     TType lineType = parser.GetColumnsType();
 
     THolder<IThreadPool> pool = CreateThreadPool(settings.Threads_);
@@ -429,6 +440,9 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
 
     while (TString line = splitter.ConsumeLine()) {
         ++row;
+        if (line.empty()) {
+            continue;
+        }
         readBytes += line.Size();
         batchBytes += line.Size();
 
@@ -480,18 +494,9 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
 TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath, const TString& dbPath, const TImportFileSettings& settings) {
     TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, FilesCount);
     TString headerRow;
+    TCsvParser parser;
     TCsvFileReader splitter(filePath, settings, headerRow, inFlightGetter);
     bool RemoveLastDelimiter = false;
-
-    if (settings.Header_ || settings.HeaderRow_) {
-        if (settings.HeaderRow_) {
-            headerRow = settings.HeaderRow_;
-        }
-        if (headerRow.EndsWith(settings.Delimiter_)) {
-            RemoveLastDelimiter = true;
-            headerRow.erase(headerRow.Size() - settings.Delimiter_.Size());
-        }
-    }
 
     NTable::TCreateSessionResult sessionResult = TableClient->GetSession(NTable::TCreateSessionSettings()).GetValueSync();
     if (!sessionResult.IsSuccess())
@@ -501,13 +506,33 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath, const TStr
         return tableResult;
 
     auto columnTypes = GetColumnTypes(tableResult.GetTableDescription());
-    TCsvParser parser(std::move(headerRow), settings.Delimiter_[0], columnTypes);
+
+    if (settings.Header_ || settings.HeaderRow_) {
+        if (settings.HeaderRow_) {
+            headerRow = settings.HeaderRow_;
+        }
+        if (headerRow.back() == '\n') {
+            headerRow.pop_back();
+        }
+        if (headerRow.EndsWith(settings.Delimiter_)) {
+            RemoveLastDelimiter = true;
+            headerRow.erase(headerRow.Size() - settings.Delimiter_.Size());
+        }
+        parser = TCsvParser(std::move(headerRow), settings.Delimiter_[0], settings.NullValue_, &columnTypes);
+    } else {
+        TVector<TString> columns;
+        for (const auto& column : tableResult.GetTableDescription().GetColumns()) {
+            columns.push_back(column.Name);
+        }
+        parser = TCsvParser(std::move(columns), settings.Delimiter_[0], settings.NullValue_, &columnTypes);
+    }
+
     TType lineType = parser.GetColumnsType();
 
     TVector<TAsyncStatus> threadResults(splitter.GetSplitCount());
     THolder<IThreadPool> pool = CreateThreadPool(splitter.GetSplitCount());
     for (size_t threadId = 0; threadId < splitter.GetSplitCount(); ++threadId) {
-        auto loadCsv = [&] () {
+        auto loadCsv = [&, threadId] () {
             auto upsertCsv = [&](std::vector<TString>&& buffer) {
                 TValueBuilder builder;
                 builder.BeginList();
@@ -527,6 +552,9 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath, const TStr
             TAsyncStatus status;
             TString line;
             while (splitter.GetChunk(threadId).ConsumeLine(line)) {
+                if (line.empty()) {
+                    continue;
+                }
                 readBytes += line.size();
                 batchBytes += line.size();
                 if (RemoveLastDelimiter) {

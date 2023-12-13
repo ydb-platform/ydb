@@ -10,8 +10,9 @@ namespace {
 
 class TCsvToYdbConverter {
 public:
-    explicit TCsvToYdbConverter(TTypeParser& parser)
+    explicit TCsvToYdbConverter(TTypeParser& parser, const TString& nullValue)
         : Parser(parser)
+        , NullValue(nullValue)
     {
     }
 
@@ -133,15 +134,15 @@ public:
 
     void BuildValue(TStringBuf token) {
         switch (Parser.GetKind()) {
-        case TTypeParser::ETypeKind::Primitive:
+        case TTypeParser::ETypeKind::Primitive: {
             BuildPrimitive(TString(token));
             break;
-
-        case TTypeParser::ETypeKind::Decimal:
+        }
+        case TTypeParser::ETypeKind::Decimal: {
             Builder.Decimal(TString(token));
             break;
-
-        case TTypeParser::ETypeKind::Optional:
+        }
+        case TTypeParser::ETypeKind::Optional: {
             Parser.OpenOptional();
             if (token == NullValue) {
                 Builder.EmptyOptional(GetType());
@@ -152,23 +153,31 @@ public:
             }
             Parser.CloseOptional();
             break;
-
-        case TTypeParser::ETypeKind::Null:
+        }
+        case TTypeParser::ETypeKind::Null: {
             EnsureNull(token);
             break;
-
-        case TTypeParser::ETypeKind::Void:
+        }
+        case TTypeParser::ETypeKind::Void: {
             EnsureNull(token);
             break;
-
-        case TTypeParser::ETypeKind::Tagged:
+        }
+        case TTypeParser::ETypeKind::Tagged: {
             Parser.OpenTagged();
             Builder.BeginTagged(Parser.GetTag());
             BuildValue(token);
             Builder.EndTagged();
             Parser.CloseTagged();
             break;
-
+        }
+        case TTypeParser::ETypeKind::Pg: {
+            if (token == NullValue) {
+                Builder.Pg(TPgValue(TPgValue::VK_NULL, {}, Parser.GetPg()));
+            } else {
+                Builder.Pg(TPgValue(TPgValue::VK_TEXT, TString(token), Parser.GetPg()));
+            }
+            break;
+        }
         default:
             throw TMisuseException() << "Unsupported type kind: " << Parser.GetKind();
         }
@@ -198,6 +207,10 @@ public:
             BuildType(typeBuilder);
             typeBuilder.EndTagged();
             Parser.CloseTagged();
+            break;
+
+        case TTypeParser::ETypeKind::Pg:
+            typeBuilder.Pg(Parser.GetPg());
             break;
 
         default:
@@ -240,10 +253,12 @@ private:
 
 }
 
-TCsvParser::TCsvParser(TString&& headerRow, const char delimeter,
-                       const std::map<TString, TType>& paramTypes, const std::map<TString, TString>* paramSources) 
+TCsvParser::TCsvParser(TString&& headerRow, const char delimeter, const TString& nullValue,
+                       const std::map<TString, TType>* paramTypes,
+                       const std::map<TString, TString>* paramSources) 
     : HeaderRow(std::move(headerRow))
     , Delimeter(delimeter)
+    , NullValue(nullValue)
     , ParamTypes(paramTypes)
     , ParamSources(paramSources)
 {
@@ -251,12 +266,23 @@ TCsvParser::TCsvParser(TString&& headerRow, const char delimeter,
     Header = static_cast<TVector<TString>>(splitter);
 }
 
-TValue TCsvParser::FieldToValue(TTypeParser& parser, TStringBuf token) {
-    TCsvToYdbConverter converter(parser);
+TCsvParser::TCsvParser(TVector<TString>&& header, const char delimeter, const TString& nullValue,
+                       const std::map<TString, TType>* paramTypes,
+                       const std::map<TString, TString>* paramSources) 
+    : Header(std::move(header))
+    , Delimeter(delimeter)
+    , NullValue(nullValue)
+    , ParamTypes(paramTypes)
+    , ParamSources(paramSources)
+{
+}
+
+TValue TCsvParser::FieldToValue(TTypeParser& parser, TStringBuf token) const {
+    TCsvToYdbConverter converter(parser, NullValue);
     return converter.Convert(token);
 }
 
-void TCsvParser::GetParams(TString&& data, TParamsBuilder& builder) {
+void TCsvParser::GetParams(TString&& data, TParamsBuilder& builder) const {
     NCsvFormat::CsvSplitter splitter(data, Delimeter);
     auto headerIt = Header.begin();
     do {
@@ -265,8 +291,8 @@ void TCsvParser::GetParams(TString&& data, TParamsBuilder& builder) {
             throw TMisuseException() << "Header contains less fields than data. Header: \"" << HeaderRow << "\", data: \"" << data << "\"";
         }
         TString fullname = "$" + *headerIt;
-        auto paramIt = ParamTypes.find(fullname);
-        if (paramIt == ParamTypes.end()) {
+        auto paramIt = ParamTypes->find(fullname);
+        if (paramIt == ParamTypes->end()) {
             ++headerIt;
             continue;
         }
@@ -286,7 +312,7 @@ void TCsvParser::GetParams(TString&& data, TParamsBuilder& builder) {
     }
 }
 
-void TCsvParser::GetValue(TString&& data, TValueBuilder& builder, const TType& type) {
+void TCsvParser::GetValue(TString&& data, TValueBuilder& builder, const TType& type) const {
     NCsvFormat::CsvSplitter splitter(data, Delimeter);
     auto headerIt = Header.cbegin();
     std::map<TString, TStringBuf> fields;
@@ -307,6 +333,9 @@ void TCsvParser::GetValue(TString&& data, TValueBuilder& builder, const TType& t
     parser.OpenStruct();
     while (parser.TryNextMember()) {
         TString name = parser.GetMemberName();
+        if (name == NullValue) {
+            continue;
+        }
         auto fieldIt = fields.find(name);
         if (fieldIt == fields.end()) {
             throw TMisuseException() << "No member \"" << name << "\" in csv string for YDB struct type";
@@ -317,11 +346,15 @@ void TCsvParser::GetValue(TString&& data, TValueBuilder& builder, const TType& t
     builder.EndStruct();
 }
 
-TType TCsvParser::GetColumnsType() {
+TType TCsvParser::GetColumnsType() const {
     TTypeBuilder builder;
     builder.BeginStruct();
     for (const auto& colName : Header) {
-        builder.AddMember(colName, ParamTypes.at(colName));
+        if (ParamTypes->find(colName) != ParamTypes->end()) {
+            builder.AddMember(colName, ParamTypes->at(colName));
+        } else {
+            builder.AddMember(NullValue, TTypeBuilder().Build());
+        }
     }
     builder.EndStruct();
     return builder.Build();

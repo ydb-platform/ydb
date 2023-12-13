@@ -224,24 +224,17 @@ bool TBlobState::HasWrittenQuorum(const TBlobStorageGroupInfo& info, const TBlob
 
 TString TBlobState::ToString() const {
     TStringStream str;
-    str << "{Id# " << Id.ToString();
-    str << Endl;
-    str << " Whole# " << Whole.ToString();
-    str << Endl;
-    str << " WholeSituation# " << SituationToString(WholeSituation);
-    str << Endl;
+    str << "{Id# " << Id.ToString() << Endl;
+    str << " IsChanged# " << IsChanged << Endl;
+    str << " Whole# " << Whole.ToString() << Endl;
+    str << " WholeSituation# " << SituationToString(WholeSituation) << Endl;
     for (ui32 i = 0; i < Parts.size(); ++i) {
-    str << Endl;
-        str << " Parts[" << i << "]# " << Parts[i].ToString();
-    str << Endl;
+        str << Endl << " Parts[" << i << "]# " << Parts[i].ToString() << Endl;
     }
     for (ui32 i = 0; i < Disks.size(); ++i) {
-    str << Endl;
-        str << " Disks[" << i << "]# " << Disks[i].ToString();
-    str << Endl;
+        str << Endl << " Disks[" << i << "]# " << Disks[i].ToString() << Endl;
     }
-    str << " BlobIdx# " << (ui32)BlobIdx;
-    str << Endl;
+    str << " BlobIdx# " << (ui32)BlobIdx << Endl;
     str << "}";
     return str.Str();
 }
@@ -326,11 +319,9 @@ void TGroupDiskRequests::AddGet(const ui32 diskOrderNumber, const TLogoBlobID &i
 }
 
 void TGroupDiskRequests::AddPut(const ui32 diskOrderNumber, const TLogoBlobID &id, TRope buffer,
-        TDiskPutRequest::EPutReason putReason, bool isHandoff, std::vector<std::pair<ui64, ui32>> *extraBlockChecks,
-        NWilson::TSpan *span, ui8 blobIdx) {
+        TDiskPutRequest::EPutReason putReason, bool isHandoff, ui8 blobIdx) {
     Y_ABORT_UNLESS(diskOrderNumber < DiskRequestsForOrderNumber.size());
-    DiskRequestsForOrderNumber[diskOrderNumber].PutsToSend.emplace_back(id, buffer, putReason, isHandoff,
-        extraBlockChecks, span, blobIdx);
+    DiskRequestsForOrderNumber[diskOrderNumber].PutsToSend.emplace_back(id, buffer, putReason, isHandoff, blobIdx);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -446,15 +437,14 @@ EStrategyOutcome TBlackboard::RunStrategies(TLogContext &logCtx, const TStackVec
                     break;
 
                 case EStrategyOutcome::DONE:
-                    if (expired && !blob.HasWrittenQuorum(*Info, *expired)) {
-                        blob.IsChanged = true;
-                        status = NKikimrProto::UNKNOWN;
-                    }
                     break;
             }
             if (status != NKikimrProto::OK) {
                 break;
             }
+        }
+        if (status == NKikimrProto::OK && expired && !blob.HasWrittenQuorum(*Info, *expired)) {
+            status = NKikimrProto::UNKNOWN;
         }
         if (status != NKikimrProto::UNKNOWN) {
             const auto [doneIt, inserted, node] = DoneBlobStates.insert(BlobStates.extract(it++));
@@ -538,19 +528,8 @@ void TBlackboard::GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, T
     }
 }
 
-void TBlackboard::RegisterBlobForPut(const TLogoBlobID& id, std::vector<std::pair<ui64, ui32>> *extraBlockChecks,
-        NWilson::TSpan *span) {
-    TBlobState& state = (*this)[id];
-    if (!state.ExtraBlockChecks) {
-        state.ExtraBlockChecks = extraBlockChecks;
-    } else {
-        Y_ABORT_UNLESS(state.ExtraBlockChecks == extraBlockChecks);
-    }
-    if (!state.Span) {
-        state.Span = span;
-    } else {
-        Y_ABORT_UNLESS(state.Span == span);
-    }
+void TBlackboard::RegisterBlobForPut(const TLogoBlobID& id) {
+    (*this)[id];
 }
 
 TBlobState& TBlackboard::operator [](const TLogoBlobID& id) {

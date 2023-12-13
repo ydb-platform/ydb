@@ -374,7 +374,7 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx,
                 }
                 bytes += put.Buffer.size();
                 lastItemCount++;
-                vMultiPut->AddVPut(put.Id, TRcBuf(TRope(put.Buffer)), &cookie, put.ExtraBlockChecks, NWilson::TTraceId());
+                vMultiPut->AddVPut(put.Id, TRcBuf(TRope(put.Buffer)), &cookie, nullptr, NWilson::TTraceId());
             }
             vMultiPut->Record.SetCookie(TVMultiPutCookie(diskOrderNumber, lastItemCount, VMultiPutRequests));
             ++VMultiPutRequests;

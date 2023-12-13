@@ -288,7 +288,7 @@ public:
 
 class TVersionedIndex {
     std::map<TSnapshot, ISnapshotSchema::TPtr> Snapshots;
-    std::shared_ptr<arrow::Schema> IndexKey;
+    std::shared_ptr<arrow::Schema> PrimaryKey;
     std::map<ui64, ISnapshotSchema::TPtr> SnapshotByVersion;
     ui64 LastSchemaVersion = 0;
 public:
@@ -327,15 +327,15 @@ public:
         return Snapshots.rbegin()->second;
     }
 
-    const std::shared_ptr<arrow::Schema>& GetIndexKey() const noexcept {
-        return IndexKey;
+    const std::shared_ptr<arrow::Schema>& GetPrimaryKey() const noexcept {
+        return PrimaryKey;
     }
 
     void AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
         if (Snapshots.empty()) {
-            IndexKey = indexInfo.GetIndexKey();
+            PrimaryKey = indexInfo.GetPrimaryKey();
         } else {
-            Y_ABORT_UNLESS(IndexKey->Equals(indexInfo.GetIndexKey()));
+            Y_ABORT_UNLESS(PrimaryKey->Equals(indexInfo.GetPrimaryKey()));
         }
 
         auto newVersion = indexInfo.GetVersion();
@@ -358,8 +358,6 @@ public:
 
     virtual const TVersionedIndex& GetVersionedIndex() const = 0;
     virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const { return GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetReplaceKey(); }
-    virtual const std::shared_ptr<arrow::Schema>& GetSortingKey() const { return GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetSortingKey(); }
-    virtual const std::shared_ptr<arrow::Schema>& GetIndexKey() const { return GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetIndexKey(); }
 
     virtual bool HasDataInPathId(const ui64 pathId) const = 0;
     virtual bool Load(IDbWrapper& db) = 0;

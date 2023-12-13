@@ -29,10 +29,7 @@ TIndexInfo::TIndexInfo(const TString& name, ui32 id)
 {}
 
 bool TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
-    if (!other.GetReplaceKey()->Equals(GetReplaceKey())) {
-        return false;
-    }
-    if (!other.GetIndexKey()->Equals(GetIndexKey())) {
+    if (!other.GetPrimaryKey()->Equals(GetPrimaryKey())) {
         return false;
     }
     return true;
@@ -240,19 +237,14 @@ void TIndexInfo::SetAllKeys() {
     /// @note Setting replace and sorting key to PK we are able to:
     /// * apply REPLACE by MergeSort
     /// * apply PK predicate before REPLACE
-    const auto& primaryKeyNames = NamesOnly(GetPrimaryKey());
+    const auto& primaryKeyNames = NamesOnly(GetPrimaryKeyColumns());
     // Update set of required columns with names from primary key.
     for (const auto& name: primaryKeyNames) {
         RequiredColumns.insert(name);
     }
-
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    if (primaryKeyNames.size()) {
-        SortingKey = ArrowSchema(primaryKeyNames);
-        ReplaceKey = SortingKey;
-        fields = ReplaceKey->fields();
-        IndexKey = ReplaceKey;
-    }
+    AFL_VERIFY(primaryKeyNames.size());
+    PrimaryKey = ArrowSchema(primaryKeyNames);
+    std::vector<std::shared_ptr<arrow::Field>> fields = PrimaryKey->fields();
 
     fields.push_back(arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()));
     fields.push_back(arrow::field(SPEC_COL_TX_ID, arrow::uint64()));
@@ -271,8 +263,8 @@ void TIndexInfo::SetAllKeys() {
 }
 
 std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortDescription() const {
-    if (GetSortingKey()) {
-        auto key = GetExtendedKey(); // Sort with extended key, greater snapshot first
+    if (GetPrimaryKey()) {
+        auto key = ExtendedKey; // Sort with extended key, greater snapshot first
         Y_ABORT_UNLESS(key && key->num_fields() > 2);
         auto description = std::make_shared<NArrow::TSortDescription>(key);
         description->Directions[key->num_fields() - 1] = -1;
@@ -284,10 +276,10 @@ std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortDescription() const {
 }
 
 std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortReplaceDescription() const {
-    if (GetSortingKey()) {
-        auto key = GetExtendedKey(); // Sort with extended key, greater snapshot first
+    if (GetPrimaryKey()) {
+        auto key = ExtendedKey; // Sort with extended key, greater snapshot first
         Y_ABORT_UNLESS(key && key->num_fields() > 2);
-        auto description = std::make_shared<NArrow::TSortDescription>(key, GetReplaceKey());
+        auto description = std::make_shared<NArrow::TSortDescription>(key, GetPrimaryKey());
         description->Directions[key->num_fields() - 1] = -1;
         description->Directions[key->num_fields() - 2] = -1;
         description->NotNull = true; // TODO

@@ -214,16 +214,12 @@ public:
         return SelectInfo->PortionsOrderedPK.empty() && CommittedBlobs.empty();
     }
 
-    std::shared_ptr<arrow::Schema> GetSortingKey() const {
-        return ResultIndexSchema->GetIndexInfo().GetSortingKey();
-    }
-
     std::shared_ptr<arrow::Schema> GetReplaceKey() const {
         return ResultIndexSchema->GetIndexInfo().GetReplaceKey();
     }
 
     std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {
-        return ResultIndexSchema->GetIndexInfo().GetPrimaryKey();
+        return ResultIndexSchema->GetIndexInfo().GetPrimaryKeyColumns();
     }
 
     size_t NumIndexedChunks() const {

@@ -78,7 +78,7 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::PrepareForInsert(const TStr
         return nullptr;
     }
 
-    const auto& sortingKey = GetIndexInfo().GetSortingKey();
+    const auto& sortingKey = GetIndexInfo().GetPrimaryKey();
     Y_ABORT_UNLESS(sortingKey);
 
     // Check PK is NOT NULL

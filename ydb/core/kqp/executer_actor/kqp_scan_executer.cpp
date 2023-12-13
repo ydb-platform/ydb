@@ -1,7 +1,6 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
 #include "kqp_partition_helper.h"
-#include "kqp_result_channel.h"
 #include "kqp_tasks_graph.h"
 #include "kqp_tasks_validate.h"
 #include "kqp_shards_resolver.h"

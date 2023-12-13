@@ -77,6 +77,12 @@ struct TStageExecutionStats {
     std::vector<ui64> InputBytes;
     std::vector<ui64> OutputRows;
     std::vector<ui64> OutputBytes;
+    std::vector<ui64> ResultRows;
+    std::vector<ui64> ResultBytes;
+    std::vector<ui64> IngressRows;
+    std::vector<ui64> IngressBytes;
+    std::vector<ui64> EgressRows;
+    std::vector<ui64> EgressBytes;
 
     std::vector<ui64> FirstRowTimeMs;
     std::vector<ui64> FinishTimeMs;
@@ -108,8 +114,8 @@ public:
     // basic stats
     std::unordered_set<ui64> AffectedShards;
     ui32 TotalTasks = 0;
-    std::atomic<ui64> ResultBytes = 0;
-    std::atomic<ui64> ResultRows = 0;
+    ui64 ResultBytes = 0;
+    ui64 ResultRows = 0;
     TDuration ExecuterCpuTime;
 
     TInstant StartTs;

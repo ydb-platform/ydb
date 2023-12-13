@@ -87,7 +87,7 @@ void TWriteSessionImpl::Start(const TDuration& delay) {
             });                                                                                             \
         }
         WRAP_HANDLER(TWriteSessionEvent::TAcksEvent, AcksHandler);
-        WRAP_HANDLER(TWriteSessionEvent::TReadyToAcceptEvent, ReadyToAcceptHander);
+        WRAP_HANDLER(TWriteSessionEvent::TReadyToAcceptEvent, ReadyToAcceptHandler);
         WRAP_HANDLER(TSessionClosedEvent, SessionClosedHandler, const);
         WRAP_HANDLER(TWriteSessionEvent::TEvent, CommonHandler);
 #undef WRAP_HANDLER

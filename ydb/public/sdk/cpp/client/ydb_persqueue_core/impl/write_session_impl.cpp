@@ -51,7 +51,6 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
     , PrevToken(DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo() : "")
-    , EventsQueue(std::make_shared<TWriteSessionEventsQueue>(Settings))
     , InitSeqNoPromise(NThreading::NewPromise<ui64>())
     , WakeupInterval(
             Settings.BatchFlushInterval_.GetOrElse(TDuration::Zero()) ?
@@ -77,6 +76,25 @@ TWriteSessionImpl::TWriteSessionImpl(
 
 void TWriteSessionImpl::Start(const TDuration& delay) {
     Y_ABORT_UNLESS(SelfContext);
+
+    if (!EventsQueue) {
+#define WRAP_HANDLER(type, handler, ...)                                                                    \
+        if (auto h = Settings.EventHandlers_.handler##_) {                                                  \
+            Settings.EventHandlers_.handler([ctx = SelfContext, h = std::move(h)](__VA_ARGS__ type& ev){    \
+                if (auto self = ctx->LockShared()) {                                                        \
+                    h(ev);                                                                                  \
+                }                                                                                           \
+            });                                                                                             \
+        }
+        WRAP_HANDLER(TWriteSessionEvent::TAcksEvent, AcksHandler);
+        WRAP_HANDLER(TWriteSessionEvent::TReadyToAcceptEvent, ReadyToAcceptHandler);
+        WRAP_HANDLER(TSessionClosedEvent, SessionClosedHandler, const);
+        WRAP_HANDLER(TWriteSessionEvent::TEvent, CommonHandler);
+#undef WRAP_HANDLER
+
+        EventsQueue = std::make_shared<TWriteSessionEventsQueue>(Settings);
+    }
+
     ++ConnectionAttemptsDone;
     if (!Started) {
         with_lock(Lock) {
@@ -374,7 +392,7 @@ void TWriteSessionImpl::WriteInternal(
         readyToAccept = OnMemoryUsageChangedImpl(bufferSize).NowOk;
     }
     if (readyToAccept) {
-        EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{TContinuationToken{}});
+        EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
     }
 }
 
@@ -740,7 +758,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
             OnErrorResolved();
 
             if (!FirstTokenSent) {
-                result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{TContinuationToken{}});
+                result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
                 FirstTokenSent = true;
             }
             // Kickstart send after session reestablishment
@@ -777,7 +795,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                 });
 
                 if (CleanupOnAcknowledged(GetIdImpl(sequenceNumber))) {
-                    result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{TContinuationToken{}});
+                    result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
                 }
             }
             //EventsQueue->PushEvent(std::move(acksEvent));
@@ -925,7 +943,7 @@ void TWriteSessionImpl::OnCompressed(TBlock&& block, bool isSyncCompression) {
         memoryUsage = OnCompressedImpl(std::move(block));
     }
     if (memoryUsage.NowOk && !memoryUsage.WasOk) {
-        EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{TContinuationToken{}});
+        EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
     }
 }
 

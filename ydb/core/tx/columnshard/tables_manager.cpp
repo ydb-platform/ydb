@@ -6,12 +6,37 @@
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
+#include <library/cpp/protobuf/json/proto2json.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+
 
 namespace NKikimr::NColumnShard {
 
 void TSchemaPreset::Deserialize(const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto) {
     Id = presetProto.GetId();
     Name = presetProto.GetName();
+}
+
+bool TTablesManager::FillMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, NJson::TJsonValue& json) {
+    NIceDb::TNiceDb db(txc.DB);
+    {
+        auto& schemaJson = json.InsertValue("schema_versions", NJson::JSON_ARRAY);
+        auto rowset = db.Table<Schema::SchemaPresetVersionInfo>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+
+        while (!rowset.EndOfSet()) {
+            TSchemaPreset::TSchemaPresetVersionInfo info;
+            Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
+            NProtobufJson::Proto2Json(info, schemaJson.AppendValue(NJson::JSON_MAP));
+
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
@@ -219,7 +244,7 @@ bool TTablesManager::RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIc
     return true;
 }
 
-void TTablesManager::AddPresetVersion(const ui32 presetId, const TRowVersion& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db) {
+void TTablesManager::AddSchemaVersion(const ui32 presetId, const TRowVersion& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db) {
     Y_ABORT_UNLESS(SchemaPresets.contains(presetId));
     auto preset = SchemaPresets.at(presetId);
 
@@ -250,10 +275,10 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const TRowVersion& versi
         if (SchemaPresets.empty()) {
             TSchemaPreset fakePreset;
             Y_ABORT_UNLESS(RegisterSchemaPreset(fakePreset, db));
-            AddPresetVersion(fakePreset.GetId(), version, versionInfo.GetSchema(), db);
+            AddSchemaVersion(fakePreset.GetId(), version, versionInfo.GetSchema(), db);
         } else {
             Y_ABORT_UNLESS(SchemaPresets.contains(fakePreset.GetId()));
-            AddPresetVersion(fakePreset.GetId(), version, versionInfo.GetSchema(), db);
+            AddSchemaVersion(fakePreset.GetId(), version, versionInfo.GetSchema(), db);
         }
     }
 
@@ -267,7 +292,6 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const TRowVersion& versi
         if (PrimaryIndex) {
             PrimaryIndex->OnTieringModified(nullptr, Ttl);
         }
-
     }
     Schema::SaveTableVersionInfo(db, pathId, version, versionInfo);
     table.AddVersion(version, versionInfo);
@@ -280,12 +304,8 @@ void TTablesManager::IndexSchemaVersion(const TRowVersion& version, const NKikim
     const bool isFirstPrimaryIndexInitialization = !PrimaryIndex;
     if (!PrimaryIndex) {
         PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, NOlap::TCompactionLimits(), StoragesManager);
-    } else {
-        const NOlap::TIndexInfo& lastIndexInfo = PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetIndexInfo();
-        Y_ABORT_UNLESS(lastIndexInfo.GetReplaceKey()->Equals(indexInfo.GetReplaceKey()));
-        Y_ABORT_UNLESS(lastIndexInfo.GetIndexKey()->Equals(indexInfo.GetIndexKey()));
     }
-    PrimaryIndex->UpdateDefaultSchema(snapshot, std::move(indexInfo));
+    PrimaryIndex->RegisterSchemaVersion(snapshot, std::move(indexInfo));
     if (isFirstPrimaryIndexInitialization) {
         for (auto&& i : Tables) {
             PrimaryIndex->RegisterTable(i.first);

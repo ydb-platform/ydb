@@ -549,7 +549,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 UNIT_ASSERT_EQUAL(0, drives.size());
                 UNIT_ASSERT_EQUAL(0, warden.DrivePathCounterKeys().size());
             }
-            
+
             // If a drive is not present in a subsequent call, then it is removed from a counters map.
             // We check both serial number validator and also that counters are removed for missing drives.
             {

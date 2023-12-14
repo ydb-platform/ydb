@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_cluster_config.h>
 #include <ydb/library/yql/utils/url_builder.h>
+#include <ydb/library/actors/http/http.h>
 
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
@@ -73,6 +74,17 @@ void FillS3ClusterConfig(NYql::TS3ClusterConfig& clusterConfig,
     FillClusterAuth(clusterConfig, s3.auth(), authToken, accountIdSignatures);
 }
 
+std::pair<TString, bool> ParseHttpEndpoint(const TString& endpoint) {
+    TStringBuf scheme;
+    TStringBuf host;
+    TStringBuf uri;
+    NHttp::CrackURL(endpoint, scheme, host, uri);
+
+    // by default useSsl is true
+    // explicit "http://" scheme should disable ssl usage
+    return std::make_pair(ToString(host), scheme != "http");
+}
+
 void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
     const TString& name,
     const TString& authToken,
@@ -81,11 +93,13 @@ void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
     const FederatedQuery::Monitoring& monitoring) {
     clusterConfig.SetName(name);
 
-    clusterConfig.SetCluster(endpoint);
+    auto [address, useSsl] = ParseHttpEndpoint(endpoint);
+
+    clusterConfig.SetCluster(address);
     clusterConfig.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
     clusterConfig.MutablePath()->SetProject(monitoring.project());
     clusterConfig.MutablePath()->SetCluster(monitoring.cluster());
-    clusterConfig.SetUseSsl(true);
+    clusterConfig.SetUseSsl(useSsl);
     FillClusterAuth(clusterConfig, monitoring.auth(), authToken, accountIdSignatures);
 }
 

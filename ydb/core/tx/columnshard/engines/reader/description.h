@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
-
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 namespace NKikimr::NOlap {
 
 // Describes read/scan request
@@ -18,6 +18,7 @@ public:
     // There's complex logic in NKikimr::TTableRange comparison that could be emulated only with separated compare
     // operations with potentially different columns. We have to remove columns to support -Inf (Null) and +Inf.
     NOlap::TPKRangesFilter PKRangesFilter;
+    NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
 
     // List of columns
     std::vector<ui32> ColumnIds;

@@ -8,11 +8,11 @@ namespace NYT::NServiceDiscovery::NYP {
 
 IServiceDiscoveryPtr CreateServiceDiscovery(TServiceDiscoveryConfigPtr config)
 {
-    if (!config->Enable) {
-        return nullptr;
-    }
+    // In opensource, we do not have any service discovery implementation,
+    // so it must be disabled.
+    YT_VERIFY(!config->Enable);
 
-    Y_UNREACHABLE();
+    return nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

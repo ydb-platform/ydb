@@ -2808,6 +2808,183 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
+    Y_UNIT_TEST(InsertValuesFromTableWithDefault) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE t (a INT, b int DEFAULT 5, PRIMARY KEY(a));
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                INSERT INTO t VALUES(1);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM t;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [["1";"5"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(InsertValuesFromTableWithDefaultBool) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE t (a INT, b bool DEFAULT false, PRIMARY KEY(a));
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                INSERT INTO t VALUES(1);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM t;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [["1";"f"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(InsertValuesFromTableWithDefaultText) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE t (a INT, b text DEFAULT 'empty', PRIMARY KEY(a));
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                INSERT INTO t VALUES(1);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM t;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [["1";"empty"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(InsertValuesFromTableWithDefaultTextNotNull) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE t (a INT, b text NOT NULL DEFAULT 'empty', PRIMARY KEY(a));
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                INSERT INTO t VALUES(1);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM t;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [["1";"empty"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(InsertValuesFromTableWithDefaultTextNotNullButNull) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE t (a INT, b text NOT NULL DEFAULT NULL, PRIMARY KEY(a));
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            Cerr << result.GetIssues().ToString() << Endl;
+            UNIT_ASSERT(!result.IsSuccess());
+        }
+    }
+
+    Y_UNIT_TEST(InsertValuesFromTableWithDefaultNegativeCase) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE t (a INT, b int DEFAULT 'text', PRIMARY KEY(a));
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            Cerr << result.GetIssues().ToString() << Endl;
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
 
     Y_UNIT_TEST(InsertNoTargetColumns_SerialNotNull) {
         NKikimrConfig::TAppConfig appConfig;

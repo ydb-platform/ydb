@@ -6,13 +6,13 @@ import (
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
-var _ Sink = (*SinkMock)(nil)
+var _ Sink[any] = (*SinkMock)(nil)
 
 type SinkMock struct {
 	mock.Mock
 }
 
-func (m *SinkMock) AddRow(transformer utils.Transformer) error {
+func (m *SinkMock) AddRow(transformer utils.RowTransformer[any]) error {
 	args := m.Called(transformer)
 
 	return args.Error(0)
@@ -26,17 +26,17 @@ func (m *SinkMock) Finish() {
 	m.Called()
 }
 
-func (m *SinkMock) ResultQueue() <-chan *ReadResult {
-	return m.Called().Get(0).(chan *ReadResult)
+func (m *SinkMock) ResultQueue() <-chan *ReadResult[any] {
+	return m.Called().Get(0).(chan *ReadResult[any])
 }
 
-var _ ColumnarBuffer = (*ColumnarBufferMock)(nil)
+var _ ColumnarBuffer[any] = (*ColumnarBufferMock)(nil)
 
 type ColumnarBufferMock struct {
 	mock.Mock
 }
 
-func (m *ColumnarBufferMock) addRow(transformer utils.Transformer) error {
+func (m *ColumnarBufferMock) addRow(transformer utils.RowTransformer[any]) error {
 	panic("not implemented") // TODO: Implement
 }
 

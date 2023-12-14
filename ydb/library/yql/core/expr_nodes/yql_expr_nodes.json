@@ -515,6 +515,23 @@
             ]
         },
         {
+            "Name": "TCoPgType",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "PgType"},
+            "Children": [
+                {"Index": 0, "Name": "TypeName", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TCoPgConst",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "PgConst"},
+            "Children": [
+                {"Index": 0, "Name": "Value", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Type", "Type": "TCoPgType"}
+            ]
+        },
+        {
             "Name": "TCoExtendBase",
             "VarArgBase": "TExprBase",
             "Match": {"Type": "CallableBase"}

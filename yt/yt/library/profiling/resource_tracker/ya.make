@@ -10,7 +10,7 @@ PEERDIR(
     yt/yt/library/profiling
 
     # TODO(prime@:) remove this, once dependency cycle with yt/core is resolved
-    yt/yt_proto/yt/core    
+    yt/yt_proto/yt/core
 )
 
 END()

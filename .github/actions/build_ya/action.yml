@@ -82,12 +82,6 @@ runs:
             ;;
         esac
         
-        # FIXME: remove after 5014029 merge
-        if [ "${{ runner.arch }}" == "X64" ]; then
-          curl -s https://storage.yandexcloud.net/ydb-tech-ci/tools/ya-bin-test-cache-patched-amd64 -o ./ya
-          chmod +x ./ya
-        fi
-
         echo "::debug::get version"
         ./ya --version
         

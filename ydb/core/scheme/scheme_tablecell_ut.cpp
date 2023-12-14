@@ -232,6 +232,8 @@ Y_UNIT_TEST_SUITE(Scheme) {
     }
 
     void CompareTypedCellMatrix(const TSerializedCellMatrix& matrix, const TVector<TCell>& cells, const TVector<TTypeInfo>& types, ui64 hash) {
+        UNIT_ASSERT_VALUES_EQUAL(matrix.GetCells().size(), matrix.GetRowCount() * matrix.GetColCount());
+
         UNIT_ASSERT_VALUES_EQUAL(matrix.GetCells().size(), cells.size());
         UNIT_ASSERT_VALUES_EQUAL(matrix.GetCells().size(), types.size());
 

@@ -3905,7 +3905,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     Y_UNIT_TEST(AutoChooseIndex) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX);
+        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_ONLY_POINTS);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
@@ -3919,7 +3919,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            SELECT * FROM `/Root/SecondaryKeys` WHERE Fk <= 1;
+            SELECT Fk, Key FROM `/Root/SecondaryKeys` WHERE Fk <= 1;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
         AssertSuccessResult(result);
         AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 1);

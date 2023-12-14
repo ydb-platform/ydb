@@ -209,7 +209,7 @@ namespace {
         return false;
     }
 
-    Y_FORCE_INLINE bool TryDeserializeCellMatrix(const TString& data, TString& resultBuffer, TVector<TCell>& resultCells) {
+    Y_FORCE_INLINE bool TryDeserializeCellMatrix(const TString& data, TString& resultBuffer, TVector<TCell>& resultCells, ui32& rowCount, ui16& colCount) {
         resultBuffer.clear();
         resultCells.clear();
 
@@ -221,13 +221,12 @@ namespace {
         if (Y_UNLIKELY(bufEnd - buf < static_cast<ptrdiff_t>(sizeof(ui16))))
             return false;
 
-        ui64 cellCount;
-        ui32 rowCount = ReadUnaligned<ui32>(buf);
+        rowCount = ReadUnaligned<ui32>(buf);
         buf += sizeof(rowCount);
-        ui16 colCount = ReadUnaligned<ui16>(buf);
+        colCount = ReadUnaligned<ui16>(buf);
         buf += sizeof(colCount);
-        cellCount = (ui64)rowCount * (ui64)colCount;
 
+        ui64 cellCount = (ui64)rowCount * (ui64)colCount;
         if (TryDeserializeCellVecBody(buf, bufEnd, cellCount, resultCells)) {
             resultBuffer = data;
             return true;
@@ -275,7 +274,7 @@ TString TSerializedCellMatrix::Serialize(TConstArrayRef<TCell> cells, ui32 rowCo
 }
 
 bool TSerializedCellMatrix::DoTryParse(const TString& data) {
-    return TryDeserializeCellMatrix(data, Buf, Cells);
+    return TryDeserializeCellMatrix(data, Buf, Cells, RowCount, ColCount);
 }
 
 void TCellsStorage::Reset(TArrayRef<const TCell> cells)

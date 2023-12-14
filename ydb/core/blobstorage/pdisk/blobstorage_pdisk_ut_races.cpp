@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
                 const ui32 reservedChunk = evRes->ChunkIds.front();
                 auto& reservedChunks = mocks[c].Chunks[EChunkState::RESERVED];
                 reservedChunks.emplace(reservedChunk);
-                
+
                 NPDisk::TCommitRecord rec;
                 rec.CommitChunks.push_back(*reservedChunks.begin());
                 logNoTest(mocks[c], rec);
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
     Y_UNIT_TEST(KillOwnerWhileDeletingChunkWithInflightMock) {
         TestKillOwnerWhileDeletingChunk(true, 20, 50, 10, 100);
     }
-    
+
     void TestDecommit(bool usePDiskMock, ui32 timeLimit, ui32 inflight, ui32 reservedChunks) {
         THPTimer timer;
         while (timer.Passed() < timeLimit) {
@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
                         chunk, 0, data.size(), 0, (void*)(cookie++)));
                 }
             };
-            
+
             auto sendManyWrites = [&](TVDiskMock& mock, TChunkIdx chunk, ui32 number, ui64& cookie) {
                 for (ui32 i = 0; i < number; ++i) {
                     TString dataCopy = data;
@@ -164,7 +164,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
                     auto res = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
                     UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
                 }
-            } 
+            }
             for (ui32 i = 0; i < reservedChunks; ++i) {
                 testCtx.TestResponse<NPDisk::TEvChunkForgetResult>(new NPDisk::TEvChunkForget(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound),
                         NKikimrProto::OK);
@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
             }
             mock.CommitReservedChunks();
             TVector<TChunkIdx> chunkIds(mock.Chunks[EChunkState::COMMITTED].begin(), mock.Chunks[EChunkState::COMMITTED].end());
-            
+
             while (mock.Chunks[EChunkState::COMMITTED].size() > 0) {
                 auto it = mock.Chunks[EChunkState::COMMITTED].begin();
                 for (ui32 i = 0; i < inflight; ++i) {
@@ -239,12 +239,12 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
                 const ui32 reservedChunk = evRes->ChunkIds.front();
                 auto& reservedChunks = mocks[c].Chunks[EChunkState::RESERVED];
                 reservedChunks.emplace(reservedChunk);
-                
+
                 NPDisk::TCommitRecord rec;
                 rec.CommitChunks.push_back(*reservedChunks.begin());
                 logNoTest(mocks[c], rec);
                 reservedChunks.clear();
-            } 
+            }
             testCtx.Recv<NPDisk::TEvHarakiriResult>();
         }
     }
@@ -267,7 +267,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
         std::vector<TVDiskMock> mocks;
         enum EMockState {
             Empty,
-            InitStarted, 
+            InitStarted,
             InitFinished,
             KillStarted,
             KillFinished

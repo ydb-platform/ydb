@@ -184,7 +184,7 @@ public:
             return AtomicGet(HardLimit) - AtomicGet(Black);
         default:
             return 0;
-        } 
+        }
     }
 };
 

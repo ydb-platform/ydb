@@ -912,7 +912,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     using TCurrent = NKikimrConfig::TCurrentCompatibilityInfo;
     void TestRestartWithDifferentVersion(TCurrent oldInfo, TCurrent newInfo, bool isCompatible, bool suppressCompatibilityCheck = false) {
         TCompatibilityInfoTest::Reset(&oldInfo);
-    
+
         TActorTestContext testCtx({
             .IsBad = false,
             .SuppressCompatibilityCheck = suppressCompatibilityCheck,

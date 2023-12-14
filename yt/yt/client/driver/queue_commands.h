@@ -91,7 +91,7 @@ public:
 private:
     NYPath::TRichYPath ConsumerPath;
     NYPath::TRichYPath QueuePath;
-    i64 Offset;
+    std::optional<i64> Offset;
     int PartitionIndex;
     NQueueClient::TQueueRowBatchReadOptions RowBatchReadOptions;
 

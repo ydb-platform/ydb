@@ -3,7 +3,6 @@ package NYql.Connector.App.Config;
 
 import "ydb/library/yql/providers/generic/connector/api/common/data_source.proto";
 import "ydb/library/yql/providers/generic/connector/api/common/endpoint.proto";
-import "ydb/library/yql/providers/generic/connector/app/config/server.proto";
 
 option go_package = "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/config";
 

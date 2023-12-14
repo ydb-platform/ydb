@@ -11,10 +11,11 @@ import (
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb/library/go/core/log"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
+	rdbms_utils "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/datasource/rdbms/utils"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 )
 
-var _ utils.Connection = (*Connection)(nil)
+var _ rdbms_utils.Connection = (*Connection)(nil)
 
 type Connection struct {
 	*sql.DB
@@ -25,7 +26,7 @@ type rows struct {
 	*sql.Rows
 }
 
-func (r rows) MakeTransformer(ydbTypes []*Ydb.Type) (utils.Transformer, error) {
+func (r rows) MakeTransformer(ydbTypes []*Ydb.Type) (utils.RowTransformer[any], error) {
 	columns, err := r.ColumnTypes()
 	if err != nil {
 		return nil, fmt.Errorf("column types: %w", err)
@@ -44,7 +45,7 @@ func (r rows) MakeTransformer(ydbTypes []*Ydb.Type) (utils.Transformer, error) {
 	return transformer, nil
 }
 
-func (c Connection) Query(ctx context.Context, query string, args ...any) (utils.Rows, error) {
+func (c Connection) Query(ctx context.Context, query string, args ...any) (rdbms_utils.Rows, error) {
 	c.logger.Dump(query, args...)
 
 	out, err := c.DB.QueryContext(ctx, query, args...)
@@ -65,10 +66,10 @@ func (c Connection) Query(ctx context.Context, query string, args ...any) (utils
 	return rows{Rows: out}, nil
 }
 
-var _ utils.ConnectionManager = (*connectionManager)(nil)
+var _ rdbms_utils.ConnectionManager = (*connectionManager)(nil)
 
 type connectionManager struct {
-	utils.ConnectionManagerBase
+	rdbms_utils.ConnectionManagerBase
 	// TODO: cache of connections, remove unused connections with TTL
 }
 
@@ -76,7 +77,7 @@ func (c *connectionManager) Make(
 	ctx context.Context,
 	logger log.Logger,
 	dsi *api_common.TDataSourceInstance,
-) (utils.Connection, error) {
+) (rdbms_utils.Connection, error) {
 	if dsi.GetCredentials().GetBasic() == nil {
 		return nil, fmt.Errorf("currently only basic auth is supported")
 	}
@@ -137,10 +138,10 @@ func (c *connectionManager) Make(
 	return &Connection{DB: conn, logger: queryLogger}, nil
 }
 
-func (c *connectionManager) Release(logger log.Logger, conn utils.Connection) {
+func (c *connectionManager) Release(logger log.Logger, conn rdbms_utils.Connection) {
 	utils.LogCloserError(logger, conn, "close clickhouse connection")
 }
 
-func NewConnectionManager(cfg utils.ConnectionManagerBase) utils.ConnectionManager {
+func NewConnectionManager(cfg rdbms_utils.ConnectionManagerBase) rdbms_utils.ConnectionManager {
 	return &connectionManager{ConnectionManagerBase: cfg}
 }

@@ -15,7 +15,6 @@ public:
             TBlobStorageGroupInfo::EBlobState *optimisticState) {
         const ui32 totalPartCount = info.Type.TotalPartCount();
         ui32 errorDisks = 0;
-        ui32 unknownDisks = 0;
         TSubgroupPartLayout optimisticLayout;
         for (ui32 diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
             TBlobState::TDisk &disk = state.Disks[diskIdx];
@@ -35,8 +34,6 @@ public:
                 }
             }
             if (!isErrorDisk) {
-                bool isUnknownDisk = true;
-
                 for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
                     const TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
                     R_LOG_DEBUG_SX(logCtx, "BPG51", "Id# " << state.Id.ToString()
@@ -48,8 +45,6 @@ public:
                         case TBlobState::ESituation::Absent:
                         case TBlobState::ESituation::Lost:
                         case TBlobState::ESituation::Present:
-                            isUnknownDisk = false;
-                            [[fallthrough]];
                         case TBlobState::ESituation::Unknown:
                         case TBlobState::ESituation::Sent:
                             optimisticLayout.AddItem(diskIdx, partIdx, info.Type);
@@ -59,8 +54,6 @@ public:
                             break;
                     }
                 }
-
-                unknownDisks += isUnknownDisk;
             }
         }
 

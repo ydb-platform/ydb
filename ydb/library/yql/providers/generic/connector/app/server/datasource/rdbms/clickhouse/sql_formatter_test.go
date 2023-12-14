@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	ydb "github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
+	rdbms_utils "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/datasource/rdbms/utils"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
@@ -16,7 +17,7 @@ func TestMakeDescribeTableQuery(t *testing.T) {
 	formatter := NewSQLFormatter()
 	request := &api.TDescribeTableRequest{Table: "table", DataSourceInstance: &common.TDataSourceInstance{Database: "db"}}
 
-	output, args := utils.MakeDescribeTableQuery(logger, formatter, request)
+	output, args := rdbms_utils.MakeDescribeTableQuery(logger, formatter, request)
 	require.Equal(t, "SELECT name, type FROM system.columns WHERE table = ? and database = ?", output)
 	require.Equal(t, args, []any{"table", "db"})
 }
@@ -411,7 +412,7 @@ func TestMakeSQLFormatterQuery(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.testName, func(t *testing.T) {
-			outputQuery, outputArgs, err := utils.MakeReadSplitQuery(logger, formatter, tc.selectReq)
+			outputQuery, outputArgs, err := rdbms_utils.MakeReadSplitQuery(logger, formatter, tc.selectReq)
 			require.Equal(t, tc.outputQuery, outputQuery)
 			require.Equal(t, tc.outputArgs, outputArgs)
 

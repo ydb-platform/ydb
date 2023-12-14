@@ -115,7 +115,7 @@ private:
         }                                                           \
         /**/
         DECLARE_HANDLER(TWriteSessionEvent::TAcksEvent, AcksHandler_, true);
-        DECLARE_HANDLER(TWriteSessionEvent::TReadyToAcceptEvent, ReadyToAcceptHander_, true);
+        DECLARE_HANDLER(TWriteSessionEvent::TReadyToAcceptEvent, ReadyToAcceptHandler_, true);
         DECLARE_HANDLER(TSessionClosedEvent, SessionClosedHandler_, false); // Not applied
 
 #undef DECLARE_HANDLER
@@ -354,6 +354,10 @@ public:
     bool Close(TDuration closeTimeout = TDuration::Max());
 
     TWriterCounters::TPtr GetCounters() {Y_ABORT("Unimplemented"); } //ToDo - unimplemented;
+
+    const TWriteSessionSettings& GetSettings() const {
+        return Settings;
+    }
 
     ~TWriteSessionImpl(); // will not call close - destroy everything without acks
 

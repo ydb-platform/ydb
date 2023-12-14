@@ -20,7 +20,7 @@ const (
 	variableSize
 )
 
-type sizePattern struct {
+type sizePattern[T utils.Acceptor] struct {
 	// Ordered numbers of acceptors of variable legnth types.
 	// Their size must be estimated every time.
 	varyingSizeIx []int
@@ -29,7 +29,7 @@ type sizePattern struct {
 	fixedSizeTotal uint64
 }
 
-func (sp *sizePattern) estimate(acceptors []any) (uint64, error) {
+func (sp *sizePattern[T]) estimate(acceptors []T) (uint64, error) {
 	sizeTotal := sp.fixedSizeTotal
 
 	for _, ix := range sp.varyingSizeIx {
@@ -44,8 +44,8 @@ func (sp *sizePattern) estimate(acceptors []any) (uint64, error) {
 	return sizeTotal, nil
 }
 
-func newSizePattern(acceptors []any) (*sizePattern, error) {
-	sp := &sizePattern{}
+func newSizePattern[T utils.Acceptor](acceptors []T) (*sizePattern[T], error) {
+	sp := &sizePattern[T]{}
 
 	for i, acceptor := range acceptors {
 		size, kind, err := sizeOfValue(acceptor)

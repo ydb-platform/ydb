@@ -1369,7 +1369,10 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
         //! Function to handle ReadyToAccept event.
         //! If this handler is set, write these events will be handled by handler,
         //! otherwise sent to TWriteSession::GetEvent().
-        FLUENT_SETTING(TReadyToAcceptHandler, ReadyToAcceptHander);
+        FLUENT_SETTING(TReadyToAcceptHandler, ReadyToAcceptHandler);
+        TSelf& ReadyToAcceptHander(const TReadyToAcceptHandler& value) {
+            return ReadyToAcceptHandler(value);
+        }
 
         //! Function to handle close session events.
         //! If this handler is set, close session events will be handled by handler

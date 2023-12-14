@@ -4584,6 +4584,13 @@
             "uri": "https://{canondata_backend}/1936997/00f46808be87e2ae2d4ac3ac45675b659c5ace45/resource.tar.gz#test_sql2yql.test_dq-mem_limit_/sql.yql"
         }
     ],
+    "test_sql2yql.test[dq-pool_trees_whitelist]": [
+        {
+            "checksum": "5137c665c4b6c390b2ec84c27fefb128",
+            "size": 1529,
+            "uri": "https://{canondata_backend}/1871002/c65ff3a6f73717dfa83b26a43711be000bed4540/resource.tar.gz#test_sql2yql.test_dq-pool_trees_whitelist_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[dq-precompute_asyncfile]": [
         {
             "checksum": "8483231236acc4f5d127668886f5e8b5",
@@ -7053,6 +7060,13 @@
             "checksum": "437e069b42f5be8056ae1e687afa564f",
             "size": 2048,
             "uri": "https://{canondata_backend}/1936947/659b615f15086142a8960946dabd06b519d43335/resource.tar.gz#test_sql2yql.test_join-alias_where_group_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[join-anyjoin_common_dup]": [
+        {
+            "checksum": "ef68815e2c28729f9f2f3440d14e97ca",
+            "size": 5433,
+            "uri": "https://{canondata_backend}/1784117/7b40c8bc89d621b5f023787bed20d97e19f45312/resource.tar.gz#test_sql2yql.test_join-anyjoin_common_dup_/sql.yql"
         }
     ],
     "test_sql2yql.test[join-anyjoin_common_nodata_keys]": [
@@ -13045,6 +13059,27 @@
             "checksum": "3a762deb072c530794191fdc864e9ce8",
             "size": 1194,
             "uri": "https://{canondata_backend}/1900335/425722d0f3dcb06655105a52bbf5ce0ea67fb6d5/resource.tar.gz#test_sql2yql.test_pg_catalog-lambda_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg_catalog-pg_database]": [
+        {
+            "checksum": "3c66358cd738a51ccd0766e18e21fc45",
+            "size": 1077,
+            "uri": "https://{canondata_backend}/1942525/b1770d18f4fe73123c8ba7b8888beae32aa4e70b/resource.tar.gz#test_sql2yql.test_pg_catalog-pg_database_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg_catalog-pg_shdescription]": [
+        {
+            "checksum": "3c2389e9a1d831db2944939e11919590",
+            "size": 871,
+            "uri": "https://{canondata_backend}/1937424/e8964bf325e3789f68bbeb40e42daa75bf189e76/resource.tar.gz#test_sql2yql.test_pg_catalog-pg_shdescription_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg_catalog-pg_tablespace]": [
+        {
+            "checksum": "755687f11614cdbe84381134ddba275c",
+            "size": 775,
+            "uri": "https://{canondata_backend}/1777230/5b7a099a288bb49a0012caf8ab53daf90cc81178/resource.tar.gz#test_sql2yql.test_pg_catalog-pg_tablespace_/sql.yql"
         }
     ],
     "test_sql2yql.test[pg_catalog-pg_type_syntax_pg]": [
@@ -21699,6 +21734,13 @@
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_dq-mem_limit_/formatted.sql"
         }
     ],
+    "test_sql_format.test[dq-pool_trees_whitelist]": [
+        {
+            "checksum": "20eade00c283958b45d0b952730cff0f",
+            "size": 188,
+            "uri": "https://{canondata_backend}/1871002/c65ff3a6f73717dfa83b26a43711be000bed4540/resource.tar.gz#test_sql_format.test_dq-pool_trees_whitelist_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[dq-precompute_asyncfile]": [
         {
             "checksum": "91c30aca2dc34875c088cf0ccbd57b3b",
@@ -24168,6 +24210,13 @@
             "checksum": "22a7b41ca879d216456b2964efce6f5c",
             "size": 244,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_join-alias_where_group_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[join-anyjoin_common_dup]": [
+        {
+            "checksum": "bfb503adf441f580dab262121af76df0",
+            "size": 503,
+            "uri": "https://{canondata_backend}/1784117/7b40c8bc89d621b5f023787bed20d97e19f45312/resource.tar.gz#test_sql_format.test_join-anyjoin_common_dup_/formatted.sql"
         }
     ],
     "test_sql_format.test[join-anyjoin_common_nodata_keys]": [

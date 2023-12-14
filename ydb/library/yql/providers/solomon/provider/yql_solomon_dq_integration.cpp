@@ -46,9 +46,12 @@ void FillScheme(const TTypeAnnotationNode& itemType, NSo::NProto::TDqSolomonShar
     int index = 0;
     for (const TItemExprType* structItem : itemType.Cast<TStructExprType>()->GetItems()) {
         const auto itemName = structItem->GetName();
-        const auto* itemType = structItem->GetItemType();
+        const TDataExprType* itemType = nullptr;
 
-        const auto dataType = NUdf::GetDataTypeInfo(itemType->Cast<TDataExprType>()->GetSlot());
+        bool isOptionalUnused = false;
+        YQL_ENSURE(IsDataOrOptionalOfData(structItem->GetItemType(), isOptionalUnused, itemType), "Failed to unwrap optional type");
+
+        const auto dataType = NUdf::GetDataTypeInfo(itemType->GetSlot());
 
         NSo::NProto::TDqSolomonSchemeItem schemeItem;
         schemeItem.SetKey(TString(itemName));
@@ -62,7 +65,7 @@ void FillScheme(const TTypeAnnotationNode& itemType, NSo::NProto::TDqSolomonShar
         } else if (dataType.Features & NUdf::StringType) {
             scheme.MutableLabels()->Add(std::move(schemeItem));
         } else {
-            YQL_ENSURE(false, "Ivalid data type for monitoing sink: " << dataType.Name);
+            YQL_ENSURE(false, "Invalid data type for monitoring sink: " << dataType.Name);
         }
     }
 }

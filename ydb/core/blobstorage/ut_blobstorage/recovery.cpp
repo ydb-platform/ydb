@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
             bool isCompatible, TValidateCallback validateCallback, bool suppressCompatibilityCheck = false) {
         passPoisons = 1000;
         const TString build = "ydb";
-    
+
         TCurrentConstructor oldInfoConstructor;
         if (oldVersion) {
             oldInfoConstructor = TCurrentConstructor{
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
             auto response = env.WaitForEdgeActorEvent<TEvStateStorage::TEvInfo>(getGenEdge, true);
             return response->Get()->CurrentGeneration;
         };
-        
+
         const ui32 gen1 = getTabletGen();
         env.Sim(TDuration::Seconds(30));
         const ui32 gen2 = getTabletGen();

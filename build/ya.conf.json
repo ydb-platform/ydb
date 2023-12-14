@@ -1,5 +1,20 @@
 {
     "bottles": {
+        "atop": {
+            "executable": {
+                "atop": [
+                    "atop",
+                    "atop"
+                ]
+            },
+            "formula": {
+                "by_platform": {
+                    "linux-x86_64": {
+                        "uri": "sbr:1277521710"
+                    }
+                }
+            }
+        },
         "clang16": {
             "executable": {
                 "c++": [
@@ -133,6 +148,22 @@
         }
     },
     "toolchain": {
+        "atop": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                }
+            ],
+            "tools": {
+                "atop": {
+                    "bottle": "atop",
+                    "executable": "atop"
+                }
+            }
+        },
         "clang16": {
             "env": {
                 "CPATH": [
@@ -1098,6 +1129,9 @@
         "msvc-win-x86_64": "msvc2019-win-x86_64"
     },
     "tools": {
+        "atop": {
+            "description": "Advanced System & Process Monitor"
+        },
         "gdb": {
             "description": "Run gdb"
         },

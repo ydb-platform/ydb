@@ -80,7 +80,7 @@ class YandexCloudProvider:
 
         return cnt, cnt_provisioning
 
-    def start_vm(self, instance_name: str, preset_name: str, user_data, vm_labels):
+    def start_vm(self, zone_id: str, subnet_id: str, instance_name: str, preset_name: str, user_data, vm_labels):
         metadata = {
             "serial-port-enable": "1",
             "user-data": user_data,
@@ -102,7 +102,7 @@ class YandexCloudProvider:
         request = CreateInstanceRequest(
             name=instance_name,
             folder_id=self.cfg.yc_folder_id,
-            zone_id=self.cfg.yc_zone_id,
+            zone_id=zone_id,
             platform_id=preset['platform_id'],
             resources_spec=ResourcesSpec(
                 cores=int(preset["cpu_cores"]),
@@ -120,7 +120,7 @@ class YandexCloudProvider:
             ),
             network_interface_specs=[
                 NetworkInterfaceSpec(
-                    subnet_id=self.cfg.yc_subnet_id,
+                    subnet_id=subnet_id,
                     primary_v4_address_spec=PrimaryAddressSpec(),
                 ),
             ],

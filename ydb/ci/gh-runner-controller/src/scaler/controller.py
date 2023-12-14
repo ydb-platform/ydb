@@ -1,5 +1,6 @@
 import logging
 import time
+import random
 from threading import Event
 from collections import defaultdict
 
@@ -30,6 +31,7 @@ class DynamicValue:
                 self.current = self.default
                 self.expire_time = None
         return self.current
+
 
 class TimeoutFlag:
     def __init__(self, expire_time=300):
@@ -166,9 +168,15 @@ class ScaleController:
         labels = [self.prefix, "auto-provisioned", f"build-preset-{preset_name}"]
         vm_labels = {self.prefix: runner_name}
         user_data = create_userdata(self.gh.html_url, new_runner_token, runner_name, labels, self.cfg.ssh_keys)
-        self.logger.info("start runner %s (%s)", runner_name, labels)
+
+        placement = random.choice(self.cfg.yc_zones)
+        zone_id = placement['zone_id']
+        subnet_id = placement['subnet_id']
+
+        self.logger.info("start runner %s in %s (%s)", runner_name, zone_id, labels)
+
         try:
-            instance = self.yc.start_vm(runner_name, preset_name, user_data, vm_labels)
+            instance = self.yc.start_vm(zone_id, subnet_id, runner_name, preset_name, user_data, vm_labels)
         except grpc.RpcError as rpc_error:
             # noinspection PyUnresolvedReferences
             if rpc_error.code() == grpc.StatusCode.RESOURCE_EXHAUSTED:

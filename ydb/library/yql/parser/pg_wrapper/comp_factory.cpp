@@ -20,6 +20,7 @@
 #include <ydb/library/yql/utils/fp_bits.h>
 #include <library/cpp/yson/detail.h>
 #include <util/string/split.h>
+#include <util/system/getpid.h>
 
 #define TypeName PG_TypeName
 #define SortBy PG_SortBy
@@ -311,6 +312,14 @@ public:
             };
 
             ApplyFillers(AllPgShDescriptionFillers, Y_ARRAY_SIZE(AllPgShDescriptionFillers), PgShDescriptionFillers_);
+        } else if (Table_ == "pg_stat_gssapi") {
+            static const std::pair<const char*, TPgStatGssapiFiller> AllPgStatGssapiFillers[] = {
+                {"encrypted", []() { return ScalarDatumToPod(BoolGetDatum(false)); }},
+                {"gss_authenticated", []() { return ScalarDatumToPod(BoolGetDatum(false)); }},
+                {"pid", []() { return ScalarDatumToPod(Int32GetDatum(GetPID())); }}
+            };
+
+            ApplyFillers(AllPgStatGssapiFillers, Y_ARRAY_SIZE(AllPgStatGssapiFillers), PgStatGssapiFillers_);
         }
     }
 
@@ -371,6 +380,14 @@ public:
 
                 rows.emplace_back(row);
             }
+        } else if (Table_ == "pg_stat_gssapi") {
+            NUdf::TUnboxedValue* items;
+            auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgStatGssapiFillers_.size(), items);
+            for (ui32 i = 0; i < PgStatGssapiFillers_.size(); ++i) {
+                items[i] = PgStatGssapiFillers_[i]();
+            }
+
+            rows.emplace_back(row);
         }
 
         return compCtx.HolderFactory.VectorAsVectorHolder(std::move(rows));
@@ -392,6 +409,8 @@ private:
     TVector<TPgTablespaceFiller> PgTablespaceFillers_;
     using TPgShDescriptionFiller = NUdf::TUnboxedValuePod(*)(ui32 index);
     TVector<TPgShDescriptionFiller> PgShDescriptionFillers_;
+    using TPgStatGssapiFiller = NUdf::TUnboxedValuePod(*)();
+    TVector<TPgStatGssapiFiller> PgStatGssapiFillers_;
 };
 
 class TFunctionCallInfo {

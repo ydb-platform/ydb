@@ -2047,6 +2047,28 @@
         }
     ],
     "test.test[pg-wide_top_sort--Results]": [],
+    "test.test[pg_catalog-pg_timezone_names-default.txt-Analyze]": [
+        {
+            "checksum": "c1f2d837c3623c81dd596a9877913fb8",
+            "size": 948,
+            "uri": "https://{canondata_backend}/1880306/c56e2bb8307f2239f8acf535a621c40b5a08a363/resource.tar.gz#test.test_pg_catalog-pg_timezone_names-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[pg_catalog-pg_timezone_names-default.txt-Debug]": [
+        {
+            "checksum": "e2533b4d21ac0d1b5ff40de375f82edb",
+            "size": 423,
+            "uri": "https://{canondata_backend}/1880306/c56e2bb8307f2239f8acf535a621c40b5a08a363/resource.tar.gz#test.test_pg_catalog-pg_timezone_names-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg_catalog-pg_timezone_names-default.txt-Plan]": [
+        {
+            "checksum": "c1f2d837c3623c81dd596a9877913fb8",
+            "size": 948,
+            "uri": "https://{canondata_backend}/1880306/c56e2bb8307f2239f8acf535a621c40b5a08a363/resource.tar.gz#test.test_pg_catalog-pg_timezone_names-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg_catalog-pg_timezone_names-default.txt-Results]": [],
     "test.test[pragma-classic_division-default.txt-Analyze]": [
         {
             "checksum": "a48ccc9922567dfee1170d2c2df45b6e",

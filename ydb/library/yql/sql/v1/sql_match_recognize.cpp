@@ -2,6 +2,7 @@
 #include "node.h"
 #include "sql_expression.h"
 #include <ydb/library/yql/core/sql_types/match_recognize.h>
+#include <algorithm>
 
 namespace NSQLTranslationV1 {
 
@@ -233,7 +234,7 @@ NYql::NMatchRecognize::TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTer
         const auto& primaryVar = factor.GetRule_row_pattern_factor1().GetRule_row_pattern_primary1();
         NYql::NMatchRecognize::TRowPatternPrimary primary;
         bool output = true;
-        switch(primaryVar.GetAltCase()){
+        switch (primaryVar.GetAltCase()) {
             case TRule_row_pattern_primary::kAltRowPatternPrimary1:
                 primary = PatternVar(primaryVar.GetAlt_row_pattern_primary1().GetRule_row_pattern_primary_variable_name1().GetRule_row_pattern_variable_name1(), *this);
                 break;
@@ -261,10 +262,33 @@ NYql::NMatchRecognize::TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTer
                 Ctx.Error(TokenPosition(primaryVar.GetAlt_row_pattern_primary4().GetToken1()))
                         << "ALL ROWS PER MATCH and {- -} are not supported yet"; //https://st.yandex-team.ru/YQL-16227
                 break;
-            case TRule_row_pattern_primary::kAltRowPatternPrimary6:
-                Ctx.Error(TokenPosition(primaryVar.GetAlt_row_pattern_primary4().GetToken1()))
-                        << "PERMUTE is not supported yet"; //https://st.yandex-team.ru/YQL-16228
+            case TRule_row_pattern_primary::kAltRowPatternPrimary6: {
+                std::vector<NYql::NMatchRecognize::TRowPatternPrimary> items{ParsePattern(
+                    primaryVar.GetAlt_row_pattern_primary6().GetRule_row_pattern_permute1().GetRule_row_pattern3())
+                };
+                for (const auto& p: primaryVar.GetAlt_row_pattern_primary6().GetRule_row_pattern_permute1().GetBlock4()) {
+                    items.push_back(ParsePattern(p.GetRule_row_pattern2()));
+                }
+                //Permutations now is a syntactic sugar and converted to all possible alternatives
+                if (items.size() > NYql::NMatchRecognize::MaxPermutedItems) {
+                    Ctx.Error(TokenPosition(primaryVar.GetAlt_row_pattern_primary4().GetToken1()))
+                        << "Too many items in permute";
+                    return NYql::NMatchRecognize::TRowPatternTerm{};
+                }
+                std::vector<size_t> indexes(items.size());
+                std::generate(begin(indexes), end(indexes), [n = 0] () mutable { return n++; });
+                NYql::NMatchRecognize::TRowPattern permuted;
+                do {
+                    NYql::NMatchRecognize::TRowPatternTerm term;
+                    term.reserve(indexes.size());
+                    for (size_t i = 0; i != indexes.size(); ++i) {
+                        term.push_back({items[indexes[i]], 1, 1, true, false, false});
+                    }
+                    permuted.push_back(std::move(term));
+                } while (std::next_permutation(indexes.begin(), indexes.end()));
+                primary = permuted;
                 break;
+            }
             case TRule_row_pattern_primary::ALT_NOT_SET:
                 Y_ABORT("You should change implementation according to grammar changes");
         }

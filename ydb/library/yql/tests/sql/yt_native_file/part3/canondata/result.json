@@ -1172,6 +1172,27 @@
             "uri": "https://{canondata_backend}/995452/ea151ade22503e898db09f69b7b2e95103712788/resource.tar.gz#test.test_lineage-some_tablerow-default.txt-Results_/Output.txt"
         }
     ],
+    "test.test[match_recognize-permute-default.txt-Debug]": [
+        {
+            "checksum": "fc2e0736d613d175c26262453288e109",
+            "size": 2618,
+            "uri": "https://{canondata_backend}/1597364/7201a1222703ae8401f20c1ca6ae40ecc5a9a1a2/resource.tar.gz#test.test_match_recognize-permute-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[match_recognize-permute-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1597364/7201a1222703ae8401f20c1ca6ae40ecc5a9a1a2/resource.tar.gz#test.test_match_recognize-permute-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[match_recognize-permute-default.txt-Results]": [
+        {
+            "checksum": "5fbd538ddeed846f7473d1c1f0596c2f",
+            "size": 3140,
+            "uri": "https://{canondata_backend}/1597364/7201a1222703ae8401f20c1ca6ae40ecc5a9a1a2/resource.tar.gz#test.test_match_recognize-permute-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[optimizers-direct_row_after_merge--Debug]": [
         {
             "checksum": "929c014b5f3b6053472c352634d51ac6",

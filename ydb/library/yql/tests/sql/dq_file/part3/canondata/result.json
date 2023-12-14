@@ -1456,6 +1456,28 @@
         }
     ],
     "test.test[library-library--Results]": [],
+    "test.test[match_recognize-permute-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1937027/2c2635807b1c895dd72532d28ab483f4c079524f/resource.tar.gz#test.test_match_recognize-permute-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[match_recognize-permute-default.txt-Debug]": [
+        {
+            "checksum": "7fcb06119526d3a8b2e1cdba5528706b",
+            "size": 2688,
+            "uri": "https://{canondata_backend}/1937027/2c2635807b1c895dd72532d28ab483f4c079524f/resource.tar.gz#test.test_match_recognize-permute-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[match_recognize-permute-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1937027/2c2635807b1c895dd72532d28ab483f4c079524f/resource.tar.gz#test.test_match_recognize-permute-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[match_recognize-permute-default.txt-Results]": [],
     "test.test[optimizers-direct_row_after_merge--Analyze]": [
         {
             "checksum": "f97dad5288d9faa2dcac804288b33afd",

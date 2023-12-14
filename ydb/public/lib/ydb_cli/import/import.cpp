@@ -394,8 +394,11 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
         if (settings.HeaderRow_) {
             headerRow = settings.HeaderRow_;
         }
-        if (headerRow.back() == '\n') {
-            headerRow.pop_back();
+        if (headerRow.EndsWith("\r\n")) {
+            headerRow.erase(headerRow.Size() - 2);
+        }
+        if (headerRow.EndsWith("\n")) {
+            headerRow.erase(headerRow.Size() - 1);
         }
         if (headerRow.EndsWith(settings.Delimiter_)) {
             RemoveLastDelimiter = true;
@@ -511,8 +514,11 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath, const TStr
         if (settings.HeaderRow_) {
             headerRow = settings.HeaderRow_;
         }
-        if (headerRow.back() == '\n') {
-            headerRow.pop_back();
+        if (headerRow.EndsWith("\r\n")) {
+            headerRow.erase(headerRow.Size() - 2);
+        }
+        if (headerRow.EndsWith("\n")) {
+            headerRow.erase(headerRow.Size() - 1);
         }
         if (headerRow.EndsWith(settings.Delimiter_)) {
             RemoveLastDelimiter = true;

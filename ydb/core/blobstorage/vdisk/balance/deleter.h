@@ -26,6 +26,7 @@ namespace NKikimr {
         TStats Stats;
 
         void DoJobQuant(const TActorContext &ctx) {
+            auto status = PartsRequester.DoJobQuant(ctx);
             if (auto batch = PartsRequester.TryGetResults()) {
                 Stats.PartsRequested += batch->size();
                 for (auto& part: *batch) {
@@ -35,7 +36,7 @@ namespace NKikimr {
                     }
                 }
             }
-            auto status = PartsRequester.DoJobQuant(ctx);
+            Cerr << Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ " << "PartsRequester status " << ": " << (ui32)status << Endl;
             if (status == TPartsRequester::EState::FINISHED && Stats.PartsDecidedToDelete == Stats.PartsMarkedDeleted) {
                 Send(NotifyId, new NActors::TEvents::TEvCompleted(DELETER_ID));
                 Send(SelfId(), new NActors::TEvents::TEvPoison);

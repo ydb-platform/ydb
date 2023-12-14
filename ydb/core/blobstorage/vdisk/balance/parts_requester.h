@@ -33,6 +33,7 @@ namespace NKikimr {
             , QueueActorMapPtr(queueActorMapPtr)
             , Result(Reserve(BatchSize))
             , Responses(0)
+            , ExpectedResponses(0)
         {}
 
         EState DoJobQuant(const TActorContext &ctx) {

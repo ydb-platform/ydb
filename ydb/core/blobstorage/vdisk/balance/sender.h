@@ -23,11 +23,13 @@ namespace NKikimr {
         TStats Stats;
 
         void DoJobQuant(const TActorContext &ctx) {
+            auto status = Reader.DoJobQuant(ctx);
             if (auto batch = Reader.TryGetResults()) {
                 Stats.PartsRead += batch->size();
                 SendParts(*batch);
             }
-            auto status = Reader.DoJobQuant(ctx);
+            Cerr << Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ " << "Reader status "
+                 << ": " << (ui32)status << " " << Stats.PartsRead << " " << Stats.PartsSent << Endl;
             if (status == TReader::EReaderState::FINISHED && Stats.PartsRead == Stats.PartsSent) {
                 Send(NotifyId, new NActors::TEvents::TEvCompleted(SENDER_ID));
                 Send(SelfId(), new NActors::TEvents::TEvPoison);
@@ -35,8 +37,12 @@ namespace NKikimr {
         }
 
         void SendParts(const TVector<TPart>& batch) {
+            Cerr << Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ "
+                 << "Sending parts " << batch.size() << Endl;
             for (const auto& part: batch) {
                 auto vDiskId = GetVDiskId(*Ctx->GInfo, part.Key);
+                Cerr << Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ "
+                    << "Sending " << part.Key.ToString() << " to " << Ctx->GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId)) << Endl;
                 auto& queue = (*QueueActorMapPtr)[TVDiskIdShort(vDiskId)];
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(
                     part.Key, part.PartData, vDiskId, 

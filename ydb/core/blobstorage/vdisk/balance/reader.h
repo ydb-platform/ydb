@@ -27,6 +27,7 @@ namespace NKikimr {
             , Quoter(replPDiskReadQuoter)
             , Result(Reserve(BatchSize))
             , Responses(0)
+            , ExpectedResponses(0)
         {}
 
         EReaderState DoJobQuant(const TActorContext &ctx) {
@@ -47,6 +48,7 @@ namespace NKikimr {
                 };
                 if (std::holds_alternative<TRope>(item.PartData)) {
                     Result[i].PartData = std::get<TRope>(item.PartData);
+                    ++Responses;
                 } else {
                     TDiskPart diskPart = std::get<TDiskPart>(item.PartData);
                     auto ev = std::make_unique<NPDisk::TEvChunkRead>(
@@ -64,8 +66,8 @@ namespace NKikimr {
                         std::make_unique<IEventHandle>(PDiskCtx->PDiskId, ctx.SelfID, ev.release()),
                         diskPart.Size
                     );
-                    ++ExpectedResponses;
                 }
+                ++ExpectedResponses;
             }
             return WAITING_PDISK_RESPONSES;
         }

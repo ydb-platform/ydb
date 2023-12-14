@@ -36,7 +36,7 @@ namespace NKikimr {
                     Ctx->VDiskCfg->ReplInterconnectChannel);
             const TBlobStorageGroupInfo::TTopology& topology = Ctx->GInfo->GetTopology();
             NBackpressure::TQueueClientId replQueueClientId(
-                NBackpressure::EQueueClientType::ReplJob, topology.GetOrderNumber(Ctx->VCtx->ShortSelfVDisk));
+                NBackpressure::EQueueClientType::Balancing, topology.GetOrderNumber(Ctx->VCtx->ShortSelfVDisk));
 
             CreateQueuesForVDisks(*QueueActorMapPtr, SelfId(), Ctx->GInfo, Ctx->VCtx,
                     Ctx->GInfo->GetVDisks(), Ctx->MonGroup.GetGroup(),
@@ -66,21 +66,24 @@ namespace NKikimr {
                 collectPartsByPredicate(PartsToSendOnMain(Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, It.GetCurKey().LogoBlobID(), merger.Ingress), sendOnMainParts);
                 collectPartsByPredicate(PartsToDelete(Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, It.GetCurKey().LogoBlobID(), merger.Ingress), tryDeleteParts);
 
+                Cerr << Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ " << "Blob" << " " << It.GetCurKey().LogoBlobID().ToString() << " " << merger.Ingress.ToString(&Ctx->GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, It.GetCurKey().LogoBlobID()) << Endl;
+
                 merger.Clear();
             }
             return {sendOnMainParts, tryDeleteParts};
         }
 
         void StartBalancing(const TActorContext &ctx) {
+            Cerr << Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ " << "Ask repl token " << Endl;
             if (!Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(Ctx->VDiskCfg->BaseInfo.PDiskId))) {
                 HandleReplToken(ctx);
             }
         }
 
         void HandleReplToken(const TActorContext &ctx) {
+            Cerr << Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ " << "Repl token acquired " << Endl;
             DoJobQuant(ctx);
             Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
-            // StartBalancing(ctx);
             Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup());
         }
 
@@ -98,6 +101,7 @@ namespace NKikimr {
                     Y_ABORT("Unexpected id");
             }
             if (Stats.SendCompleted && Stats.DeleteCompleted) {
+                Cerr << Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ " << "Balancing completed" << Endl;
                 Send(Ctx->SkeletonId, new TEvStartBalancing());
                 Send(SelfId(), new NActors::TEvents::TEvPoison);
             }
@@ -112,15 +116,16 @@ namespace NKikimr {
             }
         }
 
-        void DoJobQuant(const TActorContext &ctx) {
-            if (ConnectedVDisks.size() == Ctx->GInfo->GetTotalVDisksNum() - 1) {
+        void DoJobQuant(const TActorContext &) {
+            Cerr << Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ " << "Connected vdisks " << ConnectedVDisks.size() << "/" << Ctx->GInfo->GetTotalVDisksNum() - 1 << Endl;
+            // if (ConnectedVDisks.size() == Ctx->GInfo->GetTotalVDisksNum() - 1) {
                 Send(SenderId, new NActors::TEvents::TEvWakeup());
                 Send(DeleterId, new NActors::TEvents::TEvWakeup());
-            } else {
-                LOG_WARN_S(ctx, NKikimrServices::BS_SKELETON,
-                    "Balancing actor could not do a job quant, some vdisks are disconnected: "
-                    << ConnectedVDisks.size() << " < " << Ctx->GInfo->GetTotalVDisksNum());
-            }
+            // } else {
+            //     LOG_WARN_S(ctx, NKikimrServices::BS_SKELETON,
+            //         "Balancing actor could not do a job quant, some vdisks are disconnected: "
+            //         << ConnectedVDisks.size() << " < " << Ctx->GInfo->GetTotalVDisksNum());
+            // }
         }
 
         STRICT_STFUNC(StateFunc,
@@ -142,6 +147,8 @@ namespace NKikimr {
         void Bootstrap(const TActorContext &ctx) {
             CreateVDisksQueues();
             auto [sendOnMainParts, tryDeleteParts] = CollectKeys();
+            Cerr << Ctx->GInfo->GetTopology().GetOrderNumber(Ctx->VCtx->ShortSelfVDisk) << "$ " << " " << ctx.Now().MilliSeconds() << " Bootstrap" << ": "
+                 << "sendOnMainParts size = " << sendOnMainParts.size() << "; tryDeleteParts size = " << tryDeleteParts.size() << Endl;
 
             SenderId = ctx.Register(new TSender(SelfId(), std::move(sendOnMainParts), QueueActorMapPtr, Ctx));
             ActiveActors.Insert(SenderId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);

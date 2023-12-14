@@ -772,6 +772,10 @@ void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dat
 }
 
 void TColumnShard::SetupIndexation() {
+    if (!AppDataVerified().ColumnShardConfig.GetIndexationEnabled()) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("reason", "disabled");
+        return;
+    }
     BackgroundController.CheckDeadlinesIndexation();
     if (BackgroundController.GetIndexingActiveCount()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("reason", "in_progress")
@@ -818,6 +822,10 @@ void TColumnShard::SetupIndexation() {
 }
 
 void TColumnShard::SetupCompaction() {
+    if (!AppDataVerified().ColumnShardConfig.GetCompactionEnabled()) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_compaction")("reason", "disabled");
+        return;
+    }
     CSCounters.OnSetupCompaction();
 
     BackgroundController.CheckDeadlines();
@@ -845,6 +853,10 @@ void TColumnShard::SetupCompaction() {
 }
 
 bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls, const bool force) {
+    if (!AppDataVerified().ColumnShardConfig.GetTTLEnabled()) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_ttl")("reason", "disabled");
+        return false;
+    }
     CSCounters.OnSetupTtl();
     if (BackgroundController.IsTtlActive()) {
         ACFL_DEBUG("background", "ttl")("skip_reason", "in_progress");

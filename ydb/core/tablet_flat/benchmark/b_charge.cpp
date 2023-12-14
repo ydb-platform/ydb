@@ -1,8 +1,8 @@
 #include <benchmark/benchmark.h>
-#include <random>
 
 #include <ydb/core/tablet_flat/flat_row_celled.h>
-#include <ydb/core/tablet_flat/flat_part_charge.h>
+#include <ydb/core/tablet_flat/flat_part_charge_range.h>
+#include <ydb/core/tablet_flat/flat_part_charge_create.h>
 #include <ydb/core/tablet_flat/test/libs/rows/cook.h>
 #include <ydb/core/tablet_flat/test/libs/rows/tool.h>
 #include <ydb/core/tablet_flat/test/libs/table/model/large.h>
@@ -138,7 +138,7 @@ BENCHMARK_DEFINE_F(TModel, PrechargeByKeys)(benchmark::State& state) {
         const auto from = Tool.KeyCells(Mass.Saved[lower]);
         const auto to = Tool.KeyCells(Mass.Saved[upper]);
 
-        TCharge::Range(Env.Get(), from, to, *Run.Get(), keyDefaults, Tags, items, Max<ui64>());
+        ChargeRange(Env.Get(), from, to, *Run.Get(), keyDefaults, Tags, items, Max<ui64>());
     }
 
     state.counters["Touched"] = benchmark::Counter(Env->TouchedCount, benchmark::Counter::kAvgIterations);
@@ -154,7 +154,7 @@ BENCHMARK_DEFINE_F(TModel, PrechargeByRows)(benchmark::State& state) {
         ui32 lower = ++it % 50;
         ui32 upper = lower + items;
 
-        TCharge(Env.Get(), *(Run.Get())->begin()->Part, Tags, false).Do(lower, upper, keyDefaults, items, Max<ui64>());
+        CreateCharge(Env.Get(), *(Run.Get())->begin()->Part, Tags, false)->Do(lower, upper, keyDefaults, items, Max<ui64>());
     }
 
     state.counters["Touched"] = Env->TouchedCount / it;

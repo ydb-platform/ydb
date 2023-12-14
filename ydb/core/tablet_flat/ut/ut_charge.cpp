@@ -1,5 +1,6 @@
 #include <ydb/core/tablet_flat/flat_row_celled.h>
-#include <ydb/core/tablet_flat/flat_part_charge.h>
+#include <ydb/core/tablet_flat/flat_part_charge_range.h>
+#include <ydb/core/tablet_flat/flat_part_charge_create.h>
 #include <ydb/core/tablet_flat/test/libs/rows/cook.h>
 #include <ydb/core/tablet_flat/test/libs/rows/tool.h>
 #include <ydb/core/tablet_flat/test/libs/table/model/large.h>
@@ -196,10 +197,10 @@ namespace {
             }
 
             bool ready = !reverse
-                ? TCharge::Range(&env, from, to, run, keyDefaults, tags, items, Max<ui64>(), true)
-                : TCharge::RangeReverse(&env, from, to, run, keyDefaults, tags, items, Max<ui64>(), true);
+                ? ChargeRange(&env, from, to, run, keyDefaults, tags, items, Max<ui64>(), true)
+                : ChargeRangeReverse(&env, from, to, run, keyDefaults, tags, items, Max<ui64>(), true);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(!fail || env.ToLoad.empty(), ready, AssertMesage(fail));
+            UNIT_ASSERT_VALUES_EQUAL_C(!fail || env.ToLoad.empty(), ready, AssertMessage(fail));
 
             CheckPrecharged(env.Touched, shouldPrecharge, sticky, flags);
         }
@@ -226,8 +227,8 @@ namespace {
 
             UNIT_ASSERT_VALUES_EQUAL_C(
                 !fail,
-                TCharge(&env, *run.begin()->Part, tags, false).Do(row1, row2, keyDefaults, items, Max<ui64>()),
-                AssertMesage(fail));
+                CreateCharge(&env, *run.begin()->Part, tags, false)->Do(row1, row2, keyDefaults, items, Max<ui64>()),
+                AssertMessage(fail));
 
             CheckPrecharged(env.Touched, shouldPrecharge, sticky, fail ? TPageIdFlags::IfFail : TPageIdFlags::IfNoFail);
         }
@@ -361,7 +362,7 @@ namespace {
             }
         }
 
-        std::string AssertMesage(bool fail) const {
+        std::string AssertMessage(bool fail) const {
             return 
                 "Seq: " + std::to_string(CurrentStep()) + 
                 " Fail: " + (fail ? "Yes" : "No");

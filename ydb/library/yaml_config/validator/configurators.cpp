@@ -6,7 +6,7 @@
 #include <util/string/split.h>
 #include <util/generic/hash.h>
 
-using namespace NYamlConfig::NValidator;
+using namespace NKikimr::NYamlConfig::NValidator;
 
 namespace NYamlConfig::NValidator {
 namespace Configurators {
@@ -84,4 +84,4 @@ TNodeWrapper walkFrom(TNodeWrapper node, const TVector<TString>& pathTokens) {
     return node;
 }
 
-} // namespace NYamlConfig::NValidator
+} // namespace NKikimr::NYamlConfig::NValidator

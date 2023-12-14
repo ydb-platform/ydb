@@ -330,17 +330,387 @@ INSERT INTO TIMESTAMP_TBL VALUES ('Feb 16 17:32:01 5097 BC');
 <sql-statement>
 SELECT d1 FROM TIMESTAMP_TBL;
 </sql-statement>
-BackTrace(void**, unsigned long)+29 (0x14033ECD)
-TBackTrace::Capture()+30 (0x1403443E)
-TWithBackTrace<yexception>::TWithBackTrace<>()+72 (0x13FD0568)
-NYT::TNode::TTypeError::TTypeError()+25 (0x144DC3E9)
-NYT::TNode::CheckType(NYT::TNode::EType) const+267 (0x144DD9BB)
-NYT::TNode::AsString() const+30 (0x144DC53E)
-WriteTableToStream(IOutputStream&, TVector<NYT::TNode, std::__y1::allocator<NYT::TNode> > const&, TVector<NYT::TNode, std::__y1::allocator<NYT::TNode> > const&)+830 (0x13EBBB7E)
-Main(int, char**)+5748 (0x13EC0FB4)
-main+273 (0x13EC2761)
-??+0 (0x7F5DA6429D90)
-__libc_start_main+128 (0x7F5DA6429E40)
-??+0 (0x13E4C029)
+<sql-statement>
+-- Check behavior at the boundaries of the timestamp range
+SELECT '4714-11-24 00:00:00 BC'::timestamp;
+</sql-statement>
+<sql-statement>
+SELECT '4714-11-23 23:59:59 BC'::timestamp;  -- out of range
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
 
-(NYT::TNode::TTypeError) library/cpp/yson/node/node.cpp:829: TNode type string_node expected, actual type null
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '4714-11-23 23:59:59 BC'::timestamp;  -- out of range
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  timestamp out of range: "4714-11-23 23:59:59 BC"
+
+        	SELECT '4714-11-23 23:59:59 BC'::timestamp;  -- out of range
+	^
+<sql-statement>
+SELECT '294276-12-31 23:59:59'::timestamp;
+</sql-statement>
+<sql-statement>
+SELECT '294277-01-01 00:00:00'::timestamp;  -- out of range
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '294277-01-01 00:00:00'::timestamp;  -- out of range
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  timestamp out of range: "294277-01-01 00:00:00"
+
+        	SELECT '294277-01-01 00:00:00'::timestamp;  -- out of range
+	^
+<sql-statement>
+-- Demonstrate functions and operators
+SELECT d1 FROM TIMESTAMP_TBL
+   WHERE d1 > timestamp without time zone '1997-01-02';
+</sql-statement>
+<sql-statement>
+SELECT d1 FROM TIMESTAMP_TBL
+   WHERE d1 < timestamp without time zone '1997-01-02';
+</sql-statement>
+<sql-statement>
+SELECT d1 FROM TIMESTAMP_TBL
+   WHERE d1 = timestamp without time zone '1997-01-02';
+</sql-statement>
+<sql-statement>
+SELECT d1 FROM TIMESTAMP_TBL
+   WHERE d1 != timestamp without time zone '1997-01-02';
+</sql-statement>
+<sql-statement>
+SELECT d1 FROM TIMESTAMP_TBL
+   WHERE d1 <= timestamp without time zone '1997-01-02';
+</sql-statement>
+<sql-statement>
+SELECT d1 FROM TIMESTAMP_TBL
+   WHERE d1 >= timestamp without time zone '1997-01-02';
+</sql-statement>
+<sql-statement>
+SELECT d1 - timestamp without time zone '1997-01-02' AS diff
+   FROM TIMESTAMP_TBL WHERE d1 BETWEEN '1902-01-01' AND '2038-01-01';
+</sql-statement>
+<sql-statement>
+SELECT date_trunc( 'week', timestamp '2004-02-29 15:44:17.71393' ) AS week_trunc;
+</sql-statement>
+<sql-statement>
+-- verify date_bin behaves the same as date_trunc for relevant intervals
+-- case 1: AD dates, origin < input
+SELECT
+  str,
+  interval,
+  date_trunc(str, ts) = date_bin(interval::interval, ts, timestamp '2001-01-01') AS equal
+FROM (
+  VALUES
+  ('week', '7 d'),
+  ('day', '1 d'),
+  ('hour', '1 h'),
+  ('minute', '1 m'),
+  ('second', '1 s'),
+  ('millisecond', '1 ms'),
+  ('microsecond', '1 us')
+) intervals (str, interval),
+(VALUES (timestamp '2020-02-29 15:44:17.71393')) ts (ts);
+</sql-statement>
+<sql-statement>
+-- case 2: BC dates, origin < input
+SELECT
+  str,
+  interval,
+  date_trunc(str, ts) = date_bin(interval::interval, ts, timestamp '2000-01-01 BC') AS equal
+FROM (
+  VALUES
+  ('week', '7 d'),
+  ('day', '1 d'),
+  ('hour', '1 h'),
+  ('minute', '1 m'),
+  ('second', '1 s'),
+  ('millisecond', '1 ms'),
+  ('microsecond', '1 us')
+) intervals (str, interval),
+(VALUES (timestamp '0055-6-10 15:44:17.71393 BC')) ts (ts);
+</sql-statement>
+<sql-statement>
+-- case 3: AD dates, origin > input
+SELECT
+  str,
+  interval,
+  date_trunc(str, ts) = date_bin(interval::interval, ts, timestamp '2020-03-02') AS equal
+FROM (
+  VALUES
+  ('week', '7 d'),
+  ('day', '1 d'),
+  ('hour', '1 h'),
+  ('minute', '1 m'),
+  ('second', '1 s'),
+  ('millisecond', '1 ms'),
+  ('microsecond', '1 us')
+) intervals (str, interval),
+(VALUES (timestamp '2020-02-29 15:44:17.71393')) ts (ts);
+</sql-statement>
+<sql-statement>
+-- case 4: BC dates, origin > input
+SELECT
+  str,
+  interval,
+  date_trunc(str, ts) = date_bin(interval::interval, ts, timestamp '0055-06-17 BC') AS equal
+FROM (
+  VALUES
+  ('week', '7 d'),
+  ('day', '1 d'),
+  ('hour', '1 h'),
+  ('minute', '1 m'),
+  ('second', '1 s'),
+  ('millisecond', '1 ms'),
+  ('microsecond', '1 us')
+) intervals (str, interval),
+(VALUES (timestamp '0055-6-10 15:44:17.71393 BC')) ts (ts);
+</sql-statement>
+<sql-statement>
+-- bin timestamps into arbitrary intervals
+SELECT
+  interval,
+  ts,
+  origin,
+  date_bin(interval::interval, ts, origin)
+FROM (
+  VALUES
+  ('15 days'),
+  ('2 hours'),
+  ('1 hour 30 minutes'),
+  ('15 minutes'),
+  ('10 seconds'),
+  ('100 milliseconds'),
+  ('250 microseconds')
+) intervals (interval),
+(VALUES (timestamp '2020-02-11 15:44:17.71393')) ts (ts),
+(VALUES (timestamp '2001-01-01')) origin (origin);
+</sql-statement>
+<sql-statement>
+-- shift bins using the origin parameter:
+SELECT date_bin('5 min'::interval, timestamp '2020-02-01 01:01:01', timestamp '2020-02-01 00:02:30');
+</sql-statement>
+<sql-statement>
+-- disallow intervals with months or years
+SELECT date_bin('5 months'::interval, timestamp '2020-02-01 01:01:01', timestamp '2001-01-01');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- disallow intervals with months or years
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  timestamps cannot be binned into intervals containing months or years
+
+        	-- disallow intervals with months or years
+	^
+<sql-statement>
+SELECT date_bin('5 years'::interval,  timestamp '2020-02-01 01:01:01', timestamp '2001-01-01');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT date_bin('5 years'::interval,  timestamp '2020-02-01 01:01:01', timestamp '2001-01-01');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  timestamps cannot be binned into intervals containing months or years
+
+        	SELECT date_bin('5 years'::interval,  timestamp '2020-02-01 01:01:01', timestamp '2001-01-01');
+	^
+<sql-statement>
+-- disallow zero intervals
+SELECT date_bin('0 days'::interval, timestamp '1970-01-01 01:00:00' , timestamp '1970-01-01 00:00:00');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- disallow zero intervals
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  stride must be greater than zero
+
+        	-- disallow zero intervals
+	^
+<sql-statement>
+-- disallow negative intervals
+SELECT date_bin('-2 days'::interval, timestamp '1970-01-01 01:00:00' , timestamp '1970-01-01 00:00:00');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- disallow negative intervals
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  stride must be greater than zero
+
+        	-- disallow negative intervals
+	^
+<sql-statement>
+-- Test casting within a BETWEEN qualifier
+SELECT d1 - timestamp without time zone '1997-01-02' AS diff
+  FROM TIMESTAMP_TBL
+  WHERE d1 BETWEEN timestamp without time zone '1902-01-01'
+   AND timestamp without time zone '2038-01-01';
+</sql-statement>
+<sql-statement>
+-- DATE_PART (timestamp_part)
+SELECT d1 as "timestamp",
+   date_part( 'year', d1) AS year, date_part( 'month', d1) AS month,
+   date_part( 'day', d1) AS day, date_part( 'hour', d1) AS hour,
+   date_part( 'minute', d1) AS minute, date_part( 'second', d1) AS second
+   FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SELECT d1 as "timestamp",
+   date_part( 'quarter', d1) AS quarter, date_part( 'msec', d1) AS msec,
+   date_part( 'usec', d1) AS usec
+   FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SELECT d1 as "timestamp",
+   date_part( 'isoyear', d1) AS isoyear, date_part( 'week', d1) AS week,
+   date_part( 'isodow', d1) AS isodow, date_part( 'dow', d1) AS dow,
+   date_part( 'doy', d1) AS doy
+   FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SELECT d1 as "timestamp",
+   date_part( 'decade', d1) AS decade,
+   date_part( 'century', d1) AS century,
+   date_part( 'millennium', d1) AS millennium,
+   round(date_part( 'julian', d1)) AS julian,
+   date_part( 'epoch', d1) AS epoch
+   FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+-- extract implementation is mostly the same as date_part, so only
+-- test a few cases for additional coverage.
+SELECT d1 as "timestamp",
+   extract(microseconds from d1) AS microseconds,
+   extract(milliseconds from d1) AS milliseconds,
+   extract(seconds from d1) AS seconds,
+   round(extract(julian from d1)) AS julian,
+   extract(epoch from d1) AS epoch
+   FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+-- value near upper bound uses special case in code
+SELECT date_part('epoch', '294270-01-01 00:00:00'::timestamp);
+</sql-statement>
+<sql-statement>
+SELECT extract(epoch from '294270-01-01 00:00:00'::timestamp);
+</sql-statement>
+<sql-statement>
+-- another internal overflow test case
+SELECT extract(epoch from '5000-01-01 00:00:00'::timestamp);
+</sql-statement>
+<sql-statement>
+-- TO_CHAR()
+SELECT to_char(d1, 'DAY Day day DY Dy dy MONTH Month month RM MON Mon mon')
+   FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(d1, 'FMDAY FMDay FMday FMMONTH FMMonth FMmonth FMRM')
+   FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(d1, 'Y,YYY YYYY YYY YY Y CC Q MM WW DDD DD D J')
+   FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(d1, 'FMY,YYY FMYYYY FMYYY FMYY FMY FMCC FMQ FMMM FMWW FMDDD FMDD FMD FMJ')
+   FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(d1, 'HH HH12 HH24 MI SS SSSS')
+   FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(d1, E'"HH:MI:SS is" HH:MI:SS "\\"text between quote marks\\""')
+   FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(d1, 'HH24--text--MI--text--SS')
+   FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(d1, 'YYYYTH YYYYth Jth')
+   FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(d1, 'YYYY A.D. YYYY a.d. YYYY bc HH:MI:SS P.M. HH:MI:SS p.m. HH:MI:SS pm')
+   FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(d1, 'IYYY IYY IY I IW IDDD ID')
+   FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(d1, 'FMIYYY FMIYY FMIY FMI FMIW FMIDDD FMID')
+   FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(d, 'FF1 FF2 FF3 FF4 FF5 FF6  ff1 ff2 ff3 ff4 ff5 ff6  MS US')
+   FROM (VALUES
+       ('2018-11-02 12:34:56'::timestamp),
+       ('2018-11-02 12:34:56.78'),
+       ('2018-11-02 12:34:56.78901'),
+       ('2018-11-02 12:34:56.78901234')
+   ) d(d);
+</sql-statement>
+<sql-statement>
+-- Roman months, with upper and lower case.
+SELECT i,
+       to_char(i * interval '1mon', 'rm'),
+       to_char(i * interval '1mon', 'RM')
+    FROM generate_series(-13, 13) i;
+</sql-statement>
+<sql-statement>
+-- timestamp numeric fields constructor
+SELECT make_timestamp(2014, 12, 28, 6, 30, 45.887);
+</sql-statement>
+<sql-statement>
+SELECT make_timestamp(-44, 3, 15, 12, 30, 15);
+</sql-statement>
+<sql-statement>
+-- should fail
+select make_timestamp(0, 7, 15, 12, 30, 15);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- should fail
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date field value out of range: 0-07-15
+
+        	-- should fail
+	^
+<sql-statement>
+-- generate_series for timestamp
+select * from generate_series('2020-01-01 00:00'::timestamp,
+                              '2020-01-02 03:00'::timestamp,
+                              '1 hour'::interval);
+</sql-statement>
+<sql-statement>
+-- the LIMIT should allow this to terminate in a reasonable amount of time
+-- (but that unfortunately doesn't work yet for SELECT * FROM ...)
+select generate_series('2022-01-01 00:00'::timestamp,
+                       'infinity'::timestamp,
+                       '1 month'::interval) limit 10;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:3:8: Error: Generator functions are not allowed in: SELECT
+    	select generate_series('2022-01-01 00:00'::timestamp,
+	       ^
+<sql-statement>
+-- errors
+select * from generate_series('2020-01-01 00:00'::timestamp,
+                              '2020-01-02 03:00'::timestamp,
+                              '0 hour'::interval);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- errors
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  step size cannot equal zero
+
+        	-- errors
+	^

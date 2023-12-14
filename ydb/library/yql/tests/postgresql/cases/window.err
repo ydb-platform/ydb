@@ -314,17 +314,3052 @@ FROM empsalary GROUP BY depname;
 SELECT sum(salary) OVER w1, count(*) OVER w2
 FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary);
 </sql-statement>
-BackTrace(void**, unsigned long)+29 (0x14033ECD)
-TBackTrace::Capture()+30 (0x1403443E)
-TWithBackTrace<yexception>::TWithBackTrace<>()+72 (0x13FD0568)
-NYT::TNode::TTypeError::TTypeError()+25 (0x144DC3E9)
-NYT::TNode::CheckType(NYT::TNode::EType) const+267 (0x144DD9BB)
-NYT::TNode::AsString() const+30 (0x144DC53E)
-WriteTableToStream(IOutputStream&, TVector<NYT::TNode, std::__y1::allocator<NYT::TNode> > const&, TVector<NYT::TNode, std::__y1::allocator<NYT::TNode> > const&)+830 (0x13EBBB7E)
-Main(int, char**)+5748 (0x13EC0FB4)
-main+273 (0x13EC2761)
-??+0 (0x7F2872029D90)
-__libc_start_main+128 (0x7F2872029E40)
-??+0 (0x13E4C029)
+<sql-statement>
+-- subplan
+SELECT lead(ten, (SELECT two FROM tenk1 WHERE s.unique2 = unique2)) OVER (PARTITION BY four ORDER BY ten)
+FROM tenk1 s WHERE unique2 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
 
-(NYT::TNode::TTypeError) library/cpp/yson/node/node.cpp:829: TNode type string_node expected, actual type null
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+-- empty table
+SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 WHERE FALSE)s;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+-- mixture of agg/wfunc in the same window
+SELECT sum(salary) OVER w, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: CalcOverWindow
+    	-- mixture of agg/wfunc in the same window
+	^
+        -stdin-:<main>:1:1: Error: Expected hashable and equatable type for key column: _yql_partition_key_0_0, but got: pgvarchar
+        	-- mixture of agg/wfunc in the same window
+	^
+<sql-statement>
+-- strict aggs
+SELECT empno, depname, salary, bonus, depadj, MIN(bonus) OVER (ORDER BY empno), MAX(depadj) OVER () FROM(
+	SELECT *,
+		CASE WHEN enroll_date < '2008-01-01' THEN 2008 - extract(YEAR FROM enroll_date) END * 500 AS bonus,
+		CASE WHEN
+			AVG(salary) OVER (PARTITION BY depname) < salary
+		THEN 200 END AS depadj FROM empsalary
+)s;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgSelect, At function: PgSetItem
+    	-- strict aggs
+	^
+        -stdin-:<main>:4:13: Error: Star is incompatible to column reference
+        			CASE WHEN enroll_date < '2008-01-01' THEN 2008 - extract(YEAR FROM enroll_date) END * 500 AS bonus,
+	            ^
+        -stdin-:<main>:4:70: Error: Star is incompatible to column reference
+        			CASE WHEN enroll_date < '2008-01-01' THEN 2008 - extract(YEAR FROM enroll_date) END * 500 AS bonus,
+	                                                                     ^
+<sql-statement>
+-- window function over ungrouped agg over empty row set (bug before 9.1)
+SELECT SUM(COUNT(f1)) OVER () FROM int4_tbl WHERE f1=42;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int4_tbl
+    
+<sql-statement>
+-- window function with ORDER BY an expression involving aggregates (9.1 bug)
+select ten,
+  sum(unique1) + sum(unique2) as res,
+  rank() over (order by sum(unique1) + sum(unique2)) as rank
+from tenk1
+group by ten order by ten;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+-- window and aggregate with GROUP BY expression (9.2 bug)
+explain (costs off)
+select first_value(max(x)) over (), y
+  from (select unique1 as x, ten+four as y from tenk1) ss
+  group by y;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- window and aggregate with GROUP BY expression (9.2 bug)
+	^
+<sql-statement>
+-- test non-default frame specifications
+SELECT four, ten,
+	sum(ten) over (partition by four order by ten),
+	last_value(ten) over (partition by four order by ten)
+FROM (select distinct ten, four from tenk1) ss;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT four, ten,
+	sum(ten) over (partition by four order by ten range between unbounded preceding and current row),
+	last_value(ten) over (partition by four order by ten range between unbounded preceding and current row)
+FROM (select distinct ten, four from tenk1) ss;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT four, ten,
+	sum(ten) over (partition by four order by ten range between unbounded preceding and unbounded following),
+	last_value(ten) over (partition by four order by ten range between unbounded preceding and unbounded following)
+FROM (select distinct ten, four from tenk1) ss;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT four, ten/4 as two,
+	sum(ten/4) over (partition by four order by ten/4 range between unbounded preceding and current row),
+	last_value(ten/4) over (partition by four order by ten/4 range between unbounded preceding and current row)
+FROM (select distinct ten, four from tenk1) ss;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT four, ten/4 as two,
+	sum(ten/4) over (partition by four order by ten/4 rows between unbounded preceding and current row),
+	last_value(ten/4) over (partition by four order by ten/4 rows between unbounded preceding and current row)
+FROM (select distinct ten, four from tenk1) ss;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (order by four range between current row and unbounded following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (rows between current row and unbounded following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (rows between 2 preceding and 2 following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude no others),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude current row),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude group),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude ties),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT first_value(unique1) over (ORDER BY four rows between current row and 2 following exclude current row),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT first_value(unique1) over (ORDER BY four rows between current row and 2 following exclude group),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT first_value(unique1) over (ORDER BY four rows between current row and 2 following exclude ties),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT last_value(unique1) over (ORDER BY four rows between current row and 2 following exclude current row),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT last_value(unique1) over (ORDER BY four rows between current row and 2 following exclude group),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT last_value(unique1) over (ORDER BY four rows between current row and 2 following exclude ties),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (rows between 2 preceding and 1 preceding),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (rows between 1 following and 3 following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (rows between unbounded preceding and 1 following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (w range between current row and unbounded following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (w range between unbounded preceding and current row exclude current row),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (w range between unbounded preceding and current row exclude group),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (w range between unbounded preceding and current row exclude ties),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT first_value(unique1) over w,
+	nth_value(unique1, 2) over w AS nth_2,
+	last_value(unique1) over w, unique1, four
+FROM tenk1 WHERE unique1 < 10
+WINDOW w AS (order by four range between current row and unbounded following);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over
+	(order by unique1
+	 rows (SELECT unique1 FROM tenk1 ORDER BY unique1 LIMIT 1) + 1 PRECEDING),
+	unique1
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:3:8: Error: SubLinks are not allowed in: FRAME
+    		 rows (SELECT unique1 FROM tenk1 ORDER BY unique1 LIMIT 1) + 1 PRECEDING),
+	       ^
+<sql-statement>
+CREATE TEMP VIEW v_window AS
+	SELECT i, sum(i) over (order by i rows between 1 preceding and 1 following) as sum_rows
+	FROM generate_series(1, 10) i;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	CREATE TEMP VIEW v_window AS
+	^
+<sql-statement>
+SELECT * FROM v_window;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.v_window
+    
+<sql-statement>
+SELECT pg_get_viewdef('v_window');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_get_viewdef('v_window');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  relation "v_window" does not exist
+
+        	SELECT pg_get_viewdef('v_window');
+	^
+<sql-statement>
+CREATE OR REPLACE TEMP VIEW v_window AS
+	SELECT i, sum(i) over (order by i rows between 1 preceding and 1 following
+	exclude current row) as sum_rows FROM generate_series(1, 10) i;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	CREATE OR REPLACE TEMP VIEW v_window AS
+	^
+<sql-statement>
+SELECT * FROM v_window;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.v_window
+    
+<sql-statement>
+SELECT pg_get_viewdef('v_window');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_get_viewdef('v_window');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  relation "v_window" does not exist
+
+        	SELECT pg_get_viewdef('v_window');
+	^
+<sql-statement>
+CREATE OR REPLACE TEMP VIEW v_window AS
+	SELECT i, sum(i) over (order by i rows between 1 preceding and 1 following
+	exclude group) as sum_rows FROM generate_series(1, 10) i;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	CREATE OR REPLACE TEMP VIEW v_window AS
+	^
+<sql-statement>
+SELECT * FROM v_window;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.v_window
+    
+<sql-statement>
+SELECT pg_get_viewdef('v_window');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_get_viewdef('v_window');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  relation "v_window" does not exist
+
+        	SELECT pg_get_viewdef('v_window');
+	^
+<sql-statement>
+CREATE OR REPLACE TEMP VIEW v_window AS
+	SELECT i, sum(i) over (order by i rows between 1 preceding and 1 following
+	exclude ties) as sum_rows FROM generate_series(1, 10) i;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	CREATE OR REPLACE TEMP VIEW v_window AS
+	^
+<sql-statement>
+SELECT * FROM v_window;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.v_window
+    
+<sql-statement>
+SELECT pg_get_viewdef('v_window');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_get_viewdef('v_window');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  relation "v_window" does not exist
+
+        	SELECT pg_get_viewdef('v_window');
+	^
+<sql-statement>
+CREATE OR REPLACE TEMP VIEW v_window AS
+	SELECT i, sum(i) over (order by i rows between 1 preceding and 1 following
+	exclude no others) as sum_rows FROM generate_series(1, 10) i;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	CREATE OR REPLACE TEMP VIEW v_window AS
+	^
+<sql-statement>
+SELECT * FROM v_window;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.v_window
+    
+<sql-statement>
+SELECT pg_get_viewdef('v_window');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_get_viewdef('v_window');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  relation "v_window" does not exist
+
+        	SELECT pg_get_viewdef('v_window');
+	^
+<sql-statement>
+CREATE OR REPLACE TEMP VIEW v_window AS
+	SELECT i, sum(i) over (order by i groups between 1 preceding and 1 following) as sum_rows FROM generate_series(1, 10) i;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	CREATE OR REPLACE TEMP VIEW v_window AS
+	^
+<sql-statement>
+SELECT * FROM v_window;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.v_window
+    
+<sql-statement>
+SELECT pg_get_viewdef('v_window');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_get_viewdef('v_window');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  relation "v_window" does not exist
+
+        	SELECT pg_get_viewdef('v_window');
+	^
+<sql-statement>
+DROP VIEW v_window;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: View not found: 'v_window'
+    	DROP VIEW v_window;
+	^
+<sql-statement>
+CREATE TEMP VIEW v_window AS
+	SELECT i, min(i) over (order by i range between '1 day' preceding and '10 days' following) as min_i
+  FROM generate_series(now(), now()+'100 days'::interval, '1 hour') i;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	CREATE TEMP VIEW v_window AS
+	^
+<sql-statement>
+SELECT pg_get_viewdef('v_window');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_get_viewdef('v_window');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  relation "v_window" does not exist
+
+        	SELECT pg_get_viewdef('v_window');
+	^
+<sql-statement>
+-- RANGE offset PRECEDING/FOLLOWING tests
+SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:2:26: Error: At function: EvaluateExpr
+    	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding),
+	                         ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:2:26: Error: At function: Unwrap
+            	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding),
+	                         ^
+                -stdin-:<main>:2:58: Error: Can't unwrap PostgreSQL type
+                	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding),
+	                                                         ^
+<sql-statement>
+SELECT sum(unique1) over (order by four desc range between 2::int8 preceding and 1::int2 preceding),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:26: Error: At function: EvaluateExpr
+    	SELECT sum(unique1) over (order by four desc range between 2::int8 preceding and 1::int2 preceding),
+	                         ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:26: Error: At function: Unwrap
+            	SELECT sum(unique1) over (order by four desc range between 2::int8 preceding and 1::int2 preceding),
+	                         ^
+                -stdin-:<main>:1:63: Error: Can't unwrap PostgreSQL type
+                	SELECT sum(unique1) over (order by four desc range between 2::int8 preceding and 1::int2 preceding),
+	                                                              ^
+<sql-statement>
+SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding exclude no others),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:26: Error: At function: EvaluateExpr
+    	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding exclude no others),
+	                         ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:26: Error: At function: Unwrap
+            	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding exclude no others),
+	                         ^
+                -stdin-:<main>:1:58: Error: Can't unwrap PostgreSQL type
+                	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding exclude no others),
+	                                                         ^
+<sql-statement>
+SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding exclude current row),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:26: Error: At function: EvaluateExpr
+    	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding exclude current row),
+	                         ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:26: Error: At function: Unwrap
+            	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding exclude current row),
+	                         ^
+                -stdin-:<main>:1:58: Error: Can't unwrap PostgreSQL type
+                	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding exclude current row),
+	                                                         ^
+<sql-statement>
+SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding exclude group),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:26: Error: At function: EvaluateExpr
+    	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding exclude group),
+	                         ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:26: Error: At function: Unwrap
+            	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding exclude group),
+	                         ^
+                -stdin-:<main>:1:58: Error: Can't unwrap PostgreSQL type
+                	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding exclude group),
+	                                                         ^
+<sql-statement>
+SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding exclude ties),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:26: Error: At function: EvaluateExpr
+    	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding exclude ties),
+	                         ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:26: Error: At function: Unwrap
+            	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding exclude ties),
+	                         ^
+                -stdin-:<main>:1:58: Error: Can't unwrap PostgreSQL type
+                	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 1::int2 preceding exclude ties),
+	                                                         ^
+<sql-statement>
+SELECT sum(unique1) over (order by four range between 2::int8 preceding and 6::int2 following exclude ties),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:26: Error: At function: EvaluateExpr
+    	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 6::int2 following exclude ties),
+	                         ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:26: Error: At function: Unwrap
+            	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 6::int2 following exclude ties),
+	                         ^
+                -stdin-:<main>:1:58: Error: Can't unwrap PostgreSQL type
+                	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 6::int2 following exclude ties),
+	                                                         ^
+<sql-statement>
+SELECT sum(unique1) over (order by four range between 2::int8 preceding and 6::int2 following exclude group),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:26: Error: At function: EvaluateExpr
+    	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 6::int2 following exclude group),
+	                         ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:26: Error: At function: Unwrap
+            	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 6::int2 following exclude group),
+	                         ^
+                -stdin-:<main>:1:58: Error: Can't unwrap PostgreSQL type
+                	SELECT sum(unique1) over (order by four range between 2::int8 preceding and 6::int2 following exclude group),
+	                                                         ^
+<sql-statement>
+SELECT sum(unique1) over (partition by four order by unique1 range between 5::int8 preceding and 6::int2 following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:26: Error: At function: EvaluateExpr
+    	SELECT sum(unique1) over (partition by four order by unique1 range between 5::int8 preceding and 6::int2 following),
+	                         ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:26: Error: At function: Unwrap
+            	SELECT sum(unique1) over (partition by four order by unique1 range between 5::int8 preceding and 6::int2 following),
+	                         ^
+                -stdin-:<main>:1:79: Error: Can't unwrap PostgreSQL type
+                	SELECT sum(unique1) over (partition by four order by unique1 range between 5::int8 preceding and 6::int2 following),
+	                                                                              ^
+<sql-statement>
+SELECT sum(unique1) over (partition by four order by unique1 range between 5::int8 preceding and 6::int2 following
+	exclude current row),unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:26: Error: At function: EvaluateExpr
+    	SELECT sum(unique1) over (partition by four order by unique1 range between 5::int8 preceding and 6::int2 following
+	                         ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:26: Error: At function: Unwrap
+            	SELECT sum(unique1) over (partition by four order by unique1 range between 5::int8 preceding and 6::int2 following
+	                         ^
+                -stdin-:<main>:1:79: Error: Can't unwrap PostgreSQL type
+                	SELECT sum(unique1) over (partition by four order by unique1 range between 5::int8 preceding and 6::int2 following
+	                                                                              ^
+<sql-statement>
+select sum(salary) over (order by enroll_date range between '1 year'::interval preceding and '1 year'::interval following),
+	salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:25: Error: At function: EvaluateExpr
+    	select sum(salary) over (order by enroll_date range between '1 year'::interval preceding and '1 year'::interval following),
+	                        ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:25: Error: At function: Unwrap
+            	select sum(salary) over (order by enroll_date range between '1 year'::interval preceding and '1 year'::interval following),
+	                        ^
+                -stdin-:<main>:1:71: Error: Can't unwrap PostgreSQL type
+                	select sum(salary) over (order by enroll_date range between '1 year'::interval preceding and '1 year'::interval following),
+	                                                                      ^
+<sql-statement>
+select sum(salary) over (order by enroll_date desc range between '1 year'::interval preceding and '1 year'::interval following),
+	salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:25: Error: At function: EvaluateExpr
+    	select sum(salary) over (order by enroll_date desc range between '1 year'::interval preceding and '1 year'::interval following),
+	                        ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:25: Error: At function: Unwrap
+            	select sum(salary) over (order by enroll_date desc range between '1 year'::interval preceding and '1 year'::interval following),
+	                        ^
+                -stdin-:<main>:1:76: Error: Can't unwrap PostgreSQL type
+                	select sum(salary) over (order by enroll_date desc range between '1 year'::interval preceding and '1 year'::interval following),
+	                                                                           ^
+<sql-statement>
+select sum(salary) over (order by enroll_date desc range between '1 year'::interval following and '1 year'::interval following),
+	salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:25: Error: At function: EvaluateExpr
+    	select sum(salary) over (order by enroll_date desc range between '1 year'::interval following and '1 year'::interval following),
+	                        ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:25: Error: At function: Unwrap
+            	select sum(salary) over (order by enroll_date desc range between '1 year'::interval following and '1 year'::interval following),
+	                        ^
+                -stdin-:<main>:1:76: Error: Can't unwrap PostgreSQL type
+                	select sum(salary) over (order by enroll_date desc range between '1 year'::interval following and '1 year'::interval following),
+	                                                                           ^
+<sql-statement>
+select sum(salary) over (order by enroll_date range between '1 year'::interval preceding and '1 year'::interval following
+	exclude current row), salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:25: Error: At function: EvaluateExpr
+    	select sum(salary) over (order by enroll_date range between '1 year'::interval preceding and '1 year'::interval following
+	                        ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:25: Error: At function: Unwrap
+            	select sum(salary) over (order by enroll_date range between '1 year'::interval preceding and '1 year'::interval following
+	                        ^
+                -stdin-:<main>:1:71: Error: Can't unwrap PostgreSQL type
+                	select sum(salary) over (order by enroll_date range between '1 year'::interval preceding and '1 year'::interval following
+	                                                                      ^
+<sql-statement>
+select sum(salary) over (order by enroll_date range between '1 year'::interval preceding and '1 year'::interval following
+	exclude group), salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:25: Error: At function: EvaluateExpr
+    	select sum(salary) over (order by enroll_date range between '1 year'::interval preceding and '1 year'::interval following
+	                        ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:25: Error: At function: Unwrap
+            	select sum(salary) over (order by enroll_date range between '1 year'::interval preceding and '1 year'::interval following
+	                        ^
+                -stdin-:<main>:1:71: Error: Can't unwrap PostgreSQL type
+                	select sum(salary) over (order by enroll_date range between '1 year'::interval preceding and '1 year'::interval following
+	                                                                      ^
+<sql-statement>
+select sum(salary) over (order by enroll_date range between '1 year'::interval preceding and '1 year'::interval following
+	exclude ties), salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:25: Error: At function: EvaluateExpr
+    	select sum(salary) over (order by enroll_date range between '1 year'::interval preceding and '1 year'::interval following
+	                        ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:25: Error: At function: Unwrap
+            	select sum(salary) over (order by enroll_date range between '1 year'::interval preceding and '1 year'::interval following
+	                        ^
+                -stdin-:<main>:1:71: Error: Can't unwrap PostgreSQL type
+                	select sum(salary) over (order by enroll_date range between '1 year'::interval preceding and '1 year'::interval following
+	                                                                      ^
+<sql-statement>
+select first_value(salary) over(order by salary range between 1000 preceding and 1000 following),
+	lead(salary) over(order by salary range between 1000 preceding and 1000 following),
+	nth_value(salary, 1) over(order by salary range between 1000 preceding and 1000 following),
+	salary from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select first_value(salary) over(order by salary range between 1000 preceding and 1000 following),
+	^
+        -stdin-:<main>:1:32: Error: At function: PgWindow
+        	select first_value(salary) over(order by salary range between 1000 preceding and 1000 following),
+	                               ^
+            -stdin-:<main>:1:32: Error: Unsupported frame type: range
+            	select first_value(salary) over(order by salary range between 1000 preceding and 1000 following),
+	                               ^
+        -stdin-:<main>:2:19: Error: At function: PgWindow
+        		lead(salary) over(order by salary range between 1000 preceding and 1000 following),
+	                  ^
+            -stdin-:<main>:2:19: Error: Unsupported frame type: range
+            		lead(salary) over(order by salary range between 1000 preceding and 1000 following),
+	                  ^
+        -stdin-:<main>:3:27: Error: At function: PgWindow
+        		nth_value(salary, 1) over(order by salary range between 1000 preceding and 1000 following),
+	                          ^
+            -stdin-:<main>:3:27: Error: Unsupported frame type: range
+            		nth_value(salary, 1) over(order by salary range between 1000 preceding and 1000 following),
+	                          ^
+<sql-statement>
+select last_value(salary) over(order by salary range between 1000 preceding and 1000 following),
+	lag(salary) over(order by salary range between 1000 preceding and 1000 following),
+	salary from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select last_value(salary) over(order by salary range between 1000 preceding and 1000 following),
+	^
+        -stdin-:<main>:1:31: Error: At function: PgWindow
+        	select last_value(salary) over(order by salary range between 1000 preceding and 1000 following),
+	                              ^
+            -stdin-:<main>:1:31: Error: Unsupported frame type: range
+            	select last_value(salary) over(order by salary range between 1000 preceding and 1000 following),
+	                              ^
+        -stdin-:<main>:2:18: Error: At function: PgWindow
+        		lag(salary) over(order by salary range between 1000 preceding and 1000 following),
+	                 ^
+            -stdin-:<main>:2:18: Error: Unsupported frame type: range
+            		lag(salary) over(order by salary range between 1000 preceding and 1000 following),
+	                 ^
+<sql-statement>
+select first_value(salary) over(order by salary range between 1000 following and 3000 following
+	exclude current row),
+	lead(salary) over(order by salary range between 1000 following and 3000 following exclude ties),
+	nth_value(salary, 1) over(order by salary range between 1000 following and 3000 following
+	exclude ties),
+	salary from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select first_value(salary) over(order by salary range between 1000 following and 3000 following
+	^
+        -stdin-:<main>:1:32: Error: At function: PgWindow
+        	select first_value(salary) over(order by salary range between 1000 following and 3000 following
+	                               ^
+            -stdin-:<main>:1:32: Error: Excludes are not supported
+            	select first_value(salary) over(order by salary range between 1000 following and 3000 following
+	                               ^
+        -stdin-:<main>:3:19: Error: At function: PgWindow
+        		lead(salary) over(order by salary range between 1000 following and 3000 following exclude ties),
+	                  ^
+            -stdin-:<main>:3:19: Error: Excludes are not supported
+            		lead(salary) over(order by salary range between 1000 following and 3000 following exclude ties),
+	                  ^
+        -stdin-:<main>:4:27: Error: At function: PgWindow
+        		nth_value(salary, 1) over(order by salary range between 1000 following and 3000 following
+	                          ^
+            -stdin-:<main>:4:27: Error: Excludes are not supported
+            		nth_value(salary, 1) over(order by salary range between 1000 following and 3000 following
+	                          ^
+<sql-statement>
+select last_value(salary) over(order by salary range between 1000 following and 3000 following
+	exclude group),
+	lag(salary) over(order by salary range between 1000 following and 3000 following exclude group),
+	salary from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select last_value(salary) over(order by salary range between 1000 following and 3000 following
+	^
+        -stdin-:<main>:1:31: Error: At function: PgWindow
+        	select last_value(salary) over(order by salary range between 1000 following and 3000 following
+	                              ^
+            -stdin-:<main>:1:31: Error: Excludes are not supported
+            	select last_value(salary) over(order by salary range between 1000 following and 3000 following
+	                              ^
+        -stdin-:<main>:3:18: Error: At function: PgWindow
+        		lag(salary) over(order by salary range between 1000 following and 3000 following exclude group),
+	                 ^
+            -stdin-:<main>:3:18: Error: Excludes are not supported
+            		lag(salary) over(order by salary range between 1000 following and 3000 following exclude group),
+	                 ^
+<sql-statement>
+select first_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	exclude ties),
+	last_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following),
+	salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:32: Error: At function: EvaluateExpr
+    	select first_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	                               ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:32: Error: At function: Unwrap
+            	select first_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	                               ^
+                -stdin-:<main>:1:102: Error: Can't unwrap PostgreSQL type
+                	select first_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	                                                                                                     ^
+<sql-statement>
+select first_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	exclude ties),
+	last_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	exclude ties),
+	salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:32: Error: At function: EvaluateExpr
+    	select first_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	                               ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:32: Error: At function: Unwrap
+            	select first_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	                               ^
+                -stdin-:<main>:1:102: Error: Can't unwrap PostgreSQL type
+                	select first_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	                                                                                                     ^
+<sql-statement>
+select first_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	exclude group),
+	last_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	exclude group),
+	salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:32: Error: At function: EvaluateExpr
+    	select first_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	                               ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:32: Error: At function: Unwrap
+            	select first_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	                               ^
+                -stdin-:<main>:1:102: Error: Can't unwrap PostgreSQL type
+                	select first_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	                                                                                                     ^
+<sql-statement>
+select first_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	exclude current row),
+	last_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	exclude current row),
+	salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:32: Error: At function: EvaluateExpr
+    	select first_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	                               ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:32: Error: At function: Unwrap
+            	select first_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	                               ^
+                -stdin-:<main>:1:102: Error: Can't unwrap PostgreSQL type
+                	select first_value(salary) over(order by enroll_date range between unbounded preceding and '1 year'::interval following
+	                                                                                                     ^
+<sql-statement>
+-- RANGE offset PRECEDING/FOLLOWING with null values
+select x, y,
+       first_value(y) over w,
+       last_value(y) over w
+from
+  (select x, x as y from generate_series(1,5) as x
+   union all select null, 42
+   union all select null, 43) ss
+window w as
+  (order by x asc nulls first range between 2 preceding and 2 following);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:10:3: Error: sortby_nulls unsupported value: 1
+    	  (order by x asc nulls first range between 2 preceding and 2 following);
+	  ^
+<sql-statement>
+select x, y,
+       first_value(y) over w,
+       last_value(y) over w
+from
+  (select x, x as y from generate_series(1,5) as x
+   union all select null, 42
+   union all select null, 43) ss
+window w as
+  (order by x asc nulls last range between 2 preceding and 2 following);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:9:3: Error: sortby_nulls unsupported value: 2
+    	  (order by x asc nulls last range between 2 preceding and 2 following);
+	  ^
+<sql-statement>
+select x, y,
+       first_value(y) over w,
+       last_value(y) over w
+from
+  (select x, x as y from generate_series(1,5) as x
+   union all select null, 42
+   union all select null, 43) ss
+window w as
+  (order by x desc nulls first range between 2 preceding and 2 following);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:9:3: Error: sortby_nulls unsupported value: 1
+    	  (order by x desc nulls first range between 2 preceding and 2 following);
+	  ^
+<sql-statement>
+select x, y,
+       first_value(y) over w,
+       last_value(y) over w
+from
+  (select x, x as y from generate_series(1,5) as x
+   union all select null, 42
+   union all select null, 43) ss
+window w as
+  (order by x desc nulls last range between 2 preceding and 2 following);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:9:3: Error: sortby_nulls unsupported value: 2
+    	  (order by x desc nulls last range between 2 preceding and 2 following);
+	  ^
+<sql-statement>
+-- Check overflow behavior for various integer sizes
+select x, last_value(x) over (order by x::smallint range between current row and 2147450884 following)
+from generate_series(32764, 32766) x;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- Check overflow behavior for various integer sizes
+	^
+        -stdin-:<main>:2:30: Error: At function: PgWindow
+        	select x, last_value(x) over (order by x::smallint range between current row and 2147450884 following)
+	                             ^
+            -stdin-:<main>:2:30: Error: Unsupported frame type: range
+            	select x, last_value(x) over (order by x::smallint range between current row and 2147450884 following)
+	                             ^
+<sql-statement>
+select x, last_value(x) over (order by x::smallint desc range between current row and 2147450885 following)
+from generate_series(-32766, -32764) x;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select x, last_value(x) over (order by x::smallint desc range between current row and 2147450885 following)
+	^
+        -stdin-:<main>:1:30: Error: At function: PgWindow
+        	select x, last_value(x) over (order by x::smallint desc range between current row and 2147450885 following)
+	                             ^
+            -stdin-:<main>:1:30: Error: Unsupported frame type: range
+            	select x, last_value(x) over (order by x::smallint desc range between current row and 2147450885 following)
+	                             ^
+<sql-statement>
+select x, last_value(x) over (order by x range between current row and 4 following)
+from generate_series(2147483644, 2147483646) x;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select x, last_value(x) over (order by x range between current row and 4 following)
+	^
+        -stdin-:<main>:1:30: Error: At function: PgWindow
+        	select x, last_value(x) over (order by x range between current row and 4 following)
+	                             ^
+            -stdin-:<main>:1:30: Error: Unsupported frame type: range
+            	select x, last_value(x) over (order by x range between current row and 4 following)
+	                             ^
+<sql-statement>
+select x, last_value(x) over (order by x desc range between current row and 5 following)
+from generate_series(-2147483646, -2147483644) x;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select x, last_value(x) over (order by x desc range between current row and 5 following)
+	^
+        -stdin-:<main>:1:30: Error: At function: PgWindow
+        	select x, last_value(x) over (order by x desc range between current row and 5 following)
+	                             ^
+            -stdin-:<main>:1:30: Error: Unsupported frame type: range
+            	select x, last_value(x) over (order by x desc range between current row and 5 following)
+	                             ^
+<sql-statement>
+select x, last_value(x) over (order by x range between current row and 4 following)
+from generate_series(9223372036854775804, 9223372036854775806) x;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select x, last_value(x) over (order by x range between current row and 4 following)
+	^
+        -stdin-:<main>:1:30: Error: At function: PgWindow
+        	select x, last_value(x) over (order by x range between current row and 4 following)
+	                             ^
+            -stdin-:<main>:1:30: Error: Unsupported frame type: range
+            	select x, last_value(x) over (order by x range between current row and 4 following)
+	                             ^
+<sql-statement>
+select x, last_value(x) over (order by x desc range between current row and 5 following)
+from generate_series(-9223372036854775806, -9223372036854775804) x;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select x, last_value(x) over (order by x desc range between current row and 5 following)
+	^
+        -stdin-:<main>:1:30: Error: At function: PgWindow
+        	select x, last_value(x) over (order by x desc range between current row and 5 following)
+	                             ^
+            -stdin-:<main>:1:30: Error: Unsupported frame type: range
+            	select x, last_value(x) over (order by x desc range between current row and 5 following)
+	                             ^
+<sql-statement>
+-- Test in_range for other numeric datatypes
+create temp table numerics(
+    id int,
+    f_float4 float4,
+    f_float8 float8,
+    f_numeric numeric
+);
+</sql-statement>
+<sql-statement>
+insert into numerics values
+(0, '-infinity', '-infinity', '-infinity'),
+(1, -3, -3, -3),
+(2, -1, -1, -1),
+(3, 0, 0, 0),
+(4, 1.1, 1.1, 1.1),
+(5, 1.12, 1.12, 1.12),
+(6, 2, 2, 2),
+(7, 100, 100, 100),
+(8, 'infinity', 'infinity', 'infinity'),
+(9, 'NaN', 'NaN', 'NaN');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: AsList
+    	insert into numerics values
+	^
+        -stdin-:<main>:1:1: Error: Cannot infer common type for int4 and numeric
+        	insert into numerics values
+	^
+        -stdin-:<main>:1:1: Error: Cannot infer common type for numeric and int4
+        	insert into numerics values
+	^
+<sql-statement>
+select id, f_float4, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_float4 range between
+             1 preceding and 1 following);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select id, f_float4, first_value(id) over w, last_value(id) over w
+	^
+        -stdin-:<main>:3:13: Error: At function: PgWindow
+        	window w as (order by f_float4 range between
+	            ^
+            -stdin-:<main>:3:13: Error: Unsupported frame type: range
+            	window w as (order by f_float4 range between
+	            ^
+<sql-statement>
+select id, f_float4, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_float4 range between
+             1 preceding and 1.1::float4 following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_float4 range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_float4 range between
+	            ^
+                -stdin-:<main>:4:35: Error: Can't unwrap PostgreSQL type
+                	             1 preceding and 1.1::float4 following);
+	                                  ^
+<sql-statement>
+select id, f_float4, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_float4 range between
+             'inf' preceding and 'inf' following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_float4 range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_float4 range between
+	            ^
+                -stdin-:<main>:4:14: Error: Can't unwrap PostgreSQL type
+                	             'inf' preceding and 'inf' following);
+	             ^
+<sql-statement>
+select id, f_float4, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_float4 range between
+             'inf' preceding and 'inf' preceding);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_float4 range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_float4 range between
+	            ^
+                -stdin-:<main>:4:14: Error: Can't unwrap PostgreSQL type
+                	             'inf' preceding and 'inf' preceding);
+	             ^
+<sql-statement>
+select id, f_float4, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_float4 range between
+             'inf' following and 'inf' following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_float4 range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_float4 range between
+	            ^
+                -stdin-:<main>:4:14: Error: Can't unwrap PostgreSQL type
+                	             'inf' following and 'inf' following);
+	             ^
+<sql-statement>
+select id, f_float4, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_float4 range between
+             1.1 preceding and 'NaN' following);  -- error, NaN disallowed
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_float4 range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_float4 range between
+	            ^
+                -stdin-:<main>:4:14: Error: Can't unwrap PostgreSQL type
+                	             1.1 preceding and 'NaN' following);  -- error, NaN disallowed
+	             ^
+<sql-statement>
+select id, f_float8, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_float8 range between
+             1 preceding and 1 following);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select id, f_float8, first_value(id) over w, last_value(id) over w
+	^
+        -stdin-:<main>:3:13: Error: At function: PgWindow
+        	window w as (order by f_float8 range between
+	            ^
+            -stdin-:<main>:3:13: Error: Unsupported frame type: range
+            	window w as (order by f_float8 range between
+	            ^
+<sql-statement>
+select id, f_float8, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_float8 range between
+             1 preceding and 1.1::float8 following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_float8 range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_float8 range between
+	            ^
+                -stdin-:<main>:4:35: Error: Can't unwrap PostgreSQL type
+                	             1 preceding and 1.1::float8 following);
+	                                  ^
+<sql-statement>
+select id, f_float8, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_float8 range between
+             'inf' preceding and 'inf' following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_float8 range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_float8 range between
+	            ^
+                -stdin-:<main>:4:14: Error: Can't unwrap PostgreSQL type
+                	             'inf' preceding and 'inf' following);
+	             ^
+<sql-statement>
+select id, f_float8, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_float8 range between
+             'inf' preceding and 'inf' preceding);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_float8 range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_float8 range between
+	            ^
+                -stdin-:<main>:4:14: Error: Can't unwrap PostgreSQL type
+                	             'inf' preceding and 'inf' preceding);
+	             ^
+<sql-statement>
+select id, f_float8, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_float8 range between
+             'inf' following and 'inf' following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_float8 range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_float8 range between
+	            ^
+                -stdin-:<main>:4:14: Error: Can't unwrap PostgreSQL type
+                	             'inf' following and 'inf' following);
+	             ^
+<sql-statement>
+select id, f_float8, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_float8 range between
+             1.1 preceding and 'NaN' following);  -- error, NaN disallowed
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_float8 range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_float8 range between
+	            ^
+                -stdin-:<main>:4:14: Error: Can't unwrap PostgreSQL type
+                	             1.1 preceding and 'NaN' following);  -- error, NaN disallowed
+	             ^
+<sql-statement>
+select id, f_numeric, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_numeric range between
+             1 preceding and 1 following);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select id, f_numeric, first_value(id) over w, last_value(id) over w
+	^
+        -stdin-:<main>:3:13: Error: At function: PgWindow
+        	window w as (order by f_numeric range between
+	            ^
+            -stdin-:<main>:3:13: Error: Unsupported frame type: range
+            	window w as (order by f_numeric range between
+	            ^
+<sql-statement>
+select id, f_numeric, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_numeric range between
+             1 preceding and 1.1::numeric following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_numeric range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_numeric range between
+	            ^
+                -stdin-:<main>:4:35: Error: Can't unwrap PostgreSQL type
+                	             1 preceding and 1.1::numeric following);
+	                                  ^
+<sql-statement>
+select id, f_numeric, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_numeric range between
+             1 preceding and 1.1::float8 following);  -- currently unsupported
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_numeric range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_numeric range between
+	            ^
+                -stdin-:<main>:4:35: Error: Can't unwrap PostgreSQL type
+                	             1 preceding and 1.1::float8 following);  -- currently unsupported
+	                                  ^
+<sql-statement>
+select id, f_numeric, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_numeric range between
+             'inf' preceding and 'inf' following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_numeric range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_numeric range between
+	            ^
+                -stdin-:<main>:4:14: Error: Can't unwrap PostgreSQL type
+                	             'inf' preceding and 'inf' following);
+	             ^
+<sql-statement>
+select id, f_numeric, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_numeric range between
+             'inf' preceding and 'inf' preceding);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_numeric range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_numeric range between
+	            ^
+                -stdin-:<main>:4:14: Error: Can't unwrap PostgreSQL type
+                	             'inf' preceding and 'inf' preceding);
+	             ^
+<sql-statement>
+select id, f_numeric, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_numeric range between
+             'inf' following and 'inf' following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_numeric range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_numeric range between
+	            ^
+                -stdin-:<main>:4:14: Error: Can't unwrap PostgreSQL type
+                	             'inf' following and 'inf' following);
+	             ^
+<sql-statement>
+select id, f_numeric, first_value(id) over w, last_value(id) over w
+from numerics
+window w as (order by f_numeric range between
+             1.1 preceding and 'NaN' following);  -- error, NaN disallowed
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_numeric range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_numeric range between
+	            ^
+                -stdin-:<main>:4:14: Error: Can't unwrap PostgreSQL type
+                	             1.1 preceding and 'NaN' following);  -- error, NaN disallowed
+	             ^
+<sql-statement>
+-- Test in_range for other datetime datatypes
+create temp table datetimes(
+    id int,
+    f_time time,
+    f_timetz timetz,
+    f_interval interval,
+    f_timestamptz timestamptz,
+    f_timestamp timestamp
+);
+</sql-statement>
+<sql-statement>
+insert into datetimes values
+(1, '11:00', '11:00 BST', '1 year', '2000-10-19 10:23:54+01', '2000-10-19 10:23:54'),
+(2, '12:00', '12:00 BST', '2 years', '2001-10-19 10:23:54+01', '2001-10-19 10:23:54'),
+(3, '13:00', '13:00 BST', '3 years', '2001-10-19 10:23:54+01', '2001-10-19 10:23:54'),
+(4, '14:00', '14:00 BST', '4 years', '2002-10-19 10:23:54+01', '2002-10-19 10:23:54'),
+(5, '15:00', '15:00 BST', '5 years', '2003-10-19 10:23:54+01', '2003-10-19 10:23:54'),
+(6, '15:00', '15:00 BST', '5 years', '2004-10-19 10:23:54+01', '2004-10-19 10:23:54'),
+(7, '17:00', '17:00 BST', '7 years', '2005-10-19 10:23:54+01', '2005-10-19 10:23:54'),
+(8, '18:00', '18:00 BST', '8 years', '2006-10-19 10:23:54+01', '2006-10-19 10:23:54'),
+(9, '19:00', '19:00 BST', '9 years', '2007-10-19 10:23:54+01', '2007-10-19 10:23:54'),
+(10, '20:00', '20:00 BST', '10 years', '2008-10-19 10:23:54+01', '2008-10-19 10:23:54');
+</sql-statement>
+<sql-statement>
+select id, f_time, first_value(id) over w, last_value(id) over w
+from datetimes
+window w as (order by f_time range between
+             '70 min'::interval preceding and '2 hours'::interval following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_time range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_time range between
+	            ^
+                -stdin-:<main>:4:24: Error: Can't unwrap PostgreSQL type
+                	             '70 min'::interval preceding and '2 hours'::interval following);
+	                       ^
+<sql-statement>
+select id, f_time, first_value(id) over w, last_value(id) over w
+from datetimes
+window w as (order by f_time desc range between
+             '70 min' preceding and '2 hours' following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_time desc range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_time desc range between
+	            ^
+                -stdin-:<main>:4:14: Error: Can't unwrap PostgreSQL type
+                	             '70 min' preceding and '2 hours' following);
+	             ^
+<sql-statement>
+select id, f_timetz, first_value(id) over w, last_value(id) over w
+from datetimes
+window w as (order by f_timetz range between
+             '70 min'::interval preceding and '2 hours'::interval following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_timetz range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_timetz range between
+	            ^
+                -stdin-:<main>:4:24: Error: Can't unwrap PostgreSQL type
+                	             '70 min'::interval preceding and '2 hours'::interval following);
+	                       ^
+<sql-statement>
+select id, f_timetz, first_value(id) over w, last_value(id) over w
+from datetimes
+window w as (order by f_timetz desc range between
+             '70 min' preceding and '2 hours' following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_timetz desc range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_timetz desc range between
+	            ^
+                -stdin-:<main>:4:14: Error: Can't unwrap PostgreSQL type
+                	             '70 min' preceding and '2 hours' following);
+	             ^
+<sql-statement>
+select id, f_interval, first_value(id) over w, last_value(id) over w
+from datetimes
+window w as (order by f_interval range between
+             '1 year'::interval preceding and '1 year'::interval following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_interval range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_interval range between
+	            ^
+                -stdin-:<main>:4:24: Error: Can't unwrap PostgreSQL type
+                	             '1 year'::interval preceding and '1 year'::interval following);
+	                       ^
+<sql-statement>
+select id, f_interval, first_value(id) over w, last_value(id) over w
+from datetimes
+window w as (order by f_interval desc range between
+             '1 year' preceding and '1 year' following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_interval desc range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_interval desc range between
+	            ^
+                -stdin-:<main>:4:14: Error: Can't unwrap PostgreSQL type
+                	             '1 year' preceding and '1 year' following);
+	             ^
+<sql-statement>
+select id, f_timestamptz, first_value(id) over w, last_value(id) over w
+from datetimes
+window w as (order by f_timestamptz range between
+             '1 year'::interval preceding and '1 year'::interval following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_timestamptz range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_timestamptz range between
+	            ^
+                -stdin-:<main>:4:24: Error: Can't unwrap PostgreSQL type
+                	             '1 year'::interval preceding and '1 year'::interval following);
+	                       ^
+<sql-statement>
+select id, f_timestamptz, first_value(id) over w, last_value(id) over w
+from datetimes
+window w as (order by f_timestamptz desc range between
+             '1 year' preceding and '1 year' following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_timestamptz desc range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_timestamptz desc range between
+	            ^
+                -stdin-:<main>:4:14: Error: Can't unwrap PostgreSQL type
+                	             '1 year' preceding and '1 year' following);
+	             ^
+<sql-statement>
+select id, f_timestamp, first_value(id) over w, last_value(id) over w
+from datetimes
+window w as (order by f_timestamp range between
+             '1 year'::interval preceding and '1 year'::interval following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_timestamp range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_timestamp range between
+	            ^
+                -stdin-:<main>:4:24: Error: Can't unwrap PostgreSQL type
+                	             '1 year'::interval preceding and '1 year'::interval following);
+	                       ^
+<sql-statement>
+select id, f_timestamp, first_value(id) over w, last_value(id) over w
+from datetimes
+window w as (order by f_timestamp desc range between
+             '1 year' preceding and '1 year' following);
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:3:13: Error: At function: EvaluateExpr
+    	window w as (order by f_timestamp desc range between
+	            ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:3:13: Error: At function: Unwrap
+            	window w as (order by f_timestamp desc range between
+	            ^
+                -stdin-:<main>:4:14: Error: Can't unwrap PostgreSQL type
+                	             '1 year' preceding and '1 year' following);
+	             ^
+<sql-statement>
+-- RANGE offset PRECEDING/FOLLOWING error cases
+select sum(salary) over (order by enroll_date, salary range between '1 year'::interval preceding and '2 years'::interval following
+	exclude ties), salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:2:25: Error: At function: EvaluateExpr
+    	select sum(salary) over (order by enroll_date, salary range between '1 year'::interval preceding and '2 years'::interval following
+	                        ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:2:25: Error: At function: Unwrap
+            	select sum(salary) over (order by enroll_date, salary range between '1 year'::interval preceding and '2 years'::interval following
+	                        ^
+                -stdin-:<main>:2:79: Error: Can't unwrap PostgreSQL type
+                	select sum(salary) over (order by enroll_date, salary range between '1 year'::interval preceding and '2 years'::interval following
+	                                                                              ^
+<sql-statement>
+select sum(salary) over (range between '1 year'::interval preceding and '2 years'::interval following
+	exclude ties), salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:25: Error: At function: EvaluateExpr
+    	select sum(salary) over (range between '1 year'::interval preceding and '2 years'::interval following
+	                        ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:25: Error: At function: Unwrap
+            	select sum(salary) over (range between '1 year'::interval preceding and '2 years'::interval following
+	                        ^
+                -stdin-:<main>:1:50: Error: Can't unwrap PostgreSQL type
+                	select sum(salary) over (range between '1 year'::interval preceding and '2 years'::interval following
+	                                                 ^
+<sql-statement>
+select sum(salary) over (order by depname range between '1 year'::interval preceding and '2 years'::interval following
+	exclude ties), salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:25: Error: At function: EvaluateExpr
+    	select sum(salary) over (order by depname range between '1 year'::interval preceding and '2 years'::interval following
+	                        ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:25: Error: At function: Unwrap
+            	select sum(salary) over (order by depname range between '1 year'::interval preceding and '2 years'::interval following
+	                        ^
+                -stdin-:<main>:1:67: Error: Can't unwrap PostgreSQL type
+                	select sum(salary) over (order by depname range between '1 year'::interval preceding and '2 years'::interval following
+	                                                                  ^
+<sql-statement>
+select max(enroll_date) over (order by enroll_date range between 1 preceding and 2 following
+	exclude ties), salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select max(enroll_date) over (order by enroll_date range between 1 preceding and 2 following
+	^
+        -stdin-:<main>:1:30: Error: At function: PgWindow
+        	select max(enroll_date) over (order by enroll_date range between 1 preceding and 2 following
+	                             ^
+            -stdin-:<main>:1:30: Error: Excludes are not supported
+            	select max(enroll_date) over (order by enroll_date range between 1 preceding and 2 following
+	                             ^
+<sql-statement>
+select max(enroll_date) over (order by salary range between -1 preceding and 2 following
+	exclude ties), salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select max(enroll_date) over (order by salary range between -1 preceding and 2 following
+	^
+        -stdin-:<main>:1:30: Error: At function: PgWindow
+        	select max(enroll_date) over (order by salary range between -1 preceding and 2 following
+	                             ^
+            -stdin-:<main>:1:30: Error: Excludes are not supported
+            	select max(enroll_date) over (order by salary range between -1 preceding and 2 following
+	                             ^
+<sql-statement>
+select max(enroll_date) over (order by salary range between 1 preceding and -2 following
+	exclude ties), salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select max(enroll_date) over (order by salary range between 1 preceding and -2 following
+	^
+        -stdin-:<main>:1:30: Error: At function: PgWindow
+        	select max(enroll_date) over (order by salary range between 1 preceding and -2 following
+	                             ^
+            -stdin-:<main>:1:30: Error: Excludes are not supported
+            	select max(enroll_date) over (order by salary range between 1 preceding and -2 following
+	                             ^
+<sql-statement>
+select max(enroll_date) over (order by salary range between '1 year'::interval preceding and '2 years'::interval following
+	exclude ties), salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:30: Error: At function: EvaluateExpr
+    	select max(enroll_date) over (order by salary range between '1 year'::interval preceding and '2 years'::interval following
+	                             ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:30: Error: At function: Unwrap
+            	select max(enroll_date) over (order by salary range between '1 year'::interval preceding and '2 years'::interval following
+	                             ^
+                -stdin-:<main>:1:71: Error: Can't unwrap PostgreSQL type
+                	select max(enroll_date) over (order by salary range between '1 year'::interval preceding and '2 years'::interval following
+	                                                                      ^
+<sql-statement>
+select max(enroll_date) over (order by enroll_date range between '1 year'::interval preceding and '-2 years'::interval following
+	exclude ties), salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Expression evaluation
+
+    -stdin-:<main>:1:30: Error: At function: EvaluateExpr
+    	select max(enroll_date) over (order by enroll_date range between '1 year'::interval preceding and '-2 years'::interval following
+	                             ^
+        -stdin-:<main>: Error: Type annotation
+        
+            -stdin-:<main>:1:30: Error: At function: Unwrap
+            	select max(enroll_date) over (order by enroll_date range between '1 year'::interval preceding and '-2 years'::interval following
+	                             ^
+                -stdin-:<main>:1:76: Error: Can't unwrap PostgreSQL type
+                	select max(enroll_date) over (order by enroll_date range between '1 year'::interval preceding and '-2 years'::interval following
+	                                                                           ^
+<sql-statement>
+-- GROUPS tests
+SELECT sum(unique1) over (order by four groups between unbounded preceding and current row),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (order by four groups between unbounded preceding and unbounded following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (order by four groups between current row and unbounded following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (order by four groups between 1 preceding and unbounded following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (order by four groups between 1 following and unbounded following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (order by four groups between unbounded preceding and 2 following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (order by four groups between 2 preceding and 1 preceding),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (order by four groups between 0 preceding and 0 following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
+	exclude current row), unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
+	exclude group), unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
+	exclude ties), unique1, four
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (partition by ten
+	order by four groups between 0 preceding and 0 following),unique1, four, ten
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (partition by ten
+	order by four groups between 0 preceding and 0 following exclude current row), unique1, four, ten
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (partition by ten
+	order by four groups between 0 preceding and 0 following exclude group), unique1, four, ten
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT sum(unique1) over (partition by ten
+	order by four groups between 0 preceding and 0 following exclude ties), unique1, four, ten
+FROM tenk1 WHERE unique1 < 10;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+select first_value(salary) over(order by enroll_date groups between 1 preceding and 1 following),
+	lead(salary) over(order by enroll_date groups between 1 preceding and 1 following),
+	nth_value(salary, 1) over(order by enroll_date groups between 1 preceding and 1 following),
+	salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select first_value(salary) over(order by enroll_date groups between 1 preceding and 1 following),
+	^
+        -stdin-:<main>:1:32: Error: At function: PgWindow
+        	select first_value(salary) over(order by enroll_date groups between 1 preceding and 1 following),
+	                               ^
+            -stdin-:<main>:1:32: Error: Unsupported frame type: groups
+            	select first_value(salary) over(order by enroll_date groups between 1 preceding and 1 following),
+	                               ^
+        -stdin-:<main>:2:19: Error: At function: PgWindow
+        		lead(salary) over(order by enroll_date groups between 1 preceding and 1 following),
+	                  ^
+            -stdin-:<main>:2:19: Error: Unsupported frame type: groups
+            		lead(salary) over(order by enroll_date groups between 1 preceding and 1 following),
+	                  ^
+        -stdin-:<main>:3:27: Error: At function: PgWindow
+        		nth_value(salary, 1) over(order by enroll_date groups between 1 preceding and 1 following),
+	                          ^
+            -stdin-:<main>:3:27: Error: Unsupported frame type: groups
+            		nth_value(salary, 1) over(order by enroll_date groups between 1 preceding and 1 following),
+	                          ^
+<sql-statement>
+select last_value(salary) over(order by enroll_date groups between 1 preceding and 1 following),
+	lag(salary) over(order by enroll_date groups between 1 preceding and 1 following),
+	salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select last_value(salary) over(order by enroll_date groups between 1 preceding and 1 following),
+	^
+        -stdin-:<main>:1:31: Error: At function: PgWindow
+        	select last_value(salary) over(order by enroll_date groups between 1 preceding and 1 following),
+	                              ^
+            -stdin-:<main>:1:31: Error: Unsupported frame type: groups
+            	select last_value(salary) over(order by enroll_date groups between 1 preceding and 1 following),
+	                              ^
+        -stdin-:<main>:2:18: Error: At function: PgWindow
+        		lag(salary) over(order by enroll_date groups between 1 preceding and 1 following),
+	                 ^
+            -stdin-:<main>:2:18: Error: Unsupported frame type: groups
+            		lag(salary) over(order by enroll_date groups between 1 preceding and 1 following),
+	                 ^
+<sql-statement>
+select first_value(salary) over(order by enroll_date groups between 1 following and 3 following
+	exclude current row),
+	lead(salary) over(order by enroll_date groups between 1 following and 3 following exclude ties),
+	nth_value(salary, 1) over(order by enroll_date groups between 1 following and 3 following
+	exclude ties),
+	salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select first_value(salary) over(order by enroll_date groups between 1 following and 3 following
+	^
+        -stdin-:<main>:1:32: Error: At function: PgWindow
+        	select first_value(salary) over(order by enroll_date groups between 1 following and 3 following
+	                               ^
+            -stdin-:<main>:1:32: Error: Excludes are not supported
+            	select first_value(salary) over(order by enroll_date groups between 1 following and 3 following
+	                               ^
+        -stdin-:<main>:3:19: Error: At function: PgWindow
+        		lead(salary) over(order by enroll_date groups between 1 following and 3 following exclude ties),
+	                  ^
+            -stdin-:<main>:3:19: Error: Excludes are not supported
+            		lead(salary) over(order by enroll_date groups between 1 following and 3 following exclude ties),
+	                  ^
+        -stdin-:<main>:4:27: Error: At function: PgWindow
+        		nth_value(salary, 1) over(order by enroll_date groups between 1 following and 3 following
+	                          ^
+            -stdin-:<main>:4:27: Error: Excludes are not supported
+            		nth_value(salary, 1) over(order by enroll_date groups between 1 following and 3 following
+	                          ^
+<sql-statement>
+select last_value(salary) over(order by enroll_date groups between 1 following and 3 following
+	exclude group),
+	lag(salary) over(order by enroll_date groups between 1 following and 3 following exclude group),
+	salary, enroll_date from empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select last_value(salary) over(order by enroll_date groups between 1 following and 3 following
+	^
+        -stdin-:<main>:1:31: Error: At function: PgWindow
+        	select last_value(salary) over(order by enroll_date groups between 1 following and 3 following
+	                              ^
+            -stdin-:<main>:1:31: Error: Excludes are not supported
+            	select last_value(salary) over(order by enroll_date groups between 1 following and 3 following
+	                              ^
+        -stdin-:<main>:3:18: Error: At function: PgWindow
+        		lag(salary) over(order by enroll_date groups between 1 following and 3 following exclude group),
+	                 ^
+            -stdin-:<main>:3:18: Error: Excludes are not supported
+            		lag(salary) over(order by enroll_date groups between 1 following and 3 following exclude group),
+	                 ^
+<sql-statement>
+-- Show differences in offset interpretation between ROWS, RANGE, and GROUPS
+WITH cte (x) AS (
+        SELECT * FROM generate_series(1, 35, 2)
+SELECT x, (sum(x) over w)
+FROM cte
+WINDOW w AS (ORDER BY x rows between 1 preceding and 1 following);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:4:1: Error: ERROR:  syntax error at or near "SELECT"
+
+    	SELECT x, (sum(x) over w)
+	^
+<sql-statement>
+WITH cte (x) AS (
+        SELECT * FROM generate_series(1, 35, 2)
+SELECT x, (sum(x) over w)
+FROM cte
+WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:3:1: Error: ERROR:  syntax error at or near "SELECT"
+
+    	SELECT x, (sum(x) over w)
+	^
+<sql-statement>
+WITH cte (x) AS (
+        SELECT * FROM generate_series(1, 35, 2)
+SELECT x, (sum(x) over w)
+FROM cte
+WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:3:1: Error: ERROR:  syntax error at or near "SELECT"
+
+    	SELECT x, (sum(x) over w)
+	^
+<sql-statement>
+WITH cte (x) AS (
+        select 1 union all select 1 union all select 1 union all
+        SELECT * FROM generate_series(5, 49, 2)
+SELECT x, (sum(x) over w)
+FROM cte
+WINDOW w AS (ORDER BY x rows between 1 preceding and 1 following);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:4:1: Error: ERROR:  syntax error at or near "SELECT"
+
+    	SELECT x, (sum(x) over w)
+	^
+<sql-statement>
+WITH cte (x) AS (
+        select 1 union all select 1 union all select 1 union all
+        SELECT * FROM generate_series(5, 49, 2)
+SELECT x, (sum(x) over w)
+FROM cte
+WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:4:1: Error: ERROR:  syntax error at or near "SELECT"
+
+    	SELECT x, (sum(x) over w)
+	^
+<sql-statement>
+WITH cte (x) AS (
+        select 1 union all select 1 union all select 1 union all
+        SELECT * FROM generate_series(5, 49, 2)
+SELECT x, (sum(x) over w)
+FROM cte
+WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:4:1: Error: ERROR:  syntax error at or near "SELECT"
+
+    	SELECT x, (sum(x) over w)
+	^
+<sql-statement>
+-- with UNION
+SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 UNION ALL SELECT * FROM tenk2)s LIMIT 0;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+-- check some degenerate cases
+create temp table t1 (f1 int, f2 int8);
+</sql-statement>
+<sql-statement>
+insert into t1 values (1,1),(1,2),(2,2);
+</sql-statement>
+<sql-statement>
+select f1, sum(f1) over (partition by f1
+                         range between 1 preceding and 1 following)
+from t1 where f1 = f2;  -- error, must have order by
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select f1, sum(f1) over (partition by f1
+	^
+        -stdin-:<main>:1:25: Error: At function: PgWindow
+        	select f1, sum(f1) over (partition by f1
+	                        ^
+            -stdin-:<main>:1:25: Error: Unsupported frame type: range
+            	select f1, sum(f1) over (partition by f1
+	                        ^
+<sql-statement>
+explain (costs off)
+select f1, sum(f1) over (partition by f1 order by f2
+                         range between 1 preceding and 1 following)
+from t1 where f1 = f2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select f1, sum(f1) over (partition by f1 order by f2
+                         range between 1 preceding and 1 following)
+from t1 where f1 = f2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select f1, sum(f1) over (partition by f1 order by f2
+	^
+        -stdin-:<main>:1:25: Error: At function: PgWindow
+        	select f1, sum(f1) over (partition by f1 order by f2
+	                        ^
+            -stdin-:<main>:1:25: Error: Unsupported frame type: range
+            	select f1, sum(f1) over (partition by f1 order by f2
+	                        ^
+<sql-statement>
+select f1, sum(f1) over (partition by f1, f1 order by f2
+                         range between 2 preceding and 1 preceding)
+from t1 where f1 = f2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select f1, sum(f1) over (partition by f1, f1 order by f2
+	^
+        -stdin-:<main>:1:25: Error: At function: PgWindow
+        	select f1, sum(f1) over (partition by f1, f1 order by f2
+	                        ^
+            -stdin-:<main>:1:25: Error: Unsupported frame type: range
+            	select f1, sum(f1) over (partition by f1, f1 order by f2
+	                        ^
+<sql-statement>
+select f1, sum(f1) over (partition by f1, f2 order by f2
+                         range between 1 following and 2 following)
+from t1 where f1 = f2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select f1, sum(f1) over (partition by f1, f2 order by f2
+	^
+        -stdin-:<main>:1:25: Error: At function: PgWindow
+        	select f1, sum(f1) over (partition by f1, f2 order by f2
+	                        ^
+            -stdin-:<main>:1:25: Error: Unsupported frame type: range
+            	select f1, sum(f1) over (partition by f1, f2 order by f2
+	                        ^
+<sql-statement>
+select f1, sum(f1) over (partition by f1
+                         groups between 1 preceding and 1 following)
+from t1 where f1 = f2;  -- error, must have order by
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select f1, sum(f1) over (partition by f1
+	^
+        -stdin-:<main>:1:25: Error: At function: PgWindow
+        	select f1, sum(f1) over (partition by f1
+	                        ^
+            -stdin-:<main>:1:25: Error: Unsupported frame type: groups
+            	select f1, sum(f1) over (partition by f1
+	                        ^
+<sql-statement>
+explain (costs off)
+select f1, sum(f1) over (partition by f1 order by f2
+                         groups between 1 preceding and 1 following)
+from t1 where f1 = f2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select f1, sum(f1) over (partition by f1 order by f2
+                         groups between 1 preceding and 1 following)
+from t1 where f1 = f2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select f1, sum(f1) over (partition by f1 order by f2
+	^
+        -stdin-:<main>:1:25: Error: At function: PgWindow
+        	select f1, sum(f1) over (partition by f1 order by f2
+	                        ^
+            -stdin-:<main>:1:25: Error: Unsupported frame type: groups
+            	select f1, sum(f1) over (partition by f1 order by f2
+	                        ^
+<sql-statement>
+select f1, sum(f1) over (partition by f1, f1 order by f2
+                         groups between 2 preceding and 1 preceding)
+from t1 where f1 = f2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select f1, sum(f1) over (partition by f1, f1 order by f2
+	^
+        -stdin-:<main>:1:25: Error: At function: PgWindow
+        	select f1, sum(f1) over (partition by f1, f1 order by f2
+	                        ^
+            -stdin-:<main>:1:25: Error: Unsupported frame type: groups
+            	select f1, sum(f1) over (partition by f1, f1 order by f2
+	                        ^
+<sql-statement>
+select f1, sum(f1) over (partition by f1, f2 order by f2
+                         groups between 1 following and 2 following)
+from t1 where f1 = f2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select f1, sum(f1) over (partition by f1, f2 order by f2
+	^
+        -stdin-:<main>:1:25: Error: At function: PgWindow
+        	select f1, sum(f1) over (partition by f1, f2 order by f2
+	                        ^
+            -stdin-:<main>:1:25: Error: Unsupported frame type: groups
+            	select f1, sum(f1) over (partition by f1, f2 order by f2
+	                        ^
+<sql-statement>
+-- ordering by a non-integer constant is allowed
+SELECT rank() OVER (ORDER BY length('abc'));
+</sql-statement>
+<sql-statement>
+-- can't order by another window function
+SELECT rank() OVER (ORDER BY rank() OVER (ORDER BY random()));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:30: Error: Over is not allowed in: ORDER BY
+    	SELECT rank() OVER (ORDER BY rank() OVER (ORDER BY random()));
+	                             ^
+<sql-statement>
+-- some other errors
+SELECT * FROM empsalary WHERE row_number() OVER (ORDER BY salary) < 10;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:31: Error: Over is not allowed in: WHERE
+    	SELECT * FROM empsalary WHERE row_number() OVER (ORDER BY salary) < 10;
+	                              ^
+<sql-statement>
+SELECT * FROM empsalary INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) < 10;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:45: Error: Over is not allowed in: JOIN ON
+    	SELECT * FROM empsalary INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) < 10;
+	                                            ^
+<sql-statement>
+SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtMap!
+    	SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1;
+	^
+        -stdin-:<main>:1:1: Fatal: ydb/library/yql/providers/common/mkql/yql_provider_mkql.cpp:364  GetCallable(): requirement Callables.cend() != compiler failed, message: Missed callable: PgWindowCall
+        	SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1;
+	^
+<sql-statement>
+SELECT * FROM rank() OVER (ORDER BY random());
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:29: Error: ERROR:  syntax error at or near "ORDER"
+
+    	SELECT * FROM rank() OVER (ORDER BY random());
+	                            ^
+<sql-statement>
+DELETE FROM empsalary WHERE (rank() OVER (ORDER BY random())) > 10;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:30: Error: Over is not allowed in: WHERE
+    	DELETE FROM empsalary WHERE (rank() OVER (ORDER BY random())) > 10;
+	                             ^
+<sql-statement>
+DELETE FROM empsalary RETURNING rank() OVER (ORDER BY random());
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: ResTarget: alternative is not implemented yet : 357
+    	DELETE FROM empsalary RETURNING rank() OVER (ORDER BY random());
+	^
+<sql-statement>
+SELECT count(*) OVER w FROM tenk1 WINDOW w AS (ORDER BY unique1), w AS (ORDER BY unique1);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT rank() OVER (PARTITION BY four, ORDER BY ten) FROM tenk1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:41: Error: ERROR:  syntax error at or near "ORDER"
+
+    	SELECT rank() OVER (PARTITION BY four, ORDER BY ten) FROM tenk1;
+	                                        ^
+<sql-statement>
+SELECT count() OVER () FROM tenk1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: FuncCall: count(*) must be used to call a parameterless aggregate function
+    	SELECT count() OVER () FROM tenk1;
+	       ^
+<sql-statement>
+SELECT generate_series(1, 100) OVER () FROM empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	SELECT generate_series(1, 100) OVER () FROM empsalary;
+	       ^
+<sql-statement>
+SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+-- filter
+SELECT sum(salary), row_number() OVER (ORDER BY depname), sum(
+    sum(salary) FILTER (WHERE enroll_date > '2007-01-01')
+) FILTER (WHERE depname <> 'sales') OVER (ORDER BY depname DESC) AS "filtered_sum",
+    depname
+FROM empsalary GROUP BY depname;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:59: Error: FuncCall: unsupported agg_filter
+    	SELECT sum(salary), row_number() OVER (ORDER BY depname), sum(
+	                                                          ^
+<sql-statement>
+-- Test pushdown of quals into a subquery containing window functions
+-- pushdown is safe because all PARTITION BY clauses include depname:
+EXPLAIN (COSTS OFF)
+SELECT * FROM
+  (SELECT depname,
+          sum(salary) OVER (PARTITION BY depname) depsalary,
+          min(salary) OVER (PARTITION BY depname || 'A', depname) depminsalary
+   FROM empsalary) emp
+WHERE depname = 'sales';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Test pushdown of quals into a subquery containing window functions
+	^
+<sql-statement>
+-- pushdown is unsafe because there's a PARTITION BY clause without depname:
+EXPLAIN (COSTS OFF)
+SELECT * FROM
+  (SELECT depname,
+          sum(salary) OVER (PARTITION BY enroll_date) enroll_salary,
+          min(salary) OVER (PARTITION BY depname) depminsalary
+   FROM empsalary) emp
+WHERE depname = 'sales';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- pushdown is unsafe because there's a PARTITION BY clause without depname:
+	^
+<sql-statement>
+-- Test Sort node collapsing
+EXPLAIN (COSTS OFF)
+SELECT * FROM
+  (SELECT depname,
+          sum(salary) OVER (PARTITION BY depname order by empno) depsalary,
+          min(salary) OVER (PARTITION BY depname, empno order by enroll_date) depminsalary
+   FROM empsalary) emp
+WHERE depname = 'sales';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Test Sort node collapsing
+	^
+<sql-statement>
+-- Test Sort node reordering
+EXPLAIN (COSTS OFF)
+SELECT
+  lead(1) OVER (PARTITION BY depname ORDER BY salary, enroll_date),
+  lag(1) OVER (PARTITION BY depname ORDER BY salary,enroll_date,empno)
+FROM empsalary;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Test Sort node reordering
+	^
+<sql-statement>
+-- Test incremental sorting
+EXPLAIN (COSTS OFF)
+SELECT * FROM
+  (SELECT depname,
+          empno,
+          salary,
+          enroll_date,
+          row_number() OVER (PARTITION BY depname ORDER BY enroll_date) AS first_emp,
+          row_number() OVER (PARTITION BY depname ORDER BY enroll_date DESC) AS last_emp
+   FROM empsalary) emp
+WHERE first_emp = 1 OR last_emp = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Test incremental sorting
+	^
+<sql-statement>
+SELECT * FROM
+  (SELECT depname,
+          empno,
+          salary,
+          enroll_date,
+          row_number() OVER (PARTITION BY depname ORDER BY enroll_date) AS first_emp,
+          row_number() OVER (PARTITION BY depname ORDER BY enroll_date DESC) AS last_emp
+   FROM empsalary) emp
+WHERE first_emp = 1 OR last_emp = 1;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: PgSelect, At function: PgSetItem, At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: CalcOverWindow, At function: OrderedMap, At function: CalcOverWindow
+    	SELECT * FROM
+	^
+        -stdin-:<main>:1:1: Error: Expected hashable and equatable type for key column: _yql_partition_key_0_0, but got: pgvarchar
+        	SELECT * FROM
+	^
+<sql-statement>
+-- cleanup
+DROP TABLE empsalary;
+</sql-statement>
+<sql-statement>
+-- test user-defined window function with named args and default args
+CREATE FUNCTION nth_value_def(val anyelement, n integer = 1) RETURNS anyelement
+  LANGUAGE internal WINDOW IMMUTABLE STRICT AS 'window_nth_value';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	-- test user-defined window function with named args and default args
+	^
+<sql-statement>
+SELECT nth_value_def(n := 2, val := ten) OVER (PARTITION BY four), ten, four
+  FROM (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten) s;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT nth_value_def(n := 2, val := ten) OVER (PARTITION BY four), ten, four
+	       ^
+<sql-statement>
+SELECT nth_value_def(ten) OVER (PARTITION BY four), ten, four
+  FROM (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten) s;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+--
+-- Test the basic moving-aggregate machinery
+--
+-- create aggregates that record the series of transform calls (these are
+-- intentionally not true inverses)
+CREATE FUNCTION logging_sfunc_nonstrict(text, anyelement) RETURNS text AS
+$$ SELECT COALESCE($1, '') || '*' || quote_nullable($2) $$
+LANGUAGE SQL IMMUTABLE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	--
+	^
+<sql-statement>
+CREATE FUNCTION logging_msfunc_nonstrict(text, anyelement) RETURNS text AS
+$$ SELECT COALESCE($1, '') || '+' || quote_nullable($2) $$
+LANGUAGE SQL IMMUTABLE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	CREATE FUNCTION logging_msfunc_nonstrict(text, anyelement) RETURNS text AS
+	^
+<sql-statement>
+CREATE FUNCTION logging_minvfunc_nonstrict(text, anyelement) RETURNS text AS
+$$ SELECT $1 || '-' || quote_nullable($2) $$
+LANGUAGE SQL IMMUTABLE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	CREATE FUNCTION logging_minvfunc_nonstrict(text, anyelement) RETURNS text AS
+	^
+<sql-statement>
+CREATE AGGREGATE logging_agg_nonstrict (anyelement)
+	stype = text,
+	sfunc = logging_sfunc_nonstrict,
+	mstype = text,
+	msfunc = logging_msfunc_nonstrict,
+	minvfunc = logging_minvfunc_nonstrict
+);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:2: Error: ERROR:  syntax error at or near "stype"
+
+    		stype = text,
+	 ^
+<sql-statement>
+CREATE AGGREGATE logging_agg_nonstrict_initcond (anyelement)
+	stype = text,
+	sfunc = logging_sfunc_nonstrict,
+	mstype = text,
+	msfunc = logging_msfunc_nonstrict,
+	minvfunc = logging_minvfunc_nonstrict,
+	initcond = 'I',
+	minitcond = 'MI'
+);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:2: Error: ERROR:  syntax error at or near "stype"
+
+    		stype = text,
+	 ^
+<sql-statement>
+CREATE FUNCTION logging_sfunc_strict(text, anyelement) RETURNS text AS
+$$ SELECT $1 || '*' || quote_nullable($2) $$
+LANGUAGE SQL STRICT IMMUTABLE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	CREATE FUNCTION logging_sfunc_strict(text, anyelement) RETURNS text AS
+	^
+<sql-statement>
+CREATE FUNCTION logging_msfunc_strict(text, anyelement) RETURNS text AS
+$$ SELECT $1 || '+' || quote_nullable($2) $$
+LANGUAGE SQL STRICT IMMUTABLE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	CREATE FUNCTION logging_msfunc_strict(text, anyelement) RETURNS text AS
+	^
+<sql-statement>
+CREATE FUNCTION logging_minvfunc_strict(text, anyelement) RETURNS text AS
+$$ SELECT $1 || '-' || quote_nullable($2) $$
+LANGUAGE SQL STRICT IMMUTABLE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	CREATE FUNCTION logging_minvfunc_strict(text, anyelement) RETURNS text AS
+	^
+<sql-statement>
+CREATE AGGREGATE logging_agg_strict (text)
+	stype = text,
+	sfunc = logging_sfunc_strict,
+	mstype = text,
+	msfunc = logging_msfunc_strict,
+	minvfunc = logging_minvfunc_strict
+);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:2: Error: ERROR:  syntax error at or near "stype"
+
+    		stype = text,
+	 ^
+<sql-statement>
+CREATE AGGREGATE logging_agg_strict_initcond (anyelement)
+	stype = text,
+	sfunc = logging_sfunc_strict,
+	mstype = text,
+	msfunc = logging_msfunc_strict,
+	minvfunc = logging_minvfunc_strict,
+	initcond = 'I',
+	minitcond = 'MI'
+);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:2: Error: ERROR:  syntax error at or near "stype"
+
+    		stype = text,
+	 ^
+<sql-statement>
+-- test strict and non-strict cases
+SELECT
+	p::text || ',' || i::text || ':' || COALESCE(v::text, 'NULL') AS row,
+	logging_agg_nonstrict(v) over wnd as nstrict,
+	logging_agg_nonstrict_initcond(v) over wnd as nstrict_init,
+	logging_agg_strict(v::text) over wnd as strict,
+	logging_agg_strict_initcond(v) over wnd as strict_init
+FROM (VALUES
+	(1, 1, NULL),
+	(1, 2, 'a'),
+	(1, 3, 'b'),
+	(1, 4, NULL),
+	(1, 5, NULL),
+	(1, 6, 'c'),
+	(2, 1, NULL),
+	(2, 2, 'x'),
+	(3, 1, 'z')
+) AS t(p, i, v)
+WINDOW wnd AS (PARTITION BY P ORDER BY i ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+ORDER BY p, i;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- test strict and non-strict cases
+	^
+        -stdin-:<main>:19:29: Error: No such column: P
+        	WINDOW wnd AS (PARTITION BY P ORDER BY i ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+	                            ^
+<sql-statement>
+-- and again, but with filter
+SELECT
+	p::text || ',' || i::text || ':' ||
+		CASE WHEN f THEN COALESCE(v::text, 'NULL') ELSE '-' END as row,
+	logging_agg_nonstrict(v) filter(where f) over wnd as nstrict_filt,
+	logging_agg_nonstrict_initcond(v) filter(where f) over wnd as nstrict_init_filt,
+	logging_agg_strict(v::text) filter(where f) over wnd as strict_filt,
+	logging_agg_strict_initcond(v) filter(where f) over wnd as strict_init_filt
+FROM (VALUES
+	(1, 1, true,  NULL),
+	(1, 2, false, 'a'),
+	(1, 3, true,  'b'),
+	(1, 4, false, NULL),
+	(1, 5, false, NULL),
+	(1, 6, false, 'c'),
+	(2, 1, false, NULL),
+	(2, 2, true,  'x'),
+	(3, 1, true,  'z')
+) AS t(p, i, f, v)
+WINDOW wnd AS (PARTITION BY p ORDER BY i ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+ORDER BY p, i;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:5:2: Error: FuncCall: unsupported agg_filter
+    		logging_agg_nonstrict(v) filter(where f) over wnd as nstrict_filt,
+	 ^
+<sql-statement>
+-- test that volatile arguments disable moving-aggregate mode
+SELECT
+	i::text || ':' || COALESCE(v::text, 'NULL') as row,
+	logging_agg_strict(v::text)
+		over wnd as inverse,
+	logging_agg_strict(v::text || CASE WHEN random() < 0 then '?' ELSE '' END)
+		over wnd as noinverse
+FROM (VALUES
+	(1, 'a'),
+	(2, 'b'),
+	(3, 'c')
+) AS t(i, v)
+WINDOW wnd AS (ORDER BY i ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+ORDER BY i;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- test that volatile arguments disable moving-aggregate mode
+	^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- test that volatile arguments disable moving-aggregate mode
+	^
+            -stdin-:<main>:4:2: Error: At function: PgWindowCall
+            		logging_agg_strict(v::text)
+	 ^
+                -stdin-:<main>:4:2: Error: Unsupported function: logging_agg_strict
+                		logging_agg_strict(v::text)
+	 ^
+        -stdin-:<main>:1:1: Error: At function: PgResultItem
+        	-- test that volatile arguments disable moving-aggregate mode
+	^
+            -stdin-:<main>:6:2: Error: At function: PgWindowCall
+            		logging_agg_strict(v::text || CASE WHEN random() < 0 then '?' ELSE '' END)
+	 ^
+                -stdin-:<main>:6:2: Error: Unsupported function: logging_agg_strict
+                		logging_agg_strict(v::text || CASE WHEN random() < 0 then '?' ELSE '' END)
+	 ^
+<sql-statement>
+SELECT
+	i::text || ':' || COALESCE(v::text, 'NULL') as row,
+	logging_agg_strict(v::text) filter(where true)
+		over wnd as inverse,
+	logging_agg_strict(v::text) filter(where random() >= 0)
+		over wnd as noinverse
+FROM (VALUES
+	(1, 'a'),
+	(2, 'b'),
+	(3, 'c')
+) AS t(i, v)
+WINDOW wnd AS (ORDER BY i ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+ORDER BY i;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:3:2: Error: FuncCall: unsupported agg_filter
+    		logging_agg_strict(v::text) filter(where true)
+	 ^
+<sql-statement>
+-- test that non-overlapping windows don't use inverse transitions
+SELECT
+	logging_agg_strict(v::text) OVER wnd
+FROM (VALUES
+	(1, 'a'),
+	(2, 'b'),
+	(3, 'c')
+) AS t(i, v)
+WINDOW wnd AS (ORDER BY i ROWS BETWEEN CURRENT ROW AND CURRENT ROW)
+ORDER BY i;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- test that non-overlapping windows don't use inverse transitions
+	^
+        -stdin-:<main>:3:2: Error: At function: PgWindowCall
+        		logging_agg_strict(v::text) OVER wnd
+	 ^
+            -stdin-:<main>:3:2: Error: Unsupported function: logging_agg_strict
+            		logging_agg_strict(v::text) OVER wnd
+	 ^
+<sql-statement>
+-- test that returning NULL from the inverse transition functions
+-- restarts the aggregation from scratch. The second aggregate is supposed
+-- to test cases where only some aggregates restart, the third one checks
+-- that one aggregate restarting doesn't cause others to restart.
+CREATE FUNCTION sum_int_randrestart_minvfunc(int4, int4) RETURNS int4 AS
+$$ SELECT CASE WHEN random() < 0.2 THEN NULL ELSE $1 - $2 END $$
+LANGUAGE SQL STRICT;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	-- test that returning NULL from the inverse transition functions
+	^
+<sql-statement>
+CREATE AGGREGATE sum_int_randomrestart (int4)
+	stype = int4,
+	sfunc = int4pl,
+	mstype = int4,
+	msfunc = int4pl,
+	minvfunc = sum_int_randrestart_minvfunc
+);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:2: Error: ERROR:  syntax error at or near "stype"
+
+    		stype = int4,
+	 ^
+<sql-statement>
+WITH
+vs AS (
+	SELECT i, (random() * 100)::int4 AS v
+	FROM generate_series(1, 100) AS i
+),
+sum_following AS (
+	SELECT i, SUM(v) OVER
+		(ORDER BY i DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS s
+	FROM vs
+SELECT DISTINCT
+	sum_following.s = sum_int_randomrestart(v) OVER fwd AS eq1,
+	-sum_following.s = sum_int_randomrestart(-v) OVER fwd AS eq2,
+	100*3+(vs.i-1)*3 = length(logging_agg_nonstrict(''::text) OVER fwd) AS eq3
+FROM vs
+JOIN sum_following ON sum_following.i = vs.i
+WINDOW fwd AS (
+	ORDER BY vs.i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
+);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:10:1: Error: ERROR:  syntax error at or near "SELECT"
+
+    	SELECT DISTINCT
+	^
+<sql-statement>
+--
+-- Test various built-in aggregates that have moving-aggregate support
+--
+-- test inverse transition functions handle NULLs properly
+SELECT i,AVG(v::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+<sql-statement>
+SELECT i,AVG(v::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+  FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
+</sql-statement>
+VERIFY failed (2023-12-12T19:41:50.094283+0300): Value is not boxed
+  ydb/library/yql/public/udf/udf_value_inl.h:379
+  AsBoxed(): requirement IsBoxed() failed
+BackTrace(void**, unsigned long)+29 (0x14087F6D)
+FormatBackTrace(IOutputStream*)+32 (0x14088440)
+PrintBackTrace()+17 (0x14088491)
+NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long)+995 (0x140CE743)
+NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...)+418 (0x140C18B2)
+NYql::NUdf::TUnboxedValuePod::AsBoxed() const+218 (0x152AF12A)
+NYql::PointerDatumFromPod(NYql::NUdf::TUnboxedValuePod const&)+29 (0x1B7A9E8D)
+NYql::TPgResolvedCall<true>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const+771 (0x1B7E5C33)
+NKikimr::NMiniKQL::TMutableComputationNode<NYql::TPgResolvedCall<true> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const+420 (0x1B7E50D4)
+??+0 (0x7F854D4FCC53)
+??+0 (0x7F854D4FC47C)
+??+0 (0x7F854D4FAE01)
+??+0 (0x1FD82FD2)
+NYql::NUdf::TBoxedValueAccessor::Fetch(NYql::NUdf::IBoxedValue&, NYql::NUdf::TUnboxedValue&)+244 (0x178E67A4)
+NYql::NUdf::TUnboxedValuePod::Fetch(NYql::NUdf::TUnboxedValue&) const+228 (0x178E6624)
+NKikimr::NMiniKQL::TForwardListValue::TIterator::Next(NYql::NUdf::TUnboxedValue&)+36 (0x17B99974)
+NYql::NUdf::TBoxedValueAccessor::Next(NYql::NUdf::IBoxedValue&, NYql::NUdf::TUnboxedValue&)+244 (0x14EFDD24)
+NYql::NUdf::TUnboxedValuePod::Next(NYql::NUdf::TUnboxedValue&) const+228 (0x14EFD9F4)
+NYql::TYsonExecuteResOrPull::WriteValue(NYql::NUdf::TUnboxedValue const&, NKikimr::NMiniKQL::TType*)+436 (0x209F9A54)
+NYql::NFile::TYtFileGateway::ExecuteResult(NYql::NFile::TSession&, NYson::TYsonWriter&, NYql::NNodes::TExprBase, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&, TVector<TBasicString<char, std::__y1::char_traits<char> >, std::__y1::allocator<TBasicString<char, std::__y1::char_traits<char> > > > const&) const+2002 (0x1C34AE12)
+NYql::NFile::TYtFileGateway::ResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&)+1128 (0x1C31DEF8)
+??+0 (0x1AB7ECFE)
+??+0 (0x1AB82F89)
+??+0 (0x1AB82EE8)
+??+0 (0x1AB82E78)
+??+0 (0x1AB82E28)
+??+0 (0x1AB821BC)
+std::__y1::__function::__value_func<std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)>::operator()[abi:v15000](TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) const+93 (0x1AB92C9D)
+std::__y1::function<std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)>::operator()(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) const+56 (0x1AB91FE8)
+NYql::TExecTransformerBase::CallbackTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+811 (0x1AB91C6B)
+NYql::TAsyncCallbackTransformer<NYql::TExecTransformerBase>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+64 (0x1AB7FF50)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+100 (0x153FF174)
+??+0 (0x176F665C)
+??+0 (0x176EA0A6)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+100 (0x153FF174)
+??+0 (0x1786F3EC)
+??+0 (0x17861728)
+??+0 (0x1786DCCC)
+??+0 (0x178619D7)
+??+0 (0x1786D98A)
+??+0 (0x178619D7)
+??+0 (0x17859F2E)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+100 (0x153FF174)
+??+0 (0x15403098)
+??+0 (0x15402DC9)
+??+0 (0x153FF7D5)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+100 (0x153FF174)
+NYql::AsyncTransformStepImpl(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool, bool, TBasicStringBuf<char, std::__y1::char_traits<char> > const&)+1222 (0x153FE226)
+NYql::AsyncTransform(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool)+127 (0x153FEAAF)
+NYql::TProgram::AsyncTransformWithFallback(bool)+120 (0x16C17A78)
+??+0 (0x16C3EC1E)
+??+0 (0x16C3E797)
+??+0 (0x16C3E665)
+??+0 (0x16C3D140)
+??+0 (0x16C3D007)
+??+0 (0x16C15F8D)
+NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+3760 (0x16C15C20)
+??+0 (0x16C12804)
+NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+301 (0x16C14CCD)
+Main(int, char**)+4924 (0x13F14D4C)
+main+273 (0x13F16831)
+??+0 (0x7F854D229D90)
+__libc_start_main+128 (0x7F854D229E40)
+??+0 (0x13EA0029)
+pthread_kill at ./nptl/./nptl/pthread_kill.c:43:17
+?? at ??:0:0

@@ -585,12 +585,22 @@ CREATE TABLE remember_create_subid (c int);
 <sql-statement>
 SAVEPOINT q;
 </sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: TransactionStmt: kind is not supported: 4
+    	SAVEPOINT q;
+	^
 <sql-statement>
 DROP TABLE remember_create_subid;
 </sql-statement>
 <sql-statement>
 ROLLBACK TO q;
 </sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: TransactionStmt: kind is not supported: 6
+    	ROLLBACK TO q;
+	^
 <sql-statement>
 COMMIT;
 </sql-statement>
@@ -615,12 +625,22 @@ ALTER TABLE remember_node_subid ALTER c TYPE bigint;
 <sql-statement>
 SAVEPOINT q;
 </sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: TransactionStmt: kind is not supported: 4
+    	SAVEPOINT q;
+	^
 <sql-statement>
 DROP TABLE remember_node_subid;
 </sql-statement>
 <sql-statement>
 ROLLBACK TO q;
 </sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: TransactionStmt: kind is not supported: 6
+    	ROLLBACK TO q;
+	^
 <sql-statement>
 COMMIT;
 </sql-statement>

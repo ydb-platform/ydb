@@ -726,3 +726,928 @@ SELECT power('-inf'::numeric, 'inf');
  Infinity
 (1 row)
 
+-- Check for appropriate rounding and overflow
+CREATE TABLE fract_only (id int, val numeric(4,4));
+INSERT INTO fract_only VALUES (1, '0.0');
+INSERT INTO fract_only VALUES (2, '0.1');
+INSERT INTO fract_only VALUES (4, '-0.9999');
+INSERT INTO fract_only VALUES (5, '0.99994');
+INSERT INTO fract_only VALUES (7, '0.00001');
+INSERT INTO fract_only VALUES (8, '0.00017');
+INSERT INTO fract_only VALUES (9, 'NaN');
+DROP TABLE fract_only;
+-- Check conversion to integers
+SELECT (-9223372036854775808.5)::int8; -- should fail
+ERROR:  bigint out of range
+SELECT (-9223372036854775808.4)::int8; -- ok
+         int8         
+----------------------
+ -9223372036854775808
+(1 row)
+
+SELECT 9223372036854775807.4::int8; -- ok
+        int8         
+---------------------
+ 9223372036854775807
+(1 row)
+
+SELECT 9223372036854775807.5::int8; -- should fail
+ERROR:  bigint out of range
+SELECT (-2147483648.5)::int4; -- should fail
+ERROR:  integer out of range
+SELECT (-2147483648.4)::int4; -- ok
+    int4     
+-------------
+ -2147483648
+(1 row)
+
+SELECT 2147483647.4::int4; -- ok
+    int4    
+------------
+ 2147483647
+(1 row)
+
+SELECT 2147483647.5::int4; -- should fail
+ERROR:  integer out of range
+SELECT (-32768.5)::int2; -- should fail
+ERROR:  smallint out of range
+SELECT (-32768.4)::int2; -- ok
+  int2  
+--------
+ -32768
+(1 row)
+
+SELECT 32767.4::int2; -- ok
+ int2  
+-------
+ 32767
+(1 row)
+
+SELECT 32767.5::int2; -- should fail
+ERROR:  smallint out of range
+-- Check inf/nan conversion behavior
+SELECT 'NaN'::float8::numeric;
+ numeric 
+---------
+     NaN
+(1 row)
+
+SELECT 'Infinity'::float8::numeric;
+ numeric  
+----------
+ Infinity
+(1 row)
+
+SELECT '-Infinity'::float8::numeric;
+  numeric  
+-----------
+ -Infinity
+(1 row)
+
+SELECT 'NaN'::float4::numeric;
+ numeric 
+---------
+     NaN
+(1 row)
+
+SELECT 'Infinity'::float4::numeric;
+ numeric  
+----------
+ Infinity
+(1 row)
+
+SELECT '-Infinity'::float4::numeric;
+  numeric  
+-----------
+ -Infinity
+(1 row)
+
+SELECT '42'::int2::numeric;
+ numeric 
+---------
+      42
+(1 row)
+
+SELECT 'NaN'::numeric::int2;
+ERROR:  cannot convert NaN to smallint
+SELECT 'Infinity'::numeric::int2;
+ERROR:  cannot convert infinity to smallint
+SELECT '-Infinity'::numeric::int2;
+ERROR:  cannot convert infinity to smallint
+SELECT 'NaN'::numeric::int4;
+ERROR:  cannot convert NaN to integer
+SELECT 'Infinity'::numeric::int4;
+ERROR:  cannot convert infinity to integer
+SELECT '-Infinity'::numeric::int4;
+ERROR:  cannot convert infinity to integer
+SELECT 'NaN'::numeric::int8;
+ERROR:  cannot convert NaN to bigint
+SELECT 'Infinity'::numeric::int8;
+ERROR:  cannot convert infinity to bigint
+SELECT '-Infinity'::numeric::int8;
+ERROR:  cannot convert infinity to bigint
+-- Simple check that ceil(), floor(), and round() work correctly
+CREATE TABLE ceil_floor_round (a numeric);
+INSERT INTO ceil_floor_round VALUES ('-5.5');
+INSERT INTO ceil_floor_round VALUES ('-5.499999');
+INSERT INTO ceil_floor_round VALUES ('9.5');
+INSERT INTO ceil_floor_round VALUES ('9.4999999');
+INSERT INTO ceil_floor_round VALUES ('0.0');
+INSERT INTO ceil_floor_round VALUES ('0.0000001');
+INSERT INTO ceil_floor_round VALUES ('-0.000001');
+DROP TABLE ceil_floor_round;
+-- Check rounding, it should round ties away from zero.
+SELECT i as pow,
+	round((-2.5 * 10 ^ i)::numeric, -i),
+	round((-1.5 * 10 ^ i)::numeric, -i),
+	round((-0.5 * 10 ^ i)::numeric, -i),
+	round((0.5 * 10 ^ i)::numeric, -i),
+	round((1.5 * 10 ^ i)::numeric, -i),
+	round((2.5 * 10 ^ i)::numeric, -i)
+FROM generate_series(-5,5) AS t(i);
+ pow |  round   |  round   |  round   |  round  |  round  |  round  
+-----+----------+----------+----------+---------+---------+---------
+  -5 | -0.00003 | -0.00002 | -0.00001 | 0.00001 | 0.00002 | 0.00003
+  -4 |  -0.0003 |  -0.0002 |  -0.0001 |  0.0001 |  0.0002 |  0.0003
+  -3 |   -0.003 |   -0.002 |   -0.001 |   0.001 |   0.002 |   0.003
+  -2 |    -0.03 |    -0.02 |    -0.01 |    0.01 |    0.02 |    0.03
+  -1 |     -0.3 |     -0.2 |     -0.1 |     0.1 |     0.2 |     0.3
+   0 |       -3 |       -2 |       -1 |       1 |       2 |       3
+   1 |      -30 |      -20 |      -10 |      10 |      20 |      30
+   2 |     -300 |     -200 |     -100 |     100 |     200 |     300
+   3 |    -3000 |    -2000 |    -1000 |    1000 |    2000 |    3000
+   4 |   -30000 |   -20000 |   -10000 |   10000 |   20000 |   30000
+   5 |  -300000 |  -200000 |  -100000 |  100000 |  200000 |  300000
+(11 rows)
+
+-- Testing for width_bucket(). For convenience, we test both the
+-- numeric and float8 versions of the function in this file.
+-- errors
+SELECT width_bucket(5.0, 3.0, 4.0, 0);
+ERROR:  count must be greater than zero
+SELECT width_bucket(5.0, 3.0, 4.0, -5);
+ERROR:  count must be greater than zero
+SELECT width_bucket(3.5, 3.0, 3.0, 888);
+ERROR:  lower bound cannot equal upper bound
+SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, 0);
+ERROR:  count must be greater than zero
+SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, -5);
+ERROR:  count must be greater than zero
+SELECT width_bucket(3.5::float8, 3.0::float8, 3.0::float8, 888);
+ERROR:  lower bound cannot equal upper bound
+SELECT width_bucket('NaN', 3.0, 4.0, 888);
+ERROR:  operand, lower bound, and upper bound cannot be NaN
+SELECT width_bucket(0::float8, 'NaN', 4.0::float8, 888);
+ERROR:  operand, lower bound, and upper bound cannot be NaN
+SELECT width_bucket(2.0, 3.0, '-inf', 888);
+ERROR:  lower and upper bounds must be finite
+SELECT width_bucket(0::float8, '-inf', 4.0::float8, 888);
+ERROR:  lower and upper bounds must be finite
+-- normal operation
+CREATE TABLE width_bucket_test (operand_num numeric, operand_f8 float8);
+-- Check positive and negative infinity: we require
+-- finite bucket bounds, but allow an infinite operand
+SELECT width_bucket(0.0::numeric, 'Infinity'::numeric, 5, 10); -- error
+ERROR:  lower and upper bounds must be finite
+SELECT width_bucket(0.0::numeric, 5, '-Infinity'::numeric, 20); -- error
+ERROR:  lower and upper bounds must be finite
+SELECT width_bucket('Infinity'::numeric, 1, 10, 10),
+       width_bucket('-Infinity'::numeric, 1, 10, 10);
+ width_bucket | width_bucket 
+--------------+--------------
+           11 |            0
+(1 row)
+
+SELECT width_bucket(0.0::float8, 'Infinity'::float8, 5, 10); -- error
+ERROR:  lower and upper bounds must be finite
+SELECT width_bucket(0.0::float8, 5, '-Infinity'::float8, 20); -- error
+ERROR:  lower and upper bounds must be finite
+SELECT width_bucket('Infinity'::float8, 1, 10, 10),
+       width_bucket('-Infinity'::float8, 1, 10, 10);
+ width_bucket | width_bucket 
+--------------+--------------
+           11 |            0
+(1 row)
+
+DROP TABLE width_bucket_test;
+-- Simple test for roundoff error when results should be exact
+SELECT x, width_bucket(x::float8, 10, 100, 9) as flt,
+       width_bucket(x::numeric, 10, 100, 9) as num
+FROM generate_series(0, 110, 10) x;
+  x  | flt | num 
+-----+-----+-----
+   0 |   0 |   0
+  10 |   1 |   1
+  20 |   2 |   2
+  30 |   3 |   3
+  40 |   4 |   4
+  50 |   5 |   5
+  60 |   6 |   6
+  70 |   7 |   7
+  80 |   8 |   8
+  90 |   9 |   9
+ 100 |  10 |  10
+ 110 |  10 |  10
+(12 rows)
+
+SELECT x, width_bucket(x::float8, 100, 10, 9) as flt,
+       width_bucket(x::numeric, 100, 10, 9) as num
+FROM generate_series(0, 110, 10) x;
+  x  | flt | num 
+-----+-----+-----
+   0 |  10 |  10
+  10 |  10 |  10
+  20 |   9 |   9
+  30 |   8 |   8
+  40 |   7 |   7
+  50 |   6 |   6
+  60 |   5 |   5
+  70 |   4 |   4
+  80 |   3 |   3
+  90 |   2 |   2
+ 100 |   1 |   1
+ 110 |   0 |   0
+(12 rows)
+
+SELECT to_char('100'::numeric, 'FM999.9');
+ to_char 
+---------
+ 100.
+(1 row)
+
+SELECT to_char('100'::numeric, 'FM999.');
+ to_char 
+---------
+ 100
+(1 row)
+
+SELECT to_char('100'::numeric, 'FM999');
+ to_char 
+---------
+ 100
+(1 row)
+
+-- Check parsing of literal text in a format string
+SELECT to_char('100'::numeric, 'foo999');
+ to_char 
+---------
+ foo 100
+(1 row)
+
+SELECT to_char('100'::numeric, 'f\oo999');
+ to_char  
+----------
+ f\oo 100
+(1 row)
+
+SELECT to_char('100'::numeric, 'f\\oo999');
+  to_char  
+-----------
+ f\\oo 100
+(1 row)
+
+SELECT to_char('100'::numeric, 'f\"oo999');
+ to_char  
+----------
+ f"oo 100
+(1 row)
+
+SELECT to_char('100'::numeric, 'f\\"oo999');
+  to_char  
+-----------
+ f\"oo 100
+(1 row)
+
+SELECT to_char('100'::numeric, 'f"ool"999');
+ to_char  
+----------
+ fool 100
+(1 row)
+
+SELECT to_char('100'::numeric, 'f"\ool"999');
+ to_char  
+----------
+ fool 100
+(1 row)
+
+SELECT to_char('100'::numeric, 'f"\\ool"999');
+  to_char  
+-----------
+ f\ool 100
+(1 row)
+
+SELECT to_char('100'::numeric, 'f"ool\"999');
+ to_char  
+----------
+ fool"999
+(1 row)
+
+SELECT to_char('100'::numeric, 'f"ool\\"999');
+  to_char  
+-----------
+ fool\ 100
+(1 row)
+
+SELECT to_number('-34,338,492', '99G999G999');
+ to_number 
+-----------
+ -34338492
+(1 row)
+
+SELECT to_number('-34,338,492.654,878', '99G999G999D999G999');
+    to_number     
+------------------
+ -34338492.654878
+(1 row)
+
+SELECT to_number('<564646.654564>', '999999.999999PR');
+   to_number    
+----------------
+ -564646.654564
+(1 row)
+
+SELECT to_number('0.00001-', '9.999999S');
+ to_number 
+-----------
+  -0.00001
+(1 row)
+
+SELECT to_number('5.01-', 'FM9.999999S');
+ to_number 
+-----------
+     -5.01
+(1 row)
+
+SELECT to_number('5.01-', 'FM9.999999MI');
+ to_number 
+-----------
+     -5.01
+(1 row)
+
+SELECT to_number('5 4 4 4 4 8 . 7 8', '9 9 9 9 9 9 . 9 9');
+ to_number 
+-----------
+ 544448.78
+(1 row)
+
+SELECT to_number('.01', 'FM9.99');
+ to_number 
+-----------
+      0.01
+(1 row)
+
+SELECT to_number('.0', '99999999.99999999');
+ to_number 
+-----------
+       0.0
+(1 row)
+
+SELECT to_number('.-01', 'S99.99');
+ to_number 
+-----------
+     -0.01
+(1 row)
+
+SELECT to_number('.01-', '99.99S');
+ to_number 
+-----------
+     -0.01
+(1 row)
+
+SELECT to_number(' . 0 1-', ' 9 9 . 9 9 S');
+ to_number 
+-----------
+     -0.01
+(1 row)
+
+SELECT to_number('34,50','999,99');
+ to_number 
+-----------
+      3450
+(1 row)
+
+SELECT to_number('123,000','999G');
+ to_number 
+-----------
+       123
+(1 row)
+
+SELECT to_number('123456','999G999');
+ to_number 
+-----------
+    123456
+(1 row)
+
+SELECT to_number('$1234.56','L9,999.99');
+ to_number 
+-----------
+   1234.56
+(1 row)
+
+SELECT to_number('$1234.56','L99,999.99');
+ to_number 
+-----------
+   1234.56
+(1 row)
+
+SELECT to_number('$1,234.56','L99,999.99');
+ to_number 
+-----------
+   1234.56
+(1 row)
+
+SELECT to_number('1234.56','L99,999.99');
+ to_number 
+-----------
+   1234.56
+(1 row)
+
+SELECT to_number('1,234.56','L99,999.99');
+ to_number 
+-----------
+   1234.56
+(1 row)
+
+SELECT to_number('42nd', '99th');
+ to_number 
+-----------
+        42
+(1 row)
+
+--
+-- Input syntax
+--
+CREATE TABLE num_input_test (n1 numeric);
+-- good inputs
+INSERT INTO num_input_test(n1) VALUES (' 123');
+INSERT INTO num_input_test(n1) VALUES ('   3245874    ');
+INSERT INTO num_input_test(n1) VALUES ('  -93853');
+INSERT INTO num_input_test(n1) VALUES ('555.50');
+INSERT INTO num_input_test(n1) VALUES ('-555.50');
+INSERT INTO num_input_test(n1) VALUES ('NaN ');
+INSERT INTO num_input_test(n1) VALUES ('        nan');
+INSERT INTO num_input_test(n1) VALUES (' inf ');
+INSERT INTO num_input_test(n1) VALUES (' +inf ');
+INSERT INTO num_input_test(n1) VALUES (' -inf ');
+INSERT INTO num_input_test(n1) VALUES (' Infinity ');
+INSERT INTO num_input_test(n1) VALUES (' +inFinity ');
+INSERT INTO num_input_test(n1) VALUES (' -INFINITY ');
+-- bad inputs
+INSERT INTO num_input_test(n1) VALUES ('     ');
+ERROR:  invalid input syntax for type numeric: "     "
+LINE 1: INSERT INTO num_input_test(n1) VALUES ('     ');
+                                               ^
+INSERT INTO num_input_test(n1) VALUES ('   1234   %');
+ERROR:  invalid input syntax for type numeric: "   1234   %"
+LINE 1: INSERT INTO num_input_test(n1) VALUES ('   1234   %');
+                                               ^
+INSERT INTO num_input_test(n1) VALUES ('xyz');
+ERROR:  invalid input syntax for type numeric: "xyz"
+LINE 1: INSERT INTO num_input_test(n1) VALUES ('xyz');
+                                               ^
+INSERT INTO num_input_test(n1) VALUES ('- 1234');
+ERROR:  invalid input syntax for type numeric: "- 1234"
+LINE 1: INSERT INTO num_input_test(n1) VALUES ('- 1234');
+                                               ^
+INSERT INTO num_input_test(n1) VALUES ('5 . 0');
+ERROR:  invalid input syntax for type numeric: "5 . 0"
+LINE 1: INSERT INTO num_input_test(n1) VALUES ('5 . 0');
+                                               ^
+INSERT INTO num_input_test(n1) VALUES ('5. 0   ');
+ERROR:  invalid input syntax for type numeric: "5. 0   "
+LINE 1: INSERT INTO num_input_test(n1) VALUES ('5. 0   ');
+                                               ^
+INSERT INTO num_input_test(n1) VALUES ('');
+ERROR:  invalid input syntax for type numeric: ""
+LINE 1: INSERT INTO num_input_test(n1) VALUES ('');
+                                               ^
+INSERT INTO num_input_test(n1) VALUES (' N aN ');
+ERROR:  invalid input syntax for type numeric: " N aN "
+LINE 1: INSERT INTO num_input_test(n1) VALUES (' N aN ');
+                                               ^
+INSERT INTO num_input_test(n1) VALUES ('+ infinity');
+ERROR:  invalid input syntax for type numeric: "+ infinity"
+LINE 1: INSERT INTO num_input_test(n1) VALUES ('+ infinity');
+                                               ^
+SELECT * FROM num_input_test;
+    n1     
+-----------
+       123
+   3245874
+    -93853
+    555.50
+   -555.50
+       NaN
+       NaN
+  Infinity
+  Infinity
+ -Infinity
+  Infinity
+  Infinity
+ -Infinity
+(13 rows)
+
+select trim_scale((0.1 - 2e-16383) * (0.1 - 3e-16383));
+ trim_scale 
+------------
+       0.01
+(1 row)
+
+--
+-- Test some corner cases for division
+--
+select 999999999999999999999::numeric/1000000000000000000000;
+        ?column?        
+------------------------
+ 1.00000000000000000000
+(1 row)
+
+select mod(999999999999999999999::numeric,1000000000000000000000);
+          mod          
+-----------------------
+ 999999999999999999999
+(1 row)
+
+select div(-9999999999999999999999::numeric,1000000000000000000000);
+ div 
+-----
+  -9
+(1 row)
+
+select mod(-9999999999999999999999::numeric,1000000000000000000000);
+          mod           
+------------------------
+ -999999999999999999999
+(1 row)
+
+select div(-9999999999999999999999::numeric,1000000000000000000000)*1000000000000000000000 + mod(-9999999999999999999999::numeric,1000000000000000000000);
+        ?column?         
+-------------------------
+ -9999999999999999999999
+(1 row)
+
+select mod (70.0,70) ;
+ mod 
+-----
+ 0.0
+(1 row)
+
+select div (70.0,70) ;
+ div 
+-----
+   1
+(1 row)
+
+select 70.0 / 70 ;
+        ?column?        
+------------------------
+ 1.00000000000000000000
+(1 row)
+
+select 12345678901234567890 % 123;
+ ?column? 
+----------
+       78
+(1 row)
+
+select 12345678901234567890 / 123;
+      ?column?      
+--------------------
+ 100371373180768845
+(1 row)
+
+select div(12345678901234567890, 123);
+        div         
+--------------------
+ 100371373180768844
+(1 row)
+
+select div(12345678901234567890, 123) * 123 + 12345678901234567890 % 123;
+       ?column?       
+----------------------
+ 12345678901234567890
+(1 row)
+
+--
+-- Test some corner cases for square root
+--
+select sqrt(1.000000000000003::numeric);
+       sqrt        
+-------------------
+ 1.000000000000001
+(1 row)
+
+select sqrt(1.000000000000004::numeric);
+       sqrt        
+-------------------
+ 1.000000000000002
+(1 row)
+
+select sqrt(96627521408608.56340355805::numeric);
+        sqrt         
+---------------------
+ 9829929.87811248648
+(1 row)
+
+select sqrt(96627521408608.56340355806::numeric);
+        sqrt         
+---------------------
+ 9829929.87811248649
+(1 row)
+
+select sqrt(515549506212297735.073688290367::numeric);
+          sqrt          
+------------------------
+ 718017761.766585921184
+(1 row)
+
+select sqrt(515549506212297735.073688290368::numeric);
+          sqrt          
+------------------------
+ 718017761.766585921185
+(1 row)
+
+select sqrt(8015491789940783531003294973900306::numeric);
+       sqrt        
+-------------------
+ 89529278953540017
+(1 row)
+
+select sqrt(8015491789940783531003294973900307::numeric);
+       sqrt        
+-------------------
+ 89529278953540018
+(1 row)
+
+--
+-- Test code path for raising to integer powers
+--
+select 10.0 ^ -2147483648 as rounds_to_zero;
+   rounds_to_zero   
+--------------------
+ 0.0000000000000000
+(1 row)
+
+select 10.0 ^ -2147483647 as rounds_to_zero;
+   rounds_to_zero   
+--------------------
+ 0.0000000000000000
+(1 row)
+
+select 10.0 ^ 2147483647 as overflows;
+ERROR:  value overflows numeric format
+select 117743296169.0 ^ 1000000000 as overflows;
+ERROR:  value overflows numeric format
+-- cases that used to return inaccurate results
+select 3.789 ^ 21;
+            ?column?            
+--------------------------------
+ 1409343026052.8716016316022141
+(1 row)
+
+select 3.789 ^ 35;
+                ?column?                
+----------------------------------------
+ 177158169650516670809.3820586142670135
+(1 row)
+
+select 1.2 ^ 345;
+                   ?column?                    
+-----------------------------------------------
+ 2077446682327378559843444695.5827049735727869
+(1 row)
+
+select 0.12 ^ (-20);
+               ?column?               
+--------------------------------------
+ 2608405330458882702.5529619561355838
+(1 row)
+
+select 1.000000000123 ^ (-2147483648);
+      ?column?      
+--------------------
+ 0.7678656556403084
+(1 row)
+
+-- cases that used to error out
+select 0.12 ^ (-25);
+                 ?column?                  
+-------------------------------------------
+ 104825960103961013959336.4983657883169110
+(1 row)
+
+select 0.5678 ^ (-85);
+                ?column?                
+----------------------------------------
+ 782333637740774446257.7719390061997396
+(1 row)
+
+-- negative base to integer powers
+select (-1.0) ^ 2147483646;
+      ?column?      
+--------------------
+ 1.0000000000000000
+(1 row)
+
+select (-1.0) ^ 2147483647;
+      ?column?       
+---------------------
+ -1.0000000000000000
+(1 row)
+
+select (-1.0) ^ 2147483648;
+      ?column?      
+--------------------
+ 1.0000000000000000
+(1 row)
+
+select (-1.0) ^ 1000000000000000;
+      ?column?      
+--------------------
+ 1.0000000000000000
+(1 row)
+
+select (-1.0) ^ 1000000000000001;
+      ?column?       
+---------------------
+ -1.0000000000000000
+(1 row)
+
+--
+-- Tests for raising to non-integer powers
+--
+-- special cases
+select 0.0 ^ 0.0;
+      ?column?      
+--------------------
+ 1.0000000000000000
+(1 row)
+
+select (-12.34) ^ 0.0;
+      ?column?      
+--------------------
+ 1.0000000000000000
+(1 row)
+
+select 12.34 ^ 0.0;
+      ?column?      
+--------------------
+ 1.0000000000000000
+(1 row)
+
+select 0.0 ^ 12.34;
+      ?column?      
+--------------------
+ 0.0000000000000000
+(1 row)
+
+-- NaNs
+select 'NaN'::numeric ^ 'NaN'::numeric;
+ ?column? 
+----------
+      NaN
+(1 row)
+
+select 'NaN'::numeric ^ 0;
+ ?column? 
+----------
+        1
+(1 row)
+
+select 'NaN'::numeric ^ 1;
+ ?column? 
+----------
+      NaN
+(1 row)
+
+select 0 ^ 'NaN'::numeric;
+ ?column? 
+----------
+      NaN
+(1 row)
+
+select 1 ^ 'NaN'::numeric;
+ ?column? 
+----------
+        1
+(1 row)
+
+-- invalid inputs
+select 0.0 ^ (-12.34);
+ERROR:  zero raised to a negative power is undefined
+select (-12.34) ^ 1.2;
+ERROR:  a negative number raised to a non-integer power yields a complex result
+-- cases that used to generate inaccurate results
+select 32.1 ^ 9.8;
+      ?column?      
+--------------------
+ 580429286790711.10
+(1 row)
+
+select 32.1 ^ (-9.8);
+             ?column?             
+----------------------------------
+ 0.000000000000001722862754788209
+(1 row)
+
+select 12.3 ^ 45.6;
+                       ?column?                       
+------------------------------------------------------
+ 50081010321492803393171165777624533697036806969694.9
+(1 row)
+
+select 12.3 ^ (-45.6);
+                              ?column?                               
+---------------------------------------------------------------------
+ 0.00000000000000000000000000000000000000000000000001996764828785491
+(1 row)
+
+--
+-- Tests for EXP()
+--
+-- special cases
+select exp(0.0);
+        exp         
+--------------------
+ 1.0000000000000000
+(1 row)
+
+select exp(1.0);
+        exp         
+--------------------
+ 2.7182818284590452
+(1 row)
+
+select exp(1.0::numeric(71,70));
+                                   exp                                    
+--------------------------------------------------------------------------
+ 2.7182818284590452353602874713526624977572470936999595749669676277240766
+(1 row)
+
+select exp('nan'::numeric);
+ exp 
+-----
+ NaN
+(1 row)
+
+select exp('inf'::numeric);
+   exp    
+----------
+ Infinity
+(1 row)
+
+-- cases that used to generate inaccurate results
+select exp(32.999);
+         exp         
+---------------------
+ 214429043492155.053
+(1 row)
+
+select exp(-32.999);
+               exp                
+----------------------------------
+ 0.000000000000004663547361468248
+(1 row)
+
+select exp(123.456);
+                            exp                             
+------------------------------------------------------------
+ 413294435277809344957685441227343146614594393746575438.725
+(1 row)
+
+select exp(-123.456);
+                                   exp                                   
+-------------------------------------------------------------------------
+ 0.000000000000000000000000000000000000000000000000000002419582541264601
+(1 row)
+
+--
+-- Tests for generate_series
+--
+select * from generate_series(0.0::numeric, 4.0::numeric);
+ generate_series 
+-----------------
+             0.0
+             1.0
+             2.0
+             3.0
+             4.0
+(5 rows)
+
+select * from generate_series(0.1::numeric, 4.0::numeric, 1.3::numeric);
+ generate_series 
+-----------------
+             0.1
+             1.4
+             2.7
+             4.0
+(4 rows)
+
+select * from generate_series(4.0::numeric, -1.5::numeric, -2.2::numeric);
+ generate_series 
+-----------------
+             4.0
+             1.8
+            -0.4
+(3 rows)
+

@@ -152,17 +152,1206 @@ SELECT var_samp(b::numeric) FROM aggtest;
 -- is not
 SELECT var_pop(1.0::float8), var_samp(2.0::float8);
 </sql-statement>
-BackTrace(void**, unsigned long)+29 (0x14033ECD)
-TBackTrace::Capture()+30 (0x1403443E)
-TWithBackTrace<yexception>::TWithBackTrace<>()+72 (0x13FD0568)
-NYT::TNode::TTypeError::TTypeError()+25 (0x144DC3E9)
-NYT::TNode::CheckType(NYT::TNode::EType) const+267 (0x144DD9BB)
-NYT::TNode::AsString() const+30 (0x144DC53E)
-WriteTableToStream(IOutputStream&, TVector<NYT::TNode, std::__y1::allocator<NYT::TNode> > const&, TVector<NYT::TNode, std::__y1::allocator<NYT::TNode> > const&)+830 (0x13EBBB7E)
-Main(int, char**)+5748 (0x13EC0FB4)
-main+273 (0x13EC2761)
-??+0 (0x7F8A03C29D90)
-__libc_start_main+128 (0x7F8A03C29E40)
-??+0 (0x13E4C029)
+<sql-statement>
+SELECT stddev_pop(3.0::float8), stddev_samp(4.0::float8);
+</sql-statement>
+<sql-statement>
+SELECT var_pop('inf'::float8), var_samp('inf'::float8);
+</sql-statement>
+<sql-statement>
+SELECT stddev_pop('inf'::float8), stddev_samp('inf'::float8);
+</sql-statement>
+<sql-statement>
+SELECT var_pop('nan'::float8), var_samp('nan'::float8);
+</sql-statement>
+<sql-statement>
+SELECT stddev_pop('nan'::float8), stddev_samp('nan'::float8);
+</sql-statement>
+<sql-statement>
+SELECT var_pop(1.0::float4), var_samp(2.0::float4);
+</sql-statement>
+<sql-statement>
+SELECT stddev_pop(3.0::float4), stddev_samp(4.0::float4);
+</sql-statement>
+<sql-statement>
+SELECT var_pop('inf'::float4), var_samp('inf'::float4);
+</sql-statement>
+<sql-statement>
+SELECT stddev_pop('inf'::float4), stddev_samp('inf'::float4);
+</sql-statement>
+<sql-statement>
+SELECT var_pop('nan'::float4), var_samp('nan'::float4);
+</sql-statement>
+<sql-statement>
+SELECT stddev_pop('nan'::float4), stddev_samp('nan'::float4);
+</sql-statement>
+<sql-statement>
+SELECT var_pop(1.0::numeric), var_samp(2.0::numeric);
+</sql-statement>
+<sql-statement>
+SELECT stddev_pop(3.0::numeric), stddev_samp(4.0::numeric);
+</sql-statement>
+<sql-statement>
+SELECT var_pop('inf'::numeric), var_samp('inf'::numeric);
+</sql-statement>
+<sql-statement>
+SELECT stddev_pop('inf'::numeric), stddev_samp('inf'::numeric);
+</sql-statement>
+<sql-statement>
+SELECT var_pop('nan'::numeric), var_samp('nan'::numeric);
+</sql-statement>
+<sql-statement>
+SELECT stddev_pop('nan'::numeric), stddev_samp('nan'::numeric);
+</sql-statement>
+<sql-statement>
+-- verify correct results for null and NaN inputs
+select sum(null::int4) from generate_series(1,3);
+</sql-statement>
+<sql-statement>
+select sum(null::int8) from generate_series(1,3);
+</sql-statement>
+<sql-statement>
+select sum(null::numeric) from generate_series(1,3);
+</sql-statement>
+<sql-statement>
+select sum(null::float8) from generate_series(1,3);
+</sql-statement>
+<sql-statement>
+select avg(null::int4) from generate_series(1,3);
+</sql-statement>
+<sql-statement>
+select avg(null::int8) from generate_series(1,3);
+</sql-statement>
+<sql-statement>
+select avg(null::numeric) from generate_series(1,3);
+</sql-statement>
+<sql-statement>
+select avg(null::float8) from generate_series(1,3);
+</sql-statement>
+<sql-statement>
+select sum('NaN'::numeric) from generate_series(1,3);
+</sql-statement>
+<sql-statement>
+select avg('NaN'::numeric) from generate_series(1,3);
+</sql-statement>
+<sql-statement>
+-- verify correct results for infinite inputs
+SELECT sum(x::float8), avg(x::float8), var_pop(x::float8)
+FROM (VALUES ('1'), ('infinity')) v(x);
+</sql-statement>
+<sql-statement>
+SELECT sum(x::float8), avg(x::float8), var_pop(x::float8)
+FROM (VALUES ('infinity'), ('1')) v(x);
+</sql-statement>
+<sql-statement>
+SELECT sum(x::float8), avg(x::float8), var_pop(x::float8)
+FROM (VALUES ('infinity'), ('infinity')) v(x);
+</sql-statement>
+<sql-statement>
+SELECT sum(x::float8), avg(x::float8), var_pop(x::float8)
+FROM (VALUES ('-infinity'), ('infinity')) v(x);
+</sql-statement>
+<sql-statement>
+SELECT sum(x::float8), avg(x::float8), var_pop(x::float8)
+FROM (VALUES ('-infinity'), ('-infinity')) v(x);
+</sql-statement>
+<sql-statement>
+SELECT sum(x::numeric), avg(x::numeric), var_pop(x::numeric)
+FROM (VALUES ('1'), ('infinity')) v(x);
+</sql-statement>
+<sql-statement>
+SELECT sum(x::numeric), avg(x::numeric), var_pop(x::numeric)
+FROM (VALUES ('infinity'), ('1')) v(x);
+</sql-statement>
+<sql-statement>
+SELECT sum(x::numeric), avg(x::numeric), var_pop(x::numeric)
+FROM (VALUES ('infinity'), ('infinity')) v(x);
+</sql-statement>
+<sql-statement>
+SELECT sum(x::numeric), avg(x::numeric), var_pop(x::numeric)
+FROM (VALUES ('-infinity'), ('infinity')) v(x);
+</sql-statement>
+<sql-statement>
+SELECT sum(x::numeric), avg(x::numeric), var_pop(x::numeric)
+FROM (VALUES ('-infinity'), ('-infinity')) v(x);
+</sql-statement>
+<sql-statement>
+-- test accuracy with a large input offset
+SELECT avg(x::float8), var_pop(x::float8)
+FROM (VALUES (100000003), (100000004), (100000006), (100000007)) v(x);
+</sql-statement>
+<sql-statement>
+SELECT avg(x::float8), var_pop(x::float8)
+FROM (VALUES (7000000000005), (7000000000007)) v(x);
+</sql-statement>
+<sql-statement>
+-- SQL2003 binary aggregates
+SELECT regr_count(b, a) FROM aggtest;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
 
-(NYT::TNode::TTypeError) library/cpp/yson/node/node.cpp:829: TNode type string_node expected, actual type null
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
+    
+<sql-statement>
+SELECT regr_sxx(b, a) FROM aggtest;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
+    
+<sql-statement>
+SELECT regr_syy(b, a) FROM aggtest;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
+    
+<sql-statement>
+SELECT regr_sxy(b, a) FROM aggtest;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
+    
+<sql-statement>
+SELECT regr_avgx(b, a), regr_avgy(b, a) FROM aggtest;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
+    
+<sql-statement>
+SELECT regr_r2(b, a) FROM aggtest;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
+    
+<sql-statement>
+SELECT regr_slope(b, a), regr_intercept(b, a) FROM aggtest;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
+    
+<sql-statement>
+SELECT covar_pop(b, a), covar_samp(b, a) FROM aggtest;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
+    
+<sql-statement>
+SELECT corr(b, a) FROM aggtest;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.aggtest
+    
+<sql-statement>
+-- check single-tuple behavior
+SELECT covar_pop(1::float8,2::float8), covar_samp(3::float8,4::float8);
+</sql-statement>
+<sql-statement>
+SELECT covar_pop(1::float8,'inf'::float8), covar_samp(3::float8,'inf'::float8);
+</sql-statement>
+<sql-statement>
+SELECT covar_pop(1::float8,'nan'::float8), covar_samp(3::float8,'nan'::float8);
+</sql-statement>
+<sql-statement>
+-- test accum and combine functions directly
+CREATE TABLE regr_test (x float8, y float8);
+</sql-statement>
+<sql-statement>
+INSERT INTO regr_test VALUES (10,150),(20,250),(30,350),(80,540),(100,200);
+</sql-statement>
+<sql-statement>
+SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+FROM regr_test WHERE x IN (10,20,30,80);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+	^
+                -stdin-:<main>:2:24: Error: At function: PgIn
+                	FROM regr_test WHERE x IN (10,20,30,80);
+	                       ^
+                    -stdin-:<main>:2:24: Error: Mismatch of types in IN expressions: float8 is not equal to int4
+                    	FROM regr_test WHERE x IN (10,20,30,80);
+	                       ^
+<sql-statement>
+SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+FROM regr_test;
+</sql-statement>
+<sql-statement>
+SELECT float8_accum('{4,140,2900}'::float8[], 100);
+</sql-statement>
+<sql-statement>
+SELECT float8_regr_accum('{4,140,2900,1290,83075,15050}'::float8[], 200, 100);
+</sql-statement>
+<sql-statement>
+SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+FROM regr_test WHERE x IN (10,20,30);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+	^
+                -stdin-:<main>:2:24: Error: At function: PgIn
+                	FROM regr_test WHERE x IN (10,20,30);
+	                       ^
+                    -stdin-:<main>:2:24: Error: Mismatch of types in IN expressions: float8 is not equal to int4
+                    	FROM regr_test WHERE x IN (10,20,30);
+	                       ^
+<sql-statement>
+SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+FROM regr_test WHERE x IN (80,100);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+	^
+                -stdin-:<main>:2:24: Error: At function: PgIn
+                	FROM regr_test WHERE x IN (80,100);
+	                       ^
+                    -stdin-:<main>:2:24: Error: Mismatch of types in IN expressions: float8 is not equal to int4
+                    	FROM regr_test WHERE x IN (80,100);
+	                       ^
+<sql-statement>
+SELECT float8_combine('{3,60,200}'::float8[], '{0,0,0}'::float8[]);
+</sql-statement>
+<sql-statement>
+SELECT float8_combine('{0,0,0}'::float8[], '{2,180,200}'::float8[]);
+</sql-statement>
+<sql-statement>
+SELECT float8_combine('{3,60,200}'::float8[], '{2,180,200}'::float8[]);
+</sql-statement>
+<sql-statement>
+SELECT float8_regr_combine('{3,60,200,750,20000,2000}'::float8[],
+                           '{0,0,0,0,0,0}'::float8[]);
+</sql-statement>
+<sql-statement>
+SELECT float8_regr_combine('{0,0,0,0,0,0}'::float8[],
+                           '{2,180,200,740,57800,-3400}'::float8[]);
+</sql-statement>
+<sql-statement>
+SELECT float8_regr_combine('{3,60,200,750,20000,2000}'::float8[],
+                           '{2,180,200,740,57800,-3400}'::float8[]);
+</sql-statement>
+<sql-statement>
+DROP TABLE regr_test;
+</sql-statement>
+<sql-statement>
+-- test count, distinct
+SELECT count(four) AS cnt_1000 FROM onek;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
+    
+<sql-statement>
+SELECT count(DISTINCT four) AS cnt_4 FROM onek;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
+    
+<sql-statement>
+select ten, count(*), sum(four) from onek
+group by ten order by ten;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
+    
+<sql-statement>
+select ten, count(four), sum(DISTINCT four) from onek
+group by ten order by ten;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
+    
+<sql-statement>
+-- user-defined aggregates
+SELECT newavg(four) AS avg_1 FROM onek;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
+    
+<sql-statement>
+SELECT newsum(four) AS sum_1500 FROM onek;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
+    
+<sql-statement>
+SELECT newcnt(four) AS cnt_1000 FROM onek;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek
+    
+<sql-statement>
+SELECT newcnt(*) AS cnt_1000 FROM onek;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: FuncCall: * is expected only in count function
+    	SELECT newcnt(*) AS cnt_1000 FROM onek;
+	       ^
+<sql-statement>
+SELECT oldcnt(*) AS cnt_1000 FROM onek;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: FuncCall: * is expected only in count function
+    	SELECT oldcnt(*) AS cnt_1000 FROM onek;
+	       ^
+<sql-statement>
+SELECT sum2(q1,q2) FROM int8_tbl;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
+    
+<sql-statement>
+-- test for outer-level aggregates
+-- this should work
+select ten, sum(distinct four) from onek a
+group by ten
+having exists (select 1 from onek b where sum(distinct a.four) = b.four);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:5:43: Error: Aggregate functions are not allowed in: WHERE
+    	having exists (select 1 from onek b where sum(distinct a.four) = b.four);
+	                                          ^
+<sql-statement>
+-- this should fail because subquery has an agg of its own in WHERE
+select ten, sum(distinct four) from onek a
+group by ten
+having exists (select 1 from onek b
+               where sum(distinct a.four + b.four) = b.four);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:5:22: Error: Aggregate functions are not allowed in: WHERE
+    	               where sum(distinct a.four + b.four) = b.four);
+	                     ^
+<sql-statement>
+-- Test handling of sublinks within outer-level aggregates.
+-- Per bug report from Daniel Grace.
+select
+  (select max((select i.unique2 from tenk1 i where i.unique1 = o.unique1)))
+from tenk1 o;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+-- Test handling of Params within aggregate arguments in hashed aggregation.
+-- Per bug report from Jeevan Chalke.
+explain (verbose, costs off)
+select s1, s2, sm
+from generate_series(1, 3) s1,
+     lateral (select s2, sum(s1 + s2) sm
+              from generate_series(1, 3) s2 group by s2) ss
+order by 1, 2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Test handling of Params within aggregate arguments in hashed aggregation.
+	^
+<sql-statement>
+select s1, s2, sm
+from generate_series(1, 3) s1,
+     lateral (select s2, sum(s1 + s2) sm
+              from generate_series(1, 3) s2 group by s2) ss
+order by 1, 2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select s1, s2, sm
+	^
+<sql-statement>
+explain (verbose, costs off)
+select array(select sum(x+y) s
+            from generate_series(1,3) y group by y order by s)
+  from generate_series(1,3) x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select array(select sum(x+y) s
+            from generate_series(1,3) y group by y order by s)
+  from generate_series(1,3) x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: SublinkExpr: unsupported link type: 6
+    	select array(select sum(x+y) s
+	       ^
+<sql-statement>
+--
+-- test for bitwise integer aggregates
+--
+CREATE TEMPORARY TABLE bitwise_test(
+  i2 INT2,
+  i4 INT4,
+  i8 INT8,
+  i INTEGER,
+  x INT2,
+  y BIT(4)
+);
+</sql-statement>
+<sql-statement>
+-- empty case
+SELECT
+  BIT_AND(i2) AS "?",
+  BIT_OR(i4)  AS "?",
+  BIT_XOR(i8) AS "?"
+FROM bitwise_test;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- empty case
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: ?
+        	-- empty case
+	^
+<sql-statement>
+COPY bitwise_test FROM STDIN NULL 'null';
+1	1	1	1	1	B0101
+3	3	3	null	2	B0100
+7	7	7	3	4	B1100
+\.
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "1"
+
+    	1	1	1	1	1	B0101
+	^
+<sql-statement>
+SELECT
+  BIT_AND(i2) AS "1",
+  BIT_AND(i4) AS "1",
+  BIT_AND(i8) AS "1",
+  BIT_AND(i)  AS "?",
+  BIT_AND(x)  AS "0",
+  BIT_AND(y)  AS "0100",
+  BIT_OR(i2)  AS "7",
+  BIT_OR(i4)  AS "7",
+  BIT_OR(i8)  AS "7",
+  BIT_OR(i)   AS "?",
+  BIT_OR(x)   AS "7",
+  BIT_OR(y)   AS "1101",
+  BIT_XOR(i2) AS "5",
+  BIT_XOR(i4) AS "5",
+  BIT_XOR(i8) AS "5",
+  BIT_XOR(i)  AS "?",
+  BIT_XOR(x)  AS "7",
+  BIT_XOR(y)  AS "1101"
+FROM bitwise_test;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: 1
+        	SELECT
+	^
+<sql-statement>
+--
+-- test boolean aggregates
+--
+-- first test all possible transition and final states
+SELECT
+  -- boolean and transitions
+  -- null because strict
+  booland_statefunc(NULL, NULL)  IS NULL AS "t",
+  booland_statefunc(TRUE, NULL)  IS NULL AS "t",
+  booland_statefunc(FALSE, NULL) IS NULL AS "t",
+  booland_statefunc(NULL, TRUE)  IS NULL AS "t",
+  booland_statefunc(NULL, FALSE) IS NULL AS "t",
+  -- and actual computations
+  booland_statefunc(TRUE, TRUE) AS "t",
+  NOT booland_statefunc(TRUE, FALSE) AS "t",
+  NOT booland_statefunc(FALSE, TRUE) AS "t",
+  NOT booland_statefunc(FALSE, FALSE) AS "t";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: t
+        	--
+	^
+<sql-statement>
+SELECT
+  -- boolean or transitions
+  -- null because strict
+  boolor_statefunc(NULL, NULL)  IS NULL AS "t",
+  boolor_statefunc(TRUE, NULL)  IS NULL AS "t",
+  boolor_statefunc(FALSE, NULL) IS NULL AS "t",
+  boolor_statefunc(NULL, TRUE)  IS NULL AS "t",
+  boolor_statefunc(NULL, FALSE) IS NULL AS "t",
+  -- actual computations
+  boolor_statefunc(TRUE, TRUE) AS "t",
+  boolor_statefunc(TRUE, FALSE) AS "t",
+  boolor_statefunc(FALSE, TRUE) AS "t",
+  NOT boolor_statefunc(FALSE, FALSE) AS "t";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: t
+        	SELECT
+	^
+<sql-statement>
+CREATE TEMPORARY TABLE bool_test(
+  b1 BOOL,
+  b2 BOOL,
+  b3 BOOL,
+  b4 BOOL);
+</sql-statement>
+<sql-statement>
+-- empty case
+SELECT
+  BOOL_AND(b1)   AS "n",
+  BOOL_OR(b3)    AS "n"
+FROM bool_test;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- empty case
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: n
+        	-- empty case
+	^
+<sql-statement>
+COPY bool_test FROM STDIN NULL 'null';
+TRUE	null	FALSE	null
+FALSE	TRUE	null	null
+null	TRUE	FALSE	null
+\.
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "TRUE"
+
+    	TRUE	null	FALSE	null
+	^
+<sql-statement>
+SELECT
+  BOOL_AND(b1)     AS "f",
+  BOOL_AND(b2)     AS "t",
+  BOOL_AND(b3)     AS "f",
+  BOOL_AND(b4)     AS "n",
+  BOOL_AND(NOT b2) AS "f",
+  BOOL_AND(NOT b3) AS "t"
+FROM bool_test;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: f
+        	SELECT
+	^
+<sql-statement>
+SELECT
+  EVERY(b1)     AS "f",
+  EVERY(b2)     AS "t",
+  EVERY(b3)     AS "f",
+  EVERY(b4)     AS "n",
+  EVERY(NOT b2) AS "f",
+  EVERY(NOT b3) AS "t"
+FROM bool_test;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: f
+        	SELECT
+	^
+<sql-statement>
+SELECT
+  BOOL_OR(b1)      AS "t",
+  BOOL_OR(b2)      AS "t",
+  BOOL_OR(b3)      AS "f",
+  BOOL_OR(b4)      AS "n",
+  BOOL_OR(NOT b2)  AS "f",
+  BOOL_OR(NOT b3)  AS "t"
+FROM bool_test;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: f
+        	SELECT
+	^
+<sql-statement>
+--
+-- Test cases that should be optimized into indexscans instead of
+-- the generic aggregate implementation.
+--
+-- Basic cases
+explain (costs off)
+  select min(unique1) from tenk1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select min(unique1) from tenk1;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+explain (costs off)
+  select max(unique1) from tenk1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select max(unique1) from tenk1;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+explain (costs off)
+  select max(unique1) from tenk1 where unique1 < 42;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select max(unique1) from tenk1 where unique1 < 42;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+explain (costs off)
+  select max(unique1) from tenk1 where unique1 > 42;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select max(unique1) from tenk1 where unique1 > 42;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+-- the planner may choose a generic aggregate here if parallel query is
+-- enabled, since that plan will be parallel safe and the "optimized"
+-- plan, which has almost identical cost, will not be.  we want to test
+-- the optimized plan, so temporarily disable parallel query.
+begin;
+</sql-statement>
+<sql-statement>
+set local max_parallel_workers_per_gather = 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: max_parallel_workers_per_gather
+    	set local max_parallel_workers_per_gather = 0;
+	^
+<sql-statement>
+explain (costs off)
+  select max(unique1) from tenk1 where unique1 > 42000;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select max(unique1) from tenk1 where unique1 > 42000;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+rollback;
+</sql-statement>
+<sql-statement>
+-- multi-column index (uses tenk1_thous_tenthous)
+explain (costs off)
+  select max(tenthous) from tenk1 where thousand = 33;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- multi-column index (uses tenk1_thous_tenthous)
+	^
+<sql-statement>
+select max(tenthous) from tenk1 where thousand = 33;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+explain (costs off)
+  select min(tenthous) from tenk1 where thousand = 33;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select min(tenthous) from tenk1 where thousand = 33;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+-- check parameter propagation into an indexscan subquery
+explain (costs off)
+  select f1, (select min(unique1) from tenk1 where unique1 > f1) AS gt
+    from int4_tbl;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- check parameter propagation into an indexscan subquery
+	^
+<sql-statement>
+select f1, (select min(unique1) from tenk1 where unique1 > f1) AS gt
+  from int4_tbl;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+-- check some cases that were handled incorrectly in 8.3.0
+explain (costs off)
+  select distinct max(unique2) from tenk1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- check some cases that were handled incorrectly in 8.3.0
+	^
+<sql-statement>
+select distinct max(unique2) from tenk1;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+explain (costs off)
+  select max(unique2) from tenk1 order by 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select max(unique2) from tenk1 order by 1;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+explain (costs off)
+  select max(unique2) from tenk1 order by max(unique2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select max(unique2) from tenk1 order by max(unique2);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+explain (costs off)
+  select max(unique2) from tenk1 order by max(unique2)+1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select max(unique2) from tenk1 order by max(unique2)+1;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+explain (costs off)
+  select max(unique2), generate_series(1,3) as g from tenk1 order by g desc;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select max(unique2), generate_series(1,3) as g from tenk1 order by g desc;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:22: Error: Generator functions are not allowed in: SELECT
+    	select max(unique2), generate_series(1,3) as g from tenk1 order by g desc;
+	                     ^
+<sql-statement>
+-- interesting corner case: constant gets optimized into a seqscan
+explain (costs off)
+  select max(100) from tenk1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- interesting corner case: constant gets optimized into a seqscan
+	^
+<sql-statement>
+select max(100) from tenk1;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+-- try it on an inheritance tree
+create table minmaxtest(f1 int);
+</sql-statement>
+<sql-statement>
+create table minmaxtest1() inherits (minmaxtest);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table minmaxtest1() inherits (minmaxtest);
+	^
+<sql-statement>
+create table minmaxtest2() inherits (minmaxtest);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table minmaxtest2() inherits (minmaxtest);
+	^
+<sql-statement>
+create table minmaxtest3() inherits (minmaxtest);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table minmaxtest3() inherits (minmaxtest);
+	^
+<sql-statement>
+create index minmaxtesti on minmaxtest(f1);
+</sql-statement>
+<sql-statement>
+create index minmaxtest1i on minmaxtest1(f1);
+</sql-statement>
+<sql-statement>
+create index minmaxtest2i on minmaxtest2(f1 desc);
+</sql-statement>
+<sql-statement>
+create index minmaxtest3i on minmaxtest3(f1) where f1 is not null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: partial index is not supported yet
+    	create index minmaxtest3i on minmaxtest3(f1) where f1 is not null;
+	^
+<sql-statement>
+insert into minmaxtest values(11), (12);
+</sql-statement>
+<sql-statement>
+insert into minmaxtest1 values(13), (14);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.minmaxtest1
+    
+<sql-statement>
+insert into minmaxtest2 values(15), (16);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.minmaxtest2
+    
+<sql-statement>
+insert into minmaxtest3 values(17), (18);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.minmaxtest3
+    
+<sql-statement>
+explain (costs off)
+  select min(f1), max(f1) from minmaxtest;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select min(f1), max(f1) from minmaxtest;
+</sql-statement>
+<sql-statement>
+-- DISTINCT doesn't do anything useful here, but it shouldn't fail
+explain (costs off)
+  select distinct min(f1), max(f1) from minmaxtest;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- DISTINCT doesn't do anything useful here, but it shouldn't fail
+	^
+<sql-statement>
+select distinct min(f1), max(f1) from minmaxtest;
+</sql-statement>
+<sql-statement>
+drop table minmaxtest cascade;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: CASCADE is not implemented
+    	drop table minmaxtest cascade;
+	^
+<sql-statement>
+-- check for correct detection of nested-aggregate errors
+select max(min(unique1)) from tenk1;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+select (select max(min(unique1)) from int8_tbl) from tenk1;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.tenk1
+    
+<sql-statement>
+--
+-- Test removal of redundant GROUP BY columns
+--
+create temp table t1 (a int, b int, c int, d int, primary key (a, b));
+</sql-statement>
+<sql-statement>
+create temp table t2 (x int, y int, z int, primary key (x, y));
+</sql-statement>
+<sql-statement>
+create temp table t3 (a int, b int, c int, primary key(a, b) deferrable);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DEFERRABLE constraints not supported
+    	create temp table t3 (a int, b int, c int, primary key(a, b) deferrable);
+	^
+<sql-statement>
+-- Non-primary-key columns can be removed from GROUP BY
+explain (costs off) select * from t1 group by a,b,c,d;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Non-primary-key columns can be removed from GROUP BY
+	^
+<sql-statement>
+-- No removal can happen if the complete PK is not present in GROUP BY
+explain (costs off) select a,c from t1 group by a,c,d;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- No removal can happen if the complete PK is not present in GROUP BY
+	^
+<sql-statement>
+-- Test removal across multiple relations
+explain (costs off) select *
+from t1 inner join t2 on t1.a = t2.x and t1.b = t2.y
+group by t1.a,t1.b,t1.c,t1.d,t2.x,t2.y,t2.z;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Test removal across multiple relations
+	^
+<sql-statement>
+-- Test case where t1 can be optimized but not t2
+explain (costs off) select t1.*,t2.x,t2.z
+from t1 inner join t2 on t1.a = t2.x and t1.b = t2.y
+group by t1.a,t1.b,t1.c,t1.d,t2.x,t2.z;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Test case where t1 can be optimized but not t2
+	^
+<sql-statement>
+-- Cannot optimize when PK is deferrable
+explain (costs off) select * from t3 group by a,b,c;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Cannot optimize when PK is deferrable
+	^
+<sql-statement>
+create temp table t1c () inherits (t1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create temp table t1c () inherits (t1);
+	^
+<sql-statement>
+-- Ensure we don't remove any columns when t1 has a child table
+explain (costs off) select * from t1 group by a,b,c,d;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Ensure we don't remove any columns when t1 has a child table
+	^
+<sql-statement>
+-- Okay to remove columns if we're only querying the parent.
+explain (costs off) select * from only t1 group by a,b,c,d;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Okay to remove columns if we're only querying the parent.
+	^
+<sql-statement>
+create temp table p_t1 (
+  a int,
+  b int,
+  c int,
+  d int,
+  primary key(a,b)
+) partition by list(a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	create temp table p_t1 (
+	^
+<sql-statement>
+create temp table p_t1_1 partition of p_t1 for values in(1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create temp table p_t1_1 partition of p_t1 for values in(1);
+	^
+<sql-statement>
+create temp table p_t1_2 partition of p_t1 for values in(2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create temp table p_t1_2 partition of p_t1 for values in(2);
+	^
+<sql-statement>
+-- Ensure we can remove non-PK columns for partitioned tables.
+explain (costs off) select * from p_t1 group by a,b,c,d;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Ensure we can remove non-PK columns for partitioned tables.
+	^
+<sql-statement>
+drop table t1 cascade;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: CASCADE is not implemented
+    	drop table t1 cascade;
+	^
+<sql-statement>
+drop table t2;
+</sql-statement>
+<sql-statement>
+drop table t3;
+</sql-statement>
+<sql-statement>
+drop table p_t1;
+</sql-statement>
+<sql-statement>
+--
+-- Test GROUP BY matching of join columns that are type-coerced due to USING
+--
+create temp table t1(f1 int, f2 bigint);
+</sql-statement>
+(TFileError) (File exists) util/system/file.cpp:857: can't open "/tmp/tmpbbmu_5di/t1" with mode CreateNew (0x00000003)

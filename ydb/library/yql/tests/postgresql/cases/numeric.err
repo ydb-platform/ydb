@@ -2295,17 +2295,1328 @@ SELECT power('-inf'::numeric, '-inf');
 -- numeric AVG used to fail on some platforms
 SELECT AVG(val) FROM num_data;
 </sql-statement>
-BackTrace(void**, unsigned long)+29 (0x14033ECD)
-TBackTrace::Capture()+30 (0x1403443E)
-TWithBackTrace<yexception>::TWithBackTrace<>()+72 (0x13FD0568)
-NYT::TNode::TTypeError::TTypeError()+25 (0x144DC3E9)
-NYT::TNode::CheckType(NYT::TNode::EType) const+267 (0x144DD9BB)
-NYT::TNode::AsString() const+30 (0x144DC53E)
-WriteTableToStream(IOutputStream&, TVector<NYT::TNode, std::__y1::allocator<NYT::TNode> > const&, TVector<NYT::TNode, std::__y1::allocator<NYT::TNode> > const&)+830 (0x13EBBB7E)
-Main(int, char**)+5748 (0x13EC0FB4)
-main+273 (0x13EC2761)
-??+0 (0x7FDB67429D90)
-__libc_start_main+128 (0x7FDB67429E40)
-??+0 (0x13E4C029)
+<sql-statement>
+SELECT MAX(val) FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT MIN(val) FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT STDDEV(val) FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT VARIANCE(val) FROM num_data;
+</sql-statement>
+<sql-statement>
+-- Check for appropriate rounding and overflow
+CREATE TABLE fract_only (id int, val numeric(4,4));
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (1, '0.0');
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (2, '0.1');
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (3, '1.0');	-- should fail
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (4, '-0.9999');
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (5, '0.99994');
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (6, '0.99995');  -- should fail
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (7, '0.00001');
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (8, '0.00017');
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (9, 'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (10, 'Inf');	-- should fail
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (11, '-Inf');	-- should fail
+</sql-statement>
+<sql-statement>
+SELECT * FROM fract_only;
+</sql-statement>
+<sql-statement>
+DROP TABLE fract_only;
+</sql-statement>
+<sql-statement>
+-- Check conversion to integers
+SELECT (-9223372036854775808.5)::int8; -- should fail
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
 
-(NYT::TNode::TTypeError) library/cpp/yson/node/node.cpp:829: TNode type string_node expected, actual type null
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Check conversion to integers
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	-- Check conversion to integers
+	^
+<sql-statement>
+SELECT (-9223372036854775808.4)::int8; -- ok
+</sql-statement>
+<sql-statement>
+SELECT 9223372036854775807.4::int8; -- ok
+</sql-statement>
+<sql-statement>
+SELECT 9223372036854775807.5::int8; -- should fail
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 9223372036854775807.5::int8; -- should fail
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	SELECT 9223372036854775807.5::int8; -- should fail
+	^
+<sql-statement>
+SELECT (-2147483648.5)::int4; -- should fail
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT (-2147483648.5)::int4; -- should fail
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  integer out of range
+
+        	SELECT (-2147483648.5)::int4; -- should fail
+	^
+<sql-statement>
+SELECT (-2147483648.4)::int4; -- ok
+</sql-statement>
+<sql-statement>
+SELECT 2147483647.4::int4; -- ok
+</sql-statement>
+<sql-statement>
+SELECT 2147483647.5::int4; -- should fail
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 2147483647.5::int4; -- should fail
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  integer out of range
+
+        	SELECT 2147483647.5::int4; -- should fail
+	^
+<sql-statement>
+SELECT (-32768.5)::int2; -- should fail
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT (-32768.5)::int2; -- should fail
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  smallint out of range
+
+        	SELECT (-32768.5)::int2; -- should fail
+	^
+<sql-statement>
+SELECT (-32768.4)::int2; -- ok
+</sql-statement>
+<sql-statement>
+SELECT 32767.4::int2; -- ok
+</sql-statement>
+<sql-statement>
+SELECT 32767.5::int2; -- should fail
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 32767.5::int2; -- should fail
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  smallint out of range
+
+        	SELECT 32767.5::int2; -- should fail
+	^
+<sql-statement>
+-- Check inf/nan conversion behavior
+SELECT 'NaN'::float8::numeric;
+</sql-statement>
+<sql-statement>
+SELECT 'Infinity'::float8::numeric;
+</sql-statement>
+<sql-statement>
+SELECT '-Infinity'::float8::numeric;
+</sql-statement>
+<sql-statement>
+SELECT 'NaN'::numeric::float8;
+</sql-statement>
+<sql-statement>
+SELECT 'Infinity'::numeric::float8;
+</sql-statement>
+<sql-statement>
+SELECT '-Infinity'::numeric::float8;
+</sql-statement>
+<sql-statement>
+SELECT 'NaN'::float4::numeric;
+</sql-statement>
+<sql-statement>
+SELECT 'Infinity'::float4::numeric;
+</sql-statement>
+<sql-statement>
+SELECT '-Infinity'::float4::numeric;
+</sql-statement>
+<sql-statement>
+SELECT 'NaN'::numeric::float4;
+</sql-statement>
+<sql-statement>
+SELECT 'Infinity'::numeric::float4;
+</sql-statement>
+<sql-statement>
+SELECT '-Infinity'::numeric::float4;
+</sql-statement>
+<sql-statement>
+SELECT '42'::int2::numeric;
+</sql-statement>
+<sql-statement>
+SELECT 'NaN'::numeric::int2;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 'NaN'::numeric::int2;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert NaN to smallint
+
+        	SELECT 'NaN'::numeric::int2;
+	^
+<sql-statement>
+SELECT 'Infinity'::numeric::int2;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 'Infinity'::numeric::int2;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert infinity to smallint
+
+        	SELECT 'Infinity'::numeric::int2;
+	^
+<sql-statement>
+SELECT '-Infinity'::numeric::int2;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '-Infinity'::numeric::int2;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert infinity to smallint
+
+        	SELECT '-Infinity'::numeric::int2;
+	^
+<sql-statement>
+SELECT 'NaN'::numeric::int4;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 'NaN'::numeric::int4;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert NaN to integer
+
+        	SELECT 'NaN'::numeric::int4;
+	^
+<sql-statement>
+SELECT 'Infinity'::numeric::int4;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 'Infinity'::numeric::int4;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert infinity to integer
+
+        	SELECT 'Infinity'::numeric::int4;
+	^
+<sql-statement>
+SELECT '-Infinity'::numeric::int4;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '-Infinity'::numeric::int4;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert infinity to integer
+
+        	SELECT '-Infinity'::numeric::int4;
+	^
+<sql-statement>
+SELECT 'NaN'::numeric::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 'NaN'::numeric::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert NaN to bigint
+
+        	SELECT 'NaN'::numeric::int8;
+	^
+<sql-statement>
+SELECT 'Infinity'::numeric::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 'Infinity'::numeric::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert infinity to bigint
+
+        	SELECT 'Infinity'::numeric::int8;
+	^
+<sql-statement>
+SELECT '-Infinity'::numeric::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '-Infinity'::numeric::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert infinity to bigint
+
+        	SELECT '-Infinity'::numeric::int8;
+	^
+<sql-statement>
+-- Simple check that ceil(), floor(), and round() work correctly
+CREATE TABLE ceil_floor_round (a numeric);
+</sql-statement>
+<sql-statement>
+INSERT INTO ceil_floor_round VALUES ('-5.5');
+</sql-statement>
+<sql-statement>
+INSERT INTO ceil_floor_round VALUES ('-5.499999');
+</sql-statement>
+<sql-statement>
+INSERT INTO ceil_floor_round VALUES ('9.5');
+</sql-statement>
+<sql-statement>
+INSERT INTO ceil_floor_round VALUES ('9.4999999');
+</sql-statement>
+<sql-statement>
+INSERT INTO ceil_floor_round VALUES ('0.0');
+</sql-statement>
+<sql-statement>
+INSERT INTO ceil_floor_round VALUES ('0.0000001');
+</sql-statement>
+<sql-statement>
+INSERT INTO ceil_floor_round VALUES ('-0.000001');
+</sql-statement>
+<sql-statement>
+SELECT a, ceil(a), ceiling(a), floor(a), round(a) FROM ceil_floor_round;
+</sql-statement>
+<sql-statement>
+DROP TABLE ceil_floor_round;
+</sql-statement>
+<sql-statement>
+-- Check rounding, it should round ties away from zero.
+SELECT i as pow,
+	round((-2.5 * 10 ^ i)::numeric, -i),
+	round((-1.5 * 10 ^ i)::numeric, -i),
+	round((-0.5 * 10 ^ i)::numeric, -i),
+	round((0.5 * 10 ^ i)::numeric, -i),
+	round((1.5 * 10 ^ i)::numeric, -i),
+	round((2.5 * 10 ^ i)::numeric, -i)
+FROM generate_series(-5,5) AS t(i);
+</sql-statement>
+<sql-statement>
+-- Testing for width_bucket(). For convenience, we test both the
+-- numeric and float8 versions of the function in this file.
+-- errors
+SELECT width_bucket(5.0, 3.0, 4.0, 0);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Testing for width_bucket(). For convenience, we test both the
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  count must be greater than zero
+
+        	-- Testing for width_bucket(). For convenience, we test both the
+	^
+<sql-statement>
+SELECT width_bucket(5.0, 3.0, 4.0, -5);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(5.0, 3.0, 4.0, -5);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  count must be greater than zero
+
+        	SELECT width_bucket(5.0, 3.0, 4.0, -5);
+	^
+<sql-statement>
+SELECT width_bucket(3.5, 3.0, 3.0, 888);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(3.5, 3.0, 3.0, 888);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  lower bound cannot equal upper bound
+
+        	SELECT width_bucket(3.5, 3.0, 3.0, 888);
+	^
+<sql-statement>
+SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, 0);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, 0);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  count must be greater than zero
+
+        	SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, 0);
+	^
+<sql-statement>
+SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, -5);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, -5);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  count must be greater than zero
+
+        	SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, -5);
+	^
+<sql-statement>
+SELECT width_bucket(3.5::float8, 3.0::float8, 3.0::float8, 888);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(3.5::float8, 3.0::float8, 3.0::float8, 888);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  lower bound cannot equal upper bound
+
+        	SELECT width_bucket(3.5::float8, 3.0::float8, 3.0::float8, 888);
+	^
+<sql-statement>
+SELECT width_bucket('NaN', 3.0, 4.0, 888);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket('NaN', 3.0, 4.0, 888);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  operand, lower bound, and upper bound cannot be NaN
+
+        	SELECT width_bucket('NaN', 3.0, 4.0, 888);
+	^
+<sql-statement>
+SELECT width_bucket(0::float8, 'NaN', 4.0::float8, 888);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(0::float8, 'NaN', 4.0::float8, 888);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  operand, lower bound, and upper bound cannot be NaN
+
+        	SELECT width_bucket(0::float8, 'NaN', 4.0::float8, 888);
+	^
+<sql-statement>
+SELECT width_bucket(2.0, 3.0, '-inf', 888);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(2.0, 3.0, '-inf', 888);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  lower and upper bounds must be finite
+
+        	SELECT width_bucket(2.0, 3.0, '-inf', 888);
+	^
+<sql-statement>
+SELECT width_bucket(0::float8, '-inf', 4.0::float8, 888);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(0::float8, '-inf', 4.0::float8, 888);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  lower and upper bounds must be finite
+
+        	SELECT width_bucket(0::float8, '-inf', 4.0::float8, 888);
+	^
+<sql-statement>
+-- normal operation
+CREATE TABLE width_bucket_test (operand_num numeric, operand_f8 float8);
+</sql-statement>
+<sql-statement>
+COPY width_bucket_test (operand_num) FROM stdin;
+-5.2
+-0.0000000001
+0.000000000001
+1.99999999999999
+2.00000000000001
+4.5
+5.5
+9.99999999999999
+10
+10.0000000000001
+\.
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "-"
+
+    	-5.2
+	^
+<sql-statement>
+UPDATE width_bucket_test SET operand_f8 = operand_num::float8;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys'. 
+    
+<sql-statement>
+SELECT
+    operand_num,
+    width_bucket(operand_num, 0, 10, 5) AS wb_1,
+    width_bucket(operand_f8, 0, 10, 5) AS wb_1f,
+    width_bucket(operand_num, 10, 0, 5) AS wb_2,
+    width_bucket(operand_f8, 10, 0, 5) AS wb_2f,
+    width_bucket(operand_num, 2, 8, 4) AS wb_3,
+    width_bucket(operand_f8, 2, 8, 4) AS wb_3f,
+    width_bucket(operand_num, 5.0, 5.5, 20) AS wb_4,
+    width_bucket(operand_f8, 5.0, 5.5, 20) AS wb_4f,
+    width_bucket(operand_num, -25, 25, 10) AS wb_5,
+    width_bucket(operand_f8, -25, 25, 10) AS wb_5f
+    FROM width_bucket_test;
+</sql-statement>
+<sql-statement>
+-- Check positive and negative infinity: we require
+-- finite bucket bounds, but allow an infinite operand
+SELECT width_bucket(0.0::numeric, 'Infinity'::numeric, 5, 10); -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Check positive and negative infinity: we require
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  lower and upper bounds must be finite
+
+        	-- Check positive and negative infinity: we require
+	^
+<sql-statement>
+SELECT width_bucket(0.0::numeric, 5, '-Infinity'::numeric, 20); -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(0.0::numeric, 5, '-Infinity'::numeric, 20); -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  lower and upper bounds must be finite
+
+        	SELECT width_bucket(0.0::numeric, 5, '-Infinity'::numeric, 20); -- error
+	^
+<sql-statement>
+SELECT width_bucket('Infinity'::numeric, 1, 10, 10),
+       width_bucket('-Infinity'::numeric, 1, 10, 10);
+</sql-statement>
+<sql-statement>
+SELECT width_bucket(0.0::float8, 'Infinity'::float8, 5, 10); -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(0.0::float8, 'Infinity'::float8, 5, 10); -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  lower and upper bounds must be finite
+
+        	SELECT width_bucket(0.0::float8, 'Infinity'::float8, 5, 10); -- error
+	^
+<sql-statement>
+SELECT width_bucket(0.0::float8, 5, '-Infinity'::float8, 20); -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(0.0::float8, 5, '-Infinity'::float8, 20); -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  lower and upper bounds must be finite
+
+        	SELECT width_bucket(0.0::float8, 5, '-Infinity'::float8, 20); -- error
+	^
+<sql-statement>
+SELECT width_bucket('Infinity'::float8, 1, 10, 10),
+       width_bucket('-Infinity'::float8, 1, 10, 10);
+</sql-statement>
+<sql-statement>
+DROP TABLE width_bucket_test;
+</sql-statement>
+<sql-statement>
+-- Simple test for roundoff error when results should be exact
+SELECT x, width_bucket(x::float8, 10, 100, 9) as flt,
+       width_bucket(x::numeric, 10, 100, 9) as num
+FROM generate_series(0, 110, 10) x;
+</sql-statement>
+<sql-statement>
+SELECT x, width_bucket(x::float8, 100, 10, 9) as flt,
+       width_bucket(x::numeric, 100, 10, 9) as num
+FROM generate_series(0, 110, 10) x;
+</sql-statement>
+<sql-statement>
+--
+-- TO_CHAR()
+--
+SELECT to_char(val, '9G999G999G999G999G999')
+	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, '9G999G999G999G999G999D999G999G999G999G999')
+	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, '9999999999999999.999999999999999PR')
+	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, '9999999999999999.999999999999999S')
+	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'MI9999999999999999.999999999999999')     FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FMS9999999999999999.999999999999999')    FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FM9999999999999999.999999999999999THPR') FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'SG9999999999999999.999999999999999th')   FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, '0999999999999999.999999999999999')       FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'S0999999999999999.999999999999999')      FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FM0999999999999999.999999999999999')     FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FM9999999999999999.099999999999999') 	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FM9999999999990999.990999999999999') 	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FM0999999999999999.999909999999999') 	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FM9999999990999999.099999999999999') 	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'L9999999999999999.099999999999999')	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FM9999999999999999.99999999999999')	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FMS 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, E'99999 "text" 9999 "9999" 999 "\\"text between quote marks\\"" 9999') FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, '999999SG9999999999')			FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FM9999999999999999.999999999999999')	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, '9.999EEEE')				FROM num_data;
+</sql-statement>
+<sql-statement>
+WITH v(val) AS
+  (VALUES('0'::numeric),('-4.2'),('4.2e9'),('1.2e-5'),('inf'),('-inf'),('nan'))
+SELECT val,
+  to_char(val, '9.999EEEE') as numeric,
+  to_char(val::float8, '9.999EEEE') as float8,
+  to_char(val::float4, '9.999EEEE') as float4
+FROM v;
+</sql-statement>
+<sql-statement>
+WITH v(exp) AS
+  (VALUES(-16379),(-16378),(-1234),(-789),(-45),(-5),(-4),(-3),(-2),(-1),(0),
+         (1),(2),(3),(4),(5),(38),(275),(2345),(45678),(131070),(131071))
+SELECT exp,
+  to_char(('1.2345e'||exp)::numeric, '9.999EEEE') as numeric
+FROM v;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	WITH v(exp) AS
+	^
+        -stdin-:<main>:5:3: Error: At function: PgCall
+        	  to_char(('1.2345e'||exp)::numeric, '9.999EEEE') as numeric
+	  ^
+            -stdin-:<main>:5:29: Error: At function: PgCast
+            	  to_char(('1.2345e'||exp)::numeric, '9.999EEEE') as numeric
+	                            ^
+                -stdin-:<main>:5:21: Error: At function: PgOp
+                	  to_char(('1.2345e'||exp)::numeric, '9.999EEEE') as numeric
+	                    ^
+                    -stdin-:<main>:5:21: Error: Unable to find an overload for operator || with given argument type(s): (unknown,int4)
+                    	  to_char(('1.2345e'||exp)::numeric, '9.999EEEE') as numeric
+	                    ^
+<sql-statement>
+WITH v(val) AS
+  (VALUES('0'::numeric),('-4.2'),('4.2e9'),('1.2e-5'),('inf'),('-inf'),('nan'))
+SELECT val,
+  to_char(val, 'MI9999999999.99') as numeric,
+  to_char(val::float8, 'MI9999999999.99') as float8,
+  to_char(val::float4, 'MI9999999999.99') as float4
+FROM v;
+</sql-statement>
+<sql-statement>
+WITH v(val) AS
+  (VALUES('0'::numeric),('-4.2'),('4.2e9'),('1.2e-5'),('inf'),('-inf'),('nan'))
+SELECT val,
+  to_char(val, 'MI99.99') as numeric,
+  to_char(val::float8, 'MI99.99') as float8,
+  to_char(val::float4, 'MI99.99') as float4
+FROM v;
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'FM999.9');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'FM999.');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'FM999');
+</sql-statement>
+<sql-statement>
+-- Check parsing of literal text in a format string
+SELECT to_char('100'::numeric, 'foo999');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'f\oo999');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'f\\oo999');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'f\"oo999');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'f\\"oo999');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'f"ool"999');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'f"\ool"999');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'f"\\ool"999');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'f"ool\"999');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'f"ool\\"999');
+</sql-statement>
+<sql-statement>
+-- TO_NUMBER()
+--
+SET lc_numeric = 'C';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: lc_numeric
+    	-- TO_NUMBER()
+	^
+<sql-statement>
+SELECT to_number('-34,338,492', '99G999G999');
+</sql-statement>
+<sql-statement>
+SELECT to_number('-34,338,492.654,878', '99G999G999D999G999');
+</sql-statement>
+<sql-statement>
+SELECT to_number('<564646.654564>', '999999.999999PR');
+</sql-statement>
+<sql-statement>
+SELECT to_number('0.00001-', '9.999999S');
+</sql-statement>
+<sql-statement>
+SELECT to_number('5.01-', 'FM9.999999S');
+</sql-statement>
+<sql-statement>
+SELECT to_number('5.01-', 'FM9.999999MI');
+</sql-statement>
+<sql-statement>
+SELECT to_number('5 4 4 4 4 8 . 7 8', '9 9 9 9 9 9 . 9 9');
+</sql-statement>
+<sql-statement>
+SELECT to_number('.01', 'FM9.99');
+</sql-statement>
+<sql-statement>
+SELECT to_number('.0', '99999999.99999999');
+</sql-statement>
+<sql-statement>
+SELECT to_number('0', '99.99');
+</sql-statement>
+<sql-statement>
+SELECT to_number('.-01', 'S99.99');
+</sql-statement>
+<sql-statement>
+SELECT to_number('.01-', '99.99S');
+</sql-statement>
+<sql-statement>
+SELECT to_number(' . 0 1-', ' 9 9 . 9 9 S');
+</sql-statement>
+<sql-statement>
+SELECT to_number('34,50','999,99');
+</sql-statement>
+<sql-statement>
+SELECT to_number('123,000','999G');
+</sql-statement>
+<sql-statement>
+SELECT to_number('123456','999G999');
+</sql-statement>
+<sql-statement>
+SELECT to_number('$1234.56','L9,999.99');
+</sql-statement>
+<sql-statement>
+SELECT to_number('$1234.56','L99,999.99');
+</sql-statement>
+<sql-statement>
+SELECT to_number('$1,234.56','L99,999.99');
+</sql-statement>
+<sql-statement>
+SELECT to_number('1234.56','L99,999.99');
+</sql-statement>
+<sql-statement>
+SELECT to_number('1,234.56','L99,999.99');
+</sql-statement>
+<sql-statement>
+SELECT to_number('42nd', '99th');
+</sql-statement>
+<sql-statement>
+RESET lc_numeric;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	RESET lc_numeric;
+	^
+<sql-statement>
+--
+-- Input syntax
+--
+CREATE TABLE num_input_test (n1 numeric);
+</sql-statement>
+<sql-statement>
+-- good inputs
+INSERT INTO num_input_test(n1) VALUES (' 123');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('   3245874    ');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('  -93853');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('555.50');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('-555.50');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('NaN ');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('        nan');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES (' inf ');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES (' +inf ');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES (' -inf ');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES (' Infinity ');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES (' +inFinity ');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES (' -INFINITY ');
+</sql-statement>
+<sql-statement>
+-- bad inputs
+INSERT INTO num_input_test(n1) VALUES ('     ');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- bad inputs
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: "     "
+
+        	-- bad inputs
+	^
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('   1234   %');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_input_test(n1) VALUES ('   1234   %');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: "   1234   %"
+
+        	INSERT INTO num_input_test(n1) VALUES ('   1234   %');
+	^
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('xyz');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_input_test(n1) VALUES ('xyz');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: "xyz"
+
+        	INSERT INTO num_input_test(n1) VALUES ('xyz');
+	^
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('- 1234');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_input_test(n1) VALUES ('- 1234');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: "- 1234"
+
+        	INSERT INTO num_input_test(n1) VALUES ('- 1234');
+	^
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('5 . 0');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_input_test(n1) VALUES ('5 . 0');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: "5 . 0"
+
+        	INSERT INTO num_input_test(n1) VALUES ('5 . 0');
+	^
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('5. 0   ');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_input_test(n1) VALUES ('5. 0   ');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: "5. 0   "
+
+        	INSERT INTO num_input_test(n1) VALUES ('5. 0   ');
+	^
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_input_test(n1) VALUES ('');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: ""
+
+        	INSERT INTO num_input_test(n1) VALUES ('');
+	^
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES (' N aN ');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_input_test(n1) VALUES (' N aN ');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: " N aN "
+
+        	INSERT INTO num_input_test(n1) VALUES (' N aN ');
+	^
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('+ infinity');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_input_test(n1) VALUES ('+ infinity');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: "+ infinity"
+
+        	INSERT INTO num_input_test(n1) VALUES ('+ infinity');
+	^
+<sql-statement>
+SELECT * FROM num_input_test;
+</sql-statement>
+<sql-statement>
+--
+-- Test some corner cases for multiplication
+--
+select 4790999999999999999999999999999999999999999999999999999999999999999999999999999999999999 * 9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999;
+</sql-statement>
+<sql-statement>
+select 4789999999999999999999999999999999999999999999999999999999999999999999999999999999999999 * 9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999;
+</sql-statement>
+<sql-statement>
+select 4770999999999999999999999999999999999999999999999999999999999999999999999999999999999999 * 9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999;
+</sql-statement>
+<sql-statement>
+select 4769999999999999999999999999999999999999999999999999999999999999999999999999999999999999 * 9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999;
+</sql-statement>
+<sql-statement>
+select trim_scale((0.1 - 2e-16383) * (0.1 - 3e-16383));
+</sql-statement>
+<sql-statement>
+--
+-- Test some corner cases for division
+--
+select 999999999999999999999::numeric/1000000000000000000000;
+</sql-statement>
+<sql-statement>
+select div(999999999999999999999::numeric,1000000000000000000000);
+</sql-statement>
+<sql-statement>
+select mod(999999999999999999999::numeric,1000000000000000000000);
+</sql-statement>
+<sql-statement>
+select div(-9999999999999999999999::numeric,1000000000000000000000);
+</sql-statement>
+<sql-statement>
+select mod(-9999999999999999999999::numeric,1000000000000000000000);
+</sql-statement>
+<sql-statement>
+select div(-9999999999999999999999::numeric,1000000000000000000000)*1000000000000000000000 + mod(-9999999999999999999999::numeric,1000000000000000000000);
+</sql-statement>
+<sql-statement>
+select mod (70.0,70) ;
+</sql-statement>
+<sql-statement>
+select div (70.0,70) ;
+</sql-statement>
+<sql-statement>
+select 70.0 / 70 ;
+</sql-statement>
+<sql-statement>
+select 12345678901234567890 % 123;
+</sql-statement>
+<sql-statement>
+select 12345678901234567890 / 123;
+</sql-statement>
+<sql-statement>
+select div(12345678901234567890, 123);
+</sql-statement>
+<sql-statement>
+select div(12345678901234567890, 123) * 123 + 12345678901234567890 % 123;
+</sql-statement>
+<sql-statement>
+--
+-- Test some corner cases for square root
+--
+select sqrt(1.000000000000003::numeric);
+</sql-statement>
+<sql-statement>
+select sqrt(1.000000000000004::numeric);
+</sql-statement>
+<sql-statement>
+select sqrt(96627521408608.56340355805::numeric);
+</sql-statement>
+<sql-statement>
+select sqrt(96627521408608.56340355806::numeric);
+</sql-statement>
+<sql-statement>
+select sqrt(515549506212297735.073688290367::numeric);
+</sql-statement>
+<sql-statement>
+select sqrt(515549506212297735.073688290368::numeric);
+</sql-statement>
+<sql-statement>
+select sqrt(8015491789940783531003294973900306::numeric);
+</sql-statement>
+<sql-statement>
+select sqrt(8015491789940783531003294973900307::numeric);
+</sql-statement>
+<sql-statement>
+--
+-- Test code path for raising to integer powers
+--
+select 10.0 ^ -2147483648 as rounds_to_zero;
+</sql-statement>
+<sql-statement>
+select 10.0 ^ -2147483647 as rounds_to_zero;
+</sql-statement>
+<sql-statement>
+select 10.0 ^ 2147483647 as overflows;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select 10.0 ^ 2147483647 as overflows;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value overflows numeric format
+
+        	select 10.0 ^ 2147483647 as overflows;
+	^
+<sql-statement>
+select 117743296169.0 ^ 1000000000 as overflows;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select 117743296169.0 ^ 1000000000 as overflows;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value overflows numeric format
+
+        	select 117743296169.0 ^ 1000000000 as overflows;
+	^
+<sql-statement>
+-- cases that used to return inaccurate results
+select 3.789 ^ 21;
+</sql-statement>
+<sql-statement>
+select 3.789 ^ 35;
+</sql-statement>
+<sql-statement>
+select 1.2 ^ 345;
+</sql-statement>
+<sql-statement>
+select 0.12 ^ (-20);
+</sql-statement>
+<sql-statement>
+select 1.000000000123 ^ (-2147483648);
+</sql-statement>
+<sql-statement>
+select coalesce(nullif(0.9999999999 ^ 23300000000000, 0), 0) as rounds_to_zero;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:17: Error: A_Expr_Kind unsupported value: 5
+    	select coalesce(nullif(0.9999999999 ^ 23300000000000, 0), 0) as rounds_to_zero;
+	                ^
+<sql-statement>
+select round(((1 - 1.500012345678e-1000) ^ 1.45e1003) * 1e1000);
+</sql-statement>
+<sql-statement>
+-- cases that used to error out
+select 0.12 ^ (-25);
+</sql-statement>
+<sql-statement>
+select 0.5678 ^ (-85);
+</sql-statement>
+<sql-statement>
+select coalesce(nullif(0.9999999999 ^ 70000000000000, 0), 0) as underflows;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:17: Error: A_Expr_Kind unsupported value: 5
+    	select coalesce(nullif(0.9999999999 ^ 70000000000000, 0), 0) as underflows;
+	                ^
+<sql-statement>
+-- negative base to integer powers
+select (-1.0) ^ 2147483646;
+</sql-statement>
+<sql-statement>
+select (-1.0) ^ 2147483647;
+</sql-statement>
+<sql-statement>
+select (-1.0) ^ 2147483648;
+</sql-statement>
+<sql-statement>
+select (-1.0) ^ 1000000000000000;
+</sql-statement>
+<sql-statement>
+select (-1.0) ^ 1000000000000001;
+</sql-statement>
+<sql-statement>
+--
+-- Tests for raising to non-integer powers
+--
+-- special cases
+select 0.0 ^ 0.0;
+</sql-statement>
+<sql-statement>
+select (-12.34) ^ 0.0;
+</sql-statement>
+<sql-statement>
+select 12.34 ^ 0.0;
+</sql-statement>
+<sql-statement>
+select 0.0 ^ 12.34;
+</sql-statement>
+<sql-statement>
+-- NaNs
+select 'NaN'::numeric ^ 'NaN'::numeric;
+</sql-statement>
+<sql-statement>
+select 'NaN'::numeric ^ 0;
+</sql-statement>
+<sql-statement>
+select 'NaN'::numeric ^ 1;
+</sql-statement>
+<sql-statement>
+select 0 ^ 'NaN'::numeric;
+</sql-statement>
+<sql-statement>
+select 1 ^ 'NaN'::numeric;
+</sql-statement>
+<sql-statement>
+-- invalid inputs
+select 0.0 ^ (-12.34);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- invalid inputs
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  zero raised to a negative power is undefined
+
+        	-- invalid inputs
+	^
+<sql-statement>
+select (-12.34) ^ 1.2;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select (-12.34) ^ 1.2;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  a negative number raised to a non-integer power yields a complex result
+
+        	select (-12.34) ^ 1.2;
+	^
+<sql-statement>
+-- cases that used to generate inaccurate results
+select 32.1 ^ 9.8;
+</sql-statement>
+<sql-statement>
+select 32.1 ^ (-9.8);
+</sql-statement>
+<sql-statement>
+select 12.3 ^ 45.6;
+</sql-statement>
+<sql-statement>
+select 12.3 ^ (-45.6);
+</sql-statement>
+<sql-statement>
+-- big test
+select 1.234 ^ 5678;
+</sql-statement>
+<sql-statement>
+--
+-- Tests for EXP()
+--
+-- special cases
+select exp(0.0);
+</sql-statement>
+<sql-statement>
+select exp(1.0);
+</sql-statement>
+<sql-statement>
+select exp(1.0::numeric(71,70));
+</sql-statement>
+<sql-statement>
+select exp('nan'::numeric);
+</sql-statement>
+<sql-statement>
+select exp('inf'::numeric);
+</sql-statement>
+<sql-statement>
+select exp('-inf'::numeric);
+</sql-statement>
+<sql-statement>
+select coalesce(nullif(exp(-5000::numeric), 0), 0) as rounds_to_zero;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:17: Error: A_Expr_Kind unsupported value: 5
+    	select coalesce(nullif(exp(-5000::numeric), 0), 0) as rounds_to_zero;
+	                ^
+<sql-statement>
+select coalesce(nullif(exp(-10000::numeric), 0), 0) as underflows;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:17: Error: A_Expr_Kind unsupported value: 5
+    	select coalesce(nullif(exp(-10000::numeric), 0), 0) as underflows;
+	                ^
+<sql-statement>
+-- cases that used to generate inaccurate results
+select exp(32.999);
+</sql-statement>
+<sql-statement>
+select exp(-32.999);
+</sql-statement>
+<sql-statement>
+select exp(123.456);
+</sql-statement>
+<sql-statement>
+select exp(-123.456);
+</sql-statement>
+<sql-statement>
+-- big test
+select exp(1234.5678);
+</sql-statement>
+<sql-statement>
+--
+-- Tests for generate_series
+--
+select * from generate_series(0.0::numeric, 4.0::numeric);
+</sql-statement>
+<sql-statement>
+select * from generate_series(0.1::numeric, 4.0::numeric, 1.3::numeric);
+</sql-statement>
+<sql-statement>
+select * from generate_series(4.0::numeric, -1.5::numeric, -2.2::numeric);
+</sql-statement>
+<sql-statement>
+-- Trigger errors
+select * from generate_series(-100::numeric, 100::numeric, 0::numeric);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Trigger errors
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  step size cannot equal zero
+
+        	-- Trigger errors
+	^
+<sql-statement>
+select * from generate_series(-100::numeric, 100::numeric, 'nan'::numeric);
+</sql-statement>
+pgrun: /storage/d/arcc/mount/1/a0a05244-a249bf61-ec2999f5-6661a47b/contrib/libs/llvm12/lib/IR/LegacyPassManager.cpp:588: void llvm::PMTopLevelManager::setLastUser(ArrayRef<Pass *>, Pass *): Assertion `AnalysisPass && "Expected analysis pass to exist."' failed.
+pthread_kill at ./nptl/./nptl/pthread_kill.c:43:17
+?? at ??:0:0

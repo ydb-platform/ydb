@@ -347,17 +347,412 @@ INSERT INTO foo VALUES (42),(3),(10),(7),(null),(null),(1);
 <sql-statement>
 SELECT * FROM foo ORDER BY f1;
 </sql-statement>
-BackTrace(void**, unsigned long)+29 (0x14033ECD)
-TBackTrace::Capture()+30 (0x1403443E)
-TWithBackTrace<yexception>::TWithBackTrace<>()+72 (0x13FD0568)
-NYT::TNode::TTypeError::TTypeError()+25 (0x144DC3E9)
-NYT::TNode::CheckType(NYT::TNode::EType) const+267 (0x144DD9BB)
-NYT::TNode::AsString() const+30 (0x144DC53E)
-WriteTableToStream(IOutputStream&, TVector<NYT::TNode, std::__y1::allocator<NYT::TNode> > const&, TVector<NYT::TNode, std::__y1::allocator<NYT::TNode> > const&)+830 (0x13EBBB7E)
-Main(int, char**)+5748 (0x13EC0FB4)
-main+273 (0x13EC2761)
-??+0 (0x7F2C13A29D90)
-__libc_start_main+128 (0x7F2C13A29E40)
-??+0 (0x13E4C029)
+<sql-statement>
+SELECT * FROM foo ORDER BY f1 ASC;	-- same thing
+</sql-statement>
+<sql-statement>
+SELECT * FROM foo ORDER BY f1 NULLS FIRST;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
 
-(NYT::TNode::TTypeError) library/cpp/yson/node/node.cpp:829: TNode type string_node expected, actual type null
+    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 1
+    	SELECT * FROM foo ORDER BY f1 NULLS FIRST;
+	^
+<sql-statement>
+SELECT * FROM foo ORDER BY f1 DESC;
+</sql-statement>
+<sql-statement>
+SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 2
+    	SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
+	^
+<sql-statement>
+-- check if indexscans do the right things
+CREATE INDEX fooi ON foo (f1);
+</sql-statement>
+<sql-statement>
+SET enable_sort = false;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_sort
+    	SET enable_sort = false;
+	^
+<sql-statement>
+SELECT * FROM foo ORDER BY f1;
+</sql-statement>
+<sql-statement>
+SELECT * FROM foo ORDER BY f1 NULLS FIRST;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 1
+    	SELECT * FROM foo ORDER BY f1 NULLS FIRST;
+	^
+<sql-statement>
+SELECT * FROM foo ORDER BY f1 DESC;
+</sql-statement>
+<sql-statement>
+SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 2
+    	SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
+	^
+<sql-statement>
+DROP INDEX fooi;
+</sql-statement>
+-stdin-:<main>: Error: Pre type annotation
+
+    -stdin-:<main>:1:1: Error: Unexpected tag: pgObject
+    	DROP INDEX fooi;
+	^
+<sql-statement>
+CREATE INDEX fooi ON foo (f1 DESC);
+</sql-statement>
+<sql-statement>
+SELECT * FROM foo ORDER BY f1;
+</sql-statement>
+<sql-statement>
+SELECT * FROM foo ORDER BY f1 NULLS FIRST;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 1
+    	SELECT * FROM foo ORDER BY f1 NULLS FIRST;
+	^
+<sql-statement>
+SELECT * FROM foo ORDER BY f1 DESC;
+</sql-statement>
+<sql-statement>
+SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 2
+    	SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
+	^
+<sql-statement>
+DROP INDEX fooi;
+</sql-statement>
+-stdin-:<main>: Error: Pre type annotation
+
+    -stdin-:<main>:1:1: Error: Unexpected tag: pgObject
+    	DROP INDEX fooi;
+	^
+<sql-statement>
+CREATE INDEX fooi ON foo (f1 DESC NULLS LAST);
+</sql-statement>
+<sql-statement>
+SELECT * FROM foo ORDER BY f1;
+</sql-statement>
+<sql-statement>
+SELECT * FROM foo ORDER BY f1 NULLS FIRST;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 1
+    	SELECT * FROM foo ORDER BY f1 NULLS FIRST;
+	^
+<sql-statement>
+SELECT * FROM foo ORDER BY f1 DESC;
+</sql-statement>
+<sql-statement>
+SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: sortby_nulls unsupported value: 2
+    	SELECT * FROM foo ORDER BY f1 DESC NULLS LAST;
+	^
+<sql-statement>
+--
+-- Test planning of some cases with partial indexes
+--
+-- partial index is usable
+explain (costs off)
+select * from onek2 where unique2 = 11 and stringu1 = 'ATAAAA';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select * from onek2 where unique2 = 11 and stringu1 = 'ATAAAA';
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
+    
+<sql-statement>
+-- actually run the query with an analyze to use the partial index
+explain (costs off, analyze on, timing off, summary off)
+select * from onek2 where unique2 = 11 and stringu1 = 'ATAAAA';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- actually run the query with an analyze to use the partial index
+	^
+<sql-statement>
+explain (costs off)
+select unique2 from onek2 where unique2 = 11 and stringu1 = 'ATAAAA';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select unique2 from onek2 where unique2 = 11 and stringu1 = 'ATAAAA';
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
+    
+<sql-statement>
+-- partial index predicate implies clause, so no need for retest
+explain (costs off)
+select * from onek2 where unique2 = 11 and stringu1 < 'B';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- partial index predicate implies clause, so no need for retest
+	^
+<sql-statement>
+select * from onek2 where unique2 = 11 and stringu1 < 'B';
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
+    
+<sql-statement>
+explain (costs off)
+select unique2 from onek2 where unique2 = 11 and stringu1 < 'B';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select unique2 from onek2 where unique2 = 11 and stringu1 < 'B';
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
+    
+<sql-statement>
+-- but if it's an update target, must retest anyway
+explain (costs off)
+select unique2 from onek2 where unique2 = 11 and stringu1 < 'B' for update;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- but if it's an update target, must retest anyway
+	^
+<sql-statement>
+select unique2 from onek2 where unique2 = 11 and stringu1 < 'B' for update;
+</sql-statement>
+-stdin-:<main>: Warning: Parse Sql
+
+    -stdin-:<main>:1:1: Warning: SelectStmt: lockingClause is ignored
+    	select unique2 from onek2 where unique2 = 11 and stringu1 < 'B' for update;
+	^
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
+    
+<sql-statement>
+-- partial index is not applicable
+explain (costs off)
+select unique2 from onek2 where unique2 = 11 and stringu1 < 'C';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- partial index is not applicable
+	^
+<sql-statement>
+select unique2 from onek2 where unique2 = 11 and stringu1 < 'C';
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
+    
+<sql-statement>
+-- partial index implies clause, but bitmap scan must recheck predicate anyway
+SET enable_indexscan TO off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_indexscan
+    	-- partial index implies clause, but bitmap scan must recheck predicate anyway
+	^
+<sql-statement>
+explain (costs off)
+select unique2 from onek2 where unique2 = 11 and stringu1 < 'B';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select unique2 from onek2 where unique2 = 11 and stringu1 < 'B';
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
+    
+<sql-statement>
+RESET enable_indexscan;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	RESET enable_indexscan;
+	^
+<sql-statement>
+-- check multi-index cases too
+explain (costs off)
+select unique1, unique2 from onek2
+  where (unique2 = 11 or unique1 = 0) and stringu1 < 'B';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- check multi-index cases too
+	^
+<sql-statement>
+select unique1, unique2 from onek2
+  where (unique2 = 11 or unique1 = 0) and stringu1 < 'B';
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
+    
+<sql-statement>
+explain (costs off)
+select unique1, unique2 from onek2
+  where (unique2 = 11 and stringu1 < 'B') or unique1 = 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select unique1, unique2 from onek2
+  where (unique2 = 11 and stringu1 < 'B') or unique1 = 0;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.onek2
+    
+<sql-statement>
+--
+-- Test some corner cases that have been known to confuse the planner
+--
+-- ORDER BY on a constant doesn't really need any sorting
+SELECT 1 AS x ORDER BY x;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--
+	^
+        -stdin-:<main>:5:24: Error: Column reference can't be used without FROM
+        	SELECT 1 AS x ORDER BY x;
+	                       ^
+<sql-statement>
+-- But ORDER BY on a set-valued expression does
+create function sillysrf(int) returns setof int as
+  'values (1),(10),(2),($1)' language sql immutable;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	-- But ORDER BY on a set-valued expression does
+	^
+<sql-statement>
+select sillysrf(42);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select sillysrf(42);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select sillysrf(42);
+	       ^
+            -stdin-:<main>:1:8: Error: No such proc: sillysrf
+            	select sillysrf(42);
+	       ^
+<sql-statement>
+select sillysrf(-1) order by 1;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select sillysrf(-1) order by 1;
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select sillysrf(-1) order by 1;
+	       ^
+            -stdin-:<main>:1:8: Error: No such proc: sillysrf
+            	select sillysrf(-1) order by 1;
+	       ^
+<sql-statement>
+drop function sillysrf(int);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 386
+    	drop function sillysrf(int);
+	^
+<sql-statement>
+-- X = X isn't a no-op, it's effectively X IS NOT NULL assuming = is strict
+-- (see bug #5084)
+select * from (values (2),(null),(1)) v(k) where k = k order by k;
+</sql-statement>
+<sql-statement>
+select * from (values (2),(null),(1)) v(k) where k = k;
+</sql-statement>
+<sql-statement>
+-- Test partitioned tables with no partitions, which should be handled the
+-- same as the non-inheritance case when expanding its RTE.
+create table list_parted_tbl (a int,b int) partition by list (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- Test partitioned tables with no partitions, which should be handled the
+	^
+<sql-statement>
+create table list_parted_tbl1 partition of list_parted_tbl
+  for values in (1) partition by list(b);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table list_parted_tbl1 partition of list_parted_tbl
+	^
+<sql-statement>
+explain (costs off) select * from list_parted_tbl;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off) select * from list_parted_tbl;
+	^
+<sql-statement>
+drop table list_parted_tbl;
+</sql-statement>

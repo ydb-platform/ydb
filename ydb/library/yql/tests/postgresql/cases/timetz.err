@@ -55,17 +55,202 @@ INSERT INTO TIMETZ_TBL VALUES ('15:36:39 MSK m2');
 <sql-statement>
 SELECT f1 AS "Time TZ" FROM TIMETZ_TBL;
 </sql-statement>
-BackTrace(void**, unsigned long)+29 (0x14033ECD)
-TBackTrace::Capture()+30 (0x1403443E)
-TWithBackTrace<yexception>::TWithBackTrace<>()+72 (0x13FD0568)
-NYT::TNode::TTypeError::TTypeError()+25 (0x144DC3E9)
-NYT::TNode::CheckType(NYT::TNode::EType) const+267 (0x144DD9BB)
-NYT::TNode::AsString() const+30 (0x144DC53E)
-WriteTableToStream(IOutputStream&, TVector<NYT::TNode, std::__y1::allocator<NYT::TNode> > const&, TVector<NYT::TNode, std::__y1::allocator<NYT::TNode> > const&)+830 (0x13EBBB7E)
-Main(int, char**)+5748 (0x13EC0FB4)
-main+273 (0x13EC2761)
-??+0 (0x7F63BCA29D90)
-__libc_start_main+128 (0x7F63BCA29E40)
-??+0 (0x13E4C029)
+<sql-statement>
+SELECT f1 AS "Three" FROM TIMETZ_TBL WHERE f1 < '05:06:07-07';
+</sql-statement>
+<sql-statement>
+SELECT f1 AS "Seven" FROM TIMETZ_TBL WHERE f1 > '05:06:07-07';
+</sql-statement>
+<sql-statement>
+SELECT f1 AS "None" FROM TIMETZ_TBL WHERE f1 < '00:00-07';
+</sql-statement>
+<sql-statement>
+SELECT f1 AS "Ten" FROM TIMETZ_TBL WHERE f1 >= '00:00-07';
+</sql-statement>
+<sql-statement>
+-- Check edge cases
+SELECT '23:59:59.999999 PDT'::timetz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
 
-(NYT::TNode::TTypeError) library/cpp/yson/node/node.cpp:829: TNode type string_node expected, actual type null
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Check edge cases
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "23:59:59.999999 PDT"
+
+        	-- Check edge cases
+	^
+<sql-statement>
+SELECT '23:59:59.9999999 PDT'::timetz;  -- rounds up
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '23:59:59.9999999 PDT'::timetz;  -- rounds up
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "23:59:59.9999999 PDT"
+
+        	SELECT '23:59:59.9999999 PDT'::timetz;  -- rounds up
+	^
+<sql-statement>
+SELECT '23:59:60 PDT'::timetz;  -- rounds up
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '23:59:60 PDT'::timetz;  -- rounds up
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "23:59:60 PDT"
+
+        	SELECT '23:59:60 PDT'::timetz;  -- rounds up
+	^
+<sql-statement>
+SELECT '24:00:00 PDT'::timetz;  -- allowed
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '24:00:00 PDT'::timetz;  -- allowed
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "24:00:00 PDT"
+
+        	SELECT '24:00:00 PDT'::timetz;  -- allowed
+	^
+<sql-statement>
+SELECT '24:00:00.01 PDT'::timetz;  -- not allowed
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '24:00:00.01 PDT'::timetz;  -- not allowed
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "24:00:00.01 PDT"
+
+        	SELECT '24:00:00.01 PDT'::timetz;  -- not allowed
+	^
+<sql-statement>
+SELECT '23:59:60.01 PDT'::timetz;  -- not allowed
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '23:59:60.01 PDT'::timetz;  -- not allowed
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "23:59:60.01 PDT"
+
+        	SELECT '23:59:60.01 PDT'::timetz;  -- not allowed
+	^
+<sql-statement>
+SELECT '24:01:00 PDT'::timetz;  -- not allowed
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '24:01:00 PDT'::timetz;  -- not allowed
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "24:01:00 PDT"
+
+        	SELECT '24:01:00 PDT'::timetz;  -- not allowed
+	^
+<sql-statement>
+SELECT '25:00:00 PDT'::timetz;  -- not allowed
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '25:00:00 PDT'::timetz;  -- not allowed
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "25:00:00 PDT"
+
+        	SELECT '25:00:00 PDT'::timetz;  -- not allowed
+	^
+<sql-statement>
+--
+-- TIME simple math
+--
+-- We now make a distinction between time and intervals,
+-- and adding two times together makes no sense at all.
+-- Leave in one query to show that it is rejected,
+-- and do the rest of the testing in horology.sql
+-- where we do mixed-type arithmetic. - thomas 2000-12-02
+SELECT f1 + time with time zone '00:01' AS "Illegal" FROM TIMETZ_TBL;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	--
+	^
+        -stdin-:<main>:9:11: Error: At function: PgOp
+        	SELECT f1 + time with time zone '00:01' AS "Illegal" FROM TIMETZ_TBL;
+	          ^
+            -stdin-:<main>:9:11: Error: Unable to find an overload for operator + with given argument type(s): (timetz,timetz)
+            	SELECT f1 + time with time zone '00:01' AS "Illegal" FROM TIMETZ_TBL;
+	          ^
+<sql-statement>
+--
+-- test EXTRACT
+--
+SELECT EXTRACT(MICROSECOND FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(MILLISECOND FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(SECOND      FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(MINUTE      FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(HOUR        FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(DAY         FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');  -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT EXTRACT(DAY         FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');  -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  "time with time zone" units "day" not recognized
+
+        	SELECT EXTRACT(DAY         FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');  -- error
+	^
+<sql-statement>
+SELECT EXTRACT(FORTNIGHT   FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');  -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT EXTRACT(FORTNIGHT   FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');  -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  "time with time zone" units "fortnight" not recognized
+
+        	SELECT EXTRACT(FORTNIGHT   FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');  -- error
+	^
+<sql-statement>
+SELECT EXTRACT(TIMEZONE    FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04:30');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(TIMEZONE_HOUR   FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04:30');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(TIMEZONE_MINUTE FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04:30');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(EPOCH       FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');
+</sql-statement>
+<sql-statement>
+-- date_part implementation is mostly the same as extract, so only
+-- test a few cases for additional coverage.
+SELECT date_part('microsecond', TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');
+</sql-statement>
+<sql-statement>
+SELECT date_part('millisecond', TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');
+</sql-statement>
+<sql-statement>
+SELECT date_part('second',      TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');
+</sql-statement>
+<sql-statement>
+SELECT date_part('epoch',       TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');
+</sql-statement>

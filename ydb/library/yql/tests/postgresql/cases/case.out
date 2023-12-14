@@ -32,3 +32,97 @@ SELECT '3' AS "One",
  3   |           3
 (1 row)
 
+SELECT '<NULL>' AS "One",
+  CASE
+    WHEN 1 > 2 THEN 3
+  END AS "Simple default";
+  One   | Simple default 
+--------+----------------
+ <NULL> |               
+(1 row)
+
+SELECT '3' AS "One",
+  CASE
+    WHEN 1 < 2 THEN 3
+    ELSE 4
+  END AS "Simple ELSE";
+ One | Simple ELSE 
+-----+-------------
+ 3   |           3
+(1 row)
+
+SELECT '4' AS "One",
+  CASE
+    WHEN 1 > 2 THEN 3
+    ELSE 4
+  END AS "ELSE default";
+ One | ELSE default 
+-----+--------------
+ 4   |            4
+(1 row)
+
+SELECT '6' AS "One",
+  CASE
+    WHEN 1 > 2 THEN 3
+    WHEN 4 < 5 THEN 6
+    ELSE 7
+  END AS "Two WHEN with default";
+ One | Two WHEN with default 
+-----+-----------------------
+ 6   |                     6
+(1 row)
+
+SELECT '7' AS "None",
+   CASE WHEN random() < 0 THEN 1
+   END AS "NULL on no matches";
+ None | NULL on no matches 
+------+--------------------
+ 7    |                   
+(1 row)
+
+-- Constant-expression folding shouldn't evaluate unreachable subexpressions
+SELECT CASE WHEN 1=0 THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END;
+ case 
+------
+    1
+(1 row)
+
+SELECT CASE 1 WHEN 0 THEN 1/0 WHEN 1 THEN 1 ELSE 2/0 END;
+ case 
+------
+    1
+(1 row)
+
+-- Test for cases involving untyped literals in test expression
+SELECT CASE 'a' WHEN 'a' THEN 1 ELSE 2 END;
+ case 
+------
+    1
+(1 row)
+
+--
+-- Nested CASE expressions
+--
+-- This test exercises a bug caused by aliasing econtext->caseValue_isNull
+-- with the isNull argument of the inner CASE's CaseExpr evaluation.  After
+-- evaluating the vol(null) expression in the inner CASE's second WHEN-clause,
+-- the isNull flag for the case test value incorrectly became true, causing
+-- the third WHEN-clause not to match.  The volatile function calls are needed
+-- to prevent constant-folding in the planner, which would hide the bug.
+-- Wrap this in a single transaction so the transient '=' operator doesn't
+-- cause problems in concurrent sessions
+BEGIN;
+ROLLBACK;
+-- Test multiple evaluation of a CASE arg that is a read/write object (#14472)
+-- Wrap this in a single transaction so the transient '=' operator doesn't
+-- cause problems in concurrent sessions
+BEGIN;
+ROLLBACK;
+-- Test interaction of CASE with ArrayCoerceExpr (bug #15471)
+BEGIN;
+ROLLBACK;
+--
+-- Clean up
+--
+DROP TABLE CASE_TBL;
+DROP TABLE CASE2_TBL;

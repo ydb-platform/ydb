@@ -38,6 +38,8 @@ namespace NMiniKQL = NKikimr::NMiniKQL;
 const ui32 PRETTY_FLAGS = NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote |
                           NYql::TAstPrintFlags::AdaptArbitraryContent;
 
+const TString nullRepr("");
+
 bool IsEscapedChar(const TString& s, size_t pos) {
     bool escaped = false;
     while (s[--pos] == '\\') {
@@ -720,6 +722,7 @@ inline const TString FormatBool(const TString& value)
 
     return (value == "true") ? T
          : (value == "false") ? F
+         : (value == nullRepr) ? nullRepr
          : ythrow yexception() << "Unexpected bool literal: " << value;
 }
 
@@ -790,7 +793,7 @@ void WriteTableToStream(IOutputStream& stream, const NYT::TNode::TListType& cols
 
         { int i = 0;
         for (const auto& col : row.AsList()) {
-            const auto& cellData = col.AsString();
+            const auto& cellData = col.HasValue() ? col.AsString() : nullRepr;
             auto& c = columns[i];
 
             rowData.emplace_back(c.Formatter(cellData));

@@ -92,3 +92,12 @@ INSERT INTO BOOLTBL3 (d, b, o) VALUES ('null', null, 3);
 CREATE TABLE booltbl4(isfalse bool, istrue bool, isnul bool);
 INSERT INTO booltbl4 VALUES (false, true, null);
 \pset null '(null)'
+--
+-- Clean up
+-- Many tables are retained by the regression test, but these do not seem
+--  particularly useful so just get rid of them for now.
+--  - thomas 1997-11-30
+--
+DROP TABLE  BOOLTBL1;
+DROP TABLE  BOOLTBL2;
+DROP TABLE  BOOLTBL3;

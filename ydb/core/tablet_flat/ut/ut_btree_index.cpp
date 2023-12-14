@@ -916,6 +916,13 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     }
 
     template<typename TIter>
+    EReady SeekLast(TIter& iter, const TString& message, ui32 failsAllowed = 10) {
+        return Retry([&]() {
+            return iter.SeekLast();
+        }, message, failsAllowed);
+    }
+
+    template<typename TIter>
     EReady SeekKey(TIter& iter, ESeek seek, bool reverse, TCells key, const TKeyCellDefaults *keyDefaults, const TString& message, ui32 failsAllowed = 10) {
         return Retry([&]() {
             if (reverse) {
@@ -964,6 +971,19 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
                 }
             }
         }
+    }
+
+    template<typename TEnv>
+    void CheckSeekLast(const TPartStore& part) {
+        TEnv env;
+        TPartBtreeIndexIt bTree(&part, &env, { });
+        TPartIndexIt flat(&part, &env, { });
+
+        TString message = TStringBuilder() << "SeekLast<" << typeid(TEnv).name() << ">";
+        EReady bTreeReady = SeekLast(bTree, message);
+        EReady flatReady = SeekLast(flat, message);
+        UNIT_ASSERT_VALUES_EQUAL(bTreeReady, EReady::Data);
+        AssertEqual(bTree, bTreeReady, flat, flatReady, message);
     }
 
     template<typename TEnv>
@@ -1055,6 +1075,8 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
 
         CheckSeekRowId<TTestEnv>(part);
         CheckSeekRowId<TTouchEnv>(part);
+        CheckSeekLast<TTestEnv>(part);
+        CheckSeekLast<TTouchEnv>(part);
         CheckSeekKey<TTestEnv>(part, eggs.Scheme->Keys.Get());
         CheckSeekKey<TTouchEnv>(part, eggs.Scheme->Keys.Get());
         CheckNextPrev<TTestEnv>(part);

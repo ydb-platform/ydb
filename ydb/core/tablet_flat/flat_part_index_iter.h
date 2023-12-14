@@ -36,6 +36,19 @@ public:
         return DataOrGone();
     }
 
+    EReady SeekLast() override {
+        auto index = TryGetIndex();
+        if (!index) {
+            return EReady::Page;
+        }
+        Iter = (*index)->End();
+        if (Iter.Off() == 0) {
+            return EReady::Gone;
+        }
+        Iter--;
+        return DataOrGone();
+    }
+
     EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) override {
         auto index = TryGetIndex();
         if (!index) {
@@ -53,19 +66,6 @@ public:
         }
 
         Iter = index->LookupKeyReverse(key, GroupInfo, seek, keyDefaults);
-        return DataOrGone();
-    }
-
-    EReady SeekLast() {
-        auto index = TryGetIndex();
-        if (!index) {
-            return EReady::Page;
-        }
-        Iter = (*index)->End();
-        if (Iter.Off() == 0) {
-            return EReady::Gone;
-        }
-        Iter--;
         return DataOrGone();
     }
 

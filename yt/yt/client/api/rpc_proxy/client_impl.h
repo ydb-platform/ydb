@@ -482,7 +482,7 @@ public:
         const TString& passwordSha256,
         const TListUserTokensOptions& options) override;
 
-    TFuture<TBundleConfigDescriptorPtr> GetBundleConfig(
+    TFuture<TBundleConfigDescriptor> GetBundleConfig(
         const TString& bundleName,
         const TGetBundleConfigOptions& options = {}) override;
 

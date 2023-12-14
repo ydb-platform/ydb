@@ -93,11 +93,23 @@ public:
         return Program.AddCommand()->MutableProjection();
     }
 
+    const TTypeAnnotationNode& GetCommonType(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right) {
+        if (right.IsBlock())
+            return right;
+        if (left.IsBlock())
+            return left;
+        return right;
+    }
+
+    std::pair<ui32, const TTypeAnnotationNode*> AddYqlKernelBinaryFunc(TKernelRequestBuilder::EBinaryOp op, const TTypeAnnotationNode& argTypeOne, const TTypeAnnotationNode& argTypeTwo, const TTypeAnnotationNode* retType) {
+        const auto retBlockType = retType ? ConvertToBlockType(retType) : &GetCommonType(argTypeOne, argTypeTwo) ;
+        return std::make_pair(YqlKernelRequestBuilder->AddBinaryOp(op, &argTypeOne, &argTypeTwo, retBlockType), retBlockType);
+    }
+
     ui32 AddYqlKernelBinaryFunc(TKernelRequestBuilder::EBinaryOp op, const TExprBase& arg1, const TExprBase& arg2, const TTypeAnnotationNode* retType) {
-        auto arg1Type = GetArgType(arg1);
-        auto arg2Type = GetArgType(arg2);
-        auto retBlockType = ConvertToBlockType(retType);
-        return YqlKernelRequestBuilder->AddBinaryOp(op, arg1Type, arg2Type, retBlockType);
+        const auto arg1Type = GetArgType(arg1);
+        const auto arg2Type = GetArgType(arg2);
+        return AddYqlKernelBinaryFunc(op, *arg1Type, *arg2Type, retType).first;
     }
 
     ui32 AddYqlKernelJsonExists(const TExprBase& arg1, const TExprBase& arg2, const TTypeAnnotationNode* retType) {
@@ -147,15 +159,15 @@ public:
         return ExprContext;
     }
 
-    bool CheckYqlCompatibleArgsTypes(const TKqpOlapFilterCompare& comparison) {
-        if (const auto maybe = comparison.Left().Maybe<TCoAtom>()) {
+    bool CheckYqlCompatibleArgsTypes(const TKqpOlapFilterBinaryOp& operation) {
+        if (const auto maybe = operation.Left().Maybe<TCoAtom>()) {
             if (const auto type = GetColumnTypeByName(maybe.Cast().Value()); type->GetKind() == ETypeAnnotationKind::Data) {
                 if (const auto info = GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot()); !(info.Features & (NUdf::EDataTypeFeatures::StringType | NUdf::EDataTypeFeatures::NumericType))) {
                     return false;
                 }
             }
         }
-        if (const auto maybe = comparison.Right().Maybe<TCoAtom>()) {
+        if (const auto maybe = operation.Right().Maybe<TCoAtom>()) {
             if (const auto type = GetColumnTypeByName(maybe.Cast().Value()); type->GetKind() == ETypeAnnotationKind::Data) {
                 if (const auto info = GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot()); !(info.Features & (NUdf::EDataTypeFeatures::StringType | NUdf::EDataTypeFeatures::NumericType))) {
                     return false;
@@ -167,20 +179,6 @@ public:
 
     TKernelRequestBuilder& GetKernelRequestBuilder() const {
         return *YqlKernelRequestBuilder;
-    }
-private:
-    const TTypeAnnotationNode* ConvertToBlockType(const TTypeAnnotationNode* type) {
-        if (!type->IsBlock()) {
-            return ExprContext.MakeType<TBlockExprType>(type);
-        }
-        return type;
-    }
-
-    const TTypeAnnotationNode* GetColumnTypeByName(const std::string_view &name) {
-        auto *rowItemType = GetSeqItemType(Row.Ptr()->GetTypeAnn());
-        YQL_ENSURE(rowItemType->GetKind() == ETypeAnnotationKind::Struct, "Input for OLAP lambda must contain Struct inside.");
-        auto structType = rowItemType->Cast<TStructExprType>();
-        return structType->FindItemType(name);
     }
 
     const TTypeAnnotationNode* GetArgType(const TExprBase& arg) {
@@ -208,6 +206,20 @@ private:
             }
         }
         return ExprContext.MakeType<TScalarExprType>(argType);
+    }
+private:
+    const TTypeAnnotationNode* ConvertToBlockType(const TTypeAnnotationNode* type) {
+        if (!type->IsBlock()) {
+            return ExprContext.MakeType<TBlockExprType>(type);
+        }
+        return type;
+    }
+
+    const TTypeAnnotationNode* GetColumnTypeByName(const std::string_view &name) {
+        auto *rowItemType = GetSeqItemType(Row.Ptr()->GetTypeAnn());
+        YQL_ENSURE(rowItemType->GetKind() == ETypeAnnotationKind::Struct, "Input for OLAP lambda must contain Struct inside.");
+        auto structType = rowItemType->Cast<TStructExprType>();
+        return structType->FindItemType(name);
     }
 
     static std::unordered_map<std::string, EAggFunctionType> AggFuncTypesMap;
@@ -240,7 +252,7 @@ std::unordered_set<std::string> YqlKernelCmpFuncs = {
     "string_contains", "starts_with", "ends_with"
 };
 
-TProgram::TAssignment* CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx);
+const TProgram::TAssignment* CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx);
 ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx);
 
 ui32 ConvertValueToColumn(const TCoDataCtor& value, TKqpOlapCompileContext& ctx)
@@ -414,7 +426,7 @@ ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx) {
     YQL_ENSURE(false, "Unknown node in OLAP comparison compiler: " << node.Ptr()->Content());
 }
 
-TProgram::TAssignment* CompileSimpleArrowComparison(const TKqpOlapFilterCompare& comparison,
+const TProgram::TAssignment* CompileSimpleArrowComparison(const TKqpOlapFilterBinaryOp& comparison,
     TKqpOlapCompileContext& ctx)
 {
     // Columns should be created before comparison, otherwise comparison fail to find columns
@@ -446,7 +458,7 @@ TProgram::TAssignment* CompileSimpleArrowComparison(const TKqpOlapFilterCompare&
     return command;
 }
 
-TProgram::TAssignment* CompileYqlKernelComparison(const TKqpOlapFilterCompare& comparison,
+const TProgram::TAssignment* CompileYqlKernelComparison(const TKqpOlapFilterBinaryOp& comparison,
     TKqpOlapCompileContext& ctx)
 {
     // Columns should be created before comparison, otherwise comparison fail to find columns
@@ -506,17 +518,30 @@ TProgram::TAssignment* CompileYqlKernelComparison(const TKqpOlapFilterCompare& c
     return command;
 }
 
-TProgram::TAssignment* CompileYqlKernelAnyComparison(const TKqpOlapFilterCompare& comparison, TKqpOlapCompileContext& ctx)
-{
-    // Columns should be created before comparison, otherwise comparison fail to find columns
-    const auto leftColumnId = GetOrCreateColumnId(comparison.Left(), ctx);
-    const auto rightColumnId = GetOrCreateColumnId(comparison.Right(), ctx);
+struct TTypedColumn {
+    const ui64 Id;
+    const TTypeAnnotationNode *const Type;
+};
 
-    TProgram::TAssignment *const command = ctx.CreateAssignCmd();
+TTypedColumn GetOrCreateColumnIdAndType(const TExprBase& node, TKqpOlapCompileContext& ctx);
+
+struct TTypedAssigment {
+    const TProgram::TAssignment *const Assigment;
+    const TTypeAnnotationNode *const Type;
+};
+
+TTypedAssigment CompileYqlKernelBinaryOperation(const TKqpOlapFilterBinaryOp& operation, TKqpOlapCompileContext& ctx)
+{
+    // Columns should be created before operation, otherwise operation fail to find columns
+    const auto leftColumn = GetOrCreateColumnIdAndType(operation.Left(), ctx);
+    const auto rightColumn = GetOrCreateColumnIdAndType(operation.Right(), ctx);
+
+    auto *const command = ctx.CreateAssignCmd();
     auto *const cmpFunc = command->MutableFunction();
 
     TKernelRequestBuilder::EBinaryOp op;
-    if (const std::string_view& oper = comparison.Operator().Value(); oper == "string_contains"sv) {
+    bool compare = true;
+    if (const std::string_view& oper = operation.Operator().Value(); oper == "string_contains"sv) {
         op = TKernelRequestBuilder::EBinaryOp::StringContains;
     } else if (oper == "starts_with"sv) {
         op = TKernelRequestBuilder::EBinaryOp::StartsWith;
@@ -534,20 +559,49 @@ TProgram::TAssignment* CompileYqlKernelAnyComparison(const TKqpOlapFilterCompare
         op = TKernelRequestBuilder::EBinaryOp::Greater;
     } else if (oper == "gte"sv) {
         op = TKernelRequestBuilder::EBinaryOp::GreaterOrEqual;
+    } else if (oper == "+"sv) {
+        op = TKernelRequestBuilder::EBinaryOp::Add;
+        compare = false;
+    } else if (oper == "-"sv) {
+        op = TKernelRequestBuilder::EBinaryOp::Sub;
+        compare = false;
+    } else if (oper == "*"sv) {
+        op = TKernelRequestBuilder::EBinaryOp::Mul;
+        compare = false;
+    } else if (oper == "/"sv) {
+        op = TKernelRequestBuilder::EBinaryOp::Div;
+        compare = false;
+    } else if (oper == "%"sv) {
+        op = TKernelRequestBuilder::EBinaryOp::Mod;
+        compare = false;
     } else {
-        return command;
+        YQL_ENSURE(false, "Unknown binary OLAP operation: " << oper);
     }
 
-    const auto idx = ctx.AddYqlKernelBinaryFunc(op, comparison.Left(), comparison.Right(),
-        ctx.ExprCtx().MakeType<TOptionalExprType>(ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool)));
+    const auto kernel = ctx.AddYqlKernelBinaryFunc(op, *leftColumn.Type, *rightColumn.Type,
+        compare ? ctx.ExprCtx().MakeType<TOptionalExprType>(ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool)) : nullptr);
     cmpFunc->SetFunctionType(TProgram::YQL_KERNEL);
-    cmpFunc->SetKernelIdx(idx);
-    cmpFunc->AddArguments()->SetId(leftColumnId);
-    cmpFunc->AddArguments()->SetId(rightColumnId);
-    return command;
+    cmpFunc->SetKernelIdx(kernel.first);
+    cmpFunc->AddArguments()->SetId(leftColumn.Id);
+    cmpFunc->AddArguments()->SetId(rightColumn.Id);
+    return {command, kernel.second};
 }
 
-TProgram::TAssignment* CompileComparison(const TKqpOlapFilterCompare& comparison, TKqpOlapCompileContext& ctx)
+const TProgram::TAssignment* CompileYqlKernelAnyComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOlapCompileContext& ctx)
+{
+    return CompileYqlKernelBinaryOperation(comparison, ctx).Assigment;
+}
+
+TTypedColumn GetOrCreateColumnIdAndType(const TExprBase& node, TKqpOlapCompileContext& ctx) {
+    if (const auto& maybeBinaryOp = node.Maybe<TKqpOlapFilterBinaryOp>()) {
+        const auto& pair = CompileYqlKernelBinaryOperation(maybeBinaryOp.Cast(), ctx);
+        return {pair.Assigment->GetColumn().GetId(), pair.Type};
+    }
+
+    return {GetOrCreateColumnId(node, ctx), ctx.GetArgType(node)};
+}
+
+const TProgram::TAssignment* CompileComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOlapCompileContext& ctx)
 {
     if constexpr (NKikimr::NSsa::RuntimeVersion >= 4U) {
         if (ctx.CheckYqlCompatibleArgsTypes(comparison)) {
@@ -567,7 +621,7 @@ TProgram::TAssignment* CompileComparison(const TKqpOlapFilterCompare& comparison
     }
 }
 
-TProgram::TAssignment* InvertResult(TProgram::TAssignment* command, TKqpOlapCompileContext& ctx)
+const TProgram::TAssignment* InvertResult(TProgram::TAssignment* command, TKqpOlapCompileContext& ctx)
 {
     auto *const notCommand = ctx.CreateAssignCmd();
     auto *const notFunc = notCommand->MutableFunction();
@@ -578,7 +632,7 @@ TProgram::TAssignment* InvertResult(TProgram::TAssignment* command, TKqpOlapComp
 }
 
 template<bool Empty = false>
-TProgram::TAssignment* CompileExists(const TKqpOlapFilterExists& exists, TKqpOlapCompileContext& ctx)
+const TProgram::TAssignment* CompileExists(const TKqpOlapFilterExists& exists, TKqpOlapCompileContext& ctx)
 {
     const ui32 columnId = GetOrCreateColumnId(exists.Column(), ctx);
     auto *const command = ctx.CreateAssignCmd();
@@ -603,7 +657,7 @@ TProgram::TAssignment* CompileExists(const TKqpOlapFilterExists& exists, TKqpOla
     }
 }
 
-TProgram::TAssignment* CompileJsonExists(const TKqpOlapJsonExists& jsonExistsCallable, TKqpOlapCompileContext& ctx) {
+const TProgram::TAssignment* CompileJsonExists(const TKqpOlapJsonExists& jsonExistsCallable, TKqpOlapCompileContext& ctx) {
     Y_ABORT_UNLESS(NKikimr::NSsa::RuntimeVersion >= 3, "JSON_EXISTS pushdown is supported starting from the v3 of SSA runtime.");
 
     ui32 columnId = GetOrCreateColumnId(jsonExistsCallable.Column(), ctx);
@@ -626,7 +680,7 @@ TProgram::TAssignment* CompileJsonExists(const TKqpOlapJsonExists& jsonExistsCal
 }
 
 template<typename TFunc>
-TProgram::TAssignment* BuildLogicalProgram(const TExprNode::TChildrenType& args, const TFunc function, TKqpOlapCompileContext& ctx)
+const TProgram::TAssignment* BuildLogicalProgram(const TExprNode::TChildrenType& args, const TFunc function, TKqpOlapCompileContext& ctx)
 {
     const auto childrenCount = args.size();
     if (childrenCount == 1) {
@@ -635,8 +689,8 @@ TProgram::TAssignment* BuildLogicalProgram(const TExprNode::TChildrenType& args,
         return CompileCondition(TExprBase(args.front()), ctx);
     }
 
-    TProgram::TAssignment* left = nullptr;
-    TProgram::TAssignment* right = nullptr;
+    const TProgram::TAssignment* left = nullptr;
+    const TProgram::TAssignment* right = nullptr;
 
     if (childrenCount == 2) {
         // Nice, we can build logical operation with two child as expected
@@ -668,8 +722,8 @@ TProgram::TAssignment* BuildLogicalProgram(const TExprNode::TChildrenType& args,
     return logicalOp;
 }
 
-TProgram::TAssignment* CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx) {
-    if (const auto maybeCompare = condition.Maybe<TKqpOlapFilterCompare>()) {
+const TProgram::TAssignment* CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx) {
+    if (const auto maybeCompare = condition.Maybe<TKqpOlapFilterBinaryOp>()) {
         return CompileComparison(maybeCompare.Cast(), ctx);
     }
 
@@ -727,8 +781,7 @@ TProgram::TAssignment* CompileCondition(const TExprBase& condition, TKqpOlapComp
 }
 
 void CompileFilter(const TKqpOlapFilter& filterNode, TKqpOlapCompileContext& ctx) {
-    TProgram::TAssignment* condition = CompileCondition(filterNode.Condition(), ctx);
-
+    auto* condition = CompileCondition(filterNode.Condition(), ctx);
     auto* filter = ctx.CreateFilter();
     filter->MutablePredicate()->SetId(condition->GetColumn().GetId());
 }

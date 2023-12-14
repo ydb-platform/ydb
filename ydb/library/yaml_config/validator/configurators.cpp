@@ -6,9 +6,7 @@
 #include <util/string/split.h>
 #include <util/generic/hash.h>
 
-using namespace NKikimr::NYamlConfig::NValidator;
-
-namespace NYamlConfig::NValidator {
+namespace NKikimr::NYamlConfig::NValidator {
 namespace Configurators {
 
 std::function<void(TInt64Builder&)> nonNegative() {

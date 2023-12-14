@@ -178,6 +178,7 @@ struct TDqSettings {
         SAVE_SETTING(EnableChannelStats);
         SAVE_SETTING(ExportStats);
         SAVE_SETTING(TaskRunnerStats);
+        SAVE_SETTING(SpillingEngine);
 #undef SAVE_SETTING
     }
 

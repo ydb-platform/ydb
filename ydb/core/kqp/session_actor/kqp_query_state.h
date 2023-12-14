@@ -82,7 +82,7 @@ public:
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     TKqpCompileResult::TConstPtr CompileResult;
-    NKqpProto::TKqpStatsCompile CompileStats;
+    NKqpProto::TKqpStatsCompile CompileStats; // TODO
     TIntrusivePtr<TKqpTransactionContext> TxCtx;
     TQueryData::TPtr QueryData;
 
@@ -95,7 +95,7 @@ public:
     TInstant StartTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
 
-    NKqpProto::TKqpStatsQuery Stats;
+    NKqpProto::TKqpStatsQuery Stats; // TODO
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 

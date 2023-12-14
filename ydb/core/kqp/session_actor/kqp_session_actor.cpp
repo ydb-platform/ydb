@@ -626,7 +626,7 @@ public:
         }
 
         Counters->ReportTxCreated(Settings.DbCounters);
-        Counters->ReportBeginTransaction(Settings.DbCounters, Transactions.EvictedTx, Transactions.Size(), Transactions.ToBeAbortedSize());
+        Counters->ReportBeginTransaction(Settings.DbCounters, Transactions.EvictedTx, Transactions.Size(), Transactions.ToBeAbortedSize()); // TODO: check 
     }
 
     bool PrepareQueryTransaction() {
@@ -674,7 +674,7 @@ public:
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
-        auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(),
+        auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(), //TODO:
             EKikimrQueryType::Dml);
         if (!success) {
             YQL_ENSURE(!issues.Empty());

@@ -291,7 +291,6 @@ public:
 
 struct TTxId {
     TULID Id;
-    TString HumanStr;
 
     TTxId()
         : Id(TULID::Min())
@@ -299,14 +298,11 @@ struct TTxId {
 
     TTxId(const TULID& other)
         : Id(other)
-        , HumanStr(Id.ToString())
     {}
 
     static TTxId FromString(const TString& str) {
         TTxId res;
-        if (res.Id.ParseString(str)) {
-            res.HumanStr = str;
-        }
+        YQL_ENSURE(res.Id.ParseString(str));
         return res;
     }
 
@@ -315,46 +311,95 @@ struct TTxId {
     }
 
     TString GetHumanStr() {
-        return HumanStr;
+        return Id.ToString();
     }
 };
 
 class TTransactionsCache {
-    TLRUCache<TTxId, TIntrusivePtr<TKqpTransactionContext>> Active;
+    struct TCachedTransaction {
+        TTxId Id;
+        TIntrusivePtr<TKqpTransactionContext> Context;
+    };
+    ui64 ActiveSize;
+    TVector<TCachedTransaction> Active;
     std::deque<TIntrusivePtr<TKqpTransactionContext>> ToBeAborted;
+
+    TCachedTransaction* FindTransactionById(const TTxId& id) {
+        for (auto& cachedTransaction : Active) {
+            if (cachedTransaction.Context && cachedTransaction.Id == id) {
+                return &cachedTransaction;
+            }
+        }
+        return nullptr;
+    }
+
+    TCachedTransaction* FindOldestTransaction() {
+        TCachedTransaction* result = nullptr;
+        for (auto& cachedTransaction : Active) {
+            if (cachedTransaction.Context && (!result || result->Context->LastAccessTime < cachedTransaction.Context->LastAccessTime)) {
+                result = &cachedTransaction;
+            }
+        }
+        return result;
+    }
+
+    bool Insert(const TTxId& id, TIntrusivePtr<TKqpTransactionContext> context) {
+        for (auto& cachedTransaction : Active) {
+            if (!cachedTransaction.Context) {
+                cachedTransaction.Id = id;
+                cachedTransaction.Context = std::move(context);
+                ++ActiveSize;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    TIntrusivePtr<TKqpTransactionContext> ReleaseContext(TCachedTransaction* cachedTransaction) {
+        if (cachedTransaction->Context) {
+            auto result = std::move(cachedTransaction->Context);
+            cachedTransaction->Context = nullptr;
+            --ActiveSize;
+            return result;
+        }
+        return nullptr;
+    }
+
 public:
     ui64 EvictedTx = 0;
     TDuration IdleTimeout;
 
     TTransactionsCache(size_t size, TDuration idleTimeout)
-        : Active(size)
+        : ActiveSize(0)
+        , Active(size)
         , IdleTimeout(idleTimeout)
     {}
 
-    size_t Size() {
-        return Active.Size();
+    size_t Size() const {
+        return ActiveSize;
     }
 
-    size_t MaxSize() {
-        return Active.GetMaxSize();
+    size_t MaxSize() const {
+        return Active.size();
     }
 
     TIntrusivePtr<TKqpTransactionContext> Find(const TTxId& id) {
-        if (auto it = Active.Find(id); it != Active.End()) {
-            it.Value()->Touch();
-            return *it;
+        auto* cachedTransaction = FindTransactionById(id);
+        if (cachedTransaction) {
+            cachedTransaction->Context->Touch();
+            return cachedTransaction->Context;
         } else {
-            return {};
+            return nullptr;
         }
     }
 
-    TIntrusivePtr<TKqpTransactionContext> ReleaseTransaction(const TTxId& txId) {
-        if (auto it = Active.FindWithoutPromote(txId); it != Active.End()) {
-            auto ret = std::move(it.Value());
-            Active.Erase(it);
-            return ret;
+    TIntrusivePtr<TKqpTransactionContext> ReleaseTransaction(const TTxId& id) {
+        auto* cachedTransaction = FindTransactionById(id);
+        if (cachedTransaction) {
+            return ReleaseContext(cachedTransaction);
+        } else {
+            return nullptr;
         }
-        return {};
     }
 
     void AddToBeAborted(TIntrusivePtr<TKqpTransactionContext> ctx) {
@@ -362,20 +407,19 @@ public:
     }
 
     bool RemoveOldTransactions() {
-        if (Active.Size() < Active.GetMaxSize()) {
+        if (ActiveSize < Active.size()) {
+            return true;
+        }
+
+        auto* oldest = FindOldestTransaction();
+        auto currentIdle = TInstant::Now() - oldest->Context->LastAccessTime;
+        if (currentIdle >= IdleTimeout) {
+            oldest->Context->Invalidate();
+            ToBeAborted.emplace_back(ReleaseContext(oldest));
+            ++EvictedTx;
             return true;
         } else {
-            auto it = Active.FindOldest();
-            auto currentIdle = TInstant::Now() - it.Value()->LastAccessTime;
-            if (currentIdle >= IdleTimeout) {
-                it.Value()->Invalidate();
-                ToBeAborted.emplace_back(std::move(it.Value()));
-                Active.Erase(it);
-                ++EvictedTx;
-                return true;
-            } else {
-                return false;
-            }
+            return false;
         }
     }
 
@@ -383,15 +427,16 @@ public:
         if (!RemoveOldTransactions()) {
             return false;
         }
-        return Active.Insert(std::make_pair(txId, txCtx));
+        return Insert(txId, std::move(txCtx));
     }
 
     void FinalCleanup() {
-        for (auto it = Active.Begin(); it != Active.End(); ++it) {
-            it.Value()->Invalidate();
-            ToBeAborted.emplace_back(std::move(it.Value()));
+        for (auto& item : Active) {
+            if (item.Context) {
+                item.Context->Invalidate();
+                ToBeAborted.emplace_back(ReleaseContext(&item));
+            }
         }
-        Active.Clear();
     }
 
     size_t ToBeAbortedSize() {

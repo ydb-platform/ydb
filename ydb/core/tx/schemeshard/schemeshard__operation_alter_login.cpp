@@ -98,7 +98,7 @@ public:
                         db.Table<Schema::LoginSidMembers>().Key(addGroupMembership.GetGroup(), addGroupMembership.GetMember()).Update();
                         result->SetStatus(NKikimrScheme::StatusSuccess);
                         if (response.Notice) {
-                            result->AddNoticeIssue(response.Notice);
+                            result->AddNotice(response.Notice);
                         }
                     }
                     break;
@@ -115,7 +115,7 @@ public:
                         db.Table<Schema::LoginSidMembers>().Key(removeGroupMembership.GetGroup(), removeGroupMembership.GetMember()).Delete();
                         result->SetStatus(NKikimrScheme::StatusSuccess);
                         if (response.Warning) {
-                            result->AddWarningIssue(response.Warning);
+                            result->AddWarning(response.Warning);
                         }
                     }
                     break;

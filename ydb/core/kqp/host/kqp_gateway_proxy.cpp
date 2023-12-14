@@ -1143,8 +1143,6 @@ private:
                     phyTx.MutableSchemeOperation()->MutableRemoveGroupMembership()->Swap(&schemeTx);
                     break;
                 }
-                default:
-                    break;
             }
         }
     }

@@ -9,6 +9,7 @@
 #include <openssl/rand.h>
 
 #include <util/generic/singleton.h>
+#include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/hex.h>
 
@@ -162,7 +163,7 @@ TLoginProvider::TBasicResponse TLoginProvider::AddGroupMembership(const TAddGrou
     TSidRecord& group = itGroupModify->second;
 
     if (group.Members.count(request.Member)) {
-        response.Notice = "Role \"" + request.Member + "\" is already a member of role \"" + group.Name + "\"";
+        response.Notice = TStringBuilder() << "Role \"" << request.Member << "\" is already a member of role \"" << group.Name << "\"";
     } else {
         group.Members.insert(request.Member);
     }
@@ -184,7 +185,7 @@ TLoginProvider::TBasicResponse TLoginProvider::RemoveGroupMembership(const TRemo
     TSidRecord& group = itGroupModify->second;
 
     if (!group.Members.count(request.Member)) {
-        response.Warning = "Role \"" + request.Member + "\" is not a member of role \"" + group.Name + "\"";
+        response.Warning = TStringBuilder() << "Role \"" << request.Member << "\" is not a member of role \"" << group.Name << "\"";
     } else {
         group.Members.erase(request.Member);
     }

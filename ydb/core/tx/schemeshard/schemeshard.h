@@ -227,12 +227,12 @@ struct TEvSchemeShard {
             Record.SetReason(errStr);
         }
 
-        void AddWarningIssue(const TString& text) {
+        void AddWarning(const TString& text) {
             auto issue = MakeIssue(NKikimrIssues::TIssuesIds::WARNING, text);
             NYql::IssueToMessage(issue, Record.AddIssues());
         }
 
-        void AddNoticeIssue(const TString& text) {
+        void AddNotice(const TString& text) {
             auto issue = MakeIssue(NKikimrIssues::TIssuesIds::INFO, text);
             NYql::IssueToMessage(issue, Record.AddIssues());
         }

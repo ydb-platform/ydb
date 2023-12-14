@@ -51,7 +51,7 @@ struct TImportFileSettings : public TOperationRequestSettings<TImportFileSetting
     FLUENT_SETTING_DEFAULT(bool, NewlineDelimited, false);
     FLUENT_SETTING_DEFAULT(TString, HeaderRow, "");
     FLUENT_SETTING_DEFAULT(TString, Delimiter, DefaultDelimiter);
-    FLUENT_SETTING_DEFAULT(TString, NullValue, "");
+    FLUENT_SETTING_DEFAULT(std::optional<TString>, NullValue, std::nullopt);
 };
 
 class TImportFileClient {

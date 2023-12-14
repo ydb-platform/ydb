@@ -17,10 +17,10 @@ public:
     TCsvParser& operator=(TCsvParser&&) = default;
     ~TCsvParser() = default;
 
-    TCsvParser(TString&& headerRow, const char delimeter, const TString& nullValue,
+    TCsvParser(TString&& headerRow, const char delimeter, const std::optional<TString>& nullValue,
                const std::map<TString, TType>* paramTypes = nullptr,
                const std::map<TString, TString>* paramSources = nullptr);
-    TCsvParser(TVector<TString>&& header, const char delimeter, const TString& nullValue,
+    TCsvParser(TVector<TString>&& header, const char delimeter, const std::optional<TString>& nullValue,
                const std::map<TString, TType>* paramTypes = nullptr,
                const std::map<TString, TString>* paramSources = nullptr);
 
@@ -34,7 +34,7 @@ private:
     TVector<TString> Header;
     TString HeaderRow;
     char Delimeter;
-    TString NullValue;
+    std::optional<TString> NullValue;
     const std::map<TString, TType>* ParamTypes;
     const std::map<TString, TString>* ParamSources;
 };

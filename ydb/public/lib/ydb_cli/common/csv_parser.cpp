@@ -10,7 +10,7 @@ namespace {
 
 class TCsvToYdbConverter {
 public:
-    explicit TCsvToYdbConverter(TTypeParser& parser, const TString& nullValue)
+    explicit TCsvToYdbConverter(TTypeParser& parser, const std::optional<TString>& nullValue)
         : Parser(parser)
         , NullValue(nullValue)
     {
@@ -106,15 +106,30 @@ public:
         case EPrimitiveType::DyNumber:
             Builder.DyNumber(token);
             break;
-        case EPrimitiveType::Date:
-            Builder.Date(TInstant::Days(GetArithmetic<ui16>(token)));
+        case EPrimitiveType::Date: {
+            TInstant date;
+            if (!TInstant::TryParseIso8601(token, date)) {
+                date = TInstant::Days(GetArithmetic<ui16>(token));
+            }
+            Builder.Date(date);
             break;
-        case EPrimitiveType::Datetime:
-            Builder.Datetime(TInstant::Seconds(GetArithmetic<ui32>(token)));
+        }
+        case EPrimitiveType::Datetime: {
+            TInstant datetime;
+            if (!TInstant::TryParseIso8601(token, datetime)) {
+                datetime = TInstant::Seconds(GetArithmetic<ui32>(token));
+            }
+            Builder.Datetime(datetime);
             break;
-        case EPrimitiveType::Timestamp:
-            Builder.Timestamp(TInstant::MicroSeconds(GetArithmetic<ui64>(token)));
+        }
+        case EPrimitiveType::Timestamp: {
+            TInstant timestamp;
+            if (!TInstant::TryParseIso8601(token, timestamp)) {
+                timestamp = TInstant::MicroSeconds(GetArithmetic<ui64>(token));
+            }
+            Builder.Timestamp(timestamp);
             break;
+        }
         case EPrimitiveType::Interval:
             Builder.Interval(GetArithmetic<i64>(token));
             break;
@@ -144,7 +159,7 @@ public:
         }
         case TTypeParser::ETypeKind::Optional: {
             Parser.OpenOptional();
-            if (token == NullValue) {
+            if (NullValue && token == NullValue) {
                 Builder.EmptyOptional(GetType());
             } else {
                 Builder.BeginOptional();
@@ -247,13 +262,13 @@ public:
 
 private:
     TTypeParser& Parser;
-    const TString NullValue = "";
+    const std::optional<TString> NullValue = "";
     TValueBuilder Builder;
 };
 
 }
 
-TCsvParser::TCsvParser(TString&& headerRow, const char delimeter, const TString& nullValue,
+TCsvParser::TCsvParser(TString&& headerRow, const char delimeter, const std::optional<TString>& nullValue,
                        const std::map<TString, TType>* paramTypes,
                        const std::map<TString, TString>* paramSources) 
     : HeaderRow(std::move(headerRow))
@@ -266,7 +281,7 @@ TCsvParser::TCsvParser(TString&& headerRow, const char delimeter, const TString&
     Header = static_cast<TVector<TString>>(splitter);
 }
 
-TCsvParser::TCsvParser(TVector<TString>&& header, const char delimeter, const TString& nullValue,
+TCsvParser::TCsvParser(TVector<TString>&& header, const char delimeter, const std::optional<TString>& nullValue,
                        const std::map<TString, TType>* paramTypes,
                        const std::map<TString, TString>* paramSources) 
     : Header(std::move(header))
@@ -333,7 +348,7 @@ void TCsvParser::GetValue(TString&& data, TValueBuilder& builder, const TType& t
     parser.OpenStruct();
     while (parser.TryNextMember()) {
         TString name = parser.GetMemberName();
-        if (name == NullValue) {
+        if (name == "__ydb_skip_column_name") {
             continue;
         }
         auto fieldIt = fields.find(name);
@@ -353,7 +368,7 @@ TType TCsvParser::GetColumnsType() const {
         if (ParamTypes->find(colName) != ParamTypes->end()) {
             builder.AddMember(colName, ParamTypes->at(colName));
         } else {
-            builder.AddMember(NullValue, TTypeBuilder().Build());
+            builder.AddMember("__ydb_skip_column_name", TTypeBuilder().Build());
         }
     }
     builder.EndStruct();

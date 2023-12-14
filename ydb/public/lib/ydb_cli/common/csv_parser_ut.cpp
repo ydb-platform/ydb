@@ -73,6 +73,9 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
     }
 
     Y_UNIT_TEST(DateTypesTestParams) {
+        CommonTestParams("name", "\"2001-01-01\"", {{"$name", TValueBuilder().Date(TInstant::ParseIso8601("2001-01-01")).Build()}});
+        CommonTestParams("name", "\"2001-01-01T12:12:12\"", {{"$name", TValueBuilder().Datetime(TInstant::ParseIso8601("2001-01-01T12:12:12")).Build()}});
+        CommonTestParams("name", "\"2001-01-01T12:12:12.111111\"", {{"$name", TValueBuilder().Timestamp(TInstant::ParseIso8601("2001-01-01T12:12:12.111111")).Build()}});
         CommonTestParams("name", "12000", {{"$name", TValueBuilder().Date(TInstant::Days(12000)).Build()}});
         CommonTestParams("name", "1200000", {{"$name", TValueBuilder().Datetime(TInstant::Seconds(1200000)).Build()}});
         CommonTestParams("name", "120000000", {{"$name", TValueBuilder().Timestamp(TInstant::MicroSeconds(120000000)).Build()}});
@@ -83,6 +86,9 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
     }
 
     Y_UNIT_TEST(DateTypesTestValue) {
+        CommonTestValue("name", "\"2001-01-01\"", MakeStruct("name", TValueBuilder().Date(TInstant::ParseIso8601("2001-01-01")).Build()));
+        CommonTestValue("name", "\"2001-01-01T12:12:12\"", MakeStruct("name", TValueBuilder().Datetime(TInstant::ParseIso8601("2001-01-01T12:12:12")).Build()));
+        CommonTestValue("name", "\"2001-01-01T12:12:12.111111\"", MakeStruct("name", TValueBuilder().Timestamp(TInstant::ParseIso8601("2001-01-01T12:12:12.111111")).Build()));
         CommonTestValue("name", "12000", MakeStruct("name", TValueBuilder().Date(TInstant::Days(12000)).Build()));
         CommonTestValue("name", "1200000", MakeStruct("name", TValueBuilder().Datetime(TInstant::Seconds(1200000)).Build()));
         CommonTestValue("name", "120000000", MakeStruct("name", TValueBuilder().Timestamp(TInstant::MicroSeconds(120000000)).Build()));

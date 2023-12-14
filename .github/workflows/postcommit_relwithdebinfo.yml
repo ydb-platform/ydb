@@ -1,4 +1,4 @@
-name: Postcommit check
+name: Postcommit_relwithdebinfo
 on: 
   push:
     branches:
@@ -10,14 +10,10 @@ on:
       - '*'
 jobs:
   build_and_test:
-    strategy:
-      fail-fast: false
-      matrix:
-        build_preset: ["relwithdebinfo", "release-asan"]
-    name: Build and test ${{ matrix.build_preset }}
+    name: Build and test relwithdebinfo
     uses: ./.github/workflows/build_and_test_ya_provisioned.yml
     with:
-      build_preset: ${{ matrix.build_preset }}
+      build_preset: "relwithdebinfo"
       build_target: "ydb/"
       test_size: "small,medium"
       test_type: "unittest,py3test,py2test,pytest"

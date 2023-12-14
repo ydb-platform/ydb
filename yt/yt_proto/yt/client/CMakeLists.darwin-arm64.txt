@@ -246,6 +246,18 @@ get_built_tool_path(
   contrib/tools/protoc/plugins/cpp_styleguide
   cpp_styleguide
 )
+get_built_tool_path(
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc/bin
+  protoc
+)
+get_built_tool_path(
+  TOOL_cpp_styleguide_bin
+  TOOL_cpp_styleguide_dependency
+  contrib/tools/protoc/plugins/cpp_styleguide
+  cpp_styleguide
+)
 
 add_library(yt_proto-yt-client)
 target_include_directories(yt_proto-yt-client PUBLIC
@@ -260,6 +272,7 @@ target_link_libraries(yt_proto-yt-client PUBLIC
 target_proto_messages(yt_proto-yt-client PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/client/api/rpc_proxy/proto/api_service.proto
   ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/client/api/rpc_proxy/proto/discovery_service.proto
+  ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/client/bundle_controller/proto/bundle_controller_service.proto
   ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/client/cell_master/proto/cell_directory.proto
   ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/client/chaos_client/proto/replication_card.proto
   ${CMAKE_SOURCE_DIR}/yt/yt_proto/yt/client/chunk_client/proto/data_statistics.proto

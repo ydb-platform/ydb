@@ -2033,7 +2033,7 @@ TFuture<void> TClient::AlterQuery(
     ThrowUnimplemented("AlterQuery");
 }
 
-TFuture<TBundleConfigDescriptor> TClient::GetBundleConfig(
+TFuture<TBundleConfigDescriptorPtr> TClient::GetBundleConfig(
     const TString& /*bundleName*/,
     const TGetBundleConfigOptions& /*options*/)
 {

@@ -678,7 +678,7 @@ public:
 class TClientCommandTenantQuotas : public TClientCommandTree {
 public:
     TClientCommandTenantQuotas()
-        : TClientCommandTree("quotas", {}, "")
+        : TClientCommandTree("quotas", {}, "Manage database size quotas")
     {
         AddCommand(std::make_unique<TClientCommandTenantChangeQuotas>());
     }

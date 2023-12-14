@@ -163,6 +163,9 @@ bool RightJoinSideAllowed(const TString& joinType) {
     return joinType != "LeftOnly";
 }
 
+bool RightJoinSideOptional(const TString& joinType) {
+    return joinType == "Left";
+}
 } // namespace
 
 TKqpProgramBuilder::TKqpProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry)
@@ -355,7 +358,16 @@ TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, c
         for (ui32 i = 0; i < rightRowType->GetMembersCount(); ++i) {
             TString newMemberName = rightLabel.empty() ? TString(rightRowType->GetMemberName(i))
                 : TString::Join(rightLabel, ".", rightRowType->GetMemberName(i));
-            rowTypeBuilder.Add(newMemberName, rightRowType->GetMemberType(i));
+
+            const bool makeOptional = RightJoinSideOptional(joinType)
+                && rightRowType->GetMemberType(i)->GetKind() != TType::EKind::Optional
+                && rightRowType->GetMemberType(i)->GetKind() != TType::EKind::Pg;
+
+            TType* memberType = makeOptional
+                ? TOptionalType::Create(rightRowType->GetMemberType(i), GetTypeEnvironment())
+                : rightRowType->GetMemberType(i);
+
+            rowTypeBuilder.Add(newMemberName, memberType);
         }
     }
 

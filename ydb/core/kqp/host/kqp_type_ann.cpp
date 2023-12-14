@@ -27,6 +27,10 @@ bool RightJoinSideAllowed(const TStringBuf& joinType) {
     return joinType != "LeftOnly";
 }
 
+bool RightJoinSideOptional(const TStringBuf& joinType) {
+    return joinType == "Left";
+}
+
 const TTypeAnnotationNode* MakeKqpEffectType(TExprContext& ctx) {
     return ctx.MakeType<TResourceExprType>(KqpEffectTag);
 }
@@ -1379,8 +1383,14 @@ TStatus AnnotateStreamIdxLookupJoin(const TExprNode::TPtr& node, TExprContext& c
 
     if (RightJoinSideAllowed(joinType.Value())) {
         for (const auto& member : rightDataType->Cast<TStructExprType>()->GetItems()) {
+            const bool makeOptional = RightJoinSideOptional(joinType.Value()) && !member->GetItemType()->IsOptionalOrNull();
+
+            const TTypeAnnotationNode* memberType = makeOptional
+                ? ctx.MakeType<TOptionalExprType>(member->GetItemType())
+                : member->GetItemType();
+
             resultStructItems.emplace_back(
-                ctx.MakeType<TItemExprType>(TString::Join(rightLabel.Value(), ".", member->GetName()), member->GetItemType())
+                ctx.MakeType<TItemExprType>(TString::Join(rightLabel.Value(), ".", member->GetName()), memberType)
             );
         }
     }
@@ -1704,8 +1714,14 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
 
     if (RightJoinSideAllowed(joinType.Value())) {
         for (const auto& item : rightRowType->Cast<TStructExprType>()->GetItems()) {
+            const bool makeOptional = RightJoinSideOptional(joinType.Value()) && !item->GetItemType()->IsOptionalOrNull();
+
+            const TTypeAnnotationNode* itemType = makeOptional
+                ? ctx.MakeType<TOptionalExprType>(item->GetItemType())
+                : item->GetItemType();
+
             resultStructItems.emplace_back(
-                ctx.MakeType<TItemExprType>(TString::Join(rightLabel.Value(), ".", item->GetName()), item->GetItemType())
+                ctx.MakeType<TItemExprType>(TString::Join(rightLabel.Value(), ".", item->GetName()), itemType)
             );
         }
     }

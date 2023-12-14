@@ -150,8 +150,13 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
             TSysTables::TTableColumnInfo{
                 keyColumn.GetName(),
                 keyColumn.GetId(),
-                NScheme::TTypeInfo{static_cast<NScheme::TTypeId>(keyColumn.GetTypeId())},
-                "",
+                NScheme::TTypeInfo{
+                    static_cast<NScheme::TTypeId>(keyColumn.GetTypeId()),
+                    keyColumn.GetTypeId() == NScheme::NTypeIds::Pg
+                        ? NPg::TypeDescFromPgTypeId(keyColumn.GetTypeInfo().GetPgTypeId())
+                        : nullptr
+                },
+                keyColumn.GetTypeInfo().GetPgTypeMod(),
                 keyOrder++
             }
         );
@@ -169,7 +174,12 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
         Columns.emplace_back(TSysTables::TTableColumnInfo{
             column.GetName(),
             column.GetId(),
-            NScheme::TTypeInfo{static_cast<NScheme::TTypeId>(column.GetTypeId())}
+            NScheme::TTypeInfo{static_cast<NScheme::TTypeId>(column.GetTypeId()),
+                column.GetTypeId() == NScheme::NTypeIds::Pg
+                    ? NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())
+                    : nullptr,
+            },
+            column.GetTypeInfo().GetPgTypeMod()
         });
     }
 }

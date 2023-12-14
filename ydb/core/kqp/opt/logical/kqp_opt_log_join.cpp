@@ -614,7 +614,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         return {};
     }
 
-    const bool useStreamIndexLookupJoin = kqpCtx.IsDataQuery()
+    const bool useStreamIndexLookupJoin = (kqpCtx.IsDataQuery() || kqpCtx.IsGenericQuery())
         && kqpCtx.Config->EnableKqpDataQueryStreamIdxLookupJoin
         && supportedStreamJoinKinds.contains(join.JoinType().Value());
 

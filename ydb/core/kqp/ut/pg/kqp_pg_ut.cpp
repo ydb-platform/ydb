@@ -2484,8 +2484,14 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(JoinWithQueryService) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(JoinWithQueryService, StreamLookup) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(serverSettings);
         auto client = kikimr.GetTableClient();
         auto db = kikimr.GetQueryClient();
         auto settings = NYdb::NQuery::TExecuteQuerySettings()
@@ -2506,8 +2512,8 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             const auto query = Q_(R"(
                 --!syntax_pg
                 CREATE TABLE t2(
-                id2 int4 PRIMARY KEY,
-                val2 text
+                id2 int4 PRIMARY KEY NOT NULL,
+                val2 text NOT NULL
                 ))");
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

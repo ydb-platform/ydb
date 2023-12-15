@@ -49,7 +49,6 @@ with_kotlinc_plugin_serialization="bool"
 [attrs.dir]
 
 [attrs.induced]
-consumer_classpath="list"
 consumer-classpath="str"
 consumer-jar="str"
 consumer-type="str"

@@ -71,6 +71,7 @@ struct TTotalStatistics {
     TAggregate IngressRows;
     TAggregate EgressBytes;
     TAggregate EgressRows;
+    TAggregate Tasks;
     TAggregates Aggregates;
 };
 
@@ -149,6 +150,8 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
                     totals.OutputRows.Add(sum);
                 } else if (name == "TotalOutputBytes") {
                     totals.OutputBytes.Add(sum);
+                } else if (name == "Tasks") {
+                    totals.Tasks.Add(sum);
                 }
                 writer.OnKeyedItem(name);
                 writer.OnBeginMap();
@@ -208,6 +211,8 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
                         totals.CpuTimeUs.Add(*sum);
                     } else if (name == "SourceCpuTimeUs") {
                         totals.SourceCpuTimeUs.Add(*sum);
+                    } else if (name == "Tasks") {
+                        totals.Tasks.Add(*sum);
                     }
                 }
             }
@@ -363,6 +368,7 @@ TString GetV1StatFromV2Plan(const TString& plan) {
                         totals.IngressRows.Write(writer, "IngressRows");
                         totals.EgressBytes.Write(writer, "EgressBytes");
                         totals.EgressRows.Write(writer, "EgressRows");
+                        totals.Tasks.Write(writer, "Tasks");
                         writer.OnEndMap();
                     }
                 }

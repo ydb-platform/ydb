@@ -263,18 +263,18 @@ TString GetPrettyStatistics(const TString& statistics) {
             if (p.first.StartsWith("Graph=") || p.first.StartsWith("Precompute=")) {
                 writer.OnKeyedItem(p.first);
                 writer.OnBeginMap();
-                    RemapNode(writer, p.second, "StagesCount", "StagesCount");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.TasksCount", "TasksCount");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.BuildCpuTimeUs", "BuildCpuTimeUs");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.ComputeCpuTimeUs", "ComputeCpuTimeUs");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.Tasks", "Tasks");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.CpuTimeUs", "CpuTimeUs");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.SourceCpuTimeUs", "SourceCpuTimeUs");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressS3SourceBytes", "IngressObjectStorageBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressS3SinkBytes", "EgressObjectStorageBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressPqSourceBytes", "IngressStreamBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressPqSinkBytes", "EgressStreamBytes");
-                    RemapNode(writer, p.second, "IngressBytes", "IngressBytes");
-                    RemapNode(writer, p.second, "EgressBytes", "EgressBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressBytes", "IngressBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressRows", "IngressRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.InputBytes", "InputBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.InputRows", "InputRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.OutputBytes", "OutputBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.OutputRows", "OutputRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.ResultBytes", "ResultBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.ResultRows", "ResultRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressBytes", "EgressBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressRows", "EgressRows");
                 writer.OnEndMap();
             }
             // YQv2
@@ -282,8 +282,8 @@ TString GetPrettyStatistics(const TString& statistics) {
             else {
                 writer.OnKeyedItem(p.first);
                 writer.OnBeginMap();
-                    AggregateNode(writer, p.second, "Tasks", "Tasks");
-                    AggregateNode(writer, p.second, "CpuTimeUs", "CpuTimeUs");
+                    RemapNode(writer, p.second, "Tasks", "Tasks");
+                    RemapNode(writer, p.second, "CpuTimeUs", "CpuTimeUs");
                     RemapNode(writer, p.second, "IngressBytes", "IngressBytes");
                     RemapNode(writer, p.second, "IngressRows", "IngressRows");
                     RemapNode(writer, p.second, "InputBytes", "InputBytes");

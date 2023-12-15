@@ -52,6 +52,12 @@ runs:
           extra_params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
           extra_params+=(--bazel-remote-password "${{ inputs.bazel_remote_password }}")
           extra_params+=(--bazel-remote-put --dist-cache-evict-bins --add-result .o --add-result .a)
+          sed -i -E 's/USE_AIO\s*=.*/USE_AIO = "dynamic"/g;
+                     s/USE_ICONV\s*=.*/USE_ICONV = "dynamic"/g;
+                     s/USE_IDN\s*=.*/USE_IDN = "dynamic"/g' build/internal/ya.conf
+          echo 'Put in cache enabled ==> use dynamic vendored libs. build/internal/ya.conf after patch:'
+          cat build/internal/ya.conf
+          echo
         fi
         
         case "${{ inputs.build_preset }}" in

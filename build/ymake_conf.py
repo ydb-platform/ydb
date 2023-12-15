@@ -1987,6 +1987,9 @@ class MSVCCompiler(MSVC, Compiler):
         cxx_warnings = []
 
         if self.tc.use_clang:
+            if self.tc.from_arcadia:
+                flags += ['-imsvc{}/share/include'.format(self.tc.name_marker)]
+
             flags += [
                 # Allow <windows.h> to be included via <Windows.h> in case-sensitive file-systems.
                 '-fcase-insensitive-paths',

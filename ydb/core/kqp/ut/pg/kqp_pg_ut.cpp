@@ -1181,7 +1181,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(InsertFromSelect) {
+    Y_UNIT_TEST(InsertFromSelect_Simple) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
 
         auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec) {
@@ -1199,12 +1199,119 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 --!syntax_pg
                 INSERT INTO )" << emptyTableName << " (key, value) SELECT * FROM \"" << tableName << "\";"
             , TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::INTERNAL_ERROR);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            result = ExecutePgSelect(kikimr, emptyTableName);
+            ValidatePgYqlResult(result, spec);
         };
 
         for (const auto& spec : typeSpecs) {
             Cerr << spec.TypeId << Endl;
             testSingleType(spec);
+        }
+    }
+
+    Y_UNIT_TEST(InsertFromSelect_NoReorder) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
+         {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE t (
+                    columnA      int4 PRIMARY KEY,
+                    columnB      int4 NOT NULL
+            ))", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                INSERT INTO t SELECT 1 as columnC, 2 as columnA;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());    
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                INSERT INTO t (columnA, columnB) SELECT 2 as columnB, 4 as columnA;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());    
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM t;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            Cerr << "Result:\n" << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            CompareYson(R"(
+                [["1";"2"];["2";"4"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(InsertFromSelect_Serial) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
+         {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE movies (
+                    id          serial PRIMARY KEY,
+                    title       text NOT NULL
+            ))", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE movies_2 (
+                id          serial PRIMARY KEY,
+                title       text NOT NULL
+            ))", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                INSERT INTO movies (id, title) VALUES (1, 'movie1'), (4, 'movie4');
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());    
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM movies;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [["1";"movie1"];["4";"movie4"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                INSERT INTO movies_2 (title)
+                SELECT title
+                FROM movies;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM movies_2;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [["1";"movie1"];["2";"movie4"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
@@ -2712,7 +2819,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 INSERT INTO t VALUES (1, 'a', 'a');
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().Contains("VALUES have 3 columns, INSERT INTO expects: 2"));
+            UNIT_ASSERT(result.GetIssues().ToString().Contains("values have 3 columns, INSERT INTO expects: 2"));
         }
         {
             auto result = db.ExecuteQuery(R"(
@@ -2775,6 +2882,42 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
             CompareYson(R"(
                 [["1";"a"];["2";"b"];["3";"c"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(Insert_Serial) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
+         {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE movies (
+                    id          serial PRIMARY KEY,
+                    title       text NOT NULL
+            ))", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                INSERT INTO movies VALUES (1, 'movie1'), (4, 'movie4');
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());    
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM movies;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [["1";"movie1"];["4";"movie4"]]
             )", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
@@ -3227,7 +3370,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                     INSERT INTO PgTable1 VALUES (1, 'a', 'a');
                 )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT(result.GetIssues().ToString().Contains("VALUES have 3 columns, INSERT INTO expects: 2"));
+                UNIT_ASSERT(result.GetIssues().ToString().Contains("values have 3 columns, INSERT INTO expects: 2"));
             }
             {
                 auto result = db.ExecuteQuery(R"(

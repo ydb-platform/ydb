@@ -991,7 +991,8 @@ public:
             }
             if (!targetColumns.empty()) {
                 setItemOptions.push_back(QL(QA("target_columns"), QVL(targetColumns.data(), targetColumns.size())));
-            } else if (fillTargetColumns) {
+            }
+            if (fillTargetColumns) {
                 setItemOptions.push_back(QL(QA("fill_target_columns")));
             }
             if (ListLength(x->targetList) > 0) {

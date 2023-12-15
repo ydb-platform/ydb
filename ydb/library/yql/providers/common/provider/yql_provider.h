@@ -191,5 +191,23 @@ bool ValidateIntervalUnit(std::string_view unit, TExprContext& ctx);
 bool ValidateDateTimeFormatName(std::string_view formatName, TExprContext& ctx);
 bool ValidateTimestampFormatName(std::string_view formatName, TExprContext& ctx);
 
+bool TransformPgSetItemOption(
+    const NNodes::TCoPgSelect& pgSelect, 
+    TStringBuf optionName, 
+    std::function<void(const NNodes::TExprBase&)> lambda
+);
+
+TExprNode::TPtr GetSetItemOption(const NNodes::TCoPgSelect& pgSelect, TStringBuf optionName);
+
+TExprNode::TPtr GetSetItemOptionValue(const NNodes::TExprBase& setItemOption);
+
+bool NeedToRenamePgSelectColumns(const NNodes::TCoPgSelect& pgSelect);
+
+bool RenamePgSelectColumns(
+    const NNodes::TCoPgSelect& node,
+    TExprNode::TPtr& output,
+    TMaybe<TVector<TString>> tableColumnOrder, 
+    TExprContext& ctx, 
+    TTypeAnnotationContext& types);
 } // namespace NCommon
 } // namespace NYql

@@ -748,7 +748,6 @@ TExprNode::TPtr ExpandPositionalUnionAll(const TExprNode& node, const TVector<TC
 TExprNode::TPtr BuildValues(
     TPositionHandle pos,
     const TExprNode::TPtr& values,
-    const TExprNode::TPtr& targetColumns,
     TExprContext& ctx
 ) {
     return ctx.Builder(pos)
@@ -759,9 +758,7 @@ TExprNode::TPtr BuildValues(
                 .Callable("AsStruct")
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     for (ui32 index = 0; index < values->Child(1)->ChildrenSize(); ++index) {
-                        TStringBuf alias = targetColumns
-                            ? targetColumns->Child(1)->Child(index)->Content()
-                            : values->Child(1)->Child(index)->Content();
+                        TStringBuf alias = values->Child(1)->Child(index)->Content();
                         parent
                             .List(index)
                                 .Atom(0, alias)
@@ -1716,8 +1713,8 @@ TExprNode::TPtr BuildProjectionLambda(TPositionHandle pos, const TExprNode::TPtr
                         }
                     } else {
                         auto type = x->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-                        for (ui32 i = 0; i < type->GetSize(); ++i) {
-                            auto column = type->GetItems()[i]->GetName();
+                        for (const auto& item : type->GetItems()) {
+                            TStringBuf column = item->GetName();
                             auto columnName = subLink ? column : NTypeAnnImpl::RemoveAlias(column);
                             auto listBuilder = parent.List(index++);
                             if (overrideColumns.contains(columnName)) {
@@ -3148,14 +3145,13 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         auto sort = GetSetting(setItem->Tail(), "sort");
         auto extraSortColumns = GetSetting(setItem->Tail(), "final_extra_sort_columns");
         auto extraSortKeys = GetSetting(setItem->Tail(), "final_extra_sort_keys");
-        auto targetColumns = GetSetting(setItem->Tail(), "target_columns");
         bool emitPgStar = (GetSetting(setItem->Tail(), "emit_pg_star") != nullptr);
         bool unknownsAllowed = (GetSetting(setItem->Tail(), "unknowns_allowed") != nullptr);
         bool oneRow = !from;
         TExprNode::TPtr list;
         if (values) {
             YQL_ENSURE(!result);
-            list = BuildValues(node->Pos(), values, targetColumns, ctx);
+            list = BuildValues(node->Pos(), values, ctx);
 
             if (!unknownsAllowed) {
                 auto pos = node->Pos();
@@ -3163,7 +3159,6 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             }
         } else {
             YQL_ENSURE(result);
-            YQL_ENSURE(!targetColumns, "target columns for projection are not supported yet");
             TExprNode::TPtr projectionLambda = BuildProjectionLambda(node->Pos(), result, subLinkId.Defined(), emitPgStar, ctx);
             TExprNode::TPtr projectionArg = projectionLambda->Head().HeadPtr();
             TExprNode::TPtr projectionRoot = projectionLambda->TailPtr();

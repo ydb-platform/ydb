@@ -380,11 +380,16 @@ private:
         }
 
         auto op = GetTableOp(node);
-        if (NPgTypeAnn::NeedsValuesRename(node, op)) {
-            if (!NPgTypeAnn::RewriteValuesColumnNames(node, table, ctx, Types)) {
+        if (NPgTypeAnn::IsPgInsert(node, op)) {
+            TExprNode::TPtr newInput;
+            auto ok = NCommon::RenamePgSelectColumns(node.Input().Cast<TCoPgSelect>(), newInput, table->Metadata->ColumnOrder, ctx, Types);
+            if (!ok) {
                 return TStatus::Error;
             }
-            return TStatus::Repeat;
+            if (newInput != node.Input().Ptr()) {
+                node.Ptr()->ChildRef(TKiWriteTable::idx_Input) = newInput;
+                return TStatus::Repeat;
+            }
         }
 
         if (!rowType) {

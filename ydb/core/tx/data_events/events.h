@@ -49,7 +49,7 @@ struct TDataEvents {
         }
 
         void AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, ui64 tableId, 
-            ui64 schemaVersion, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema,
+            ui64 schemaVersion, const std::vector<ui32>& columnIds,
             ui64 payloadIndex, NKikimrDataEvents::EDataFormat payloadFormat) {
             Y_ABORT_UNLESS(operationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
             Y_ABORT_UNLESS(payloadFormat != NKikimrDataEvents::FORMAT_UNSPECIFIED);
@@ -60,9 +60,7 @@ struct TDataEvents {
             operation->SetPayloadIndex(payloadIndex);
             operation->MutableTableId()->SetTableId(tableId);
             operation->MutableTableId()->SetSchemaVersion(schemaVersion);
-            for (ui32 i = 0; i < ydbSchema.size(); ++i) {
-                operation->AddColumnIds(i + 1);
-            }
+            operation->MutableColumnIds()->Assign(columnIds.begin(), columnIds.end());
         }
 
         ui64 GetTxId() const {

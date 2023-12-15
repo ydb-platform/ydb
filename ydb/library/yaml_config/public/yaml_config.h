@@ -15,7 +15,7 @@
 #include <map>
 #include <string>
 
-namespace NYamlConfig {
+namespace NKikimr::NYamlConfig {
 
 struct TYamlConfigEx : public yexception {};
 
@@ -223,4 +223,4 @@ bool IsMainConfig(const TString& config);
  */
 TString StripMetadata(const TString& config);
 
-} // namespace NYamlConfig
+} // namespace NKikimr::NYamlConfig

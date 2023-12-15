@@ -21,7 +21,7 @@ struct fy_document_iterator;
 struct fy_node_pair;
 extern "C" struct fy_node *fy_node_buildf(struct fy_document *fyd, const char *fmt, ...);
 
-namespace NFyaml {
+namespace NKikimr::NFyaml {
     namespace NDetail {
         template <class T>
         class TNodeOps;
@@ -30,10 +30,10 @@ namespace NFyaml {
     class TNode;
 }
 
-bool operator==(const fy_node* node1, const NFyaml::NDetail::TNodeOps<NFyaml::TNodeRef>& node2);
-bool operator==(const fy_node* node1, const NFyaml::NDetail::TNodeOps<NFyaml::TNode>& node2);
+bool operator==(const fy_node* node1, const NKikimr::NFyaml::NDetail::TNodeOps<NKikimr::NFyaml::TNodeRef>& node2);
+bool operator==(const fy_node* node1, const NKikimr::NFyaml::NDetail::TNodeOps<NKikimr::NFyaml::TNode>& node2);
 
-namespace NFyaml {
+namespace NKikimr::NFyaml {
 
 struct TStringPtrHashT {
     size_t operator()(const TSimpleSharedPtr<TString>& str) const {
@@ -200,7 +200,7 @@ protected:
 
 template <class T>
 class TNodeOps : public TNodeOpsBase {
-friend class ::NFyaml::TNodeRef;
+friend class ::NKikimr::NFyaml::TNodeRef;
 
 public:
     template <class OtherT>
@@ -208,8 +208,8 @@ public:
 
     bool operator==(const fy_node* node) const { return Node() == node; }
 
-    friend bool ::operator==(const fy_node* node1, const TNodeOps<NFyaml::TNodeRef>& node2);
-    friend bool ::operator==(const fy_node* node1, const TNodeOps<NFyaml::TNode>& node2);
+    friend bool ::operator==(const fy_node* node1, const TNodeOps<NKikimr::NFyaml::TNodeRef>& node2);
+    friend bool ::operator==(const fy_node* node1, const TNodeOps<NKikimr::NFyaml::TNode>& node2);
 
     explicit operator bool() const { return Node() != nullptr; }
 
@@ -936,4 +936,4 @@ void TNodeOps<T>::ClearUserData() {
 
 } // namespace NDetail
 
-} // namesapce NFyaml
+} // namesapce NKikimr::NFyaml

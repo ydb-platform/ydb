@@ -53,6 +53,7 @@ public:
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(DirectRowInFlatMap));
         AddHandler(0, &TCoUnorderedBase::Match, HNDL(Unordered));
         AddHandler(0, &TCoAggregate::Match, HNDL(CountAggregate));
+        AddHandler(0, &TYtReadTable::Match, HNDL(ZeroSampleToZeroLimit));
 
         AddHandler(1, &TCoFilterNullMembers::Match, HNDL(FilterNullMemebers<TCoFilterNullMembers>));
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(FilterNullMemebers<TCoSkipNullMembers>));
@@ -310,8 +311,6 @@ protected:
     }
 
 protected:
-    TMaybeNode<TExprBase> CountAggregate(TExprBase node, TExprContext& ctx) const;
-
     TMaybeNode<TExprBase> Aggregate(TExprBase node, TExprContext& ctx) const {
         auto aggregate = node.Cast<TCoAggregateBase>();
 
@@ -2504,20 +2503,56 @@ protected:
     TMaybeNode<TExprBase> MatchRecognize(TExprBase node, TExprContext& ctx) {
         return ExpandMatchRecognize(node.Ptr(), ctx, *Types);
     }
+
+    TMaybeNode<TExprBase> CountAggregate(TExprBase node, TExprContext& ctx) const {
+        auto aggregate = node.Cast<TCoAggregate>();
+
+        auto input = aggregate.Input();
+        if (!IsYtProviderInput(input)) {
+            return node;
+        }
+
+        return TAggregateExpander::CountAggregateRewrite(aggregate, ctx, State_->Types->UseBlocks);
+    }
+
+    TMaybeNode<TExprBase> ZeroSampleToZeroLimit(TExprBase node, TExprContext& ctx) const {
+        auto read = node.Cast<TYtReadTable>();
+
+        bool hasUpdates = false;
+        TVector<TExprBase> updatedSections;
+        for (auto section: read.Input()) {
+            TMaybe<TSampleParams> sampling = NYql::GetSampleParams(section.Settings().Ref());
+            if (sampling && sampling->Percentage == 0.0) {
+                hasUpdates = true;
+                section = Build<TYtSection>(ctx, section.Pos())
+                    .InitFrom(section)
+                    .Settings(
+                        NYql::AddSetting(
+                            *NYql::RemoveSetting(section.Settings().Ref(), EYtSettingType::Sample, ctx),
+                            EYtSettingType::Take,
+                            Build<TCoUint64>(ctx, section.Pos()).Literal().Value(0).Build().Done().Ptr(),
+                            ctx
+                        )
+                    )
+                    .Done();
+            }
+            updatedSections.push_back(section);
+        }
+
+        if (!hasUpdates) {
+            return node;
+        }
+
+        return ctx.ChangeChild(read.Ref(), TYtReadTable::idx_Input,
+            Build<TYtSectionList>(ctx, read.Input().Pos())
+                .Add(updatedSections)
+                .Done().Ptr());
+    }
+
 private:
     TYtState::TPtr State_;
 };
 
-NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> TYtLogicalOptProposalTransformer::CountAggregate(TExprBase node, TExprContext& ctx) const {
-    auto aggregate = node.Cast<TCoAggregate>();
-
-    auto input = aggregate.Input();
-    if (!IsYtProviderInput(input)) {
-        return node;
-    }
-
-    return TAggregateExpander::CountAggregateRewrite(aggregate, ctx, State_->Types->UseBlocks);
-}
 
 THolder<IGraphTransformer> CreateYtLogicalOptProposalTransformer(TYtState::TPtr state) {
     return THolder(new TYtLogicalOptProposalTransformer(state));

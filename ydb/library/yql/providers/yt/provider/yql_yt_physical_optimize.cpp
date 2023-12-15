@@ -89,7 +89,6 @@ public:
         AddHandler(0, &TYtMapReduce::Match, HNDL(AddTrivialMapperForNativeYtTypes));
         AddHandler(0, &TYtDqWrite::Match, HNDL(YtDqWrite));
         AddHandler(0, &TYtDqProcessWrite::Match, HNDL(YtDqProcessWrite));
-        AddHandler(0, &TYtTransientOpBase::Match, HNDL(ZeroSample));
         AddHandler(0, &TYtEquiJoin::Match, HNDL(EarlyMergeJoin));
 
         AddHandler(1, &TYtMap::Match, HNDL(FuseInnerMap));
@@ -6151,35 +6150,6 @@ private:
             }
         }
         return TExprBase(res);
-    }
-
-    TMaybeNode<TExprBase> ZeroSample(TExprBase node, TExprContext& ctx) const {
-        auto op = node.Cast<TYtTransientOpBase>();
-
-        if (node.Ref().HasResult() && node.Ref().GetResult().Type() == TExprNode::World) {
-            return node;
-        }
-
-        bool hasUpdates = false;
-        TVector<TExprBase> updatedSections;
-        for (auto section: op.Input()) {
-            TMaybe<TSampleParams> sampling = NYql::GetSampleParams(section.Settings().Ref());
-            if (sampling && sampling->Percentage == 0.0) {
-                hasUpdates = true;
-                updatedSections.push_back(MakeEmptySection(section, op.DataSink(), true, State_, ctx));
-            } else {
-                updatedSections.push_back(section);
-            }
-        }
-
-        if (!hasUpdates) {
-            return node;
-        }
-
-        return ctx.ChangeChild(op.Ref(), TYtTransientOpBase::idx_Input,
-            Build<TYtSectionList>(ctx, op.Input().Pos())
-                .Add(updatedSections)
-                .Done().Ptr());
     }
 
     TMaybeNode<TExprBase> ReplaceStatWriteTable(TExprBase node, TExprContext& ctx) const {

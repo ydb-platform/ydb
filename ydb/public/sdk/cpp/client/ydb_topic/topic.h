@@ -1236,7 +1236,6 @@ struct TWriteSessionEvent {
         TMaybe<TWrittenMessageDetails> Details;
         //! Write stats from server. See TWriteStat. nullptr for DISCARDED event.
         TWriteStat::TPtr Stat;
-
     };
 
     struct TAcksEvent : public TPrintable<TAcksEvent> {

@@ -103,6 +103,7 @@ public:
 private:
     struct THandlersVisitor : public TParent::TBaseHandlersVisitor {
         using TParent::TBaseHandlersVisitor::TBaseHandlersVisitor;
+
 #define DECLARE_HANDLER(type, handler, answer)                      \
         bool operator()(type&) {                                    \
             if (this->PushHandler<type>(                            \
@@ -122,7 +123,6 @@ private:
         bool Visit() {
             return std::visit(*this, Event);
         }
-
     };
 
     bool ApplyHandler(TEventInfo& eventInfo) {

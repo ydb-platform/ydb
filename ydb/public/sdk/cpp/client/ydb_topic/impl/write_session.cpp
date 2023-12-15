@@ -37,7 +37,7 @@ NThreading::TFuture<void> TWriteSession::WaitEvent() {
 
 void TWriteSession::WriteEncoded(TContinuationToken&& token, TStringBuf data, ECodec codec, ui32 originalSize,
                                  TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp) {
-    auto message = TWriteMessage::CompressedMessage(data, codec, originalSize);
+    auto message = TWriteMessage::CompressedMessage(std::move(data), codec, originalSize);
     if (seqNo.Defined())
         message.SeqNo(*seqNo);
     if (createTimestamp.Defined())
@@ -52,7 +52,7 @@ void TWriteSession::WriteEncoded(TContinuationToken&& token, TWriteMessage&& mes
 
 void TWriteSession::Write(TContinuationToken&& token, TStringBuf data, TMaybe<ui64> seqNo,
                           TMaybe<TInstant> createTimestamp) {
-    TWriteMessage message{data};
+    TWriteMessage message{std::move(data)};
     if (seqNo.Defined())
         message.SeqNo(*seqNo);
     if (createTimestamp.Defined())

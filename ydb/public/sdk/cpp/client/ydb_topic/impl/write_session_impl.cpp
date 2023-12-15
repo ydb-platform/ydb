@@ -400,7 +400,6 @@ NThreading::TFuture<void> TWriteSessionImpl::WaitEvent() {
     return EventsQueue->WaitEvent();
 }
 
-// Client method.
 void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& message) {
     TInstant createdAtValue = message.CreateTimestamp_.Defined() ? *message.CreateTimestamp_ : TInstant::Now();
     bool readyToAccept = false;
@@ -425,6 +424,7 @@ void TWriteSessionImpl::Write(TContinuationToken&& token, TWriteMessage&& messag
     WriteInternal(std::move(token), std::move(message));
 }
 
+// Client method.
 void TWriteSessionImpl::WriteEncoded(TContinuationToken&& token, TWriteMessage&& message)
 {
     WriteInternal(std::move(token), std::move(message));
@@ -1245,8 +1245,9 @@ void TWriteSessionImpl::SendImpl() {
 
 // Client method, no Lock
 bool TWriteSessionImpl::Close(TDuration closeTimeout) {
-    if (AtomicGet(Aborting))
+    if (AtomicGet(Aborting)) {
         return false;
+    }
     LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Write session: close. Timeout " << closeTimeout);
     auto startTime = TInstant::Now();
     auto remaining = closeTimeout;

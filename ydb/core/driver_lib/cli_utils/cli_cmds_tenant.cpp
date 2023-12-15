@@ -647,7 +647,8 @@ public:
     {
         TTenantClientGRpcCommand::Parse(config);
 
-        GRpcRequest.mutable_database_quotas()->set_data_size_hard_quota(DataSizeHardQuota);
+        if (config.ParseResult->Has("data-size-hard-quota"))
+            GRpcRequest.mutable_database_quotas()->set_data_size_hard_quota(DataSizeHardQuota);
 
         if (config.ParseResult->Has("data-size-soft-quota"))
             GRpcRequest.mutable_database_quotas()->set_data_size_soft_quota(DataSizeSoftQuota);

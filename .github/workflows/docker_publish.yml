@@ -19,7 +19,7 @@ on:
         type: string
         required: true
         default: main
-        description: "Git branch/tag revision to builld local_ydb"
+        description: "Git branch/tag revision to build local_ydb"
 
 jobs:
   build:

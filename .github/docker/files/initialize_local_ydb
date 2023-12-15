@@ -1,4 +1,5 @@
 #!/bin/bash
+set -x
 
 INIT_YDB_SCRIPT=/init_ydb
 

@@ -238,6 +238,24 @@ namespace NKikimr {
         }
     }
 
+    NMatrix::TVectorType TIngress::GetVDiskHandoffVec(const TBlobStorageGroupInfo::TTopology *top,
+                                                 const TVDiskIdShort &vdisk,
+                                                 const TLogoBlobID &id) const {
+        Y_ABORT_UNLESS(IngressMode(top->GType) == EMode::GENERIC);
+        Y_DEBUG_ABORT_UNLESS(id.PartId() == 0);
+        SETUP_VECTORS(Data, top->GType);
+
+        ui8 nodeId = top->GetIdxInSubgroup(vdisk, id.Hash());
+
+        if (nodeId < totalParts) {
+            return TVectorType(0, totalParts);
+        }
+
+        ui8 handoffNodeId = nodeId - totalParts;
+        Y_DEBUG_ABORT_UNLESS(handoffNodeId < handoffNum);
+        return handoff[handoffNodeId].ToVector();
+    }
+
     NMatrix::TVectorType TIngress::LocalParts(TBlobStorageGroupType gtype) const {
         switch (IngressMode(gtype)) {
             case EMode::GENERIC: {

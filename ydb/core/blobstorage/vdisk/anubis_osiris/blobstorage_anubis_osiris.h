@@ -6,6 +6,12 @@
 
 namespace NKikimr {
 
+    // prepared data to insert to Hull Database
+    struct THullDbInsert {
+        TLogoBlobID Id;
+        TIngress Ingress;
+    };
+
     struct TAnubisOsirisPutRecoveryLogRec;
 
     ////////////////////////////////////////////////////////////////////////////
@@ -46,12 +52,6 @@ namespace NKikimr {
         bool IsOsiris() const {
             return !IsAnubis();
         }
-
-        // prepared data to insert to Hull Database
-        struct THullDbInsert {
-            TLogoBlobID Id;
-            TIngress Ingress;
-        };
 
         // return data to insert to Hull Database, we create ingress according to whether this
         // blob is Anubis or Osiris record

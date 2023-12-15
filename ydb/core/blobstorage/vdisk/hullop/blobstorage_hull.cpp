@@ -226,7 +226,7 @@ namespace NKikimr {
             Fields->AllowGarbageCollection);
     }
 
-    void THull::AddAnubisOsirisLogoBlob(
+    void THull::AddLogoBlob(
             const TActorContext &ctx,
             const TLogoBlobID &id,
             const TIngress &ingress,

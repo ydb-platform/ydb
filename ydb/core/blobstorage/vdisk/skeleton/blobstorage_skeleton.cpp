@@ -819,8 +819,9 @@ namespace NKikimr {
                     nullptr, nullptr));
 
             bool confirmSyncLogAlso = static_cast<bool>(syncLogMsg);
+            THullDbInsert insert{.Id=msg->Id, .Ingress=msg->Ingress};
             intptr_t loggedRecId = LoggedRecsVault.Put(
-                    new TLoggedRecDelLogoBlobDataSyncLog(seg, confirmSyncLogAlso, std::move(result), ev->Sender, ev->Cookie));
+                    new TLoggedRecDelLogoBlobDataSyncLog(seg, confirmSyncLogAlso, insert, std::move(result), ev->Sender, ev->Cookie));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureHandoffDelLogoBlob,
@@ -1540,7 +1541,7 @@ namespace NKikimr {
                 return;
             }
 
-            TEvAnubisOsirisPut::THullDbInsert insert = msg->PrepareInsert(VCtx->Top.get(), VCtx->ShortSelfVDisk);
+            THullDbInsert insert = msg->PrepareInsert(VCtx->Top.get(), VCtx->ShortSelfVDisk);
             TLsnSeg seg = Db->LsnMngr->AllocLsnForHullAndSyncLog();
 
             // Manage PDisk scheduler weights
@@ -2295,6 +2296,9 @@ namespace NKikimr {
             if (DefragId) {
                 ctx.Send(DefragId, ev->Get()->Clone());
             }
+            if (BalancingId) {
+                ctx.Send(BalancingId, ev->Get()->Clone());
+            }
 
             // FIXME: reconfigure handoff
         }
@@ -2472,14 +2476,15 @@ namespace NKikimr {
         }
 
         void RunBalancing(const TActorContext &ctx) {
-            if (!Config->FeatureFlags.GetUseVDisksBalancing()) {
+            if (!Config->FeatureFlags.GetUseVDisksBalancing() || VCtx->Top->GType.GetErasure() == TErasureType::ErasureMirror3of4) {
                 return;
             }
             if (BalancingId) {
+                Send(BalancingId, new NActors::TEvents::TEvPoison());
                 ActiveActors.Erase(BalancingId);
             }
             auto balancingCtx = std::make_shared<TBalancingCtx>(
-                VCtx, PDiskCtx, SelfId(), Hull->GetHullDs()->GetIndexSnapshot(), Config, GInfo
+                VCtx, PDiskCtx, SelfId(), Hull->GetSnapshot(), Config, GInfo
             );
             BalancingId = ctx.Register(CreateBalancingActor(balancingCtx));
             ActiveActors.Insert(BalancingId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);

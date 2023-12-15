@@ -11,6 +11,9 @@ PEERDIR(
 
 SRCS(
     balancing_actor.cpp
+    deleter.cpp
+    sender.cpp
+    utils.cpp
 )
 
 END()

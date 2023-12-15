@@ -113,7 +113,7 @@ namespace NKikimr {
                 const TDiskPart &diskAddr,
                 ui64 lsn);
 
-        void AddAnubisOsirisLogoBlob(
+        void AddLogoBlob(
                 const TActorContext &ctx,
                 const TLogoBlobID &id,
                 const TIngress &ingress,

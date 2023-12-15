@@ -37,5 +37,26 @@ namespace NKikimr {
         }
     };
 
+    struct TPartInfo {
+        TLogoBlobID Key;
+        TIngress Ingress;
+        std::variant<TDiskPart, TRope> PartData;
+    };
+
+    struct TPart {
+        TLogoBlobID Key;
+        TIngress Ingress;
+        TRope PartData;
+    };
+
+    struct TPartOnMain {
+        TLogoBlobID Key;
+        TIngress Ingress;
+        bool HasOnMain;
+    };
+
+    constexpr ui32 SENDER_ID = 0;
+    constexpr ui32 DELETER_ID = 1;
+
     struct TEvStartBalancing : TEventLocal<TEvStartBalancing, TEvBlobStorage::EvStartBalancing> {};
 } // NKikimr

@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 
 namespace NKikimr::NKqp {
@@ -792,7 +793,86 @@ public:
     TFuture<TGenericResult> ModifyPermissions(const TString& cluster,
         const TModifyPermissionsSettings& settings) override
     {
-        FORWARD_ENSURE_NO_PREPARE(ModifyPermissions, cluster, settings);
+        CHECK_PREPARED_DDL(ModifyPermissions);
+
+        auto modifyPermissionsPromise = NewPromise<TGenericResult>();
+
+        if (settings.Permissions.empty() && !settings.IsPermissionsClear) {
+            return MakeFuture(ResultFromError<TGenericResult>("No permissions names for modify permissions"));
+        }
+
+        if (settings.Pathes.empty()) {
+            return MakeFuture(ResultFromError<TGenericResult>("No pathes for modify permissions"));
+        }
+
+        if (settings.Roles.empty()) {
+            return MakeFuture(ResultFromError<TGenericResult>("No roles for modify permissions"));
+        }
+
+        NACLib::TDiffACL acl;
+        switch (settings.Action) {
+            case NYql::TModifyPermissionsSettings::EAction::Grant: {
+                for (const auto& sid : settings.Roles) {
+                    for (const auto& permission : settings.Permissions) {
+                        TACLAttrs aclAttrs = ConvertYdbPermissionNameToACLAttrs(permission);
+                        acl.AddAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, sid, aclAttrs.InheritanceType);
+                    }
+                }
+            }
+            break;
+            case NYql::TModifyPermissionsSettings::EAction::Revoke: {
+                if (settings.IsPermissionsClear) {
+                    for (const auto& sid : settings.Roles) {
+                        acl.ClearAccessForSid(sid);
+                    }
+                } else {
+                    for (const auto& sid : settings.Roles) {
+                        for (const auto& permission : settings.Permissions) {
+                            TACLAttrs aclAttrs = ConvertYdbPermissionNameToACLAttrs(permission);
+                            acl.RemoveAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, sid, aclAttrs.InheritanceType);
+                        }
+                    }
+                }
+            }
+            break;
+            default: {
+                return MakeFuture(ResultFromError<TGenericResult>("Unknown permission action"));
+            }
+        }
+
+        const auto serializedDiffAcl = acl.SerializeAsString();
+
+        TVector<std::pair<const TString*, std::pair<TString, TString>>> pathPairs;
+        pathPairs.reserve(settings.Pathes.size());
+        for (const auto& path : settings.Pathes) {
+            pathPairs.push_back(std::make_pair(&path, SplitPathByDirAndBaseNames(path)));
+        }
+
+        if (IsPrepare()) {
+            for (const auto& path : pathPairs) {
+                const auto& [dirname, basename] = path.second;
+
+                NKikimrSchemeOp::TModifyScheme schemeTx;
+                schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);
+                schemeTx.SetWorkingDir(dirname);
+                schemeTx.MutableModifyACL()->SetName(basename);
+                schemeTx.MutableModifyACL()->SetDiffACL(serializedDiffAcl);
+
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableModifyPermissions()->Swap(&schemeTx);
+            }
+
+            TGenericResult result;
+            result.SetSuccess();
+            modifyPermissionsPromise.SetValue(result);
+
+        } else {
+            return Gateway->ModifyPermissions(cluster, settings);
+        }
+
+        return modifyPermissionsPromise;
     }
 
     TFuture<TGenericResult> CreateUser(const TString& cluster, const TCreateUserSettings& settings) override {

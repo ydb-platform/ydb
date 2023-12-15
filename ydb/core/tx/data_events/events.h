@@ -16,15 +16,13 @@ namespace NKikimr::NEvents {
 struct TDataEvents {
 
     class TCoordinatorInfo {
-        YDB_READONLY_DEF(ui64, TabletId);
         YDB_READONLY(ui64, MinStep, 0);
         YDB_READONLY(ui64, MaxStep, 0);
         YDB_READONLY_DEF(google::protobuf::RepeatedField<ui64>, DomainCoordinators);
 
     public:
-        TCoordinatorInfo(const ui64 tabletId, const ui64 minStep, const ui64 maxStep, const google::protobuf::RepeatedField<ui64>& coordinators)
-            : TabletId(tabletId)
-            , MinStep(minStep)
+        TCoordinatorInfo(const ui64 minStep, const ui64 maxStep, const google::protobuf::RepeatedField<ui64>& coordinators)
+            : MinStep(minStep)
             , MaxStep(maxStep)
             , DomainCoordinators(coordinators) {}
     };

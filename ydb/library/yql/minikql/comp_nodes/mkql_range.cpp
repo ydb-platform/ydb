@@ -501,7 +501,12 @@ public:
                 return ctx.HolderFactory.GetEmptyContainerLazy();
             }
             if (!DoMultiply(ctx, limit, current, expandedLists[i], currentComponentsCompare, TypeInfos[i])) {
-                return FullRange(ctx);
+                if (i > 0) {
+                    PadInfs(ctx, current, i);
+                    break;
+                } else {
+                    return FullRange(ctx);
+                }
             }
         }
 
@@ -516,6 +521,24 @@ private:
     void RegisterDependencies() const final {
         DependsOn(Limit);
         std::for_each(Lists.cbegin(), Lists.cend(), std::bind(&TRangeMultiplyWrapper::DependsOn, this, std::placeholders::_1));
+    }
+
+    void PadInfs(TComputationContext& ctx, TUnboxedValueQueue& current, size_t currentPrefix) const {
+        size_t extraColumns = 0;
+        for (size_t i = 0; i < TypeInfos.size(); ++i) {
+            const auto& ti = TypeInfos[i];
+            Y_ENSURE(ti.Components.size() % 2 == 1);
+            if (currentPrefix <= i) {
+                extraColumns += (ti.Components.size() - 1) / 2;
+            }
+        }
+
+        TUnboxedValueQueue result;
+        for (const auto& c : current) {
+            auto curr = ExpandRange(c);
+            result.push_back(AppendInfs(ctx, curr, extraColumns));
+        }
+        std::swap(current, result);
     }
 
     bool DoMultiply(TComputationContext& ctx, ui64 limit, TUnboxedValueQueue& current, const TUnboxedValueQueue& next,

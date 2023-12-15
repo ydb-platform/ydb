@@ -85,7 +85,7 @@ public:
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     TKqpCompileResult::TConstPtr CompileResult;
-    NKqpProto::TKqpStatsCompile CompileStats; // TODO
+    TKqpStatsCompile CompileStats;
     TIntrusivePtr<TKqpTransactionContext> TxCtx;
     TQueryData::TPtr QueryData;
 
@@ -97,8 +97,7 @@ public:
 
     TInstant StartTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
-
-    NKqpProto::TKqpStatsQuery Stats; // TODO
+    NKqpProto::TKqpStatsQuery Stats;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     NActors::TMonotonic StartedAt;
@@ -235,7 +234,7 @@ public:
     }
 
     bool NeedCheckTableVersions() const {
-        return CompileStats.GetFromCache();
+        return CompileStats.FromCache;
     }
 
     TString ExtractQueryText() const {

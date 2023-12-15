@@ -732,7 +732,7 @@ public:
         QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
         FillCompileStatus(QueryState->CompileResult, QueryResponse->Record);
 
-        auto ru = NRuCalc::CpuTimeToUnit(TDuration::MicroSeconds(QueryState->CompileStats.GetCpuTimeUs()));
+        auto ru = NRuCalc::CpuTimeToUnit(TDuration::MicroSeconds(QueryState->CompileStats.CpuTimeUs));
         auto& record = QueryResponse->Record.GetRef();
         record.SetConsumedRu(ru);
 
@@ -1349,7 +1349,9 @@ public:
         stats->SetDurationUs((TInstant::Now() - QueryState->StartTime).MicroSeconds());
         stats->SetWorkerCpuTimeUs(QueryState->GetCpuTime().MicroSeconds());
         if (QueryState->CompileResult) {
-            stats->MutableCompilation()->Swap(&QueryState->CompileStats);
+            stats->MutableCompilation()->SetFromCache(QueryState->CompileStats.FromCache);
+            stats->MutableCompilation()->SetDurationUs(QueryState->CompileStats.DurationUs);
+            stats->MutableCompilation()->SetCpuTimeUs(QueryState->CompileStats.CpuTimeUs);
         }
 
         if (IsExecuteAction(QueryState->GetAction())) {

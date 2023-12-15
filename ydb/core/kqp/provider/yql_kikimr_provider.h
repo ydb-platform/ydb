@@ -342,7 +342,7 @@ public:
             const auto newOp = TYdbOperation(op.GetOperation());
 
             const auto info = tableInfoMap.FindPtr(table);
-            if (info) {
+            if (!info) {
                 TString message = TStringBuilder()
                     << "Unable to find table info for table '" << table << "'";
                 const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
@@ -423,7 +423,7 @@ public:
                     HasUncommittedChangesRead = true;
                 }
 
-                if (info->GetHasIndexTables()) {
+                if ((*info)->GetHasIndexTables()) {
                     if (!EnableImmediateEffects) {
                         TString message = TStringBuilder()
                             << "Multiple modification of table with secondary indexes is not supported yet";

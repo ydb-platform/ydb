@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
 
 add_library(public-udf-tz)
 target_link_libraries(public-udf-tz PUBLIC

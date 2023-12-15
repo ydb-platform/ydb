@@ -1,2 +1,0 @@
-items:
-- include: { mode: merge, path: overlay/toc_p.yaml }

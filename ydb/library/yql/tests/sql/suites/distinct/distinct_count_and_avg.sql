@@ -1,1 +1,0 @@
-select count(distinct key) as count, avg(numKey) as avg from (select key, cast(key as int) as numKey, value from plato.Input2) as x group by value order by count;

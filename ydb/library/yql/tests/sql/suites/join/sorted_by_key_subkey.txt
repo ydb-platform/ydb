@@ -1,3 +1,0 @@
-{"key"="aaa";"subkey"="bbb";"value"="ks1"};
-{"key"="bbb";"subkey"="bbb";"value"="ks2"};
-{"key"="bbb";"subkey"="ccc";"value"="ks3"};

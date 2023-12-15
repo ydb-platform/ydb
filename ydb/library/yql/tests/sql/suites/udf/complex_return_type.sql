@@ -1,1 +1,0 @@
-select SimpleUdf::ComplexReturnType("banana");

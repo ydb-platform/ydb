@@ -620,7 +620,7 @@ public:
     MOCK_METHOD(TFuture<void>, AlterQuery, (
         NQueryTrackerClient::TQueryId queryId, const TAlterQueryOptions& options), (override));
 
-    MOCK_METHOD(TFuture<TBundleConfigDescriptorPtr>, GetBundleConfig, (
+    MOCK_METHOD(TFuture<TBundleConfigDescriptor>, GetBundleConfig, (
         const TString& bundleName,
         const TGetBundleConfigOptions& options), (override));
 };

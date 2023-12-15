@@ -1,5 +1,0 @@
-RECURSE(
-    grpc
-    protos
-    client
-)

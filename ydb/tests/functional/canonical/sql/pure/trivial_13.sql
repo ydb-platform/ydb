@@ -1,2 +1,0 @@
-select '' as two;
-

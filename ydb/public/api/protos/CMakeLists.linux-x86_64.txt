@@ -7,7 +7,6 @@
 
 
 add_subdirectory(annotations)
-add_subdirectory(out)
 get_built_tool_path(
   TOOL_validation_bin
   TOOL_validation_dependency

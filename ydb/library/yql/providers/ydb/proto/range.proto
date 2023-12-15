@@ -1,8 +1,0 @@
-syntax = "proto3";
-
-package NYql.NYdb;
-
-message TKeyRange {
-    bytes from_key = 1;
-    bytes to_key = 2;
-}

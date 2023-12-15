@@ -14,8 +14,6 @@ SRCS(
     api/rpc_proxy/proto/api_service.proto
     api/rpc_proxy/proto/discovery_service.proto
 
-    bundle_controller/proto/bundle_controller_service.proto
-
     cell_master/proto/cell_directory.proto
 
     chaos_client/proto/replication_card.proto

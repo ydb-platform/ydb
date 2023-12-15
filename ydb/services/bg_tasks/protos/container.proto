@@ -1,6 +1,0 @@
-package NKikimrProto;
-
-message TStringContainer {
-    optional string ClassName = 1;
-    optional bytes BinaryData = 2;
-}

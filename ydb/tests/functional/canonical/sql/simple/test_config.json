@@ -1,9 +1,0 @@
-{
-    "script_params.script": {
-      "parameters_values": {"$value": "Result"},
-      "parameters_types": {"$value": "Utf8"}
-    },
-    "ct.script": {
-      "compare_tables": ["Questions"]
-    }
-}

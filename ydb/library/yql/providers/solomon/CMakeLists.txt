@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(async_io)
 add_subdirectory(expr_nodes)
 add_subdirectory(gateway)
 add_subdirectory(proto)

@@ -6,18 +6,5 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(base)
-add_subdirectory(deprecated)
-add_subdirectory(experimental)
-add_subdirectory(fq)
-add_subdirectory(idx_test)
-add_subdirectory(json_value)
-add_subdirectory(jwt)
-add_subdirectory(operation_id)
 add_subdirectory(scheme_types)
-add_subdirectory(stat_visualization)
-add_subdirectory(ut_helpers)
 add_subdirectory(validation)
-add_subdirectory(value)
-add_subdirectory(ydb_cli)
-add_subdirectory(yson_value)

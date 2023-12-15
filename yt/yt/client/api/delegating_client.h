@@ -618,7 +618,7 @@ public:
         NQueryTrackerClient::TQueryId queryId,
         const TAlterQueryOptions& options) override;
 
-    virtual TFuture<TBundleConfigDescriptorPtr> GetBundleConfig(
+    virtual TFuture<TBundleConfigDescriptor> GetBundleConfig(
         const TString& bundleName,
         const TGetBundleConfigOptions& options = {}) override;
 

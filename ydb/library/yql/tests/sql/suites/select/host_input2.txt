@@ -1,3 +1,0 @@
-{"url"="http://www.foo.ru/";};
-{"url"="http://www.wat.com/";};
-{"url"="http://www.ya.hz/wat";};

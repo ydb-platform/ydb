@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
 get_built_tool_path(
   TOOL_enum_parser_bin
   TOOL_enum_parser_dependency

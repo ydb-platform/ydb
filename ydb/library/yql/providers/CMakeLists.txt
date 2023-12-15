@@ -6,17 +6,11 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(clickhouse)
 add_subdirectory(common)
 add_subdirectory(config)
 add_subdirectory(dq)
-add_subdirectory(function)
 add_subdirectory(generic)
-add_subdirectory(pg)
-add_subdirectory(pq)
 add_subdirectory(result)
-add_subdirectory(s3)
 add_subdirectory(solomon)
 add_subdirectory(stat)
-add_subdirectory(ydb)
 add_subdirectory(yt)

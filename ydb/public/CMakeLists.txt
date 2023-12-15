@@ -8,4 +8,3 @@
 
 add_subdirectory(api)
 add_subdirectory(lib)
-add_subdirectory(sdk)

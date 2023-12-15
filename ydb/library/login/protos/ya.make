@@ -1,9 +1,0 @@
-PROTO_LIBRARY()
-
-EXCLUDE_TAGS(GO_PROTO)
-
-SRCS(
-    login.proto
-)
-
-END()

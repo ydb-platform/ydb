@@ -7,7 +7,6 @@
 
 
 add_subdirectory(fake_llvm_symbolizer)
-add_subdirectory(ut)
 
 add_library(yql-utils-backtrace)
 target_link_libraries(yql-utils-backtrace PUBLIC

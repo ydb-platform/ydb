@@ -7,13 +7,13 @@
 
 
 cmake_minimum_required(VERSION 3.15)
-project(YDB LANGUAGES C CXX ASM)
+project(YDBLIB LANGUAGES C CXX ASM)
 
 set(BUILD_SHARED_LIBS Off)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_EXTENSIONS Off)
-set(YDB_MAX_LINK_JOBS 5 CACHE STRING "Maximum parallel link jobs for Ninja generator")
-set_property(GLOBAL PROPERTY JOB_POOLS link_jobs=${YDB_MAX_LINK_JOBS})
+set(YDBLIB_MAX_LINK_JOBS 5 CACHE STRING "Maximum parallel link jobs for Ninja generator")
+set_property(GLOBAL PROPERTY JOB_POOLS link_jobs=${YDBLIB_MAX_LINK_JOBS})
 set(CMAKE_JOB_POOL_LINK link_jobs)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/cmake)

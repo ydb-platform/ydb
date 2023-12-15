@@ -7,7 +7,6 @@
 
 
 add_subdirectory(codegen)
-add_subdirectory(ut)
 
 add_library(providers-yt-codec)
 target_compile_options(providers-yt-codec PRIVATE

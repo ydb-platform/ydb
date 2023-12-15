@@ -1,6 +1,0 @@
-items:
-- { name: Обзор,                                  href: index.md }
-- { name: Работа с базами данных PostgreSQL,      href: postgresql.md }
-- { name: Работа с базами данных ClickHouse,      href: clickhouse.md }
-- name: Работа с бакетами S3
-  include: { path: s3/toc_i.yaml, mode: link }

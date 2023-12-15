@@ -7,7 +7,6 @@
 
 
 add_subdirectory(protos)
-add_subdirectory(ut)
 get_built_tool_path(
   TOOL_rescompiler_bin
   TOOL_rescompiler_dependency

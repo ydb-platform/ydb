@@ -1,9 +1,0 @@
-USE plato;
-
-$f = ()->{
-   return value;
-};
-
-SELECT
-    $f()
-FROM Input

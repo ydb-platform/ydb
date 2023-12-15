@@ -1,4 +1,0 @@
-RECURSE(
-    protobuf
-    wilson
-)

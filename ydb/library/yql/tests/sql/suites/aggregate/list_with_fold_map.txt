@@ -1,2 +1,0 @@
-{"counters"=[0;1;];"names"=["a";"b";];"id"="tmp1";};
-{"counters"=[0;0;];"names"=["c";];"id"="tmp2";};

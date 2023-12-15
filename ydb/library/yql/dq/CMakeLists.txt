@@ -8,13 +8,9 @@
 
 add_subdirectory(actors)
 add_subdirectory(common)
-add_subdirectory(comp_nodes)
 add_subdirectory(expr_nodes)
 add_subdirectory(integration)
 add_subdirectory(opt)
 add_subdirectory(proto)
-add_subdirectory(runtime)
-add_subdirectory(state)
 add_subdirectory(tasks)
-add_subdirectory(transform)
 add_subdirectory(type_ann)

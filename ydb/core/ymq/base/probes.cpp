@@ -1,3 +1,0 @@
-#include "probes.h"
-
-LWTRACE_DEFINE_PROVIDER(SQS_PROVIDER);

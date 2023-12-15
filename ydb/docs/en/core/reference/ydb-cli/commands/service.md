@@ -1,1 +1,0 @@
-{% include [service.md](_includes/service.md) %}

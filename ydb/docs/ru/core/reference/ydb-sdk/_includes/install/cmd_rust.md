@@ -1,1 +1,0 @@
-```cargo add ydb```

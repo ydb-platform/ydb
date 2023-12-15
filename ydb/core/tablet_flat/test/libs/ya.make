@@ -1,5 +1,0 @@
-RECURSE(
-    exec
-    rows
-    table
-)

@@ -1,9 +1,0 @@
-package NKikimrTx;
-option java_package = "ru.yandex.kikimr.proto";
-
-message TKeyRange {
-    optional bytes From = 1;
-    optional bytes To = 2;
-    optional bool FromInclusive = 3;
-    optional bool ToInclusive = 4;
-};

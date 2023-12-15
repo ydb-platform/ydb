@@ -1,7 +1,0 @@
-items:
-- name: Docker
-  href: ydb_docker.md
-- name: Binary file
-  href: ydb_local.md
-- name: Minikube
-  href: ydb_minikube.md

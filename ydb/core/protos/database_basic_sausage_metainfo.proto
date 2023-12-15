@@ -1,3 +1,0 @@
-package NKikimrDatabaseBasic;
-option java_package = "ru.yandex.kikimr.proto";
-

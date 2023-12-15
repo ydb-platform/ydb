@@ -13,6 +13,7 @@ PEERDIR(
     ydb/library/yql/sql/settings
     ydb/library/yql/sql/v1/lexer
     ydb/library/yql/sql/v1/proto_parser
+    ydb/library/yql/core/sql_types
     library/cpp/protobuf/util
     library/cpp/resource
 )

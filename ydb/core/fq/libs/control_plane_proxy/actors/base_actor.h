@@ -67,7 +67,7 @@ public:
     }
 
     void HandleTimeout() {
-        CPP_LOG_D("TBaseActor Timeout occurred. Actor id: "
+        CPP_LOG_W("TBaseActor Timeout occurred. Actor id: "
                   << SelfId());
         Counters->Timeout->Inc();
         SendErrorMessageToSender(MakeTimeoutEventImpl(

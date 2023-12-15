@@ -3798,7 +3798,7 @@ private:
                     .Done();
                 break;
             case EYtSettingType::Skip:
-                res = Build<TCoMinus>(ctx, node.Pos())
+                res = Build<TCoSub>(ctx, node.Pos())
                     .Left<TCoMax>()
                         .Add(res)
                         .Add(s.Value().Cast())

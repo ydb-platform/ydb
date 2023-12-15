@@ -1301,12 +1301,12 @@
             "Match": {"Type": "Callable", "Name": "AggrAdd"}
         },
         {
-            "Name": "TCoMinus",
+            "Name": "TCoSub",
             "Base": "TCoBinaryArithmetic",
             "Match": {"Type": "Callable", "Name": "-"}
         },
         {
-            "Name": "TCoPlus",
+            "Name": "TCoAdd",
             "Base": "TCoBinaryArithmetic",
             "Match": {"Type": "Callable", "Name": "+"}
         },

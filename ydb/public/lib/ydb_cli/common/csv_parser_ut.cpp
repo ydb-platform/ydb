@@ -9,7 +9,6 @@ using namespace NYdb::NConsoleClient;
 
 Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
     bool CompareValues(const TValue& lhs, const TValue& rhs) {
-        lhs.GetProto();
         TString stringFirst, stringSecond;
         NProtoBuf::TextFormat::PrintToString(lhs.GetProto(), &stringFirst);
         NProtoBuf::TextFormat::PrintToString(rhs.GetProto(), &stringSecond);

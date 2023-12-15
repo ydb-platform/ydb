@@ -112,6 +112,25 @@ protected:
     NWilson::TSpan ProposeTransactionSpan;
 };
 
+class TDataShard::TTxWrite: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxWrite(TDataShard* ds, NEvents::TDataEvents::TEvWrite::TPtr ev, TInstant receivedAt, ui64 tieBreakerIndex, bool delayed);
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+protected:
+    TOperation::TPtr Op;
+    NEvents::TDataEvents::TEvWrite::TPtr Ev;
+    const TInstant ReceivedAt;
+    const ui64 TieBreakerIndex;
+    ui64 TxId;
+    TVector<EExecutionUnitKind> CompleteList;
+    TInstant CommitStart;
+    bool Acked;
+    bool Rescheduled = false;
+    bool WaitComplete = false;
+    NWilson::TSpan ProposeTransactionSpan;
+};
+
 class TDataShard::TTxReadSet : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxReadSet(TDataShard *self, TEvTxProcessing::TEvReadSet::TPtr ev);

@@ -166,10 +166,15 @@ namespace NDataShardReadTableTest {
 
         static void PrintPrimitive(TStringBuilder& out, const NYdb::TValueParser& parser) {
             switch (parser.GetPrimitiveType()) {
+            case NYdb::EPrimitiveType::Uint64:
+                out << parser.GetUint64();
+                break;
             case NYdb::EPrimitiveType::Uint32:
                 out << parser.GetUint32();
                 break;
-
+            case NYdb::EPrimitiveType::Utf8:
+                out << parser.GetUtf8();
+                break;
             case NYdb::EPrimitiveType::Timestamp:
                 out << parser.GetTimestamp();
                 break;

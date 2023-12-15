@@ -25,7 +25,7 @@ protected:
 
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx, NWilson::TTraceId traceId = {});
     void Execute(TAutoPtr<ITransaction> transaction, NWilson::TTraceId traceId = {});
-    void EnqueueExecute(TAutoPtr<ITransaction> transaction);
+    void EnqueueExecute(TAutoPtr<ITransaction> transaction, NWilson::TTraceId traceId = {});
 
     const NTable::TScheme& Scheme() const noexcept;
 

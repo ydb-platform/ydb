@@ -25,6 +25,7 @@ namespace NTabletFlatExecutor {
 class TTransactionContext;
 class TExecutor;
 struct TPageCollectionTxEnv;
+struct TSeat;
 
 class TTableSnapshotContext : public TThrRefBase, TNonCopyable {
     friend class TExecutor;
@@ -200,9 +201,10 @@ class TTransactionContext : public TTxMemoryProviderBase {
     friend class TExecutor;
 
 public:
-    TTransactionContext(ui64 tablet, ui32 gen, ui32 step, NTable::TDatabase &db, IExecuting &env,
+    TTransactionContext(TSeat &seat, ui64 tablet, ui32 gen, ui32 step, NTable::TDatabase &db, IExecuting &env,
                         ui64 memoryLimit, ui64 taskId)
         : TTxMemoryProviderBase(memoryLimit, taskId)
+        , Seat(seat)
         , Tablet(tablet)
         , Generation(gen)
         , Step(step)
@@ -226,6 +228,7 @@ public:
     }
 
 public:
+    TSeat& Seat;
     const ui64 Tablet = Max<ui32>();
     const ui32 Generation = Max<ui32>();
     const ui32 Step = Max<ui32>();

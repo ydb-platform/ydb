@@ -184,13 +184,26 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
         if (!Batch->Commit) {
             Batch->Commit = CommitManager->Begin(false, ECommit::Redo, seat->GetTxTraceId());
         } else {
-            i64 batchSize = Batch->Bodies.size() + 1;
+            // Batch commit's TraceId will be used for all blobstorage requests of the batch.
+            if (!Batch->Commit->TraceId && seat->TxSpan) {
+                // It is possible that the original or consequent transactions didn't have a TraceId,
+                // but if a new transaction of a batch has TraceId, use it for the whole batch
+                // (and consequent traced transactions).
+                Batch->Commit->TraceId = seat->GetTxTraceId();
+            } else {
+                seat->TxSpan.Link(Batch->Commit->TraceId, {});
+            }
 
-            Batch->Commit->FirstTx->TxSpan.Attribute("BatchSize", batchSize);
+            for (TSeat* tx = Batch->Commit->FirstTx; tx != nullptr; tx = tx->NextCommitTx) {
+                // Update batch size of the transaction, whose TraceId the commit uses (first transaction in batch, that has TraceId).
+                if (tx->TxSpan) {
+                    i64 batchSize = Batch->Bodies.size() + 1;
+                    tx->TxSpan.Attribute("BatchSize", batchSize);
+                    break;
+                }
+            }
 
-            seat->TxSpan
-                .Attribute("Batched", true)
-                .Link(Batch->Commit->FirstTx->GetTxTraceId());
+            seat->TxSpan.Attribute("Batched", true);
         }
         
         Batch->Commit->PushTx(seat.Get());

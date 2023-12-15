@@ -39,9 +39,9 @@ void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction, NWilson::T
         static_cast<TExecutor*>(Executor())->Execute(transaction, ExecutorCtx(*TlsActivationContext), std::move(traceId));
 }
 
-void TTabletExecutedFlat::EnqueueExecute(TAutoPtr<ITransaction> transaction) {
+void TTabletExecutedFlat::EnqueueExecute(TAutoPtr<ITransaction> transaction, NWilson::TTraceId traceId) {
     if (transaction)
-        static_cast<TExecutor*>(Executor())->Enqueue(transaction, ExecutorCtx(*TlsActivationContext));
+        static_cast<TExecutor*>(Executor())->Enqueue(transaction, ExecutorCtx(*TlsActivationContext), std::move(traceId));
 }
 
 const NTable::TScheme& TTabletExecutedFlat::Scheme() const noexcept {

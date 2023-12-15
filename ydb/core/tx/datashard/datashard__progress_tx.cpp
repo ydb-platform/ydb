@@ -1,6 +1,8 @@
 #include "datashard_txs.h"
 #include "datashard_failpoints.h"
 
+#include <ydb/core/tablet_flat/flat_exec_seat.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -23,7 +25,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
             return true;
         }
 
-        NIceDb::TNiceDb db(txc.DB);
+        NWilson::TSpan auxExecuteSpan;
 
         if (!ActiveOp) {
             const bool expireSnapshotsAllowed = (
@@ -44,6 +46,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
             Self->Pipeline.ActivateWaitingTxOps(ctx);
 
             ActiveOp = Self->Pipeline.GetNextActiveOp(false);
+
             if (!ActiveOp) {
                 Self->IncCounter(COUNTER_TX_PROGRESS_IDLE);
                 LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
@@ -56,6 +59,16 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
                        << ActiveOp->GetKind() << " " << *ActiveOp << " (unit "
                        << ActiveOp->GetCurrentUnit() << ") at " << Self->TabletID());
             ActiveOp->IncrementInProgress();
+
+            if (ActiveOp->OperationSpan) {
+                if (!txc.Seat.TxSpan) {
+                    // If Progress Tx for this operation is being executed the first time,
+                    // it won't have a span, because we choose what operation to run in the transaction itself.
+                    // We create transaction span and transaction execution spans here instead.
+                    txc.Seat.SetupTxSpan(ActiveOp->GetTraceId());
+                    auxExecuteSpan = txc.Seat.CreateExecutionSpan();
+                }
+            }
         }
 
         Y_ABORT_UNLESS(ActiveOp && ActiveOp->IsInProgress());
@@ -68,6 +81,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
             case EExecutionStatus::Restart:
                 // Restart even if current CompleteList is not empty
                 // It will be extended in subsequent iterations
+                auxExecuteSpan.EndOk();
                 return false;
 
             case EExecutionStatus::Reschedule:
@@ -103,6 +117,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
         }
 
         // Commit all side effects
+        auxExecuteSpan.EndOk();
         return true;
     } catch (...) {
         Y_ABORT("there must be no leaked exceptions");

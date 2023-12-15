@@ -15,6 +15,7 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/json/json_writer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
@@ -122,7 +123,8 @@ protected:
         TVector<TLogoBlobID> TrashBeingCommitted;
 
         TTxRequest(THolder<TIntermediate> intermediate, TKeyValueFlat *keyValueFlat)
-            : Intermediate(std::move(intermediate))
+            : NTabletFlatExecutor::ITransaction(NLWTrace::TOrbit())
+            , Intermediate(std::move(intermediate))
             , Self(keyValueFlat)
         {
             Intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_UNKNOWN);
@@ -388,7 +390,8 @@ protected:
         CheckYellowChannels(ev->Get()->Intermediate->Stat);
 
         State.OnEvIntermediate(*(ev->Get()->Intermediate), ctx);
-        Execute(new TTxRequest(std::move(ev->Get()->Intermediate), this), ctx);
+        auto traceId = ev->Get()->Intermediate->Span.GetTraceId();
+        Execute(new TTxRequest(std::move(ev->Get()->Intermediate), this), ctx, std::move(traceId));
     }
 
     void Handle(TEvKeyValue::TEvNotify::TPtr &ev, const TActorContext &ctx) {

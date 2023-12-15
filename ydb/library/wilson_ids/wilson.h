@@ -4,6 +4,7 @@ namespace NKikimr {
 
     struct TWilson {
         enum {
+            Tablet = 7,
             BlobStorage = 8, // DS proxy and lower levels
             DsProxyInternals = 9,
             VDiskTopLevel = 12,

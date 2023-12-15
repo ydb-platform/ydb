@@ -19,6 +19,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <ydb/core/blobstorage/vdisk/localrecovery/localrecovery_public.h>
+#include <ydb/core/blobstorage/vdisk/balance/balancing_actor.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hulllog.h>
 #include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
@@ -1711,6 +1712,7 @@ namespace NKikimr {
                 ReplDone = true;
             }
             UpdateReplState();
+            RunBalancing(ctx);
         }
 
         void SkeletonErrorState(const TActorContext &ctx,
@@ -2449,6 +2451,20 @@ namespace NKikimr {
             ev->Get()->Callback({}, "replication is not in progress");
         }
 
+        void RunBalancing(const TActorContext &ctx) {
+            if (!Config->FeatureFlags.GetUseVDisksBalancing()) {
+                return;
+            }
+            if (BalancingId) {
+                ActiveActors.Erase(BalancingId);
+            }
+            auto balancingCtx = std::make_shared<TBalancingCtx>(
+                VCtx, PDiskCtx, SelfId(), Hull->GetHullDs()->GetIndexSnapshot(), Config, GInfo
+            );
+            BalancingId = ctx.Register(CreateBalancingActor(balancingCtx));
+            ActiveActors.Insert(BalancingId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+        }
+
         // NOTES: we have 4 state functions, one of which is an error state (StateDatabaseError) and
         // others are good: StateLocalRecovery, StateSyncGuidRecovery, StateNormal
         // We switch between states in the following manner:
@@ -2622,6 +2638,7 @@ namespace NKikimr {
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
             hFunc(TEvReplInvoke, Handle)
+            CFunc(TEvStartBalancing::EventType, RunBalancing)
         )
 
         STRICT_STFUNC(StateDatabaseError,
@@ -2730,6 +2747,7 @@ namespace NKikimr {
         bool CommenceRepl = false;
         TActorId ScrubId;
         TActorId DefragId;
+        TActorId BalancingId;
         bool HasUnreadableBlobs = false;
         std::unique_ptr<TVDiskCompactionState> VDiskCompactionState;
         TMemorizableControlWrapper EnableVPatch;

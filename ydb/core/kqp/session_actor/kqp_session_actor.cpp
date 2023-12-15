@@ -674,7 +674,7 @@ public:
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
-        auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(), //TODO:
+        auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(),
             EKikimrQueryType::Dml);
         if (!success) {
             YQL_ENSURE(!issues.Empty());
@@ -712,16 +712,15 @@ public:
         }
 
         try {
-            auto parameters = QueryState->GetYdbParameters();
-            if (QueryState->CompileResult && QueryState->CompileResult->Ast) {
-                auto& params = QueryState->CompileResult->Ast->PgAutoParamValues;
-                if (params) {
-                    for(const auto& [name, param] : *params) {
-                        parameters.insert({name, param});
+            const auto& parameters = QueryState->GetYdbParameters();
+            QueryState->QueryData->ParseParameters(parameters);
+            if (QueryState->CompileResult && QueryState->CompileResult->Ast && QueryState->CompileResult->Ast->PgAutoParamValues) {
+                for(const auto& [name, param] : *QueryState->CompileResult->Ast->PgAutoParamValues) {
+                    if (!parameters.contains(name)) {
+                        QueryState->QueryData->AddTypedValueParam(name, param);
                     }
                 }
             }
-            QueryState->QueryData->ParseParameters(parameters);
         } catch(const yexception& ex) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
         }

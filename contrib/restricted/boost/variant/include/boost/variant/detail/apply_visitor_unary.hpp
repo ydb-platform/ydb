@@ -14,7 +14,7 @@
 #define BOOST_VARIANT_DETAIL_APPLY_VISITOR_UNARY_HPP
 
 #include <boost/config.hpp>
-#include <boost/move/utility.hpp>
+#include <utility>
 
 #if !defined(BOOST_NO_CXX14_DECLTYPE_AUTO) && !defined(BOOST_NO_CXX11_DECLTYPE_N3276)
 #   include <boost/mpl/distance.hpp>
@@ -40,41 +40,23 @@ namespace boost {
 // nonconst-visitor version:
 //
 
-#ifndef BOOST_NO_CXX11_RVALUE_REFERENCES
 template <typename Visitor, typename Visitable>
 inline typename Visitor::result_type
 apply_visitor(Visitor& visitor, Visitable&& visitable)
 {
-    return ::boost::forward<Visitable>(visitable).apply_visitor(visitor);
+    return std::forward<Visitable>(visitable).apply_visitor(visitor);
 }
-#else
-template <typename Visitor, typename Visitable>
-inline typename Visitor::result_type
-apply_visitor(Visitor& visitor, Visitable& visitable)
-{
-    return visitable.apply_visitor(visitor);
-}
-#endif
 
 //
 // const-visitor version:
 //
 
-#ifndef BOOST_NO_CXX11_RVALUE_REFERENCES
 template <typename Visitor, typename Visitable>
 inline typename Visitor::result_type
 apply_visitor(const Visitor& visitor, Visitable&& visitable)
 {
-    return ::boost::forward<Visitable>(visitable).apply_visitor(visitor);
+    return std::forward<Visitable>(visitable).apply_visitor(visitor);
 }
-#else
-template <typename Visitor, typename Visitable>
-inline typename Visitor::result_type
-apply_visitor(const Visitor& visitor, Visitable& visitable)
-{
-    return visitable.apply_visitor(visitor);
-}
-#endif
 
 
 #if !defined(BOOST_NO_CXX14_DECLTYPE_AUTO) && !defined(BOOST_NO_CXX11_DECLTYPE_N3276)
@@ -116,12 +98,12 @@ struct result_wrapper1
 
     Visitor&& visitor_;
     explicit result_wrapper1(Visitor&& visitor) BOOST_NOEXCEPT
-        : visitor_(::boost::forward<Visitor>(visitor))
+        : visitor_(std::forward<Visitor>(visitor))
     {}
 
     template <class T>
     result_type operator()(T&& val) const {
-        return visitor_(::boost::forward<T>(val));
+        return visitor_(std::forward<T>(val));
     }
 };
 
@@ -134,8 +116,8 @@ inline decltype(auto) apply_visitor(Visitor&& visitor, Visitable&& visitable,
         bool
     >::type = true)
 {
-    boost::detail::variant::result_wrapper1<Visitor, Visitable> cpp14_vis(::boost::forward<Visitor>(visitor));
-    return ::boost::forward<Visitable>(visitable).apply_visitor(cpp14_vis);
+    boost::detail::variant::result_wrapper1<Visitor, Visitable> cpp14_vis(std::forward<Visitor>(visitor));
+    return std::forward<Visitable>(visitable).apply_visitor(cpp14_vis);
 }
 
 #endif // !defined(BOOST_NO_CXX14_DECLTYPE_AUTO) && !defined(BOOST_NO_CXX11_DECLTYPE_N3276)

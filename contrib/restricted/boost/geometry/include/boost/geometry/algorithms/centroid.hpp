@@ -82,16 +82,9 @@ class centroid_exception : public geometry::exception
 {
 public:
 
-    /*!
-    \brief The default constructor
-    */
     inline centroid_exception() {}
 
-    /*!
-    \brief Returns the explanatory string.
-    \return Pointer to a null-terminated string with explanatory information.
-    */
-    virtual char const* what() const noexcept
+    char const* what() const noexcept override
     {
         return "Boost.Geometry Centroid calculation exception";
     }

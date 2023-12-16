@@ -11,12 +11,11 @@
 // Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
 
-#ifndef BOOST_GEOMETRY_ALGORITHMS_DETAIL_OVERLAY_INTERSECTION_BOX_BOX_HPP
-#define BOOST_GEOMETRY_ALGORITHMS_DETAIL_OVERLAY_INTERSECTION_BOX_BOX_HPP
+#ifndef BOOST_GEOMETRY_ALGORITHMS_DETAIL_INTERSECTION_BOX_BOX_IMPLEMENTATION_HPP
+#define BOOST_GEOMETRY_ALGORITHMS_DETAIL_INTERSECTION_BOX_BOX_IMPLEMENTATION_HPP
 
 
 #include <boost/geometry/core/access.hpp>
-#include <boost/geometry/core/coordinate_type.hpp>
 
 
 namespace boost { namespace geometry
@@ -42,18 +41,16 @@ struct intersection_box_box
             BoxOut& box_out,
             Strategy const& strategy)
     {
-        typedef typename coordinate_type<BoxOut>::type ct;
-
-        ct max1 = get<max_corner, Dimension>(box1);
-        ct min2 = get<min_corner, Dimension>(box2);
+        auto max1 = get<max_corner, Dimension>(box1);
+        auto min2 = get<min_corner, Dimension>(box2);
 
         if (max1 < min2)
         {
             return false;
         }
 
-        ct max2 = get<max_corner, Dimension>(box2);
-        ct min1 = get<min_corner, Dimension>(box1);
+        auto max2 = get<max_corner, Dimension>(box2);
+        auto min1 = get<min_corner, Dimension>(box1);
 
         if (max2 < min1)
         {
@@ -93,4 +90,4 @@ struct intersection_box_box<DimensionCount, DimensionCount>
 }} // namespace boost::geometry
 
 
-#endif // BOOST_GEOMETRY_ALGORITHMS_DETAIL_OVERLAY_INTERSECTION_BOX_BOX_HPP
+#endif // BOOST_GEOMETRY_ALGORITHMS_DETAIL_INTERSECTION_BOX_BOX_IMPLEMENTATION_HPP

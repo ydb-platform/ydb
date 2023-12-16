@@ -22,6 +22,8 @@
 #define BOOST_GEOMETRY_ALGORITHMS_DETAIL_DISJOINT_LINEAR_SEGMENT_OR_BOX_HPP
 
 
+#include <boost/range/size.hpp>
+
 #include <boost/geometry/algorithms/detail/disjoint/multirange_geometry.hpp>
 #include <boost/geometry/algorithms/dispatch/disjoint.hpp>
 #include <boost/geometry/algorithms/not_implemented.hpp>

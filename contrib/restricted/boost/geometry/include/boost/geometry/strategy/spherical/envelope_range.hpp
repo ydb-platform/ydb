@@ -10,6 +10,8 @@
 #ifndef BOOST_GEOMETRY_STRATEGY_SPHERICAL_ENVELOPE_RANGE_HPP
 #define BOOST_GEOMETRY_STRATEGY_SPHERICAL_ENVELOPE_RANGE_HPP
 
+#include <boost/range/size.hpp>
+
 #include <boost/geometry/algorithms/assign.hpp>
 #include <boost/geometry/algorithms/detail/envelope/initialize.hpp>
 #include <boost/geometry/geometries/segment.hpp>

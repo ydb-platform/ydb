@@ -30,6 +30,7 @@
 #ifndef BOOST_GEOMETRY_UTIL_SERIES_EXPANSION_HPP
 #define BOOST_GEOMETRY_UTIL_SERIES_EXPANSION_HPP
 
+#include <boost/array.hpp>
 #include <boost/geometry/core/assert.hpp>
 #include <boost/geometry/util/math.hpp>
 

@@ -32,6 +32,7 @@
 #define BOOST_GEOMETRY_FORMULAS_KARNEY_INVERSE_HPP
 
 
+#include <boost/core/invoke_swap.hpp>
 #include <boost/math/constants/constants.hpp>
 #include <boost/math/special_functions/hypot.hpp>
 
@@ -191,7 +192,7 @@ public:
         if (swap_point < 0)
         {
             lon12_sign *= -1;
-            swap(lat1, lat2);
+            boost::core::invoke_swap(lat1, lat2);
         }
 
         // Enforce lat1 to be <= 0.
@@ -448,9 +449,9 @@ public:
 
         if (swap_point < 0)
         {
-            swap(sin_alpha1, sin_alpha2);
-            swap(cos_alpha1, cos_alpha2);
-            swap(result.geodesic_scale, M21);
+            boost::core::invoke_swap(sin_alpha1, sin_alpha2);
+            boost::core::invoke_swap(cos_alpha1, cos_alpha2);
+            boost::core::invoke_swap(result.geodesic_scale, M21);
         }
 
         sin_alpha1 *= swap_point * lon12_sign;

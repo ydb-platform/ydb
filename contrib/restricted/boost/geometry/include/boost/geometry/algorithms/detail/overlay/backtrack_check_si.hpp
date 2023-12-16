@@ -20,7 +20,6 @@
 #include <boost/range/end.hpp>
 #include <boost/range/value_type.hpp>
 
-#include <boost/geometry/core/access.hpp>
 #include <boost/geometry/algorithms/detail/overlay/turn_info.hpp>
 #include <boost/geometry/algorithms/detail/has_self_intersections.hpp>
 #if defined(BOOST_GEOMETRY_DEBUG_INTERSECTION) || defined(BOOST_GEOMETRY_OVERLAY_REPORT_WKT)

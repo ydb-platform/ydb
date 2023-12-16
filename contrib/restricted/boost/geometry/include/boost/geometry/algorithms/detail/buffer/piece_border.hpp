@@ -18,6 +18,7 @@
 #include <array>
 
 #include <boost/core/addressof.hpp>
+#include <boost/range/size.hpp>
 
 #include <boost/geometry/core/assert.hpp>
 #include <boost/geometry/core/config.hpp>

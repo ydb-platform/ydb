@@ -696,7 +696,7 @@ struct get_turn_info_linear_areal
         namespace ov = overlay;
         typedef ov::get_turn_info_for_endpoint<EnableFirst, EnableLast> get_info_e;
 
-        const std::size_t ip_count = inters.i_info().count;
+        std::size_t const ip_count = inters.i_info().count;
         // no intersection points
         if (ip_count == 0)
         {

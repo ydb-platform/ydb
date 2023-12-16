@@ -12,6 +12,8 @@
 
 #include <vector>
 
+#include <boost/range/size.hpp>
+
 #include <boost/geometry/algorithms/dispatch/distance.hpp>
 #include <boost/geometry/algorithms/detail/visit.hpp>
 #include <boost/geometry/core/assert.hpp>

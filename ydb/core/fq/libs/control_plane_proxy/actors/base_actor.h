@@ -24,7 +24,6 @@ class TPlainBaseActor : public NActors::TActorBootstrapped<TDerived> {
 public:
     using TBase = NActors::TActorBootstrapped<TDerived>;
     using TBase::Become;
-    using TBase::PassAway;
     using TBase::SelfId;
     using TBase::Send;
 
@@ -73,6 +72,11 @@ public:
         SendErrorMessageToSender(MakeTimeoutEventImpl(
             MakeErrorIssue(TIssuesIds::TIMEOUT,
                            "Timeout occurred. Try repeating the request later")));
+    }
+
+    void PassAway() override {
+        Counters->InFly->Dec();
+        TBase::PassAway();
     }
 
 protected:

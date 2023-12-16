@@ -85,31 +85,34 @@ template <class TRecord>
 TUnversionedRow FromRecord(
     const TRecord& record,
     const TRowBufferPtr& rowBuffer,
-    const typename TRecord::TRecordDescriptor::TIdMapping& idMapping)
+    const typename TRecord::TRecordDescriptor::TIdMapping& idMapping,
+    NTableClient::EValueFlags flags)
 {
-    return record.ToUnversionedRow(rowBuffer, idMapping);
+    return record.ToUnversionedRow(rowBuffer, idMapping, flags);
 }
 
 template <class TRecord>
 TUnversionedOwningRow FromRecord(
     const TRecord& record,
-    const typename TRecord::TRecordDescriptor::TIdMapping& idMapping)
+    const typename TRecord::TRecordDescriptor::TIdMapping& idMapping,
+    NTableClient::EValueFlags flags)
 {
     // TODO(babenko): optimize
     auto rowBuffer = New<TRowBuffer>(TDefaultRowBufferPoolTag(), 256);
-    return TUnversionedOwningRow(FromRecord(record, rowBuffer, idMapping));
+    return TUnversionedOwningRow(FromRecord(record, rowBuffer, idMapping, flags));
 }
 
 template <class TRecord>
 TSharedRange<TUnversionedRow> FromRecords(
     TRange<TRecord> records,
     const TRowBufferPtr& rowBuffer,
-    const typename TRecord::TRecordDescriptor::TIdMapping& idMapping)
+    const typename TRecord::TRecordDescriptor::TIdMapping& idMapping,
+    NTableClient::EValueFlags flags)
 {
     std::vector<TUnversionedRow> rows;
     rows.reserve(records.size());
     for (const auto& record : records) {
-        rows.push_back(FromRecord(record, rowBuffer, idMapping));
+        rows.push_back(FromRecord(record, rowBuffer, idMapping, flags));
     }
     return MakeSharedRange(std::move(rows), rowBuffer);
 }
@@ -117,9 +120,10 @@ TSharedRange<TUnversionedRow> FromRecords(
 template <class TRecord>
 TSharedRange<TUnversionedRow> FromRecords(
     TRange<TRecord> records,
-    const typename TRecord::TRecordDescriptor::TIdMapping& idMapping)
+    const typename TRecord::TRecordDescriptor::TIdMapping& idMapping,
+    NTableClient::EValueFlags flags)
 {
-    return FromRecords(records, New<TRowBuffer>(), idMapping);
+    return FromRecords(records, New<TRowBuffer>(), idMapping, flags);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

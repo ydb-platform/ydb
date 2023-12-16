@@ -10,8 +10,10 @@
 #define BOOST_UTILITY_SWAP_HPP
 
 // The header file at this path is deprecated;
-// use boost/core/swap.hpp instead.
+// use boost/core/invoke_swap.hpp instead.
 
+#include <boost/config/header_deprecated.hpp>
 #include <boost/core/swap.hpp>
+
 
 #endif

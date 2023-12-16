@@ -123,8 +123,7 @@ protected:
         TVector<TLogoBlobID> TrashBeingCommitted;
 
         TTxRequest(THolder<TIntermediate> intermediate, TKeyValueFlat *keyValueFlat)
-            : NTabletFlatExecutor::ITransaction(NLWTrace::TOrbit())
-            , Intermediate(std::move(intermediate))
+            : Intermediate(std::move(intermediate))
             , Self(keyValueFlat)
         {
             Intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_UNKNOWN);

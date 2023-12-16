@@ -38,7 +38,7 @@ namespace NMiniKQL = NKikimr::NMiniKQL;
 const ui32 PRETTY_FLAGS = NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote |
                           NYql::TAstPrintFlags::AdaptArbitraryContent;
 
-const TString nullRepr("");
+TString nullRepr("");
 
 bool IsEscapedChar(const TString& s, size_t pos) {
     bool escaped = false;
@@ -937,6 +937,25 @@ void WriteToYtTableScheme(
 }
 
 void ProcessMetaCmd(const TStringBuf& cmd) {
+    const TStringBuf pset_null("\\pset null ");
+
+    if (cmd.starts_with(pset_null)) {
+        const auto secondArgPos = cmd.find_first_not_of(" ", pset_null.length());
+        if (secondArgPos != std::string_view::npos) {
+            TStringBuf newNullRepr(cmd, secondArgPos);
+
+            if (newNullRepr.front() == '\'') {
+                newNullRepr.remove_prefix(1);
+
+                if (newNullRepr.back() == '\'') {
+                    newNullRepr.remove_suffix(1);
+                }
+            }
+            nullRepr = newNullRepr;
+
+            return;
+        }
+    }
     Cerr << "Metacommand " << cmd << " is not supported\n";
 }
 
@@ -1001,6 +1020,15 @@ int Main(int argc, char* argv[])
         if (stmt[0] == '\\') {
             ProcessMetaCmd(stmt);
             continue;
+        }
+
+        {
+            const auto metaCmdStart = stmt.find("\n\\");
+            if (TString::npos != metaCmdStart) {
+                const auto metaCmdEnd = stmt.find_first_of("\r\n", metaCmdStart + 2);
+                ProcessMetaCmd(stmt.substr(metaCmdStart + 1, metaCmdEnd));
+                continue;
+            }
         }
 
         google::protobuf::Arena arena;

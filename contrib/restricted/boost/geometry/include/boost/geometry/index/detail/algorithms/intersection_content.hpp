@@ -16,7 +16,7 @@
 #define BOOST_GEOMETRY_INDEX_DETAIL_ALGORITHMS_INTERSECTION_CONTENT_HPP
 
 #include <boost/geometry/algorithms/detail/disjoint/box_box.hpp>
-#include <boost/geometry/algorithms/detail/overlay/intersection_box_box.hpp>
+#include <boost/geometry/algorithms/detail/intersection/box_box_implementation.hpp>
 
 #include <boost/geometry/index/detail/algorithms/content.hpp>
 

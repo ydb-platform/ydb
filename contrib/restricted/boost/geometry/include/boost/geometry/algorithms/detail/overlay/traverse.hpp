@@ -11,6 +11,8 @@
 
 #include <cstddef>
 
+#include <boost/range/size.hpp>
+
 #include <boost/geometry/algorithms/detail/overlay/backtrack_check_si.hpp>
 #include <boost/geometry/algorithms/detail/overlay/traversal_ring_creator.hpp>
 #include <boost/geometry/algorithms/detail/overlay/traversal_switch_detector.hpp>

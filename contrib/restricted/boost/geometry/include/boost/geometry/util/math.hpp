@@ -450,7 +450,7 @@ struct define_half_pi
 template <typename T>
 struct relaxed_epsilon
 {
-    static inline T apply(const T& factor)
+    static inline T apply(T const& factor)
     {
         return factor * std::numeric_limits<T>::epsilon();
     }

@@ -362,7 +362,7 @@ inline void assign_parents(Geometry1 const& geometry1,
             }
             else if (info.parent.source_index >= 0)
             {
-                const ring_info_type& parent = ring_map[info.parent];
+                ring_info_type const& parent = ring_map[info.parent];
                 bool const pos = math::larger(info.get_area(), 0);
                 bool const parent_pos = math::larger(parent.area, 0);
 

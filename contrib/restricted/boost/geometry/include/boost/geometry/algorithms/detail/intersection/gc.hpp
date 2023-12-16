@@ -12,6 +12,8 @@
 
 #include <tuple>
 
+#include <boost/range/size.hpp>
+
 #include <boost/geometry/algorithms/detail/gc_make_rtree.hpp>
 #include <boost/geometry/algorithms/detail/intersection/interface.hpp>
 #include <boost/geometry/views/detail/geometry_collection_view.hpp>

@@ -216,7 +216,7 @@ template <typename Geometry1, typename Geometry2>
 struct assign
 {
     static inline void
-    apply(Geometry1& geometry1, const Geometry2& geometry2)
+    apply(Geometry1& geometry1, Geometry2 const& geometry2)
     {
         concepts::check<Geometry1>();
         concepts::check<Geometry2 const>();

@@ -1,5 +1,8 @@
 [root]
-
+templates=[
+    { path="root_cmake_lists.jinja", dest="CMakeLists.txt" },
+    { path="root_global_vars.jinja", dest="cmake/global_vars.cmake" },
+]
 copy=[
 	"cmake/global_flags.compiler.gnu.cmake",
     "cmake/global_flags.compiler.msvc.cmake",
@@ -9,7 +12,13 @@ copy=[
 ]
 
 [attrs.root]
-includes="list"
+project_name="str"
+project_language_list="list"
+use_conan="bool"
+platform_flags="list"
+platform_cmakelists="list"
+platform_vars="list"
+includes="sorted_set"
 
 [attrs.target]
 

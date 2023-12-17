@@ -8,9 +8,6 @@ inputs:
     required: true
     default: "relwithdebinfo"
     description: "relwithdebinfo, release-asan, release-tsan"
-  rebuild:
-    required: false
-    default: "0"
   bazel_remote_uri:
     required: false
     description: "bazel-remote endpoint"
@@ -46,10 +43,6 @@ runs:
           extra_params+=(--target="${{ inputs.build_target }}")
         fi
 
-        if [[ "${{ inputs.rebuild }} " == "1" ]]; then
-          params+=(--rebuild)
-        fi
-        
         if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
           extra_params+=(--bazel-remote-store)
           extra_params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")

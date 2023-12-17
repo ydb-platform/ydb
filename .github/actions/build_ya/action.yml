@@ -42,7 +42,7 @@ runs:
         if [ ! -z "${{ inputs.build_target }}" ]; then
           extra_params+=(--target="${{ inputs.build_target }}")
         fi
-        
+
         if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
           extra_params+=(--bazel-remote-store)
           extra_params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")

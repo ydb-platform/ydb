@@ -15,9 +15,6 @@ target_link_libraries(restricted-boost-any INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   restricted-boost-config
-  restricted-boost-core
-  restricted-boost-static_assert
   restricted-boost-throw_exception
   restricted-boost-type_index
-  restricted-boost-type_traits
 )

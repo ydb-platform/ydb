@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    if: ${{ vars.CHECKS_SWITCH2 != '' && fromJSON(vars.CHECKS_SWITCH2).allowed_dirs == true}}
+    if: ${{ vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).allowed_dirs == true}}
     runs-on: ubuntu-latest
 
     steps:

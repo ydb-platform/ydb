@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   check-running-allowed:
-    if: ${{ fromJSON(vars.CHECKS_SWITCH).pr_check == true}}
+    if: ${{vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).pr_check == true}}
     runs-on: ubuntu-latest
     outputs:
       result: ${{ steps.check-ownership-membership.outputs.result }}

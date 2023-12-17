@@ -15,6 +15,8 @@
 
 #include <deque>
 
+#include <boost/range/size.hpp>
+
 #include <boost/core/ignore_unused.hpp>
 
 #include <boost/geometry/core/closure.hpp>
@@ -38,11 +40,10 @@
 #include <boost/geometry/algorithms/detail/is_valid/has_valid_self_turns.hpp>
 #include <boost/geometry/algorithms/dispatch/is_valid.hpp>
 
-// TEMP - with UmberllaStrategy this will be not needed
+// TEMP - with UmbrellaStrategy this will be not needed
 #include <boost/geometry/strategy/area.hpp>
 #include <boost/geometry/strategies/area/services.hpp>
 // TODO: use point_order instead of area
-
 
 #ifdef BOOST_GEOMETRY_TEST_DEBUG
 #include <boost/geometry/io/dsv/write.hpp>

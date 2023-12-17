@@ -403,6 +403,8 @@ select '[]'::jsonb #- '{a}';
 select jsonb_set('{}','{a}','"b"', false);
 select jsonb_set('[]','{1}','"b"', false);
 select jsonb_set('[{"f1":1,"f2":null},2,null,3]', '{0}','[2,3,4]', false);
+-- jsonb_set_lax
+\pset null NULL
 -- errors
 select jsonb_set_lax('{"a":1,"b":2}', '{b}', null, true, null);
 select jsonb_set_lax('{"a":1,"b":2}', '{b}', null, true, 'no_such_treatment');

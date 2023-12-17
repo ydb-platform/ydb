@@ -491,7 +491,6 @@ INSERT INTO booltbl4 VALUES (false, true, null);
 <sql-statement>
 \pset null '(null)'
 </sql-statement>
-Metacommand \pset null '(null)' is not supported
 <sql-statement>
 -- AND expression need to return null if there's any nulls and not all
 -- of the value are true

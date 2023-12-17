@@ -15,6 +15,12 @@
 #ifndef BOOST_GEOMETRY_INDEX_DETAIL_RTREE_NODE_VARIANT_STATIC_HPP
 #define BOOST_GEOMETRY_INDEX_DETAIL_RTREE_NODE_VARIANT_STATIC_HPP
 
+#include <utility>
+#include <boost/container/allocator_traits.hpp>
+#include <boost/core/invoke_swap.hpp>
+#include <boost/variant/static_visitor.hpp>
+#include <boost/variant/variant.hpp>
+
 #include <boost/geometry/index/detail/rtree/node/variant_dynamic.hpp>
 #include <boost/geometry/index/detail/varray.hpp>
 
@@ -146,7 +152,7 @@ public:
 
     void swap(allocators & a)
     {
-        boost::swap(node_allocator(), a.node_allocator());
+        boost::core::invoke_swap(node_allocator(), a.node_allocator());
     }
 
     bool operator==(allocators const& a) const { return node_allocator() == a.node_allocator(); }

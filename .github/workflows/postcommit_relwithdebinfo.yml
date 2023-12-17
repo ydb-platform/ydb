@@ -10,6 +10,7 @@ on:
       - '*'
 jobs:
   build_and_test:
+    if: ${{ fromJSON(vars.CHECKS_SWITCH).postcommit_relwithdebinfo == true}}
     name: Build and test relwithdebinfo
     uses: ./.github/workflows/build_and_test_ya_provisioned.yml
     with:

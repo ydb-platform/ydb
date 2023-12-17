@@ -11,6 +11,7 @@ on:
       - '*'
 jobs:
   build_and_test:
+    if: ${{ fromJSON(vars.CHECKS_SWITCH).postcommit_asan == true}}
     name: Build and test release-asan
     uses: ./.github/workflows/build_and_test_ya_provisioned.yml
     with:

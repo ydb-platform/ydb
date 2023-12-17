@@ -29,8 +29,8 @@ namespace endian
   typedef align alignment;
 
 # ifndef  BOOST_NO_CXX11_TEMPLATE_ALIASES
-  template <BOOST_SCOPED_ENUM(order) Order, class T, std::size_t n_bits,
-    BOOST_SCOPED_ENUM(align) Align = align::no>
+  template <order Order, class T, std::size_t n_bits,
+    align Align = align::no>
   using endian = endian_arithmetic<Order, T, n_bits, Align>;
 # endif
 

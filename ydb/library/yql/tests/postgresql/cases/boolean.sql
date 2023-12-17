@@ -92,6 +92,16 @@ INSERT INTO BOOLTBL3 (d, b, o) VALUES ('null', null, 3);
 CREATE TABLE booltbl4(isfalse bool, istrue bool, isnul bool);
 INSERT INTO booltbl4 VALUES (false, true, null);
 \pset null '(null)'
+-- AND expression need to return null if there's any nulls and not all
+-- of the value are true
+SELECT istrue AND isnul AND istrue FROM booltbl4;
+SELECT istrue AND istrue AND isnul FROM booltbl4;
+SELECT isnul AND istrue AND istrue FROM booltbl4;
+-- OR expression need to return null if there's any nulls and none
+-- of the value is true
+SELECT isfalse OR isnul OR isfalse FROM booltbl4;
+SELECT isfalse OR isfalse OR isnul FROM booltbl4;
+SELECT isnul OR isfalse OR isfalse FROM booltbl4;
 --
 -- Clean up
 -- Many tables are retained by the regression test, but these do not seem

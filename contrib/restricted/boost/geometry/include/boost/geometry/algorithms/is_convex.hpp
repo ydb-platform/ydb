@@ -16,6 +16,7 @@
 
 
 #include <boost/range/empty.hpp>
+#include <boost/range/size.hpp>
 
 #include <boost/geometry/algorithms/detail/equals/point_point.hpp>
 #include <boost/geometry/algorithms/detail/dummy_geometries.hpp>

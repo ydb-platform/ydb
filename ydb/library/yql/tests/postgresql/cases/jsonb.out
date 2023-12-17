@@ -1919,6 +1919,8 @@ select jsonb_set('[{"f1":1,"f2":null},2,null,3]', '{0}','[2,3,4]', false);
  [[2, 3, 4], 2, null, 3]
 (1 row)
 
+-- jsonb_set_lax
+\pset null NULL
 -- errors
 select jsonb_set_lax('{"a":1,"b":2}', '{b}', null, true, null);
 ERROR:  null_value_treatment must be "delete_key", "return_target", "use_json_null", or "raise_exception"

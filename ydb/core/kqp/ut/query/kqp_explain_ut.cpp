@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT(aggregate.IsDefined());
         UNIT_ASSERT(aggregate.GetMapSafe().at("GroupBy").GetStringSafe() == "item.App");
         UNIT_ASSERT(aggregate.GetMapSafe().at("Aggregation").GetStringSafe() ==
-            "{_yql_agg_0: MAX(item.Message),_yql_agg_1: MIN(item.Message)}");
+            "{_yql_agg_0: MAX(item.Message,state._yql_agg_0),_yql_agg_1: MIN(item.Message,state._yql_agg_1)}");
     }
 
     Y_UNIT_TEST(ComplexJoin) {

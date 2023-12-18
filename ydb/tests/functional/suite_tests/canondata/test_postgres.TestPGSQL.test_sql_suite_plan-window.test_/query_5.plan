@@ -74,7 +74,7 @@
                                                                                         "Node Type": "Aggregate-TableFullScan",
                                                                                         "Operators": [
                                                                                             {
-                                                                                                "Aggregation": "{_yql_agg_0: SUM(item.salary)}",
+                                                                                                "Aggregation": "{_yql_agg_0: SUM(item.salary,state._yql_agg_0)}",
                                                                                                 "GroupBy": "item.depname",
                                                                                                 "Name": "Aggregate"
                                                                                             },

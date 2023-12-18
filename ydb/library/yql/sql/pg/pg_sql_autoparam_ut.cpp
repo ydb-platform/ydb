@@ -17,6 +17,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
     Y_UNIT_TEST(AutoParamValues_DifferentTypes) {
         TTranslationSettings settings;
         settings.AutoParametrizeEnabled = true;
+        settings.AutoParametrizeValuesStmt = true;
         auto res = SqlToYqlWithMode(
             R"(insert into plato.Output values (1,2,3), (1,2.0,3))",
             NSQLTranslation::ESqlMode::QUERY,
@@ -66,10 +67,11 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
         }
     }
 
-    void TestAutoParam(const TString& query, const THashMap<TString, TString>& expectedParamNameToJsonYdbVal, const TMap<TString, TString>& expectedParamTypes, TUsedParamsGetter usedParamsGetter, THashSet<TString> enabledParametrizeScopes = {}) {
+    void TestAutoParam(const TString& query, const THashMap<TString, TString>& expectedParamNameToJsonYdbVal, const TMap<TString, TString>& expectedParamTypes, TUsedParamsGetter usedParamsGetter, THashSet<TString> disabledParametrizeScopes = {}) {
         TTranslationSettings settings;
         settings.AutoParametrizeEnabled = true;
-        settings.AutoParametrizeEnabledScopes = enabledParametrizeScopes;
+        settings.AutoParametrizeValuesStmt = true;
+        settings.AutoParametrizeExprDisabledScopes = disabledParametrizeScopes;
         auto res = SqlToYqlWithMode(
             query,
             NSQLTranslation::ESqlMode::QUERY,
@@ -190,7 +192,6 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
             {"type":{"pg_type": {"oid": 23}},
             "value":{"text_value": "1"}}
         )";
-        THashSet<TString> enabledScopes {"WHERE"};
 
         // We expect: (PgOp '">" (PgColumnRef '"key") a0)
         const TUsedParamsGetter usedInWhereComp = [] (TSet<TString>& usedParams, const NYql::TAstNode& node) {
@@ -220,7 +221,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
             usedParams.insert(TString(pgBinOpSecondArg->GetContent()));
         };
         TString type = "(PgType 'int4)";
-        TestAutoParam(query, {{"a0", expectedParamJson}}, {{"a0", type}}, usedInWhereComp, enabledScopes);
+        TestAutoParam(query, {{"a0", expectedParamJson}}, {{"a0", type}}, usedInWhereComp);
     }
     
     Y_UNIT_TEST(AutoParamConsts_Select) {
@@ -239,7 +240,6 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
             {"type":{"pg_type": {"oid": 1560}},
             "value":{"text_value": "b10001"}}
         )";
-        THashSet<TString> enabledScopes {"SELECT"};
         const TUsedParamsGetter dummyGetter = [] (TSet<TString>& usedParams, const NYql::TAstNode&) {
             usedParams = {"a0", "a1", "a2"};
         };
@@ -252,7 +252,24 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
             {"a0", expectedParamJsonInt4}, 
             {"a1", expectedParamJsonText},
             {"a2", expectedParamJsonBit},
-            }, expectedParamTypes, dummyGetter, enabledScopes);
+            }, expectedParamTypes, dummyGetter);
+    }
+
+    Y_UNIT_TEST(AutoParamValues_FailToInferColumnType) {
+        const auto query = R"(INSERT INTO test VALUES (1), ('2');)";
+        TMap<TString, TString> paramToType = {{"a0", "(PgType 'int4)"}, {"a1", "(PgType 'unknown)"}};
+        TString expectedParamJsonInt4 = R"(
+            {"type":{"pg_type": {"oid": 23}},
+            "value":{"text_value": "1"}}
+        )";
+        TString expectedParamJsonText = R"(
+            {"type":{"pg_type": {"oid": 705}},
+            "value":{"text_value": "2"}}
+        )";
+        const TUsedParamsGetter dummyGetter = [] (TSet<TString>& usedParams, const NYql::TAstNode&) {
+            usedParams = {"a0", "a1"};
+        };
+        TestAutoParam(query, {{"a0", expectedParamJsonInt4}, {"a1", expectedParamJsonText}}, paramToType, dummyGetter, {});
     }
 
 }

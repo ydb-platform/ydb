@@ -41,10 +41,12 @@ class TDqChannelStorageActor : public TActorBootstrapped<TDqChannelStorageActor>
     using TBase = TActorBootstrapped<TDqChannelStorageActor>;
 
 public:
-    TDqChannelStorageActor(TTxId txId, ui64 channelId, IDqChannelStorage::TWakeUpCallback&& wakeUp)
+    TDqChannelStorageActor(TTxId txId, ui64 channelId, IDqChannelStorage::TWakeUpCallback&& wakeUp, TActorSystem* actorSystem)
         : TxId_(txId)
         , ChannelId_(channelId)
-        , WakeUp_(std::move(wakeUp)) {}
+        , WakeUp_(std::move(wakeUp))
+        , ActorSystem_(actorSystem)
+    {}
 
     void Bootstrap() {
         auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, TStringBuilder() << "ChannelId: " << ChannelId_,
@@ -135,7 +137,7 @@ public:
         return WritingBlobs_.size() > MAX_INFLIGHT_BLOBS_COUNT || WritingBlobsSize_ > MAX_INFLIGHT_BLOBS_SIZE;
     }
 
-    void Put(ui64 blobId, TRope&& blob) {
+    void Put(ui64 blobId, TRope&& blob, ui64 cookie) {
         FailOnError();
 
         // TODO: timeout
@@ -143,13 +145,13 @@ public:
 
         ui64 size = blob.size();
 
-        Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(blobId, std::move(blob)));
+        SendEvent(new TEvDqSpilling::TEvWrite(blobId, std::move(blob)), cookie);
 
         WritingBlobs_.emplace(blobId, size);
         WritingBlobsSize_ += size;
     }
 
-    bool Get(ui64 blobId, TBuffer& blob) {
+    bool Get(ui64 blobId, TBuffer& blob, ui64 cookie) {
         FailOnError();
 
         auto loadedIt = LoadedBlobs_.find(blobId);
@@ -162,7 +164,7 @@ public:
 
         auto result = LoadingBlobs_.emplace(blobId);
         if (result.second) {
-            Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, true));
+            SendEvent(new TEvDqSpilling::TEvRead(blobId, true), cookie);
         }
 
         return false;
@@ -178,6 +180,23 @@ private:
             LOG_E("Error: " << *Error_);
             ythrow TDqChannelStorageException() << "TxId: " << TxId_ << ", channelId: " << ChannelId_
                 << ", error: " << *Error_;
+        }
+    }
+
+    template<typename T>
+    void SendEvent(T* event, ui64 cookie) {
+        if (ActorSystem_) {
+            ActorSystem_->Send(
+                new IEventHandle(
+                    SpillingActorId_,
+                    SelfId(),
+                    event,
+                    /*flags=*/0,
+                    cookie
+                )
+            );
+        } else {
+            Send(SpillingActorId_, event);
         }
     }
 
@@ -197,13 +216,15 @@ private:
     TMap<ui64, TBuffer> LoadedBlobs_;
 
     TMaybe<TString> Error_;
+
+    TActorSystem* ActorSystem_;
 };
 
 
 class TDqChannelStorage : public IDqChannelStorage {
 public:
-    TDqChannelStorage(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUp) {
-        SelfActor_ = new TDqChannelStorageActor(txId, channelId, std::move(wakeUp));
+    TDqChannelStorage(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUp, TActorSystem* actorSystem) {
+        SelfActor_ = new TDqChannelStorageActor(txId, channelId, std::move(wakeUp), actorSystem);
         TlsActivationContext->AsActorContext().RegisterWithSameMailbox(SelfActor_);
     }
 
@@ -219,12 +240,12 @@ public:
         return SelfActor_->IsFull();
     }
 
-    void Put(ui64 blobId, TRope&& blob) override {
-        SelfActor_->Put(blobId, std::move(blob));
+    void Put(ui64 blobId, TRope&& blob, ui64 cookie = 0) override {
+        SelfActor_->Put(blobId, std::move(blob), cookie);
     }
 
-    bool Get(ui64 blobId, TBuffer& blob) override {
-        return SelfActor_->Get(blobId, blob);
+    bool Get(ui64 blobId, TBuffer& blob, ui64 cookie = 0) override {
+        return SelfActor_->Get(blobId, blob, cookie);
     }
 
 private:
@@ -233,9 +254,9 @@ private:
 
 } // anonymous namespace
 
-IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId, IDqChannelStorage::TWakeUpCallback wakeUp)
+IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId, IDqChannelStorage::TWakeUpCallback wakeUp, TActorSystem* actorSystem)
 {
-    return new TDqChannelStorage(txId, channelId, std::move(wakeUp));
+    return new TDqChannelStorage(txId, channelId, std::move(wakeUp), actorSystem);
 }
 
 } // namespace NYql::NDq

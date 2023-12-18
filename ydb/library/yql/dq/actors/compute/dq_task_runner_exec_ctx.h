@@ -4,7 +4,6 @@
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/actors/core/actor.h>
 
-
 namespace NYql {
 namespace NDq {
 
@@ -13,6 +12,7 @@ public:
     TDqTaskRunnerExecutionContext(TTxId txId, bool withSpilling, IDqChannelStorage::TWakeUpCallback&& wakeUp);
 
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId) const override;
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, NActors::TActorSystem* actorSystem) const override;
 
 private:
     const TTxId TxId_;

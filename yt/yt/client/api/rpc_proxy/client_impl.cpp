@@ -504,17 +504,38 @@ TFuture<TYsonString> TClient::GetTablePivotKeys(
 }
 
 TFuture<void> TClient::CreateTableBackup(
-    const TBackupManifestPtr& /*manifest*/,
-    const TCreateTableBackupOptions& /*options*/)
+    const TBackupManifestPtr& manifest,
+    const TCreateTableBackupOptions& options)
 {
-    ThrowUnimplemented("CreateTableBackup");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.CreateTableBackup();
+    ToProto(req->mutable_manifest(), *manifest);
+
+    SetTimeoutOptions(*req, options);
+    req->set_checkpoint_timestamp_delay(ToProto<i64>(options.CheckpointTimestampDelay));
+    req->set_checkpoint_check_period(ToProto<i64>(options.CheckpointCheckPeriod));
+    req->set_checkpoint_check_timeout(ToProto<i64>(options.CheckpointCheckTimeout));
+    req->set_force(options.Force);
+
+    return req->Invoke().As<void>();
 }
 
 TFuture<void> TClient::RestoreTableBackup(
-    const TBackupManifestPtr& /*manifest*/,
-    const TRestoreTableBackupOptions& /*options*/)
+    const TBackupManifestPtr& manifest,
+    const TRestoreTableBackupOptions& options)
 {
-    ThrowUnimplemented("RestoreTableBackup");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.RestoreTableBackup();
+    ToProto(req->mutable_manifest(), *manifest);
+
+    SetTimeoutOptions(*req, options);
+    req->set_force(options.Force);
+    req->set_mount(options.Mount);
+    req->set_enable_replicas(options.EnableReplicas);
+
+    return req->Invoke().As<void>();
 }
 
 TFuture<std::vector<TTableReplicaId>> TClient::GetInSyncReplicas(

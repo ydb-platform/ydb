@@ -50,6 +50,12 @@ message QueryInternal {
     NFq.NConfig.TYdbStorageConfig compute_connection = 26;
     google.protobuf.Duration result_ttl = 27;
     NYql.NDqProto.StatusIds.StatusCode pending_status_code = 28;
+
+    message NamedValue {
+        string name = 1;
+        int64 value = 2;
+    }
+    repeated NamedValue statistics = 29;
 }
 
 message JobInternal {

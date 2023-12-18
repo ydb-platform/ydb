@@ -6,14 +6,12 @@ ENV TZ=Etc/UTC
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-      python3 curl lsb-release python3-dev libc6-dev libidn11-dev libaio1 libaio-dev libgcc-11-dev binutils tree
+      python3 curl lsb-release python3-dev libc6-dev libidn11-dev libaio1 libaio-dev libgcc-11-dev binutils tree git
 
 COPY ydb/ /ydbwork/ydb/
 
 WORKDIR /ydbwork/ydb/
 
-# FIXME: change to release
-#RUN ./ya make --build=relwithdebinfo  -T \
 RUN ./ya make -r -T \
       -C ydb/apps/ydbd/ydbd \
       -C ydb/apps/ydb/ydb \
@@ -21,10 +19,8 @@ RUN ./ya make -r -T \
       -o /ydbwork/out/ \
     && /ydbwork/out/ydb/apps/ydbd/ydbd -V \
     && tree /ydbwork/out/ \
-    && strip /ydbwork/out/ydb/apps/ydbd/ydbd \
-    && strip /ydbwork/out/ydb/apps/ydb/ydb \
-    && strip /ydbwork/out/ydb/public/tools/local_ydb/local_ydb \
-    && rm -rf ~/.ya  # for reduce cache size
+    && strip /ydbwork/out/ydb/apps/ydbd/ydbd /ydbwork/out/ydb/apps/ydb/ydb /ydbwork/out/ydb/public/tools/local_ydb/local_ydb \
+    && rm -rf ~/.ya  || echo 'unable to delete ~/.ya' # for reduce cache size
 
 
 FROM ubuntu:22.04

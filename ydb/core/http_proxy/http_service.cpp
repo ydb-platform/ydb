@@ -47,6 +47,7 @@ namespace NKikimr::NHttpProxy {
         Processors->Initialize();
         if (cfg.UseSDK) {
             auto config = NYdb::TDriverConfig().SetNetworkThreadsNum(1)
+                .SetClientThreadsNum(1)
                 .SetGRpcKeepAlivePermitWithoutCalls(true)
                 .SetGRpcKeepAliveTimeout(TDuration::Seconds(90))
                 .SetDiscoveryMode(NYdb::EDiscoveryMode::Async);

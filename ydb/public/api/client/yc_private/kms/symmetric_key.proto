@@ -5,7 +5,7 @@ package yandex.cloud.priv.kms.v1;
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
 
-option go_package = "github.com/ydb-platform/ydb/cloud/bitbucket/private-api/yandex/cloud/priv/kms/v1;kms";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/kms;kms";
 option java_outer_classname = "PSK";
 
 enum SymmetricAlgorithm {

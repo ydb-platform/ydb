@@ -6,7 +6,7 @@ import "ydb/public/api/client/yc_private/kms/symmetric_key.proto";
 import "ydb/public/api/client/yc_private/kms/asymmetricencryption/asymmetric_encryption_key.proto";
 import "ydb/public/api/client/yc_private/kms/asymmetricsignature/asymmetric_signature_key.proto";
 
-option go_package = "github.com/ydb-platform/ydb/cloud/bitbucket/private-api/yandex/cloud/priv/kms/v1;kms";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/kms;kms";
 option java_outer_classname = "PSCS";
 
 // --- data plane for KMS symmetric cryptography operations

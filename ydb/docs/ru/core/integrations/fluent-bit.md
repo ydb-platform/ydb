@@ -16,7 +16,7 @@ FluentBit – инструмент, который может собирать �
 
 Принципиальная схема работы выглядит следующим образом:
 
-![FluentBit in Kubernetes cluster](_assets/fluent-bit-ydb-scheme.png)
+![FluentBit in Kubernetes cluster](../_assets/fluent-bit-ydb-scheme.png)
 <small>Рисунок 1 — Схема взаимодействия FluentBit и YDB в Kubernetes кластере</small>
 
 На этой схеме:

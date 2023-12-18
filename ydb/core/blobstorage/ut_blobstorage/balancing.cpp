@@ -220,23 +220,22 @@ struct TRandomTest {
 
         for (ui32 step = 0; step < NumIters; ++step) {
             Cerr << step << Endl;
-            data.push_back(GenData(random() % 4096));
+            data.push_back(GenData(16 + random() % 4096));
             auto blobId = MakeLogoBlobId(step, data.back().size());
             auto locations = Env.GetExpectedPartsLocations(blobId);
 
-            // Stop some node needs for this blob
-            ui32 nodeIdWithBlob = 0;
-            while (locations[nodeIdWithBlob].size() == 0) ++nodeIdWithBlob;
             if (random() % 10 == 1 && Env.RunningNodes.size() + 2 > Env->Settings.NodeCount) {
-                Env.StopNode(nodeIdWithBlob);
+                ui32 nodeId = random() % Env->Settings.NodeCount;
+                Cerr << "Stop node " << nodeId << Endl;
+                Env.StopNode(nodeId);
             }
 
             Env.SendPut(step, data.back(), NKikimrProto::OK);
 
-            // Start some disabled node
             if (random() % 10 == 1) {
                 for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
                     if (!Env.RunningNodes.contains(pos)) {
+                        Cerr << "Start node " << pos << Endl;
                         Env.StartNode(pos);
                         Env->Sim(TDuration::Seconds(10));
                         break;
@@ -244,17 +243,17 @@ struct TRandomTest {
                 }
             }
 
-            if (random() % 50 == 1) {
-                ui32 pos = random() % Env->Settings.NodeCount;
-                if (!Env.RunningNodes.contains(pos)) {
-                    Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
-                }
-            }
+            // if (random() % 50 == 1) {
+            //     ui32 pos = random() % Env->Settings.NodeCount;
+            //     if (!Env.RunningNodes.contains(pos)) {
+            //         Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
+            //     }
+            // }
 
-            // Wipe random node
-            if (random() % 100 == 1) {
-                // Env->Wipe(ui32 nodeId, ui32 pdiskId, ui32 vslotId);
-            }
+            // // Wipe random node
+            // if (random() % 100 == 1) {
+            //     // Env->Wipe(ui32 nodeId, ui32 pdiskId, ui32 vslotId);
+            // }
         }
 
         for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {

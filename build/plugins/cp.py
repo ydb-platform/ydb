@@ -4,14 +4,16 @@ from _common import sort_by_keywords
 
 
 def oncopy(unit, *args):
-    keywords = {'RESULT': 1, 'KEEP_DIR_STRUCT': 0, 'DESTINATION': 1, 'FROM': 1}
+    keywords = {'RESULT': 1, 'KEEP_DIR_STRUCT': 0, 'DESTINATION': 1, 'FROM': 1, 'OUTPUT_INCLUDES': 1, 'AUTO': 0}
 
     flat_args, spec_args = sort_by_keywords(keywords, args)
 
     dest_dir = spec_args['DESTINATION'][0] if 'DESTINATION' in spec_args else ''
     from_dir = spec_args['FROM'][0] if 'FROM' in spec_args else ''
+    output_include = spec_args['OUTPUT_INCLUDES'][0] if 'OUTPUT_INCLUDES' in spec_args else ''
     keep_struct = 'KEEP_DIR_STRUCT' in spec_args
     save_in_var = 'RESULT' in spec_args
+    auto = 'AUTO' in spec_args
     targets = []
 
     for source in flat_args:
@@ -25,6 +27,11 @@ def oncopy(unit, *args):
         target_path = os.path.join(dest_dir, rel_path, filename)
         if save_in_var:
             targets.append(target_path)
-        unit.oncopy_file([source_path, target_path])
+        unit.oncopy_file(
+            [source_path, target_path]
+            + (['OUTPUT_INCLUDES', output_include] if output_include else [])
+            + (['AUTO'] if auto else [])
+        )
+
     if save_in_var:
         unit.set([spec_args["RESULT"][0], " ".join(targets)])

@@ -1166,9 +1166,6 @@ class GnuToolchain(Toolchain):
             ])
 
         if self.tc.is_clang:
-            if not self.tc.is_system_cxx:
-                if 'CLANG' in self.tc.name_marker:
-                    self.c_flags_platform.append('-isystem{}/share/include'.format(self.tc.name_marker))
             target_triple = self.tc.triplet_opt.get(target.arch, None)
             if not target_triple:
                 target_triple = select(default=None, selectors=[
@@ -1987,9 +1984,6 @@ class MSVCCompiler(MSVC, Compiler):
         cxx_warnings = []
 
         if self.tc.use_clang:
-            if self.tc.from_arcadia:
-                flags += ['-imsvc{}/share/include'.format(self.tc.name_marker)]
-
             flags += [
                 # Allow <windows.h> to be included via <Windows.h> in case-sensitive file-systems.
                 '-fcase-insensitive-paths',

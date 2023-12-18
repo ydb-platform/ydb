@@ -1,14 +1,15 @@
-#include "library/cpp/packedtypes/packedfloat.h"
-#include "util/datetime/cputimer.h"
+#include "ydb/core/blobstorage/vdisk/common/benchmark/ev_put2.h"
 #include <cstring>
 #include <vector>
 
 #include <library/cpp/actors/core/event.h>
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/int128/int128.h>
+#include <library/cpp/packedtypes/packedfloat.h>
 #include <library/cpp/testing/benchmark/bench.h>
 
 #include <util/datetime/base.h>
+#include <util/datetime/cputimer.h>
 #include <util/generic/yexception.h>
 #include <util/stream/input.h>
 #include <util/stream/output.h>
@@ -113,11 +114,10 @@ struct TTestStats {
 };
 
 using TEvVPut = NKikimr::TEvBlobStorage::TEvVPut;
-// using TEvVPut = NKikimrBlobStorage::TEvVPut;
 using NActors::TChunkSerializer;
 
-template <typename InitFunc>
-ui128 InitializeEvents(std::span<TEvVPut> evs, InitFunc& initFunc) {
+template <typename Ev, typename InitFunc>
+ui128 InitializeEvents(std::span<Ev> evs, InitFunc& initFunc) {
     ui128 bytesWritten = 0;
     for (auto& ev : evs) {
         bytesWritten += initFunc(ev);
@@ -125,7 +125,8 @@ ui128 InitializeEvents(std::span<TEvVPut> evs, InitFunc& initFunc) {
     return bytesWritten;
 }
 
-void SerializeEvents(std::span<TEvVPut> evs, std::span<TChunkSerializer*> streams) {
+template <typename Ev>
+void SerializeEvents(std::span<Ev> evs, std::span<TChunkSerializer*> streams) {
     for (size_t i = 0; i < evs.size(); ++i) {
         auto& ev = evs[i];
         auto* stream = streams[i];
@@ -133,22 +134,23 @@ void SerializeEvents(std::span<TEvVPut> evs, std::span<TChunkSerializer*> stream
     }
 }
 
-void DeserializeEvents(std::span<TEvVPut> evs, std::span<NActors::TEventSerializationInfo> infos, std::vector<NActors::IEventBase*>& trash, std::span<NActors::TAllocChunkSerializer> streams) {
+template <typename Ev>
+void DeserializeEvents(std::span<Ev> evs, std::span<NActors::TEventSerializationInfo> infos, std::vector<NActors::IEventBase*>& trash, std::span<NActors::TAllocChunkSerializer> streams) {
     for (size_t i = 0; i < evs.size(); ++i) {
         auto& stream = streams[i];
         auto& info = infos[i];
         auto data = stream.Release(std::move(info));
-        auto ev = TEvVPut::Load(data.Get());
+        auto ev = Ev::Load(data.Get());
         trash[i] = ev;
     }
 }
 
-template <size_t max_bytes, typename InitFunc>
+template <size_t max_bytes, typename Ev, typename InitFunc>
 TTestStats DoTest(size_t evCount, InitFunc&& initFunc) {
     TTestStats stats;
     stats.EvCount = evCount;
 
-    std::vector<TEvVPut> evs(evCount);
+    std::vector<Ev> evs(evCount);
     std::vector<NActors::TEventSerializationInfo> infos;
     infos.reserve(evs.size());
     for (auto& ev : evs) {
@@ -162,18 +164,18 @@ TTestStats DoTest(size_t evCount, InitFunc&& initFunc) {
         serializers.push_back(&s);
     }
 
-    stats.BytesWritten = InitializeEvents(evs, initFunc);
+    stats.BytesWritten = InitializeEvents(static_cast<std::span<Ev>>(evs), initFunc);
 
     {
         TPrecisionTimer timer;
-        SerializeEvents(evs, serializers);
+        SerializeEvents(static_cast<std::span<Ev>>(evs), serializers);
         stats.SerializeCycles = timer.GetCycleCount();
         stats.SerializeDuration = CyclesToDuration(static_cast<ui64>(stats.SerializeCycles));
     }
 
     {
         TPrecisionTimer timer;
-        DeserializeEvents(evs, infos, trash, streams);
+        DeserializeEvents(static_cast<std::span<Ev>>(evs), infos, trash, streams);
         stats.DeserializeCycles = timer.GetCycleCount();
         stats.DeserializeDuration = CyclesToDuration(static_cast<ui64>(stats.DeserializeCycles));
     }
@@ -197,31 +199,39 @@ void SerDeLoopIteration(Event& ev, size_t iterations) {
 
 } // namespace
 
-int main() {
+template <typename Ev>
+void test() {
     constexpr static size_t kLogMin = 10;
-    constexpr static size_t kLogMax = 14;
+    constexpr static size_t kLogMax = 17;
     constexpr static size_t kIterations = 120;
 
     TTestStats stats;
     for (size_t k = kLogMin; k < kLogMax; ++k) {
         for (size_t i = 0; i < kIterations; ++i) {
-            stats += DoTest<128>(1U << k, [position = 0](TEvVPut& ev) mutable {
+            stats += DoTest<128, Ev>(1U << k, [position = 0](Ev& ev) mutable {
                 ++position;
                 if (position & 3 == 0) {
+                    ev.Record.SetCookie(1123);
+                    ev.Record.SetNotifyIfNotReady(true);
                     ev.Record.SetBuffer(storeString32);
-                    return 32;
+                    return 64 + 8 + 32;
                 }
                 if (position & 3 == 1) {
+                    ev.Record.SetFullDataSize(4048);
                     ev.Record.SetBuffer(storeString64);
-                    return 64;
+                    return 64 + 64;
                 }
                 if (position & 3 == 2) {
+                    ev.Record.SetCookie(1123);
+                    ev.Record.SetNotifyIfNotReady(true);
                     ev.Record.SetBuffer(storeString128);
-                    return 128;
+                    return 64 + 8 + 128;
                 }
                 if (position & 3 == 3) {
+                    ev.Record.SetCookie(1123);
+                    ev.Record.SetNotifyIfNotReady(true);
                     ev.Record.SetBuffer(storeString256);
-                    return 256;
+                    return 64 + 8 + 256;
                 }
                 return 0;
             });
@@ -245,4 +255,9 @@ int main() {
     << stats.DeserializeCycles / stats.EvCount << " cycles/Ev read" << Endl
     << stats.DeserializeCycles / stats.BytesWritten << " cycles/B read" << Endl
     ;
+}
+
+int main() {
+    test<TEvVPut2>();
+    test<TEvVPut>();
 }

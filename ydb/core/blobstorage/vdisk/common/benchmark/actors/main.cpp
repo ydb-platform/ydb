@@ -22,6 +22,7 @@
 #include <util/system/yassert.h>
 
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/blobstorage/vdisk/common/benchmark/ev_put2.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 
@@ -69,7 +70,7 @@ struct TVdiskBenchEvents {
         End,
     };
 
-    static_assert(End < EventSpaceEnd(TEvents::ES_USERSPACE), "expect End < EventSpaceEnd(ES_HELLOWORLD)");
+    static_assert(End < EventSpaceEnd(TEvents::ES_USERSPACE), "expect End < EventSpaceEnd(ES_USERSPACE)");
 };
 
 struct TEvAck : public TEventBase<TEvAck, TVdiskBenchEvents::Ack> {
@@ -93,7 +94,7 @@ class TSenderActor : public NActors::TActorBootstrapped<TSenderActor> {
     void SendToTarget() {
         SendEvents++;
         auto* ptr = new NKikimr::TEvBlobStorage::TEvVPut;
-        ptr->StorePayload(TRope(Payload));
+        // auto* ptr = new TEvVPut2();
         Send(Target, ptr);
     }
 
@@ -142,12 +143,11 @@ class TReceiverActor : public TActor<TReceiverActor> {
 
     void Handle(NKikimr::TEvBlobStorage::TEvVPut::TPtr& ev) {
         Y_UNUSED(ev->Get());
-        auto* evLoad = ev->Get();
-        auto count = evLoad->GetPayloadCount();
-        for (ui32 i = 0; i < count; ++i) {
-            auto rope = evLoad->GetPayload(i);
-            Y_ASSERT(rope == Payload);
-        }
+        Send(ev->Sender, new TEvAck());
+    }
+
+    void Handle(TEvVPut2::TPtr& ev) {
+        Y_UNUSED(ev->Get());
         Send(ev->Sender, new TEvAck());
     }
 
@@ -160,6 +160,7 @@ public:
     STFUNC(Main) {
         STRICT_STFUNC_BODY(
             hFunc(NKikimr::TEvBlobStorage::TEvVPut, Handle);
+            // hFunc(TEvVPut2, Handle);
         )
     }
 };
@@ -318,5 +319,5 @@ int test(const char* payload, TDuration duration) {
 } // namespace
 
 int main() {
-    return NRemoteBench::test(storeString128, TDuration::Seconds(10));
+    return NRemoteBench::test(storeString128, TDuration::Seconds(1));
 }

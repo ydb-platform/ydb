@@ -4,7 +4,7 @@ package yandex.cloud.priv.kms.v1.asymmetricencryption;
 
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/ydb-platform/ydb/cloud/bitbucket/private-api/yandex/cloud/priv/kms/v1/asymmetricencryption;kms";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/kms/asymmetricencryption;kms";
 option java_outer_classname = "PAEK";
 
 enum AsymmetricEncryptionAlgorithm {

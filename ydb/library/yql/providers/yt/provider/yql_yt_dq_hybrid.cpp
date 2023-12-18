@@ -32,6 +32,8 @@ namespace NYql {
 
 namespace {
 
+// test comment
+
 using namespace NNodes;
 using namespace NDq;
 

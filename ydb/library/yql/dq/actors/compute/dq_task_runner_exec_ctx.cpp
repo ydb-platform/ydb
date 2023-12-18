@@ -14,8 +14,12 @@ TDqTaskRunnerExecutionContext::TDqTaskRunnerExecutionContext(TTxId txId, bool wi
 }
 
 IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId) const {
+    return CreateChannelStorage(channelId, nullptr);
+}
+
+IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, NActors::TActorSystem* actorSystem) const {
     if (WithSpilling_) {
-        return CreateDqChannelStorage(TxId_, channelId, WakeUp_);
+        return CreateDqChannelStorage(TxId_, channelId, WakeUp_, actorSystem);
     } else {
         return nullptr;
     }

@@ -300,6 +300,7 @@ public:
                 typeOid != UNKNOWNOID ? NPg::LookupType(typeOid).Name : DEFAULT_PARAM_TYPE;
             ParamNameToPgTypeName[paramName] = typeName;
         }
+
     }
 
     void OnResult(const List* raw) {
@@ -452,7 +453,7 @@ public:
         Y_ABORT_UNLESS(rawValuesLists);
         size_t rows = ListLength(rawValuesLists);
 
-        if (rows == 0 || !Settings.AutoParametrizeEnabled) {
+        if (rows == 0 || !Settings.AutoParametrizeEnabled || !Settings.AutoParametrizeValuesStmt) {
             return false;
         }
 
@@ -580,8 +581,8 @@ public:
         }
 
         TVector<TPgConst> pgConsts;
-        bool allValsAreLiteral = ExtractPgConstsForAutoParam(valuesLists, pgConsts);
-        if (allValsAreLiteral) {
+        bool canAutoparametrize = ExtractPgConstsForAutoParam(valuesLists, pgConsts);
+        if (canAutoparametrize) {
             auto maybeColumnTypes = InferColumnTypesForValuesStmt(pgConsts, valNames.size());
             if (maybeColumnTypes) {
                 auto valuesNode = MakeValuesStmtAutoParam(std::move(pgConsts), std::move(maybeColumnTypes.GetRef()));
@@ -2928,11 +2929,10 @@ public:
         typedValue.mutable_type()->mutable_pg_type()->set_oid(oid);
 
         auto* value = typedValue.mutable_value();
-        if (valueNType.value) {
-            value->set_text_value(std::move(valueNType.value.GetRef()));
-        } else {
-            Y_ABORT_UNLESS(valueNType.type == TPgConst::Type::unknown, "NULL is allowed to only be of unknown type");
+        if (valueNType.type == TPgConst::Type::nil) {
             value->set_null_flag_value(NProtoBuf::NULL_VALUE);
+        } else {
+            value->set_text_value(std::move(valueNType.value.GetRef()));
         }
 
         const auto& paramName = AddAutoParam(std::move(typedValue));
@@ -2955,8 +2955,7 @@ public:
             ? L(A("PgType"), QA(TPgConst::ToString(valueNType->type)))
             : L(A("PgType"), QA("unknown"));
 
-        if (Settings.AutoParametrizeEnabled &&
-            Settings.AutoParametrizeEnabledScopes.contains(settings.Scope)) {
+        if (Settings.AutoParametrizeEnabled && !Settings.AutoParametrizeExprDisabledScopes.contains(settings.Scope)) {
             return AutoParametrizeConst(std::move(valueNType.GetRef()), pgTypeNode);
         }
 

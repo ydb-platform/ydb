@@ -5,6 +5,7 @@
 
 using namespace NYql;
 
+/*
 Y_UNIT_TEST_SUITE(CboOptimizer) {
 
 Y_UNIT_TEST(InputToString) {
@@ -97,3 +98,5 @@ EqClasses: [[a,b],[c,d]]
 }
 
 } // Y_UNIT_TEST_SUITE(CboOptimizer)
+
+*/

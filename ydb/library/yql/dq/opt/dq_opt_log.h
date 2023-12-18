@@ -25,7 +25,7 @@ NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     const NNodes::TExprBase& node,
     TExprContext& ctx,
     TTypeAnnotationContext& typesCtx,
-    const std::function<IOptimizer*(IOptimizer::TInput&&)>& optFactory,
+    const std::function<IOptimizer*()>& optFactory,
     bool ruleEnabled);
 
 NNodes::TExprBase DqRewriteEquiJoin(const NNodes::TExprBase& node, TExprContext& ctx);
@@ -46,6 +46,6 @@ IGraphTransformer::TStatus DqWrapRead(const TExprNode::TPtr& input, TExprNode::T
 
 NNodes::TExprBase DqExpandMatchRecognize(NNodes::TExprBase node, TExprContext& ctx, TTypeAnnotationContext& typeAnnCtx);
 
-IOptimizer* MakeNativeOptimizer(const IOptimizer::TInput& input, const std::function<void(const TString&)>& log);
+IOptimizer* MakeNativeOptimizer(const ui32 maxDPcppDPTableSize);
 
 } // namespace NYql::NDq

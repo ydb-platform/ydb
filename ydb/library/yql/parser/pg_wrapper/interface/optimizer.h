@@ -6,6 +6,6 @@
 
 namespace NYql {
 
-IOptimizer* MakePgOptimizer(const IOptimizer::TInput& input, const std::function<void(const TString&)>& log = {});
+IOptimizer* MakePgOptimizer(const std::function<void(const TString&)>& log = {});
 
 } // namespace NYql

@@ -18,6 +18,15 @@ bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TString>& joinKey
 }
 }
 
+bool NDq::operator < (const NDq::TJoinColumn& c1, const NDq::TJoinColumn& c2) {
+    if (c1.RelName < c2.RelName){
+        return true;
+    } else if (c1.RelName == c2.RelName) {
+        return c1.AttributeName < c2.AttributeName;
+    }
+    return false;
+}
+
 /**
  * Compute the cost and output cardinality of a join
  * 

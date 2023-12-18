@@ -101,7 +101,7 @@ class YTestReportTrace:
 def filter_empty_logs(logs):
     result = {}
     for k, v in logs.items():
-        if os.stat(v).st_size == 0:
+        if not os.path.isfile(v) or os.stat(v).st_size == 0:
             continue
         result[k] = v
     return result

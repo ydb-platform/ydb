@@ -63,10 +63,6 @@ public:
         return Matrix_;
     }
 
-    const TVector<TCell> KeyCells() const {
-        return KeyCells_;
-    }
-
     ui64 LockTxId() const {
         return Record().locktxid();
     }
@@ -232,7 +228,6 @@ private:
     const TUserTable* TableInfo_;
     const NEvents::TDataEvents::TEvWrite::TPtr& Ev_;
     TSerializedCellMatrix Matrix_;
-    TVector<TCell> KeyCells_;
     TActorId Source_;
     TEngineBay EngineBay;
     NKikimrTxDataShard::TError::EKind ErrCode;

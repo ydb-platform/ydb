@@ -152,18 +152,14 @@ TVector<TEngineBay::TColumnWriteMeta> GetColumnWrites(const ::google::protobuf::
 
 void TValidatedWriteTx::SetTxKeys(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnTags, const NScheme::TTypeRegistry& typeRegistry, const TActorContext& ctx)
 {
+    TVector<TCell> keyCells;
     for (ui32 rowIdx = 0; rowIdx < Matrix_.GetRowCount(); ++rowIdx)
     {
-        //TODO zero copy necessary keys from TableInfo_->KeyColumnTypes
-        KeyCells_.clear();
-        for (ui16 colIdx = 0; colIdx < TableInfo_->KeyColumnIds.size(); ++colIdx)
-            KeyCells_.push_back(Matrix_.GetCells()[rowIdx * columnTags.size() + colIdx]);
-
-        TTableRange tableRange(KeyCells_);
+        Matrix_.GetSubmatrix(rowIdx, rowIdx, 0, TableInfo_->KeyColumnIds.size() - 1, keyCells);
 
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << TableInfo_->Path << ", shard: " << TabletId_ << ", "
-                                                                 << "write point " << DebugPrintPoint(TableInfo_->KeyColumnTypes, KeyCells_, typeRegistry));
-
+                                                                 << "write point " << DebugPrintPoint(TableInfo_->KeyColumnTypes, keyCells, typeRegistry));
+        TTableRange tableRange(keyCells);
         EngineBay.AddWriteRange(TableId_, tableRange, TableInfo_->KeyColumnTypes, GetColumnWrites(columnTags), false);
     }
 }

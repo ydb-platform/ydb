@@ -88,6 +88,7 @@ private:
                     std::optional<ui64> inputSizeHint, ProgressCallbackFunc & progressCallback);
     TType GetTableType(const NTable::TTableDescription& tableDescription);
     std::map<TString, TType> GetColumnTypes(const NTable::TTableDescription& tableDescription);
+    void ValidateTable(const NTable::TTableDescription& tableDescription);
 
     TStatus UpsertParquet(const TString& filename, const TString& dbPath, const TImportFileSettings& settings,
                     ProgressCallbackFunc & progressCallback);

@@ -385,6 +385,7 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
         return tableResult;
 
     auto columnTypes = GetColumnTypes(tableResult.GetTableDescription());
+    ValidateTable(tableResult.GetTableDescription());
 
     if (settings.Header_ || settings.HeaderRow_) {
         TString headerRow;
@@ -509,6 +510,7 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath, const TStr
         return tableResult;
 
     auto columnTypes = GetColumnTypes(tableResult.GetTableDescription());
+    ValidateTable(tableResult.GetTableDescription());
 
     if (settings.Header_ || settings.HeaderRow_) {
         if (settings.HeaderRow_) {
@@ -617,6 +619,7 @@ TStatus TImportFileClient::UpsertJson(IInputStream& input, const TString& dbPath
         return tableResult;
 
     const TType tableType = GetTableType(tableResult.GetTableDescription());
+    ValidateTable(tableResult.GetTableDescription());
     const NYdb::EBinaryStringEncoding stringEncoding =
         (settings.Format_ == EOutputFormat::JsonBase64) ? NYdb::EBinaryStringEncoding::Base64 :
             NYdb::EBinaryStringEncoding::Unicode;
@@ -833,6 +836,20 @@ std::map<TString, TType> TImportFileClient::GetColumnTypes(const NTable::TTableD
         columnTypes.insert({(*it).Name, (*it).Type});
     }
     return columnTypes;
+}
+
+void TImportFileClient::ValidateTable(const NTable::TTableDescription& tableDescription) {
+    auto columnTypes = GetColumnTypes(tableDescription);
+    bool hasPgType = false;
+    for (const auto& [_, type] : columnTypes) {
+        if (TTypeParser(type).GetKind() == TTypeParser::ETypeKind::Pg) {
+            hasPgType = true;
+            break;
+        }
+    }
+    if (tableDescription.GetStoreType() == NTable::EStoreType::Column && hasPgType) {
+        throw TMisuseException() << "Import into column table with Pg type columns in not supported";
+    }
 }
 
 }

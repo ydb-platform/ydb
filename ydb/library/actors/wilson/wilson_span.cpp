@@ -53,9 +53,7 @@ namespace NWilson {
     }
 
     void TSpan::Send() {
-        if (TlsActivationContext) {
-            TActivationContext::Send(new IEventHandle(MakeWilsonUploaderId(), {}, new TEvWilson(&Data->Span)));
-        }
+        Data->ActorSystem->Send(new IEventHandle(MakeWilsonUploaderId(), {}, new TEvWilson(&Data->Span)));
         Data->Sent = true;
     }
 

@@ -3,7 +3,7 @@ GO_LIBRARY()
 SRCS(
     cmd.go
     config.go
-    data_source_factory.go
+    data_source_collection.go
     doc.go
     grpc_metrics.go
     httppuller.go

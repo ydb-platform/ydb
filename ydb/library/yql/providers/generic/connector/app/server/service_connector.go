@@ -11,9 +11,7 @@ import (
 	"github.com/ydb-platform/ydb/library/go/core/metrics/solomon"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/config"
-	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/datasource"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
-	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/streaming"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
@@ -24,13 +22,11 @@ import (
 
 type serviceConnector struct {
 	api_service.UnimplementedConnectorServer
-	dataSourceFactory  *dataSourceFactory
-	memoryAllocator    memory.Allocator
-	readLimiterFactory *paging.ReadLimiterFactory
-	cfg                *config.TServerConfig
-	grpcServer         *grpc.Server
-	listener           net.Listener
-	logger             log.Logger
+	dataSourceCollection *DataSourceCollection
+	cfg                  *config.TServerConfig
+	grpcServer           *grpc.Server
+	listener             net.Listener
+	logger               log.Logger
 }
 
 func (s *serviceConnector) ListTables(_ *api_service_protos.TListTablesRequest, _ api_service.Connector_ListTablesServer) error {
@@ -52,16 +48,7 @@ func (s *serviceConnector) DescribeTable(
 		}, nil
 	}
 
-	dataSource, err := s.dataSourceFactory.Make(logger, request.DataSourceInstance.Kind)
-	if err != nil {
-		logger.Error("request handling failed", log.Error(err))
-
-		return &api_service_protos.TDescribeTableResponse{
-			Error: utils.NewAPIErrorFromStdError(err),
-		}, nil
-	}
-
-	out, err := dataSource.DescribeTable(ctx, logger, request)
+	out, err := s.dataSourceCollection.DescribeTable(ctx, logger, request)
 	if err != nil {
 		logger.Error("request handling failed", log.Error(err))
 
@@ -187,76 +174,20 @@ func (s *serviceConnector) doReadSplits(
 		return fmt.Errorf("validate read splits request: %w", err)
 	}
 
-	dataSource, err := s.dataSourceFactory.Make(logger, request.DataSourceInstance.Kind)
-	if err != nil {
-		return fmt.Errorf("make data source: %w", err)
-	}
-
 	for i, split := range request.Splits {
 		splitLogger := log.With(logger, log.Int("split_id", i))
 
-		err = s.readSplit(splitLogger, stream, request, split, dataSource)
+		err := s.dataSourceCollection.DoReadSplit(
+			splitLogger,
+			stream,
+			request,
+			split,
+		)
+
 		if err != nil {
 			return fmt.Errorf("read split %d: %w", i, err)
 		}
 	}
-
-	return nil
-}
-
-func (s *serviceConnector) readSplit(
-	logger log.Logger,
-	stream api_service.Connector_ReadSplitsServer,
-	request *api_service_protos.TReadSplitsRequest,
-	split *api_service_protos.TSplit,
-	dataSource datasource.DataSource,
-) error {
-	logger.Debug("split reading started", utils.SelectToFields(split.Select)...)
-
-	columnarBufferFactory, err := paging.NewColumnarBufferFactory(
-		logger,
-		s.memoryAllocator,
-		s.readLimiterFactory,
-		request.Format,
-		split.Select.What)
-	if err != nil {
-		return fmt.Errorf("new columnar buffer factory: %w", err)
-	}
-
-	trafficTracker := paging.NewTrafficTracker(s.cfg.Paging)
-
-	sink, err := paging.NewSink(
-		stream.Context(),
-		logger,
-		trafficTracker,
-		columnarBufferFactory,
-		s.readLimiterFactory.MakeReadLimiter(logger),
-		int(s.cfg.Paging.PrefetchQueueCapacity),
-	)
-	if err != nil {
-		return fmt.Errorf("new sink: %w", err)
-	}
-
-	streamer := streaming.NewStreamer(
-		logger,
-		stream,
-		request,
-		split,
-		sink,
-		dataSource,
-	)
-
-	if err := streamer.Run(); err != nil {
-		return fmt.Errorf("run paging streamer: %w", err)
-	}
-
-	readStats := trafficTracker.DumpStats(true)
-
-	logger.Debug(
-		"split reading finished",
-		log.UInt64("total_bytes", readStats.GetBytes()),
-		log.UInt64("total_rows", readStats.GetRows()),
-	)
 
 	return nil
 }
@@ -350,13 +281,15 @@ func newServiceConnector(
 	reflection.Register(grpcServer)
 
 	s := &serviceConnector{
-		dataSourceFactory:  newDataSourceFacotry(queryLoggerFactory),
-		memoryAllocator:    memory.DefaultAllocator,
-		readLimiterFactory: paging.NewReadLimiterFactory(cfg.ReadLimit),
-		logger:             logger,
-		grpcServer:         grpcServer,
-		listener:           listener,
-		cfg:                cfg,
+		dataSourceCollection: NewDataSourceCollection(
+			queryLoggerFactory,
+			memory.DefaultAllocator,
+			paging.NewReadLimiterFactory(cfg.ReadLimit),
+			cfg),
+		logger:     logger,
+		grpcServer: grpcServer,
+		listener:   listener,
+		cfg:        cfg,
 	}
 
 	api_service.RegisterConnectorServer(grpcServer, s)

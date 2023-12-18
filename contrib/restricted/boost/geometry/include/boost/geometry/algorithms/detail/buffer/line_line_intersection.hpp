@@ -77,7 +77,7 @@ struct line_line_intersection
         // | pa pa |
         // | qb qb |
         auto const denominator_pq = determinant<line, &line::a, &line::b>(p, q);
-        constexpr decltype(denominator_pq) const zero = 0;
+        static decltype(denominator_pq) const zero = 0;
 
         if (equidistant)
         {

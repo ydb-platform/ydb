@@ -424,9 +424,9 @@ NUdf::TUnboxedValue DecodeImpl(TType* type, TStringBuf& input, const THolderFact
     case TType::EKind::Null:
         return NUdf::TUnboxedValue();
     case TType::EKind::EmptyList:
-        return factory.GetEmptyContainer();
+        return factory.GetEmptyContainerLazy();
     case TType::EKind::EmptyDict:
-        return factory.GetEmptyContainer();
+        return factory.GetEmptyContainerLazy();
     case TType::EKind::Data: {
         auto slot = *static_cast<TDataType*>(type)->GetDataSlot();
         return Decode<false>(input, slot, buffer);

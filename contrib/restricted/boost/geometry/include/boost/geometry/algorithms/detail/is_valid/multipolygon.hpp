@@ -20,7 +20,6 @@
 #include <boost/iterator/filter_iterator.hpp>
 #include <boost/range/begin.hpp>
 #include <boost/range/end.hpp>
-#include <boost/range/size.hpp>
 #include <boost/range/value_type.hpp>
 
 #include <boost/geometry/core/exterior_ring.hpp>

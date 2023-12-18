@@ -68,10 +68,10 @@ Y_UNIT_TEST_SUITE(SerializeVoid) {
     Y_UNIT_TEST(Null) {
         TTestContext ctx;
         auto value = NUdf::TUnboxedValuePod();
-        auto nullJson = WriteValueToFuncJsonStr(value, ctx.TypeEnv.GetTypeOfNull());
+        auto nullJson = WriteValueToFuncJsonStr(value, ctx.TypeEnv.GetTypeOfNullLazy());
         UNIT_ASSERT_VALUES_EQUAL(nullJson, "null");
 
-        auto voidJson = WriteValueToFuncJsonStr(value, ctx.TypeEnv.GetTypeOfVoid());
+        auto voidJson = WriteValueToFuncJsonStr(value, ctx.TypeEnv.GetTypeOfVoidLazy());
         UNIT_ASSERT_VALUES_EQUAL(voidJson, "null");
     }
 }
@@ -136,11 +136,11 @@ Y_UNIT_TEST_SUITE(SerializeJson) {
 Y_UNIT_TEST_SUITE(SerializeContainers) {
     Y_UNIT_TEST(EmptyContainer) {
         TTestContext ctx;
-        auto value = ctx.HolderFactory.GetEmptyContainer();
-        auto dictJson = WriteValueToFuncJsonStr(value, ctx.TypeEnv.GetTypeOfEmptyDict());
+        auto value = ctx.HolderFactory.GetEmptyContainerLazy();
+        auto dictJson = WriteValueToFuncJsonStr(value, ctx.TypeEnv.GetTypeOfEmptyDictLazy());
         UNIT_ASSERT_VALUES_EQUAL(dictJson, "[]");
 
-        auto listJson = WriteValueToFuncJsonStr(value, ctx.TypeEnv.GetTypeOfEmptyList());
+        auto listJson = WriteValueToFuncJsonStr(value, ctx.TypeEnv.GetTypeOfEmptyListLazy());
         UNIT_ASSERT_VALUES_EQUAL(listJson, "[]");
     }
 
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(SerializeContainers) {
         TTestContext ctx;
         auto type = TDictType::Create(
             TDataType::Create(NUdf::TDataType<NUdf::TUtf8>::Id, ctx.TypeEnv),
-            ctx.TypeEnv.GetTypeOfVoid(),
+            ctx.TypeEnv.GetTypeOfVoidLazy(),
             ctx.TypeEnv
         );
         auto dictBuilder = ctx.Vb.NewDict(type, NUdf::TDictFlags::EDictKind::Hashed);
@@ -359,7 +359,7 @@ Y_UNIT_TEST_SUITE(DeserializeDict) {
 
         auto type = TDictType::Create(
             TDataType::Create(NUdf::TDataType<i32>::Id, ctx.TypeEnv),
-            ctx.TypeEnv.GetTypeOfVoid(),
+            ctx.TypeEnv.GetTypeOfVoidLazy(),
             ctx.TypeEnv
         );
         auto value = ReadJsonStrValue(&json, type, ctx.HolderFactory);

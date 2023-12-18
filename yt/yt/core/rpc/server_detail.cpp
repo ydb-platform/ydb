@@ -88,6 +88,11 @@ void TServiceContextBase::Reply(const TSharedRefArray& responseMessage)
     TResponseHeader header;
     YT_VERIFY(TryParseResponseHeader(responseMessage, &header));
 
+    // COMPAT(danilalexeev): legacy RPC codecs
+    if (header.has_codec()) {
+        SetResponseBodySerializedWithCompression();
+    }
+
     if (header.has_error()) {
         Error_ = FromProto<TError>(header.error());
     }

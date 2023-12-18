@@ -317,7 +317,7 @@ public:
     NUdf::TType* Build() const override {
         return NMiniKQL::TDictType::Create(
             const_cast<NMiniKQL::TType*>(KeyType_),
-            Parent_.Env().GetVoid()->GetType(), Parent_.Env());
+            Parent_.Env().GetVoidLazy()->GetType(), Parent_.Env());
     }
 
 private:
@@ -409,7 +409,7 @@ public:
         const NUdf::TStringRef& name,
         ui32* index) override
     {
-        StructBuilder_.Add(name, Parent_.Env().GetVoid()->GetType(), index);
+        StructBuilder_.Add(name, Parent_.Env().GetVoidLazy()->GetType(), index);
         return *this;
     }
 
@@ -1591,8 +1591,8 @@ TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder(
         const NUdf::ISecureParamsProvider* provider)
     : Env_(env)
     , ReturnType_(nullptr)
-    , RunConfigType_(Env_.GetTypeOfVoid())
-    , UserType_(Env_.GetTypeOfVoid())
+    , RunConfigType_(Env_.GetTypeOfVoidLazy())
+    , UserType_(Env_.GetTypeOfVoidLazy())
     , TypeInfoHelper_(typeInfoHelper)
     , ModuleName_(moduleName)
     , CountersProvider_(countersProvider)
@@ -1620,15 +1620,15 @@ NUdf::IFunctionTypeInfoBuilder7& TFunctionTypeInfoBuilder::IRImplementationImpl(
 }
 
 NUdf::TType* TFunctionTypeInfoBuilder::Null() const {
-    return Env_.GetTypeOfNull();
+    return Env_.GetTypeOfNullLazy();
 }
 
 NUdf::TType* TFunctionTypeInfoBuilder::EmptyList() const {
-    return Env_.GetTypeOfEmptyList();
+    return Env_.GetTypeOfEmptyListLazy();
 }
 
 NUdf::TType* TFunctionTypeInfoBuilder::EmptyDict() const {
-    return Env_.GetTypeOfEmptyDict();
+    return Env_.GetTypeOfEmptyDictLazy();
 }
 
 void TFunctionTypeInfoBuilder::Unused1()
@@ -1846,7 +1846,7 @@ NUdf::ICallableTypeBuilder::TPtr TFunctionTypeInfoBuilder::Callable(
 
 NUdf::TType* TFunctionTypeInfoBuilder::Void() const
 {
-    return Env_.GetTypeOfVoid();
+    return Env_.GetTypeOfVoidLazy();
 }
 
 NUdf::TType* TFunctionTypeInfoBuilder::Resource(const NUdf::TStringRef& tag) const {

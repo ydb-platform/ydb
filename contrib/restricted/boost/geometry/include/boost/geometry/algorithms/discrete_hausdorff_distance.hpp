@@ -26,6 +26,8 @@
 #include <vector>
 #include <limits>
 
+#include <boost/range/size.hpp>
+
 #include <boost/geometry/algorithms/detail/dummy_geometries.hpp>
 #include <boost/geometry/algorithms/detail/throw_on_empty_input.hpp>
 #include <boost/geometry/algorithms/not_implemented.hpp>

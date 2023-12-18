@@ -28,6 +28,15 @@ public:
         return it->second.Name;
     }
 
+    std::optional<ui32> GetColumnIdOptional(const TString& name) const override {
+        auto it = PrimaryIndexStatsSchema.ColumnNames.find(name);
+        if (it == PrimaryIndexStatsSchema.ColumnNames.end()) {
+            return {};
+        } else {
+            return it->second;
+        }
+    }
+
     const NTable::TScheme::TTableSchema& GetSchema() const override {
         return PrimaryIndexStatsSchema;
     }

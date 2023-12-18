@@ -282,9 +282,9 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
     case TType::EKind::Null:
         return NUdf::TUnboxedValuePod();
     case TType::EKind::EmptyList:
-        return holderFactory.GetEmptyContainer();
+        return holderFactory.GetEmptyContainerLazy();
     case TType::EKind::EmptyDict:
-        return holderFactory.GetEmptyContainer();
+        return holderFactory.GetEmptyContainerLazy();
 
     case TType::EKind::Data: {
         auto dataType = static_cast<const TDataType*>(type);
@@ -402,7 +402,7 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
         }
 
         if (!len) {
-            return holderFactory.GetEmptyContainer();
+            return holderFactory.GetEmptyContainerLazy();
         }
 
         TTemporaryUnboxedValueVector tmp;

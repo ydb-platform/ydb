@@ -12,7 +12,7 @@ extern "C" {
 
 ssize_t BridgeGetAbiVersion()
 {
-    return 0;
+    return 1; // EYqlPluginAbiVersion::AbortQuery
 }
 
 TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOptions)
@@ -68,7 +68,14 @@ void FillString(const char*& str, ssize_t& strLength, const std::optional<TStrin
     strLength = original->size();
 }
 
-TBridgeQueryResult* BridgeRun(TBridgeYqlPlugin* plugin, const char* queryId, const char* impersonationUser, const char* queryText, const char* settings, const TBridgeQueryFile* bridgeFiles, int bridgeFileCount)
+TBridgeQueryResult* BridgeRun(
+    TBridgeYqlPlugin* plugin,
+    const char* queryId,
+    const char* impersonationUser,
+    const char* queryText,
+    const char* settings,
+    const TBridgeQueryFile* bridgeFiles,
+    int bridgeFileCount)
 {
     static const auto EmptyMap = TYsonString(TString("{}"));
 
@@ -111,6 +118,23 @@ TBridgeQueryResult* BridgeGetProgress(TBridgeYqlPlugin* plugin, const char* quer
     FillString(bridgeResult->Progress, bridgeResult->ProgressLength, result.Progress);
 
     return bridgeResult;
+}
+
+TBridgeAbortResult* BridgeAbort(TBridgeYqlPlugin* plugin, const char* queryId)
+{
+    auto* nativePlugin = reinterpret_cast<IYqlPlugin*>(plugin);
+    auto* bridgeResult = new TBridgeAbortResult;
+
+    auto result = nativePlugin->GetProgress(NYT::TGuid::FromString(queryId));
+    FillString(bridgeResult->YsonError, bridgeResult->YsonErrorLength, result.YsonError);
+
+    return bridgeResult;
+}
+
+void BridgeFreeAbortResult(TBridgeAbortResult* result)
+{
+    delete result->YsonError;
+    delete result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

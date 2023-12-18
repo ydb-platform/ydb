@@ -196,7 +196,8 @@ private:
             Counters,
             enableComputeActor ? tasks : TVector<NYql::NDqProto::TDqTask>(),
             computeActorType,
-            StatsMode));
+            StatsMode,
+            enableSpilling));
         auto allocateRequest = MakeHolder<TEvAllocateWorkersRequest>(workerCount, Username);
         allocateRequest->Record.SetTraceId(TraceId);
         allocateRequest->Record.SetCreateComputeActor(enableComputeActor);
@@ -244,8 +245,8 @@ private:
         Timeout = tasks.size() == 1
             ? TDuration::MilliSeconds(Settings->_LiteralTimeout.Get().GetOrElse(TDqSettings::TDefault::LiteralTimeout))
             : TDuration::MilliSeconds(Settings->_TableTimeout.Get().GetOrElse(TDqSettings::TDefault::TableTimeout));
-        
-        YQL_CLOG(DEBUG, ProviderDq) << "Dq timeouts are set to: " 
+
+        YQL_CLOG(DEBUG, ProviderDq) << "Dq timeouts are set to: "
             << ToString(Timeout) << " (global), "
             << ToString(WorkersAllocationFailTimeout) << " (workers allocation fail), "
             << ToString(WorkersAllocationWarnTimeout) << " (workers allocation warn) ";

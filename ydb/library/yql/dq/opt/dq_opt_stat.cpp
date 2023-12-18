@@ -3,12 +3,91 @@
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_cost_function.h>
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
 
 namespace NYql::NDq {
 
 using namespace NNodes;
 
+namespace {
+    /***
+     * We maintain a white list of callables that we consider part of constant expressions
+     * All other callables will not be evaluated
+     */
+    THashSet<TString> constantFoldingWhiteList = {
+        "Concat", "Just", "Optional","SafeCast",
+        "+", "-", "*", "/", "%"};
+}
+
+bool NeedCalc(NNodes::TExprBase node) {
+    auto type = node.Ref().GetTypeAnn();
+    if (type->IsSingleton()) {
+        return false;
+    }
+
+    if (type->GetKind() == ETypeAnnotationKind::Optional) {
+        if (node.Maybe<TCoNothing>()) {
+            return false;
+        }
+        if (auto maybeJust = node.Maybe<TCoJust>()) {
+            return NeedCalc(maybeJust.Cast().Input());
+        }
+        return true;
+    }
+
+    if (type->GetKind() == ETypeAnnotationKind::Tuple) {
+        if (auto maybeTuple = node.Maybe<TExprList>()) {
+            return AnyOf(maybeTuple.Cast(), [](const auto& item) { return NeedCalc(item); });
+        }
+        return true;
+    }
+
+    if (type->GetKind() == ETypeAnnotationKind::List) {
+        if (node.Maybe<TCoList>()) {
+            YQL_ENSURE(node.Ref().ChildrenSize() == 1, "Should be rewritten to AsList");
+            return false;
+        }
+        if (auto maybeAsList = node.Maybe<TCoAsList>()) {
+            return AnyOf(maybeAsList.Cast().Args(), [](const auto& item) { return NeedCalc(NNodes::TExprBase(item)); });
+        }
+        return true;
+    }
+
+    YQL_ENSURE(type->GetKind() == ETypeAnnotationKind::Data,
+                "Object of type " << *type << " should not be considered for calculation");
+
+    return !node.Maybe<TCoDataCtor>();
+}
+
+/***
+ * Check if the expression is a constant expression
+ * Its type annotation need to specify that its a data type, and then we check:
+ *   - If its a literal, its a constant expression
+ *   - If its a callable in the while list and all children are constant expressions, then its a constant expression
+ *   - If one of the child is a type expression, it also passes the check
+ */
+bool IsConstantExpr(const TExprNode::TPtr& input) {
+    if (!IsDataOrOptionalOfData(input->GetTypeAnn())) {
+        return false;
+    }
+
+    if (!NeedCalc(TExprBase(input))) {
+        return true;
+    }
+
+    else if (input->IsCallable(constantFoldingWhiteList)) {
+        for (size_t i = 0; i < input->ChildrenSize(); i++) {
+            auto callableInput = input->Child(i);
+            if (callableInput->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Type && !IsConstantExpr(callableInput)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    return false;
+}
 
 /**
  * Compute statistics for map join

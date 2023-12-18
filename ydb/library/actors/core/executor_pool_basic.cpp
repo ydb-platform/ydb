@@ -111,7 +111,6 @@ namespace NActors {
             cfg.Priority
         )
     {
-        SetSharedExecutorsCount(cfg.SharedExecutorsCount);
         SoftProcessingDurationTs = cfg.SoftProcessingDurationTs;
         ActorSystemProfile = cfg.ActorSystemProfile;
     }
@@ -400,6 +399,7 @@ namespace NActors {
                         actorSystem,
                         this,
                         MailboxTable.Get(),
+                        &Threads[i],
                         PoolName,
                         TimePerMailbox,
                         EventsPerMailbox));
@@ -408,7 +408,8 @@ namespace NActors {
                     new TExecutorThread(
                         i,
                         actorSystem,
-                        actorSystem->GetBasicExecutorPools(),
+                        &Threads[i],
+                        0,
                         PoolName,
                         SoftProcessingDurationTs,
                         TimePerMailbox,
@@ -536,10 +537,6 @@ namespace NActors {
 
     i16 TBasicExecutorPool::GetPriority() const {
         return Priority;
-    }
-
-    void TBasicExecutorPool::SetSharedExecutorsCount(i16 count) {
-        SharedExecutorsCount = count;
     }
 
     void TBasicExecutorPool::SetLocalQueueSize(ui16 size) {

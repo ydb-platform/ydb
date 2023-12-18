@@ -30,5 +30,5 @@ void TestRestoreRange(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 group
 void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 tabletId0, ui32 groupId, ui32 iterationsNum,
         ui32 decommitStep = 1e9, ui32 timeLimitSec = 0, std::vector<ui32> probabilities = { 10, 10, 3, 3, 2, 1, 1, 3, 3, 1 });
 
-void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId, ui32 blobsNum, ui32 maxBlobSize, ui32 readsNum, 
+void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId, ui32 blobsNum, ui32 maxBlobSize, ui32 readsNum,
         bool decommit = false, ui32 timeLimitSec = 0, std::vector<ui32> probabilities = { 5, 1, 5, 5, 1, 1 });

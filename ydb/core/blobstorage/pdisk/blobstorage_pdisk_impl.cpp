@@ -737,7 +737,7 @@ void TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
             for (auto it = cutLogInfoForOwner.begin(); it != cutLogInfoForOwner.end(); ++it) {
                 TOwner chunkOwner = it->first;
                 auto &cutLogInfo = it->second;
-                
+
                 if (cutLogInfo.Lsn == 0) {
                     // Prevent cuts with lsn = 0.
                     continue;

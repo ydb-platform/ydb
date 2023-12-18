@@ -58,30 +58,31 @@ sourceSets.main.java.srcDirs += '{{ srcdir }}'
 
 dependencies {
 {% for target in targets -%}
-{% if target.junit5_test -%}
+{%     if target.junit5_test -%}
     testImplementation("org.junit.jupiter:junit-jupiter:5.8.2")
 
     api("org.apache.commons:commons-math3:3.6.1")
 
     api("com.google.guava:guava:31.0.1-jre")
-{% endif -%}
-{% for library in target.consumer_classpath -%}
-{% if targets|selectattr("app_main_class") -%}
-{% if target.lib_excludes is defined and target.lib_excludes[library]|length > 0 -%}
-    implementation({{ library }}) {
-{% for exclude in target.lib_excludes[library] -%}
+{%     endif -%}
+{%     for library in target.consumer -%}
+{%         set classpath = library.classpath -%}
+{%         if targets|selectattr("app_main_class") -%}
+{%             if target.lib_excludes is defined and target.lib_excludes[classpath]|length > 0 -%}
+    implementation({{ classpath }}) {
+{%                 for exclude in target.lib_excludes[classpath] -%}
         exclude group: '{{ exclude[0] }}', module: '{{ exclude[1] }}'
-{% endfor -%}
+{%                 endfor -%}
     }
-{% else -%}
-    implementation({{ library }})
-{% endif -%}
-{% elif target.isTest -%}
-    testImplementation({{ library }})
-{% else -%}
-    api({{ library }})
-{% endif -%}
-{% endfor -%}
+{%             else -%}
+    implementation({{ classpath }})
+{%             endif -%}
+{%         elif target.isTest -%}
+    testImplementation({{ classpath }})
+{%         else -%}
+    api({{ classpath }})
+{%         endif -%}
+{%     endfor -%}
 {% endfor -%}
 }
 

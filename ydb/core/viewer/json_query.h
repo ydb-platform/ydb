@@ -38,9 +38,16 @@ class TJsonQuery : public TViewerPipeClient<TJsonQuery> {
     TString Database;
     TString Action;
     TString Stats;
-    TString Schema = "classic";
     TString Syntax;
     TString UserToken;
+
+    enum ESchemaType {
+        Classic,
+        Modern,
+        Multi,
+        Ydb,
+    };
+    ESchemaType Schema = ESchemaType::Classic;
 
     std::optional<TNodeId> SubscribedNodeId;
     std::vector<TNodeId> TenantDynamicNodes;
@@ -52,6 +59,20 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
+    ESchemaType StringToSchemaType(const TString& schemaStr) {
+        if (schemaStr == "classic") {
+            return ESchemaType::Classic;
+        } else if (schemaStr == "modern") {
+            return ESchemaType::Modern;
+        } else if (schemaStr == "multi") {
+            return ESchemaType::Multi;
+        } else if (schemaStr == "ydb") {
+            return ESchemaType::Ydb;
+        } else {
+            return ESchemaType::Classic;
+        }
+    }
+
     void ParseCgiParameters(const TCgiParameters& params) {
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
@@ -60,10 +81,8 @@ public:
         Database = params.Get("database");
         Stats = params.Get("stats");
         Action = params.Get("action");
-        Schema = params.Get("schema");
-        if (Schema.empty()) {
-            Schema = "classic";
-        }
+        TString schemaStr = params.Get("schema");
+        Schema = StringToSchemaType(schemaStr);
         Syntax = params.Get("syntax");
         Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
     }
@@ -381,7 +400,7 @@ private:
                 MakeErrorReply(out, jsonResponse, record);
             }
 
-            if (Schema == "classic" && Stats.empty() && (Action.empty() || Action == "execute")) {
+            if (Schema == ESchemaType::Classic && Stats.empty() && (Action.empty() || Action == "execute")) {
                 jsonResponse = std::move(jsonResponse["result"]);
             }
 
@@ -497,7 +516,7 @@ private:
 
         out << Viewer->GetHTTPOKJSON(Event->Get());
         if (ResultSets.size() > 0) {
-            if (Schema == "classic") {
+            if (Schema == ESchemaType::Classic) {
                 NJson::TJsonValue& jsonResults = jsonResponse["result"];
                 jsonResults.SetType(NJson::JSON_ARRAY);
                 for (auto it = ResultSets.begin(); it != ResultSets.end(); ++it) {
@@ -514,7 +533,7 @@ private:
                 }
             }
 
-            if (Schema == "modern") {
+            if (Schema == ESchemaType::Modern) {
                 {
                     NJson::TJsonValue& jsonColumns = jsonResponse["columns"];
                     NYdb::TResultSet resultSet(ResultSets.front());
@@ -545,7 +564,7 @@ private:
                 }
             }
 
-            if (Schema == "multi") {
+            if (Schema == ESchemaType::Multi) {
                 NJson::TJsonValue& jsonResults = jsonResponse["result"];
                 jsonResults.SetType(NJson::JSON_ARRAY);
                 for (auto it = ResultSets.begin(); it != ResultSets.end(); ++it) {
@@ -575,7 +594,7 @@ private:
                 }
             }
 
-            if (Schema == "ydb") {
+            if (Schema == ESchemaType::Ydb) {
                 NJson::TJsonValue& jsonResults = jsonResponse["result"];
                 jsonResults.SetType(NJson::JSON_ARRAY);
                 for (auto it = ResultSets.begin(); it != ResultSets.end(); ++it) {

@@ -58,6 +58,12 @@ public:
                 } else { \
                     function = reinterpret_cast<TFunc ## function*>(Library_.Sym(#function)); \
                 } \
+            } else if constexpr(#function == TStringBuf("BridgeFreeAbortResult")) { \
+                if (AbiVersion_ < EYqlPluginAbiVersion::AbortQuery) { \
+                    function = reinterpret_cast<TFunc ## function*>(FreeAbortResultStub); \
+                } else { \
+                    function = reinterpret_cast<TFunc ## function*>(Library_.Sym(#function)); \
+                } \
             } else { \
                 function = reinterpret_cast<TFunc ## function*>(Library_.Sym(#function)); \
             } \
@@ -69,8 +75,6 @@ public:
         GetYqlPluginAbiVersion();
 
         FOR_EACH_BRIDGE_INTERFACE_FUNCTION(XX);
-        // COMPAT(gritukan): Remove after commit in YDB repository.
-        XX(BridgeAbort)
         #undef XX
     }
 
@@ -81,15 +85,18 @@ protected:
 
     #define XX(function) TFunc ## function* function;
     FOR_EACH_BRIDGE_INTERFACE_FUNCTION(XX)
-
-    // COMPAT(gritukan): Remove after commit in YDB repository.
-    XX(BridgeAbort)
     #undef XX
 
     // COMPAT(gritukan): AbortQuery
-    static void AbortQueryStub(TBridgeYqlPlugin* /*plugin*/, const char* /*queryId*/)
+    static TBridgeAbortResult* AbortQueryStub(TBridgeYqlPlugin* /*plugin*/, const char* /*queryId*/)
     {
         // Just do nothing. It is not worse than in used to be before.
+        return nullptr;
+    }
+
+    static void FreeAbortResultStub(TBridgeAbortResult* /*result*/)
+    {
+        YT_ABORT();
     }
 
     void GetYqlPluginAbiVersion()
@@ -138,7 +145,12 @@ public:
         BridgePlugin_ = BridgeCreateYqlPlugin(&bridgeOptions);
     }
 
-    TQueryResult Run(TQueryId queryId, TString impersonationUser, TString queryText, NYson::TYsonString settings, std::vector<TQueryFile> files) noexcept override
+    TQueryResult Run(
+        TQueryId queryId,
+        TString impersonationUser,
+        TString queryText,
+        NYson::TYsonString settings,
+        std::vector<TQueryFile> files) noexcept override
     {
         auto settingsString = settings ? settings.ToString() : "{}";
         auto queryIdStr = ToString(queryId);
@@ -155,8 +167,15 @@ public:
             });
         }
 
-        auto* bridgeQueryResult = BridgeRun(BridgePlugin_, queryIdStr.data(), impersonationUser.data(), queryText.data(), settingsString.data(), filesData.data(), filesData.size());
-        TQueryResult queryResult = {
+        auto* bridgeQueryResult = BridgeRun(
+            BridgePlugin_,
+            queryIdStr.data(),
+            impersonationUser.data(),
+            queryText.data(),
+            settingsString.data(),
+            filesData.data(),
+            filesData.size());
+        TQueryResult queryResult{
             .YsonResult = ToString(bridgeQueryResult->YsonResult, bridgeQueryResult->YsonResultLength),
             .Plan = ToString(bridgeQueryResult->Plan, bridgeQueryResult->PlanLength),
             .Statistics = ToString(bridgeQueryResult->Statistics, bridgeQueryResult->StatisticsLength),
@@ -172,12 +191,28 @@ public:
     {
         auto queryIdStr = ToString(queryId);
         auto* bridgeQueryResult = BridgeGetProgress(BridgePlugin_, queryIdStr.data());
-        TQueryResult queryResult = {
+        TQueryResult queryResult{
             .Plan = ToString(bridgeQueryResult->Plan, bridgeQueryResult->PlanLength),
             .Progress = ToString(bridgeQueryResult->Progress, bridgeQueryResult->ProgressLength),
         };
         BridgeFreeQueryResult(bridgeQueryResult);
         return queryResult;
+    }
+
+    TAbortResult Abort(TQueryId queryId) noexcept override
+    {
+        auto queryIdStr = ToString(queryId);
+        auto* bridgeAbortResult = BridgeAbort(BridgePlugin_, queryIdStr.data());
+        // COMPAT(gritukan): AbortQuery
+        if (!bridgeAbortResult) {
+            return {};
+        }
+
+        TAbortResult abortResult{
+            .YsonError = ToString(bridgeAbortResult->YsonError, bridgeAbortResult->YsonErrorLength),
+        };
+        BridgeFreeAbortResult(bridgeAbortResult);
+        return abortResult;
     }
 
     ~TYqlPlugin() override

@@ -1,5 +1,8 @@
 #include "write_session.h"
+
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h>
+
 #include <library/cpp/string_utils/url/url.h>
 
 #include <util/generic/store_policy.h>
@@ -67,15 +70,24 @@ TSimpleBlockingWriteSession::TSimpleBlockingWriteSession(
         std::shared_ptr<TGRpcConnectionsImpl> connections,
         TDbDriverStatePtr dbDriverState
 ) {
-    auto alteredSettings = settings;
-    alteredSettings.EventHandlers_.AcksHandler_ = [this](TWriteSessionEvent::TAcksEvent& event) {this->HandleAck(event); };
-    alteredSettings.EventHandlers_.ReadyToAcceptHander_ = [this](TWriteSessionEvent::TReadyToAcceptEvent& event)
-            {this->HandleReady(event); };
-    alteredSettings.EventHandlers_.SessionClosedHandler_ = [this](const TSessionClosedEvent& event) {this->HandleClosed(event); };
-
-    Writer = std::make_shared<TWriteSession>(
-                alteredSettings, client, connections, dbDriverState
-    );
+    auto subSettings = settings;
+    if (settings.EventHandlers_.AcksHandler_) {
+        LOG_LAZY(dbDriverState->Log, TLOG_WARNING, "TSimpleBlockingWriteSession: Cannot use AcksHandler, resetting.");
+        subSettings.EventHandlers_.AcksHandler({});
+    }
+    if (settings.EventHandlers_.ReadyToAcceptHandler_) {
+        LOG_LAZY(dbDriverState->Log, TLOG_WARNING, "TSimpleBlockingWriteSession: Cannot use ReadyToAcceptHandler, resetting.");
+        subSettings.EventHandlers_.ReadyToAcceptHandler({});
+    }
+    if (settings.EventHandlers_.SessionClosedHandler_) {
+        LOG_LAZY(dbDriverState->Log, TLOG_WARNING, "TSimpleBlockingWriteSession: Cannot use SessionClosedHandler, resetting.");
+        subSettings.EventHandlers_.SessionClosedHandler({});
+    }
+    if (settings.EventHandlers_.CommonHandler_) {
+        LOG_LAZY(dbDriverState->Log, TLOG_WARNING, "TSimpleBlockingWriteSession: Cannot use CommonHandler, resetting.");
+        subSettings.EventHandlers_.CommonHandler({});
+    }
+    Writer = std::make_shared<TWriteSession>(subSettings, client, connections, dbDriverState);
     Writer->Start(TDuration::Max());
 }
 
@@ -86,9 +98,6 @@ ui64 TSimpleBlockingWriteSession::GetInitSeqNo() {
 bool TSimpleBlockingWriteSession::Write(
         TStringBuf data, TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp, const TDuration& blockTimeout
 ) {
-    if (!IsAlive())
-        return false;
-
     auto continuationToken = WaitForToken(blockTimeout);
     if (continuationToken.Defined()) {
         Writer->Write(std::move(*continuationToken), std::move(data), seqNo, createTimestamp);
@@ -98,27 +107,33 @@ bool TSimpleBlockingWriteSession::Write(
 }
 
 TMaybe<TContinuationToken> TSimpleBlockingWriteSession::WaitForToken(const TDuration& timeout) {
-    auto startTime = TInstant::Now();
+    TInstant startTime = TInstant::Now();
     TDuration remainingTime = timeout;
+
     TMaybe<TContinuationToken> token = Nothing();
-    while(!token.Defined() && remainingTime > TDuration::Zero()) {
-        with_lock(Lock) {
-            if (!ContinueTokens.empty()) {
-                token = std::move(ContinueTokens.front());
-                ContinueTokens.pop();
+
+    while (IsAlive() && remainingTime > TDuration::Zero()) {
+        Writer->WaitEvent().Wait(remainingTime);
+
+        for (auto event : Writer->GetEvents()) {
+            if (auto* readyEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
+                Y_ABORT_UNLESS(token.Empty());
+                token = std::move(readyEvent->ContinuationToken);
+            } else if (auto* ackEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&event)) {
+                // discard
+            } else if (auto* closeSessionEvent = std::get_if<TSessionClosedEvent>(&event)) {
+                Closed.store(true);
+                return Nothing();
             }
         }
-        if (!IsAlive())
-            return Nothing();
 
         if (token.Defined()) {
-            return std::move(*token);
+            return token;
         }
-        else {
-            remainingTime = timeout - (TInstant::Now() - startTime);
-            Sleep(Min(remainingTime, TDuration::MilliSeconds(100)));
-        }
+
+        remainingTime = timeout - (TInstant::Now() - startTime);
     }
+
     return Nothing();
 }
 
@@ -128,28 +143,11 @@ TWriterCounters::TPtr TSimpleBlockingWriteSession::GetCounters() {
 
 
 bool TSimpleBlockingWriteSession::IsAlive() const {
-    bool closed = false;
-    with_lock(Lock) {
-        closed = Closed;
-    }
-    return !closed;
+    return !Closed.load();
 }
 
-void TSimpleBlockingWriteSession::HandleAck(TWriteSessionEvent::TAcksEvent& event) {
-    Y_UNUSED(event);
-}
-
-void TSimpleBlockingWriteSession::HandleReady(TWriteSessionEvent::TReadyToAcceptEvent& event) {
-    with_lock(Lock) {
-        ContinueTokens.emplace(std::move(event.ContinuationToken));
-    }
-}
-void TSimpleBlockingWriteSession::HandleClosed(const TSessionClosedEvent&) {
-    with_lock(Lock) {
-        Closed = true;
-    }
-}
 bool TSimpleBlockingWriteSession::Close(TDuration closeTimeout) {
+    Closed.store(true);
     return Writer->Close(std::move(closeTimeout));
 }
 

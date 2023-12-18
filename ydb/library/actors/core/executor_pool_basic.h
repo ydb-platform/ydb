@@ -209,8 +209,6 @@ namespace NActors {
         explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer);
         ~TBasicExecutorPool();
 
-        void SetSharedExecutorsCount(i16 count);
-
         void Initialize(TWorkerContext& wctx) override;
         ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingReadCounter) override;
         ui32 GetReadyActivationCommon(TWorkerContext& wctx, ui64 revolvingReadCounter);

@@ -24,6 +24,8 @@
 
 #include <array>
 
+#include <boost/range/size.hpp>
+
 #include <boost/geometry/algorithms/detail/assign_box_corners.hpp>
 #include <boost/geometry/algorithms/detail/convex_hull/graham_andrew.hpp>
 #include <boost/geometry/algorithms/detail/equals/point_point.hpp>

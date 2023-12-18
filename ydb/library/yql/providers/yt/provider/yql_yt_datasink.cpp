@@ -251,7 +251,9 @@ public:
     }
 
     void PostRewriteIO() final {
-        State_->TablesData->CleanupCompiledSQL();
+        if (!State_->Types->EvaluationInProgress) {
+            State_->TablesData->CleanupCompiledSQL();
+        }
     }
 
     void Reset() final {

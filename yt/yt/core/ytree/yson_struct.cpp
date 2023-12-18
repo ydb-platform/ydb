@@ -135,6 +135,11 @@ std::vector<TString> TYsonStructBase::GetAllParameterAliases(const TString& key)
     return result;
 }
 
+void TYsonStructBase::GetSchema(IYsonConsumer* consumer) const
+{
+    return Meta_->GetSchema(this, consumer);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TYsonStruct::InitializeRefCounted()

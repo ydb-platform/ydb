@@ -1482,6 +1482,16 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             Ctx.IncrementMonCounter("sql_pragma", "file");
             success = true;
             return BuildPragma(Ctx.Pos(), TString(ConfigProviderName), "AddFileByUrl", values, false);
+        } else if (normalizedPragma == "fileoption") {
+            if (values.size() < 3U) {
+                Error() << "Expected file alias, option key and value";
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                return {};
+            }
+
+            Ctx.IncrementMonCounter("sql_pragma", "FileOption");
+            success = true;
+            return BuildPragma(Ctx.Pos(), TString(ConfigProviderName), "SetFileOption", values, false);
         } else if (normalizedPragma == "folder") {
             if (values.size() < 2U || values.size() > 3U || pragmaValueDefault) {
                 Error() << "Expected folder alias, url and optional token name as pragma values";

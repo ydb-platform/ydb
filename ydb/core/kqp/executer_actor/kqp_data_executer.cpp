@@ -3,7 +3,6 @@
 #include "kqp_locks_helper.h"
 #include "kqp_partition_helper.h"
 #include "kqp_planner.h"
-#include "kqp_result_channel.h"
 #include "kqp_table_resolver.h"
 #include "kqp_tasks_validate.h"
 #include "kqp_shards_resolver.h"
@@ -1723,7 +1722,7 @@ private:
                 } else if (StreamResult && stageInfo.Meta.IsOlap()) {
                     BuildScanTasksFromShards(stageInfo);
                 } else if (stageInfo.Meta.ShardOperations.empty()) {
-                    BuildComputeTasks(stageInfo);
+                    BuildComputeTasks(stageInfo, std::max<ui32>(ShardsOnNode.size(), ResourceSnapshot.size()));
                 } else if (stageInfo.Meta.IsSysView()) {
                     BuildSysViewScanTasks(stageInfo);
                 } else {

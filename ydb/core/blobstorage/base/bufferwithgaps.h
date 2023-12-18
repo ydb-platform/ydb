@@ -187,7 +187,7 @@ namespace NKikimr {
             str << "Offset# " << Offset;
             str << " Gaps# { ";
             for (auto [begin, size] : Gaps) {
-                str << "{ Begin# " << begin << " Size# " << size << " } "; 
+                str << "{ Begin# " << begin << " Size# " << size << " } ";
             }
             str << "}";
             str << " IsCommitted# " << IsCommited;

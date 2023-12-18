@@ -204,7 +204,7 @@
                 {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 1, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "AutoIncrementColumns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "DefaultConstraintColumns", "Type": "TCoAtomList"},
                 {"Index": 4, "Name": "InputItemType", "Type": "TExprBase"}
             ]
         },
@@ -461,7 +461,7 @@
             "Children": [
                 {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "AutoIncrementColumns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "DefaultConstraintColumns", "Type": "TCoAtomList"},
                 {"Index": 4, "Name": "InputItemType", "Type": "TExprBase"}
             ]
         },
@@ -546,9 +546,9 @@
             "Match": {"Type": "Callable", "Name": "KqpOlapXor"}
         },
         {
-            "Name": "TKqpOlapFilterCompare",
+            "Name": "TKqpOlapFilterBinaryOp",
             "Base": "TExprBase",
-            "Match": {"Type": "Tuple", "Name": "KqpOlapFilterCompare"},
+            "Match": {"Type": "Tuple", "Name": "KqpOlapFilterBinaryOp"},
             "Children": [
                 {"Index": 0, "Name": "Operator", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "Left", "Type": "TExprBase"},

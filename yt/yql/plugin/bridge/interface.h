@@ -9,7 +9,8 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// NB(mpereskokova): don't forget to update min_required_abi_version at yt/yql/agent/config.cpp and abi_version in yt/yql/plugin/dynamic/impl.cpp during breaking changes
+// NB(mpereskokova): Do not forget to update EYqlPluginAbiVersion and supported versions
+// during ABI changes.
 using TFuncBridgeGetAbiVersion = ssize_t();
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -82,10 +83,24 @@ struct TBridgeQueryFile
     EQueryFileContentType Type;
 };
 
+struct TBridgeAbortResult
+{
+    const char* YsonError = nullptr;
+    ssize_t YsonErrorLength = 0;
+};
+
 using TFuncBridgeFreeQueryResult = void(TBridgeQueryResult* result);
-using TFuncBridgeRun = TBridgeQueryResult*(TBridgeYqlPlugin* plugin, const char* queryId, const char* impersonationUser, const char* queryText, const char* settings, const TBridgeQueryFile* files, int fileCount);
+using TFuncBridgeRun = TBridgeQueryResult*(
+    TBridgeYqlPlugin* plugin,
+    const char* queryId,
+    const char* impersonationUser,
+    const char* queryText,
+    const char* settings,
+    const TBridgeQueryFile* files,
+    int fileCount);
 using TFuncBridgeGetProgress = TBridgeQueryResult*(TBridgeYqlPlugin* plugin, const char* queryId);
-using TFuncBridgeAbort = void(TBridgeYqlPlugin* plugin, const char* queryId);
+using TFuncBridgeAbort = TBridgeAbortResult*(TBridgeYqlPlugin* plugin, const char* queryId);
+using TFuncBridgeFreeAbortResult = void(TBridgeAbortResult* result);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -95,6 +110,8 @@ using TFuncBridgeAbort = void(TBridgeYqlPlugin* plugin, const char* queryId);
     XX(BridgeFreeQueryResult) \
     XX(BridgeRun) \
     XX(BridgeGetProgress) \
-    XX(BridgeGetAbiVersion)
+    XX(BridgeGetAbiVersion) \
+    XX(BridgeAbort) \
+    XX(BridgeFreeAbortResult)
 
 ////////////////////////////////////////////////////////////////////////////////

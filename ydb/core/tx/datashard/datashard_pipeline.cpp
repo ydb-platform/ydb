@@ -3,6 +3,7 @@
 #include "datashard_pipeline.h"
 #include "datashard_impl.h"
 #include "datashard_txs.h"
+#include "datashard_write_operation.h"
 
 #include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/cputime.h>
@@ -1555,6 +1556,52 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
     return tx;
 }
 
+TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr& ev, TInstant receivedAt, ui64 tieBreakerIndex, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx)
+{
+    const auto& rec = ev->Get()->Record;
+    TBasicOpInfo info(rec.GetTxId(), EOperationKind::DataTx, EvWrite::Convertor::GetProposeFlags(rec.GetTxMode()), 0, receivedAt, tieBreakerIndex);
+    auto op = MakeIntrusive<TWriteOperation>(info, ev, Self, txc, ctx);
+
+    auto badRequest = [&](const TString& error) {
+        op->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, error);
+        LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
+    };
+
+    if (!op->WriteTx()->Ready()) {
+        badRequest(TStringBuilder() << "Shard " << Self->TabletID() << " cannot parse tx " << op->GetTxId() << ": " << op->WriteTx()->GetError());
+        return op;
+    }
+
+    op->ExtractKeys();
+
+    switch (rec.txmode()) {
+        case NKikimrDataEvents::TEvWrite::MODE_PREPARE:
+            break;
+        case NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE:
+            op->SetVolatilePrepareFlag();
+            break;
+        case NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE:
+            op->SetImmediateFlag();
+            break;
+        default:
+            badRequest(TStringBuilder() << "Unknown txmode: " << rec.txmode());
+            return op;
+    }
+
+    // Make config checks for immediate op.
+    if (op->IsImmediate()) {
+        if (Config.NoImmediate() || (Config.ForceOnlineRW())) {
+            LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, "Shard " << Self->TabletID() << " force immediate op " << op->GetTxId() << " to online according to config");
+            op->SetForceOnlineFlag();
+        } else {
+            if (Config.DirtyImmediate())
+                op->SetForceDirtyFlag();
+        }
+    }
+
+    return op;
+}
+
 void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, const TActorContext &ctx)
 {
     auto dataTx = tx->BuildDataTx(Self, txc, ctx);
@@ -1826,7 +1873,7 @@ void TPipeline::MaybeActivateWaitingSchemeOps(const TActorContext& ctx) const {
     }
 }
 
-bool TPipeline::AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {
+bool TPipeline::CheckInflightLimit() const {
     // check in-flight limit
     size_t totalInFly =
         Self->ReadIteratorsInFly() + Self->TxInFly() + Self->ImmediateInFly()
@@ -1834,19 +1881,35 @@ bool TPipeline::AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, co
     if (totalInFly > Self->GetMaxTxInFly())
         return false; // let tx to be rejected
 
+    return true;
+}
+
+bool TPipeline::AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {
+    if (!CheckInflightLimit())
+        return false;
+
     if (Self->MvccSwitchState == TSwitchState::SWITCHING) {
-        WaitingDataTxOps.emplace(TRowVersion::Min(), std::move(ev)); // postpone tx processing till mvcc state switch is finished
+        WaitingDataTxOps.emplace(TRowVersion::Min(), IEventHandle::Upcast<TEvDataShard::TEvProposeTransaction>(std::move(ev)));  // postpone tx processing till mvcc state switch is finished
     } else {
         bool prioritizedReads = Self->GetEnablePrioritizedMvccSnapshotReads();
         Y_DEBUG_ABORT_UNLESS(ev->Get()->Record.HasMvccSnapshot());
         TRowVersion snapshot(ev->Get()->Record.GetMvccSnapshot().GetStep(), ev->Get()->Record.GetMvccSnapshot().GetTxId());
-        WaitingDataTxOps.emplace(snapshot, std::move(ev));
+        WaitingDataTxOps.emplace(snapshot, IEventHandle::Upcast<TEvDataShard::TEvProposeTransaction>(std::move(ev)));
         const ui64 waitStep = prioritizedReads ? snapshot.Step : snapshot.Step + 1;
         TRowVersion unreadableEdge;
         if (!Self->WaitPlanStep(waitStep) && snapshot < (unreadableEdge = GetUnreadableEdge(prioritizedReads))) {
             ActivateWaitingTxOps(unreadableEdge, prioritizedReads, ctx);  // Async MediatorTimeCastEntry update, need to reschedule the op
         }
     }
+
+    return true;
+}
+
+bool TPipeline::AddWaitingTxOp(NEvents::TDataEvents::TEvWrite::TPtr& ev) {
+    if (!CheckInflightLimit())
+        return false;
+
+    WaitingDataTxOps.emplace(TRowVersion::Min(), IEventHandle::Upcast<NEvents::TDataEvents::TEvWrite>(std::move(ev)));  // postpone tx processing till mvcc state switch is finished
 
     return true;
 }

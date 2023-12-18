@@ -272,6 +272,21 @@ public:
     }
 
 private:
+    static void DoShutdownPollable(TPollableCookie* cookie, IPollable* pollable)
+    {
+        // Poller guarantees that OnShutdown is never executed concurrently with OnEvent().
+        // Otherwise it will be removed in TRunEventGuard.
+        RunNoExcept([&] {
+            pollable->OnShutdown();
+        });
+
+        cookie->UnregisterPromise.Set();
+        cookie->Invoker.Reset();
+        auto pollerThread = std::move(cookie->PollerThread);
+        pollerThread->UnregisterQueue_.Enqueue(pollable);
+        pollerThread->WakeupHandle_.Raise();
+    }
+
     class TRunEventGuard
     {
     public:
@@ -296,10 +311,13 @@ private:
 
         ~TRunEventGuard()
         {
-            if (Pollable_) {
-                // This is unlikely but might happen on thread pool termination.
-                GetFinalizerInvoker()->Invoke(BIND(&ResetAndDestroy, Unretained(Pollable_), Control_));
+            if (!Pollable_) {
+                return;
             }
+
+            auto* cookie = TPollableCookie::FromPollable(Pollable_);
+            cookie->ResetControl(ToUnderlying(Control_));
+            Destroy(Pollable_);
         }
 
         explicit operator bool() const
@@ -325,20 +343,8 @@ private:
         {
             auto* cookie = TPollableCookie::FromPollable(pollable);
             if (cookie->ReleaseRef()) {
-                pollable->OnShutdown();
-                cookie->UnregisterPromise.Set();
-                cookie->Invoker.Reset();
-                auto pollerThread = std::move(cookie->PollerThread);
-                pollerThread->UnregisterQueue_.Enqueue(pollable);
-                pollerThread->WakeupHandle_.Raise();
+                DoShutdownPollable(cookie, pollable);
             }
-        }
-
-        static void ResetAndDestroy(IPollable* pollable, EPollControl control)
-        {
-            auto* cookie = TPollableCookie::FromPollable(pollable);
-            cookie->ResetControl(ToUnderlying(control));
-            Destroy(pollable);
         }
     };
 
@@ -384,15 +390,7 @@ private:
         YT_VERIFY(cookie);
 
         if (cookie->SetUnregisterFlag()) {
-            // Poller guarantees that OnShutdown is never executed concurrently with OnEvent().
-            // Otherwise it will be removed in TRunEventGuard.
-
-            pollable->OnShutdown();
-            cookie->UnregisterPromise.Set();
-            cookie->Invoker.Reset();
-            auto pollerThread = std::move(cookie->PollerThread);
-            pollerThread->UnregisterQueue_.Enqueue(pollable);
-            pollerThread->WakeupHandle_.Raise();
+            DoShutdownPollable(cookie, pollable.Get());
         }
     }
 

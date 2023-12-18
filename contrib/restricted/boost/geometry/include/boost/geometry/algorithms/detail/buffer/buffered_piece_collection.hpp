@@ -698,7 +698,7 @@ struct buffered_piece_collection
         BOOST_GEOMETRY_ASSERT(pc.offsetted_count >= 0);
     }
 
-    inline void add_piece_point(piece& pc, const point_type& point, bool add_to_original)
+    inline void add_piece_point(piece& pc, point_type const& point, bool add_to_original)
     {
         if (add_to_original && pc.type != strategy::buffer::buffered_concave)
         {

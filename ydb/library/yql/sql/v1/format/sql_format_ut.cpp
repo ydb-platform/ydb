@@ -17,11 +17,11 @@ struct TSetup {
         Formatter = NSQLFormat::MakeSqlFormatter(settings);
     }
 
-    void Run(const TCases& cases) {
+    void Run(const TCases& cases, NSQLFormat::EFormatMode mode = NSQLFormat::EFormatMode::Pretty) {
         for (const auto& c : cases) {
             NYql::TIssues issues;
             TString formatted;
-            auto res = Formatter->Format(c.first, formatted, issues);
+            auto res = Formatter->Format(c.first, formatted, issues, mode);
             UNIT_ASSERT_C(res, issues.ToString());
             auto expected = c.second;
             SubstGlobal(expected, "\t", TString(NSQLFormat::OneIndent, ' '));
@@ -32,9 +32,11 @@ struct TSetup {
             UNIT_ASSERT_C(res2, issues.ToString());
             UNIT_ASSERT_NO_DIFF(formatted, formatted2);
 
-            auto mutatedQuery = NSQLFormat::MutateQuery(c.first);
-            auto res3 = Formatter->Format(mutatedQuery, formatted, issues);
-            UNIT_ASSERT_C(res3, issues.ToString());
+            if (mode == NSQLFormat::EFormatMode::Pretty) {
+                auto mutatedQuery = NSQLFormat::MutateQuery(c.first);
+                auto res3 = Formatter->Format(mutatedQuery, formatted, issues);
+                UNIT_ASSERT_C(res3, issues.ToString());
+            }
         }
     }
 
@@ -1466,4 +1468,34 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
         TSetup setup;
         setup.Run(cases);
     }
+
+    Y_UNIT_TEST(Obfuscate) {
+        TCases cases = {
+            {"select 1;",
+             "SELECT\n\t0;\n"},
+            {"select true;",
+             "SELECT\n\tFALSE;\n"},
+            {"select 'foo';",
+             "SELECT\n\t'str';\n"},
+            {"select 3.0;",
+             "SELECT\n\t0.0;\n"},
+            {"select col;",
+             "SELECT\n\tid;\n"},
+            {"select * from tab;",
+             "SELECT\n\t*\nFROM id;\n"},
+            {"select cast(col as int32);",
+             "SELECT\n\tCAST(id AS int32);\n"},
+            {"select func(col);",
+             "SELECT\n\tfunc(id);\n"},
+            {"select mod::func(col);",
+             "SELECT\n\tmod::func(id);\n"},
+            {"declare $a as int32;",
+             "DECLARE $id AS int32;\n"},
+            {"select * from `logs/of/bob` where pwd='foo';",
+             "SELECT\n\t*\nFROM id\nWHERE id = 'str';\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases, NSQLFormat::EFormatMode::Obfuscate);
+    }    
 }

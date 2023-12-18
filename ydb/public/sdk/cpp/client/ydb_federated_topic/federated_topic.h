@@ -238,12 +238,21 @@ struct TFederatedWriteSessionSettings : public NTopic::TWriteSessionSettings {
     TFederatedWriteSessionSettings() = default;
     TFederatedWriteSessionSettings(const TFederatedWriteSessionSettings&) = default;
     TFederatedWriteSessionSettings(TFederatedWriteSessionSettings&&) = default;
+    TFederatedWriteSessionSettings& operator=(const TFederatedWriteSessionSettings&) = default;
+    TFederatedWriteSessionSettings& operator=(TFederatedWriteSessionSettings&&) = default;
+
     TFederatedWriteSessionSettings(const TString& path, const TString& producerId, const TString& messageGroupId)
         : NTopic::TWriteSessionSettings(path, producerId, messageGroupId) {
     }
 
-    TFederatedWriteSessionSettings& operator=(const TFederatedWriteSessionSettings&) = default;
-    TFederatedWriteSessionSettings& operator=(TFederatedWriteSessionSettings&&) = default;
+    TFederatedWriteSessionSettings(const NTopic::TWriteSessionSettings& settings)
+        : NTopic::TWriteSessionSettings(settings) {
+    }
+    TFederatedWriteSessionSettings(NTopic::TWriteSessionSettings&& settings)
+        : NTopic::TWriteSessionSettings(std::move(settings)) {
+    }
+    // TFederatedWriteSessionSettings& operator=(const NTopic::TWriteSessionSettings&);
+    // TFederatedWriteSessionSettings& operator=(NTopic::TWriteSessionSettings&&);
 };
 
 //! Settings for read session.
@@ -365,8 +374,6 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
         READ_MIRRORED
     };
 
-    // optional for read_mirrored case ?
-
     //! Policy for federated reading.
     //!
     //! READ_ALL: read will be done from all topic instances from all databases.
@@ -442,11 +449,11 @@ public:
     TFederatedTopicClient(const TDriver& driver, const TFederatedTopicClientSettings& settings = {});
 
     //! Create read session.
-    std::shared_ptr<IFederatedReadSession> CreateFederatedReadSession(const TFederatedReadSessionSettings& settings);
+    std::shared_ptr<IFederatedReadSession> CreateReadSession(const TFederatedReadSessionSettings& settings);
 
     //! Create write session.
-    // std::shared_ptr<NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingFederatedWriteSession(const TFederatedWriteSessionSettings& settings);
-    // std::shared_ptr<NTopic::IWriteSession> CreateFederatedWriteSession(const TFederatedWriteSessionSettings& settings);
+    // std::shared_ptr<NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TFederatedWriteSessionSettings& settings);
+    std::shared_ptr<NTopic::IWriteSession> CreateWriteSession(const TFederatedWriteSessionSettings& settings);
 
 private:
     std::shared_ptr<TImpl> Impl_;

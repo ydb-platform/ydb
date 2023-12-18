@@ -2797,7 +2797,7 @@ public:
                 Node = L(Node, Values[i].Build());
             }
         }
-        else if (Name == TStringBuf("AddFileByUrl") || Name == TStringBuf("AddFolderByUrl") || Name == TStringBuf("ImportUdfs") || Name == TStringBuf("SetPackageVersion")) {
+        else if (Name == TStringBuf("AddFileByUrl") || Name == TStringBuf("SetFileOption") || Name == TStringBuf("AddFolderByUrl") || Name == TStringBuf("ImportUdfs") || Name == TStringBuf("SetPackageVersion")) {
             Node = L(Node, BuildQuotedAtom(Pos, Name));
             for (ui32 i = 0; i < Values.size(); ++i) {
                 Node = L(Node, Values[i].Build());

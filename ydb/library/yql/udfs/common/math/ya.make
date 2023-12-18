@@ -18,6 +18,10 @@ LLVM_BC(
     PiIR
     EIR
     EpsIR
+    RoundDownwardIR
+    RoundToNearestIR
+    RoundTowardZeroIR
+    RoundUpwardIR
     AbsIR
     AcosIR
     AsinIR

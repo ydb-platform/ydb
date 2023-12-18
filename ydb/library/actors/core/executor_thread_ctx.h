@@ -49,7 +49,6 @@ namespace NActors {
     public:
         TBasicExecutorPool *OwnerExecutorPool = nullptr;
         std::atomic<TBasicExecutorPool*> OtherExecutorPool = nullptr;
-        // std::atomic<ui64> FullCycleCheckCount = 0;
         ui64 StartWakingTs = 0;
         ui32 NextPool = 0;
         bool IsShared;

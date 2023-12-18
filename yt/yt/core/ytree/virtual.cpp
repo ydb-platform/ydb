@@ -25,6 +25,32 @@ using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+using TAsyncYsonWriterPtr = TIntrusivePtr<TAsyncYsonWriter>;
+
+namespace {
+
+template <class TContextPtr>
+void ReplyFromAsyncYsonWriter(TAsyncYsonWriterPtr writer, TContextPtr context)
+{
+
+    BIND([writer = std::move(writer)] {
+        return writer->Finish();
+    })
+        .AsyncVia(NRpc::TDispatcher::Get()->GetHeavyInvoker())
+        .Run()
+        .Subscribe(BIND([context = std::move(context)] (const TErrorOr<TYsonString>& resultOrError) {
+            if (resultOrError.IsOK()) {
+                auto* response = &context->Response();
+                response->set_value(resultOrError.Value().ToString());
+                context->Reply();
+            } else {
+                context->Reply(resultOrError);
+            }
+        }));
+}
+
+} // namespace
+
 TVirtualMapBase::TVirtualMapBase()
     : TVirtualMapBase(/*owningNode*/ nullptr)
 { }
@@ -65,7 +91,7 @@ IYPathService::TResolveResult TVirtualMapBase::ResolveRecursive(
 
 void TVirtualMapBase::GetSelf(
     TReqGet* request,
-    TRspGet* response,
+    TRspGet* /*response*/,
     const TCtxGetPtr& context)
 {
     YT_ASSERT(!NYson::TTokenizer(GetRequestTargetYPath(context->RequestHeader())).ParseNext());
@@ -85,68 +111,59 @@ void TVirtualMapBase::GetSelf(
     auto keys = GetKeys(limit);
     i64 size = GetSize();
 
-    TAsyncYsonWriter writer;
+    auto writer = New<TAsyncYsonWriter>();
 
     // NB: we do not want empty attributes (<>) to appear in the result in order to comply
     // with current behaviour for some paths (like //sys/scheduler/orchid/scheduler/operations).
     if (std::ssize(keys) != size || OwningNode_) {
-        writer.OnBeginAttributes();
+        writer->OnBeginAttributes();
         if (std::ssize(keys) != size) {
-            writer.OnKeyedItem("incomplete");
-            writer.OnBooleanScalar(true);
+            writer->OnKeyedItem("incomplete");
+            writer->OnBooleanScalar(true);
         }
         if (OwningNode_) {
-            OwningNode_->WriteAttributesFragment(&writer, attributeFilter, false);
+            OwningNode_->WriteAttributesFragment(writer.Get(), attributeFilter, /*stable*/ false);
         }
-        writer.OnEndAttributes();
+        writer->OnEndAttributes();
     }
 
-    writer.OnBeginMap();
+    writer->OnBeginMap();
 
     if (attributeFilter) {
         for (const auto& key : keys) {
-            auto service = FindItemService(key);
-            if (service) {
-                writer.OnKeyedItem(key);
+            if (auto service = FindItemService(key)) {
+                writer->OnKeyedItem(key);
                 if (Opaque_) {
-                    service->WriteAttributes(&writer, attributeFilter, false);
-                    writer.OnEntity();
+                    service->WriteAttributes(writer.Get(), attributeFilter, /*stable*/ false);
+                    writer->OnEntity();
                 } else {
                     auto asyncResult = AsyncYPathGet(service, "", attributeFilter);
-                    writer.OnRaw(asyncResult);
+                    writer->OnRaw(asyncResult);
                 }
             }
         }
     } else {
         for (const auto& key : keys) {
             if (Opaque_) {
-                writer.OnKeyedItem(key);
-                writer.OnEntity();
+                writer->OnKeyedItem(key);
+                writer->OnEntity();
             } else {
                 if (auto service = FindItemService(key)) {
-                    writer.OnKeyedItem(key);
+                    writer->OnKeyedItem(key);
                     auto asyncResult = AsyncYPathGet(service, "");
-                    writer.OnRaw(asyncResult);
+                    writer->OnRaw(asyncResult);
                 }
             }
         }
     }
-    writer.OnEndMap();
+    writer->OnEndMap();
 
-    writer.Finish()
-        .Subscribe(BIND([=] (const TErrorOr<TYsonString>& resultOrError) {
-            if (resultOrError.IsOK()) {
-                response->set_value(resultOrError.Value().ToString());
-                context->Reply();
-            } else {
-                context->Reply(resultOrError);
-            }
-        }));
+    ReplyFromAsyncYsonWriter(std::move(writer), context);
 }
 
 void TVirtualMapBase::ListSelf(
     TReqList* request,
-    TRspList* response,
+    TRspList* /*response*/,
     const TCtxListPtr& context)
 {
     auto attributeFilter = request->has_attributes()
@@ -164,42 +181,33 @@ void TVirtualMapBase::ListSelf(
     auto keys = GetKeys(limit);
     i64 size = GetSize();
 
-    TAsyncYsonWriter writer;
+    auto writer = New<TAsyncYsonWriter>();
 
     if (std::ssize(keys) != size) {
-        writer.OnBeginAttributes();
-        writer.OnKeyedItem("incomplete");
-        writer.OnBooleanScalar(true);
-        writer.OnEndAttributes();
+        writer->OnBeginAttributes();
+        writer->OnKeyedItem("incomplete");
+        writer->OnBooleanScalar(true);
+        writer->OnEndAttributes();
     }
 
-    writer.OnBeginList();
+    writer->OnBeginList();
     if (attributeFilter) {
         for (const auto& key : keys) {
-            auto service = FindItemService(key);
-            if (service) {
-                writer.OnListItem();
-                service->WriteAttributes(&writer, attributeFilter, false);
-                writer.OnStringScalar(key);
+            if (auto service = FindItemService(key)) {
+                writer->OnListItem();
+                service->WriteAttributes(writer.Get(), attributeFilter, /*stable*/ false);
+                writer->OnStringScalar(key);
             }
         }
     } else {
         for (const auto& key : keys) {
-            writer.OnListItem();
-            writer.OnStringScalar(key);
+            writer->OnListItem();
+            writer->OnStringScalar(key);
         }
     }
-    writer.OnEndList();
+    writer->OnEndList();
 
-    writer.Finish()
-        .Subscribe(BIND([=] (const TErrorOr<TYsonString>& resultOrError) {
-            if (resultOrError.IsOK()) {
-                response->set_value(resultOrError.Value().ToString());
-                context->Reply();
-            } else {
-                context->Reply(resultOrError);
-            }
-        }));
+    ReplyFromAsyncYsonWriter(std::move(writer), context);
 }
 
 void TVirtualMapBase::RemoveRecursive(

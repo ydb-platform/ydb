@@ -339,7 +339,7 @@ namespace NFake {
         void SetStorageStatusFlagsByColor(NKikimrBlobStorage::TPDiskSpaceColor::E color) {
             StorageStatusFlags = TStorageStatusFlags(SpaceColorToStatusFlag(color));
         }
-        
+
         void SetStorageStatusFlags(TStorageStatusFlags flags) {
             StorageStatusFlags = flags;
         }

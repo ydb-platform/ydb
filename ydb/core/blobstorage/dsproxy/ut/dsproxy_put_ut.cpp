@@ -73,11 +73,12 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
     }
     group.SetPredictedDelayNs(7, 10);
 
-    TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
-    putImpl.GenerateInitialRequests(logCtx, partSetSingleton, vPuts);
-    group.SetError(0, NKikimrProto::ERROR);
-
     TPutImpl::TPutResultVec putResults;
+
+    putImpl.GenerateInitialRequests(logCtx, partSetSingleton);
+    putImpl.Step(logCtx, putResults, {&group.GetInfo()->GetTopology()});
+    auto vPuts = putImpl.GeneratePutRequests();
+    group.SetError(0, NKikimrProto::ERROR);
 
     TVector<ui32> diskSequence = {0, 7, 7, 7, 7, 6, 3, 4, 5, 1, 2};
     TVector<ui32> slowDiskSequence = {3, 4, 5, 6, 1, 2};
@@ -86,7 +87,7 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
         ui32 nextVPut = vPutIdx;
         ui32 diskPos = (ui32)-1;
         for (ui32 i = vPutIdx; i < vPuts.size(); ++i) {
-            auto& record = vPuts[i]->Record;
+            auto& record = std::get<0>(vPuts[i])->Record;
             TVDiskID vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
             ui32 diskIdx = group.VDiskIdx(vDiskId);
             auto it = Find(diskSequence, diskIdx);
@@ -98,7 +99,7 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
                 }
             }
         }
-        CTEST << "vdisk exp# " << (diskSequence.size() ? diskSequence.front() : -1) << " get# " << group.VDiskIdx(VDiskIDFromVDiskID(vPuts[nextVPut]->Record.GetVDiskID())) << Endl;
+        CTEST << "vdisk exp# " << (diskSequence.size() ? diskSequence.front() : -1) << " get# " << group.VDiskIdx(VDiskIDFromVDiskID(std::get<0>(vPuts[nextVPut])->Record.GetVDiskID())) << Endl;
         if (diskPos != (ui32)-1) {
             diskSequence.erase(diskSequence.begin() + diskPos);
         }
@@ -111,15 +112,15 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
             group.SetPredictedDelayNs(slowDiskSequence[vPutIdx], 10);
         }
 
-        TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> nextVPuts;
-
-        TEvBlobStorage::TEvVPut& vPut = *vPuts[vPutIdx];
+        TEvBlobStorage::TEvVPut& vPut = *std::get<0>(vPuts[vPutIdx]);
         TActorId sender;
         TEvBlobStorage::TEvVPutResult vPutResult;
         NKikimrProto::EReplyStatus status = group.OnVPut(vPut);
         vPutResult.MakeError(status, TString(), vPut.Record);
 
-        putImpl.OnVPutEventResult(logCtx, sender, vPutResult, nextVPuts, putResults);
+        putImpl.ProcessResponse(vPutResult);
+        putImpl.Step(logCtx, putResults, {&group.GetInfo()->GetTopology()});
+        auto nextVPuts = putImpl.GeneratePutRequests();
 
         if (putResults.size()) {
             break;
@@ -131,7 +132,7 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
     auto& [_, result] = putResults.front();
     UNIT_ASSERT(result->Status == NKikimrProto::OK);
     UNIT_ASSERT(result->Id == blobId);
-    UNIT_ASSERT(putImpl.GetHandoffPartsSent() == 7);
+    UNIT_ASSERT_VALUES_EQUAL(putImpl.GetHandoffPartsSent(), 2);
 }
 
 Y_UNIT_TEST(TestBlock42MaxPartCountOnHandoff) {
@@ -150,6 +151,9 @@ struct TTestPutAllOk {
     static constexpr bool IsVPut = TestMode == TPAOM_VPUT;
     static constexpr ui64 BlobCount = IsVPut ? 1 : 2;
     static constexpr ui32 MaxIterations = 10000;
+
+    using TPutResultEvent = std::variant<std::unique_ptr<TEvBlobStorage::TEvVPutResult>,
+                                         std::unique_ptr<TEvBlobStorage::TEvVMultiPutResult>>;
 
     TActorSystemStub ActorSystemStub;
     TBlobStorageGroupType GroupType;
@@ -204,45 +208,40 @@ struct TTestPutAllOk {
         }
     }
 
-    void InitVPutResults(TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> &vPuts,
-            TDeque<std::unique_ptr<TEvBlobStorage::TEvVPutResult>> &vPutResults)
-    {
-        vPutResults.resize(vPuts.size());
-        for (ui32 vPutIdx = 0; vPutIdx < vPuts.size(); ++vPutIdx) {
-            TEvBlobStorage::TEvVPut &vPut = *vPuts[vPutIdx];
-            NKikimrProto::EReplyStatus status = Group.OnVPut(vPut);
+    std::unique_ptr<TEvBlobStorage::TEvVPutResult> InitResult(TEvBlobStorage::TEvVPut& ev) {
+        NKikimrProto::EReplyStatus status = Group.OnVPut(ev);
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
+        auto vPutResult = std::make_unique<TEvBlobStorage::TEvVPutResult>();
+        vPutResult->MakeError(status, TString(), ev.Record);
+        return vPutResult;
+    }
+
+    std::unique_ptr<TEvBlobStorage::TEvVMultiPutResult> InitResult(TEvBlobStorage::TEvVMultiPut& ev) {
+        TVector<NKikimrProto::EReplyStatus> statuses = Group.OnVMultiPut(ev);
+        for (auto status : statuses) {
             UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
-            vPutResults[vPutIdx].reset(new TEvBlobStorage::TEvVPutResult());
-            TEvBlobStorage::TEvVPutResult &vPutResult = *vPutResults[vPutIdx];
-            vPutResult.MakeError(status, TString(), vPut.Record);
+        }
+        auto vMultiPutResult = std::make_unique<TEvBlobStorage::TEvVMultiPutResult>();
+        Y_ABORT_UNLESS(ev.Record.ItemsSize() == statuses.size());
+        vMultiPutResult->MakeError(NKikimrProto::OK, TString(), ev.Record);
+        for (ui64 itemIdx = 0; itemIdx < statuses.size(); ++itemIdx) {
+            NKikimrBlobStorage::TVMultiPutResultItem &item = *vMultiPutResult->Record.MutableItems(itemIdx);
+            NKikimrProto::EReplyStatus status = statuses[itemIdx];
+            item.SetStatus(status);
+        }
+        Y_ABORT_UNLESS(vMultiPutResult->Record.ItemsSize() == statuses.size());
+        return vMultiPutResult;
+    }
+
+    void InitVPutResults(TDeque<TPutImpl::TPutEvent>& vPuts, TDeque<TPutResultEvent>& vPutResults) {
+        for (auto& ev : vPuts) {
+            std::visit([&](auto& ev) {
+                vPutResults.push_back(InitResult(*ev));
+            }, ev);
         }
     }
 
-    void InitVPutResults(TDeque<std::unique_ptr<TEvBlobStorage::TEvVMultiPut>> &vMultiPuts,
-            TDeque<std::unique_ptr<TEvBlobStorage::TEvVMultiPutResult>> &vMultiPutResults)
-    {
-        vMultiPutResults.resize(vMultiPuts.size());
-        for (ui32 vMultiPutIdx = 0; vMultiPutIdx < vMultiPuts.size(); ++vMultiPutIdx) {
-            TEvBlobStorage::TEvVMultiPut &vMultiPut = *vMultiPuts[vMultiPutIdx];
-            TVector<NKikimrProto::EReplyStatus> statuses = Group.OnVMultiPut(vMultiPut);
-            for (auto status : statuses) {
-                UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
-            }
-            vMultiPutResults[vMultiPutIdx].reset(new TEvBlobStorage::TEvVMultiPutResult());
-            Y_ABORT_UNLESS(vMultiPut.Record.ItemsSize() == statuses.size());
-            TEvBlobStorage::TEvVMultiPutResult &vMultiPutResult = *vMultiPutResults[vMultiPutIdx];
-            vMultiPutResult.MakeError(NKikimrProto::OK, TString(), vMultiPut.Record);
-            for (ui64 itemIdx = 0; itemIdx < statuses.size(); ++itemIdx) {
-                NKikimrBlobStorage::TVMultiPutResultItem &item = *vMultiPutResult.Record.MutableItems(itemIdx);
-                NKikimrProto::EReplyStatus status = statuses[itemIdx];
-                item.SetStatus(status);
-            }
-            Y_ABORT_UNLESS(vMultiPutResult.Record.ItemsSize() == statuses.size());
-        }
-    }
-
-    template <typename TVPutResultEvent>
-    void PermutateVPutResults(ui64 resIdx, bool &isAborted, TDeque<std::unique_ptr<TVPutResultEvent>> &vPutResults) {
+    void PermutateVPutResults(ui64 resIdx, bool &isAborted, TDeque<TPutResultEvent> &vPutResults) {
         // select result in range [resIdx, vPutResults.size())
         if (resIdx + 1 < CheckStack.size()) {
             ui32 tgt = CheckStack[resIdx];
@@ -263,7 +262,7 @@ struct TTestPutAllOk {
     }
 
     bool Step(TPutImpl &putImpl,
-            TDeque<std::unique_ptr<TEvBlobStorage::TEvVPutResult>> &vPutResults,
+            TDeque<TPutResultEvent> &vPutResults,
             TPutImpl::TPutResultVec &putResults)
     {
         bool isAborted = false;
@@ -273,70 +272,15 @@ struct TTestPutAllOk {
                 break;
             }
 
-            TActorId sender;
-            TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts2;
-            putImpl.OnVPutEventResult(LogCtx, sender, *vPutResults[resIdx], vPuts2, putResults);
-            if (putResults.size()) {
+            std::visit([&](auto &ev) { putImpl.ProcessResponse(*ev); }, vPutResults[resIdx]);
+            putImpl.Step(LogCtx, putResults, &Group.GetInfo()->GetTopology());
+            auto vPuts = putImpl.GeneratePutRequests();
+            if (putResults.size() == BlobCount) {
                 break;
             }
 
-            for (ui32 vPutIdx = 0; vPutIdx < vPuts2.size(); ++vPutIdx) {
-                TEvBlobStorage::TEvVPut &vPut = *vPuts2[vPutIdx];
-                NKikimrProto::EReplyStatus status = Group.OnVPut(vPut);
-                UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
-                vPutResults.emplace_back(new TEvBlobStorage::TEvVPutResult());
-                TEvBlobStorage::TEvVPutResult &vPutResult = *vPutResults.back();
-                vPutResult.MakeError(status, TString(), vPut.Record);
-            }
-        }
-
-        return isAborted;
-    }
-
-    bool Step(TPutImpl &putImpl,
-            TDeque<std::unique_ptr<TEvBlobStorage::TEvVMultiPutResult>> &vMultiPutResults,
-            TPutImpl::TPutResultVec &putResults)
-    {
-        bool isAborted = false;
-        for (ui64 resIdx = 0; resIdx < vMultiPutResults.size(); ++resIdx) {
-            PermutateVPutResults(resIdx, isAborted, vMultiPutResults);
-            if (isAborted) {
-                break;
-            }
-
-            TActorId sender;
-            TDeque<std::unique_ptr<TEvBlobStorage::TEvVMultiPut>> vMultiPuts2;
-            putImpl.OnVPutEventResult(LogCtx, sender, *vMultiPutResults[resIdx], vMultiPuts2, putResults);
-            if (putResults.size() == BlobIds.size()) {
-                break;
-            }
-
-            for (ui32 vMultiPutIdx = 0; vMultiPutIdx < vMultiPuts2.size(); ++vMultiPutIdx) {
-                TEvBlobStorage::TEvVMultiPut &vMultiPut = *vMultiPuts2[vMultiPutIdx];
-                TVector<NKikimrProto::EReplyStatus> statuses = Group.OnVMultiPut(vMultiPut);
-                for (auto status : statuses) {
-                    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
-                }
-
-                vMultiPutResults[vMultiPutIdx].reset(new TEvBlobStorage::TEvVMultiPutResult());
-                Y_ABORT_UNLESS(vMultiPut.Record.ItemsSize() == statuses.size());
-                TEvBlobStorage::TEvVMultiPutResult &vMultiPutResult = *vMultiPutResults[vMultiPutIdx];
-                vMultiPutResult.MakeError(NKikimrProto::OK, TString(), vMultiPut.Record);
-
-                for (ui64 itemIdx = 0; itemIdx < statuses.size(); ++itemIdx) {
-                    auto &item = vMultiPut.Record.GetItems(itemIdx);
-                    NKikimrProto::EReplyStatus status = statuses[itemIdx];
-                    TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(item.GetBlobID());
-
-                    ui64 cookieValue = 0;
-                    ui64 *cookie = nullptr;
-                    if (item.HasCookie()) {
-                        cookieValue = item.GetCookie();
-                        cookie = &cookieValue;
-                    }
-
-                    vMultiPutResult.AddVPutResult(status, TString(), blobId, cookie);
-                }
+            for (auto& put : vPuts) {
+                std::visit([&](auto& ev) { vPutResults.push_back(InitResult(*ev)); }, put);
             }
         }
 
@@ -344,10 +288,6 @@ struct TTestPutAllOk {
     }
 
     void Run() {
-        using TVPutEvent = std::conditional_t<IsVPut, TEvBlobStorage::TEvVPut, TEvBlobStorage::TEvVMultiPut>;
-        using TVPutResultEvent = std::conditional_t<IsVPut, TEvBlobStorage::TEvVPutResult,
-                TEvBlobStorage::TEvVMultiPutResult>;
-
         ui64 i = 0;
         for (; i < MaxIterations; ++i) {
             Group.Wipe();
@@ -356,7 +296,7 @@ struct TTestPutAllOk {
                 std::unique_ptr<TEvBlobStorage::TEvPut> vPut(new TEvBlobStorage::TEvPut(blobId, Data, TInstant::Max(),
                         NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticDefault));
                 events.emplace_back(static_cast<TEventHandle<TEvBlobStorage::TEvPut> *>(
-                        new IEventHandle(TActorId(),  TActorId(), vPut.release())));
+                        new IEventHandle(TActorId(), TActorId(), vPut.release())));
             }
 
             TMaybe<TPutImpl> putImpl;
@@ -368,15 +308,16 @@ struct TTestPutAllOk {
                         NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticDefault, false);
             }
 
-            TDeque<std::unique_ptr<TVPutEvent>> vPuts;
-            putImpl->GenerateInitialRequests(LogCtx, PartSets, vPuts);
+            putImpl->GenerateInitialRequests(LogCtx, PartSets);
+            putImpl->Step(LogCtx, putResults, &Group.GetInfo()->GetTopology());
+            auto vPuts = putImpl->GeneratePutRequests();
             UNIT_ASSERT(vPuts.size() == 6 || !IsVPut);
-            TDeque<std::unique_ptr<TVPutResultEvent>> vPutResults;
+            TDeque<TPutResultEvent> vPutResults;
             InitVPutResults(vPuts, vPutResults);
 
             bool isAborted = Step(*putImpl, vPutResults, putResults);
             if (!isAborted) {
-                UNIT_ASSERT(putResults.size() == BlobCount);
+                UNIT_ASSERT_VALUES_EQUAL(putResults.size(), BlobCount);
                 for (auto& [blobIdx, result] : putResults) {
                     UNIT_ASSERT(result->Status == NKikimrProto::OK);
                     UNIT_ASSERT(result->Id == BlobIds[blobIdx]);
@@ -412,7 +353,6 @@ Y_UNIT_TEST(TestMirror3dcWith3x3MinLatencyMod) {
     TEvBlobStorage::TEvPut ev(blobId, data, TInstant::Max(), NKikimrBlobStorage::TabletLog,
             TEvBlobStorage::TEvPut::TacticMinLatency);
     TPutImpl putImpl(env.Info, env.GroupQueues, &ev, env.Mon, true, TActorId(), 0, NWilson::TTraceId());
-    TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
 
     TLogContext logCtx(NKikimrServices::BS_PROXY_PUT, false);
     logCtx.LogAcc.IsLogEnabled = false;
@@ -425,13 +365,16 @@ Y_UNIT_TEST(TestMirror3dcWith3x3MinLatencyMod) {
     char *dataBytes = encryptedData.Detach();
     Encrypt(dataBytes, dataBytes, 0, encryptedData.size(), blobId, *env.Info);
     ErasureSplit((TErasureType::ECrcMode)blobId.CrcMode(), env.Info->Type, TRope(encryptedData), partSetSingleton[0]);
-    putImpl.GenerateInitialRequests(logCtx, partSetSingleton, vPuts);
+    putImpl.GenerateInitialRequests(logCtx, partSetSingleton);
+    TPutImpl::TPutResultVec putResults;
+    putImpl.Step(logCtx, putResults, &env.Info->GetTopology());
+    auto vPuts = putImpl.GeneratePutRequests();
 
     UNIT_ASSERT_VALUES_EQUAL(vPuts.size(), 9);
     using TVDiskIDTuple = decltype(std::declval<TVDiskID>().ConvertToTuple());
     THashSet<TVDiskIDTuple> vDiskIds;
     for (auto &vPut : vPuts) {
-        TVDiskID vDiskId = VDiskIDFromVDiskID(vPut->Record.GetVDiskID());
+        TVDiskID vDiskId = VDiskIDFromVDiskID(std::get<0>(vPut)->Record.GetVDiskID());
         bool inserted = vDiskIds.insert(vDiskId.ConvertToTuple()).second;
         UNIT_ASSERT(inserted);
     }

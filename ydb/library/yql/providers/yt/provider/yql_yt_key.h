@@ -114,7 +114,7 @@ public:
         return WalkFolderImplArgs;
     }
 
-    bool Parse(const TExprNode& key, TExprContext& ctx);
+    bool Parse(const TExprNode& key, TExprContext& ctx, bool isOutput = false);
 
 private:
     EType Type = EType::Undefined;

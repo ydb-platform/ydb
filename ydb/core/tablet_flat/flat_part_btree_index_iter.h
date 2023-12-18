@@ -129,6 +129,14 @@ public:
         return DoSeek<TSeekRowId>({rowId});
     }
 
+    EReady SeekLast() override {
+        if (Y_UNLIKELY(GetEndRowId() == 0)) {
+            Y_DEBUG_ABORT_UNLESS(false, "TPart can't be empty");
+            return Exhaust();
+        }
+        return Seek(GetEndRowId() - 1);
+    }
+
     /**
      * Searches for the first page that may contain given key with specified seek mode
      *

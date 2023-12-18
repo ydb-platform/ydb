@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import boto3
+import logging
 import pytest
 
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
@@ -38,6 +39,9 @@ Pear,15,33'''
         kikimr.control_plane.wait_bootstrap(1)
         client.create_storage_connection("fruitbucket", "fbucket")
 
+        cloud_id = "mock_cloud"
+        folder_id = "my_folder"
+
         sql = R'''
             SELECT *
             FROM fruitbucket.`fruits.csv`
@@ -47,15 +51,12 @@ Pear,15,33'''
                 Weight Int NOT NULL
             ));
             '''
-
-        cloud_id = "mock_cloud"
-        folder_id = "my_folder"
-
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
         metrics = kikimr.compute_plane.get_sensors(1, "yq_public") if yq_version == "v1" else kikimr.control_plane.get_sensors(1, "yq_public")
+        logging.debug(str(metrics))
+
         assert metrics.find_sensor(
             {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.running_tasks"}) >= 0
         assert metrics.find_sensor(
@@ -66,17 +67,48 @@ Pear,15,33'''
             {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.input_bytes"}) > 0
         assert metrics.find_sensor(
             {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.uptime_seconds"}) >= 0
-        if yq_version == "v1":
-            assert metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.output_bytes"}) is None
-            assert metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.source_input_records"}) is None
+        assert metrics.find_sensor(
+            {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.source_input_records"}) == 3
+        if yq_version == "v1":  # v1 reports nothing, v2 report 0
             assert metrics.find_sensor(
                 {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.sink_output_records"}) is None
+            assert metrics.find_sensor(
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.output_bytes"}) is None
         else:
             assert metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.output_bytes"}) > 0
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.sink_output_records"}) == 0
             assert metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.source_input_records"}) > 0
-            assert metrics.find_sensor(
-                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.sink_output_records"}) > 0
+                {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.output_bytes"}) == 0
+
+        sql = R'''
+            INSERT INTO fruitbucket.`/copy/` WITH (format=parquet)
+            SELECT *
+            FROM fruitbucket.`fruits.csv`
+            WITH (format=csv_with_names, SCHEMA (
+                Fruit String NOT NULL,
+                Price Int NOT NULL,
+                Weight Int NOT NULL
+            ));
+            '''
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        metrics = kikimr.compute_plane.get_sensors(1, "yq_public") if yq_version == "v1" else kikimr.control_plane.get_sensors(1, "yq_public")
+        logging.debug(str(metrics))
+
+        assert metrics.find_sensor(
+            {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.running_tasks"}) >= 0
+        assert metrics.find_sensor(
+            {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.cpu_usage_us"}) >= 0
+        assert metrics.find_sensor({"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id,
+                                    "name": "query.memory_usage_bytes"}) > 0
+        assert metrics.find_sensor(
+            {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.input_bytes"}) > 0
+        assert metrics.find_sensor(
+            {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.uptime_seconds"}) >= 0
+        assert metrics.find_sensor(
+            {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.output_bytes"}) > 0
+        assert metrics.find_sensor(
+            {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.source_input_records"}) == 3
+        assert metrics.find_sensor(
+            {"cloud_id": cloud_id, "folder_id": folder_id, "query_id": query_id, "name": "query.sink_output_records"}) > 0

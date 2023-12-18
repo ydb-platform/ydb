@@ -56,9 +56,12 @@ struct IYsonStructParameter
 
     virtual bool CanOmitValue(const TYsonStructBase* self) const = 0;
 
+    virtual bool IsRequired() const = 0;
     virtual const TString& GetKey() const = 0;
     virtual const std::vector<TString>& GetAliases() const = 0;
     virtual IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* self) const = 0;
+
+    virtual void GetSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const = 0;
 };
 
 //using IYsonStructParameterPtr = TIntrusivePtr<IYsonStructParameter>;
@@ -97,6 +100,8 @@ struct IYsonStructMeta
     virtual void RegisterPreprocessor(std::function<void(TYsonStructBase*)> preprocessor) = 0;
     virtual void RegisterPostprocessor(std::function<void(TYsonStructBase*)> postprocessor) = 0;
     virtual void SetUnrecognizedStrategy(EUnrecognizedStrategy strategy) = 0;
+
+    virtual void GetSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const = 0;
 
     virtual ~IYsonStructMeta() = default;
 };
@@ -138,6 +143,8 @@ public:
     void RegisterPreprocessor(std::function<void(TYsonStructBase*)> preprocessor) override;
     void RegisterPostprocessor(std::function<void(TYsonStructBase*)> postprocessor) override;
     void SetUnrecognizedStrategy(EUnrecognizedStrategy strategy) override;
+
+    void GetSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const override;
 
     void FinishInitialization(const std::type_info& structType);
 
@@ -238,9 +245,12 @@ public:
     void SetDefaultsInitialized(TYsonStructBase* self) override;
     void Save(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const override;
     bool CanOmitValue(const TYsonStructBase* self) const override;
+    bool IsRequired() const override;
     const TString& GetKey() const override;
     const std::vector<TString>& GetAliases() const override;
     IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* self) const override;
+
+    void GetSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const override;
 
     // Mark as optional. Field will be default-initialized if `init` is true, initialization is skipped otherwise.
     TYsonStructParameter& Optional(bool init = true);

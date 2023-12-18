@@ -186,6 +186,7 @@ public:
     bool HasActiveProcesses();
     bool NeedWaitForActiveProcesses();
 
+    [[nodiscard]]
     NThreading::TFuture<void> Abort();
 
     inline TIssues Issues() {
@@ -362,7 +363,9 @@ private:
 
     NThreading::TFuture<void> OpenSession(const TString& username);
 
+    [[nodiscard]]
     NThreading::TFuture<void> CleanupLastSession();
+    [[nodiscard]]
     NThreading::TFuture<void> CloseLastSession();
 
     TFutureStatus RemoteKikimrValidate(const TString& cluster);

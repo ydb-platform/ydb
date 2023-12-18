@@ -918,62 +918,6 @@ namespace std
    using boost::math::cstdfloat::detail::isunordered;
    //   end more functions
 
-   //
-   // Very basic iostream operator:
-   //
-   inline std::ostream& operator << (std::ostream& os, __float128 m_value)
-   {
-      std::streamsize digits = os.precision();
-      std::ios_base::fmtflags f = os.flags();
-      std::string s;
-
-      char buf[100];
-      std::unique_ptr<char[]> buf2;
-      std::string format = "%";
-      if (f & std::ios_base::showpos)
-         format += "+";
-      if (f & std::ios_base::showpoint)
-         format += "#";
-      format += ".*";
-      if (digits == 0)
-         digits = 36;
-      format += "Q";
-      if (f & std::ios_base::scientific)
-         format += "e";
-      else if (f & std::ios_base::fixed)
-         format += "f";
-      else
-         format += "g";
-
-      int v = quadmath_snprintf(buf, 100, format.c_str(), digits, m_value);
-
-      if ((v < 0) || (v >= 99))
-      {
-         int v_max = v;
-         buf2.reset(new char[v + 3]);
-         v = quadmath_snprintf(&buf2[0], v_max + 3, format.c_str(), digits, m_value);
-         if (v >= v_max + 3)
-         {
-            BOOST_MATH_THROW_EXCEPTION(std::runtime_error("Formatting of float128_type failed."));
-         }
-         s = &buf2[0];
-      }
-      else
-         s = buf;
-      std::streamsize ss = os.width();
-      if (ss > static_cast<std::streamsize>(s.size()))
-      {
-         char fill = os.fill();
-         if ((os.flags() & std::ios_base::left) == std::ios_base::left)
-            s.append(static_cast<std::string::size_type>(ss - s.size()), fill);
-         else
-            s.insert(static_cast<std::string::size_type>(0), static_cast<std::string::size_type>(ss - s.size()), fill);
-      }
-
-      return os << s;
-   }
-
-
 } // namespace std
 
 // We will now remove the preprocessor symbols representing quadruple-precision <cmath>

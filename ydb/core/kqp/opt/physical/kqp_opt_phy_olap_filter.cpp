@@ -32,6 +32,7 @@ struct TPushdownSettings : public NPushdown::TSettings {
         Enable(EFlag::LikeOperator, NSsa::RuntimeVersion >= 2U);
         Enable(EFlag::LikeOperatorOnlyForUtf8, NSsa::RuntimeVersion < 3U);
         Enable(EFlag::JsonQueryOperators | EFlag::JsonExistsOperator, NSsa::RuntimeVersion >= 3U);
+        Enable(EFlag::ArithmeticalExpressions, NSsa::RuntimeVersion >= 4U);
         Enable(EFlag::LogicalXorOperator
             | EFlag::ParameterExpression
             | EFlag::CastExpression
@@ -64,8 +65,8 @@ struct TFilterOpsLevels {
     }
 
     bool IsSecondLevelOp(const TMaybeNode<TExprBase>& predicate) {
-        if (auto maybeCompare = predicate.Maybe<TKqpOlapFilterCompare>()) {
-            auto op = maybeCompare.Cast().Operator().StringValue();
+        if (const auto maybeBinaryOp = predicate.Maybe<TKqpOlapFilterBinaryOp>()) {
+            auto op = maybeBinaryOp.Cast().Operator().StringValue();
             if (SecondLevelFilters.find(op) != SecondLevelFilters.end()) {
                 return true;
             }
@@ -97,6 +98,8 @@ static TFilterOpsLevels NullFilterOpsLevels = TFilterOpsLevels(NullNode, NullNod
 bool IsFalseLiteral(TExprBase node) {
     return node.Maybe<TCoBool>() && !FromString<bool>(node.Cast<TCoBool>().Literal().Value());
 }
+
+std::optional<std::pair<TExprBase, TExprBase>> ExtractArithmeticParameters(const TCoBinaryArithmetic& op, TExprContext& ctx, TPositionHandle pos);
 
 TVector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, TExprContext& ctx, TPositionHandle pos)
 {
@@ -143,6 +146,17 @@ TVector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, TExprContext& 
             return builder.Done();
         }
 
+        if (const auto maybeArithmetic = node.Maybe<TCoBinaryArithmetic>()) {
+            if (const auto arithmetic = maybeArithmetic.Cast(); !arithmetic.Maybe<TCoAggrAdd>()) {
+                if (const auto params =  ExtractArithmeticParameters(arithmetic, ctx, pos)) {
+                    return Build<TKqpOlapFilterBinaryOp>(ctx, pos)
+                            .Operator(ctx.NewAtom(pos, arithmetic.Ref().Content(), TNodeFlags::Default))
+                            .Left(params->first)
+                            .Right(params->second)
+                            .Done();
+                }
+            }
+        }
         return NullNode;
     };
 
@@ -176,6 +190,21 @@ TVector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, TExprContext& 
     }
 
     return out;
+}
+
+std::optional<std::pair<TExprBase, TExprBase>> ExtractArithmeticParameters(const TCoBinaryArithmetic& op, TExprContext& ctx, TPositionHandle pos)
+{
+    const auto left = ConvertComparisonNode(op.Left(), ctx, pos);
+    if (left.size() != 1U) {
+        return std::nullopt;
+    }
+
+    const auto right = ConvertComparisonNode(op.Right(), ctx, pos);
+    if (right.size() != 1U) {
+        return std::nullopt;
+    }
+
+    return std::make_pair(left.front(), right.front());
 }
 
 TVector<std::pair<TExprBase, TExprBase>> ExtractComparisonParameters(const TCoCompare& predicate, TExprContext& ctx, TPositionHandle pos)
@@ -250,8 +279,8 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
 
     YQL_ENSURE(!compareOperator.empty(), "Unsupported comparison node: " << predicate.Ptr()->Content());
 
-    return Build<TKqpOlapFilterCompare>(ctx, pos)
-        .Operator(ctx.NewAtom(pos, compareOperator))
+    return Build<TKqpOlapFilterBinaryOp>(ctx, pos)
+        .Operator(ctx.NewAtom(pos, compareOperator, TNodeFlags::Default))
         .Left(parameter.first)
         .Right(parameter.second)
         .Done();
@@ -312,7 +341,7 @@ TMaybeNode<TExprBase> ComparisonPushdown(const TVector<std::pair<TExprBase, TExp
         andConditions.emplace_back(condition);
 
         for (ui32 j = 0; j < i; ++j) {
-            andConditions.emplace_back(Build<TKqpOlapFilterCompare>(ctx, pos)
+            andConditions.emplace_back(Build<TKqpOlapFilterBinaryOp>(ctx, pos)
                 .Operator(ctx.NewAtom(pos, "eq"))
                 .Left(parameters[j].first)
                 .Right(parameters[j].second)

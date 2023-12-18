@@ -6,15 +6,9 @@
 namespace NYql {
 namespace NPgTypeAnn {
     
-bool NeedsValuesRename(
+bool IsPgInsert(
     const NNodes::TKiWriteTable& node, 
     TYdbOperation op);
-
-bool RewriteValuesColumnNames(
-    const NNodes::TKiWriteTable& node, 
-    const TKikimrTableDescription* table, 
-    TExprContext& ctx, 
-    TTypeAnnotationContext& types);
 
 bool ValidatePgUpdateKeys(
     const NNodes::TKiWriteTable& node, 

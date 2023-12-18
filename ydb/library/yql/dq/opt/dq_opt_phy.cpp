@@ -1970,7 +1970,7 @@ TExprBase DqBuildTakeSkipStage(TExprBase node, TExprContext& ctx, IOptimizationC
         .Args({"stream"})
         .Body<TCoTake>()
             .Input("stream")
-            .Count<TCoPlus>()
+            .Count<TCoAggrAdd>()
                 .Left(take.Count())
                 .Right(skip.Count())
                 .Build()

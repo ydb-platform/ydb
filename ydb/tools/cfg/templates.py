@@ -21,6 +21,7 @@ BASE_VARS = [
     ("kikimr_auth_token_file", "${kikimr_home}/token/kikimr.token"),
     ("kikimr_dyn_ns_file", "${kikimr_config}/dyn_ns.txt"),
     ("kikimr_tracing_file", "${kikimr_config}/tracing.txt"),
+    ("kikimr_pdisk_key_file", "${kikimr_config}/pdisk_key.txt"),
 ]
 
 NODE_ID_LOCAL_VAR = """
@@ -152,6 +153,12 @@ fi
 
 if [ -f "${kikimr_dyn_ns_file}" ]; then
     kikimr_arg="${kikimr_arg}${kikimr_dyn_ns_file:+ --dyn-nodes-file ${kikimr_dyn_ns_file}}"
+fi
+
+if [ -f "${kikimr_pdisk_key_file}" ]; then
+    kikimr_arg="${kikimr_arg}${kikimr_pdisk_key_file:+ --pdisk-key-file ${kikimr_pdisk_key_file}}"
+else
+    echo "PDisk Key file not found!"
 fi
 
 kikimr_arg="${kikimr_arg}${kikimr_ca:+ --ca=${kikimr_ca}}${kikimr_cert:+ --cert=${kikimr_cert}}${kikimr_key:+ --key=${kikimr_key}}"

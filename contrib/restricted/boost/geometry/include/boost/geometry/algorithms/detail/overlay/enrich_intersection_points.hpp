@@ -185,7 +185,8 @@ inline void enrich_assign(Operations& operations, Turns& turns,
             << " nxt=" << op.enriched.next_ip_index
             << " / " << op.enriched.travels_to_ip_index
             << " [vx " << op.enriched.travels_to_vertex_index << "]"
-            << (turns[indexed_op.turn_index].discarded ? " discarded" : "")
+            << (turns[indexed_op.turn_index].discarded ? " [discarded]" : "")
+            << (op.enriched.startable ? "" : " [not startable]")
             << std::endl;
     }
 #endif

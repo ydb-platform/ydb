@@ -362,7 +362,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     }
 
     static THashSet<TStringBuf> supportedJoinKinds = {"Inner", "Left", "LeftOnly", "LeftSemi", "RightSemi"};
-    static THashSet<TStringBuf> supportedStreamJoinKinds = {"Inner", "Left"};
+    static THashSet<TStringBuf> supportedStreamJoinKinds = {"Inner", "Left", "LeftOnly"};
     if (!supportedJoinKinds.contains(join.JoinType().Value())) {
         return {};
     }
@@ -614,7 +614,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         return {};
     }
 
-    const bool useStreamIndexLookupJoin = kqpCtx.IsDataQuery()
+    const bool useStreamIndexLookupJoin = (kqpCtx.IsDataQuery() || kqpCtx.IsGenericQuery())
         && kqpCtx.Config->EnableKqpDataQueryStreamIdxLookupJoin
         && supportedStreamJoinKinds.contains(join.JoinType().Value());
 

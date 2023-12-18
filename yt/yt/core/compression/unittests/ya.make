@@ -10,6 +10,7 @@ PROTO_NAMESPACE(yt)
 
 SRCS(
     codec_ut.cpp
+    dictionary_compression_ut.cpp
     stream_ut.cpp
 )
 

@@ -16,7 +16,7 @@
 
 
 #include <boost/geometry/algorithms/detail/intersection/interface.hpp>
-#include <boost/geometry/algorithms/detail/overlay/intersection_box_box.hpp>
+#include <boost/geometry/algorithms/detail/intersection/box_box_implementation.hpp>
 
 
 namespace boost { namespace geometry

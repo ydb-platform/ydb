@@ -18,20 +18,21 @@ const (
 	finished
 )
 
-var _ Sink = (*sinkImpl)(nil)
+var _ Sink[any] = (*sinkImpl[any])(nil)
+var _ Sink[string] = (*sinkImpl[string])(nil)
 
-type sinkImpl struct {
-	currBuffer     ColumnarBuffer        // accumulates incoming rows
-	resultQueue    chan *ReadResult      // outgoing buffer queue
-	bufferFactory  ColumnarBufferFactory // creates new buffer
-	trafficTracker *TrafficTracker       // tracks the amount of data passed through the sink
-	readLimiter    ReadLimiter           // helps to restrict the number of rows read in every request
-	logger         log.Logger            // annotated logger
-	state          sinkState             // flag showing if it's ready to return data
-	ctx            context.Context       // client context
+type sinkImpl[T utils.Acceptor] struct {
+	currBuffer     ColumnarBuffer[T]        // accumulates incoming rows
+	resultQueue    chan *ReadResult[T]      // outgoing buffer queue
+	bufferFactory  ColumnarBufferFactory[T] // creates new buffer
+	trafficTracker *TrafficTracker[T]       // tracks the amount of data passed through the sink
+	readLimiter    ReadLimiter              // helps to restrict the number of rows read in every request
+	logger         log.Logger               // annotated logger
+	state          sinkState                // flag showing if it's ready to return data
+	ctx            context.Context          // client context
 }
 
-func (s *sinkImpl) AddRow(transformer utils.Transformer) error {
+func (s *sinkImpl[T]) AddRow(rowTransformer utils.RowTransformer[T]) error {
 	if s.state != operational {
 		panic(s.unexpectedState(operational))
 	}
@@ -42,7 +43,7 @@ func (s *sinkImpl) AddRow(transformer utils.Transformer) error {
 
 	// Check if we can add one more data row
 	// without exceeding page size limit.
-	ok, err := s.trafficTracker.tryAddRow(transformer.GetAcceptors())
+	ok, err := s.trafficTracker.tryAddRow(rowTransformer.GetAcceptors())
 	if err != nil {
 		return fmt.Errorf("add row to traffic tracker: %w", err)
 	}
@@ -53,21 +54,21 @@ func (s *sinkImpl) AddRow(transformer utils.Transformer) error {
 			return fmt.Errorf("flush: %w", err)
 		}
 
-		_, err := s.trafficTracker.tryAddRow(transformer.GetAcceptors())
+		_, err := s.trafficTracker.tryAddRow(rowTransformer.GetAcceptors())
 		if err != nil {
 			return fmt.Errorf("add row to traffic tracker: %w", err)
 		}
 	}
 
-	// Add physical data to the buffer
-	if err := s.currBuffer.addRow(transformer); err != nil {
+	// Append row data to the columnar buffer
+	if err := s.currBuffer.addRow(rowTransformer); err != nil {
 		return fmt.Errorf("add row to buffer: %w", err)
 	}
 
 	return nil
 }
 
-func (s *sinkImpl) AddError(err error) {
+func (s *sinkImpl[T]) AddError(err error) {
 	if s.state != operational {
 		panic(s.unexpectedState(operational))
 	}
@@ -77,7 +78,7 @@ func (s *sinkImpl) AddError(err error) {
 	s.state = failed
 }
 
-func (s *sinkImpl) flush(makeNewBuffer bool) error {
+func (s *sinkImpl[T]) flush(makeNewBuffer bool) error {
 	if s.currBuffer.TotalRows() == 0 {
 		return nil
 	}
@@ -103,7 +104,7 @@ func (s *sinkImpl) flush(makeNewBuffer bool) error {
 	return nil
 }
 
-func (s *sinkImpl) Finish() {
+func (s *sinkImpl[T]) Finish() {
 	if s.state != operational && s.state != failed {
 		panic(s.unexpectedState(operational, failed))
 	}
@@ -123,43 +124,43 @@ func (s *sinkImpl) Finish() {
 	close(s.resultQueue)
 }
 
-func (s *sinkImpl) ResultQueue() <-chan *ReadResult {
+func (s *sinkImpl[T]) ResultQueue() <-chan *ReadResult[T] {
 	return s.resultQueue
 }
 
-func (s *sinkImpl) respondWith(
-	buf ColumnarBuffer,
+func (s *sinkImpl[T]) respondWith(
+	buf ColumnarBuffer[T],
 	stats *api_service_protos.TReadSplitsResponse_TStats,
 	err error) {
 	select {
-	case s.resultQueue <- &ReadResult{ColumnarBuffer: buf, Stats: stats, Error: err}:
+	case s.resultQueue <- &ReadResult[T]{ColumnarBuffer: buf, Stats: stats, Error: err}:
 	case <-s.ctx.Done():
 	}
 }
 
-func (s *sinkImpl) unexpectedState(expected ...sinkState) error {
+func (s *sinkImpl[T]) unexpectedState(expected ...sinkState) error {
 	return fmt.Errorf(
 		"unexpected state '%v' (expected are '%v'): %w",
 		s.state, expected, utils.ErrInvariantViolation)
 }
 
-func NewSink(
+func NewSink[T utils.Acceptor](
 	ctx context.Context,
 	logger log.Logger,
-	trafficTracker *TrafficTracker,
-	columnarBufferFactory ColumnarBufferFactory,
+	trafficTracker *TrafficTracker[T],
+	columnarBufferFactory ColumnarBufferFactory[T],
 	readLimiter ReadLimiter,
 	resultQueueCapacity int,
-) (Sink, error) {
+) (Sink[T], error) {
 	buffer, err := columnarBufferFactory.MakeBuffer()
 	if err != nil {
 		return nil, fmt.Errorf("wrap buffer: %w", err)
 	}
 
-	return &sinkImpl{
+	return &sinkImpl[T]{
 		bufferFactory:  columnarBufferFactory,
 		readLimiter:    readLimiter,
-		resultQueue:    make(chan *ReadResult, resultQueueCapacity),
+		resultQueue:    make(chan *ReadResult[T], resultQueueCapacity),
 		trafficTracker: trafficTracker,
 		currBuffer:     buffer,
 		logger:         logger,

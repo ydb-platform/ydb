@@ -362,7 +362,7 @@ void TQueryPlanPrinter::PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<T
 
 void TQueryPlanPrinter::PrintPrettyTable(const NJson::TJsonValue& plan) {
     static const TVector<TString> explainColumnNames = {"Operation", "E-Cost", "E-Rows"};
-    static const TVector<TString> explainAnalyzeColumnNames = {"Operation", "DurationMs", "Rows"};
+    static const TVector<TString> explainAnalyzeColumnNames = {"Operation", "DurationMs", "Rows", "E-Cost", "E-Rows"};
 
     if (plan.GetMapSafe().contains("Plan")) {
         auto queryPlan = plan.GetMapSafe().at("Plan");
@@ -435,8 +435,11 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
 
             auto& row = table.AddRow();
             row.Column(0, std::move(operation));
-
-            if (!AnalyzeMode) {
+            if (AnalyzeMode) {
+                row.Column(3, std::move(eCost));
+                row.Column(4, std::move(eRows));
+            }
+            else {
                 row.Column(1, std::move(eCost));
                 row.Column(2, std::move(eRows));
             }
@@ -558,6 +561,133 @@ void TQueryPlanPrinter::ResolvePrecomputeLinks(NJson::TJsonValue& plan, const TH
     }
 }
 
+/**
+ * Several joins fall into a single stage, so you need to split such stages to do this. 
+ * To do this, you'll need to look through all of the nodes on the initial plan. 
+ * As soon as you find at least two joins in a single node, divide the node into as many sections as there are joins, 
+ * and distribute the inputs from the original section to each of the new sections. 
+ * Each subsequent joint should be fed into the previous section, so they are connected in sequence from the end. 
+ * After that, we change the stage with several joints to the stage with first join.
+**/
+void TQueryPlanPrinter::SplitJoinsPlan(NJson::TJsonValue& plan) {
+    auto& planMap = plan.GetMapSafe();
+
+    if (planMap.contains("Plans")) {
+        NJson::TJsonValue joins;
+        
+        TVector<NJson::TJsonValue> grandchilds;
+
+        for (auto& child : planMap.at("Plans").GetArray()) {
+            const auto& nodeName = child.GetMapSafe().at("Node Type").GetStringSafe();
+            // trying find 2 Join in 1 Node
+            auto pos = nodeName.find("MapJoin", nodeName.find("MapJoin") + 1);
+
+            if (pos != TString::npos) {
+                // save inputs
+                grandchilds.insert(grandchilds.end(), child.GetMapSafe().at("Plans").GetArray().begin(), child.GetMapSafe().at("Plans").GetArray().end());
+                std::sort(grandchilds.begin(), grandchilds.end(), [](NJson::TJsonValue& a, NJson::TJsonValue& b) {
+                    return a.GetMapSafe().at("PlanNodeId").GetIntegerSafe() > b.GetMapSafe().at("PlanNodeId").GetIntegerSafe();
+                });
+
+                NJson::TJsonValue inputs;
+                // convert vector to TJsonValue
+                for (size_t i = 0; i < grandchilds.size(); i++) {
+                    NJson::TJsonValue inp;
+                    inp.AppendValue(grandchilds[i]);
+                    inputs.AppendValue(inp);
+                }
+
+                size_t inputsSize = inputs.GetArraySafe().size();
+    
+                NJson::TJsonValue operators;
+
+                TString name = "";
+                // counter of meeting joins, value from 0 to 2
+                int meetJoins = 0;
+                // counter of creating nodes
+                size_t newNodeCount = 0;
+                // counter not typed operators
+                size_t opUncount = 0;
+
+                NJson::TJsonValue temp;
+
+                for (auto &op : child.GetMapSafe().at("Operators").GetArray()) {
+                    opUncount++;
+                    const auto& opName = op.GetMapSafe().at("Name").GetStringSafe();
+                    pos = opName.find("Join");
+                    if (pos != TString::npos) {
+                        meetJoins++;
+                    }
+                    if (meetJoins < 2) {
+                        // if we met less then 2 joins then complement name of node (op1-op2-...-opN)
+                        if (name == "") {
+                            name += opName;
+                        } else {
+                            name += "-" + opName;
+                        }
+                        operators.AppendValue(op);
+                    } else {
+                        // if we met 2 joins then create new Node
+                        temp["Node Type"] = name;
+                        temp["Operators"] = operators;
+                        temp["PlanNodeId"] = child.GetMapSafe().at("PlanNodeId").GetIntegerSafe();
+                        temp["Plans"] = inputs[newNodeCount];
+
+                        NJson::TJsonValue arrayTemp;
+                        arrayTemp.AppendValue(temp);
+                        joins.AppendValue(arrayTemp);
+
+                        name = opName;
+
+                        operators.SetType(NJson::JSON_MAP);
+                        operators.AppendValue(op);
+
+                        meetJoins = 1;
+                        newNodeCount++;
+
+                        opUncount = 0;
+
+                        if (newNodeCount >= inputsSize) {
+                            ythrow NJson::TJsonException() << "Too few inputs";
+                        }
+                    }
+                }
+    
+                if (opUncount != 0) {
+                    temp["Node Type"] = name;
+                    temp["Operators"] = operators;
+                    temp["PlanNodeId"] = child.GetMapSafe().at("PlanNodeId").GetIntegerSafe();
+                    temp["Plans"] = inputs[newNodeCount];
+                    NJson::TJsonValue arrayTemp;
+                    arrayTemp.AppendValue(temp);
+                    joins.AppendValue(arrayTemp);
+                }
+
+                if (joins.GetArraySafe().size() != inputsSize) {
+                    ythrow NJson::TJsonException() << "Too many inputs";
+                }
+            }
+        }
+
+        // connecting Joins
+        if (joins.GetArray().size() > 1) {
+            for (size_t i = joins.GetArray().size() - 1; i > 0; --i) {
+                // add join[i] to join[i - 1]["Plans"]
+                auto& currentPlans = joins[i].GetArraySafe();
+                auto& prevPlans = joins[i - 1][0].GetMapSafe().at("Plans").GetArraySafe();
+                prevPlans.insert(prevPlans.end(), currentPlans.begin(), currentPlans.end());
+            }
+            // replacing the original join with the first element of the joins array (now it contains all the added joins with plans)
+            // planMap["Plans"] must be a TArray, so there is a TArray in Joins[0]
+            planMap["Plans"] = joins[0];
+        }
+
+        for (auto& child : planMap.at("Plans").GetArraySafe()) {
+            SplitJoinsPlan(child);
+        }
+    }    
+}
+
 void TQueryPlanPrinter::SimplifyQueryPlan(NJson::TJsonValue& plan) {
     static const THashSet<TString> redundantNodes = {
         "UnionAll",
@@ -572,6 +702,7 @@ void TQueryPlanPrinter::SimplifyQueryPlan(NJson::TJsonValue& plan) {
     RemoveRedundantNodes(plan, redundantNodes);
     auto precomputes = ExtractPrecomputes(plan);
     ResolvePrecomputeLinks(plan, precomputes);
+    SplitJoinsPlan(plan);
 }
 
 TString TQueryPlanPrinter::JsonToString(const NJson::TJsonValue& jsonValue) {

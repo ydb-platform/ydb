@@ -11,76 +11,56 @@ namespace NKikimr {
 
 class TRestoreStrategy : public TStrategyBase {
 public:
-    void EvaluateRestoreLayout(TLogContext &logCtx, TBlobState &state,
-            const TBlobStorageGroupInfo &info, TBlobStorageGroupInfo::EBlobState *pessimisticState,
+    void EvaluateRestoreLayout(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
             TBlobStorageGroupInfo::EBlobState *optimisticState) {
-        Y_ABORT_UNLESS(pessimisticState);
-        Y_ABORT_UNLESS(optimisticState);
         const ui32 totalPartCount = info.Type.TotalPartCount();
         ui32 errorDisks = 0;
-        ui32 unknownDisks = 0;
-        TSubgroupPartLayout presentLayout;
         TSubgroupPartLayout optimisticLayout;
         for (ui32 diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
             TBlobState::TDisk &disk = state.Disks[diskIdx];
-            bool isHandoff = (diskIdx >= totalPartCount);
-            ui32 beginPartIdx = (isHandoff ? 0 : diskIdx);
-            ui32 endPartIdx = (isHandoff ? totalPartCount : (diskIdx + 1));
+            bool isHandoff = diskIdx >= totalPartCount;
+            ui32 beginPartIdx = isHandoff ? 0 : diskIdx;
+            ui32 endPartIdx = isHandoff ? totalPartCount : (diskIdx + 1);
             bool isErrorDisk = false;
             for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
-                TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
-                if (partSituation == TBlobState::ESituation::Error) {
+                if (disk.DiskParts[partIdx].Situation == TBlobState::ESituation::Error) {
                     R_LOG_DEBUG_SX(logCtx, "BPG50", "Id# " << state.Id.ToString()
-                            << " Restore disk# " << diskIdx << " part# " << partIdx << " error");
-                    if (!isErrorDisk) {
-                        isErrorDisk = true;
-                        errorDisks++;
-                    }
+                        << " restore disk# " << diskIdx
+                        << " part# " << partIdx
+                        << " error");
+                    isErrorDisk = true;
+                    errorDisks++;
+                    break;
                 }
             }
-            bool isUnknownDisk = true;
             if (!isErrorDisk) {
                 for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
-                    TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
-                    if (partSituation == TBlobState::ESituation::Absent) {
-                        R_LOG_DEBUG_SX(logCtx, "BPG51", "Id# " << state.Id.ToString()
-                            << " restore disk# " << diskIdx << " part# " << partIdx << " absent");
-                        optimisticLayout.AddItem(diskIdx, partIdx, info.Type);
-                        isUnknownDisk = false;
-                    } else if (partSituation == TBlobState::ESituation::Lost) {
-                        R_LOG_DEBUG_SX(logCtx, "BPG63", "Id# " << state.Id.ToString()
-                            << " restore disk# " << diskIdx << " part# " << partIdx << " lost");
-                        optimisticLayout.AddItem(diskIdx, partIdx, info.Type);
-                        isUnknownDisk = false;
-                    } else if (partSituation == TBlobState::ESituation::Present) {
-                        R_LOG_DEBUG_SX(logCtx, "BPG52", "Id# " << state.Id.ToString()
-                            << " restore disk# " << diskIdx << " part# " << partIdx << " present");
-                        presentLayout.AddItem(diskIdx, partIdx, info.Type);
-                        optimisticLayout.AddItem(diskIdx, partIdx, info.Type);
-                        isUnknownDisk = false;
-                    } else if (partSituation == TBlobState::ESituation::Unknown) {
-                        R_LOG_DEBUG_SX(logCtx, "BPG53", "Id# " << state.Id.ToString()
-                            << " restore disk# " << diskIdx << " part# " << partIdx << " unknown");
-                        optimisticLayout.AddItem(diskIdx, partIdx, info.Type);
-                    } else if (partSituation == TBlobState::ESituation::Sent) {
-                        R_LOG_DEBUG_SX(logCtx, "BPG54", "Id# " << state.Id.ToString()
-                            << " restore disk# " << diskIdx << " part# " << partIdx << " sent");
-                        optimisticLayout.AddItem(diskIdx, partIdx, info.Type);
+                    const TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
+                    R_LOG_DEBUG_SX(logCtx, "BPG51", "Id# " << state.Id.ToString()
+                        << " restore disk# " << diskIdx
+                        << " part# " << partIdx
+                        << " situation# " << TBlobState::SituationToString(partSituation));
+
+                    switch (partSituation) {
+                        case TBlobState::ESituation::Absent:
+                        case TBlobState::ESituation::Lost:
+                        case TBlobState::ESituation::Present:
+                        case TBlobState::ESituation::Unknown:
+                        case TBlobState::ESituation::Sent:
+                            optimisticLayout.AddItem(diskIdx, partIdx, info.Type);
+                            break;
+
+                        case TBlobState::ESituation::Error:
+                            break;
                     }
                 }
-            }
-            if (!isErrorDisk && isUnknownDisk) {
-                unknownDisks++;
             }
         }
 
-        ui32 pessimisticReplicas = presentLayout.CountEffectiveReplicas(info.Type);
-        ui32 optimisticReplicas = optimisticLayout.CountEffectiveReplicas(info.Type);
-        *pessimisticState = info.BlobState(pessimisticReplicas, errorDisks + unknownDisks);
+        const ui32 optimisticReplicas = optimisticLayout.CountEffectiveReplicas(info.Type);
         *optimisticState = info.BlobState(optimisticReplicas, errorDisks);
 
-        R_LOG_DEBUG_SX(logCtx, "BPG55", "restore Id# " << state.Id.ToString() << " pessimisticReplicas# " << pessimisticReplicas
-            << " pessimisticState# " << TBlobStorageGroupInfo::BlobStateToString(*pessimisticState)
+        R_LOG_DEBUG_SX(logCtx, "BPG55", "restore Id# " << state.Id.ToString()
             << " optimisticReplicas# " << optimisticReplicas
             << " optimisticState# " << TBlobStorageGroupInfo::BlobStateToString(*optimisticState));
     }
@@ -99,35 +79,49 @@ public:
         return std::nullopt;
     }
 
-    std::optional<EStrategyOutcome> IgnoreFullPessimistic(TBlobStorageGroupInfo::EBlobState pessimisticState) {
-        switch (pessimisticState) {
-        case TBlobStorageGroupInfo::EBS_DISINTEGRATED:
-        case TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY:
-        case TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY:
-        case TBlobStorageGroupInfo::EBS_RECOVERABLE_DOUBTED:
-            break;
-        case TBlobStorageGroupInfo::EBS_FULL:
-            return EStrategyOutcome::DONE; // TODO(alexvru): validate behaviour
-        }
-        return std::nullopt;
-    }
-
-
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
             TBlackboard &blackboard, TGroupDiskRequests &groupDiskRequests) override {
-        if (VerifyTheWholeSituation(state)) {
-            // TODO(alexvru): ensure this branch does not hit when there are not enough parts present!
-            return EStrategyOutcome::DONE; // blob is already marked as present
+        // Check if the work is already done.
+        if (state.WholeSituation == TBlobState::ESituation::Absent) {
+            return EStrategyOutcome::DONE; // nothing to restore
+        }
+
+        // Check if the blob is present in required number of replicas.
+        TSubgroupPartLayout present, presentOrSent;
+        const ui32 totalPartCount = info.Type.TotalPartCount();
+        for (ui32 diskIdx = 0, numDisks = state.Disks.size(); diskIdx < numDisks; ++diskIdx) {
+            const TBlobState::TDisk& disk = state.Disks[diskIdx];
+            const bool isHandoff = diskIdx >= totalPartCount;
+            const ui32 beginPartIdx = isHandoff ? 0 : diskIdx;
+            const ui32 endPartIdx = isHandoff ? totalPartCount : diskIdx + 1;
+            for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
+                switch (disk.DiskParts[partIdx].Situation) {
+                    case TBlobState::ESituation::Present:
+                        present.AddItem(diskIdx, partIdx, info.Type);
+                        [[fallthrough]];
+                    case TBlobState::ESituation::Sent:
+                        presentOrSent.AddItem(diskIdx, partIdx, info.Type);
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+        }
+
+        const auto& quorumChecker = info.GetQuorumChecker();
+        const TBlobStorageGroupInfo::TSubgroupVDisks failed(&info.GetTopology());
+        if (quorumChecker.GetBlobState(present, failed) == TBlobStorageGroupInfo::EBS_FULL) {
+            state.WholeSituation = TBlobState::ESituation::Present;
+            return EStrategyOutcome::DONE;
+        } else if (quorumChecker.GetBlobState(presentOrSent, failed) == TBlobStorageGroupInfo::EBS_FULL) {
+            return EStrategyOutcome::IN_PROGRESS;
         }
 
         // Look at the current layout and set the status if possible
-        TBlobStorageGroupInfo::EBlobState pessimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
         TBlobStorageGroupInfo::EBlobState optimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
-        EvaluateRestoreLayout(logCtx, state, info, &pessimisticState, &optimisticState);
-
+        EvaluateRestoreLayout(logCtx, state, info, &optimisticState);
         if (auto res = SetErrorForUnrecoverableOptimistic(optimisticState)) {
-            return *res;
-        } else if (auto res = IgnoreFullPessimistic(pessimisticState)) {
             return *res;
         }
 

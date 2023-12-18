@@ -1,0 +1,743 @@
+<sql-statement>
+--jsonpath io
+select ''::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	--jsonpath io
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type jsonpath: ""
+
+        	--jsonpath io
+	^
+<sql-statement>
+select '$'::jsonpath;
+</sql-statement>
+<sql-statement>
+select 'strict $'::jsonpath;
+</sql-statement>
+<sql-statement>
+select 'lax $'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.a'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.a.v'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.a.*'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.*[*]'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.a[*]'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.a[*][*]'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$[*]'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$[0]'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$[*][0]'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$[*].a'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$[*][0].a.b'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.a.**.b'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.a.**{2}.b'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.a.**{2 to 2}.b'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.a.**{2 to 5}.b'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.a.**{0 to 5}.b'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.a.**{5 to last}.b'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.a.**{last}.b'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.a.**{last to 5}.b'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$+1'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$-1'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$--+1'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.a/+-1'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '1 * 2 + 4 % -3 != false'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '"\b\f\r\n\t\v\"\''\\"'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '"\x50\u0067\u{53}\u{051}\u{00004C}"'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.foo\x50\u0067\u{53}\u{051}\u{00004C}\t\"bar'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '"\z"'::jsonpath;  -- unrecognized escape is just the literal char
+</sql-statement>
+<sql-statement>
+select '$.g ? ($.a == 1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.g ? (@ == 1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.g ? (@.a == 1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.g ? (@.a == 1 || @.a == 4)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.g ? (@.a == 1 && @.a == 4)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.g ? (@.a == 1 || @.a == 4 && @.b == 7)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.g ? (@.a == 1 || !(@.a == 4) && @.b == 7)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.g ? (@.a == 1 || !(@.x >= 123 || @.a == 4) && @.b == 7)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.g ? (@.x >= @[*]?(@.a > "abc"))'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.g ? ((@.x >= 123 || @.a == 4) is unknown)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.g ? (exists (@.x))'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.g ? (exists (@.x ? (@ == 14)))'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.g ? ((@.x >= 123 || @.a == 4) && exists (@.x ? (@ == 14)))'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.g ? (+@.x >= +-(+@.a + 2))'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$a'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$a.b'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$a[*]'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.g ? (@.zip == $zip)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.a[1,2, 3 to 16]'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.a[$a + 1, ($b[*]) to -($[0] * 2)]'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.a[$.a.size() - 3]'::jsonpath;
+</sql-statement>
+<sql-statement>
+select 'last'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select 'last'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  LAST is allowed only in array subscripts
+
+        	select 'last'::jsonpath;
+	^
+<sql-statement>
+select '"last"'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.last'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (last > 0)'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$ ? (last > 0)'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  LAST is allowed only in array subscripts
+
+        	select '$ ? (last > 0)'::jsonpath;
+	^
+<sql-statement>
+select '$[last]'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$[$[0] ? (last > 0)]'::jsonpath;
+</sql-statement>
+<sql-statement>
+select 'null.type()'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '1.type()'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '(1).type()'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '1.2.type()'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '"aaa".type()'::jsonpath;
+</sql-statement>
+<sql-statement>
+select 'true.type()'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.double().floor().ceiling().abs()'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.keyvalue().key'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.datetime()'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$.datetime("datetime template")'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@ starts with "abc")'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@ starts with $var)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@ like_regex "(invalid pattern")'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$ ? (@ like_regex "(invalid pattern")'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid regular expression: parentheses () not balanced
+
+        	select '$ ? (@ like_regex "(invalid pattern")'::jsonpath;
+	^
+<sql-statement>
+select '$ ? (@ like_regex "pattern")'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@ like_regex "pattern" flag "")'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@ like_regex "pattern" flag "i")'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@ like_regex "pattern" flag "is")'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@ like_regex "pattern" flag "isim")'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@ like_regex "pattern" flag "xsms")'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$ ? (@ like_regex "pattern" flag "xsms")'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  XQuery "x" flag (expanded regular expressions) is not implemented
+
+        	select '$ ? (@ like_regex "pattern" flag "xsms")'::jsonpath;
+	^
+<sql-statement>
+select '$ ? (@ like_regex "pattern" flag "q")'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@ like_regex "pattern" flag "iq")'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@ like_regex "pattern" flag "smixq")'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@ like_regex "pattern" flag "a")'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$ ? (@ like_regex "pattern" flag "a")'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type jsonpath
+DETAIL:  unrecognized flag character "a" in LIKE_REGEX predicate
+
+        	select '$ ? (@ like_regex "pattern" flag "a")'::jsonpath;
+	^
+<sql-statement>
+select '$ < 1'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '($ < 1) || $.a.b <= $x'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '@ + 1'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '@ + 1'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  @ is not allowed in root expressions
+
+        	select '@ + 1'::jsonpath;
+	^
+<sql-statement>
+select '($).a.b'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '($.a.b).c.d'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '($.a.b + -$.x.y).c.d'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '(-+$.a.b).c.d'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '1 + ($.a.b + 2).c.d'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '1 + ($.a.b > 2).c.d'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '($)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '(($))'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '((($ + 1)).a + ((2)).b ? ((((@ > 1)) || (exists(@.c)))))'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < 1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < -1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < +1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < .1)'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$ ? (@.a < .1)'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  syntax error, unexpected '.' at or near "." of jsonpath input
+
+        	select '$ ? (@.a < .1)'::jsonpath;
+	^
+<sql-statement>
+select '$ ? (@.a < -.1)'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$ ? (@.a < -.1)'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  syntax error, unexpected '.' at or near "." of jsonpath input
+
+        	select '$ ? (@.a < -.1)'::jsonpath;
+	^
+<sql-statement>
+select '$ ? (@.a < +.1)'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$ ? (@.a < +.1)'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  syntax error, unexpected '.' at or near "." of jsonpath input
+
+        	select '$ ? (@.a < +.1)'::jsonpath;
+	^
+<sql-statement>
+select '$ ? (@.a < 0.1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < -0.1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < +0.1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < 10.1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < -10.1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < +10.1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < 1e1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < -1e1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < +1e1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < .1e1)'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$ ? (@.a < .1e1)'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  syntax error, unexpected '.' at or near "." of jsonpath input
+
+        	select '$ ? (@.a < .1e1)'::jsonpath;
+	^
+<sql-statement>
+select '$ ? (@.a < -.1e1)'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$ ? (@.a < -.1e1)'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  syntax error, unexpected '.' at or near "." of jsonpath input
+
+        	select '$ ? (@.a < -.1e1)'::jsonpath;
+	^
+<sql-statement>
+select '$ ? (@.a < +.1e1)'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$ ? (@.a < +.1e1)'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  syntax error, unexpected '.' at or near "." of jsonpath input
+
+        	select '$ ? (@.a < +.1e1)'::jsonpath;
+	^
+<sql-statement>
+select '$ ? (@.a < 0.1e1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < -0.1e1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < +0.1e1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < 10.1e1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < -10.1e1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < +10.1e1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < 1e-1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < -1e-1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < +1e-1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < .1e-1)'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$ ? (@.a < .1e-1)'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  syntax error, unexpected '.' at or near "." of jsonpath input
+
+        	select '$ ? (@.a < .1e-1)'::jsonpath;
+	^
+<sql-statement>
+select '$ ? (@.a < -.1e-1)'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$ ? (@.a < -.1e-1)'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  syntax error, unexpected '.' at or near "." of jsonpath input
+
+        	select '$ ? (@.a < -.1e-1)'::jsonpath;
+	^
+<sql-statement>
+select '$ ? (@.a < +.1e-1)'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$ ? (@.a < +.1e-1)'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  syntax error, unexpected '.' at or near "." of jsonpath input
+
+        	select '$ ? (@.a < +.1e-1)'::jsonpath;
+	^
+<sql-statement>
+select '$ ? (@.a < 0.1e-1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < -0.1e-1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < +0.1e-1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < 10.1e-1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < -10.1e-1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < +10.1e-1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < 1e+1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < -1e+1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < +1e+1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < .1e+1)'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$ ? (@.a < .1e+1)'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  syntax error, unexpected '.' at or near "." of jsonpath input
+
+        	select '$ ? (@.a < .1e+1)'::jsonpath;
+	^
+<sql-statement>
+select '$ ? (@.a < -.1e+1)'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$ ? (@.a < -.1e+1)'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  syntax error, unexpected '.' at or near "." of jsonpath input
+
+        	select '$ ? (@.a < -.1e+1)'::jsonpath;
+	^
+<sql-statement>
+select '$ ? (@.a < +.1e+1)'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$ ? (@.a < +.1e+1)'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  syntax error, unexpected '.' at or near "." of jsonpath input
+
+        	select '$ ? (@.a < +.1e+1)'::jsonpath;
+	^
+<sql-statement>
+select '$ ? (@.a < 0.1e+1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < -0.1e+1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < +0.1e+1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < 10.1e+1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < -10.1e+1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '$ ? (@.a < +10.1e+1)'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '0'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '00'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '00'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  syntax error, unexpected IDENT_P at end of jsonpath input
+
+        	select '00'::jsonpath;
+	^
+<sql-statement>
+select '0.0'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '0.000'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '0.000e1'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '0.000e2'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '0.000e3'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '0.0010'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '0.0010e-1'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '0.0010e+1'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '0.0010e+2'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '1e'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '1e'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid floating point number at or near "1e" of jsonpath input
+
+        	select '1e'::jsonpath;
+	^
+<sql-statement>
+select '1.e'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '1.2e'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '1.2e'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid floating point number at or near "1.2e" of jsonpath input
+
+        	select '1.2e'::jsonpath;
+	^
+<sql-statement>
+select '1.2.e'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '(1.2).e'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '1e3'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '1.e3'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '1.e3.e'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '1.e3.e4'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '1.2e3'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '1.2.e3'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '(1.2).e3'::jsonpath;
+</sql-statement>
+<sql-statement>
+select '1..e'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '1..e'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  syntax error, unexpected '.' at or near "." of jsonpath input
+
+        	select '1..e'::jsonpath;
+	^
+<sql-statement>
+select '1..e3'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '1..e3'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  syntax error, unexpected '.' at or near "." of jsonpath input
+
+        	select '1..e3'::jsonpath;
+	^
+<sql-statement>
+select '(1.).e'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '(1.).e'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  syntax error, unexpected ')' at or near ")" of jsonpath input
+
+        	select '(1.).e'::jsonpath;
+	^
+<sql-statement>
+select '(1.).e3'::jsonpath;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '(1.).e3'::jsonpath;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  syntax error, unexpected ')' at or near ")" of jsonpath input
+
+        	select '(1.).e3'::jsonpath;
+	^

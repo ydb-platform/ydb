@@ -4,6 +4,7 @@ import re
 import json
 import os
 import sys
+import urllib.parse
 from xml.etree import ElementTree as ET
 from mute_utils import mute_target, pattern_to_re
 from junit_utils import add_junit_link_property, is_faulty_testcase
@@ -57,7 +58,7 @@ class YTestReportTrace:
         test_results_dir = os.path.join(self.out_root, f"{subdir}/test-results/")
 
         if not os.path.isdir(test_results_dir):
-            print(f"Directory {test_results_dir} doesn't exist")
+            log_print(f"Directory {test_results_dir} doesn't exist")
             return
 
         for folder in os.listdir(test_results_dir):
@@ -130,8 +131,8 @@ def save_log(build_root, fn, out_dir, log_url_prefix, trunc_size):
                         out_fp.write(buf)
         else:
             os.symlink(fn, out_fn)
-
-    return f"{log_url_prefix}{fpath}"
+    quoted_fpath = urllib.parse.quote(fpath)
+    return f"{log_url_prefix}{quoted_fpath}"
 
 
 def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_prefix, log_out_dir, log_trunc_size):

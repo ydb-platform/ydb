@@ -34,9 +34,16 @@ namespace NKqp {
             YDB_ACCESSOR_DEF(TVector<TString>, PrimaryKey);
             YDB_ACCESSOR_DEF(TVector<TString>, Sharding);
             YDB_ACCESSOR(ui32, MinPartitionsCount, 1);
+
+            std::optional<std::pair<TString, TString>> TTLConf;
         public:
             TString BuildQuery() const;
             std::shared_ptr<arrow::Schema> GetArrowSchema(const TVector<TColumnSchema>& columns);
+
+            TColumnTableBase& SetTTL(const TString& columnName, const TString& ttlConf) {
+                TTLConf = std::make_pair(columnName, ttlConf);
+                return *this;
+            }
 
         private:
             virtual TString GetObjectType() const = 0;

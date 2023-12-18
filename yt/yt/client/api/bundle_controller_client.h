@@ -15,6 +15,8 @@ struct TGetBundleConfigOptions
 struct TBundleConfigDescriptor
 {
     TString BundleName;
+    int RpcProxyCount;
+    int TabletNodeCount;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -607,7 +607,7 @@ _YandexAbort();
     #define Y_HAVE_INT128 1
 #endif
 
-#if defined(__clang__) && Y_CUDA_AT_LEAST(11, 0)
+#if defined(__clang__) && (!defined(__CUDACC__) || Y_CUDA_AT_LEAST(11, 0))
     #define Y_REINITIALIZES_OBJECT [[clang::reinitializes]]
 #else
     #define Y_REINITIALIZES_OBJECT
@@ -649,4 +649,24 @@ Y_FORCE_INLINE void DoNotOptimizeAway(const T&) = delete;
      */
     #define Y_DO_NOT_OPTIMIZE_AWAY(X) ::DoNotOptimizeAway(X)
 
+#endif
+
+/**
+ * @def Y_LIFETIME_BOUND
+ *
+ * The attribute on a function parameter can be used to tell the compiler
+ * that function return value may refer that parameter.
+ * The compiler may produce compile-time warning if it is able to detect that
+ * an object or reference refers to another object with a shorter lifetime.
+ */
+#if defined(__clang__) && defined(__cplusplus) && defined(__has_cpp_attribute)
+    #if defined(__CUDACC__) && !Y_CUDA_AT_LEAST(11, 0)
+        #define Y_LIFETIME_BOUND
+    #elif __has_cpp_attribute(clang::lifetimebound)
+        #define Y_LIFETIME_BOUND [[clang::lifetimebound]]
+    #else
+        #define Y_LIFETIME_BOUND
+    #endif
+#else
+    #define Y_LIFETIME_BOUND
 #endif

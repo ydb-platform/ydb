@@ -7,12 +7,14 @@ It's part of Boost since release 1.58.0. See
 
 ## Supported compilers
 
-* g++ 4.4 or later
-* clang++ 3.3 or later
-* Visual Studio 2008 or later
+* g++ 4.6 or later
+* clang++ 3.9 or later
+* Visual Studio 2012 or later
 
-Tested on [Travis](https://travis-ci.org/boostorg/endian/) and
-[Appveyor](https://ci.appveyor.com/project/pdimov/endian/).
+C++11 is required since release 1.84.
+
+Tested on [Github Actions](https://github.com/boostorg/endian/actions)
+and [Appveyor](https://ci.appveyor.com/project/pdimov/endian/).
 
 ## License
 

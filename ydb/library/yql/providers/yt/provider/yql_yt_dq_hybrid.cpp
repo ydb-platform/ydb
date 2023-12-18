@@ -333,7 +333,13 @@ private:
     TMaybeNode<TExprBase> TryYtMapByDq(TExprBase node, TExprContext& ctx) const {
         if (const auto map = node.Cast<TYtMap>(); CanReplaceOnHybrid(map)) {
             const auto chunksLimit = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);
-            const bool ordered = NYql::HasSetting(map.Settings().Ref(), EYtSettingType::Ordered);
+            bool ordered = NYql::HasSetting(map.Settings().Ref(), EYtSettingType::Ordered);
+            if (!ordered) {
+                auto setting = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::JobCount);
+                if (setting && FromString<ui64>(setting->Child(1)->Content()) == 1) {
+                    ordered = true;
+                }
+            }
             const auto sizeLimit = ordered ?
                 State_->Configuration->HybridDqDataSizeLimitForOrdered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForOrdered):
                 State_->Configuration->HybridDqDataSizeLimitForUnordered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForUnordered);

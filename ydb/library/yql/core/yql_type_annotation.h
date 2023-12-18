@@ -264,7 +264,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
 
     TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
-    IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx, bool overwrite = false);
+    IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);
 
     // cached constants
     std::optional<ui64> CachedNow;

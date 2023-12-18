@@ -117,6 +117,7 @@ class TColumnShard
     friend class TTxProcessGCResult;
     friend class TTxReadBlobRanges;
     friend class TTxApplyNormalizer;
+    friend class TTxMonitoring;
 
     friend class NOlap::TCleanupColumnEngineChanges;
     friend class NOlap::TTTLColumnEngineChanges;
@@ -170,7 +171,7 @@ class TColumnShard
     void OnDetach(const TActorContext& ctx) override;
     //void OnTabletStop(TEvTablet::TEvTabletStop::TPtr& ev, const TActorContext& ctx);
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) override;
-    //bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx);
+    bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
 
     void DefaultSignalTabletActive(const TActorContext& ctx) override {
         Y_UNUSED(ctx);

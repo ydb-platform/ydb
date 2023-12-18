@@ -13,6 +13,7 @@ var (
 	ErrTableDoesNotExist                   = fmt.Errorf("table does not exist")
 	ErrDataSourceNotSupported              = fmt.Errorf("data source not supported")
 	ErrDataTypeNotSupported                = fmt.Errorf("data type not supported")
+	ErrMethodNotSupported                  = fmt.Errorf("method not supported")
 	ErrReadLimitExceeded                   = fmt.Errorf("read limit exceeded")
 	ErrInvalidRequest                      = fmt.Errorf("invalid request")
 	ErrValueOutOfTypeBounds                = fmt.Errorf("value is out of possible range of values for the type")

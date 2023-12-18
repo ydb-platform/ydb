@@ -52,7 +52,14 @@ public:
 
         auto readSchema = ReadMetadata->GetLoadSchema(ReadMetadata->GetSnapshot());
         SpecColumns = std::make_shared<TColumnsSet>(TIndexInfo::GetSpecialColumnIdsSet(), ReadMetadata->GetIndexInfo(), readSchema);
-        EFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetEarlyFilterColumnIds(), ReadMetadata->GetIndexInfo(), readSchema);
+        {
+            auto efColumns = ReadMetadata->GetEarlyFilterColumnIds();
+            if (efColumns.size()) {
+                EFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetEarlyFilterColumnIds(), ReadMetadata->GetIndexInfo(), readSchema);
+            } else {
+                EFColumns = SpecColumns;
+            }
+        }
         *EFColumns = *EFColumns + *SpecColumns;
         if (ReadMetadata->HasProcessingColumnIds()) {
             FFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetProcessingColumnIds(), ReadMetadata->GetIndexInfo(), readSchema);

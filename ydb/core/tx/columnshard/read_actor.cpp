@@ -127,7 +127,9 @@ public:
             protoStats->SetAdditionalColumns(stats->AdditionalColumns);
             protoStats->SetDataFilterBytes(stats->DataFilterBytes);
             protoStats->SetDataAdditionalBytes(stats->DataAdditionalBytes);
-            protoStats->SetPortionsBytes(stats->PortionsBytes);
+            protoStats->SetCompactedPortionsBytes(stats->CompactedPortionsBytes);
+            protoStats->SetInsertedPortionsBytes(stats->InsertedPortionsBytes);
+            protoStats->SetCommittedPortionsBytes(stats->CommittedPortionsBytes);
             protoStats->SetSelectedRows(stats->SelectedRows);
         }
 

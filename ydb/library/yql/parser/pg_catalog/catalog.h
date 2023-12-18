@@ -13,6 +13,8 @@ constexpr ui32 UnknownOid = 705;
 constexpr ui32 AnyOid = 2276;
 constexpr ui32 AnyArrayOid = 2277;
 constexpr ui32 RecordOid = 2249;
+constexpr ui32 VarcharOid = 1043;
+constexpr ui32 TextOid = 25;
 
 // copied from pg_class.h
 enum class ERelPersistence : char

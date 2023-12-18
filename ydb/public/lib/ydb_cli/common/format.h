@@ -100,6 +100,7 @@ private:
     void PrintJson(const TString& plan);
     TString JsonToString(const NJson::TJsonValue& jsonValue);
 
+    void SplitJoinsPlan(NJson::TJsonValue& plan);
     void SimplifyQueryPlan(NJson::TJsonValue& plan);
     TVector<NJson::TJsonValue> RemoveRedundantNodes(NJson::TJsonValue& plan, const THashSet<TString>& redundantNodes);
     THashMap<TString, NJson::TJsonValue> ExtractPrecomputes(NJson::TJsonValue& planJson);

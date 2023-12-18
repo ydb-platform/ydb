@@ -216,7 +216,7 @@ TRuntimeNode ApplyPathRanges(TRuntimeNode inputList, const TExprNode& input, NCo
         if (!tableIndexDictItems.empty()) {
             auto dictType = ctx.ProgramBuilder.NewDictType(
                 ctx.ProgramBuilder.NewDataType(NUdf::TDataType<ui32>::Id),
-                ctx.ProgramBuilder.GetTypeEnvironment().GetTypeOfVoid(),
+                ctx.ProgramBuilder.GetTypeEnvironment().GetTypeOfVoidLazy(),
                 false
             );
             auto dict = ctx.ProgramBuilder.NewDict(dictType, tableIndexDictItems);
@@ -477,14 +477,14 @@ TRuntimeNode SortListBy(TRuntimeNode list, const TVector<std::pair<TString, bool
 TRuntimeNode BuildTableOutput(TRuntimeNode list, NCommon::TMkqlBuildContext& ctx) {
     list = ToStream(list, ctx);
 
-    TCallableBuilder fileWriteCall(ctx.ProgramBuilder.GetTypeEnvironment(), "YtWriteFile", ctx.ProgramBuilder.GetTypeEnvironment().GetTypeOfVoid());
+    TCallableBuilder fileWriteCall(ctx.ProgramBuilder.GetTypeEnvironment(), "YtWriteFile", ctx.ProgramBuilder.GetTypeEnvironment().GetTypeOfVoidLazy());
     fileWriteCall.Add(list);
 
     return ctx.ProgramBuilder.AsList(TRuntimeNode(fileWriteCall.Build(), false));
 }
 
 TRuntimeNode BuildDqWrite(TRuntimeNode item, TStringBuf path, NCommon::TMkqlBuildContext& ctx) {
-    TCallableBuilder fileWriteCall(ctx.ProgramBuilder.GetTypeEnvironment(), "DqWriteFile", ctx.ProgramBuilder.GetTypeEnvironment().GetTypeOfVoid());
+    TCallableBuilder fileWriteCall(ctx.ProgramBuilder.GetTypeEnvironment(), "DqWriteFile", ctx.ProgramBuilder.GetTypeEnvironment().GetTypeOfVoidLazy());
     fileWriteCall.Add(item);
     fileWriteCall.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(path));
 

@@ -2,7 +2,7 @@
 
 #include "yaml_config.h"
 
-namespace NYamlConfig {
+namespace NKikimr::NYamlConfig {
 
 class TLabelSet {
 public:
@@ -44,4 +44,4 @@ void Combine(
 
 TSelector ParseSelector(const NFyaml::TNodeRef& selectors);
 
-} // namespace NYamlConfig
+} // namespace NKikimr::NYamlConfig

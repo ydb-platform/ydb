@@ -4,9 +4,6 @@ PEERDIR(
     contrib/python/idna
 )
 
-ENV(LC_ALL=ru_RU.UTF-8)
-ENV(LANG=ru_RU.UTF-8)
-
 TEST_SRCS(
     test_idna_compat.py
     test_idna.py
@@ -17,6 +14,7 @@ TEST_SRCS(
 )
 
 NO_LINT()
+
 FORK_SUBTESTS()
 
 END()

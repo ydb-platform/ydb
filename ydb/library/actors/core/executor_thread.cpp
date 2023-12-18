@@ -6,6 +6,8 @@
 #include "event.h"
 #include "events.h"
 #include "executor_pool_base.h"
+#include "executor_pool_basic.h"
+#include "executor_thread_ctx.h"
 #include "probes.h"
 
 #include <ydb/library/actors/prof/tag.h>
@@ -36,11 +38,13 @@ namespace NActors {
             TActorSystem* actorSystem,
             IExecutorPool* executorPool,
             TMailboxTable* mailboxTable,
+            TExecutorThreadCtx *threadCtx,
             const TString& threadName,
             TDuration timePerMailbox,
             ui32 eventsPerMailbox)
         : ActorSystem(actorSystem)
         , ExecutorPool(executorPool)
+        , ThreadCtx(threadCtx)
         , Ctx(workerId, cpuId)
         , ThreadName(threadName)
         , TimePerMailbox(timePerMailbox)
@@ -53,23 +57,37 @@ namespace NActors {
             eventsPerMailbox,
             ui64(-1), // infinite soft deadline
             &Ctx.WorkerStats);
+        Ctx.ThreadCtx = ThreadCtx;
     }
 
     TExecutorThread::TExecutorThread(TWorkerId workerId,
             TActorSystem* actorSystem,
-            TVector<IExecutorPool*> executorPools,
+            TExecutorThreadCtx *threadCtx,
+            i16 poolCount,
             const TString& threadName,
             ui64 softProcessingDurationTs,
             TDuration timePerMailbox,
             ui32 eventsPerMailbox)
         : ActorSystem(actorSystem)
-        , AvailableExecutorPools(executorPools)
+        , ExecutorPool(threadCtx->OwnerExecutorPool)
+        , ThreadCtx(threadCtx)
         , Ctx(workerId, 0)
         , ThreadName(threadName)
+        , IsSharedThread(true)
         , TimePerMailbox(timePerMailbox)
         , EventsPerMailbox(eventsPerMailbox)
         , SoftProcessingDurationTs(softProcessingDurationTs)
-    {}
+        , SharedStats(poolCount)
+    {
+        Ctx.Switch(
+            ExecutorPool,
+            static_cast<TExecutorPoolBaseMailboxed*>(threadCtx->OwnerExecutorPool)->MailboxTable.Get(),
+            NHPTimer::GetClockRate() * timePerMailbox.SecondsFloat(),
+            eventsPerMailbox,
+            ui64(-1), // infinite soft deadline
+            &SharedStats[ExecutorPool->PoolId]);
+        Ctx.ThreadCtx = ThreadCtx;
+    }
 
 
 
@@ -154,7 +172,7 @@ namespace NActors {
     }
 
     template <typename TMailbox>
-    bool TExecutorThread::Execute(TMailbox* mailbox, ui32 hint, bool isTailExecution) {
+    TExecutorThread::TProcessingResult TExecutorThread::Execute(TMailbox* mailbox, ui32 hint, bool isTailExecution) {
         Y_DEBUG_ABORT_UNLESS(DyingActors.empty());
 
         bool reclaimAsFree = false;
@@ -171,6 +189,7 @@ namespace NActors {
         TActorId recipient;
         bool firstEvent = true;
         bool preempted = false;
+        bool wasWorking = false;
         for (; Ctx.ExecutedEvents < Ctx.EventsPerMailbox; ++Ctx.ExecutedEvents) {
             if (TAutoPtr<IEventHandle> evExt = mailbox->Pop()) {
                 mailbox->ProcessEvents(mailbox);
@@ -181,6 +200,7 @@ namespace NActors {
                 // move for destruct before ctx;
                 auto ev = std::move(evExt);
                 if (actor = mailbox->FindActor(recipient.LocalId())) {
+                    wasWorking = true;
                     // Since actor is not null there should be no exceptions
                     actorType = &typeid(*actor);
 
@@ -336,7 +356,7 @@ namespace NActors {
         NProfiling::TMemoryTagScope::Reset(0);
         TlsActivationContext = nullptr;
         UnlockFromExecution(mailbox, Ctx.Executor, reclaimAsFree, hint, Ctx.WorkerId, RevolvingWriteCounter);
-        return preempted;
+        return {preempted, wasWorking};
     }
 
     TThreadId TExecutorThread::GetThreadId() const {
@@ -352,11 +372,9 @@ namespace NActors {
         return Ctx.WorkerId;
     }
 
-    void TExecutorThread::ProcessExecutorPool(IExecutorPool *pool, bool isSharedThread) {
+    TExecutorThread::TProcessingResult TExecutorThread::ProcessExecutorPool(IExecutorPool *pool) {
         ExecutorPool = pool;
-        TThreadContext threadCtx;
-        TlsThreadContext = &threadCtx;
-        TlsThreadContext->Pool = static_cast<IExecutorPool*>(ExecutorPool);
+        TlsThreadContext->Pool = ExecutorPool;
         TlsThreadContext->WorkerId = Ctx.WorkerId;
         pool->Initialize(Ctx);
 
@@ -371,6 +389,7 @@ namespace NActors {
         i64 nonExecCycles = 0;
 
         bool needToStop = false;
+        bool wasWorking = false;
 
         auto executeActivation = [&](ui32 activation, bool isTailExecution) {
             LWTRACK(ActivationBegin, Ctx.Orbit, Ctx.CpuId, Ctx.PoolId, Ctx.WorkerId, NHPTimer::GetSeconds(Ctx.Lease.GetPreciseExpireTs()) * 1e3);
@@ -384,9 +403,11 @@ namespace NActors {
     case TMailboxType:: type: \
         { \
             using TMailBox = TMailboxTable:: T ## type ## Mailbox ; \
-            if (Execute<TMailBox>(static_cast<TMailBox*>(header), activation, isTailExecution)) { \
+            auto result = Execute<TMailBox>(static_cast<TMailBox*>(header), activation, isTailExecution); \
+            if (result.IsPreempted) { \
                 TlsThreadContext->CapturedType = ESendingType::Lazy; \
             } \
+            wasWorking |= result.WasWorking; \
         } \
         break \
 // EXECUTE_MAILBOX
@@ -414,7 +435,7 @@ namespace NActors {
                         Ctx.UpdateThreadTime();
                     }
 
-                    if (isSharedThread && (ui64)hpnow > Ctx.SoftDeadlineTs) {
+                    if (IsSharedThread && (ui64)hpnow > Ctx.SoftDeadlineTs) {
                         needToStop = true;
                     }
 
@@ -435,7 +456,7 @@ namespace NActors {
                 executeActivation(activation, true);
                 continue;
             }
-            Ctx.IsNeededToWaitNextActivation = !TlsThreadContext->CapturedActivation && !isSharedThread;
+            Ctx.IsNeededToWaitNextActivation = !TlsThreadContext->CapturedActivation && !IsSharedThread;
             ui32 activation = ExecutorPool->GetReadyActivation(Ctx, ++RevolvingReadCounter);
             if (!activation) {
                 activation = std::exchange(TlsThreadContext->CapturedActivation, 0);
@@ -444,10 +465,34 @@ namespace NActors {
                 ExecutorPool->ScheduleActivation(capturedActivation);
             }
             if (!activation) {
-                break;
+                return {IsSharedThread, wasWorking};
             }
             executeActivation(activation, false);
         }
+
+        if (IsSharedThread) {
+            Ctx.UpdateThreadTime();
+        }
+
+        return {IsSharedThread, wasWorking};
+    }
+
+    void TExecutorThread::UpdatePools() {
+        NeedToReloadPools = EState::NeedToReloadPools;
+    }
+
+    TExecutorThread::TProcessingResult TExecutorThread::ProcessSharedExecutorPool(TExecutorPoolBaseMailboxed *pool) {
+        Ctx.Switch(
+            pool,
+            pool->MailboxTable.Get(),
+            NHPTimer::GetClockRate() * TimePerMailbox.SecondsFloat(),
+            EventsPerMailbox,
+            GetCycleCountFast() + SoftProcessingDurationTs,
+            &SharedStats[pool->PoolId]);
+        Y_ABORT_UNLESS(Ctx.Stats->ElapsedTicksByActivity.size());
+        Ctx.WorkerId = (pool == ThreadCtx->OwnerExecutorPool ? -1 : -2);
+        Y_ABORT_UNLESS(Ctx.Stats->ElapsedTicksByActivity.size());
+        return ProcessExecutorPool(pool);
     }
 
     void* TExecutorThread::ThreadProc() {
@@ -460,48 +505,44 @@ namespace NActors {
         ThreadDisableBalloc();
 #endif
 
+        TThreadContext threadCtx;
+        TlsThreadContext = &threadCtx;
         if (ThreadName) {
             ::SetCurrentThreadName(ThreadName);
         }
 
+        if (!IsSharedThread) {
+            ProcessExecutorPool(ExecutorPool);
+            return nullptr;
+        }
+
+        TExecutorPoolBaseMailboxed *ownerPool = dynamic_cast<TExecutorPoolBaseMailboxed*>(ThreadCtx->OwnerExecutorPool);
+        TExecutorPoolBaseMailboxed *otherPool = nullptr;
+
 
         std::vector<TExecutorPoolBaseMailboxed*> pools;
-        pools.reserve(AvailableExecutorPools.size());
-        for (auto pool : AvailableExecutorPools) {
-            TExecutorPoolBaseMailboxed* mailboxedPool = dynamic_cast<TExecutorPoolBaseMailboxed*>(pool);
-            if (mailboxedPool) {
-                pools.push_back(mailboxedPool);
+        do {
+            if (NeedToReloadPools.load() == EState::NeedToReloadPools) {
+                otherPool = dynamic_cast<TExecutorPoolBaseMailboxed*>(ThreadCtx->OtherExecutorPool.load());
+                NeedToReloadPools = EState::Running;
             }
-        }
-
-        if (pools.size() == 1) {
-            ExecutorPool = pools[0];
-            Ctx.Switch(
-                pools[0],
-                pools[0]->MailboxTable.Get(),
-                NHPTimer::GetClockRate() * TimePerMailbox.SecondsFloat(),
-                EventsPerMailbox,
-                GetCycleCountFast() + SoftProcessingDurationTs,
-                &Ctx.WorkerStats);
-        }
-
-        if (pools.size() <= 1) {
-            ProcessExecutorPool(ExecutorPool, false);
-        } else {
-            while (!StopFlag.load(std::memory_order_relaxed)) {
-                for (auto pool : pools) {
-                    Ctx.Switch(
-                        pool,
-                        pool->MailboxTable.Get(),
-                        NHPTimer::GetClockRate() * TimePerMailbox.SecondsFloat(),
-                        EventsPerMailbox,
-                        GetCycleCountFast() + SoftProcessingDurationTs,
-                        &Ctx.WorkerStats);
-                    Ctx.WorkerId = -1;
-                    ProcessExecutorPool(pool, true);
+            bool wasWorking = true;
+            while (wasWorking && NeedToReloadPools.load() == EState::Running && !StopFlag.load(std::memory_order_relaxed)) {
+                wasWorking = false;
+                TProcessingResult result = ProcessSharedExecutorPool(ownerPool);
+                wasWorking |= result.WasWorking;
+                if (otherPool) {
+                    result = ProcessSharedExecutorPool(otherPool);
+                    wasWorking = result.WasWorking;
                 }
             }
-        }
+
+            if (!wasWorking && NeedToReloadPools.load() == EState::Running && !StopFlag.load(std::memory_order_relaxed)) {
+                TlsThreadContext->Timers.Reset();
+                ThreadCtx->Wait(0, &StopFlag);
+            }
+
+        } while (!StopFlag.load(std::memory_order_acquire));
 
         return nullptr;
     }
@@ -707,6 +748,11 @@ namespace NActors {
 
     void TExecutorThread::GetCurrentStats(TExecutorThreadStats& statsCopy) const {
         Ctx.GetCurrentStats(statsCopy);
+    }
+
+    void TExecutorThread::GetSharedStats(i16 poolId, TExecutorThreadStats &statsCopy) const {
+        statsCopy = TExecutorThreadStats();
+        statsCopy.Aggregate(SharedStats[poolId]);
     }
 
 }

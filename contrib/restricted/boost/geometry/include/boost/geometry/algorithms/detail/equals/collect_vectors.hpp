@@ -21,6 +21,7 @@
 
 
 #include <boost/numeric/conversion/cast.hpp>
+#include <boost/range/size.hpp>
 
 #include <boost/geometry/algorithms/detail/normalize.hpp>
 #include <boost/geometry/algorithms/not_implemented.hpp>

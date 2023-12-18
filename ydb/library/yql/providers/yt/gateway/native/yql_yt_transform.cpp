@@ -55,8 +55,8 @@ TGatewayTransformer::TGatewayTransformer(const TExecContextBase& execCtx, TYtSet
     , JobUdfs_(std::make_shared<THashMap<TString, TString>>())
     , UniqFiles_(std::make_shared<THashMap<TString, TString>>())
     , RemoteFiles_(std::make_shared<TVector<NYT::TRichYPath>>())
-    , LocalFiles_(std::make_shared<TVector<std::pair<TString, TString>>>())
-    , DeferredUdfFiles_(std::make_shared<TVector<std::pair<TString, TString>>>())
+    , LocalFiles_(std::make_shared<TVector<std::pair<TString, TLocalFileInfo>>>())
+    , DeferredUdfFiles_(std::make_shared<TVector<std::pair<TString, TLocalFileInfo>>>())
 
 {
     if (optLLVM != "OFF") {
@@ -289,7 +289,7 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName name) {
                             YQL_CLOG(DEBUG, ProviderYt) << "Passing table " << richYPathDesc << " as file "
                                 << fileName.Quote() << " (size=" << TFileStat(outPath).Size << ')';
 
-                            LocalFiles_->emplace_back(outPath, TString());
+                            LocalFiles_->emplace_back(outPath, TLocalFileInfo{TString(), false});
                         }
                     }
                 }
@@ -424,19 +424,21 @@ void TGatewayTransformer::ApplyUserJobSpec(NYT::TUserJobSpec& spec, bool localRu
     bool fakeChecksum = (GetEnv("YQL_LOCAL") == "1");  // YQL-15353
     for (auto& file: *LocalFiles_) {
         TAddLocalFileOptions opts;
-        if (!fakeChecksum && file.second) {
-            opts.MD5CheckSum(file.second);
+        if (!fakeChecksum && file.second.Hash) {
+            opts.MD5CheckSum(file.second.Hash);
         }
+        opts.BypassArtifactCache(file.second.BypassArtifactCache);
         spec.AddLocalFile(file.first, opts);
     }
     const TString binTmpFolder = Settings_->BinaryTmpFolder.Get().GetOrElse(TString());
     if (localRun || !binTmpFolder) {
         for (auto& file: *DeferredUdfFiles_) {
             TAddLocalFileOptions opts;
-            if (!fakeChecksum && file.second) {
-                opts.MD5CheckSum(file.second);
+            if (!fakeChecksum && file.second.Hash) {
+                opts.MD5CheckSum(file.second.Hash);
             }
             YQL_ENSURE(TFileStat(file.first).Size != 0);
+            opts.BypassArtifactCache(file.second.BypassArtifactCache);
             spec.AddLocalFile(file.first, opts);
         }
     } else {
@@ -444,8 +446,8 @@ void TGatewayTransformer::ApplyUserJobSpec(NYT::TUserJobSpec& spec, bool localRu
         auto entry = GetEntry();
         for (auto& file: *DeferredUdfFiles_) {
             YQL_ENSURE(TFileStat(file.first).Size != 0);
-            auto snapshot = entry->GetBinarySnapshot(binTmpFolder, file.second, file.first, binExpiration);
-            spec.AddFile(TRichYPath(snapshot.first).TransactionId(snapshot.second).FileName(TFsPath(file.first).GetName()).Executable(true));
+            auto snapshot = entry->GetBinarySnapshot(binTmpFolder, file.second.Hash, file.first, binExpiration);
+            spec.AddFile(TRichYPath(snapshot.first).TransactionId(snapshot.second).FileName(TFsPath(file.first).GetName()).Executable(true).BypassArtifactCache(file.second.BypassArtifactCache));
         }
     }
     RemoteFiles_->clear();
@@ -482,9 +484,9 @@ void TGatewayTransformer::AddFile(TString alias,
             filePath = fileInfo.Path->GetPath();
             *UsedMem_ += fileInfo.InMemorySize;
             if (fileInfo.IsUdf) {
-                DeferredUdfFiles_->emplace_back(filePath, fileInfo.Path->GetMd5());
+                DeferredUdfFiles_->emplace_back(filePath, TLocalFileInfo{fileInfo.Path->GetMd5(), fileInfo.BypassArtifactCache});
             } else {
-                LocalFiles_->emplace_back(filePath, fileInfo.Path->GetMd5());
+                LocalFiles_->emplace_back(filePath, TLocalFileInfo{fileInfo.Path->GetMd5(), fileInfo.BypassArtifactCache});
             }
         } else {
             filePath = insertRes.first->second;
@@ -507,7 +509,7 @@ void TGatewayTransformer::AddFile(TString alias,
         }
         auto insertRes = UniqFiles_->insert({alias, remoteFile.Path_});
         if (insertRes.second) {
-            RemoteFiles_->push_back(remoteFile.Executable(true));
+            RemoteFiles_->push_back(remoteFile.Executable(true).BypassArtifactCache(fileInfo.BypassArtifactCache));
             if (fileInfo.RemoteMemoryFactor > 0.) {
                 *UsedMem_ += fileInfo.RemoteMemoryFactor * GetUncompressedFileSize(GetTx(), remoteFile.Path_).GetOrElse(ui64(1) << 10);
             }

@@ -3,6 +3,7 @@ from typing import Sequence, MutableSequence, Union, Collection
 from clickhouse_connect.driver.ctypes import data_conv
 
 from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
+from clickhouse_connect.driver.errors import handle_error
 from clickhouse_connect.driver.exceptions import DataError
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.query import QueryContext
@@ -42,12 +43,11 @@ class String(ClickHouseType):
             return np.array(column, dtype=f'<U{ctx.max_str_len}')
         return column
 
-    # pylint: disable=duplicate-code,too-many-nested-blocks,too-many-branches
     def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
         encoding = None
         if not isinstance(self._first_value(column), bytes):
             encoding = ctx.encoding or self.encoding
-        data_conv.write_str_col(column, self.nullable, encoding, dest)
+        handle_error(data_conv.write_str_col(column, self.nullable, encoding, dest))
 
     def _active_null(self, ctx):
         if ctx.use_none:

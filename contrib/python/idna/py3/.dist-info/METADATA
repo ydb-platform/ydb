@@ -1,8 +1,8 @@
 Metadata-Version: 2.1
 Name: idna
-Version: 3.4
+Version: 3.6
 Summary: Internationalized Domain Names in Applications (IDNA)
-Author-email: Kim Davies <kim@cynosure.com.au>
+Author-email: Kim Davies <kim+pypi@gumleaf.org>
 Requires-Python: >=3.5
 Description-Content-Type: text/x-rst
 Classifier: Development Status :: 5 - Production/Stable
@@ -20,6 +20,7 @@ Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Internet :: Name Service (DNS)
@@ -88,9 +89,9 @@ You may use the codec encoding and decoding methods using the
 .. code-block:: pycon
 
     >>> import idna.codec
-    >>> print('домен.испытание'.encode('idna'))
+    >>> print('домен.испытание'.encode('idna2008'))
     b'xn--d1acufc.xn--80akhbyknj4f'
-    >>> print(b'xn--d1acufc.xn--80akhbyknj4f'.decode('idna'))
+    >>> print(b'xn--d1acufc.xn--80akhbyknj4f'.decode('idna2008'))
     домен.испытание
 
 Conversions can be applied at a per-label basis using the ``ulabel`` or
@@ -110,7 +111,7 @@ ways a user may input a domain name. This functionality, known as
 a “mapping”, is considered by the specification to be a local
 user-interface issue distinct from IDNA conversion functionality.
 
-This library provides one such mapping, that was developed by the
+This library provides one such mapping that was developed by the
 Unicode Consortium. Known as `Unicode IDNA Compatibility Processing
 <https://unicode.org/reports/tr46/>`_, it provides for both a regular
 mapping for typical applications, as well as a transitional mapping to
@@ -143,7 +144,7 @@ IDNA specification this conversion is not performed.
     >>> idna.encode('Königsgäßchen', uts46=True, transitional=True)
     'xn--knigsgsschen-lcb0w'
 
-Implementors should use transitional processing with caution, only in
+Implementers should use transitional processing with caution, only in
 rare cases where conversion from legacy labels to current labels must be
 performed (i.e. IDNA implementations that pre-date 2008). For typical
 applications that just need to convert labels, transitional processing
@@ -186,8 +187,8 @@ and perform the required calculations to identify eligibility. There are
 three main modes:
 
 * ``idna-data make-libdata``. Generates ``idnadata.py`` and
-  ``uts46data.py``, the pre-calculated lookup tables using for IDNA and
-  UTS 46 conversions. Implementors who wish to track this library against
+  ``uts46data.py``, the pre-calculated lookup tables used for IDNA and
+  UTS 46 conversions. Implementers who wish to track this library against
   a different Unicode version may use this tool to manually generate a
   different version of the ``idnadata.py`` and ``uts46data.py`` files.
 
@@ -203,7 +204,7 @@ three main modes:
 
 The tool accepts a number of arguments, described using ``idna-data
 -h``. Most notably, the ``--version`` argument allows the specification
-of the version of Unicode to use in computing the table data. For
+of the version of Unicode to be used in computing the table data. For
 example, ``idna-data --version 9.0.0 make-libdata`` will generate
 library data against Unicode 9.0.0.
 
@@ -217,7 +218,7 @@ Additional Notes
 * **Version support**. This library supports Python 3.5 and higher.
   As this library serves as a low-level toolkit for a variety of
   applications, many of which strive for broad compatibility with older
-  Python versions, there is no rush to remove older intepreter support.
+  Python versions, there is no rush to remove older interpreter support.
   Removing support for older versions should be well justified in that the
   maintenance burden has become too high.
 
@@ -235,7 +236,7 @@ Additional Notes
   this library. Encoding of symbols like emoji is expressly prohibited by
   the technical standard IDNA 2008 and emoji domains are broadly phased
   out across the domain industry due to associated security risks. For
-  now, applications that wish need to support these non-compliant labels
+  now, applications that need to support these non-compliant labels
   may wish to consider trying the encode/decode operation in this library
   first, and then falling back to using `encodings.idna`. See `the Github
   project <https://github.com/kjd/idna/issues/18>`_ for more discussion.

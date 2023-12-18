@@ -4,7 +4,7 @@
 
 #include <util/digest/murmur.h>
 
-namespace NFyaml {
+namespace NKikimr::NFyaml {
 
 const char* zstr = "";
 
@@ -1100,27 +1100,27 @@ bool IsComplexType(ENodeType type) {
 
 } // namespace NDetail
 
-} // namespace NFyaml
+} // namespace NKikimr::NFyaml
 
 template <>
-void Out<NFyaml::TDocument>(IOutputStream& out, const NFyaml::TDocument& value) {
+void Out<NKikimr::NFyaml::TDocument>(IOutputStream& out, const NKikimr::NFyaml::TDocument& value) {
     out << value.EmitToCharArray().get();
 }
 
 template <>
-void Out<NFyaml::TNodeRef>(IOutputStream& out, const NFyaml::TNodeRef& value) {
+void Out<NKikimr::NFyaml::TNodeRef>(IOutputStream& out, const NKikimr::NFyaml::TNodeRef& value) {
     out << value.EmitToCharArray().get();
 }
 
 template <>
-void Out<NFyaml::TJsonEmitter>(IOutputStream& out, const NFyaml::TJsonEmitter& value) {
+void Out<NKikimr::NFyaml::TJsonEmitter>(IOutputStream& out, const NKikimr::NFyaml::TJsonEmitter& value) {
     out << value.EmitToCharArray().get();
 }
 
-bool operator==(const fy_node* node1, const NFyaml::NDetail::TNodeOps<NFyaml::TNodeRef>& node2) {
+bool operator==(const fy_node* node1, const NKikimr::NFyaml::NDetail::TNodeOps<NKikimr::NFyaml::TNodeRef>& node2) {
      return node2.Node() == node1;
 }
 
-bool operator==(const fy_node* node1, const NFyaml::NDetail::TNodeOps<NFyaml::TNode>& node2) {
+bool operator==(const fy_node* node1, const NKikimr::NFyaml::NDetail::TNodeOps<NKikimr::NFyaml::TNode>& node2) {
      return node2.Node() == node1;
 }

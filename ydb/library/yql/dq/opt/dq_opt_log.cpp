@@ -76,7 +76,7 @@ TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TP
 
     auto topSortCount = take.Count();
     if (maybeSkip) {
-        topSortCount = Build<TCoPlus>(ctx, node.Pos())
+        topSortCount = Build<TCoAggrAdd>(ctx, node.Pos())
             .Left(take.Count())
             .Right(maybeSkip.Cast().Count())
             .Done();

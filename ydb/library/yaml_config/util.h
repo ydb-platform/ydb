@@ -2,7 +2,7 @@
 
 #include <library/cpp/protobuf/json/proto2json.h>
 
-namespace NYamlConfig {
+namespace NKikimr::NYamlConfig {
 
 inline NProtobufJson::TProto2JsonConfig GetProto2JsonConfig() {
     return NProtobufJson::TProto2JsonConfig()

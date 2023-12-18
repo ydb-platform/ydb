@@ -91,7 +91,6 @@ public:
     }
 
 public:
-
     static TIndexInfo BuildDefault() {
         TIndexInfo result("dummy", 0);
         return result;
@@ -131,7 +130,7 @@ public:
     std::vector<TNameTypeInfo> GetColumns(const std::vector<ui32>& ids) const;
 
     /// Traditional Primary Key (includes uniqueness, search and sorting logic)
-    std::vector<TNameTypeInfo> GetPrimaryKey() const {
+    std::vector<TNameTypeInfo> GetPrimaryKeyColumns() const {
         return GetColumns(KeyColumns);
     }
 
@@ -144,10 +143,8 @@ public:
     // Sorting key: could be less or greater then traditional PK
     // It could be empty for append-only tables. It could be greater then PK for better columns compression.
     // If sorting key includes uniqueness key as a prefix we are able to use MergeSort for REPLACE.
-    const std::shared_ptr<arrow::Schema>& GetSortingKey() const { return SortingKey; }
-    const std::shared_ptr<arrow::Schema>& GetReplaceKey() const { return ReplaceKey; }
-    const std::shared_ptr<arrow::Schema>& GetExtendedKey() const { return ExtendedKey; }
-    const std::shared_ptr<arrow::Schema>& GetIndexKey() const { return IndexKey; }
+    const std::shared_ptr<arrow::Schema>& GetReplaceKey() const { return PrimaryKey; }
+    const std::shared_ptr<arrow::Schema>& GetPrimaryKey() const { return PrimaryKey; }
 
     /// Initializes sorting, replace, index and extended keys.
     void SetAllKeys();
@@ -181,11 +178,8 @@ public:
     bool AllowTtlOverColumn(const TString& name) const;
 
     /// Returns whether the sorting keys defined.
-    bool IsSorted() const { return SortingKey.get(); }
+    bool IsSorted() const { return true; }
     bool IsSortedColumn(const ui32 columnId) const { return GetPKFirstColumnId() == columnId; }
-
-     /// Returns whether the replace keys defined.
-    bool IsReplacing() const { return ReplaceKey.get(); }
 
     std::shared_ptr<NArrow::TSortDescription> SortDescription() const;
     std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription() const;
@@ -209,16 +203,16 @@ public:
         return Version;
     }
 
+    bool CheckCompatible(const TIndexInfo& other) const;
+
 private:
     ui32 Id;
     ui64 Version = 0;
     TString Name;
     std::shared_ptr<arrow::Schema> Schema;
     std::shared_ptr<arrow::Schema> SchemaWithSpecials;
-    std::shared_ptr<arrow::Schema> SortingKey;
-    std::shared_ptr<arrow::Schema> ReplaceKey;
+    std::shared_ptr<arrow::Schema> PrimaryKey;
     std::shared_ptr<arrow::Schema> ExtendedKey; // Extend PK with snapshot columns to allow old shapshot reads
-    std::shared_ptr<arrow::Schema> IndexKey;
     THashSet<TString> RequiredColumns;
     THashSet<ui32> MinMaxIdxColumnsIds;
     std::optional<NArrow::TCompression> DefaultCompression;

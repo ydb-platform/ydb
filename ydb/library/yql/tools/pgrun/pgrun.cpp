@@ -38,6 +38,8 @@ namespace NMiniKQL = NKikimr::NMiniKQL;
 const ui32 PRETTY_FLAGS = NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote |
                           NYql::TAstPrintFlags::AdaptArbitraryContent;
 
+TString nullRepr("");
+
 bool IsEscapedChar(const TString& s, size_t pos) {
     bool escaped = false;
     while (s[--pos] == '\\') {
@@ -720,6 +722,7 @@ inline const TString FormatBool(const TString& value)
 
     return (value == "true") ? T
          : (value == "false") ? F
+         : (value == nullRepr) ? nullRepr
          : ythrow yexception() << "Unexpected bool literal: " << value;
 }
 
@@ -790,7 +793,7 @@ void WriteTableToStream(IOutputStream& stream, const NYT::TNode::TListType& cols
 
         { int i = 0;
         for (const auto& col : row.AsList()) {
-            const auto& cellData = col.AsString();
+            const auto& cellData = col.HasValue() ? col.AsString() : nullRepr;
             auto& c = columns[i];
 
             rowData.emplace_back(c.Formatter(cellData));
@@ -934,6 +937,25 @@ void WriteToYtTableScheme(
 }
 
 void ProcessMetaCmd(const TStringBuf& cmd) {
+    const TStringBuf pset_null("\\pset null ");
+
+    if (cmd.starts_with(pset_null)) {
+        const auto secondArgPos = cmd.find_first_not_of(" ", pset_null.length());
+        if (secondArgPos != std::string_view::npos) {
+            TStringBuf newNullRepr(cmd, secondArgPos);
+
+            if (newNullRepr.front() == '\'') {
+                newNullRepr.remove_prefix(1);
+
+                if (newNullRepr.back() == '\'') {
+                    newNullRepr.remove_suffix(1);
+                }
+            }
+            nullRepr = newNullRepr;
+
+            return;
+        }
+    }
     Cerr << "Metacommand " << cmd << " is not supported\n";
 }
 
@@ -993,9 +1015,20 @@ int Main(int argc, char* argv[])
         const auto stmt = GetFormattedStmt(raw_stmt);
         Cout << stmt << '\n';
 
+        Cerr << "<sql-statement>\n" << stmt << "\n</sql-statement>\n";
+
         if (stmt[0] == '\\') {
             ProcessMetaCmd(stmt);
             continue;
+        }
+
+        {
+            const auto metaCmdStart = stmt.find("\n\\");
+            if (TString::npos != metaCmdStart) {
+                const auto metaCmdEnd = stmt.find_first_of("\r\n", metaCmdStart + 2);
+                ProcessMetaCmd(stmt.substr(metaCmdStart + 1, metaCmdEnd));
+                continue;
+            }
         }
 
         google::protobuf::Arena arena;

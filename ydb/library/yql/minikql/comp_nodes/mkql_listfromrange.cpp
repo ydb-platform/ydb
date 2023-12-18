@@ -147,7 +147,7 @@ private:
             } else if (Step < TStep(0)) {
                 return Ctx.HolderFactory.template Create<TIterator<false, std::is_floating_point<T>::value>>(Start, End, Step);
             } else {
-                return Ctx.HolderFactory.GetEmptyContainer();
+                return Ctx.HolderFactory.GetEmptyContainerLazy();
             }
         }
 
@@ -219,7 +219,7 @@ private:
             } else if (TValue::Step < TStep(0)) {
                 return TValue::Ctx.HolderFactory.template Create<TTzIterator<false>>(TValue::Start, TValue::End, TValue::Step, TimezoneId);
             } else {
-                return TValue::Ctx.HolderFactory.GetEmptyContainer();
+                return TValue::Ctx.HolderFactory.GetEmptyContainerLazy();
             }
         }
         TTzValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, T start, T end, TStep step, ui16 TimezoneId)

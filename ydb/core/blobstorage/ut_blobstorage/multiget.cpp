@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(MultiGet) {
             });
             ++numInFlight;
         }
-        
+
         for (; numInFlight > 0; --numInFlight) {
             auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);

@@ -224,14 +224,14 @@ TExprNode::TPtr IsUpdateSetting(TExprContext& ctx, const TPositionHandle& pos) {
 }
 
 TExprBase BuildKqlSequencer(TExprBase& input, const TKikimrTableDescription& table,
-    const TCoAtomList& outputCols, const TCoAtomList& autoIncrement,
+    const TCoAtomList& outputCols, const TCoAtomList& defaultConstraintColumns,
     TPositionHandle pos, TExprContext& ctx)
 {
     return Build<TKqlSequencer>(ctx, pos)
         .Input(input.Ptr())
         .Table(BuildTableMeta(table, pos, ctx))
         .Columns(outputCols.Ptr())
-        .AutoIncrementColumns(autoIncrement.Ptr())
+        .DefaultConstraintColumns(defaultConstraintColumns.Ptr())
         .InputItemType(ExpandType(pos, *input.Ref().GetTypeAnn(), ctx))
         .Done();
 }
@@ -807,12 +807,12 @@ TVector<TExprBase> HandleWriteTable(const TKiWriteTable& write, TExprContext& ct
     YQL_ENSURE(inputColumnsSetting);
     auto inputColumns = TCoNameValueTuple(inputColumnsSetting).Value().Cast<TCoAtomList>();
 
-    auto autoincrementColumnsSetting = GetSetting(write.Settings().Ref(), "autoincrement_columns");
-    YQL_ENSURE(autoincrementColumnsSetting);
-    auto autoincrementColumns = TCoNameValueTuple(autoincrementColumnsSetting).Value().Cast<TCoAtomList>();
+    auto defaultConstraintColumnsNode = GetSetting(write.Settings().Ref(), "default_constraint_columns");
+    YQL_ENSURE(defaultConstraintColumnsNode);
+    auto defaultConstraintColumns = TCoNameValueTuple(defaultConstraintColumnsNode).Value().Cast<TCoAtomList>();
 
     auto op = GetTableOp(write);
-    if (autoincrementColumns.Ref().ChildrenSize() > 0) {
+    if (defaultConstraintColumns.Ref().ChildrenSize() > 0) {
         if (op == TYdbOperation::UpdateOn || op == TYdbOperation::DeleteOn) {
             const TString err = "Key columns are not specified.";
             ctx.AddError(YqlIssue(ctx.GetPosition(write.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, err));
@@ -821,9 +821,9 @@ TVector<TExprBase> HandleWriteTable(const TKiWriteTable& write, TExprContext& ct
     }
 
     if (HasIndexesToWrite(tableData)) {
-        return { WriteTableWithIndexUpdate(write, inputColumns, autoincrementColumns, tableData, ctx) } ;
+        return { WriteTableWithIndexUpdate(write, inputColumns, defaultConstraintColumns, tableData, ctx) } ;
     } else {
-        return { WriteTableSimple(write, inputColumns, autoincrementColumns, tableData, ctx) } ;
+        return { WriteTableSimple(write, inputColumns, defaultConstraintColumns, tableData, ctx) } ;
     }
 }
 

@@ -5,6 +5,7 @@ RECURSE(
     blob_depot
     blockstore
     change_exchange
+    change_mirroring
     client
     cms
     control

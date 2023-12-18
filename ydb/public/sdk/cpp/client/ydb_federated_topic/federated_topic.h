@@ -368,18 +368,25 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
     //! See description in TFederatedEventHandlers class.
     FLUENT_SETTING(TFederatedEventHandlers, FederatedEventHandlers);
 
-    enum class EReadPolicy {
-        READ_ALL = 0,
-        READ_ORIGINAL,
-        READ_MIRRORED
+    //! Default variant.
+    //! Read original topics specified in NTopic::TReadSessionSettings::Topics from all specified databases.
+    struct TReadOriginal {
+        //! Empty vector means read from all available databases;
+        //! Vector {"local"} means read only from local database, which is determined by client location;
+        //! Otherwise read from specified databases if available.
+        std::vector<TString> Databases;
     };
 
-    //! Policy for federated reading.
-    //!
-    //! READ_ALL: read will be done from all topic instances from all databases.
-    //! READ_ORIGINAL:
-    //! READ_MIRRORED:
-    FLUENT_SETTING_DEFAULT(EReadPolicy, ReadPolicy, EReadPolicy::READ_ALL);
+    //! Read original topics specified in NTopic::TReadSessionSettings::Topics and their mirrors from other databases
+    //! from one specified database.
+    struct TReadMirrored {
+        TString Database;
+    };
+
+    using TReadPolicy = std::variant<TReadOriginal, TReadMirrored>;
+
+    //! Policy for reading original and mirrored topics, see variants above.
+    FLUENT_SETTING_DEFAULT(TReadPolicy, ReadPolicy, TReadOriginal{});
 };
 
 

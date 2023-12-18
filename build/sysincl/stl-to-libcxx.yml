@@ -172,6 +172,7 @@
   - __bsd_locale_defaults.h:                               contrib/libs/cxxsupp/libcxx/include/__bsd_locale_defaults.h
   - __bsd_locale_fallbacks.h:                              contrib/libs/cxxsupp/libcxx/include/__bsd_locale_fallbacks.h
   - __config:                                              contrib/libs/cxxsupp/libcxx/include/__config
+  - __config_site:                                         contrib/libs/cxxsupp/libcxx/include/__config_site
   - __config_site.in:                                      contrib/libs/cxxsupp/libcxx/include/__config_site.in
   - __debug:                                               contrib/libs/cxxsupp/libcxx/include/__debug
   - __errc:                                                contrib/libs/cxxsupp/libcxx/include/__errc
@@ -186,7 +187,6 @@
   - __tree:                                                contrib/libs/cxxsupp/libcxx/include/__tree
   - __tuple:                                               contrib/libs/cxxsupp/libcxx/include/__tuple
   - __undef_macros:                                        contrib/libs/cxxsupp/libcxx/include/__undef_macros
-  - __wrappers_config:                                     contrib/libs/cxxsupp/libcxx/include/__wrappers_config
   - __algorithm/adjacent_find.h:                           contrib/libs/cxxsupp/libcxx/include/__algorithm/adjacent_find.h
   - __algorithm/all_of.h:                                  contrib/libs/cxxsupp/libcxx/include/__algorithm/all_of.h
   - __algorithm/any_of.h:                                  contrib/libs/cxxsupp/libcxx/include/__algorithm/any_of.h

@@ -56,13 +56,17 @@ namespace NWilson {
             int UncaughtExceptions = std::uncaught_exceptions();
             bool Sent = false;
             bool Ignored = false;
+            NActors::TActorSystem* ActorSystem;
 
-            TData(TInstant startTime, ui64 startCycles, TTraceId traceId, TFlags flags)
+            TData(TInstant startTime, ui64 startCycles, TTraceId traceId, TFlags flags, NActors::TActorSystem* actorSystem)
                 : StartTime(startTime)
                 , StartCycles(startCycles)
                 , TraceId(std::move(traceId))
                 , Flags(flags)
-            {}
+                , ActorSystem(actorSystem != nullptr ? actorSystem : (NActors::TlsActivationContext ? NActors::TActivationContext::ActorSystem() : nullptr))
+            {
+                Y_ABORT_UNLESS(ActorSystem != nullptr, "Attempting to create NWilson::TSpan outside of actor system without providing actorSystem pointer");
+            }
 
             ~TData() {
                 Y_DEBUG_ABORT_UNLESS(Sent || Ignored);
@@ -76,9 +80,9 @@ namespace NWilson {
         TSpan(const TSpan&) = delete;
         TSpan(TSpan&&) = default;
 
-        TSpan(ui8 verbosity, TTraceId parentId, std::optional<TString> name, TFlags flags = EFlags::NONE)
+        TSpan(ui8 verbosity, TTraceId parentId, std::optional<TString> name, TFlags flags = EFlags::NONE, NActors::TActorSystem* actorSystem = nullptr)
             : Data(parentId
-                    ? std::make_unique<TData>(TInstant::Now(), GetCycleCount(), parentId.Span(verbosity), flags)
+                    ? std::make_unique<TData>(TInstant::Now(), GetCycleCount(), parentId.Span(verbosity), flags, actorSystem)
                     : nullptr)
         {
             if (Y_UNLIKELY(*this)) {
@@ -93,7 +97,7 @@ namespace NWilson {
                         Name(std::move(*name));
                     }
 
-                    Attribute("node_id", NActors::TActivationContext::ActorSystem()->NodeId);
+                    Attribute("node_id", Data->ActorSystem->NodeId);
                 } else {
                     Data->Ignored = true; // ignore this span due to verbosity mismatch, still allowing child spans to be created
                 }
@@ -226,6 +230,14 @@ namespace NWilson {
 
         TTraceId GetTraceId() const {
             return Data ? TTraceId(Data->TraceId) : TTraceId();
+        }
+
+        NActors::TActorSystem* GetActorSystem() const {
+            return Data ? Data->ActorSystem : nullptr;
+        }
+
+        TSpan CreateChild(ui8 verbosity, std::optional<TString> name, TFlags flags = EFlags::NONE) const {
+            return TSpan(verbosity, GetTraceId(), std::move(name), flags, GetActorSystem());
         }
 
     private:

@@ -9,7 +9,6 @@ namespace NYql::NDq {
     
 using namespace NYql::NNodes;
 
-/*
 namespace {
 
 struct TState {
@@ -153,17 +152,14 @@ struct TState {
 
 } // namespace
 
-*/
-
 TExprBase DqOptimizeEquiJoinWithCosts(
 	const TExprBase& node, 
 	TExprContext& ctx, 
 	TTypeAnnotationContext& typesCtx,
-	const std::function<IOptimizer*()>& optFactory,
+	const std::function<IOptimizer*(IOptimizer::TInput&&)>& optFactory,
     bool ruleEnabled)
 {
     Y_UNUSED(ctx);
-    Y_UNUSED(optFactory);
 
     if (!ruleEnabled) {
         return node;
@@ -185,7 +181,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     }
 
     YQL_CLOG(TRACE, CoreDq) << "Optimizing join with costs";
-    /*
+
     TState state(equiJoin);
     // collect Rels
     if (!DqCollectJoinRelationsWithStats(typesCtx, equiJoin, [&](auto label, auto stat) {
@@ -220,8 +216,6 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     typesCtx.StatisticsMap[res.Raw()] = std::make_shared<TOptimizerStatistics>(state.Result.Rows, cols, state.Result.TotalCost);
 
     return res;
-    */
-   return node;
 }
 
 } // namespace NYql::NDq

@@ -373,8 +373,9 @@ std::function<NKikimr::NMiniKQL::IComputationNode* (NKikimr::NMiniKQL::TCallable
     };
 }
 
-IOptimizer* MakePgOptimizer(const std::function<void(const TString&)>& log)
+IOptimizer* MakePgOptimizer(const IOptimizer::TInput& input, const std::function<void(const TString&)>& log)
 {
+    Y_UNUSED(input);
     Y_UNUSED(log);
     ythrow yexception() << "PgJoinSearch does nothing";
 }

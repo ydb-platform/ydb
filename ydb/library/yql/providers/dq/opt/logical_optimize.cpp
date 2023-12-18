@@ -356,11 +356,11 @@ protected:
             std::function<void(const TString&)> log = [&](auto str) {
                 YQL_CLOG(INFO, ProviderDq) << str;
             };
-            std::function<IOptimizer*()> factory = [&]() {
+            std::function<IOptimizer*(IOptimizer::TInput&&)> factory = [&](auto input) {
                 if (TypesCtx.CostBasedOptimizer == ECostBasedOptimizerType::Native) {
-                    return MakeNativeOptimizer(10000);
+                    return MakeNativeOptimizer(input, log);
                 } else if (TypesCtx.CostBasedOptimizer == ECostBasedOptimizerType::PG) {
-                    return MakePgOptimizer(log);
+                    return MakePgOptimizer(input, log);
                 } else {
                     YQL_ENSURE(false, "Unknown CBO type");
                 }

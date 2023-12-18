@@ -149,6 +149,10 @@ namespace {
     TCreateGroupSettings ParseCreateGroupSettings(TKiCreateGroup createGroup) {
         TCreateGroupSettings createGroupSettings;
         createGroupSettings.GroupName = TString(createGroup.GroupName());
+
+        for (auto role : createGroup.Roles()) {
+            createGroupSettings.Roles.push_back(role.Cast<TCoAtom>().StringValue());
+        }
         return createGroupSettings;
     }
 
@@ -167,6 +171,13 @@ namespace {
             alterGroupSettings.Roles.push_back(role.Cast<TCoAtom>().StringValue());
         }
         return alterGroupSettings;
+    }
+
+    TRenameGroupSettings ParseRenameGroupSettings(TKiRenameGroup renameGroup) {
+        TRenameGroupSettings renameGroupSettings;
+        renameGroupSettings.GroupName = TString(renameGroup.GroupName());
+        renameGroupSettings.NewName = TString(renameGroup.NewName());
+        return renameGroupSettings;
     }
 
     TDropGroupSettings ParseDropGroupSettings(TKiDropGroup dropGroup) {
@@ -1768,10 +1779,6 @@ public:
         }
 
         if (auto maybeCreateGroup = TMaybeNode<TKiCreateGroup>(input)) {
-            if (!EnsureNotPrepare("CREATE GROUP", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
@@ -1780,8 +1787,7 @@ public:
             auto cluster = TString(maybeCreateGroup.Cast().DataSink().Cluster());
             TCreateGroupSettings createGroupSettings = ParseCreateGroupSettings(maybeCreateGroup.Cast());
 
-            bool prepareOnly = SessionCtx->Query().PrepareOnly;
-            auto future = prepareOnly ? CreateDummySuccess() : Gateway->CreateGroup(cluster, createGroupSettings);
+            auto future = Gateway->CreateGroup(cluster, createGroupSettings);
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -1792,10 +1798,6 @@ public:
         }
 
         if (auto maybeAlterGroup = TMaybeNode<TKiAlterGroup>(input)) {
-            if (!EnsureNotPrepare("ALTER GROUP", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
@@ -1804,8 +1806,7 @@ public:
             auto cluster = TString(maybeAlterGroup.Cast().DataSink().Cluster());
             TAlterGroupSettings alterGroupSettings = ParseAlterGroupSettings(maybeAlterGroup.Cast());
 
-            bool prepareOnly = SessionCtx->Query().PrepareOnly;
-            auto future = prepareOnly ? CreateDummySuccess() : Gateway->AlterGroup(cluster, alterGroupSettings);
+            auto future = Gateway->AlterGroup(cluster, alterGroupSettings);
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -1815,11 +1816,26 @@ public:
             }, "Executing ALTER GROUP");
         }
 
-        if (auto maybeDropGroup = TMaybeNode<TKiDropGroup>(input)) {
-            if (!EnsureNotPrepare("DROP GROUP", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
+        if (auto maybeRenameGroup = TMaybeNode<TKiRenameGroup>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
             }
 
+            auto cluster = TString(maybeRenameGroup.Cast().DataSink().Cluster());
+            TRenameGroupSettings renameGroupSettings = ParseRenameGroupSettings(maybeRenameGroup.Cast());
+
+            auto future = Gateway->RenameGroup(cluster, renameGroupSettings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing RENAME GROUP");
+        }
+
+        if (auto maybeDropGroup = TMaybeNode<TKiDropGroup>(input)) {
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
@@ -1828,8 +1844,7 @@ public:
             auto cluster = TString(maybeDropGroup.Cast().DataSink().Cluster());
             TDropGroupSettings dropGroupSettings = ParseDropGroupSettings(maybeDropGroup.Cast());
 
-            bool prepareOnly = SessionCtx->Query().PrepareOnly;
-            auto future = prepareOnly ? CreateDummySuccess() : Gateway->DropGroup(cluster, dropGroupSettings);
+            auto future = Gateway->DropGroup(cluster, dropGroupSettings);
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {

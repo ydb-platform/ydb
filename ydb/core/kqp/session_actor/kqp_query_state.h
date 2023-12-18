@@ -119,6 +119,8 @@ public:
 
     TString ReplayMessage;
 
+    NYql::TIssues Issues;
+
     NKikimrKqp::EQueryAction GetAction() const {
         return RequestEv->GetAction();
     }

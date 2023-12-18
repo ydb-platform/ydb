@@ -584,8 +584,20 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             SELECT * FROM TestDdl;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+    }
 
-        result = db.ExecuteQuery(R"(
+    Y_UNIT_TEST(DdlUser) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
             CREATE USER user1 PASSWORD 'password1';
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -606,6 +618,11 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = db.ExecuteQuery(R"(
+            ALTER USER user1 WITH ENCRYPTED PASSWORD 'password3';
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
             DROP USER user1;
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
@@ -614,6 +631,200 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             DROP USER IF EXISTS user1;
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(DdlGroup) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+
+        // Check create and drop group
+        auto result = db.ExecuteQuery(R"(
+            CREATE GROUP group1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            CREATE GROUP group1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            DROP GROUP group1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            CREATE GROUP group1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            DROP GROUP group2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            DROP GROUP IF EXISTS group2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        // Check rename group
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 RENAME TO group2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            CREATE GROUP group1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            CREATE GROUP group2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        // Check add and drop users
+        result = db.ExecuteQuery(R"(
+            CREATE USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            CREATE USER user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 ADD USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 ADD USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Info: Success, code: 4 subissue: { <main>: Info: Role \"user1\" is already a member of role \"group1\", code: 2 } }");
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 ADD USER user3;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 DROP USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 DROP USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user1\" is not a member of role \"group1\", code: 3 } }");
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 DROP USER user3;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user3\" is not a member of role \"group1\", code: 3 } }");
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 ADD USER user1, user3, user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 ADD USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Info: Success, code: 4 subissue: { <main>: Info: Role \"user1\" is already a member of role \"group1\", code: 2 } }");
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 ADD USER user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 0);
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 DROP USER user1, user3, user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user3\" is not a member of role \"group1\", code: 3 } }");
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 DROP USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user1\" is not a member of role \"group1\", code: 3 } }");
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 DROP USER user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user2\" is not a member of role \"group1\", code: 3 } }");
+
+        //Check create with users
+        result = db.ExecuteQuery(R"(
+            CREATE GROUP group3 WITH USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            CREATE GROUP group3;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group3 ADD USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Info: Success, code: 4 subissue: { <main>: Info: Role \"user1\" is already a member of role \"group3\", code: 2 } }");
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group3 ADD USER user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            CREATE GROUP group4 WITH USER user1, user3, user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            CREATE GROUP group4;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Error: Group already exists, code: 2029 }");
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group4 ADD USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Info: Success, code: 4 subissue: { <main>: Info: Role \"user1\" is already a member of role \"group4\", code: 2 } }");
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group4 ADD USER user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 0);
+
     }
 
     Y_UNIT_TEST(DdlCache) {

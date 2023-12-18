@@ -1772,6 +1772,47 @@ public:
         }
     }
 
+    TFuture<TGenericResult> RenameGroup(const TString& cluster, NYql::TRenameGroupSettings& settings) override {
+        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
+
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            TString database;
+            if (!GetDatabaseForLoginOperation(database)) {
+                return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+            }
+
+            TPromise<TGenericResult> renameGroupPromise = NewPromise<TGenericResult>();
+
+            auto ev = MakeHolder<TRequest>();
+            ev->Record.SetDatabaseName(database);
+            if (UserToken) {
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
+            }
+            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
+            schemeTx.SetWorkingDir(database);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+            auto& renameGroup = *schemeTx.MutableAlterLogin()->MutableRenameGroup();
+
+            renameGroup.SetGroup(settings.GroupName);
+            renameGroup.SetNewName(settings.NewName);
+
+            SendSchemeRequest(ev.Release()).Apply(
+                [renameGroupPromise](const TFuture<TGenericResult>& future) mutable {
+                    renameGroupPromise.SetValue(future.GetValue());
+                }
+            );
+
+            return renameGroupPromise.GetFuture();
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
     TFuture<TGenericResult> DropGroup(const TString& cluster, const NYql::TDropGroupSettings& settings) override {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
@@ -1798,17 +1839,11 @@ public:
             auto& dropGroup = *schemeTx.MutableAlterLogin()->MutableRemoveGroup();
 
             dropGroup.SetGroup(settings.GroupName);
+            dropGroup.SetMissingOk(settings.Force);
 
             SendSchemeRequest(ev.Release()).Apply(
-                [dropGroupPromise, &settings](const TFuture<TGenericResult>& future) mutable {
-                    const auto& realResult = future.GetValue();
-                    if (!realResult.Success() && realResult.Status() == TIssuesIds::DEFAULT_ERROR && settings.Force) {
-                        IKqpGateway::TGenericResult fakeResult;
-                        fakeResult.SetSuccess();
-                        dropGroupPromise.SetValue(std::move(fakeResult));
-                    } else {
-                        dropGroupPromise.SetValue(realResult);
-                    }
+                [dropGroupPromise](const TFuture<TGenericResult>& future) mutable {
+                    dropGroupPromise.SetValue(future.GetValue());
                 }
             );
 

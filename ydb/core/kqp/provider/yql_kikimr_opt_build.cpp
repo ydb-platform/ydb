@@ -563,6 +563,18 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         return result;
     }
 
+    if (auto maybeRenameGroup = node.Maybe<TKiRenameGroup>()) {
+        auto renameGroup = maybeRenameGroup.Cast();
+        if (!checkDataSink(renameGroup.DataSink())) {
+            return false;
+        }
+
+        txRes.Ops.insert(node.Raw());
+        auto result = ExploreTx(renameGroup.World(), ctx, dataSink, txRes, tablesData, types);
+        txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::RenameGroup, renameGroup.Pos(), ctx));
+        return result;
+    }
+
     if (auto maybeDropGroup = node.Maybe<TKiDropGroup>()) {
         auto dropGroup = maybeDropGroup.Cast();
         if (!checkDataSink(dropGroup.DataSink())) {

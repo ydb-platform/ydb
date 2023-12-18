@@ -186,7 +186,7 @@ public:
             break;
         }
         case TTypeParser::ETypeKind::Pg: {
-            if (token == NullValue) {
+            if (NullValue && token == NullValue) {
                 Builder.Pg(TPgValue(TPgValue::VK_NULL, {}, Parser.GetPg()));
             } else {
                 Builder.Pg(TPgValue(TPgValue::VK_TEXT, TString(token), Parser.GetPg()));
@@ -250,6 +250,9 @@ public:
     }
 
     void EnsureNull(TStringBuf token) const {
+        if (!NullValue) {
+            throw TMisuseException() << "Expected null value instead of \"" << token << "\", but null value is not set.";
+        }
         if (token != NullValue) {
             throw TMisuseException() << "Expected null value: \"" << NullValue << "\", recieved: \"" << token << "\".";
         }

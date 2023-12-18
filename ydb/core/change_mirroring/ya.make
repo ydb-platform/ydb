@@ -4,9 +4,7 @@ PEERDIR(
     ydb/library/actors/core
 )
 
-SRCS(
-    ydb/core/change_mirroring/reader.cpp
-)
+SRCS()
 
 END()
 

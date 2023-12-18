@@ -133,6 +133,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(CreateGroup) {
         TCases cases = {
             {"use plato;create group user;","USE plato;\n\nCREATE GROUP user;\n"},
+            {"use plato;create group user with user user;","USE plato;\n\nCREATE GROUP user WITH USER user;\n"},
+            {"use plato;create group user with user user, user,;","USE plato;\n\nCREATE GROUP user WITH USER user, user,;\n"},
         };
 
         TSetup setup;

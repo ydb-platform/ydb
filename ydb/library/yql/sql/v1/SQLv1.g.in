@@ -722,7 +722,7 @@ drop_table_stmt: DROP (TABLE | TABLESTORE | EXTERNAL TABLE) (IF EXISTS)? simple_
 create_user_stmt: CREATE USER role_name create_user_option?;
 alter_user_stmt: ALTER USER role_name (WITH? create_user_option | RENAME TO role_name);
 
-create_group_stmt: CREATE GROUP role_name;
+create_group_stmt: CREATE GROUP role_name (WITH USER role_name (COMMA role_name)* COMMA?)?;
 alter_group_stmt: ALTER GROUP role_name ((ADD|DROP) USER role_name (COMMA role_name)* COMMA? | RENAME TO role_name);
 
 drop_role_stmt: DROP (USER|GROUP) (IF EXISTS)? role_name (COMMA role_name)* COMMA?;

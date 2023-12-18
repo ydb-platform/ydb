@@ -139,13 +139,45 @@ public:
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }
+
             case NKqpProto::TKqpSchemeOperation::kAlterUser: {
                 auto modifyScheme = schemeOp.GetAlterUser();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }
+
             case NKqpProto::TKqpSchemeOperation::kDropUser: {
                 auto modifyScheme = schemeOp.GetDropUser();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kCreateGroup: {
+                auto modifyScheme = schemeOp.GetCreateGroup();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kAddGroupMembership: {
+                auto modifyScheme = schemeOp.GetAddGroupMembership();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kRemoveGroupMembership: {
+                auto modifyScheme = schemeOp.GetRemoveGroupMembership();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kRenameGroup: {
+                auto modifyScheme = schemeOp.GetRenameGroup();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kDropGroup: {
+                auto modifyScheme = schemeOp.GetDropGroup();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }

@@ -12,6 +12,7 @@ add_subdirectory(library)
 add_subdirectory(public)
 add_subdirectory(services)
 add_subdirectory(tests)
+add_subdirectory(tools)
 add_custom_target(ydb_py_protos)
 
 add_custom_command(

@@ -212,6 +212,8 @@ namespace NYql::NDqs::NExecutionHelpers {
             if (ev->Get()->Record.IssuesSize() == 0) {  // weird way used by writer to acknowledge it's death
                 DoFinish();
             } else {
+                WaitingAckFromFRW = false;
+                WriteQueue.clear();
                 Y_ABORT_UNLESS(ev->Get()->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS);
                 TBase::Send(ExecuterID, ev->Release().Release());
             }

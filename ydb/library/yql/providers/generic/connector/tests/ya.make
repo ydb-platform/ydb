@@ -19,7 +19,6 @@ REQUIREMENTS(
 )
 
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
-INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/providers/generic/connector/recipe/recipe.inc)
 
 FORK_SUBTESTS()
 

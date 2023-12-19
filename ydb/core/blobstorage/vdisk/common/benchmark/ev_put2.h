@@ -1,32 +1,33 @@
 #pragma once
 
-#include "google/protobuf/stubs/port.h"
-#include "library/cpp/actors/core/event_load.h"
-#include "util/generic/vector.h"
-#include "util/generic/yexception.h"
-#include "util/stream/output.h"
-#include "util/system/types.h"
-#include "util/system/yassert.h"
-#include "ydb/core/protos/base.pb.h"
+#include <google/protobuf/stubs/port.h>
+
+#include <library/cpp/actors/core/event_load.h>
+
+#include <util/generic/vector.h>
+#include <util/generic/yexception.h>
+#include <util/stream/output.h>
 #include <util/stream/str.h>
-#include <ydb/core/protos/blobstorage.pb.h>
+#include <util/system/types.h>
+#include <util/system/yassert.h>
+
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/vdisk/common/benchmark/fast_buf.h>
+#include <ydb/core/protos/base.pb.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 struct TEvVPut2 : public NActors::TEventBase<TEvVPut2, NKikimr::TEvBlobStorage::EvVPut> {
     struct TRecord : NYdb::NFastBuf::TFastBuf {
         constexpr static ui32 version = 0x56FE'0001;
 
         void Save(IOutputStream* out) const {
-            out->Write(&version, sizeof(version));
+            ui32 current_version = version;
+            out->Write(&current_version, sizeof(current_version));
 
+            NYdb::NFastBuf::Save(Header, out);
             NYdb::NFastBuf::Save(BlobId, out);
             NYdb::NFastBuf::Save(Buffer, out);
             NYdb::NFastBuf::Save(VDiskID, out);
-            NYdb::NFastBuf::Save(FullDataSize, out);
-            NYdb::NFastBuf::Save(IgnoreBlock, out);
-            NYdb::NFastBuf::Save(NotifyIfNotReady, out);
-            NYdb::NFastBuf::Save(Cookie, out);
             NYdb::NFastBuf::Save(HandleClass, out);
             NYdb::NFastBuf::Save(MsgQoS, out);
             NYdb::NFastBuf::Save(Timestamps, out);
@@ -35,27 +36,25 @@ struct TEvVPut2 : public NActors::TEventBase<TEvVPut2, NKikimr::TEvBlobStorage::
 
         void Load(IInputStream *in) {
             ui32 current_version;
-            in->LoadOrFail(&current_version, sizeof(version));
+            in->Read(&current_version, sizeof(current_version));
             switch (current_version) {
             case 0x56FE'0001: {
                 Load0x56FE0001(in);
                 return;
             };
             default: {
-                throw yexception();
+                Cerr << "CurrentVersion: " << current_version << " is not " << version << Endl;
+                Y_ASSERT(false);
             }
             }
         }
 
         ui32 SerializedSize() const {
             return sizeof(ui32)
+            + NYdb::NFastBuf::SerializedSize(Header)
             + NYdb::NFastBuf::SerializedSize(BlobId)
             + NYdb::NFastBuf::SerializedSize(Buffer)
             + NYdb::NFastBuf::SerializedSize(VDiskID)
-            + NYdb::NFastBuf::SerializedSize(FullDataSize)
-            + NYdb::NFastBuf::SerializedSize(IgnoreBlock)
-            + NYdb::NFastBuf::SerializedSize(NotifyIfNotReady)
-            + NYdb::NFastBuf::SerializedSize(Cookie)
             + NYdb::NFastBuf::SerializedSize(HandleClass)
             + NYdb::NFastBuf::SerializedSize(MsgQoS)
             + NYdb::NFastBuf::SerializedSize(Timestamps)
@@ -65,13 +64,10 @@ struct TEvVPut2 : public NActors::TEventBase<TEvVPut2, NKikimr::TEvBlobStorage::
 
     private:
         void Load0x56FE0001(IInputStream* in) {
+            NYdb::NFastBuf::Load(Header, in);
             NYdb::NFastBuf::Load(BlobId, in);
             NYdb::NFastBuf::Load(Buffer, in);
             NYdb::NFastBuf::Load(VDiskID, in);
-            NYdb::NFastBuf::Load(FullDataSize, in);
-            NYdb::NFastBuf::Load(IgnoreBlock, in);
-            NYdb::NFastBuf::Load(NotifyIfNotReady, in);
-            NYdb::NFastBuf::Load(Cookie, in);
             NYdb::NFastBuf::Load(HandleClass, in);
             NYdb::NFastBuf::Load(MsgQoS, in);
             NYdb::NFastBuf::Load(Timestamps, in);
@@ -79,13 +75,17 @@ struct TEvVPut2 : public NActors::TEventBase<TEvVPut2, NKikimr::TEvBlobStorage::
         }
 
     private:
+        struct [[gnu::packed]] THeader {
+            arc_ui64 FullDataSize = 0;
+            arc_ui64 Cookie = 0;
+            ui32 FieldsMask = 0;
+            bool IgnoreBlock = false;
+            bool NotifyIfNotReady = false;
+        } Header;
+
         std::optional<::NKikimrProto::TLogoBlobID> BlobId;
         std::optional<TProtoStringType> Buffer;
         std::optional<::NKikimrBlobStorage::TVDiskID> VDiskID;
-        std::optional<arc_ui64> FullDataSize;
-        std::optional<bool> IgnoreBlock;
-        std::optional<bool> NotifyIfNotReady;
-        std::optional<arc_ui64> Cookie;
         std::optional<::NKikimrBlobStorage::EPutHandleClass> HandleClass;
         std::optional<::NKikimrBlobStorage::TMsgQoS> MsgQoS;
         std::optional<::NKikimrBlobStorage::TTimestamps> Timestamps;
@@ -111,25 +111,25 @@ struct TEvVPut2 : public NActors::TEventBase<TEvVPut2, NKikimr::TEvBlobStorage::
         inline const ::NKikimrBlobStorage::TVDiskID& GetVDiskID() const { return *VDiskID; }
         inline ::NKikimrBlobStorage::TVDiskID* MutableVDiskID() { return &*VDiskID; }
 
-        inline bool HasFullDataSize() const { return FullDataSize.has_value(); }
-        inline void ClearFullDataSize() { FullDataSize.reset(); }
-        inline arc_ui64 GetFullDataSize() const { return *FullDataSize;}
-        inline void SetFullDataSize(arc_ui64 value) { FullDataSize.emplace(value); }
+        inline bool HasFullDataSize() const { return Header.FieldsMask & (1U << 0); }
+        inline void ClearFullDataSize() { Header.FieldsMask &= ~(1U << 0); }
+        inline arc_ui64 GetFullDataSize() const { return Header.FullDataSize; }
+        inline void SetFullDataSize(arc_ui64 value) { Header.FieldsMask |= (1U << 0); Header.FullDataSize = value; }
 
-        inline bool HasIgnoreBlock() const { return IgnoreBlock.has_value(); }
-        inline void ClearIgnoreBlock() { IgnoreBlock.reset(); }
-        inline bool GetIgnoreBlock() const { return *IgnoreBlock;}
-        inline void SetIgnoreBlock(bool value) { IgnoreBlock.emplace(value); }
+        inline bool HasIgnoreBlock() const { return Header.FieldsMask & (1U << 1); }
+        inline void ClearIgnoreBlock() { Header.FieldsMask &= ~(1U << 1); }
+        inline bool GetIgnoreBlock() const { return Header.IgnoreBlock;}
+        inline void SetIgnoreBlock(bool value) { Header.FieldsMask |= (1U << 1); Header.IgnoreBlock = value; }
 
-        inline bool HasNotifyIfNotReady() const { return NotifyIfNotReady.has_value(); }
-        inline void ClearNotifyIfNotReady() { NotifyIfNotReady.reset(); }
-        inline bool GetNotifyIfNotReady() const { return *NotifyIfNotReady;}
-        inline void SetNotifyIfNotReady(bool value) { NotifyIfNotReady.emplace(value); }
+        inline bool HasNotifyIfNotReady() const { return Header.FieldsMask & (1U << 2); }
+        inline void ClearNotifyIfNotReady() { Header.FieldsMask &= ~(1U << 2); }
+        inline bool GetNotifyIfNotReady() const { return Header.NotifyIfNotReady;}
+        inline void SetNotifyIfNotReady(bool value) { Header.FieldsMask |= (1U << 2); Header.NotifyIfNotReady = value; }
 
-        inline bool HasCookie() const { return Cookie.has_value(); }
-        inline void ClearCookie() { Cookie.reset(); }
-        inline arc_ui64 GetCookie() const { return *Cookie;}
-        inline void SetCookie(arc_ui64 value) { Cookie.emplace(value); }
+        inline bool HasCookie() const { return Header.FieldsMask & (1U << 3); }
+        inline void ClearCookie() { Header.FieldsMask &= ~(1U << 3); }
+        inline arc_ui64 GetCookie() const { return Header.Cookie;}
+        inline void SetCookie(arc_ui64 value) { Header.FieldsMask |= (1U << 2); Header.Cookie = value; }
 
         inline bool HasHandleClass() const { return HandleClass.has_value(); }
         inline void ClearHandleClass() { HandleClass.reset(); }
@@ -171,6 +171,8 @@ struct TEvVPut2 : public NActors::TEventBase<TEvVPut2, NKikimr::TEvBlobStorage::
         ss.Finish();
         auto s = ss.ReadAll();
         Y_ASSERT(!s.Empty());
+        Y_ASSERT(s.StartsWith(TRecord::version));
+        // Cerr << "Save Size: " << s.Size() << Endl;
         serializer->WriteString(&s);
         return serializer->ByteCount();
     }
@@ -182,6 +184,7 @@ struct TEvVPut2 : public NActors::TEventBase<TEvVPut2, NKikimr::TEvBlobStorage::
         auto ptr = new TEvVPut2();
         auto s = data->GetString();
         Y_ASSERT(!s.Empty());
+        // Cerr << "Load Size: " << s.Size() << Endl;
         TStringStream ss;
         ss.Write(s);
         NYdb::NFastBuf::Load(ptr->Record, &ss);

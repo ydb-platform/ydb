@@ -73,7 +73,7 @@ public:
     void Register(ui32 table) override {
         Send(new NSharedCache::TEvMemTableRegister(table));
     }
-    
+
     void Unregister(ui32 table) override {
         Send(new NSharedCache::TEvMemTableUnregister(table));
     }
@@ -518,6 +518,7 @@ void TExecutor::PlanTransactionActivation() {
     const ui64 limitTxInFly = Scheme().Executor.LimitInFlyTx;
     while (PendingQueue->Head() && (!limitTxInFly || (Stats->TxInFly - Stats->TxPending < limitTxInFly))) {
         TAutoPtr<TSeat> seat = PendingQueue->Pop();
+        seat->FinishPendingSpan();
         LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
         seat->CreateEnqueuedSpan();
         ActivationQueue->Push(seat.Release());
@@ -1575,10 +1576,8 @@ bool TExecutor::CanExecuteTransaction() const {
     return Stats->IsActive && (Stats->IsFollower || PendingPartSwitches.empty()) && !BrokenTransaction;
 }
 
-void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, const TActorContext &ctx) {
+void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, const TActorContext &ctx, NWilson::TTraceId traceId) {
     Y_ABORT_UNLESS(ActivationQueue, "attempt to execute transaction before activation");
-
-    NWilson::TTraceId traceId;
 
     TAutoPtr<TSeat> seat = new TSeat(++TransactionUniqCounter, self, std::move(traceId));
 
@@ -1617,6 +1616,7 @@ void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, cons
     {
         LWTRACK(TransactionPending, seat->Self->Orbit, seat->UniqID,
                 CanExecuteTransaction() ? "tx limit reached" : "transactions paused");
+        seat->CreatePendingSpan();
         PendingQueue->Push(seat.Release());
         ++Stats->TxPending;
         return;
@@ -1634,12 +1634,12 @@ void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, cons
     ExecuteTransaction(seat, ctx);
 }
 
-void TExecutor::Execute(TAutoPtr<ITransaction> self, const TActorContext &ctx) {
-    DoExecute(self, true, ctx);
+void TExecutor::Execute(TAutoPtr<ITransaction> self, const TActorContext &ctx, NWilson::TTraceId traceId) {
+    DoExecute(self, true, ctx, std::move(traceId));
 }
 
-void TExecutor::Enqueue(TAutoPtr<ITransaction> self, const TActorContext &ctx) {
-    DoExecute(self, false, ctx);
+void TExecutor::Enqueue(TAutoPtr<ITransaction> self, const TActorContext &ctx, NWilson::TTraceId traceId) {
+    DoExecute(self, false, ctx, std::move(traceId));
 }
 
 void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ctx) {
@@ -1659,11 +1659,11 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     Database->Begin(Stamp(), env);
 
     LWTRACK(TransactionExecuteBegin, seat->Self->Orbit, seat->UniqID);
-    
+
     NWilson::TSpan txExecuteSpan(TWilsonTablet::Tablet, seat->GetTxTraceId(), "Tablet.Transaction.Execute");
     const bool done = seat->Self->Execute(txc, ctx.MakeFor(OwnerActorId));
     txExecuteSpan.EndOk();
-    
+
     LWTRACK(TransactionExecuteEnd, seat->Self->Orbit, seat->UniqID, done);
 
     seat->CPUExecTime += cpuTimer.PassedReset();

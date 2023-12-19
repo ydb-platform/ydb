@@ -184,7 +184,7 @@ private:
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
         KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
-            FederatedQuerySetup, UserToken, ApplicationName, AppData(ctx)->FunctionRegistry, false, false, std::move(TempTablesState));
+            FederatedQuerySetup, UserToken, ApplicationName, AppData(ctx)->FunctionRegistry, false, false, std::move(TempTablesState), nullptr, UserRequestContext->SessionId);
 
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = QueryId.Settings.DocumentApiRestricted;

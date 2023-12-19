@@ -1501,7 +1501,7 @@ private:
 
     template<bool IsTop>
     TMaybeNode<TExprBase> Sort(TExprBase node, TExprContext& ctx) const {
-        if (State_->Types->EvaluationInProgress) {
+        if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
             return node;
         }
 
@@ -1740,7 +1740,7 @@ private:
     }
 
     TMaybeNode<TExprBase> PartitionByKey(TExprBase node, TExprContext& ctx) const {
-        if (State_->Types->EvaluationInProgress) {
+        if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
             return node;
         }
 
@@ -2611,7 +2611,7 @@ private:
     }
 
     TMaybeNode<TExprBase> FlatMap(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
-        if (State_->Types->EvaluationInProgress) {
+        if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
             return node;
         }
 
@@ -2696,7 +2696,7 @@ private:
     }
 
     TMaybeNode<TExprBase> CombineByKey(TExprBase node, TExprContext& ctx) const {
-        if (State_->Types->EvaluationInProgress) {
+        if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
             return node;
         }
 
@@ -2884,6 +2884,10 @@ private:
     }
 
     TMaybeNode<TExprBase> DqWrite(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
+        if (State_->PassiveExecution) {
+            return node;
+        }
+
         auto write = node.Cast<TYtWriteTable>();
         if (!TDqCnUnionAll::Match(write.Content().Raw())) {
             return node;
@@ -3370,6 +3374,10 @@ private:
     }
 
     TMaybeNode<TExprBase> Fill(TExprBase node, TExprContext& ctx) const {
+        if (State_->PassiveExecution) {
+            return node;
+        }
+
         auto write = node.Cast<TYtWriteTable>();
 
         auto mode = NYql::GetSetting(write.Settings().Ref(), EYtSettingType::Mode);
@@ -3527,6 +3535,10 @@ private:
     }
 
     TMaybeNode<TExprBase> Extend(TExprBase node, TExprContext& ctx) const {
+        if (State_->PassiveExecution) {
+            return node;
+        }
+
         auto extend = node.Cast<TCoExtendBase>();
 
         bool allAreTables = true;
@@ -4352,7 +4364,7 @@ private:
 
     template <typename TLMapType>
     TMaybeNode<TExprBase> LMap(TExprBase node, TExprContext& ctx) const {
-        if (State_->Types->EvaluationInProgress) {
+        if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
             return node;
         }
 
@@ -4885,7 +4897,7 @@ private:
     }
 
     TMaybeNode<TExprBase> AssumeSorted(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
-        if (State_->Types->EvaluationInProgress) {
+        if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
             return node;
         }
 
@@ -5542,7 +5554,7 @@ private:
     }
 
     TMaybeNode<TExprBase> EquiJoin(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
-        if (State_->Types->EvaluationInProgress) {
+        if (State_->Types->EvaluationInProgress || State_->PassiveExecution) {
             return node;
         }
 
@@ -6165,6 +6177,10 @@ private:
     }
 
     TMaybeNode<TExprBase> ReadWithSettings(TExprBase node, TExprContext& ctx) const {
+        if (State_->PassiveExecution) {
+            return node;
+        }
+
         auto maybeRead = node.Cast<TCoRight>().Input().Maybe<TYtReadTable>();
         if (!maybeRead) {
             return node;
@@ -6241,6 +6257,10 @@ private:
     }
 
     TMaybeNode<TExprBase> ReplaceStatWriteTable(TExprBase node, TExprContext& ctx) const {
+        if (State_->PassiveExecution) {
+            return node;
+        }
+
         auto write = node.Cast<TStatWriteTable>();
         auto input = write.Input();
 

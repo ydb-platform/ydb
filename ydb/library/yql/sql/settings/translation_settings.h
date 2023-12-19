@@ -82,6 +82,7 @@ namespace NSQLTranslation {
 
         EBindingsMode BindingsMode;
         THashMap<TString, TTableBindingSettings> Bindings;
+        bool SaveWorldDependencies = false;
 
         // each (name, type) entry in this map is equivalent to
         // DECLARE $name AS type;

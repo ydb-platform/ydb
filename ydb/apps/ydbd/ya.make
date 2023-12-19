@@ -83,6 +83,7 @@ CHECK_DEPENDENT_DIRS(
     tools/rorescompiler
     util
     ydb
+    yt
 )
 
 YQL_LAST_ABI_VERSION()

@@ -778,12 +778,13 @@ public:
             auto source = Y("DataSource", BuildQuotedAtom(Pos, tr.Service), Scoped->WrapCluster(tr.Cluster, ctx));
             auto options = tr.Options ? Q(tr.Options) : Q(Y());
             Add(Y("let", "x", keys->Y(TString(ReadName), "world", source, keys, fields, options)));
-            if (tr.Service != YtProviderName) {
-                if (InSubquery) {
-                    ctx.Error() << "Using of system '" << tr.Service << "' is not allowed in SUBQUERY";
-                    return false;
-                }
 
+            if (tr.Service != YtProviderName && InSubquery) {
+                ctx.Error() << "Using of system '" << tr.Service << "' is not allowed in SUBQUERY";
+                return false;
+            }
+
+            if (tr.Service != YtProviderName || ctx.Settings.SaveWorldDependencies) {
                 Add(Y("let", "world", Y(TString(LeftName), "x")));
             }
 

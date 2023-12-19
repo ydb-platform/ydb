@@ -22,6 +22,7 @@
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/pg/provider/yql_pg_provider_impl.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <library/cpp/cache/cache.h>
@@ -958,10 +959,11 @@ public:
         std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
         bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
-        NActors::TActorSystem* actorSystem = nullptr)
+        NActors::TActorSystem* actorSystem = nullptr, TString sessionId = "")
         : Gateway(gateway)
         , Cluster(cluster)
         , ApplicationName(applicationName)
+        , SessionId(sessionId)
         , ExprCtx(new TExprContext())
         , ModuleResolver(moduleResolver)
         , KeepConfigChanges(keepConfigChanges)
@@ -1561,6 +1563,29 @@ private:
         TypesCtx->AddDataSink(NYql::GenericProviderName, NYql::CreateGenericDataSink(state));
     }
 
+    void InitYtProvider() {
+        Y_ENSURE(SessionId);
+
+        TString userName = CreateGuidAsString();
+        if (SessionCtx->GetUserToken() && SessionCtx->GetUserToken()->GetUserSID()) {
+            userName = SessionCtx->GetUserToken()->GetUserSID();
+        }
+
+        auto [ytState, statWriter] = CreateYtNativeState(FederatedQuerySetup->YtGateway, userName, SessionId, &FederatedQuerySetup->YtGatewayConfig, TypesCtx);
+
+        ytState->PassiveExecution = true;
+        ytState->Gateway->OpenSession(
+            IYtGateway::TOpenSessionOptions(SessionId)
+                .UserName(userName)
+                .RandomProvider(TAppData::RandomProvider)
+                .TimeProvider(TAppData::TimeProvider)
+                .StatWriter(statWriter)
+        );
+
+        TypesCtx->AddDataSource(YtProviderName, CreateYtDataSource(ytState));
+        TypesCtx->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
+    }
+
     void InitPgProvider() {
         auto state = MakeIntrusive<NYql::TPgState>();
         state->Types = TypesCtx.Get();
@@ -1602,6 +1627,9 @@ private:
         if (addExternalDataSources && FederatedQuerySetup) {
             InitS3Provider(queryType);
             InitGenericProvider();
+            if (FederatedQuerySetup->YtGatewayConfig.ClusterMappingSize()) {
+                InitYtProvider();
+            }
         }
 
         InitPgProvider();
@@ -1644,7 +1672,7 @@ private:
             .AddPreTypeAnnotation()
             .AddExpressionEvaluation(*FuncRegistry)
             .Add(new TFailExpressionEvaluation(), "FailExpressionEvaluation")
-            .AddIOAnnotation()
+            .AddIOAnnotation(false)
             .AddTypeAnnotation()
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
             .AddPostTypeAnnotation()
@@ -1700,6 +1728,7 @@ private:
     TIntrusivePtr<IKqpGateway> Gateway;
     TString Cluster;
     const TMaybe<TString> ApplicationName;
+    TString SessionId;
     THolder<TExprContext> ExprCtx;
     IModuleResolver::TPtr ModuleResolver;
     bool KeepConfigChanges;
@@ -1748,10 +1777,10 @@ TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway, const 
     const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     const TMaybe<TString>& applicationName, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
-    bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem)
+    bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem, TString sessionId)
 {
     return MakeIntrusive<TKqpHost>(gateway, cluster, database, applicationName, config, moduleResolver, federatedQuerySetup, userToken, funcRegistry,
-                                   keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem);
+                                   keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem, sessionId);
 }
 
 } // namespace NKqp

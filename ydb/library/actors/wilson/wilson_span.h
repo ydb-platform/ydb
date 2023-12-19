@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <opentelemetry/proto/trace/v1/trace.pb.h>
 #include <util/generic/hash.h>
+#include <util/generic/overloaded.h>
 #include <util/datetime/cputimer.h>
 
 #include "wilson_trace.h"
@@ -80,7 +81,8 @@ namespace NWilson {
         TSpan(const TSpan&) = delete;
         TSpan(TSpan&&) = default;
 
-        TSpan(ui8 verbosity, TTraceId parentId, std::optional<TString> name, TFlags flags = EFlags::NONE, NActors::TActorSystem* actorSystem = nullptr)
+        TSpan(ui8 verbosity, TTraceId parentId, std::variant<std::optional<TString>, const char*> name,
+                TFlags flags = EFlags::NONE, NActors::TActorSystem* actorSystem = nullptr)
             : Data(parentId
                     ? std::make_unique<TData>(TInstant::Now(), GetCycleCount(), parentId.Span(verbosity), flags, actorSystem)
                     : nullptr)
@@ -93,9 +95,16 @@ namespace NWilson {
                     Data->Span.set_start_time_unix_nano(Data->StartTime.NanoSeconds());
                     Data->Span.set_kind(opentelemetry::proto::trace::v1::Span::SPAN_KIND_INTERNAL);
 
-                    if (name) {
-                        Name(std::move(*name));
-                    }
+                    std::visit(TOverloaded{
+                        [&](const char *name) {
+                            Name(TString(name));
+                        },
+                        [&](std::optional<TString>& name) {
+                            if (name) {
+                                Name(std::move(*name));
+                            }
+                        }
+                    }, name);
 
                     Attribute("node_id", Data->ActorSystem->NodeId);
                 } else {
@@ -236,7 +245,7 @@ namespace NWilson {
             return Data ? Data->ActorSystem : nullptr;
         }
 
-        TSpan CreateChild(ui8 verbosity, std::optional<TString> name, TFlags flags = EFlags::NONE) const {
+        TSpan CreateChild(ui8 verbosity, std::variant<std::optional<TString>, const char*> name, TFlags flags = EFlags::NONE) const {
             return TSpan(verbosity, GetTraceId(), std::move(name), flags, GetActorSystem());
         }
 

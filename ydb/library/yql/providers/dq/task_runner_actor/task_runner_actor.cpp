@@ -136,15 +136,29 @@ public:
         }
     }
 
-    STRICT_STFUNC(Handler, {
-        cFunc(NActors::TEvents::TEvPoison::EventType, TTaskRunnerActor::PassAway);
-        hFunc(TEvTaskRunnerCreate, OnDqTask);
-        hFunc(TEvContinueRun, OnContinueRun);
-        hFunc(TEvPop, OnChannelPop);
-        hFunc(TEvPush, OnChannelPush);
-        hFunc(TEvSinkPop, OnSinkPop);
-        hFunc(TEvSinkPopFinished, OnSinkPopFinished);
-    })
+    STFUNC(Handler) {
+        switch (ev->GetTypeRewrite()) {
+            cFunc(NActors::TEvents::TEvPoison::EventType, TTaskRunnerActor::PassAway);
+            hFunc(TEvTaskRunnerCreate, OnDqTask);
+            hFunc(TEvContinueRun, OnContinueRun);
+            hFunc(TEvPop, OnChannelPop);
+            hFunc(TEvPush, OnChannelPush);
+            hFunc(TEvSinkPop, OnSinkPop);
+            hFunc(TEvSinkPopFinished, OnSinkPopFinished);
+            default: {
+                auto message = TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")";
+                auto issue = TIssue(message).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR);
+                auto reply = MakeHolder<NDq::TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TVector<TIssue>{issue})
+                Send(
+                    new IEventHandle(
+                        ev->Sender,
+                        SelfId(),
+                        MakeError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
+                        /*flags=*/0,
+                        /*cookie=*/0));
+            }
+        }
+    }
 
 private:
     static std::pair<NYql::NDqProto::StatusIds::StatusCode, TString> ParseStderr(const TString& input, TIntrusivePtr<TDqConfiguration> settings) {

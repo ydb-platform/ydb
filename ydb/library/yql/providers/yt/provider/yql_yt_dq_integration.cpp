@@ -3,6 +3,7 @@
 #include "yql_yt_mkql_compiler.h"
 #include "yql_yt_helpers.h"
 #include "yql_yt_op_settings.h"
+#include "yql_yt_provider_impl.h"
 
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
@@ -18,6 +19,7 @@
 #include <ydb/library/yql/core/yql_type_helpers.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <yt/cpp/mapreduce/common/helpers.h>
@@ -39,8 +41,8 @@ using namespace NNodes;
 
 class TYtDqIntegration: public TDqIntegrationBase {
 public:
-    TYtDqIntegration(TYtState* state)
-        : State_(state)
+    TYtDqIntegration(TYtState::TPtr state)
+        : State_(std::move(state))
     {
     }
 
@@ -667,13 +669,26 @@ public:
         NYql::WriteTableReference(writer, YtProviderName, cluster.AsString(), refName.AsString(), true, columns);
     }
 
+    virtual void ConfigurePeepholePipeline(bool beforeDqTransforms, const THashMap<TString, TString>& providerParams, TTransformationPipeline* pipeline) override {
+        if (!beforeDqTransforms) {
+            return;
+        }
+
+        pipeline->Add(CreateSinglePassFunctorTransformer([state = State_, providerParams](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+            output = input;
+            return SubstTables(output, state, false, ctx);
+        }), "YtSubstTables", TIssuesIds::DEFAULT_ERROR);
+
+        pipeline->Add(CreateYtPeepholeTransformer(State_, providerParams), "YtPeepHole", TIssuesIds::DEFAULT_ERROR);
+    }
+
 private:
-    TYtState* State_;
+    TYtState::TPtr State_;
 };
 
-THolder<IDqIntegration> CreateYtDqIntegration(TYtState* state) {
+THolder<IDqIntegration> CreateYtDqIntegration(TYtState::TPtr state) {
     Y_ABORT_UNLESS(state);
-    return MakeHolder<TYtDqIntegration>(state);
+    return MakeHolder<TYtDqIntegration>(std::move(state));
 }
 
 }

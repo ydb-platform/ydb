@@ -13,13 +13,6 @@
 
 namespace NYql {
 
-struct TYtExtraPeepHoleSettings {
-    TString CurrentCluster;
-    const NNodes::TYtOutTable* TmpTable = nullptr;
-    TString TmpFolder;
-    TYtSettings::TConstPtr Config;
-};
-
 THolder<IGraphTransformer> CreateYtIODiscoveryTransformer(TYtState::TPtr state);
 THolder<IGraphTransformer> CreateYtEpochTransformer(TYtState::TPtr state);
 THolder<IGraphTransformer> CreateYtIntentDeterminationTransformer(TYtState::TPtr state);
@@ -39,14 +32,14 @@ THolder<IGraphTransformer> CreateYtDataSinkFinalizingTransformer(TYtState::TPtr 
 THolder<IGraphTransformer> CreateYtLogicalOptProposalTransformer(TYtState::TPtr state);
 THolder<IGraphTransformer> CreateYtPhysicalOptProposalTransformer(TYtState::TPtr state);
 THolder<IGraphTransformer> CreateYtPhysicalFinalizingTransformer(TYtState::TPtr state);
-THolder<IGraphTransformer> CreateTYtPeepholeTransformer(TYtState::TPtr state, const TYtExtraPeepHoleSettings& settings);
-THolder<IGraphTransformer> CreateTYtWideFlowTransformer(TYtState::TPtr state);
+THolder<IGraphTransformer> CreateYtPeepholeTransformer(TYtState::TPtr state, const THashMap<TString, TString>& settings);
+THolder<IGraphTransformer> CreateYtWideFlowTransformer(TYtState::TPtr state);
 THolder<IGraphTransformer> CreateYtDqHybridTransformer(TYtState::TPtr state, THolder<IGraphTransformer>&& finalizer);
 
 void ScanPlanDependencies(const TExprNode::TPtr& input, TExprNode::TListType& children);
 TString MakeTableDisplayName(NNodes::TExprBase table, bool isOutput);
 
-
 void ScanForUsedOutputTables(const TExprNode& input, TVector<TString>& usedNodeIds);
 TString MakeUsedNodeId(const TString& cluster, const TString& table);
+
 } // NYql

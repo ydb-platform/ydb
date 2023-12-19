@@ -21,6 +21,7 @@ using TAuditLogHook = std::function<void (ui32 status, const TAuditLogParts&)>;
 class IRequestCtxBaseMtSafe {
 public:
     virtual TMaybe<TString> GetTraceId() const = 0;
+    virtual TMaybe<TString> GetOpenTelemetryTraceParent() const = 0;
     // Returns client provided database name
     virtual const TMaybe<TString> GetDatabaseName() const = 0;
     // Returns "internal" token (result of ticket parser authentication)

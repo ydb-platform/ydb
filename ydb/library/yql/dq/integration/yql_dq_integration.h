@@ -2,7 +2,6 @@
 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
 #include <ydb/library/yql/core/yql_statistics.h>
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
@@ -23,6 +22,7 @@ class TJsonValue;
 namespace NYql {
 
 struct TDqSettings;
+class TTransformationPipeline;
 
 namespace NCommon {
     class TMkqlCallableCompilerBase;
@@ -73,8 +73,8 @@ public:
     // Return true if node was handled
     virtual bool FillSourcePlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) = 0;
     virtual bool FillSinkPlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) = 0;
-    // This transformer will be called before DQ peephole transformations
-    virtual std::vector<TTransformStage> GetPeepholeTransforms(bool beforeDq, const THashMap<TString, TString>& params) = 0;
+    // Called to configure DQ peephole
+    virtual void ConfigurePeepholePipeline(bool beforeDqTransforms, const THashMap<TString, TString>& params, TTransformationPipeline* pipeline) = 0;
 };
 
 } // namespace NYql

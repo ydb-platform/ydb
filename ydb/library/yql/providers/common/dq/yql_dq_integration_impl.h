@@ -26,7 +26,7 @@ public:
     void WriteFullResultTableRef(NYson::TYsonWriter& writer, const TVector<TString>& columns, const THashMap<TString, TString>& graphParams) override;
     bool FillSourcePlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) override;
     bool FillSinkPlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) override;
-    std::vector<TTransformStage> GetPeepholeTransforms(bool beforeDq, const THashMap<TString, TString>& params) override;
+    void ConfigurePeepholePipeline(bool beforeDqTransforms, const THashMap<TString, TString>& params, TTransformationPipeline* pipeline) override;
 
 protected:
     bool CanBlockReadTypes(const TStructExprType* node);

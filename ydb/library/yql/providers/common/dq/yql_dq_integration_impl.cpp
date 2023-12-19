@@ -92,8 +92,7 @@ bool TDqIntegrationBase::FillSinkPlanProperties(const NNodes::TExprBase&, TMap<T
     return false;
 }
 
-std::vector<TTransformStage> TDqIntegrationBase::GetPeepholeTransforms(bool, const THashMap<TString, TString>&) {
-    return {};
+void TDqIntegrationBase::ConfigurePeepholePipeline(bool, const THashMap<TString, TString>&, TTransformationPipeline*) {
 }
 
 } // namespace NYql

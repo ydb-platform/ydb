@@ -243,13 +243,14 @@ private:
     void AfterCreate(TTransformationPipeline*) const final {}
 
     void AfterTypeAnnotation(TTransformationPipeline* pipeline) const final {
+        // First truncate graph by calculated precomputes
+        pipeline->Add(NDqs::CreateDqsReplacePrecomputesTransformer(*pipeline->GetTypeAnnotationContext(), State_->FunctionRegistry), "ReplacePrecomputes");
+
+        // Then apply provider specific transformers on truncated graph
         std::for_each(UniqIntegrations_.cbegin(), UniqIntegrations_.cend(), [&](const auto dqInt) {
-            for (auto& stage: dqInt->GetPeepholeTransforms(true, ProviderParams_)) {
-                pipeline->Add(std::move(stage));
-            }
+            dqInt->ConfigurePeepholePipeline(true, ProviderParams_, pipeline);
         });
 
-        pipeline->Add(NDqs::CreateDqsReplacePrecomputesTransformer(*pipeline->GetTypeAnnotationContext(), State_->FunctionRegistry), "ReplacePrecomputes");
         if (State_->Settings->UseBlockReader.Get().GetOrElse(false)) {
             pipeline->Add(NDqs::CreateDqsRewritePhyBlockReadOnDqIntegrationTransformer(*pipeline->GetTypeAnnotationContext()), "ReplaceWideReadsWithBlock");
         }
@@ -274,9 +275,7 @@ private:
 
     void AfterOptimize(TTransformationPipeline* pipeline) const final {
         std::for_each(UniqIntegrations_.cbegin(), UniqIntegrations_.cend(), [&](const auto dqInt) {
-            for (auto& stage: dqInt->GetPeepholeTransforms(false, ProviderParams_)) {
-                pipeline->Add(std::move(stage));
-            }
+            dqInt->ConfigurePeepholePipeline(false, ProviderParams_, pipeline);
         });
     }
 

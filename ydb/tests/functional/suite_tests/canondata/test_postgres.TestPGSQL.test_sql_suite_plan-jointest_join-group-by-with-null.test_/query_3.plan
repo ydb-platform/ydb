@@ -46,7 +46,7 @@
                                                         "Node Type": "Aggregate-LeftJoin (MapJoin)",
                                                         "Operators": [
                                                             {
-                                                                "Aggregation": "{_yql_agg_0: COUNT(item.t2.q1)}",
+                                                                "Aggregation": "{_yql_agg_0: COUNT(item.t2.q1,state._yql_agg_0)}",
                                                                 "GroupBy": "item.t1.q2",
                                                                 "Name": "Aggregate"
                                                             },

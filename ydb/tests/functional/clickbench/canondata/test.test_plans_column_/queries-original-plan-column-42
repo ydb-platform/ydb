@@ -37,7 +37,7 @@
                                                 "Node Type": "Limit",
                                                 "Operators": [
                                                     {
-                                                        "Limit": "10 + 1000",
+                                                        "Limit": "SUM(10,1000)",
                                                         "Name": "Limit"
                                                     }
                                                 ],
@@ -52,7 +52,7 @@
                                                                 "Node Type": "TopSort",
                                                                 "Operators": [
                                                                     {
-                                                                        "Limit": "10 + 1000",
+                                                                        "Limit": "SUM(10,1000)",
                                                                         "Name": "TopSort",
                                                                         "TopSortBy": "argument.Minute"
                                                                     }
@@ -71,7 +71,7 @@
                                                                                 "Node Type": "Aggregate-Filter-TableFullScan",
                                                                                 "Operators": [
                                                                                     {
-                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0)}",
+                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
                                                                                         "GroupBy": "item.Minute",
                                                                                         "Name": "Aggregate"
                                                                                     },

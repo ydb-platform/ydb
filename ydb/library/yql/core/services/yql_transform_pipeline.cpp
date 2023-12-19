@@ -39,6 +39,11 @@ TTransformationPipeline& TTransformationPipeline::Add(IGraphTransformer& transfo
     return *this;
 }
 
+TTransformationPipeline& TTransformationPipeline::Add(TTransformStage&& stage) {
+    Transformers_.push_back(std::move(stage));
+    return *this;
+}
+
 TTransformationPipeline& TTransformationPipeline::AddServiceTransformers(EYqlIssueCode issueCode) {
     Transformers_.push_back(TTransformStage(CreateGcNodeTransformer(), "GC", issueCode));
     return *this;

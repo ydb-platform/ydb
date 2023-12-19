@@ -47,6 +47,7 @@ public:
         EYqlIssueCode issueCode = TIssuesIds::DEFAULT_ERROR, const TString& issueMessage = {});
     TTransformationPipeline& Add(IGraphTransformer& transformer, const TString& stageName,
         EYqlIssueCode issueCode = TIssuesIds::DEFAULT_ERROR, const TString& issueMessage = {});
+    TTransformationPipeline& Add(TTransformStage&& stage);
 
     TAutoPtr<IGraphTransformer> Build(bool useIssueScopes = true);
     TAutoPtr<IGraphTransformer> BuildWithNoArgChecks(bool useIssueScopes = true);

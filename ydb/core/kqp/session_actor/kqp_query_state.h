@@ -15,6 +15,8 @@
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/session_actor/kqp_tx.h>
 
+#include <ydb/library/actors/core/monotonic_provider.h>
+
 #include <util/generic/noncopyable.h>
 #include <util/generic/string.h>
 
@@ -33,7 +35,7 @@ public:
     TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, const TString& database,
         const TString& cluster, TKqpDbCountersPtr dbCounters, bool longSession,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        NWilson::TTraceId&& traceId, const TString& sessionId)
+        NWilson::TTraceId&& traceId, const TString& sessionId, TMonotonic startedAt)
         : QueryId(queryId)
         , Database(database)
         , Cluster(cluster)
@@ -46,6 +48,7 @@ public:
         , StartTime(TInstant::Now())
         , KeepSession(ev->Get()->GetKeepSession() || longSession)
         , UserToken(ev->Get()->GetUserToken())
+        , StartedAt(startedAt)
     {
         RequestEv.reset(ev->Release().Release());
 
@@ -98,6 +101,7 @@ public:
     NKqpProto::TKqpStatsQuery Stats;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    NActors::TMonotonic StartedAt;
 
     THashMap<NKikimr::TTableId, ui64> TableVersions;
 

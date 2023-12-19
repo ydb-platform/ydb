@@ -12,4 +12,5 @@ RECURSE(
     tools
     udfs
     utils
+    yt
 )

@@ -9,7 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    yt/yql/plugin/native
+    ydb/library/yql/yt/native
 )
 
 END()

@@ -1,5 +1,5 @@
-#include <yt/yql/plugin/bridge/interface.h>
-#include <yt/yql/plugin/native/plugin.h>
+#include <ydb/library/yql/yt/bridge/interface.h>
+#include <ydb/library/yql/yt/native/plugin.h>
 
 #include <type_traits>
 

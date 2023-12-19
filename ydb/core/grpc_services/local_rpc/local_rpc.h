@@ -191,6 +191,10 @@ public:
         return Nothing();
     }
 
+    TMaybe<TString> GetOpenTelemetryTraceParent() const override {
+        return Nothing();
+    }
+
     TInstant GetDeadline() const override {
         return TInstant::Max();
     }

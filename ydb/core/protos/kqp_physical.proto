@@ -389,6 +389,11 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateUser = 5;
         NKikimrSchemeOp.TModifyScheme AlterUser = 6;
         NKikimrSchemeOp.TModifyScheme DropUser = 7;
+        NKikimrSchemeOp.TModifyScheme CreateGroup = 8;
+        NKikimrSchemeOp.TModifyScheme AddGroupMembership = 9;
+        NKikimrSchemeOp.TModifyScheme RemoveGroupMembership = 10;
+        NKikimrSchemeOp.TModifyScheme DropGroup = 11;
+        NKikimrSchemeOp.TModifyScheme RenameGroup = 12;
     }
 }
 

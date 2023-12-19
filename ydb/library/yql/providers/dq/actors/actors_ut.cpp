@@ -12,13 +12,13 @@ using namespace NYql::NDqs;
 
 Y_UNIT_TEST_SUITE(ResultReceiver) {
 
-auto ResultReceiver() {
+auto ResultReceiver(TActorId executerId = {}) {
     TDqConfiguration::TPtr settings = new TDqConfiguration();
     auto receiver = MakeResultReceiver(
         {}, // columns,
-        TActorId{}, // executerId
+        executerId,
         "traceId",
-        settings, // settings
+        settings,
         {}, // secureParams
         "", // resultType ?
         {}, // graphExecutionEventsId ?
@@ -35,6 +35,18 @@ Y_UNIT_TEST(ReceiveStatus) {
     auto sender = runtime.AllocateEdgeActor();
     auto receiverId = runtime.Register(ResultReceiver().Release()); 
     runtime.Send(new IEventHandle(receiverId, sender, new TEvReadyState(), 0, true)); 
+}
+
+Y_UNIT_TEST(ReceiveError) {
+    TTestActorRuntimeBase runtime;
+    runtime.Initialize();
+
+    auto executerId = runtime.AllocateEdgeActor();
+    auto receiverId = runtime.Register(ResultReceiver(executerId).Release());
+    runtime.Send(new IEventHandle(receiverId, {}, new NActors::TEvents::TEvUndelivered(0,0), 0, true));
+
+    auto response = runtime.GrabEdgeEvent<TEvDqFailure>();
+    UNIT_ASSERT_EQUAL(response->Record.GetStatusCode(), NYql::NDqProto::StatusIds::UNAVAILABLE);
 }
 
 } // Y_UNIT_TEST_SUITE(ResultReceiver) 

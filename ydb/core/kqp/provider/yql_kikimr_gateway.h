@@ -587,6 +587,7 @@ struct TDropUserSettings {
 
 struct TCreateGroupSettings {
     TString GroupName;
+    std::vector<TString> Roles;
 };
 
 struct TAlterGroupSettings {
@@ -598,6 +599,11 @@ struct TAlterGroupSettings {
     TString GroupName;
     EAction Action;
     std::vector<TString> Roles;
+};
+
+struct TRenameGroupSettings {
+    TString GroupName;
+    TString NewName;
 };
 
 struct TDropGroupSettings {
@@ -816,6 +822,8 @@ public:
     virtual NThreading::TFuture<TGenericResult> CreateGroup(const TString& cluster, const TCreateGroupSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterGroup(const TString& cluster, TAlterGroupSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> RenameGroup(const TString& cluster, TRenameGroupSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropGroup(const TString& cluster, const TDropGroupSettings& settings) = 0;
 

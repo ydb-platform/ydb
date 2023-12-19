@@ -465,7 +465,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore23: {
-            // create_group_stmt: CREATE GROUP role_name;
+            // create_group_stmt: CREATE GROUP role_name (WITH USER role_name (COMMA role_name)* COMMA?)?;
             Ctx.BodyPart();
             auto& node = core.GetAlt_sql_stmt_core23().GetRule_create_group_stmt1();
 
@@ -485,7 +485,25 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildCreateGroup(pos, service, cluster, roleName, Ctx.Scoped));
+            TRoleParameters roleParams;
+            if (node.HasBlock4()) {
+                auto& addDropNode = node.GetBlock4();
+                TVector<TDeferredAtom> roles;
+                bool allowSystemRoles = false;
+                roleParams.Roles.emplace_back();
+                if (!RoleNameClause(addDropNode.GetRule_role_name3(), roleParams.Roles.back(), allowSystemRoles)) {
+                    return false;
+                }
+
+                for (auto& item : addDropNode.GetBlock4()) {
+                    roleParams.Roles.emplace_back();
+                    if (!RoleNameClause(item.GetRule_role_name2(), roleParams.Roles.back(), allowSystemRoles)) {
+                        return false;
+                    }
+                }
+            }
+
+            AddStatementToBlocks(blocks, BuildCreateGroup(pos, service, cluster, roleName, roleParams, Ctx.Scoped));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore24: {

@@ -199,7 +199,7 @@
                                                                 "Operators": [
                                                                     {
                                                                         "GroupBy": "item.Group",
-                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0)}",
+                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
                                                                         "Name": "Aggregate"
                                                                     },
                                                                     {

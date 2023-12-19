@@ -38,6 +38,8 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
                 return "ADD GROUP MEMBERSHIP";
             case NKikimrSchemeOp::TAlterLogin::kRemoveGroupMembership:
                 return "REMOVE GROUP MEMBERSHIP";
+            case NKikimrSchemeOp::TAlterLogin::kRenameGroup:
+                return "RENAME GROUP";
             case NKikimrSchemeOp::TAlterLogin::kRemoveGroup:
                 return "REMOVE GROUP";
             default:
@@ -611,6 +613,9 @@ TChangeLogin ExtractLoginChange(const NKikimrSchemeOp::TModifyScheme& tx) {
             case NKikimrSchemeOp::TAlterLogin::kRemoveGroupMembership:
                 result.LoginGroup = tx.GetAlterLogin().GetRemoveGroupMembership().GetGroup();
                 result.LoginMember = tx.GetAlterLogin().GetRemoveGroupMembership().GetMember();
+                break;
+            case NKikimrSchemeOp::TAlterLogin::kRenameGroup:
+                result.LoginGroup = tx.GetAlterLogin().GetRenameGroup().GetGroup();
                 break;
             case NKikimrSchemeOp::TAlterLogin::kRemoveGroup:
                 result.LoginGroup = tx.GetAlterLogin().GetRemoveGroup().GetGroup();

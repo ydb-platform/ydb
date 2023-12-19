@@ -22,6 +22,10 @@
 #include <util/generic/size_literals.h>
 #include <util/system/types.h>
 
+namespace NActors {
+    class TActorSystem;
+};
+
 namespace NYql::NDq {
 
 enum class ERunStatus : ui32 {
@@ -133,6 +137,7 @@ public:
         TVector<IDqOutput::TPtr>&& outputs) const = 0;
 
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId) const = 0;
+    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, NActors::TActorSystem* actorSystem) const = 0;
 };
 
 class TDqTaskRunnerExecutionContextBase : public IDqTaskRunnerExecutionContext {
@@ -149,6 +154,11 @@ public:
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/) const override {
         return {};
     };
+
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, NActors::TActorSystem* /*actorSystem*/) const override {
+        return {};
+    };
+
 };
 
 struct TDqTaskRunnerSettings {

@@ -53,7 +53,7 @@
                                                                 "Node Type": "Aggregate",
                                                                 "Operators": [
                                                                     {
-                                                                        "Aggregation": "{_yql_agg_0: COUNT(item.UserID)}",
+                                                                        "Aggregation": "{_yql_agg_0: COUNT(item.UserID,state._yql_agg_0)}",
                                                                         "GroupBy": "",
                                                                         "Name": "Aggregate"
                                                                     }

@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 #include <library/cpp/lwtrace/shuttle.h>
 #include <util/generic/maybe.h>
 #include <util/system/type_name.h>
@@ -514,8 +515,8 @@ namespace NFlatExecutorSetup {
         // all followers had completed log with requested gc-barrier
         virtual void FollowerGcApplied(ui32 step, TDuration followerSyncDelay) = 0;
 
-        virtual void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) = 0;
-        virtual void Enqueue(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) = 0;
+        virtual void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx, NWilson::TTraceId traceId = {}) = 0;
+        virtual void Enqueue(TAutoPtr<ITransaction> transaction, const TActorContext &ctx, NWilson::TTraceId traceId = {}) = 0;
 
         virtual void ConfirmReadOnlyLease(TMonotonic at) = 0;
         virtual void ConfirmReadOnlyLease(TMonotonic at, std::function<void()> callback) = 0;

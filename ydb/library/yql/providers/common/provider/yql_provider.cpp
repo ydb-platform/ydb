@@ -477,7 +477,8 @@ TWriteTopicSettings ParseWriteTopicSettings(TExprList node, TExprContext& ctx) {
 
 TWriteRoleSettings ParseWriteRoleSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoAtom> mode;
-    TMaybeNode<TCoAtomList> roles;
+    TVector<TCoAtom> roles;
+    TMaybeNode<TCoAtom> newName;
     TVector<TCoNameValueTuple> other;
     for (auto child : node) {
         if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
@@ -489,19 +490,29 @@ TWriteRoleSettings ParseWriteRoleSettings(TExprList node, TExprContext& ctx) {
                 mode = tuple.Value().Cast<TCoAtom>();
             } else if (name == "roles") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
-                roles = tuple.Value().Cast<TCoAtomList>();
+                for (const auto& item : tuple.Value().Cast<TCoAtomList>()) {
+                    roles.push_back(item);
+                }
+            } else if (name == "newName") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                newName = tuple.Value().Cast<TCoAtom>();
             } else {
                 other.push_back(tuple);
             }
         }
     }
 
+    const auto& builtRoles = Build<TCoAtomList>(ctx, node.Pos())
+        .Add(roles)
+        .Done();
+
     const auto& otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
         .Add(other)
         .Done();
 
     TWriteRoleSettings ret(otherSettings);
-    ret.Roles = roles;
+    ret.Roles = builtRoles;;
+    ret.NewName = newName;
     ret.Mode = mode;
 
     return ret;

@@ -60,18 +60,18 @@ public:
         TVector<TRawTypeValue> key;
         TVector<NTable::TUpdateOp> value;
 
-        const TSerializedCellMatrix& matrix = writeTx->Matrix();
-        TConstArrayRef<TCell> cells = matrix.GetCells();
-        const ui32 rowCount = matrix.GetRowCount();
-        const ui16 colCount = matrix.GetColCount();
+        TVector<TCell> keyCells;
 
-        for (ui32 rowIdx = 0; rowIdx < rowCount; ++rowIdx)
+        const TSerializedCellMatrix& matrix = writeTx->Matrix();
+
+        for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx)
         {
             key.clear();
+            keyCells.clear();
             ui64 keyBytes = 0;
             for (ui16 keyColIdx = 0; keyColIdx < TableInfo_.KeyColumnIds.size(); ++keyColIdx) {
                 const auto& cellType = TableInfo_.KeyColumnTypes[keyColIdx];
-                const TCell& cell = cells[rowIdx * colCount + keyColIdx];
+                const TCell& cell = matrix.GetCell(rowIdx, keyColIdx);
                 if (cellType.GetTypeId() == NScheme::NTypeIds::Uint8 && !cell.IsNull() && cell.AsValue<ui8>() > 127) {
                     tx->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "Keys with Uint8 column values >127 are currently prohibited");
                     return;
@@ -79,6 +79,7 @@ public:
 
                 keyBytes += cell.Size();
                 key.emplace_back(TRawTypeValue(cell.AsRef(), cellType));
+                keyCells.emplace_back(cell);
             }
 
             if (keyBytes > NLimits::MaxWriteKeySize) {
@@ -87,9 +88,9 @@ public:
             }
 
             value.clear();
-            for (ui16 valueColIdx = TableInfo_.KeyColumnIds.size(); valueColIdx < colCount; ++valueColIdx) {
+            for (ui16 valueColIdx = TableInfo_.KeyColumnIds.size(); valueColIdx < matrix.GetColCount(); ++valueColIdx) {
                 ui32 columnTag = writeTx->RecordOperation().GetColumnIds(valueColIdx);
-                const TCell& cell = cells[rowIdx * colCount + valueColIdx];
+                const TCell& cell = matrix.GetCell(rowIdx, valueColIdx);
                 if (cell.Size() > NLimits::MaxWriteValueSize) {
                     tx->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder() << "Row cell size of " << cell.Size() << " bytes is larger than the allowed threshold " << NLimits::MaxWriteValueSize);
                     return;
@@ -102,7 +103,7 @@ public:
             }
 
             txc.DB.Update(writeTableId, NTable::ERowOp::Upsert, key, value, writeVersion);
-            self->GetConflictsCache().GetTableCache(writeTableId).RemoveUncommittedWrites(writeTx->KeyCells(), txc.DB);
+            self->GetConflictsCache().GetTableCache(writeTableId).RemoveUncommittedWrites(keyCells, txc.DB);
         }
         //TODO: Counters
         // self->IncCounter(COUNTER_UPLOAD_ROWS, rowCount);

@@ -235,7 +235,8 @@ enum class TYdbOperation : ui32 {
     CreateTopic          = 1 << 19,
     AlterTopic           = 1 << 20,
     DropTopic            = 1 << 21,
-    ModifyPermission     = 1 << 22
+    ModifyPermission     = 1 << 22,
+    RenameGroup          = 1 << 23
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);

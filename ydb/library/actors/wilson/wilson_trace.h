@@ -9,6 +9,7 @@
 #include <util/random/random.h>
 #include <util/random/fast.h>
 
+#include <util/string/hex.h>
 #include <util/string/printf.h>
 
 #include <array>
@@ -221,6 +222,10 @@ namespace NWilson {
         static constexpr size_t GetTraceIdSize() { return sizeof(TTrace); }
         const void *GetSpanIdPtr() const { return &SpanId; }
         static constexpr size_t GetSpanIdSize() { return sizeof(ui64); }
+
+        TString GetHexTraceId() const {
+            return HexEncode(GetTraceIdPtr(), GetTraceIdSize());
+        }
 
         void Validate() const {
             Y_DEBUG_ABORT_UNLESS(*this || !SpanId);

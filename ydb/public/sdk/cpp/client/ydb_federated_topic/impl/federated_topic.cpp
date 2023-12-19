@@ -3,6 +3,40 @@
 
 namespace NYdb::NFederatedTopic {
 
+// TFederatedReadSessionSettings
+// Read policy settings
+
+using TReadOriginalSettings = TFederatedReadSessionSettings::TReadOriginalSettings;
+TReadOriginalSettings& TReadOriginalSettings::AddDatabase(TString database) {
+    Databases.push_back(std::move(database));
+    return *this;
+}
+
+TReadOriginalSettings& TReadOriginalSettings::AddDatabases(std::vector<TString> databases) {
+    std::move(std::begin(databases), std::end(databases), std::back_inserter(Databases));
+    return *this;
+}
+
+TReadOriginalSettings& TReadOriginalSettings::AddLocal() {
+    Databases.push_back("_local");
+    return *this;
+}
+
+TFederatedReadSessionSettings& TFederatedReadSessionSettings::ReadOriginal(TReadOriginalSettings settings) {
+    std::swap(Databases, settings.Databases);
+    ReadMirroredEnabled = false;
+    return *this;
+}
+
+TFederatedReadSessionSettings& TFederatedReadSessionSettings::ReadMirrored(TString database) {
+    Databases.clear();
+    Databases.push_back(std::move(database));
+    ReadMirroredEnabled = true;
+    return *this;
+}
+
+// TFederatedTopicClient
+
 NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& settings) {
     return NTopic::TTopicClientSettings()
         .DefaultCompressionExecutor(settings.DefaultCompressionExecutor_)

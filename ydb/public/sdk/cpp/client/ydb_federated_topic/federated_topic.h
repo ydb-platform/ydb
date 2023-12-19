@@ -273,7 +273,6 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
             bool GracefulStopAfterCommit;
         };
 
-
         //! Set simple handler with data processing and also
         //! set other handlers with default behaviour.
         //! They automatically commit data after processing
@@ -290,7 +289,6 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
         //! commitDataAfterProcessing: automatically commit data after calling of dataHandler.
         //! gracefulReleaseAfterCommit: wait for commit acknowledgements for all inflight data before confirming
         //! partition session destroy.
-
         TSimpleDataHandlers SimpleDataHandlers_;
 
         TSelf& SimpleDataHandlers(std::function<void(TReadSessionEvent::TDataReceivedEvent&)> dataHandler,
@@ -368,25 +366,39 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
     //! See description in TFederatedEventHandlers class.
     FLUENT_SETTING(TFederatedEventHandlers, FederatedEventHandlers);
 
-    //! Default variant.
-    //! Read original topics specified in NTopic::TReadSessionSettings::Topics from all specified databases.
-    struct TReadOriginal {
-        //! Empty vector means read from all available databases;
-        //! Vector {"local"} means read only from local database, which is determined by client location;
-        //! Otherwise read from specified databases if available.
+
+    //! Read policy settings
+
+    //! Databases to read from.
+    //! Default (empty) value means reading from all available databases.
+    //! Adding duplicates or unavailable databases is okay, they will be ignored.
+    struct TReadOriginalSettings {
+        //! Add reading from specified database if it's available.
+        TReadOriginalSettings& AddDatabase(TString database);
+
+        //! Add reading from several specified databases, if available.
+        TReadOriginalSettings& AddDatabases(std::vector<TString> databases);
+
+        //! Add reading from database(s) with the same location as client.
+        TReadOriginalSettings& AddLocal();
+
         std::vector<TString> Databases;
     };
 
-    //! Read original topics specified in NTopic::TReadSessionSettings::Topics and their mirrors from other databases
+    //! Default variant.
+    //! Read original topics specified in NTopic::TReadSessionSettings::Topics from databases, specified in settings.
+    //! Discards previously set ReadOriginal and ReadMirrored settings.
+    TSelf& ReadOriginal(TReadOriginalSettings settings);
+
+    //! Read original and mirrored topics specified in NTopic::TReadSessionSettings::Topics
     //! from one specified database.
-    struct TReadMirrored {
-        TString Database;
-    };
+    //! Discards previously set ReadOriginal and ReadMirrored settings.
+    TSelf& ReadMirrored(TString database);
 
-    using TReadPolicy = std::variant<TReadOriginal, TReadMirrored>;
-
-    //! Policy for reading original and mirrored topics, see variants above.
-    FLUENT_SETTING_DEFAULT(TReadPolicy, ReadPolicy, TReadOriginal{});
+private:
+    // Read policy settings, set via helpers above
+    bool ReadMirroredEnabled = false;
+    std::vector<TString> Databases;
 };
 
 

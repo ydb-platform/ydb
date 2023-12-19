@@ -682,6 +682,11 @@ TEST(TErrorTest, CompositeYTExceptionToError)
     }
 }
 
+TString HostSanitizer(TStringBuf)
+{
+    return "";
+}
+
 TEST(TErrorTest, ErrorSanitizer)
 {
     auto checkSantizied = [&] (const TError& error) {
@@ -711,7 +716,7 @@ TEST(TErrorTest, ErrorSanitizer)
 
     {
         auto instant1 = TInstant::Days(123);
-        TErrorSanitizerGuard guard1(instant1);
+        TErrorSanitizerGuard guard1(instant1, BIND(&HostSanitizer));
 
         auto error2 = TError("error2");
         checkSantizied(error2);
@@ -719,7 +724,7 @@ TEST(TErrorTest, ErrorSanitizer)
 
         {
             auto instant2 = TInstant::Days(234);
-            TErrorSanitizerGuard guard2(instant2);
+            TErrorSanitizerGuard guard2(instant2, BIND(&HostSanitizer));
 
             auto error3 = TError("error3");
             checkSantizied(error3);

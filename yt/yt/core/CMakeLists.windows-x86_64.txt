@@ -9,8 +9,6 @@
 add_subdirectory(http)
 add_subdirectory(https)
 add_subdirectory(misc)
-add_subdirectory(rpc)
-add_subdirectory(service_discovery)
 
 add_library(yt-yt-core)
 target_compile_options(yt-yt-core PRIVATE

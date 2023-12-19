@@ -6,17 +6,4 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(library-tvm-service)
-target_link_libraries(library-tvm-service PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-yt-memory
-  cpp-yt-logging
-  yt-yt-core
-)
-target_sources(library-tvm-service PRIVATE
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/tvm/service/config.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/tvm/service/tvm_service_common.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/library/tvm/service/tvm_service_dummy.cpp
-)
+add_subdirectory(grpc)

@@ -8,3 +8,4 @@ ydb-core-tx-columnshard-ut_schema/TColumnShardTestSchema::RebootForgetAfterFail
 ydb-core-kqp-ut-federated_query-generic/*
 ydb-core-client-ut/TClientTest::FollowerOfflineBoot
 ydb-library-yql-sql-pg-ut/PgSqlParsingAutoparam::AutoParamValues_DifferentTypes
+ydb-core-blobstorage-ut_blobstorage/[6/10]*

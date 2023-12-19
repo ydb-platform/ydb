@@ -1508,7 +1508,6 @@
   "contrib/restricted/boost/format/CMakeLists.linux-aarch64.txt":"",
   "contrib/restricted/boost/format/CMakeLists.linux-x86_64.txt":"",
   "contrib/restricted/boost/format/CMakeLists.txt":"",
-  "contrib/restricted/boost/format/CMakeLists.windows-x86_64.txt":"",
   "contrib/restricted/boost/function/CMakeLists.darwin-arm64.txt":"",
   "contrib/restricted/boost/function/CMakeLists.darwin-x86_64.txt":"",
   "contrib/restricted/boost/function/CMakeLists.linux-aarch64.txt":"",

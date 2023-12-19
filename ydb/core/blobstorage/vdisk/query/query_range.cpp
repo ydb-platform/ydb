@@ -58,9 +58,9 @@ namespace NKikimr {
                 TEvBlobStorage::TEvVGet::TPtr &ev,
                 std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
                 TActorId replSchedulerId,
-                TString name)
+                const char* name)
             : TLevelIndexQueryBase(queryCtx, parentId, std::move(logoBlobsSnapshot), std::move(barriersSnapshot),
-                    ev, std::move(result), replSchedulerId, std::move(name))
+                    ev, std::move(result), replSchedulerId, name)
             , ForwardIt(QueryCtx->HullCtx, &LogoBlobsSnapshot)
             , BackwardIt(QueryCtx->HullCtx, &LogoBlobsSnapshot)
             , First()

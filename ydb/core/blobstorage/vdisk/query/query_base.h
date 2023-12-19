@@ -35,7 +35,7 @@ namespace NKikimr {
                 TEvBlobStorage::TEvVGet::TPtr &ev,
                 std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
                 TActorId replSchedulerId,
-                TString name)
+                const char* name)
             : QueryCtx(queryCtx)
             , ParentId(parentId)
             , LogoBlobsSnapshot(std::move(logoBlobsSnapshot))
@@ -45,7 +45,7 @@ namespace NKikimr {
             , ShowInternals(Record.GetShowInternals())
             , Result(std::move(result))
             , ReplSchedulerId(replSchedulerId)
-            , Span(TWilson::VDiskTopLevel, std::move(BatcherCtx->OrigEv->TraceId), std::move(name))
+            , Span(TWilson::VDiskTopLevel, std::move(BatcherCtx->OrigEv->TraceId), name)
         {
             Y_DEBUG_ABORT_UNLESS(Result);
         }

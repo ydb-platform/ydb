@@ -451,20 +451,27 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         return WriteResult(ErrorCode, "Rejected by writer", MakeResponse(cookie));
     }
 
-    void HoldPending(TEvPartitionWriter::TEvWriteRequest::TPtr& ev) {
+    bool HoldPending(TEvPartitionWriter::TEvWriteRequest::TPtr& ev) {
         auto& record = ev->Get()->Record;
         const auto cookie = record.GetPartitionRequest().GetCookie();
 
-        Y_ABORT_UNLESS(Pending.empty() || Pending.rbegin()->first < cookie);
-        Y_ABORT_UNLESS(PendingReserve.empty() || PendingReserve.rbegin()->first < cookie);
-        Y_ABORT_UNLESS(PendingWrite.empty() || PendingWrite.back() < cookie);
+        auto pendingValid = (Pending.empty() || Pending.rbegin()->first < cookie);
+        auto reserveValid = (PendingReserve.empty() || PendingReserve.rbegin()->first < cookie);
+        auto writeValid = (PendingWrite.empty() || PendingWrite.back() < cookie);
+
+        if (!(pendingValid && reserveValid && writeValid)) {
+            Disconnected(EErrorCode::InternalError);
+            return false;
+        }
 
         Pending.emplace(cookie, std::move(ev->Get()->Record));
+        return true;
     }
 
     void Handle(TEvPartitionWriter::TEvWriteRequest::TPtr& ev, const TActorContext& ctx) {
-        HoldPending(ev);
-        ReserveBytes(ctx);
+        if (HoldPending(ev)) {
+            ReserveBytes(ctx);
+        }
     }
 
     void ReserveBytes(const TActorContext& ctx) {
@@ -514,10 +521,16 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void EnqueueReservedAndProcess(ui64 cookie) {
-        Y_ABORT_UNLESS(!PendingReserve.empty());
+        if(PendingReserve.empty()) {
+            Disconnected(EErrorCode::InternalError);
+            return;
+        }
         auto it = PendingReserve.begin();
 
-        Y_ABORT_UNLESS(it->first == cookie);
+        if(it->first != cookie) {
+            Disconnected(EErrorCode::InternalError);
+            return;
+        }
 
         ReceivedReserve.emplace(it->first, std::move(it->second));
 
@@ -582,11 +595,18 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void Write(ui64 cookie) {
-        Y_ABORT_UNLESS(!PendingReserve.empty());
+        if (PendingReserve.empty()) {
+            Disconnected(EErrorCode::InternalError);
+            return;
+        }
         auto it = PendingReserve.begin();
 
-        Y_ABORT_UNLESS(it->first == cookie);
-        Y_ABORT_UNLESS(PendingWrite.empty() || PendingWrite.back() < cookie);
+        auto cookieReserveValid = (it->first == cookie);
+        auto cookieWriteValid = (PendingWrite.empty() || PendingWrite.back() < cookie);
+        if (!(cookieReserveValid && cookieWriteValid)) {
+            Disconnected(EErrorCode::InternalError);
+            return;
+        }
 
         Write(cookie, std::move(it->second.Request));
 
@@ -634,7 +654,10 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
             WriteAccepted(cookie);
 
-            Y_ABORT_UNLESS(!PendingReserve.empty());
+            if (PendingReserve.empty()) {
+                Disconnected(EErrorCode::InternalError);
+                return;
+            }
             auto it = PendingReserve.begin();
             auto& holder = it->second;
 

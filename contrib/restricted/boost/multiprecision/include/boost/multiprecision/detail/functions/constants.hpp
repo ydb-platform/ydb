@@ -207,7 +207,7 @@ void calc_pi(T& result, unsigned digits)
          break;
       if (neg)
          result.negate();
-      eval_ldexp(result, result, k - 1);
+      eval_ldexp(result, result, static_cast<int>(k - 1u));
       eval_subtract(D, result);
       ++k;
       eval_ldexp(lim, lim, 1);

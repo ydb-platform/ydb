@@ -11,9 +11,20 @@
 #define BOOST_MP_STANDALONE_CONFIG_HPP
 
 #include <climits>
+
 // Boost.Config is dependency free so it is considered a requirement to use Boost.Multiprecision in standalone mode
-#include <boost/config.hpp>
-#include <boost/config/workaround.hpp>
+#ifdef __has_include
+#  if __has_include(<boost/config.hpp>)
+#    include <boost/config.hpp>
+#    include <boost/config/workaround.hpp>
+#  else
+#    error "Boost.Config is considered a requirement to use Boost.Multiprecision in standalone mode. A package is provided at https://github.com/boostorg/multiprecision/releases"
+#  endif
+#else
+// Provides the less helpful fatal error: 'boost/config.hpp' file not found if not available
+#  include <boost/config.hpp>
+#  include <boost/config/workaround.hpp>
+#endif
 
 // Minimum language standard transition
  #ifdef _MSVC_LANG
@@ -110,5 +121,28 @@ namespace boost { namespace multiprecision {
 #    define UINT128_MAX ((2 * static_cast<boost::multiprecision::uint128_type>(INT128_MAX)) + 1)
 #  endif
 #endif
+
+#define BOOST_MP_CXX14_CONSTEXPR BOOST_CXX14_CONSTEXPR
+//
+// Early compiler versions trip over the constexpr code:
+//
+#if defined(__clang__) && (__clang_major__ < 5)
+#undef BOOST_MP_CXX14_CONSTEXPR
+#define BOOST_MP_CXX14_CONSTEXPR
+#endif
+#if defined(__apple_build_version__) && (__clang_major__ < 9)
+#undef BOOST_MP_CXX14_CONSTEXPR
+#define BOOST_MP_CXX14_CONSTEXPR
+#endif
+#if defined(BOOST_GCC) && (__GNUC__ < 6)
+#undef BOOST_MP_CXX14_CONSTEXPR
+#define BOOST_MP_CXX14_CONSTEXPR
+#endif
+#if defined(BOOST_INTEL)
+#undef BOOST_MP_CXX14_CONSTEXPR
+#define BOOST_MP_CXX14_CONSTEXPR
+#define BOOST_MP_NO_CONSTEXPR_DETECTION
+#endif
+
 
 #endif // BOOST_MP_STANDALONE_CONFIG_HPP

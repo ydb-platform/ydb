@@ -49,7 +49,6 @@ PEERDIR(
     contrib/restricted/boost/type_traits
     contrib/restricted/boost/utility
     contrib/restricted/boost/variant
-    contrib/restricted/boost/variant2
 )
 
 ADDINCL(

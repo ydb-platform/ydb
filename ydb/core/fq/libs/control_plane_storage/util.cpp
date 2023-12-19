@@ -161,6 +161,11 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
         config.SetResultSetsTtl("1d");
     }
 
+    if (!config.HasStreamingQueryConfig()) {
+        // For backward compatibility
+        config.MutableStreamingQueryConfig()->MutableAvailableConnections()->CopyFrom(config.GetAvailableConnection());
+    }
+
     return config;
 }
 

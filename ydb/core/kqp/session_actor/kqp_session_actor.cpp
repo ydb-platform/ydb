@@ -211,7 +211,7 @@ public:
         NWilson::TTraceId id;
         if (false) { // change to enable Wilson tracing
             id = NWilson::TTraceId::NewTraceId(15, 4095);
-            LOG_I("wilson tracing started, id: " + std::to_string(id.GetTraceId()));
+            LOG_I("wilson tracing started, id: " + id.GetHexTraceId());
         }
         auto selfId = SelfId();
         auto as = TActivationContext::ActorSystem();
@@ -1161,7 +1161,7 @@ public:
                     ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats));
                 }
             }
-            
+
             LOG_D("Forwarded TEvExecuterProgress to " << QueryState->RequestActorId);
             Send(QueryState->RequestActorId, ev->Release().Release(), 0, QueryState->ProxyRequestId);
         }

@@ -236,7 +236,7 @@ TPartitionSourceManager::TModificationBatch::~TModificationBatch() {
     }
 }
 
-TMaybe<THeartbeat> TPartitionSourceManager::TModificationBatch::CanEmit() const {
+TMaybe<THeartbeat> TPartitionSourceManager::TModificationBatch::CanEmitHeartbeat() const {
     return HeartbeatEmitter.CanEmit();
 }
 
@@ -331,13 +331,8 @@ void TPartitionSourceManager::TSourceManager::Update(ui64 seqNo, ui64 offset, TI
     }
 }
 
-void TPartitionSourceManager::TSourceManager::Update(ui64 seqNo, ui64 offset, TInstant timestamp, THeartbeat&& heartbeat) {
-    Batch.HeartbeatEmitter.Process(SourceId, heartbeat);
-    if (InMemory == MemoryStorage().end()) {
-        Batch.SourceIdWriter.RegisterSourceId(SourceId, seqNo, offset, timestamp, std::move(heartbeat));
-    } else {
-        Batch.SourceIdWriter.RegisterSourceId(SourceId, InMemory->second.Updated(seqNo, offset, timestamp, std::move(heartbeat)));
-    }
+void TPartitionSourceManager::TSourceManager::Update(THeartbeat&& heartbeat) {
+    Batch.HeartbeatEmitter.Process(SourceId, std::move(heartbeat));
 }
 
 TPartitionSourceManager::TSourceManager::operator bool() const {

@@ -8,17 +8,17 @@ namespace NYdb::NFederatedTopic {
 
 using TReadOriginalSettings = TFederatedReadSessionSettings::TReadOriginalSettings;
 TReadOriginalSettings& TReadOriginalSettings::AddDatabase(TString database) {
-    Databases.push_back(std::move(database));
+    Databases.insert(std::move(database));
     return *this;
 }
 
 TReadOriginalSettings& TReadOriginalSettings::AddDatabases(std::vector<TString> databases) {
-    std::move(std::begin(databases), std::end(databases), std::back_inserter(Databases));
+    std::move(std::begin(databases), std::end(databases), std::inserter(Databases, Databases.end()));
     return *this;
 }
 
 TReadOriginalSettings& TReadOriginalSettings::AddLocal() {
-    Databases.push_back("_local");
+    Databases.insert("_local");
     return *this;
 }
 
@@ -30,7 +30,7 @@ TFederatedReadSessionSettings& TFederatedReadSessionSettings::ReadOriginal(TRead
 
 TFederatedReadSessionSettings& TFederatedReadSessionSettings::ReadMirrored(TString database) {
     Databases.clear();
-    Databases.push_back(std::move(database));
+    Databases.insert(std::move(database));
     ReadMirroredEnabled = true;
     return *this;
 }

@@ -4,6 +4,8 @@
 
 #include <ydb/public/api/protos/ydb_federation_discovery.pb.h>
 
+#include <unordered_set>
+
 namespace NYdb::NFederatedTopic {
 
 using NTopic::TPrintable;
@@ -382,7 +384,7 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
         //! Add reading from database(s) with the same location as client.
         TReadOriginalSettings& AddLocal();
 
-        std::vector<TString> Databases;
+        std::unordered_set<TString> Databases;
     };
 
     //! Default variant.
@@ -395,10 +397,9 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
     //! Discards previously set ReadOriginal and ReadMirrored settings.
     TSelf& ReadMirrored(TString database);
 
-private:
     // Read policy settings, set via helpers above
     bool ReadMirroredEnabled = false;
-    std::vector<TString> Databases;
+    std::unordered_set<TString> Databases;
 };
 
 

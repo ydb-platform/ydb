@@ -83,9 +83,8 @@ void TFederatedReadSessionImpl::Start() {
     });
 }
 
-void TFederatedReadSessionImpl::OpenSubSessionsImpl() {
-    for (const auto& db : FederationState->DbInfos) {
-        // TODO check if available
+void TFederatedReadSessionImpl::OpenSubSessionsImpl(const std::vector<std::shared_ptr<TDbInfo>>& dbInfos) {
+    for (const auto& db : dbInfos) {
         NTopic::TTopicClientSettings settings = SubClientSetttings;
         settings
             .Database(db->path())
@@ -102,11 +101,60 @@ void TFederatedReadSessionImpl::OnFederatedStateUpdateImpl() {
         CloseImpl();
         return;
     }
-    // 1) compare old info and new info;
-    //    result: list of subsessions to open + list of subsessions to close
-    // 2) OpenSubSessionsImpl, CloseSubSessionsImpl
-    OpenSubSessionsImpl();
-    // 3) TODO LATER reschedule OnFederatedStateUpdate
+    if (Settings.ReadMirroredEnabled) {
+        Y_ABORT_UNLESS(Settings.Databases.size() == 1);
+        // add -mirrored-from- topics to Settings
+
+        // how to get mirrors in general case???
+        std::vector<TString> dcNames = {"sas", "vla", "klg", "vlx"};
+        auto topics = Settings.Topics_;
+        for (const auto& topic : topics) {
+            for (const auto& dc : dcNames) {
+                auto mirroredTopic = topic;
+                mirroredTopic.PartitionIds_.clear();
+                mirroredTopic.Path(topic.Path_ + "-mirrored-from-" + dc);
+                Settings.AppendTopics(mirroredTopic);
+            }
+        }
+    }
+
+    std::vector<std::shared_ptr<TDbInfo>> databases;
+
+    for (const auto& db : FederationState->DbInfos) {
+        if (IsDatabaseEligibleForRead(db)) {
+            databases.push_back(db);
+        }
+    }
+
+    if (databases.empty()) {
+        CloseImpl();
+        return;
+    }
+
+    OpenSubSessionsImpl(databases);
+}
+
+bool TFederatedReadSessionImpl::IsDatabaseEligibleForRead(const std::shared_ptr<TDbInfo>& db) {
+    if (db->status() != TDbInfo::Status::DatabaseInfo_Status_AVAILABLE &&
+        db->status() != TDbInfo::Status::DatabaseInfo_Status_READ_ONLY) {
+        return false;
+    }
+
+    if (Settings.Databases.empty()) {
+        return true;
+    }
+
+    for (const auto& dbFromSettings : Settings.Databases) {
+        if (AsciiEqualsIgnoreCase(db->name(), dbFromSettings) ||
+            AsciiEqualsIgnoreCase(db->id(), dbFromSettings)) {
+            return true;
+        }
+        if (dbFromSettings == "_local" &&
+            AsciiEqualsIgnoreCase(FederationState->SelfLocation, db->location())) {
+            return true;
+        }
+    }
+    return false;
 }
 
 NThreading::TFuture<void> TFederatedReadSessionImpl::WaitEvent() {

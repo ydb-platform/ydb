@@ -51,7 +51,9 @@ private:
 
     void Start();
     bool ValidateSettings();
-    void OpenSubSessionsImpl();
+    void OpenSubSessionsImpl(const std::vector<std::shared_ptr<TDbInfo>>& dbInfos);
+
+    bool IsDatabaseEligibleForRead(const std::shared_ptr<TDbInfo>& db);
 
     void OnFederatedStateUpdateImpl();
 

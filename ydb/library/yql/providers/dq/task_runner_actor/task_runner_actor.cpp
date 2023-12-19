@@ -146,14 +146,14 @@ public:
             hFunc(TEvSinkPop, OnSinkPop);
             hFunc(TEvSinkPopFinished, OnSinkPopFinished);
             default: {
-                auto message = TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << ev->GetTypeName() << ")";
+                auto message = TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << ev->GetTypeName() << ")" << " stageId: " << StageId;
                 auto issue = TIssue(message).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR);
-                auto reply = MakeHolder<NDq::TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TVector<TIssue>{issue})
+                auto reply = MakeHolder<NDq::TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TVector<TIssue>{issue});
                 Send(
                     new IEventHandle(
                         ev->Sender,
                         SelfId(),
-                        MakeError({status.ExitCode, status.Stderr}, Settings, StageId).Release(),
+                        reply.Release(),
                         /*flags=*/0,
                         /*cookie=*/0));
             }

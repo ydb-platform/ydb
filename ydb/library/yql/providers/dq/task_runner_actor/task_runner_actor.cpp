@@ -153,7 +153,7 @@ public:
                     new IEventHandle(
                         ev->Sender,
                         SelfId(),
-                        MakeError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
+                        MakeError({status.ExitCode, status.Stderr}, Settings, StageId).Release(),
                         /*flags=*/0,
                         /*cookie=*/0));
             }

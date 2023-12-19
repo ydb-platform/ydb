@@ -332,6 +332,7 @@ message TEvCreateSessionRequest {
 
 message TCreateSessionResponse {
     optional bytes SessionId = 1;
+    optional int64 NodeId = 2;
 }
 
 message TEvCreateSessionResponse {

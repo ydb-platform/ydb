@@ -906,6 +906,11 @@ public:
         YT_VERIFY(tableSchemas.size() > 0);
 
         auto tableSchema = tableSchemas[0];
+
+        for (const auto& columnSchema : tableSchema->Columns()) {
+            NameTable_->GetIdOrRegisterName(columnSchema.Name());
+        }
+
         auto columnCount = NameTable_->GetSize();
         SchemaExistenceFlags_.resize(columnCount, true);
 
@@ -933,7 +938,7 @@ private:
     {
         Reset();
 
-        auto convertedColumns = NColumnConverters::ConvertRowsToColumns(rows, ColumnSchemas_);
+        auto convertedColumns = ColumnConverters_.ConvertRowsToColumns(rows, ColumnSchemas_);
 
         std::vector<const TBatchColumn*> rootColumns;
         rootColumns.reserve( std::ssize(convertedColumns));
@@ -985,6 +990,7 @@ private:
     std::vector<TColumnSchema> ColumnSchemas_;
     std::vector<IUnversionedColumnarRowBatch::TDictionaryId> ArrowDictionaryIds_;
     std::vector<bool> SchemaExistenceFlags_;
+    NColumnConverters::TColumnConverters ColumnConverters_;
 
     struct TMessage
     {

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.6.4)
+VERSION(1.7.0)
 
 LICENSE(Apache-2.0)
 
@@ -31,6 +31,7 @@ RESOURCE_FILES(
     .dist-info/METADATA
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
+    websocket/py.typed
 )
 
 END()

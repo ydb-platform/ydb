@@ -58,7 +58,6 @@ target_sources(yt-yt-client PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/client/api/client_cache.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/api/delegating_client.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/api/etc_client.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/client/api/bundle_controller_client.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/api/journal_client.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/api/operation_client.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/api/security_client.cpp
@@ -93,6 +92,8 @@ target_sources(yt-yt-client PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/client/api/rpc_proxy/transaction_impl.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/api/rpc_proxy/row_stream.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/api/rpc_proxy/wire_row_stream.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/client/bundle_controller_client/bundle_controller_client.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/client/bundle_controller_client/bundle_controller_settings.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/election/public.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/hive/timestamp_map.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/hydra/version.cpp

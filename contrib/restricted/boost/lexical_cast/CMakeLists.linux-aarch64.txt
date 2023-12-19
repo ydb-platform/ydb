@@ -14,15 +14,11 @@ target_include_directories(restricted-boost-lexical_cast INTERFACE
 target_link_libraries(restricted-boost-lexical_cast INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
-  restricted-boost-array
-  restricted-boost-assert
   restricted-boost-config
   restricted-boost-container
   restricted-boost-core
   restricted-boost-integer
   restricted-boost-numeric_conversion
-  restricted-boost-range
-  restricted-boost-static_assert
   restricted-boost-throw_exception
   restricted-boost-type_traits
 )

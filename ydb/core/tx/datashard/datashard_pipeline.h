@@ -8,7 +8,6 @@
 #include "execution_unit.h"
 #include "read_iterator.h"
 
-#include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 namespace NKikimr {

@@ -372,8 +372,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
-        auto settings = TServerSettings(port);
-        settings.SetNodeCount(nodesTotal)
+        auto settings = TServerSettings(port)
+                .SetNodeCount(nodesTotal)
                 .SetUseRealThreads(false)
                 .SetDomainName("Root")
                 .InitKikimrRunConfig();

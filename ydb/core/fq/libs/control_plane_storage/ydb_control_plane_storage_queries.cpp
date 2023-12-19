@@ -220,7 +220,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
             TSet<TString> disabledConnections;
             for (const auto& connection: GetEntities<FederatedQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources(), commonCounters)) {
                 auto connectionCase = connection.content().setting().connection_case();
-                if (!Config->AvailableConnections.contains(connectionCase) || !Config->StreamingQueryConfig.AvailableConnections.contains(connectionCase)) {
+                if (!Config->AvailableConnections.contains(connectionCase)) {
+                    disabledConnections.insert(connection.meta().id());
+                    continue;
+                }
+                if ((queryType == FederatedQuery::QueryContent::STREAMING) && !Config->StreamingQueryConfig.AvailableConnections.contains(connectionCase)) {
                     disabledConnections.insert(connection.meta().id());
                     continue;
                 }

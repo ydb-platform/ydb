@@ -22,12 +22,8 @@ namespace {
 
 class TDqChannelStorage : public IDqChannelStorage {
 public:
-    TDqChannelStorage(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUp, TActorSystem* actorSystem, bool isConcurrent) {
-        if (isConcurrent) {
-            SelfActor_ = CreateDqChannelStorageActor(txId, channelId, std::move(wakeUp), actorSystem);
-        } else {
-            SelfActor_ = CreateDqChannelStorageActor(txId, channelId, std::move(wakeUp), actorSystem);
-        }
+    TDqChannelStorage(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUp, TActorSystem* actorSystem) {
+        SelfActor_ = CreateDqChannelStorageActor(txId, channelId, std::move(wakeUp), actorSystem);
         TlsActivationContext->AsActorContext().RegisterWithSameMailbox(SelfActor_->GetActor());
     }
 
@@ -59,7 +55,7 @@ private:
 
 IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId, IDqChannelStorage::TWakeUpCallback wakeUp, TActorSystem* actorSystem)
 {
-    return new TDqChannelStorage(txId, channelId, std::move(wakeUp), actorSystem, false /*isConcurrent*/);
+    return new TDqChannelStorage(txId, channelId, std::move(wakeUp), actorSystem);
 }
 
 } // namespace NYql::NDq

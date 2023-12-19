@@ -714,7 +714,7 @@ namespace NKikimr {
             if (!info.IsHugeBlob) {
                 auto logMsg = CreatePutLogEvent(ctx, "TEvVPut", ev->Sender, ev->Cookie,
                         std::move(ev->Get()->Orbit), info, std::move(result));
-                ctx.Send(Db->LoggerID, logMsg.release());
+                ctx.Send(Db->LoggerID, logMsg.release(), 0, 0, std::move(info.TraceId));
             } else if (info.Buffer) {
                 // pass the work to huge blob writer
                 NKikimrBlobStorage::EPutHandleClass handleClass = record.GetHandleClass();

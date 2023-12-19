@@ -198,7 +198,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                         HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, chunkId, offset,
                         partsPtr, Cookie, true, GetWritePriority(), false);
             ev->Orbit = std::move(Item->Orbit);
-            ctx.Send(HugeKeeperCtx->PDiskCtx->PDiskId, ev.release());
+            ctx.Send(HugeKeeperCtx->PDiskCtx->PDiskId, ev.release(), 0, 0, Span.GetTraceId());
             DiskAddr = TDiskPart(chunkId, offset, storedBlobSize);
 
             // wait response
@@ -229,7 +229,10 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             CFunc(TEvents::TSystem::Poison, Die)
         )
 
-        void HandlePoison(TEvents::TEvPoison::TPtr&, const TActorContext& ctx) { Die(ctx); }
+        void HandlePoison(TEvents::TEvPoison::TPtr&, const TActorContext& ctx) {
+            Span.EndError("EvPoison");
+            Die(ctx);
+        }
         PDISK_TERMINATE_STATE_FUNC_DEF;
 
     public:

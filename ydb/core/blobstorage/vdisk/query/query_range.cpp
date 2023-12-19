@@ -57,9 +57,10 @@ namespace NKikimr {
                 TBarriersSnapshot &&barriersSnapshot,
                 TEvBlobStorage::TEvVGet::TPtr &ev,
                 std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
-                TActorId replSchedulerId)
+                TActorId replSchedulerId,
+                const char* name)
             : TLevelIndexQueryBase(queryCtx, parentId, std::move(logoBlobsSnapshot), std::move(barriersSnapshot),
-                    ev, std::move(result), replSchedulerId)
+                    ev, std::move(result), replSchedulerId, name)
             , ForwardIt(QueryCtx->HullCtx, &LogoBlobsSnapshot)
             , BackwardIt(QueryCtx->HullCtx, &LogoBlobsSnapshot)
             , First()
@@ -155,7 +156,8 @@ namespace NKikimr {
                 std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
                 TActorId replSchedulerId)
             : TLevelIndexRangeQueryViaBatcherBase(queryCtx, parentId,
-                    std::move(logoBlobsSnapshot), std::move(barriersSnapshot), ev, std::move(result), replSchedulerId)
+                    std::move(logoBlobsSnapshot), std::move(barriersSnapshot), ev, std::move(result), replSchedulerId,
+                    "VDisk.LevelIndexRangeQueryViaBatcherBase")
             , TActorBootstrapped<TLevelIndexRangeQueryViaBatcherIndexOnly>()
             , Merger(QueryCtx->HullCtx->VCtx->Top->GType)
         {

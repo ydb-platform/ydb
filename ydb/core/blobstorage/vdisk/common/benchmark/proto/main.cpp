@@ -201,9 +201,9 @@ void SerDeLoopIteration(Event& ev, size_t iterations) {
 
 template <typename Ev>
 void test() {
-    constexpr static size_t kLogMin = 10;
-    constexpr static size_t kLogMax = 17;
-    constexpr static size_t kIterations = 120;
+    constexpr static size_t kLogMin = 1;
+    constexpr static size_t kLogMax = 2;
+    constexpr static size_t kIterations = 1;
 
     TTestStats stats;
     for (size_t k = kLogMin; k < kLogMax; ++k) {
@@ -217,9 +217,10 @@ void test() {
                     return 64 + 8 + 32;
                 }
                 if (position & 3 == 1) {
+                    ev.Record.SetCookie(23);
                     ev.Record.SetFullDataSize(4048);
                     ev.Record.SetBuffer(storeString64);
-                    return 64 + 64;
+                    return 64 + 64 + 64;
                 }
                 if (position & 3 == 2) {
                     ev.Record.SetCookie(1123);

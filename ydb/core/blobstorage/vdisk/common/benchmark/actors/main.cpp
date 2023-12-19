@@ -58,6 +58,11 @@ const char* storeString256 =
 using namespace NActors;
 
 static TProgramShouldContinue ShouldContinue;
+static ui64 TotalProcessedEvents = 0;
+static TDuration TotalDuration;
+
+// using TargetEv = TEvVPut2;
+using TargetEv = NKikimr::TEvBlobStorage::TEvVPut;
 
 void OnTerminate(int) {
     ShouldContinue.ShouldStop();
@@ -93,8 +98,12 @@ class TSenderActor : public NActors::TActorBootstrapped<TSenderActor> {
 
     void SendToTarget() {
         SendEvents++;
-        auto* ptr = new NKikimr::TEvBlobStorage::TEvVPut;
+        // auto* ptr = new NKikimr::TEvBlobStorage::TEvVPut;
         // auto* ptr = new TEvVPut2();
+        auto* ptr = new TargetEv();
+        ptr->Record.SetBuffer(Payload);
+        ptr->Record.SetCookie(1123);
+        ptr->Record.SetIgnoreBlock(true);
         Send(Target, ptr);
     }
 
@@ -104,8 +113,11 @@ class TSenderActor : public NActors::TActorBootstrapped<TSenderActor> {
     }
 
     void PrintStats() {
-        const i64 ms = (TInstant::Now() - PeriodStart).MilliSeconds();
+        TDuration duration = TInstant::Now() - PeriodStart;
+        const i64 ms = duration.MilliSeconds();
         Cout << "Send " << SendEvents << " Ack " << AckEvents << " over " << ms << "ms" << Endl;
+        TotalProcessedEvents += SendEvents;
+        TotalDuration += duration;
         SendEvents = AckEvents = 0;
         ScheduleStats();
     }
@@ -139,15 +151,11 @@ public:
 };
 
 class TReceiverActor : public TActor<TReceiverActor> {
-    TRope Payload;
+    TString Payload;
 
-    void Handle(NKikimr::TEvBlobStorage::TEvVPut::TPtr& ev) {
-        Y_UNUSED(ev->Get());
-        Send(ev->Sender, new TEvAck());
-    }
-
-    void Handle(TEvVPut2::TPtr& ev) {
-        Y_UNUSED(ev->Get());
+    void Handle(TargetEv::TPtr& ev) {
+        // Y_UNUSED(ev->Get());
+        // Y_ASSERT(ev->Get()->Record.GetBuffer() == Payload);
         Send(ev->Sender, new TEvAck());
     }
 
@@ -159,8 +167,7 @@ public:
 
     STFUNC(Main) {
         STRICT_STFUNC_BODY(
-            hFunc(NKikimr::TEvBlobStorage::TEvVPut, Handle);
-            // hFunc(TEvVPut2, Handle);
+            hFunc(TargetEv, Handle);
         )
     }
 };
@@ -211,6 +218,13 @@ int test(const char* payload, TDuration duration) {
 
     actorSystem.Stop();
     actorSystem.Cleanup();
+
+    Cout
+    << "Speed: "
+    << TotalProcessedEvents / TotalDuration.Seconds()
+    << " Ev/s"
+    << Endl
+    ;
 
     return ShouldContinue.GetReturnCode();
 }
@@ -310,6 +324,13 @@ int test(const char* payload, TDuration duration) {
     sys2.Stop();
     sys1.Cleanup();
     sys2.Cleanup();
+
+    Cout
+    << "Speed: "
+    << TotalProcessedEvents / TotalDuration.Seconds()
+    << " Ev/s"
+    << Endl
+    ;
 
     return ShouldContinue.GetReturnCode();
 }

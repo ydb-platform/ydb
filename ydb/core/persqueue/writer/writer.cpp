@@ -460,6 +460,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         auto writeValid = (PendingWrite.empty() || PendingWrite.back() < cookie);
 
         if (!(pendingValid && reserveValid && writeValid)) {
+            ERROR("The cookie of WriteRequest is invalid. Cookie=" << cookie);
             Disconnected(EErrorCode::InternalError);
             return false;
         }
@@ -522,12 +523,14 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
     void EnqueueReservedAndProcess(ui64 cookie) {
         if(PendingReserve.empty()) {
+            ERROR("The state of the PartitionWriter is invalid. PendingReserve is empty. Marker #01");
             Disconnected(EErrorCode::InternalError);
             return;
         }
         auto it = PendingReserve.begin();
 
         if(it->first != cookie) {
+            ERROR("The order of reservation is invalid. Cookie=" << cookie << ", ReserveCookie=" << it->first);
             Disconnected(EErrorCode::InternalError);
             return;
         }
@@ -596,6 +599,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
     void Write(ui64 cookie) {
         if (PendingReserve.empty()) {
+            ERROR("The state of the PartitionWriter is invalid. PendingReserve is empty. Marker #02");
             Disconnected(EErrorCode::InternalError);
             return;
         }
@@ -604,6 +608,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         auto cookieReserveValid = (it->first == cookie);
         auto cookieWriteValid = (PendingWrite.empty() || PendingWrite.back() < cookie);
         if (!(cookieReserveValid && cookieWriteValid)) {
+            ERROR("The cookie of Write is invalid. Cookie=" << cookie);
             Disconnected(EErrorCode::InternalError);
             return;
         }
@@ -655,6 +660,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             WriteAccepted(cookie);
 
             if (PendingReserve.empty()) {
+                ERROR("The state of the PartitionWriter is invalid. PendingReserve is empty. Marker #03");
                 Disconnected(EErrorCode::InternalError);
                 return;
             }

@@ -40,7 +40,7 @@ PEERDIR(
     ydb/library/yql/providers/yt/lib/yt_download
     ydb/library/yql/providers/yt/provider
 
-    yt/yql/plugin
+    ydb/library/yql/yt
 )
 
 YQL_LAST_ABI_VERSION()

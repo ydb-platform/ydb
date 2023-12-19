@@ -21,6 +21,7 @@
 4. **PreHandler**  - лямбда, которая вызывается для списка потомков текущей директории после операции List (ссылки еще не зарезолвлены). Принимает список нод, текущее состояние, текущую глубину обхода, возвращает следующее состояние.
 
     Сигнатура: `(List<Struct<'Path':String, 'Type':String, 'Attributes':Yson>>, TypeOf(InitialState), Int32) -> TypeOf(InitialState)`
+    TypeOf(InitialState) - выведенный тип InitialState.
 
     Реализация по-умолчанию: `($nodes, $state, $level) -> ($state)`
 
@@ -64,6 +65,8 @@
     Ограничение можно обойти несколькими вызовами WalkFolders с объединением результатов или сериализуя новое состояние в строку без промежуточной десериализации (например, JSON/Yson lines).
 
 * Порядок обхода узлов в дереве не DFS из-за параллельных вызовов листинга директорий
+
+* InitialState используется для вывода типов обработчиков, его необходимо указывать явно, например, `ListCreate(String)`, а не `[]`.
 
 {% endnote %}
 
@@ -111,7 +114,7 @@ $diveHandler = ($nodes, $state, $attrList, $level) -> {
     $paths = ListExtract($nodes, "Path");
     $pathsWithReqAttrs = ListMap($paths, ($x) -> (($x, $attrList)));
 
-    $nextToVisit = IF($level < 2, $pathsWithReqAttrs, ListCreate(Tuple<String, List<String>>));
+    $nextToVisit = IF($level < 2, $pathsWithReqAttrs, []);
     return ($nextToVisit, $state);
 };
 
@@ -127,7 +130,7 @@ SELECT State FROM WalkFolders(`initial_folder`,
 Собрать пути из всех узлов в `initial_folder`, не заходя в поддиректории
 ```yql
 $diveHandler = ($_, $state, $_, $_) -> {
-    $nextToVisit = ListCreate(Tuple<String, List<String>>);
+    $nextToVisit = [];
     RETURN ($nextToVisit, $state);
 };
 $postHandler = ($nodes, $state, $_) -> {
@@ -192,7 +195,7 @@ $diveHandler = ($nodes, $state, $reqAttrs, $_) -> {
     -- заканчиваем обход, если набрали необходимое число узлов
     $nextToVisit =  IF(
         ListLength($collectedPaths) > $take, 
-        ListCreate(Tuple<String, List<String>>),
+        [],
         $pathsWithReqAttrs
     );
     return ($nextToVisit, $state);

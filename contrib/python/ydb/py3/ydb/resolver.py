@@ -10,11 +10,10 @@ import typing
 from . import connection as conn_impl, driver, issues, settings as settings_impl, _apis
 
 
-# Workaround for good IDE and universal for runtime
-if typing.TYPE_CHECKING:
-    from ._grpc.v4.protos import ydb_discovery_pb2
-else:
-    from ._grpc.common.protos import ydb_discovery_pb2
+try:
+    from ydb.public.api.protos import ydb_discovery_pb2
+except ImportError:
+    from contrib.ydb.public.api.protos import ydb_discovery_pb2
 
 
 logger = logging.getLogger(__name__)

@@ -13,9 +13,9 @@
 
 #include <boost/property_tree/ptree_fwd.hpp>
 
-#include <boost/optional.hpp>
+#include <boost/optional/optional.hpp>
 #include <boost/optional/optional_io.hpp>
-#include <boost/utility/enable_if.hpp>
+#include <boost/core/enable_if.hpp>
 #include <boost/type_traits/decay.hpp>
 #include <boost/type_traits/integral_constant.hpp>
 #include <sstream>

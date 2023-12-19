@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <tuple>
 #include <boost/multiprecision/detail/standalone_config.hpp>
+#include <boost/multiprecision/fwd.hpp>
 #include <boost/multiprecision/traits/transcendental_reduction_type.hpp>
 #include <boost/multiprecision/traits/std_integer_traits.hpp>
 #include <boost/multiprecision/detail/no_exceptions_support.hpp>
@@ -94,27 +95,6 @@
 #  define BOOST_MP_NO_CONSTEXPR_DETECTION
 #endif
 
-#define BOOST_MP_CXX14_CONSTEXPR BOOST_CXX14_CONSTEXPR
-//
-// Early compiler versions trip over the constexpr code:
-//
-#if defined(__clang__) && (__clang_major__ < 5)
-#undef BOOST_MP_CXX14_CONSTEXPR
-#define BOOST_MP_CXX14_CONSTEXPR
-#endif
-#if defined(__apple_build_version__) && (__clang_major__ < 9)
-#undef BOOST_MP_CXX14_CONSTEXPR
-#define BOOST_MP_CXX14_CONSTEXPR
-#endif
-#if defined(BOOST_GCC) && (__GNUC__ < 6)
-#undef BOOST_MP_CXX14_CONSTEXPR
-#define BOOST_MP_CXX14_CONSTEXPR
-#endif
-#if defined(BOOST_INTEL)
-#undef BOOST_MP_CXX14_CONSTEXPR
-#define BOOST_MP_CXX14_CONSTEXPR
-#define BOOST_MP_NO_CONSTEXPR_DETECTION
-#endif
 
 #ifdef BOOST_MP_NO_CONSTEXPR_DETECTION
 #  define BOOST_CXX14_CONSTEXPR_IF_DETECTION
@@ -130,11 +110,6 @@
 namespace boost {
 namespace multiprecision {
 
-enum expression_template_option
-{
-   et_off = 0,
-   et_on  = 1
-};
 
 enum struct variable_precision_options : signed char
 {
@@ -151,23 +126,6 @@ inline constexpr bool operator==(variable_precision_options a, variable_precisio
    return static_cast<unsigned>(a) == static_cast<unsigned>(b);
 }
 
-template <class Backend>
-struct expression_template_default
-{
-   static constexpr expression_template_option value = et_on;
-};
-
-template <class Backend, expression_template_option ExpressionTemplates = expression_template_default<Backend>::value>
-class number;
-
-template <class T>
-struct is_number : public std::integral_constant<bool, false>
-{};
-
-template <class Backend, expression_template_option ExpressionTemplates>
-struct is_number<number<Backend, ExpressionTemplates> > : public std::integral_constant<bool, true>
-{};
-
 template <class T>
 struct is_et_number : public std::integral_constant<bool, false>
 {};
@@ -183,14 +141,6 @@ struct is_no_et_number : public std::integral_constant<bool, false>
 template <class Backend>
 struct is_no_et_number<number<Backend, et_off> > : public std::integral_constant<bool, true>
 {};
-
-namespace detail {
-
-// Forward-declare an expression wrapper
-template <class tag, class Arg1 = void, class Arg2 = void, class Arg3 = void, class Arg4 = void>
-struct expression;
-
-} // namespace detail
 
 template <class T>
 struct is_number_expression : public std::integral_constant<bool, false>

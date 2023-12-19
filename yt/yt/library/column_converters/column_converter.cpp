@@ -18,37 +18,38 @@ using namespace NTableClient;
 
 IColumnConverterPtr CreateColumnConvert(
     const NTableClient::TColumnSchema& columnSchema,
-    int columnIndex)
+    int columnId,
+    int columnOffset)
 {
     switch (columnSchema.GetWireType()) {
         case EValueType::Int64:
-            return CreateInt64ColumnConverter(columnIndex, columnSchema);
+            return CreateInt64ColumnConverter(columnId, columnSchema, columnOffset);
 
         case EValueType::Uint64:
-            return CreateUint64ColumnConverter(columnIndex, columnSchema);
+            return CreateUint64ColumnConverter(columnId, columnSchema, columnOffset);
 
         case EValueType::Double:
             switch (columnSchema.CastToV1Type()) {
                 case NTableClient::ESimpleLogicalValueType::Float:
-                    return CreateFloatingPoint32ColumnConverter(columnIndex, columnSchema);
+                    return CreateFloatingPoint32ColumnConverter(columnId, columnSchema, columnOffset);
                 default:
-                    return CreateFloatingPoint64ColumnConverter(columnIndex, columnSchema);
+                    return CreateFloatingPoint64ColumnConverter(columnId, columnSchema, columnOffset);
             }
 
         case EValueType::String:
-            return CreateStringConverter(columnIndex, columnSchema);
+            return CreateStringConverter(columnId, columnSchema, columnOffset);
 
         case EValueType::Boolean:
-            return CreateBooleanColumnConverter(columnIndex, columnSchema);
+            return CreateBooleanColumnConverter(columnId, columnSchema, columnOffset);
 
         case EValueType::Any:
-            return CreateAnyConverter(columnIndex, columnSchema);
+            return CreateAnyConverter(columnId, columnSchema, columnOffset);
 
         case EValueType::Composite:
-            return CreateCompositeConverter(columnIndex, columnSchema);
+            return CreateCompositeConverter(columnId, columnSchema, columnOffset);
 
         case EValueType::Null:
-            return CreateNullConverter(columnIndex);
+            return CreateNullConverter(columnId);
 
         case EValueType::Min:
         case EValueType::TheBottom:
@@ -61,24 +62,43 @@ IColumnConverterPtr CreateColumnConvert(
 ////////////////////////////////////////////////////////////////////////////////
 
 
-TConvertedColumnRange ConvertRowsToColumns(
+TConvertedColumnRange TColumnConverters::ConvertRowsToColumns(
     TRange<TUnversionedRow> rows,
     const std::vector<TColumnSchema>& columnSchema)
 {
     TConvertedColumnRange convertedColumnsRange;
+    if (rows.size() == 0) {
+        return convertedColumnsRange;
+    }
+
+    if(IsFirstBatch_) {
+        // Initialize mapping column ids to indexes, since, for example, in the case of column specification (//path/to/table{column1,column3}), not all column ids will exist
+
+        auto firstRow = rows[0];
+
+        for (const auto* item = firstRow.Begin(); item != firstRow.End(); ++item) {
+            IdsToIndexes_[item->Id] = std::ssize(ColumnIds_);
+            ColumnIds_.push_back(item->Id);
+        }
+    }
+    IsFirstBatch_ = false;
+
     std::vector<TUnversionedRowValues> rowsValues;
     rowsValues.reserve(rows.size());
 
     for (auto row : rows) {
-        TUnversionedRowValues rowValues(columnSchema.size(), nullptr);
+        TUnversionedRowValues rowValues(ColumnIds_.size(), nullptr);
         for (const auto* item = row.Begin(); item != row.End(); ++item) {
-            rowValues[item->Id] = item;
+            auto iter = IdsToIndexes_.find(item->Id);
+            YT_VERIFY(iter != IdsToIndexes_.end());
+            rowValues[iter->second] = item;
         }
         rowsValues.push_back(std::move(rowValues));
     }
 
-    for (int columnId = 0; columnId < std::ssize(columnSchema); columnId++) {
-        auto converter = CreateColumnConvert(columnSchema[columnId], columnId);
+    for (int offset = 0; offset < std::ssize(ColumnIds_); offset++) {
+        YT_VERIFY(ColumnIds_[offset] >= 0 && ColumnIds_[offset] < std::ssize(columnSchema));
+        auto converter = CreateColumnConvert(columnSchema[ColumnIds_[offset]], ColumnIds_[offset], offset);
         auto columns = converter->Convert(rowsValues);
         convertedColumnsRange.push_back(columns);
     }

@@ -1,5 +1,5 @@
-#ifndef BOOST_HASH_DETAIL_REQUIRES_CXX11_HPP_INCLUDED
-#define BOOST_HASH_DETAIL_REQUIRES_CXX11_HPP_INCLUDED
+#ifndef BOOST_ICL_DETAIL_REQUIRES_CXX11_HPP_INCLUDED
+#define BOOST_ICL_DETAIL_REQUIRES_CXX11_HPP_INCLUDED
 
 // Copyright 2023 Peter Dimov
 // Distributed under the Boost Software License, Version 1.0.
@@ -13,10 +13,10 @@
     defined(BOOST_NO_CXX11_DECLTYPE) || \
     defined(BOOST_NO_CXX11_CONSTEXPR) || \
     defined(BOOST_NO_CXX11_NOEXCEPT) || \
-    defined(BOOST_NO_CXX11_HDR_TUPLE)
+    defined(BOOST_NO_CXX11_HDR_RATIO)
 
-BOOST_PRAGMA_MESSAGE("C++03 support was deprecated in Boost.ContainerHash 1.82 and will be removed in Boost.ContainerHash 1.84. Please open an issue in https://github.com/boostorg/container_hash if you want it retained.")
+BOOST_PRAGMA_MESSAGE("C++03 support is deprecated in Boost.Icl 1.84 and will be removed in Boost.Icl 1.86.")
 
 #endif
 
-#endif // #ifndef BOOST_HASH_DETAIL_REQUIRES_CXX11_HPP_INCLUDED
+#endif // #ifndef BOOST_ICL_DETAIL_REQUIRES_CXX11_HPP_INCLUDED

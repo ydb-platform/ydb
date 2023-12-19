@@ -33,7 +33,6 @@
 
 namespace boost {
 namespace multiprecision {
-namespace backends {
 
 #ifdef BOOST_MSVC
 #pragma warning(push)
@@ -47,11 +46,6 @@ namespace backends {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
-
-template <std::size_t MinBits = 0, std::size_t MaxBits = 0, boost::multiprecision::cpp_integer_type SignType = signed_magnitude, cpp_int_check_type Checked = unchecked, class Allocator = typename std::conditional<MinBits && (MinBits == MaxBits), void, std::allocator<limb_type> >::type>
-struct cpp_int_backend;
-
-} // namespace backends
 
 namespace detail {
 
@@ -1803,6 +1797,10 @@ public:
                   val = 10u + static_cast<unsigned>(*s - 'A');
                else
                {
+                  #if defined(BOOST_NO_EXCEPTIONS)
+                  val = static_cast<unsigned>('0');
+                  #endif
+
                   BOOST_MP_THROW_EXCEPTION(std::runtime_error("Unexpected content found while parsing character string."));
                }
                limb  = bitcount / (sizeof(limb_type) * CHAR_BIT);
@@ -1837,6 +1835,10 @@ public:
                   val = static_cast<unsigned>(*s - '0');
                else
                {
+                  #if defined(BOOST_NO_EXCEPTIONS)
+                  val = static_cast<unsigned>('0');
+                  #endif
+
                   BOOST_MP_THROW_EXCEPTION(std::runtime_error("Unexpected content found while parsing character string."));
                }
                limb  = bitcount / (sizeof(limb_type) * CHAR_BIT);
@@ -1852,7 +1854,10 @@ public:
                      {
                         // If this is the most-significant-limb, we may need to allocate an extra one for the overflow:
                         if (limb + 1 == newsize)
+                        {
                            result.resize(static_cast<unsigned>(newsize + 1), static_cast<unsigned>(newsize + 1));
+                           result.limbs()[limb + 1] = 0;
+                        }
                         if (result.size() > limb + 1)
                         {
                            result.limbs()[limb + 1] |= val;
@@ -1879,7 +1884,13 @@ public:
                   if (*s >= '0' && *s <= '9')
                      val = static_cast<limb_type>(*s - '0');
                   else
+                  {
+                     #if defined(BOOST_NO_EXCEPTIONS)
+                     val = static_cast<unsigned>('0');
+                     #endif
+
                      BOOST_MP_THROW_EXCEPTION(std::runtime_error("Unexpected character encountered in input."));
+                  }
                   block *= 10;
                   block += val;
                   if (!*++s)
@@ -2286,49 +2297,28 @@ template <std::size_t MinBits, std::size_t MaxBits, cpp_integer_type SignType, c
 struct is_equivalent_number_type<backends::cpp_int_backend<MinBits, MaxBits, SignType, Checked, Allocator>, backends::cpp_int_backend<MinBits2, MaxBits2, SignType2, Checked2, Allocator2> >
    : public std::integral_constant<bool, std::numeric_limits<number<backends::cpp_int_backend<MinBits, MaxBits, SignType, Checked, Allocator>, et_on> >::digits == std::numeric_limits<number<backends::cpp_int_backend<MinBits2, MaxBits2, SignType2, Checked2, Allocator2>, et_on> >::digits>{};
 
-template <std::size_t MinBits, std::size_t MaxBits, cpp_integer_type SignType, cpp_int_check_type Checked>
-struct expression_template_default<backends::cpp_int_backend<MinBits, MaxBits, SignType, Checked, void> >
-{
-   static constexpr expression_template_option value = et_off;
-};
-
-using boost::multiprecision::backends::cpp_int_backend;
-
 template <std::size_t MinBits, std::size_t MaxBits, cpp_integer_type SignType, cpp_int_check_type Checked, class Allocator>
 struct number_category<cpp_int_backend<MinBits, MaxBits, SignType, Checked, Allocator> > : public std::integral_constant<int, number_kind_integer>
 {};
 
-using cpp_int = number<cpp_int_backend<> >          ;
-using cpp_rational_backend = rational_adaptor<cpp_int_backend<> >;
-using cpp_rational = number<cpp_rational_backend>        ;
+#ifdef BOOST_HAS_INT128
 
-// Fixed precision unsigned types:
-using uint128_t = number<cpp_int_backend<128, 128, unsigned_magnitude, unchecked, void> >  ;
-using uint256_t = number<cpp_int_backend<256, 256, unsigned_magnitude, unchecked, void> >  ;
-using uint512_t = number<cpp_int_backend<512, 512, unsigned_magnitude, unchecked, void> >  ;
-using uint1024_t = number<cpp_int_backend<1024, 1024, unsigned_magnitude, unchecked, void> >;
+namespace detail {
 
-// Fixed precision signed types:
-using int128_t = number<cpp_int_backend<128, 128, signed_magnitude, unchecked, void> >  ;
-using int256_t = number<cpp_int_backend<256, 256, signed_magnitude, unchecked, void> >  ;
-using int512_t = number<cpp_int_backend<512, 512, signed_magnitude, unchecked, void> >  ;
-using int1024_t = number<cpp_int_backend<1024, 1024, signed_magnitude, unchecked, void> >;
+template <std::size_t MinBits, std::size_t MaxBits, cpp_integer_type SignType, cpp_int_check_type Checked, class Allocator>
+struct is_convertible_arithmetic<int128_type, backends::cpp_int_backend<MinBits, MaxBits, SignType, Checked, Allocator> >
+{
+   static constexpr bool value = true;
+};
+template <std::size_t MinBits, std::size_t MaxBits, cpp_integer_type SignType, cpp_int_check_type Checked, class Allocator>
+struct is_convertible_arithmetic<uint128_type, backends::cpp_int_backend<MinBits, MaxBits, SignType, Checked, Allocator> >
+{
+   static constexpr bool value = true;
+};
 
-// Over again, but with checking enabled this time:
-using checked_cpp_int = number<cpp_int_backend<0, 0, signed_magnitude, checked> >          ;
-using checked_cpp_rational_backend = rational_adaptor<cpp_int_backend<0, 0, signed_magnitude, checked> >;
-using checked_cpp_rational = number<checked_cpp_rational_backend>                               ;
-// Fixed precision unsigned types:
-using checked_uint128_t = number<cpp_int_backend<128, 128, unsigned_magnitude, checked, void> >  ;
-using checked_uint256_t = number<cpp_int_backend<256, 256, unsigned_magnitude, checked, void> >  ;
-using checked_uint512_t = number<cpp_int_backend<512, 512, unsigned_magnitude, checked, void> >  ;
-using checked_uint1024_t = number<cpp_int_backend<1024, 1024, unsigned_magnitude, checked, void> >;
+}
 
-// Fixed precision signed types:
-using checked_int128_t = number<cpp_int_backend<128, 128, signed_magnitude, checked, void> >  ;
-using checked_int256_t = number<cpp_int_backend<256, 256, signed_magnitude, checked, void> >  ;
-using checked_int512_t = number<cpp_int_backend<512, 512, signed_magnitude, checked, void> >  ;
-using checked_int1024_t = number<cpp_int_backend<1024, 1024, signed_magnitude, checked, void> >;
+#endif
 
 #if defined(__GNUC__) && !defined(__clang__)
 // see https://github.com/boostorg/multiprecision/issues/413

@@ -44,12 +44,6 @@ namespace boost {
 namespace multiprecision {
 namespace backends {
 
-enum digit_base_type
-{
-   digit_base_2  = 2,
-   digit_base_10 = 10
-};
-
 #ifdef BOOST_MSVC
 #pragma warning(push)
 #pragma warning(disable : 4522 6326) // multiple assignment operators specified, comparison of two constants
@@ -96,7 +90,7 @@ struct is_cpp_bin_float_explicitly_constructible_from_type<Float, bit_count, tru
 
 } // namespace detail
 
-template <unsigned Digits, digit_base_type DigitBase = digit_base_10, class Allocator = void, class Exponent = int, Exponent MinExponent = 0, Exponent MaxExponent = 0>
+template <unsigned Digits, digit_base_type DigitBase, class Allocator, class Exponent, Exponent MinExponent, Exponent MaxExponent>
 class cpp_bin_float
 {
  public:
@@ -2013,32 +2007,13 @@ inline boost::multiprecision::number<boost::multiprecision::backends::cpp_bin_fl
    return res;
 }
 
-using backends::cpp_bin_float;
-using backends::digit_base_10;
-using backends::digit_base_2;
-
 template <unsigned Digits, backends::digit_base_type DigitBase, class Exponent, Exponent MinE, Exponent MaxE, class Allocator>
 struct number_category<cpp_bin_float<Digits, DigitBase, Allocator, Exponent, MinE, MaxE> > : public std::integral_constant<int, boost::multiprecision::number_kind_floating_point>
 {};
 
-template <unsigned Digits, backends::digit_base_type DigitBase, class Allocator, class Exponent, Exponent MinE, Exponent MaxE>
-struct expression_template_default<cpp_bin_float<Digits, DigitBase, Allocator, Exponent, MinE, MaxE> >
-{
-   static constexpr expression_template_option value = std::is_void<Allocator>::value ? et_off : et_on;
-};
-
 template <unsigned Digits, backends::digit_base_type DigitBase, class Allocator, class Exponent, Exponent MinE, Exponent MaxE, class Allocator2, class Exponent2, Exponent MinE2, Exponent MaxE2>
 struct is_equivalent_number_type<cpp_bin_float<Digits, DigitBase, Allocator, Exponent, MinE, MaxE>, cpp_bin_float<Digits, DigitBase, Allocator2, Exponent2, MinE2, MaxE2> >
    : public std::integral_constant<bool, true> {};
-
-using cpp_bin_float_50 = number<backends::cpp_bin_float<50> > ;
-using cpp_bin_float_100 = number<backends::cpp_bin_float<100> >;
-
-using cpp_bin_float_single = number<backends::cpp_bin_float<24, backends::digit_base_2, void, std::int16_t, -126, 127>, et_off>       ;
-using cpp_bin_float_double = number<backends::cpp_bin_float<53, backends::digit_base_2, void, std::int16_t, -1022, 1023>, et_off>     ;
-using cpp_bin_float_double_extended = number<backends::cpp_bin_float<64, backends::digit_base_2, void, std::int16_t, -16382, 16383>, et_off>   ;
-using cpp_bin_float_quad = number<backends::cpp_bin_float<113, backends::digit_base_2, void, std::int16_t, -16382, 16383>, et_off>  ;
-using cpp_bin_float_oct = number<backends::cpp_bin_float<237, backends::digit_base_2, void, std::int32_t, -262142, 262143>, et_off>;
 
 } // namespace multiprecision
 
@@ -2064,56 +2039,88 @@ class numeric_limits<boost::multiprecision::number<boost::multiprecision::cpp_bi
 {
    using number_type = boost::multiprecision::number<boost::multiprecision::cpp_bin_float<Digits, DigitBase, Allocator, Exponent, MinE, MaxE>, ExpressionTemplates>;
 
- public:
-   static constexpr bool is_specialized = true;
-   static number_type(min)()
-   {
-      static std::pair<bool, number_type> value;
-      if (!value.first)
-      {
-         value.first = true;
-         using ui_type = typename std::tuple_element<0, typename number_type::backend_type::unsigned_types>::type;
-         value.second.backend()            = ui_type(1u);
-         value.second.backend().exponent() = boost::multiprecision::cpp_bin_float<Digits, DigitBase, Allocator, Exponent, MinE, MaxE>::min_exponent;
-      }
-      return value.second;
-   }
+ private:
+    //
+    // Functions to calculate cached values stored in static values:
+    //
+    static number_type get_min()
+    {
+       using ui_type = typename std::tuple_element<0, typename number_type::backend_type::unsigned_types>::type;
+       number_type value(ui_type(1u));
+       value.backend().exponent() = boost::multiprecision::cpp_bin_float<Digits, DigitBase, Allocator, Exponent, MinE, MaxE>::min_exponent;
+       return value;
+    }
 #ifdef BOOST_MSVC
 #pragma warning(push)
 #pragma warning(disable : 4127) // conditional expression is constant
 #endif
-   static number_type(max)()
-   {
-      static std::pair<bool, number_type> value;
-      if (!value.first)
-      {
-         value.first = true;
-         BOOST_IF_CONSTEXPR(std::is_void<Allocator>::value)
-            eval_complement(value.second.backend().bits(), value.second.backend().bits());
-         else
-         {
-            // We jump through hoops here using the backend type directly just to keep VC12 happy
-            // (ie compiler workaround, for very strange compiler bug):
-            using boost::multiprecision::default_ops::eval_add;
-            using boost::multiprecision::default_ops::eval_decrement;
-            using boost::multiprecision::default_ops::eval_left_shift;
-            using int_backend_type = typename number_type::backend_type::rep_type                               ;
-            using ui_type = typename std::tuple_element<0, typename int_backend_type::unsigned_types>::type;
-            int_backend_type                                                                    i;
-            i = ui_type(1u);
-            eval_left_shift(i, boost::multiprecision::cpp_bin_float<Digits, DigitBase, Allocator, Exponent, MinE, MaxE>::bit_count - 1);
-            int_backend_type j(i);
-            eval_decrement(i);
-            eval_add(j, i);
-            value.second.backend().bits() = j;
-         }
-         value.second.backend().exponent() = boost::multiprecision::cpp_bin_float<Digits, DigitBase, Allocator, Exponent, MinE, MaxE>::max_exponent;
-      }
-      return value.second;
-   }
+    static number_type get_max()
+    {
+       number_type value;
+       BOOST_IF_CONSTEXPR(std::is_void<Allocator>::value)
+          eval_complement(value.backend().bits(), value.backend().bits());
+       else
+       {
+          // We jump through hoops here using the backend type directly just to keep VC12 happy
+          // (ie compiler workaround, for very strange compiler bug):
+          using boost::multiprecision::default_ops::eval_add;
+          using boost::multiprecision::default_ops::eval_decrement;
+          using boost::multiprecision::default_ops::eval_left_shift;
+          using int_backend_type = typename number_type::backend_type::rep_type;
+          using ui_type = typename std::tuple_element<0, typename int_backend_type::unsigned_types>::type;
+          int_backend_type                                                                    i;
+          i = ui_type(1u);
+          eval_left_shift(i, boost::multiprecision::cpp_bin_float<Digits, DigitBase, Allocator, Exponent, MinE, MaxE>::bit_count - 1);
+          int_backend_type j(i);
+          eval_decrement(i);
+          eval_add(j, i);
+          value.backend().bits() = j;
+       }
+       value.backend().exponent() = boost::multiprecision::cpp_bin_float<Digits, DigitBase, Allocator, Exponent, MinE, MaxE>::max_exponent;
+       return value;
+    }
 #ifdef BOOST_MSVC
 #pragma warning(pop)
 #endif
+    static number_type get_epsilon()
+    {
+       using ui_type = typename std::tuple_element<0, typename number_type::backend_type::unsigned_types>::type;
+       number_type value(ui_type(1u));
+       return ldexp(value, 1 - static_cast<int>(digits));
+    }
+    // What value should this be????
+    static number_type get_round_error()
+    {
+       // returns 0.5
+       return ldexp(number_type(1u), -1);
+    }
+    static number_type get_infinity()
+    {
+       number_type value;
+       value.backend().exponent() = boost::multiprecision::cpp_bin_float<Digits, DigitBase, Allocator, Exponent, MinE, MaxE>::exponent_infinity;
+       return value;
+    }
+    static number_type get_quiet_NaN()
+    {
+       number_type value;
+       value.backend().exponent() = boost::multiprecision::cpp_bin_float<Digits, DigitBase, Allocator, Exponent, MinE, MaxE>::exponent_nan;
+       return value;
+    }
+
+ public:
+   static constexpr bool is_specialized = true;
+   static number_type(min)()
+   {
+      // C++11 thread safe static initialization:
+      static number_type value = get_min();
+      return value;
+   }
+   static number_type(max)()
+   {
+      // C++11 thread safe static initialization:
+      static number_type value = get_max();
+      return value;
+   }
    static constexpr number_type lowest()
    {
       return -(max)();
@@ -2128,31 +2135,17 @@ class numeric_limits<boost::multiprecision::number<boost::multiprecision::cpp_bi
    static constexpr int  radix        = 2;
    static number_type          epsilon()
    {
-      static std::pair<bool, number_type> value;
-      if (!value.first)
-      {
-         // We jump through hoops here just to keep VC12 happy (ie compiler workaround, for very strange compiler bug):
-         using ui_type = typename std::tuple_element<0, typename number_type::backend_type::unsigned_types>::type;
-         value.first            = true;
-         value.second.backend() = ui_type(1u);
-         value.second           = ldexp(value.second, 1 - static_cast<int>(digits));
-      }
-      return value.second;
+      // C++11 thread safe static initialization:
+      static number_type value = get_epsilon();
+      return value;
    }
    // What value should this be????
    static number_type round_error()
    {
       // returns 0.5
-      static std::pair<bool, number_type> value;
-      if (!value.first)
-      {
-         value.first = true;
-         // We jump through hoops here just to keep VC12 happy (ie compiler workaround, for very strange compiler bug):
-         using ui_type = typename std::tuple_element<0, typename number_type::backend_type::unsigned_types>::type;
-         value.second.backend() = ui_type(1u);
-         value.second           = ldexp(value.second, -1);
-      }
-      return value.second;
+      // C++11 thread safe static initialization:
+      static number_type value = get_round_error();
+      return value;
    }
    static constexpr typename boost::multiprecision::cpp_bin_float<Digits, DigitBase, Allocator, Exponent, MinE, MaxE>::exponent_type min_exponent      = boost::multiprecision::cpp_bin_float<Digits, DigitBase, Allocator, Exponent, MinE, MaxE>::min_exponent;
    static constexpr typename boost::multiprecision::cpp_bin_float<Digits, DigitBase, Allocator, Exponent, MinE, MaxE>::exponent_type min_exponent10    = (min_exponent / 1000) * 301L;
@@ -2163,31 +2156,23 @@ class numeric_limits<boost::multiprecision::number<boost::multiprecision::cpp_bi
    static constexpr bool                                                                                                             has_signaling_NaN = false;
    static constexpr float_denorm_style has_denorm                                                                                                      = denorm_absent;
    static constexpr bool               has_denorm_loss                                                                                                 = false;
-   static number_type                        infinity()
+   static number_type infinity()
    {
-      static std::pair<bool, number_type> value;
-      if (!value.first)
-      {
-         value.first                       = true;
-         value.second.backend().exponent() = boost::multiprecision::cpp_bin_float<Digits, DigitBase, Allocator, Exponent, MinE, MaxE>::exponent_infinity;
-      }
-      return value.second;
+      // C++11 thread safe static initialization:
+      static number_type value = get_infinity();
+      return value;
    }
    static number_type quiet_NaN()
    {
-      static std::pair<bool, number_type> value;
-      if (!value.first)
-      {
-         value.first                       = true;
-         value.second.backend().exponent() = boost::multiprecision::cpp_bin_float<Digits, DigitBase, Allocator, Exponent, MinE, MaxE>::exponent_nan;
-      }
-      return value.second;
+      // C++11 thread safe static initialization:
+      static number_type value = get_quiet_NaN();
+      return value;
    }
    static constexpr number_type signaling_NaN()
    {
       return number_type(0);
    }
-   static constexpr number_type denorm_min() { return number_type(0); }
+   static constexpr number_type denorm_min() { return get_min(); }
    static constexpr bool        is_iec559         = false;
    static constexpr bool        is_bounded        = true;
    static constexpr bool        is_modulo         = false;

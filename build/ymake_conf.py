@@ -756,7 +756,7 @@ class YMake(object):
         print('@import "${CONF_ROOT}/ymake.core.conf"')
 
     def print_settings(self):
-        emit_with_ignore_comment('ARCADIA_ROOT', self.arcadia.root)
+        pass
 
 
 class System(object):

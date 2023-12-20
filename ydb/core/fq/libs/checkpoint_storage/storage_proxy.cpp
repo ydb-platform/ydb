@@ -90,6 +90,10 @@ static void FillDefaultParameters(NConfig::TCheckpointCoordinatorConfig& checkpo
         limits.SetMaxTaskStateSizeBytes(1099511627776);
     }
 
+    if (!limits.GetMaxRowSizeBytes()) {
+        limits.SetMaxRowSizeBytes(8000000);
+    }
+
     if (!checkpointCoordinatorConfig.GetStorage().GetToken() && checkpointCoordinatorConfig.GetStorage().GetOAuthFile()) {
         checkpointCoordinatorConfig.MutableStorage()->SetToken(StripString(TFileInput(checkpointCoordinatorConfig.GetStorage().GetOAuthFile()).ReadAll()));
     }
@@ -119,7 +123,7 @@ void TStorageProxy::Bootstrap() {
         LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint storage: " << issues.ToOneLineString());
     }
 
-    StateStorage = NewYdbStateStorage(StorageConfig, CredentialsProviderFactory, YqSharedResources);
+    StateStorage = NewYdbStateStorage(Config, CredentialsProviderFactory, YqSharedResources);
     issues = StateStorage->Init().GetValueSync();
     if (!issues.Empty()) {
         LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint state storage: " << issues.ToOneLineString());

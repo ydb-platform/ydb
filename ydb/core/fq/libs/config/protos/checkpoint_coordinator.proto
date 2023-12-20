@@ -11,6 +11,7 @@ import "ydb/core/fq/libs/config/protos/storage.proto";
 message TStateStorageLimitsConfig {
     uint64 MaxGraphCheckpointsSizeBytes = 1;
     uint64 MaxTaskStateSizeBytes = 2;
+    uint64 MaxRowSizeBytes = 3;
 }
 
 message TCheckpointGcConfig {

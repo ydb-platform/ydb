@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/core/fq/libs/checkpoint_storage)
 
+OWNER(g:yq)
+
 SIZE(MEDIUM)
 
 FORK_SUBTESTS()
@@ -24,5 +26,7 @@ SRCS(
     ydb_state_storage_ut.cpp
     ydb_checkpoint_storage_ut.cpp
 )
+
+REQUIREMENTS(ram:10)
 
 END()

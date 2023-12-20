@@ -582,7 +582,7 @@ struct TAlterUserSettings {
 
 struct TDropUserSettings {
     TString UserName;
-    bool Force = false;
+    bool MissingOk = false;
 };
 
 struct TCreateGroupSettings {
@@ -608,7 +608,7 @@ struct TRenameGroupSettings {
 
 struct TDropGroupSettings {
     TString GroupName;
-    bool Force = false;
+    bool MissingOk = false;
 };
 
 struct TAlterColumnTableSettings {
@@ -837,11 +837,11 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropTableStore(const TString& cluster, const TDropTableStoreSettings& settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> CreateExternalTable(const TString& cluster, const TCreateExternalTableSettings& settings, bool createDir) = 0;
+    virtual NThreading::TFuture<TGenericResult> CreateExternalTable(const TString& cluster, const TCreateExternalTableSettings& settings, bool createDir, bool existingOk) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterExternalTable(const TString& cluster, const TAlterExternalTableSettings& settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> DropExternalTable(const TString& cluster, const TDropExternalTableSettings& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> DropExternalTable(const TString& cluster, const TDropExternalTableSettings& settings, bool missingOk) = 0;
 
     virtual TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() = 0;
 

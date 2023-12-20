@@ -5,16 +5,16 @@
 namespace NKikimr::NKqp {
 
 class TExternalDataSourceManager: public NMetadata::NModifications::IOperationsManager {
-    NThreading::TFuture<TYqlConclusionStatus> CreateExternalDataSource(const NYql::TObjectSettingsImpl& settings,
+    NThreading::TFuture<TYqlConclusionStatus> CreateExternalDataSource(const NYql::TCreateObjectSettings& settings,
                                                                        TInternalModificationContext& context) const;
 
-    NThreading::TFuture<TYqlConclusionStatus> DropExternalDataSource(const NYql::TObjectSettingsImpl& settings,
+    NThreading::TFuture<TYqlConclusionStatus> DropExternalDataSource(const NYql::TDropObjectSettings& settings,
                                                                      TInternalModificationContext& context) const;
 
-    void PrepareCreateExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings,
+    void PrepareCreateExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TCreateObjectSettings& settings,
                                          TInternalModificationContext& context) const;
 
-    void PrepareDropExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings,
+    void PrepareDropExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings,
                                        TInternalModificationContext& context) const;
 
 protected:

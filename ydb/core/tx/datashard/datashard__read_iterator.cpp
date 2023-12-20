@@ -1871,8 +1871,8 @@ class TDataShard::TTxReadViaPipeline : public NTabletFlatExecutor::TTransactionB
     bool WaitComplete = false;
 
 public:
-    TTxReadViaPipeline(TDataShard* ds, TEvDataShard::TEvRead::TPtr ev)
-        : TBase(ds)
+    TTxReadViaPipeline(TDataShard* ds, TEvDataShard::TEvRead::TPtr ev, NWilson::TTraceId &&traceId)
+        : TBase(ds, std::move(traceId))
         , Ev(std::move(ev))
         , ReadId(Ev->Sender, Ev->Get()->Record.GetReadId())
     {}
@@ -2235,8 +2235,8 @@ class TDataShard::TTxReadContinue : public NTabletFlatExecutor::TTransactionBase
     bool DelayedResult = false;
 
 public:
-    TTxReadContinue(TDataShard* ds, TEvDataShard::TEvReadContinue::TPtr ev)
-        : TBase(ds)
+    TTxReadContinue(TDataShard* ds, TEvDataShard::TEvReadContinue::TPtr ev, NWilson::TTraceId &&traceId)
+        : TBase(ds, std::move(traceId))
         , Ev(ev)
     {}
 
@@ -2694,7 +2694,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
 
     SetCounter(COUNTER_READ_ITERATORS_COUNT, ReadIterators.size());
 
-    Executor()->Execute(new TTxReadViaPipeline(this, ev), ctx, request->ReadSpan.GetTraceId());
+    Executor()->Execute(new TTxReadViaPipeline(this, ev, request->ReadSpan.GetTraceId()), ctx);
 }
 
 void TDataShard::Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorContext& ctx) {
@@ -2704,7 +2704,7 @@ void TDataShard::Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorCon
         return;
     }
     
-    Executor()->Execute(new TTxReadContinue(this, ev), ctx, it->second->Request->ReadSpan.GetTraceId());
+    Executor()->Execute(new TTxReadContinue(this, ev, it->second->Request->ReadSpan.GetTraceId()), ctx);
 }
 
 void TDataShard::Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext& ctx) {

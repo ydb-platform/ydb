@@ -2818,8 +2818,7 @@ void TDataShard::ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&
         UpdateProposeQueueSize();
     } else {
         // Prepare planned transactions as soon as possible
-        TTxProposeTransactionBase *tx = new TTxProposeTransactionBase(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false);
-        Execute(tx, ctx, tx->GetTraceId());
+        Execute(new TTxProposeTransactionBase(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false), ctx);
     }
 }
 
@@ -2837,8 +2836,7 @@ void TDataShard::ProposeTransaction(NEvents::TDataEvents::TEvWrite::TPtr&& ev, c
         UpdateProposeQueueSize();
     } else {
         // Prepare planned transactions as soon as possible
-        TTxWrite *tx = new TTxWrite(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false);
-        Execute(tx, ctx, tx->GetTraceId());
+        Execute(new TTxWrite(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false), ctx);
     }
 }
 
@@ -2903,14 +2901,12 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
             switch (item.Event->GetTypeRewrite()) {
                 case TEvDataShard::TEvProposeTransaction::EventType: {
                     auto event = IEventHandle::Downcast<TEvDataShard::TEvProposeTransaction>(std::move(item.Event));
-                    TTxProposeTransactionBase *tx = new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true);
-                    Execute(tx, ctx, tx->GetTraceId());
+                    Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true), ctx);
                     return;
                 }
                 case NEvents::TDataEvents::TEvWrite::EventType: {
                     auto event = IEventHandle::Downcast<NEvents::TDataEvents::TEvWrite>(std::move(item.Event));
-                    TTxWrite *tx = new TTxWrite(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true);
-                    Execute(tx, ctx, tx->GetTraceId());
+                    Execute(new TTxWrite(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true), ctx);
                     return;
                 }
                 default:
@@ -4121,13 +4117,13 @@ bool TDataShard::ReassignChannelsEnabled() const {
 }
 
 void TDataShard::ExecuteProgressTx(const TActorContext& ctx) {
-    Execute(new TTxProgressTransaction(this, {}), ctx);
+    Execute(new TTxProgressTransaction(this, {}, {}), ctx);
 }
 
 void TDataShard::ExecuteProgressTx(TOperation::TPtr op, const TActorContext& ctx) {
     Y_ABORT_UNLESS(op->IsInProgress());
     NWilson::TTraceId traceId = op->GetTraceId();
-    Execute(new TTxProgressTransaction(this, std::move(op)), ctx, std::move(traceId));
+    Execute(new TTxProgressTransaction(this, std::move(op), std::move(traceId)), ctx);
 }
 
 TDuration TDataShard::CleanupTimeout() const {

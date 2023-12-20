@@ -67,7 +67,7 @@ private:
 
 class TDataShard::TTxProgressTransaction : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    explicit TTxProgressTransaction(TDataShard *self, TOperation::TPtr op = {});
+    explicit TTxProgressTransaction(TDataShard *self, TOperation::TPtr op, NWilson::TTraceId &&traceId);
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
     void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_PROGRESS_START; }

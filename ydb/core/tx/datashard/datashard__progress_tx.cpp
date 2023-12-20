@@ -6,8 +6,8 @@
 namespace NKikimr {
 namespace NDataShard {
 
-TDataShard::TTxProgressTransaction::TTxProgressTransaction(TDataShard *self, TOperation::TPtr op)
-    : TBase(self)
+TDataShard::TTxProgressTransaction::TTxProgressTransaction(TDataShard *self, TOperation::TPtr op, NWilson::TTraceId &&traceId)
+    : TBase(self, std::move(traceId))
     , ActiveOp(std::move(op))
 {}
 
@@ -61,11 +61,11 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
             ActiveOp->IncrementInProgress();
 
             if (ActiveOp->OperationSpan) {
-                if (!txc.Seat.TxSpan) {
+                if (!TxSpan) {
                     // If Progress Tx for this operation is being executed the first time,
                     // it won't have a span, because we choose what operation to run in the transaction itself.
                     // We create transaction span and transaction execution spans here instead.
-                    txc.Seat.SetupTxSpan(ActiveOp->GetTraceId());
+                    SetupTxSpan(ActiveOp->GetTraceId());
                     auxExecuteSpan = txc.Seat.CreateExecutionSpan();
                 }
             }

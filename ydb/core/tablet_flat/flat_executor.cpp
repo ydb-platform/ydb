@@ -1576,10 +1576,10 @@ bool TExecutor::CanExecuteTransaction() const {
     return Stats->IsActive && (Stats->IsFollower || PendingPartSwitches.empty()) && !BrokenTransaction;
 }
 
-void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, const TActorContext &ctx, NWilson::TTraceId traceId) {
+void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, const TActorContext &ctx) {
     Y_ABORT_UNLESS(ActivationQueue, "attempt to execute transaction before activation");
 
-    TAutoPtr<TSeat> seat = new TSeat(++TransactionUniqCounter, self, std::move(traceId));
+    TAutoPtr<TSeat> seat = new TSeat(++TransactionUniqCounter, self);
 
     LWTRACK(TransactionBegin, seat->Self->Orbit, seat->UniqID, Owner->TabletID(), TypeName(*seat->Self));
 
@@ -1634,12 +1634,12 @@ void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, cons
     ExecuteTransaction(seat, ctx);
 }
 
-void TExecutor::Execute(TAutoPtr<ITransaction> self, const TActorContext &ctx, NWilson::TTraceId traceId) {
-    DoExecute(self, true, ctx, std::move(traceId));
+void TExecutor::Execute(TAutoPtr<ITransaction> self, const TActorContext &ctx) {
+    DoExecute(self, true, ctx);
 }
 
-void TExecutor::Enqueue(TAutoPtr<ITransaction> self, const TActorContext &ctx, NWilson::TTraceId traceId) {
-    DoExecute(self, false, ctx, std::move(traceId));
+void TExecutor::Enqueue(TAutoPtr<ITransaction> self, const TActorContext &ctx) {
+    DoExecute(self, false, ctx);
 }
 
 void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ctx) {

@@ -2104,7 +2104,7 @@ public:
     struct TPermissionParameters {
         TString PermissionAction;
         TVector<TDeferredAtom> Permissions;
-        TVector<TDeferredAtom> SchemaPathes;
+        TVector<TDeferredAtom> SchemaPaths;
         TVector<TDeferredAtom> RoleNames;
     };
 
@@ -2130,15 +2130,15 @@ public:
             return false;
         }
 
-        TVector<TNodePtr> pathes;
-        pathes.reserve(Parameters.SchemaPathes.size());
-        for (auto& item : Parameters.SchemaPathes) {
-            pathes.push_back(item.Build());
-            if (!pathes.back()->Init(ctx, FakeSource.Get())) {
+        TVector<TNodePtr> paths;
+        paths.reserve(Parameters.SchemaPaths.size());
+        for (auto& item : Parameters.SchemaPaths) {
+            paths.push_back(item.Build());
+            if (!paths.back()->Init(ctx, FakeSource.Get())) {
                 return false;
             }
         }
-        auto options = Y(Q(Y(Q("pathes"), Q(new TAstListNodeImpl(Pos, std::move(pathes))))));
+        auto options = Y(Q(Y(Q("paths"), Q(new TAstListNodeImpl(Pos, std::move(paths))))));
 
         TVector<TNodePtr> permissions;
         permissions.reserve(Parameters.Permissions.size());
@@ -2180,24 +2180,24 @@ private:
     TSourcePtr FakeSource;
 };
 
-TNodePtr BuildGrantPermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPathes, const TVector<TDeferredAtom>& roleNames, TScopedStatePtr scoped) {
+TNodePtr BuildGrantPermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPaths, const TVector<TDeferredAtom>& roleNames, TScopedStatePtr scoped) {
     return new TPermissionsAction(pos,
                                   service,
                                   cluster,
                                   {.PermissionAction = "grant",
                                                .Permissions = permissions,
-                                               .SchemaPathes = schemaPathes,
+                                               .SchemaPaths = schemaPaths,
                                                .RoleNames = roleNames},
                                   scoped);
 }
 
-TNodePtr BuildRevokePermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPathes, const TVector<TDeferredAtom>& roleNames, TScopedStatePtr scoped) {
+TNodePtr BuildRevokePermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPaths, const TVector<TDeferredAtom>& roleNames, TScopedStatePtr scoped) {
     return new TPermissionsAction(pos,
                                   service,
                                   cluster,
                                   {.PermissionAction = "revoke",
                                                .Permissions = permissions,
-                                               .SchemaPathes = schemaPathes,
+                                               .SchemaPaths = schemaPaths,
                                                .RoleNames = roleNames},
                                   scoped);
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "util/generic/algorithm.h"
+#include <util/generic/algorithm.h>
 #include <ydb/library/actors/core/monotonic.h>
 #include <ydb/library/actors/protos/actors.pb.h>
 

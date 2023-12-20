@@ -745,10 +745,7 @@ class YMake(object):
         if presets:
             print('# Variables set from command line by -D options')
             for key in sorted(presets):
-                if key in ('MY_YMAKE_BIN', 'REAL_YMAKE_BIN'):
-                    emit_with_ignore_comment(key, opts().presets[key])
-                else:
-                    emit(key, opts().presets[key])
+                emit(key, opts().presets[key])
 
     @staticmethod
     def _print_conf_content(path):

@@ -381,6 +381,11 @@ message TKqpSchemeOperation {
         FLAG_IF_NOT_EXISTS = 2; // set if IF_NOT_EXISTS modificator present
     };
 
+    // If the object is modified, this field is not empty
+    // and in that case modification will be through
+    // NMetadata::IClassBehaviour way
+    string ObjectType = 100;
+
     oneof Operation {
         NKikimrSchemeOp.TModifyScheme CreateTable = 1;
         NKikimrSchemeOp.TModifyScheme DropTable = 2;
@@ -394,6 +399,12 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme RemoveGroupMembership = 10;
         NKikimrSchemeOp.TModifyScheme DropGroup = 11;
         NKikimrSchemeOp.TModifyScheme RenameGroup = 12;
+        NKikimrSchemeOp.TModifyScheme CreateExternalDataSource = 13;
+        NKikimrSchemeOp.TModifyScheme AlterExternalDataSource = 14;
+        NKikimrSchemeOp.TModifyScheme DropExternalDataSource = 15;
+        NKikimrSchemeOp.TModifyScheme CreateExternalTable = 16;
+        NKikimrSchemeOp.TModifyScheme AlterExternalTable = 17;
+        NKikimrSchemeOp.TModifyScheme DropExternalTable = 18;
     }
 }
 

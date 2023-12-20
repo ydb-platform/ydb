@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/kqp/common
     ydb/core/kqp/federated_query
+    ydb/core/kqp/gateway/utils
     ydb/core/kqp/opt
     ydb/core/kqp/provider
     ydb/core/tx/long_tx_service/public

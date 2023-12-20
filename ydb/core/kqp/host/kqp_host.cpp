@@ -819,8 +819,8 @@ private:
             auto node = TExprBase(exprNode);
 
             hasFederatedSorcesOrSinks = hasFederatedSorcesOrSinks
-                || node.Maybe<TS3DataSource>() 
-                || node.Maybe<TS3DataSink>() 
+                || node.Maybe<TS3DataSource>()
+                || node.Maybe<TS3DataSink>()
                 || node.Maybe<TGenDataSource>();
 
             return !hasFederatedSorcesOrSinks;
@@ -923,7 +923,8 @@ public:
         TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
         std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
         const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
-        bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState = nullptr)
+        bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
+        NActors::TActorSystem* actorSystem = nullptr)
         : Gateway(gateway)
         , Cluster(cluster)
         , ExprCtx(new TExprContext())
@@ -936,6 +937,7 @@ public:
         , PlanBuilder(CreatePlanBuilder(*TypesCtx))
         , FakeWorld(ExprCtx->NewWorld(TPosition()))
         , ExecuteCtx(MakeIntrusive<TExecuteContext>())
+        , ActorSystem(actorSystem ? actorSystem : NActors::TActivationContext::ActorSystem())
     {
         if (funcRegistry) {
             FuncRegistry = funcRegistry;
@@ -945,6 +947,7 @@ public:
         }
 
         SessionCtx->SetDatabase(database);
+        SessionCtx->SetCluster(cluster);
         SessionCtx->SetTempTables(std::move(tempTablesState));
     }
 
@@ -1510,7 +1513,7 @@ private:
         };
 
         // Kikimr provider
-        auto gatewayProxy = CreateKqpGatewayProxy(Gateway, SessionCtx);
+        auto gatewayProxy = CreateKqpGatewayProxy(Gateway, SessionCtx, ActorSystem);
 
         auto queryExecutor = MakeIntrusive<TKqpQueryExecutor>(Gateway, Cluster, SessionCtx, KqpRunner);
         auto kikimrDataSource = CreateKikimrDataSource(*FuncRegistry, *TypesCtx, gatewayProxy, SessionCtx,
@@ -1648,6 +1651,7 @@ private:
     NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
 
     TKqpTempTablesState::TConstPtr TempTablesState;
+    NActors::TActorSystem* ActorSystem = nullptr;
 };
 
 } // namespace
@@ -1669,10 +1673,10 @@ TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges, bool isInternalCall,
-    TKqpTempTablesState::TConstPtr tempTablesState)
+    TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem)
 {
     return MakeIntrusive<TKqpHost>(gateway, cluster, database, config, moduleResolver, federatedQuerySetup, funcRegistry,
-                                   keepConfigChanges, isInternalCall, std::move(tempTablesState));
+                                   keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem);
 }
 
 } // namespace NKqp

@@ -4,7 +4,7 @@
 
 #include <yt/yt/core/misc/error.h>
 
-#include <yt/yt/core/ytree/yson_serializable.h>
+#include <util/system/file.h>
 
 #include <errno.h>
 

@@ -80,7 +80,7 @@ static void FillDefaultParameters(NConfig::TCheckpointCoordinatorConfig& checkpo
     auto& limits = *checkpointCoordinatorConfig.MutableStateStorageLimits();
     if (!limits.GetMaxGraphCheckpointsSizeBytes()) {
         limits.SetMaxGraphCheckpointsSizeBytes(1099511627776);
-    }   
+    }
 
     if (!limits.GetMaxTaskStateSizeBytes()) {
         limits.SetMaxTaskStateSizeBytes(1099511627776);

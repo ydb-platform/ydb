@@ -845,7 +845,7 @@ public:
         TVector<std::pair<const TString*, std::pair<TString, TString>>> pathPairs;
         pathPairs.reserve(settings.Pathes.size());
         for (const auto& path : settings.Pathes) {
-            pathPairs.push_back(std::make_pair(&path, SplitPathByDirAndBaseNames(path)));
+            pathPairs.push_back(std::make_pair(&path, NSchemeHelpers::SplitPathByDirAndBaseNames(path)));
         }
 
         if (IsPrepare()) {

@@ -44,7 +44,13 @@
 
   {% include [x](_includes/select/functional_tables.md) %}
 
+{% endif %}
+
+{% if feature_map_reduce %}
+
   {% include [x](_includes/select/folder.md) %}
+
+  {% include [x](_includes/select/walk_folders.md) %}
 
 {% endif %}
 

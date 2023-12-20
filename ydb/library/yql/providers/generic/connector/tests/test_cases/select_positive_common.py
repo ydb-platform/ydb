@@ -216,7 +216,9 @@ class Factory:
         # TODO: assert connector stats when it will be accessible
         '''
 
-        table_size = 2.5 * self.ss.connector.paging_bytes_per_page * self.ss.connector.paging_prefetch_queue_capacity
+        # FIXME: uncomment to debug YQ-2729
+        # table_size = 2.5 * self.ss.connector.paging_bytes_per_page * self.ss.connector.paging_prefetch_queue_capacity
+        table_size = self.ss.connector.paging_bytes_per_page * self.ss.connector.paging_prefetch_queue_capacity / 1000
 
         schema = Schema(
             columns=ColumnList(
@@ -239,7 +241,7 @@ class Factory:
         test_cases = []
         for data_source_kind in data_source_kinds:
             tc = TestCase(
-                name=f'large_table_{data_source_kind}',
+                name=f'large_table',
                 data_source_kind=data_source_kind,
                 data_in=data_in,
                 data_out_=data_in,
@@ -273,7 +275,7 @@ class Factory:
                 continue
             for protocol in protocols[base_tc.data_source_kind]:
                 tc = replace(base_tc)
-                tc.name += f'_{protocol}'
+                tc.name += f'_{EProtocol.Name(protocol)}'
                 tc.protocol = protocol
                 test_cases.append(tc)
 

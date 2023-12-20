@@ -55,7 +55,6 @@ public:
         DeviceReadBlockSize = costModel.ReadBlockSize;
         DeviceWriteBlockSize = costModel.WriteBlockSize;
         HugeBlobSize = costModel.MinREALHugeBlobInBytes;
-        Y_UNUSED(PDiskWriteBlockSize);
     }
 
 protected:

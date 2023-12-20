@@ -247,6 +247,7 @@ struct TRandomTest {
                 ui32 pos = random() % Env->Settings.NodeCount;
                 if (Env.RunningNodes.contains(pos)) {
                     Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
+                    Env->Sim(TDuration::Seconds(10));
                 }
             }
 
@@ -258,6 +259,7 @@ struct TRandomTest {
                     const auto& somePDisk = baseConfig.GetPDisk(pos);
                     const auto& someVSlot = baseConfig.GetVSlot(pos);
                     Env->Wipe(somePDisk.GetNodeId(), somePDisk.GetPDiskId(), someVSlot.GetVSlotId().GetVSlotId());
+                    Env->Sim(TDuration::Seconds(10));
                 }
             }
         }

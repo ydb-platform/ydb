@@ -182,7 +182,7 @@ void SetProtobufInteropConfig(TProtobufInteropDynamicConfigPtr config)
     GlobalProtobufInteropConfig()->Config.Store(std::move(config));
 }
 
-void GetSchema(const TProtobufEnumType* enumType, IYsonConsumer* consumer);
+void WriteSchema(const TProtobufEnumType* enumType, IYsonConsumer* consumer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -501,17 +501,18 @@ public:
         return EnumYsonStorageType_;
     }
 
-    void GetSchema(IYsonConsumer* consumer) const
+    void WriteSchema(IYsonConsumer* consumer) const
     {
         if (IsYsonMap()) {
-            BuildYsonFluently(consumer).BeginMap()
-                .Item("type_name").Value("dict")
-                .Item("key").Do([this] (auto&& fluent) {
-                    GetYsonMapKeyField()->GetSchema(fluent.GetConsumer());
-                })
-                .Item("value").Do([this] (auto&& fluent) {
-                    GetYsonMapValueField()->GetSchema(fluent.GetConsumer());
-                })
+            BuildYsonFluently(consumer)
+                .BeginMap()
+                    .Item("type_name").Value("dict")
+                    .Item("key").Do([&] (auto fluent) {
+                        GetYsonMapKeyField()->WriteSchema(fluent.GetConsumer());
+                    })
+                    .Item("value").Do([&] (auto fluent) {
+                        GetYsonMapValueField()->WriteSchema(fluent.GetConsumer());
+                    })
                 .EndMap();
 
             return;
@@ -558,10 +559,10 @@ public:
                 consumer->OnStringScalar("string");
                 break;
             case FieldDescriptor::TYPE_ENUM:
-                NYson::GetSchema(GetEnumType(), consumer);
+                NYson::WriteSchema(GetEnumType(), consumer);
                 break;
             case FieldDescriptor::TYPE_MESSAGE:
-                NYson::GetSchema(GetMessageType(), consumer);
+                NYson::WriteSchema(GetMessageType(), consumer);
                 break;
             default:
                 break;
@@ -690,20 +691,21 @@ public:
         }
     }
 
-    void GetSchema(IYsonConsumer* consumer) const
+    void WriteSchema(IYsonConsumer* consumer) const
     {
         BuildYsonFluently(consumer).BeginMap()
             .Item("type_name").Value("struct")
-            .Item("members").DoListFor(0, Underlying_->field_count(), [this] (auto&& fluent, int index) {
+            .Item("members").DoListFor(0, Underlying_->field_count(), [&] (auto fluent, int index) {
                 auto* field = GetFieldByNumber(Underlying_->field(index)->number());
-                fluent.Item().BeginMap()
-                    .Item("name").Value(field->GetYsonName())
-                    .Item("type").Do([&] (auto&& fluent) {
-                        field->GetSchema(fluent.GetConsumer());
-                    })
-                    .DoIf(!field->IsYsonMap() && !field->IsRepeated() && !field->IsOptional(), [&] (auto && fluent) {
-                        fluent.Item("required").Value(true);
-                    })
+                fluent.Item()
+                    .BeginMap()
+                        .Item("name").Value(field->GetYsonName())
+                        .Item("type").Do([&] (auto fluent) {
+                            field->WriteSchema(fluent.GetConsumer());
+                        })
+                        .DoIf(!field->IsYsonMap() && !field->IsRepeated() && !field->IsOptional(), [] (auto fluent) {
+                            fluent.Item("required").Value(true);
+                        })
                     .EndMap();
             })
             .EndMap();
@@ -821,14 +823,15 @@ public:
         return it == ValueToLiteral_.end() ? TStringBuf() : it->second;
     }
 
-    void GetSchema(IYsonConsumer* consumer) const
+    void WriteSchema(IYsonConsumer* consumer) const
     {
-        BuildYsonFluently(consumer).BeginMap()
-            .Item("type_name").Value("enum")
-            .Item("enum_name").Value(Underlying_->name())
-            .Item("values").DoListFor(0, Underlying_->value_count(), [this] (auto&& fluent, int index) {
-                fluent.Item().Value(FindLiteralByValue(Underlying_->value(index)->number()));
-            })
+        BuildYsonFluently(consumer)
+            .BeginMap()
+                .Item("type_name").Value("enum")
+                .Item("enum_name").Value(Underlying_->name())
+                .Item("values").DoListFor(0, Underlying_->value_count(), [&] (auto fluent, int index) {
+                    fluent.Item().Value(FindLiteralByValue(Underlying_->value(index)->number()));
+                })
             .EndMap();
     }
 
@@ -3140,14 +3143,14 @@ TString YsonStringToProto(
     return serializedProto;
 }
 
-void GetSchema(const TProtobufEnumType* type, IYsonConsumer* consumer)
+void WriteSchema(const TProtobufEnumType* type, IYsonConsumer* consumer)
 {
-    type->GetSchema(consumer);
+    type->WriteSchema(consumer);
 }
 
-void GetSchema(const TProtobufMessageType* type, IYsonConsumer* consumer)
+void WriteSchema(const TProtobufMessageType* type, IYsonConsumer* consumer)
 {
-    type->GetSchema(consumer);
+    type->WriteSchema(consumer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

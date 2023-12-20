@@ -70,28 +70,17 @@ struct TTestEnv {
         return res;
     };
 
-    void SetVDiskReadOnly(ui32 position, bool value) {
-        const TVDiskID& someVDisk = GroupInfo->GetVDiskId(position);
-        auto baseConfig = Env.FetchBaseConfig();
-
-        const auto& somePDisk = baseConfig.GetPDisk(position);
-        const auto& someVSlot = baseConfig.GetVSlot(position);
-        Cerr << "Setting VDisk read-only to " << value << " for position " << position << Endl;
-        if (!value) {
-            Env.PDiskMockStates[{somePDisk.GetNodeId(), somePDisk.GetPDiskId()}]->SetReadOnly(someVDisk, value);
+    TActorId GetQueue(const TVDiskID& vDiskId) {
+        if (!Queues.contains(vDiskId)) {
+            Queues[vDiskId] = Env.CreateQueueActor(vDiskId, NKikimrBlobStorage::EVDiskQueueId::GetFastRead, 1000);
         }
-        Env.SetVDiskReadOnly(somePDisk.GetNodeId(), somePDisk.GetPDiskId(), someVSlot.GetVSlotId().GetVSlotId(), someVDisk, value);
-        Env.Sim(TDuration::Seconds(3));
-        if (value) {
-            Env.PDiskMockStates[{somePDisk.GetNodeId(), somePDisk.GetPDiskId()}]->SetReadOnly(someVDisk, value);
-        }
+        return Queues[vDiskId];
     }
 
     TVector<ui32> GetParts(ui32 position, const TLogoBlobID& blobId) {
         if (!RunningNodes.contains(position)) {
             return {};
         }
-        auto vDiskActorId = GroupInfo->GetActorId(position);
         auto vDiskId = GroupInfo->GetVDiskId(position);
         auto ev = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(
             vDiskId, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::AsyncRead,
@@ -99,12 +88,17 @@ struct TTestEnv {
             {{blobId, 0, 0}}
         );
         const TActorId sender = Env.Runtime->AllocateEdgeActor(GroupInfo->GetActorId(*RunningNodes.begin()).NodeId(), __FILE__, __LINE__);
+        TVector<ui32> partsRes;
+
+        Cerr << "Get request for vdisk " << position << Endl;
+        auto queueId = GetQueue(vDiskId);
         Env.Runtime->WrapInActorContext(sender, [&] {
-            Env.Runtime->Send(new IEventHandle(vDiskActorId, sender, ev.release()));
+            Env.Runtime->Send(new IEventHandle(queueId, sender, ev.release()));
         });
         auto res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(sender, false);
         auto parts = res->Get()->Record.GetResult().at(0).GetParts();
-        return TVector<ui32>(parts.begin(), parts.end());
+        partsRes = TVector<ui32>(parts.begin(), parts.end());
+        return partsRes;
     }
 
     TPartsLocations GetExpectedPartsLocations(const TLogoBlobID& blobId) {
@@ -157,6 +151,10 @@ struct TTestEnv {
         }
         Env.StartNode(GroupInfo->GetActorId(position).NodeId());
         RunningNodes.insert(position);
+        for (auto [_, queueId]: Queues) {
+            Env.Runtime->Send(new IEventHandle(TEvents::TSystem::Poison, 0, queueId, {}, nullptr, 0), queueId.NodeId());
+        }
+        Queues.clear();
     }
 
     TEnvironmentSetup* operator->() {
@@ -166,6 +164,7 @@ struct TTestEnv {
     TEnvironmentSetup Env;
     TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
     THashSet<ui32> RunningNodes;
+    THashMap<TVDiskID, TActorId> Queues;
 };
 
 TLogoBlobID MakeLogoBlobId(ui32 step, ui32 dataSize) {
@@ -228,6 +227,7 @@ struct TRandomTest {
                 ui32 nodeId = random() % Env->Settings.NodeCount;
                 Cerr << "Stop node " << nodeId << Endl;
                 Env.StopNode(nodeId);
+                Env->Sim(TDuration::Seconds(10));
             }
 
             Env.SendPut(step, data.back(), NKikimrProto::OK);
@@ -243,25 +243,33 @@ struct TRandomTest {
                 }
             }
 
-            // if (random() % 50 == 1) {
-            //     ui32 pos = random() % Env->Settings.NodeCount;
-            //     if (!Env.RunningNodes.contains(pos)) {
-            //         Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
-            //     }
-            // }
+            if (random() % 50 == 1) {
+                ui32 pos = random() % Env->Settings.NodeCount;
+                if (Env.RunningNodes.contains(pos)) {
+                    Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
+                }
+            }
 
-            // // Wipe random node
-            // if (random() % 100 == 1) {
-            //     // Env->Wipe(ui32 nodeId, ui32 pdiskId, ui32 vslotId);
-            // }
+            // Wipe random node
+            if (random() % 100 == 1) {
+                ui32 pos = random() % Env->Settings.NodeCount;
+                if (Env.RunningNodes.contains(pos)) {
+                    auto baseConfig = Env->FetchBaseConfig();
+                    const auto& somePDisk = baseConfig.GetPDisk(pos);
+                    const auto& someVSlot = baseConfig.GetVSlot(pos);
+                    Env->Wipe(somePDisk.GetNodeId(), somePDisk.GetPDiskId(), someVSlot.GetVSlotId().GetVSlotId());
+                }
+            }
         }
 
         for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
-            Env->StartNode(pos);
+            Env.StartNode(pos);
         }
 
         Env->Sim(TDuration::Seconds(300));
+        Cerr << "Start checking" << Endl;
         for (ui32 step = 0; step < NumIters; ++step) {
+            Cerr << step << Endl;
             Env.CheckPartsLocations(MakeLogoBlobId(step, data[step].size()));
             UNIT_ASSERT_VALUES_EQUAL(Env.SendGet(step, data[step].size())->Get()->Responses[0].Buffer.ConvertToString(), data[step]);
         }
@@ -287,6 +295,9 @@ Y_UNIT_TEST_SUITE(VDiskBalancing) {
 
     Y_UNIT_TEST(TestRandom_Block42) {
         TRandomTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), 1000}.RunTest();
+    }
+    Y_UNIT_TEST(TestRandom_Mirror3dc) {
+        TRandomTest{TTestEnv(9, TBlobStorageGroupType::ErasureMirror3dc), 1000}.RunTest();
     }
 
 }

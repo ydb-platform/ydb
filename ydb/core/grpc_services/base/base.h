@@ -607,7 +607,7 @@ public:
         return {};
     }
 
-    TMaybe<NWilson::TTraceId> GetWilsonTraceId() const override {
+    NWilson::TTraceId GetWilsonTraceId() const override {
         return {};
     }
 
@@ -830,11 +830,8 @@ public:
         return GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER);
     }
 
-    TMaybe<NWilson::TTraceId> GetWilsonTraceId() const override {
-        if (Span_) {
-            return Span_->GetTraceId();
-        }
-        return {};
+    NWilson::TTraceId GetWilsonTraceId() const override {
+        return Span_.GetTraceId();
     }
 
     const TMaybe<TString> GetSdkBuildInfo() const {
@@ -891,9 +888,7 @@ public:
     }
 
     void LegacyFinishSpan() override {
-        if (Span_) {
-            Span_->End();
-        }
+        Span_.End();
     }
 
     // IRequestCtxBase
@@ -913,7 +908,7 @@ private:
     TMaybe<NRpcService::TRlPath> RlPath_;
     bool RlAllowed_;
     IGRpcProxyCounters::TPtr Counters_;
-    TMaybe<NWilson::TSpan> Span_;
+    NWilson::TSpan Span_;
 };
 
 template <typename TDerived>
@@ -1172,11 +1167,8 @@ public:
         return GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER);
     }
 
-    TMaybe<NWilson::TTraceId> GetWilsonTraceId() const override {
-        if (Span_) {
-            return Span_->GetTraceId();
-        }
-        return {};
+    NWilson::TTraceId GetWilsonTraceId() const override {
+        return Span_.GetTraceId();
     }
 
     const TMaybe<TString> GetSdkBuildInfo() const {
@@ -1351,7 +1343,7 @@ private:
     }
 
 protected:
-    TMaybe<NWilson::TSpan> Span_;
+    NWilson::TSpan Span_;
 private:
     TIntrusivePtr<NYdbGrpc::IRequestContextBase> Ctx_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
@@ -1429,9 +1421,7 @@ public:
     { }
 
     void Pass(const IFacilityProvider& facility) override {
-        if (this->Span_) {
-            this->Span_->End();
-        }
+        this->Span_.End();
 
         PassMethod(std::move(std::unique_ptr<TRequestIface>(this)), facility);
     }

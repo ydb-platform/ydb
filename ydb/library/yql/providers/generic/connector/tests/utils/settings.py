@@ -44,10 +44,10 @@ class Settings:
     def from_env(cls) -> 'Settings':
         return cls(
             connector=cls.Connector(
-                grpc_host=environ['YDB_CONNECTOR_RECIPE_GRPC_HOST'],
-                grpc_port=int(environ['YDB_CONNECTOR_RECIPE_GRPC_PORT']),
-                paging_bytes_per_page=int(environ['YDB_CONNECTOR_RECIPE_GRPC_PAGING_BYTES_PER_PAGE']),
-                paging_prefetch_queue_capacity=int(environ['YDB_CONNECTOR_RECIPE_GRPC_PAGING_PREFETCH_QUEUE_CAPACITY']),
+                grpc_host='localhost',
+                grpc_port=50051,
+                paging_bytes_per_page=4*1024*1024,
+                paging_prefetch_queue_capacity=2,
             ),
             clickhouse=cls.ClickHouse(
                 cluster_name='clickhouse_integration_test',
@@ -75,7 +75,7 @@ class Settings:
             case EDataSourceKind.POSTGRESQL:
                 return self.postgresql.cluster_name
             case _:
-                raise Exception(f'invalid data source: {data_source_kind}')
+                raise Exception(f'invalid data source: {EDataSourceKind.Name(data_source_kind)}')
 
 
 @dataclass

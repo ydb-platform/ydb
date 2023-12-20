@@ -224,15 +224,33 @@ struct TPublicIds {
 
 struct TDqsPipelineConfigurator : public IPipelineConfigurator {
 public:
-    TDqsPipelineConfigurator(const TDqStatePtr& state)
+    TDqsPipelineConfigurator(const TDqStatePtr& state, const THashMap<TString, TString>& providerParams)
         : State_(state)
+        , ProviderParams_(providerParams)
     {
+        for (const auto& ds: State_->TypeCtx->DataSources) {
+            if (const auto dq = ds->GetDqIntegration()) {
+                UniqIntegrations_.emplace(dq);
+            }
+        }
+        for (const auto& ds: State_->TypeCtx->DataSinks) {
+            if (const auto dq = ds->GetDqIntegration()) {
+                UniqIntegrations_.emplace(dq);
+            }
+        }
     }
 private:
     void AfterCreate(TTransformationPipeline*) const final {}
 
     void AfterTypeAnnotation(TTransformationPipeline* pipeline) const final {
+        // First truncate graph by calculated precomputes
         pipeline->Add(NDqs::CreateDqsReplacePrecomputesTransformer(*pipeline->GetTypeAnnotationContext(), State_->FunctionRegistry), "ReplacePrecomputes");
+
+        // Then apply provider specific transformers on truncated graph
+        std::for_each(UniqIntegrations_.cbegin(), UniqIntegrations_.cend(), [&](const auto dqInt) {
+            dqInt->ConfigurePeepholePipeline(true, ProviderParams_, pipeline);
+        });
+
         if (State_->Settings->UseBlockReader.Get().GetOrElse(false)) {
             pipeline->Add(NDqs::CreateDqsRewritePhyBlockReadOnDqIntegrationTransformer(*pipeline->GetTypeAnnotationContext()), "ReplaceWideReadsWithBlock");
         }
@@ -255,10 +273,16 @@ private:
         pipeline->Add(NDqs::CreateDqsRewritePhyCallablesTransformer(*pipeline->GetTypeAnnotationContext()), "RewritePhyCallables");
     }
 
-    void AfterOptimize(TTransformationPipeline*) const final {}
+    void AfterOptimize(TTransformationPipeline* pipeline) const final {
+        std::for_each(UniqIntegrations_.cbegin(), UniqIntegrations_.cend(), [&](const auto dqInt) {
+            dqInt->ConfigurePeepholePipeline(false, ProviderParams_, pipeline);
+        });
+    }
 
 private:
     TDqStatePtr State_;
+    THashMap<TString, TString> ProviderParams_;
+    std::unordered_set<IDqIntegration*> UniqIntegrations_;
 };
 
 TExprNode::TPtr DqMarkBlockStage(const TDqPhyStage& stage, TExprContext& ctx) {
@@ -792,9 +816,16 @@ private:
         try {
             auto result = TMaybeNode<TResult>(input).Cast();
 
+            THashMap<TString, TString> resSettings;
+            for (auto s: result.Settings()) {
+                if (auto val = s.Value().Maybe<TCoAtom>()) {
+                    resSettings.emplace(s.Name().Value(), val.Cast().Value());
+                }
+            }
+
             auto precomputes = FindIndependentPrecomputes(result.Input().Ptr());
             if (!precomputes.empty()) {
-                auto status = HandlePrecomputes(precomputes, ctx);
+                auto status = HandlePrecomputes(precomputes, ctx, resSettings);
                 if (status.Level != TStatus::Ok) {
                     if (status == TStatus::Async) {
                         return std::make_pair(status, ExecState->Promise.GetFuture().Apply([execState = ExecState](const TFuture<void>& completedFuture) {
@@ -813,10 +844,19 @@ private:
                 settings->_AllResultsBytesLimit = 64_MB;
             }
 
-            THashMap<TString, TString> secureParams;
-            NCommon::FillSecureParams(result.Input().Ptr(), *State->TypeCtx, secureParams);
+            int level;
+            TExprNode::TPtr resInput = WrapLambdaBody(level, result.Input().Ptr(), ctx);
+            {
+                auto block = MeasureBlock("PeepHole");
+                if (const auto status = PeepHole(resInput, resInput, ctx, resSettings); status.Level != TStatus::Ok) {
+                    return SyncStatus(status);
+                }
+            }
 
-            auto graphParams = GatherGraphParams(result.Input().Ptr());
+            THashMap<TString, TString> secureParams;
+            NCommon::FillSecureParams(resInput, *State->TypeCtx, secureParams);
+
+            auto graphParams = GatherGraphParams(resInput);
             bool hasGraphParams = !graphParams.empty();
 
             TString type;
@@ -845,15 +885,6 @@ private:
                     && integration
                     && integration->PrepareFullResultTableParams(result.Ref(), ctx, graphParams, secureParams);
                 settings->EnableFullResultWrite = enableFullResultWrite;
-            }
-
-            int level;
-            TExprNode::TPtr resInput = WrapLambdaBody(level, result.Input().Ptr(), ctx);
-            {
-                auto block = MeasureBlock("PeepHole");
-                if (const auto status = PeepHole(resInput, resInput, ctx); status.Level != TStatus::Ok) {
-                    return SyncStatus(status);
-                }
             }
 
             TString lambda;
@@ -1111,6 +1142,13 @@ private:
         TInstant startTime = TInstant::Now();
         auto pull = TPull(input);
 
+        THashMap<TString, TString> pullSettings;
+        for (auto s: pull.Settings()) {
+            if (auto val = s.Value().Maybe<TCoAtom>()) {
+                pullSettings.emplace(s.Name().Value(), val.Cast().Value());
+            }
+        }
+
         YQL_ENSURE(!TMaybeNode<TDqQuery>(pull.Input().Ptr()) || State->Settings->EnableComputeActor.Get().GetOrElse(false),
             "DqQuery is not supported with worker actor");
 
@@ -1120,7 +1158,7 @@ private:
 
         auto precomputes = FindIndependentPrecomputes(pull.Input().Ptr());
         if (!precomputes.empty()) {
-            auto status = HandlePrecomputes(precomputes, ctx);
+            auto status = HandlePrecomputes(precomputes, ctx, pullSettings);
             if (status.Level != TStatus::Ok) {
                 if (status == TStatus::Async) {
                     return std::make_pair(status, ExecState->Promise.GetFuture().Apply([execState = ExecState](const TFuture<void>& completedFuture) {
@@ -1145,7 +1183,7 @@ private:
         optimizedInput->SetTypeAnn(pull.Input().Ref().GetTypeAnn());
         optimizedInput->CopyConstraints(pull.Input().Ref());
 
-        auto status = PeepHole(optimizedInput, optimizedInput, ctx);
+        auto status = PeepHole(optimizedInput, optimizedInput, ctx, pullSettings);
         if (status.Level != TStatus::Ok) {
             return SyncStatus(status);
         }
@@ -1593,7 +1631,7 @@ private:
         });
     }
 
-    IGraphTransformer::TStatus HandlePrecomputes(const TNodeOnNodeOwnedMap& precomputes, TExprContext& ctx) {
+    IGraphTransformer::TStatus HandlePrecomputes(const TNodeOnNodeOwnedMap& precomputes, TExprContext& ctx, const THashMap<TString, TString>& providerParams) {
 
         IDataProvider::TFillSettings fillSettings;
         fillSettings.AllResultsBytesLimit.Clear();
@@ -1620,7 +1658,7 @@ private:
 
             auto optimizedInput = input;
             optimizedInput->SetState(TExprNode::EState::ConstrComplete);
-            auto status = PeepHole(optimizedInput, optimizedInput, ctx);
+            auto status = PeepHole(optimizedInput, optimizedInput, ctx, providerParams);
             if (status.Level != TStatus::Ok) {
                 return combinedStatus.Combine(status);
             }
@@ -1840,8 +1878,8 @@ private:
         return combinedStatus;
     }
 
-    IGraphTransformer::TStatus PeepHole(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        TDqsPipelineConfigurator peepholeConfig(State);
+    IGraphTransformer::TStatus PeepHole(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx, const THashMap<TString, TString>& providerParams) const {
+        TDqsPipelineConfigurator peepholeConfig(State, providerParams);
         TDqsFinalPipelineConfigurator finalPeepholeConfg;
         TPeepholeSettings peepholeSettings;
         peepholeSettings.CommonConfig = &peepholeConfig;

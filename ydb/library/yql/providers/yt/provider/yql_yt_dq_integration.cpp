@@ -678,7 +678,7 @@ public:
         pipeline->Add(CreateFunctorTransformer([state](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
             return OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
                 if (TYtReadTable::Match(node.Get()) && !node->Head().IsWorld()) {
-                    YQL_CLOG(INFO, ProviderYt) << "YtTrimWorld";
+                    YQL_CLOG(INFO, ProviderYt) << "Peephole-YtTrimWorld";
                     return ctx.ChangeChild(*node, 0, ctx.NewWorld(node->Pos()));
                 }
                 return node;
@@ -689,7 +689,7 @@ public:
             output = input;
             auto status = SubstTables(output, state, true, ctx);
             if (status.Level != IGraphTransformer::TStatus::Error && input != output) {
-                YQL_CLOG(INFO, ProviderYt) << "YtSubstTables";
+                YQL_CLOG(INFO, ProviderYt) << "Peephole-YtSubstTables";
             }
             return status;
         }), "YtSubstTables", TIssuesIds::DEFAULT_ERROR);

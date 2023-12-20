@@ -207,12 +207,6 @@ TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, NKikimr
     std::shared_ptr<IKqpGateway::IKqpTableMetadataLoader>&& metadataLoader, NActors::TActorSystem* actorSystem,
     ui32 nodeId, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig = NKikimrConfig::TQueryServiceConfig());
 
-bool SplitTablePath(const TString& tableName, const TString& database, std::pair<TString, TString>& pathPair,
-    TString& error, bool createDir);
-
-bool SetDatabaseForLoginOperation(TString& result, bool getDomainLoginOnly, TMaybe<TString> domainName,
-    const TString& database);
-
 } // namespace NKikimr::NKqp
 
 template<>

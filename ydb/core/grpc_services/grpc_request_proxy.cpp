@@ -11,6 +11,7 @@
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <shared_mutex>
 
@@ -79,12 +80,15 @@ private:
     void HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev);
     void ReplayEvents(const TString& databaseName, const TActorContext& ctx);
 
+    void StartTracing(IRequestProxyCtx& ctx);
+
     static bool IsAuthStateOK(const IRequestProxyCtx& ctx);
 
     template <typename TEvent>
     void Handle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
+            requestBaseCtx->LegacyFinishSpan();
             TGRpcRequestProxyHandleMethods::Handle(event, ctx);
         }
     }
@@ -92,6 +96,7 @@ private:
     void Handle(TEvListEndpointsRequest::TPtr& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
+            requestBaseCtx->LegacyFinishSpan();
             TGRpcRequestProxy::Handle(event, ctx);
         }
     }
@@ -144,6 +149,9 @@ private:
             requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
             return;
         }
+
+
+        //StartTracing(*requestBaseCtx);
 
         if (IsAuthStateOK(*requestBaseCtx)) {
             Handle(event, ctx);
@@ -399,6 +407,12 @@ bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
     return state.State == NYdbGrpc::TAuthState::AS_OK ||
            state.State == NYdbGrpc::TAuthState::AS_FAIL && state.NeedAuth == false ||
            state.NeedAuth == false && !ctx.GetYdbToken();
+}
+
+void TGRpcRequestProxyImpl::StartTracing(IRequestProxyCtx& ctx) {
+    auto traceId = NWilson::TTraceId::NewTraceId(15, Max<ui32>());
+    NWilson::TSpan grpcRequestProxySpan(TWilsonGrpc::RequestProxy, std::move(traceId), "GrpcRequestProxy");
+    ctx.StartTracing(std::move(grpcRequestProxySpan));
 }
 
 void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev, const TActorContext& ctx) {

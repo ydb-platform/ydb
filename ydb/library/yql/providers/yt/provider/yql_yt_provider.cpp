@@ -356,7 +356,7 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
         ytState->SessionId = sessionId;
         ytState->Gateway = gateway;
         ytState->Types = typeCtx.Get();
-        ytState->DqIntegration_ = CreateYtDqIntegration(ytState.Get());
+        ytState->DqIntegration_ = CreateYtDqIntegration(ytState.Get(), functionRegistry);
 
         TStatWriter statWriter = [ytState](ui32 publicId, const TVector<TOperationStatistics::TEntry>& stat) {
             with_lock(ytState->StatisticsMutex) {

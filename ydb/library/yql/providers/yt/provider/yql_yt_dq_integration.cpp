@@ -11,6 +11,7 @@
 #include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
 #include <ydb/library/yql/providers/common/config/yql_dispatch.h>
+#include <ydb/library/yql/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
@@ -39,8 +40,9 @@ using namespace NNodes;
 
 class TYtDqIntegration: public TDqIntegrationBase {
 public:
-    TYtDqIntegration(TYtState* state)
+    TYtDqIntegration(TYtState* state, const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry)
         : State_(state)
+        , ArrowResolver_(MakeSimpleArrowResolver(functionRegistry))
     {
     }
 
@@ -358,20 +360,24 @@ public:
         return false;
     }
 
-    bool CanBlockRead(const NNodes::TExprBase& node, TExprContext&, TTypeAnnotationContext&) override {
+    bool CanBlockRead(const NNodes::TExprBase& node, TExprContext& ctx, TTypeAnnotationContext&) override {
         auto wrap = node.Cast<TDqReadWideWrap>();
         auto maybeRead = wrap.Input().Maybe<TYtReadTable>();
         if (!maybeRead) {
             return false;
         }
 
-
         if (!State_->Configuration->UseRPCReaderInDQ.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_USE_RPC_READER_IN_DQ)) {
             return false;
         }
 
         const auto structType = GetSeqItemType(maybeRead.Raw()->GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back())->Cast<TStructExprType>();
-        if (!CanBlockReadTypes(structType)) {
+        TVector<const TTypeAnnotationNode*> subTypeAnn(Reserve(structType->GetItems().size()));
+        for (const auto& type: structType->GetItems()) {
+            subTypeAnn.emplace_back(type->GetItemType());
+        }
+
+        if (ArrowResolver_->AreTypesSupported(ctx.GetPosition(node.Pos()), subTypeAnn, ctx) != IArrowResolver::EStatus::OK) {
             return false;
         }
 
@@ -669,11 +675,12 @@ public:
 
 private:
     TYtState* State_;
+    IArrowResolver::TPtr ArrowResolver_;
 };
 
-THolder<IDqIntegration> CreateYtDqIntegration(TYtState* state) {
+THolder<IDqIntegration> CreateYtDqIntegration(TYtState* state, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry) {
     Y_ABORT_UNLESS(state);
-    return MakeHolder<TYtDqIntegration>(state);
+    return MakeHolder<TYtDqIntegration>(state, *functionRegistry);
 }
 
 }

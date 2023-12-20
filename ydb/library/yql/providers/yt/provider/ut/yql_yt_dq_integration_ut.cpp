@@ -13,7 +13,8 @@ struct TTestSetup {
         , State(MakeIntrusive<TYtState>())
     {
         State->Types = TypesCtx.Get();
-        State->DqIntegration_ = CreateYtDqIntegration(State.Get());
+        auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::IBuiltinFunctionRegistry::TPtr(nullptr));
+        State->DqIntegration_ = CreateYtDqIntegration(State.Get(), functionRegistry.Get());
 
     }
 

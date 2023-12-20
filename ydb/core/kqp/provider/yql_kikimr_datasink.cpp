@@ -967,7 +967,7 @@ public:
                         .DataSink(node->Child(1))
                         .Action().Build(mode)
                         .Permissions(settings.Permissions.Cast())
-                        .Pathes(settings.Pathes.Cast())
+                        .Paths(settings.Paths.Cast())
                         .Roles(settings.RoleNames.Cast())
                         .Done()
                         .Ptr();

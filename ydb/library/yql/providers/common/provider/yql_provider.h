@@ -83,12 +83,12 @@ struct TWriteRoleSettings {
 
 struct TWritePermissionSettings {
     NNodes::TMaybeNode<NNodes::TCoAtomList> Permissions;
-    NNodes::TMaybeNode<NNodes::TCoAtomList> Pathes;
+    NNodes::TMaybeNode<NNodes::TCoAtomList> Paths;
     NNodes::TMaybeNode<NNodes::TCoAtomList> RoleNames;
 
-    TWritePermissionSettings(NNodes::TMaybeNode<NNodes::TCoAtomList>&& permissions, NNodes::TMaybeNode<NNodes::TCoAtomList>&& pathes, NNodes::TMaybeNode<NNodes::TCoAtomList>&& roleNames)
+    TWritePermissionSettings(NNodes::TMaybeNode<NNodes::TCoAtomList>&& permissions, NNodes::TMaybeNode<NNodes::TCoAtomList>&& paths, NNodes::TMaybeNode<NNodes::TCoAtomList>&& roleNames)
         : Permissions(std::move(permissions))
-        , Pathes(std::move(pathes))
+        , Paths(std::move(paths))
         , RoleNames(std::move(roleNames)) {}
 };
 

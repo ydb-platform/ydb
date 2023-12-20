@@ -520,7 +520,7 @@ TWriteRoleSettings ParseWriteRoleSettings(TExprList node, TExprContext& ctx) {
 
 TWritePermissionSettings ParseWritePermissionsSettings(NNodes::TExprList node, TExprContext&) {
     TMaybeNode<TCoAtomList> permissions;
-    TMaybeNode<TCoAtomList> pathes;
+    TMaybeNode<TCoAtomList> paths;
     TMaybeNode<TCoAtomList> roleNames;
     for (auto child : node) {
         if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
@@ -533,14 +533,14 @@ TWritePermissionSettings ParseWritePermissionsSettings(NNodes::TExprList node, T
             } else if (name == "roles") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
                 roleNames = tuple.Value().Cast<TCoAtomList>();
-            } else if (name == "pathes") {
+            } else if (name == "paths") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
-                pathes = tuple.Value().Cast<TCoAtomList>();
+                paths = tuple.Value().Cast<TCoAtomList>();
             }
         }
     }
 
-    TWritePermissionSettings ret(std::move(permissions), std::move(pathes), std::move(roleNames));
+    TWritePermissionSettings ret(std::move(permissions), std::move(paths), std::move(roleNames));
     return ret;
 }
 

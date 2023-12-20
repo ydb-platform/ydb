@@ -241,7 +241,7 @@ public:
 private:
     struct TOperator {
         TMap<TString, NJson::TJsonValue> Properties;
-        TSet<ui32> Inputs;
+        TVector<std::variant<ui32, TExprNode::TPtr>> Inputs;
     };
 
     enum class EPlanNodeType {
@@ -300,16 +300,26 @@ private:
                     writer.WriteJsonValue(&value, true);
                 }
 
-                if (op.Inputs.size() > 1) {
-                    writer.WriteKey("Inputs");
-                    writer.BeginList();
+                writer.WriteKey("Inputs");
+                writer.BeginList();
 
-                    for (const auto& input : op.Inputs) {
-                        writer.WriteInt(input);
+                for (const auto& input : op.Inputs) {
+                    writer.BeginObject();
+
+                    if (std::holds_alternative<ui32>(input)) {
+                        writer.WriteKey("Local");
+                        writer.WriteInt(std::get<ui32>(input));
+                    }
+                    else {
+                        writer.WriteKey("PlanNode");
+                        TExprNode* ptr = std::get<TExprNode::TPtr>(input).Get();
+                        writer.WriteInt(StageInputs.at(ptr));
                     }
 
-                    writer.EndList();
+                    writer.EndObject();
                 }
+
+                writer.EndList();
 
                 writer.EndObject();
             }
@@ -733,11 +743,11 @@ private:
         return path;
     }
 
-    void Visit(const TDqSource& source, TQueryPlanNode& stagePlanNode) {
+    ui32 Visit(const TDqSource& source, TQueryPlanNode& stagePlanNode) {
         // YDB sources
         if (auto settings = source.Settings().Maybe<TKqpReadRangesSourceSettings>(); settings.IsValid()) {
             Visit(settings.Cast(), stagePlanNode);
-            return;
+            return stagePlanNode.NodeId;
         }
 
         // Federated providers
@@ -765,9 +775,11 @@ private:
         }
 
         AddOperator(stagePlanNode, "Source", op);
+
+        return stagePlanNode.NodeId;
     }
 
-    void Visit(const TDqSink& sink, TQueryPlanNode& stagePlanNode) {
+    ui32 Visit(const TDqSink& sink, TQueryPlanNode& stagePlanNode) {
         // Federated providers
         TOperator op;
         TCoDataSink dataSink = sink.DataSink().Cast<TCoDataSink>();
@@ -793,9 +805,11 @@ private:
         }
 
         AddOperator(stagePlanNode, "Sink", op);
+
+        return stagePlanNode.NodeId;
     }
 
-    void Visit(const TExprBase& expr, TQueryPlanNode& planNode) {
+    ui32 Visit(const TExprBase& expr, TQueryPlanNode& planNode) {
         if (expr.Maybe<TDqPhyStage>()) {
             auto stageGuid = NDq::TDqStageSettings::Parse(expr.Cast<TDqPhyStage>()).Id;
 
@@ -815,7 +829,7 @@ private:
                 parentNode.CteRefName = *cteNode.CteName;
                 planNode.CteRefName = *cteNode.CteName;
 
-                return;
+                return cteNode.NodeId;
             }
 
             auto& stagePlanNode = AddPlanNode(planNode);
@@ -836,17 +850,26 @@ private:
                 }
             }
 
+            TVector<ui32> inputIds;
+
             for (const auto& input : expr.Cast<TDqStageBase>().Inputs()) {
                 if (auto source = input.Maybe<TDqSource>()) {
-                    Visit(source.Cast(), stagePlanNode);
+                    auto planId = Visit(source.Cast(), stagePlanNode);
+                    inputIds.emplace_back(planId);
                 } else {
                     auto inputCn = input.Cast<TDqConnection>();
 
                     auto& inputPlanNode = AddPlanNode(stagePlanNode);
                     FillConnectionPlanNode(inputCn, inputPlanNode);
 
-                    Visit(inputCn.Output().Stage(), inputPlanNode);
+                    auto planId = Visit(inputCn.Output().Stage(), inputPlanNode);
+                    inputIds.emplace_back(planId);
                 }
+            }
+
+            for (const auto& arg : expr.Cast<TDqStageBase>().Program().Args()) {
+                StageInputs[arg.Ptr().Get()] = inputIds[0];
+                inputIds.erase(inputIds.begin());
             }
 
             if (auto outputs = expr.Cast<TDqStageBase>().Outputs()) {
@@ -863,10 +886,12 @@ private:
                 planNode.TypeName = "Stage";
             }
         }
+
+        return planNode.NodeId;
     }
 
-    TVector<ui32> Visit(TExprNode::TPtr node, TQueryPlanNode& planNode) {
-        TMaybe<ui32> operatorId;
+    TVector<std::variant<ui32, TExprNode::TPtr>> Visit(TExprNode::TPtr node, TQueryPlanNode& planNode) {
+        TMaybe<std::variant<ui32, TExprNode::TPtr>> operatorId;
         if (auto maybeRead = TMaybeNode<TKqlReadTableBase>(node)) {
             operatorId = Visit(maybeRead.Cast(), planNode);
         } else if (auto maybeReadRanges = TMaybeNode<TKqlReadTableRangesBase>(node)) {
@@ -936,9 +961,11 @@ private:
             operatorId = Visit(maybeUpsert.Cast(), planNode);
         } else if (auto maybeDelete = TMaybeNode<TKqpDeleteRows>(node)) {
             operatorId = Visit(maybeDelete.Cast(), planNode);
+        } else if (auto maybeArg = TMaybeNode<TCoArgument>(node)) {
+            operatorId = Visit(maybeArg.Cast(), planNode);
         }
 
-        TVector<ui32> inputIds;
+        TVector<std::variant<ui32, TExprNode::TPtr>> inputIds;
         if (auto maybeEffects = TMaybeNode<TKqpEffects>(node)) {
             for (const auto& effect : maybeEffects.Cast().Args()) {
                 auto ids = Visit(effect, planNode);
@@ -952,28 +979,39 @@ private:
         }
 
         if (operatorId) {
-            planNode.Operators[*operatorId].Inputs.insert(inputIds.begin(), inputIds.end());
-            return {*operatorId};
+            if (std::holds_alternative<ui32>(*operatorId)) {
+                TVector<std::variant<ui32, TExprNode::TPtr>>& opInputs = planNode.Operators[std::get<ui32>(*operatorId)].Inputs;
+                opInputs.insert(opInputs.begin(), inputIds.begin(), inputIds.end());
+                return {std::get<ui32>(*operatorId)};
+            }
+            else {
+                return {std::get<TExprNode::TPtr>(*operatorId)};
+            }
         }
 
         return inputIds;
     }
 
-    ui32 Visit(const TCoCondense1& /*condense*/, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoArgument& arg, TQueryPlanNode& planNode) {
+        Y_UNUSED(planNode);
+        return arg.Ptr();
+    }
+
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoCondense1& /*condense*/, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Aggregate";
 
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
-    ui32 Visit(const TCoCondense& /*condense*/, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoCondense& /*condense*/, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Aggregate";
 
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
-    ui32 Visit(const TCoCombineCore& combiner, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoCombineCore& combiner, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Aggregate";
         op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(combiner.KeyExtractor());
@@ -982,7 +1020,7 @@ private:
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
-    ui32 Visit(const TCoSort& sort, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoSort& sort, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Sort";
         op.Properties["SortBy"] = NPlanUtils::PrettyExprStr(sort.KeySelectorLambda());
@@ -990,7 +1028,7 @@ private:
         return AddOperator(planNode, "Sort", std::move(op));
     }
 
-    ui32 Visit(const TCoTop& top, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoTop& top, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Top";
         op.Properties["TopBy"] = NPlanUtils::PrettyExprStr(top.KeySelectorLambda());
@@ -999,7 +1037,7 @@ private:
         return AddOperator(planNode, "Top", std::move(op));
     }
 
-    ui32 Visit(const TCoTopSort& topSort, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoTopSort& topSort, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "TopSort";
         op.Properties["TopSortBy"] = NPlanUtils::PrettyExprStr(topSort.KeySelectorLambda());
@@ -1008,7 +1046,7 @@ private:
         return AddOperator(planNode, "TopSort", std::move(op));
     }
 
-    ui32 Visit(const TCoTake& take, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoTake& take, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Limit";
         op.Properties["Limit"] = NPlanUtils::PrettyExprStr(take.Count());
@@ -1016,7 +1054,7 @@ private:
         return AddOperator(planNode, "Limit", std::move(op));
     }
 
-    ui32 Visit(const TCoSkip& skip, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoSkip& skip, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Offset";
         op.Properties["Offset"] = NPlanUtils::PrettyExprStr(skip.Count());
@@ -1024,14 +1062,14 @@ private:
         return AddOperator(planNode, "Offset", std::move(op));
     }
 
-    ui32 Visit(const TCoExtendBase& /*extend*/, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoExtendBase& /*extend*/, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Union";
 
         return AddOperator(planNode, "Union", std::move(op));
     }
 
-    TMaybe<ui32> Visit(const TCoToFlow& toflow, TQueryPlanNode& planNode) {
+    TMaybe<std::variant<ui32, TExprNode::TPtr>> Visit(const TCoToFlow& toflow, TQueryPlanNode& planNode) {
         const auto toflowValue = NPlanUtils::PrettyExprStr(toflow.Input());
 
         TOperator op;
@@ -1042,13 +1080,13 @@ private:
             planNode.CteRefName = TStringBuilder() << "precompute_" << txId << "_" << resId;
             op.Properties["ToFlow"] = *planNode.CteRefName;
         } else {
-            return TMaybe<ui32>();
+            return TMaybe<std::variant<ui32, TExprNode::TPtr>>();
         }
 
         return AddOperator(planNode, "ConstantExpr", std::move(op));
     }
 
-    ui32 Visit(const TCoIterator& iter, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoIterator& iter, TQueryPlanNode& planNode) {
         const auto iterValue = NPlanUtils::PrettyExprStr(iter.List());
 
         TOperator op;
@@ -1065,7 +1103,7 @@ private:
         return AddOperator(planNode, "ConstantExpr", std::move(op));
     }
 
-    ui32 Visit(const TCoPartitionByKey& partitionByKey, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoPartitionByKey& partitionByKey, TQueryPlanNode& planNode) {
         const auto inputValue = NPlanUtils::PrettyExprStr(partitionByKey.Input());
 
         TOperator op;
@@ -1082,7 +1120,7 @@ private:
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
-    ui32 Visit(const TKqpUpsertRows& upsert, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TKqpUpsertRows& upsert, TQueryPlanNode& planNode) {
         const auto table = upsert.Table().Path().StringValue();
 
         TOperator op;
@@ -1101,7 +1139,7 @@ private:
         return AddOperator(planNode, "Upsert", std::move(op));
     }
 
-    ui32 Visit(const TKqpDeleteRows& del, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TKqpDeleteRows& del, TQueryPlanNode& planNode) {
         const auto table = del.Table().Path().StringValue();
 
         TOperator op;
@@ -1117,7 +1155,7 @@ private:
         return AddOperator(planNode, "Delete", std::move(op));
     }
 
-    ui32 Visit(const TCoFlatMapBase& flatMap, const TCoMapJoinCore& join, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoFlatMapBase& flatMap, const TCoMapJoinCore& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (MapJoin)";
 
         TOperator op;
@@ -1128,11 +1166,12 @@ private:
         auto operatorId = AddOperator(planNode, name, std::move(op));
 
         auto inputs = Visit(flatMap.Input().Ptr(), planNode);
-        planNode.Operators[operatorId].Inputs.insert(inputs.begin(), inputs.end());
+        TVector<std::variant<ui32, TExprNode::TPtr>> opInputs = planNode.Operators[operatorId].Inputs;
+        opInputs.insert(opInputs.begin(), inputs.begin(), inputs.end());
         return operatorId;
     }
 
-    ui32 Visit(const TCoMapJoinCore& join, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoMapJoinCore& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (MapJoin)";
 
         TOperator op;
@@ -1143,7 +1182,7 @@ private:
         return AddOperator(planNode, name, std::move(op));
     }
 
-    ui32 Visit(const TCoFlatMapBase& flatMap, const TCoJoinDict& join, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoFlatMapBase& flatMap, const TCoJoinDict& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (JoinDict)";
 
         TOperator op;
@@ -1154,11 +1193,12 @@ private:
         auto operatorId = AddOperator(planNode, name, std::move(op));
 
         auto inputs = Visit(flatMap.Input().Ptr(), planNode);
-        planNode.Operators[operatorId].Inputs.insert(inputs.begin(), inputs.end());
+        TVector<std::variant<ui32, TExprNode::TPtr>> opInputs = planNode.Operators[operatorId].Inputs;
+        opInputs.insert(opInputs.begin(), inputs.begin(), inputs.end());
         return operatorId;
     }
 
-    ui32 Visit(const TCoJoinDict& join, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoJoinDict& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (JoinDict)";
 
         TOperator op;
@@ -1169,7 +1209,7 @@ private:
         return AddOperator(planNode, name, std::move(op));
     }
 
-    ui32 Visit(const TCoFlatMapBase& flatMap, const TCoGraceJoinCore& join, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoFlatMapBase& flatMap, const TCoGraceJoinCore& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (Grace)";
 
         TOperator op;
@@ -1179,11 +1219,12 @@ private:
         AddOptimizerEstimates(op, join);
 
         auto inputs = Visit(flatMap.Input().Ptr(), planNode);
-        planNode.Operators[operatorId].Inputs.insert(inputs.begin(), inputs.end());
+        TVector<std::variant<ui32, TExprNode::TPtr>> opInputs = planNode.Operators[operatorId].Inputs;
+        opInputs.insert(opInputs.begin(), inputs.begin(), inputs.end());
         return operatorId;
     }
 
-    ui32 Visit(const TCoGraceJoinCore& join, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoGraceJoinCore& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (Grace)";
 
         TOperator op;
@@ -1210,7 +1251,7 @@ private:
         }
     }
 
-    ui32 Visit(const TCoFilterBase& filter, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TCoFilterBase& filter, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Filter";
 
@@ -1226,7 +1267,7 @@ private:
         return AddOperator(planNode, "Filter", std::move(op));
     }
 
-    ui32 Visit(const TKqlLookupTableBase& lookup, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TKqlLookupTableBase& lookup, TQueryPlanNode& planNode) {
         auto table = TString(lookup.Table().Path().Value());
         auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
 
@@ -1265,7 +1306,7 @@ private:
         return AddOperator(planNode, readName, std::move(op));
     }
 
-    ui32 Visit(const TKqlReadTableRangesBase& read, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TKqlReadTableRangesBase& read, TQueryPlanNode& planNode) {
         const auto table = TString(read.Table().Path());
         const auto explainPrompt = TKqpReadTableExplainPrompt::Parse(read);
 
@@ -1371,7 +1412,7 @@ private:
         return operatorId;
     }
 
-    ui32 Visit(const TKqlReadTableBase& read, TQueryPlanNode& planNode) {
+    std::variant<ui32, TExprNode::TPtr> Visit(const TKqlReadTableBase& read, TQueryPlanNode& planNode) {
         auto table = TString(read.Table().Path());
         auto range = read.Range();
 
@@ -1512,6 +1553,7 @@ private:
 
     TMap<ui32, TQueryPlanNode> QueryPlanNodes;
     TNodeSet VisitedStages;
+    THashMap<TExprNode*,ui32> StageInputs;
 };
 
 using ModifyFunction = std::function<void (NJson::TJsonValue& node)>;

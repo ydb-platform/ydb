@@ -1,5 +1,8 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/library/yql/sql/sql.h>
+#include <ydb/library/yql/utils/log/log.h>
+
+#include <util/folder/filelist.h>
 
 #include <format>
 
@@ -34,9 +37,53 @@ void ExpectUnknownEntry(TTestActorRuntime& runtime, const TString& path) {
     UNIT_ASSERT_EQUAL(pathEntry.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
 }
 
+void EnableLogging() {
+    using namespace NYql::NLog;
+    YqlLogger().ResetBackend(CreateLogBackend("cerr"));
+    for (const auto component : {EComponent::Default, EComponent::Sql, EComponent::ProviderKqp}) {
+        YqlLogger().SetComponentLevel(component, ELevel::INFO);
+    }
+}
+
+TString ReadWholeFile(const TString& path) {
+    TFileInput file(path);
+    return file.ReadAll();
+}
+
 void ExecuteDataDefinitionQuery(TSession& session, const TString& script) {
+    Cerr << "Executing the following DDL script:\n" << script;
+
     const auto result = session.ExecuteSchemeQuery(script, {}).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+TDataQueryResult ExecuteDataModificationQuery(TSession& session, const TString& script) {
+    Cerr << "Executing the following DML script:\n" << script;
+
+    const auto result = session.ExecuteDataQuery(
+            script,
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+            {}
+        ).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    return result;
+}
+
+void CompareResults(const TDataQueryResult& first, const TDataQueryResult& second) {
+    const auto& firstResults = first.GetResultSets();
+    const auto& secondResults = second.GetResultSets();
+
+    UNIT_ASSERT_VALUES_EQUAL(firstResults.size(), secondResults.size());
+    for (size_t i = 0; i < firstResults.size(); ++i) {
+        CompareYson(FormatResultSetYson(firstResults[i]), FormatResultSetYson(secondResults[i]));
+    }
+}
+
+void InitializeTablesAndSecondaryViews(TSession& session) {
+    const auto inputFolder = ArcadiaFromCurrentLocation(__SOURCE_FILE__, "input");
+    ExecuteDataDefinitionQuery(session, ReadWholeFile(inputFolder + "/create_tables_and_secondary_views.sql"));
+    ExecuteDataModificationQuery(session, ReadWholeFile(inputFolder + "/fill_tables.sql"));
 }
 
 }
@@ -192,6 +239,69 @@ Y_UNIT_TEST_SUITE(TKQPViewTest) {
             const auto dropResult = session.ExecuteSchemeQuery(dropQuery).GetValueSync();
             UNIT_ASSERT(!dropResult.IsSuccess());
             UNIT_ASSERT(dropResult.GetIssues().ToString().Contains("Error: Path does not exist"));
+        }
+    }
+}
+
+Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
+
+    Y_UNIT_TEST(OneTable) {
+        TKikimrRunner kikimr;
+        SetEnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        constexpr const char* viewName = "/Root/TheView";
+        constexpr const char* testTable = "/Root/Test";
+        const auto innerQuery = std::format(R"(
+                SELECT * FROM `{}`
+            )",
+            testTable
+        );
+
+        const TString creationQuery = std::format(R"(
+                CREATE VIEW `{}` WITH (security_invoker = true) AS {};
+            )",
+            viewName,
+            innerQuery
+        );
+        ExecuteDataDefinitionQuery(session, creationQuery);
+
+        const auto etalonResults = ExecuteDataModificationQuery(session, std::format(R"(
+                    SELECT * FROM ({});
+                )",
+                innerQuery
+            )
+        );
+        const auto selectFromViewResults = ExecuteDataModificationQuery(session, std::format(R"(
+                    SELECT * FROM `{}`;
+                )",
+                viewName
+            )
+        );
+        CompareResults(etalonResults, selectFromViewResults);
+    }
+
+    Y_UNIT_TEST(ReadTestCasesFromFiles) {
+        TKikimrRunner kikimr;
+        SetEnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        InitializeTablesAndSecondaryViews(session);
+        EnableLogging();
+
+        const auto testcasesFolder = ArcadiaFromCurrentLocation(__SOURCE_FILE__, "input/cases");
+        TDirsList testcases;
+        testcases.Fill(testcasesFolder);
+        TString testcase;
+        while (testcase = testcases.Next()) {
+            const auto pathPrefix = TStringBuilder() << testcasesFolder << '/' << testcase << '/';
+            ExecuteDataDefinitionQuery(session, ReadWholeFile(pathPrefix + "create_view.sql"));
+
+            const auto etalonResults = ExecuteDataModificationQuery(session, ReadWholeFile(pathPrefix + "etalon_query.sql"));
+            const auto selectFromViewResults = ExecuteDataModificationQuery(session, ReadWholeFile(pathPrefix + "select_from_view.sql"));
+            CompareResults(etalonResults, selectFromViewResults);
+
+            ExecuteDataDefinitionQuery(session, ReadWholeFile(pathPrefix + "drop_view.sql"));
         }
     }
 }

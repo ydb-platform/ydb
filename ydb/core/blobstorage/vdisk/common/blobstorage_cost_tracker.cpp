@@ -2,14 +2,7 @@
 
 namespace NKikimr {
 
-class TBsCostModelMirror3dc : public TBsCostModelBase {
-public:
-    TBsCostModelMirror3dc()
-        : TBsCostModelBase()
-    {
-        HugeBlobSize = 1'000'000;
-    }
-};
+class TBsCostModelMirror3dc : public TBsCostModelBase {};
 
 class TBsCostModel4Plus2Block : public TBsCostModelBase {};
 

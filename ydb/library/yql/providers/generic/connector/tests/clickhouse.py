@@ -9,6 +9,7 @@ from utils.database import Database
 from utils.log import make_logger
 from utils.schema import Schema
 from utils.settings import Settings
+from utils.sql import format_values_for_bulk_sql_insert
 
 import test_cases.select_missing_database
 import test_cases.select_missing_table
@@ -25,7 +26,7 @@ def prepare_table(
     schema: Schema,
     data_in: Sequence,
 ):
-    dbTable = f'{database.name}.{table_name}'
+    dbTable = f"{database.name}.{table_name}"
 
     # create database
     create_database_stmt = database.create(data_source_pb2.CLICKHOUSE)
@@ -43,26 +44,17 @@ def prepare_table(
         return
 
     # create table
-    create_table_stmt = f'CREATE TABLE {dbTable} ({schema.yql_column_list(data_source_pb2.CLICKHOUSE)}) ENGINE = Memory'
+    create_table_stmt = f"CREATE TABLE {dbTable} ({schema.yql_column_list(data_source_pb2.CLICKHOUSE)}) ENGINE = Memory"
     LOGGER.debug(create_table_stmt)
     client.command(create_table_stmt)
 
     # write data
-    for row in data_in:
-        # prepare string with serialized data
-        values_dump = []
-        for val in row:
-            if isinstance(val, str):
-                values_dump.append(f"'{val}'")
-            elif val is None:
-                values_dump.append('NULL')
-            else:
-                values_dump.append(str(val))
-        values = ", ".join(values_dump)
-
-        insert_stmt = f"INSERT INTO {dbTable} (*) VALUES ({values})"
-        LOGGER.debug(insert_stmt)
-        client.command(insert_stmt)
+    values = format_values_for_bulk_sql_insert(data_in)
+    insert_stmt = f"INSERT INTO {dbTable} (*) VALUES {values}"
+    # TODO: these logs may be too big when working with big tables,
+    # dump insert statement via yatest into file.
+    LOGGER.debug(insert_stmt)
+    client.command(insert_stmt)
 
 
 def select_positive(
@@ -82,21 +74,25 @@ def select_positive(
 
     # NOTE: to assert equivalence we have to add explicit ORDER BY,
     # because Clickhouse's output will be randomly ordered otherwise.
-    where_statement = ''
+    where_statement = ""
     if test_case.select_where is not None:
-        where_statement = f'WHERE {test_case.select_where.filter_expression}'
-    order_by_expression = ''
+        where_statement = f"WHERE {test_case.select_where.filter_expression}"
+    order_by_expression = ""
     order_by_column_name = test_case.select_what.order_by_column_name
     if order_by_column_name:
-        order_by_expression = f'ORDER BY {order_by_column_name}'
-    yql_script = f'''
+        order_by_expression = f"ORDER BY {order_by_column_name}"
+    yql_script = f"""
         {test_case.pragmas_sql_string}
         SELECT {test_case.select_what.yql_select_names}
         FROM {settings.clickhouse.cluster_name}.{test_case.qualified_table_name}
         {where_statement}
         {order_by_expression}
-    '''
-    result = dqrun_runner.run(test_dir=tmp_path, script=yql_script, generic_settings=test_case.generic_settings)
+    """
+    result = dqrun_runner.run(
+        test_dir=tmp_path,
+        script=yql_script,
+        generic_settings=test_case.generic_settings,
+    )
 
     assert result.returncode == 0, result.stderr
 
@@ -115,11 +111,15 @@ def select_missing_database(
     test_case: test_cases.select_missing_database.TestCase,
 ):
     # select table from the database that does not exist
-    yql_script = f'''
+    yql_script = f"""
         SELECT *
         FROM {settings.clickhouse.cluster_name}.{test_case.qualified_table_name}
-    '''
-    result = dqrun_runner.run(test_dir=tmp_path, script=yql_script, generic_settings=test_case.generic_settings)
+    """
+    result = dqrun_runner.run(
+        test_dir=tmp_path,
+        script=yql_script,
+        generic_settings=test_case.generic_settings,
+    )
 
     assert test_case.database.missing_database_msg(data_source_pb2.CLICKHOUSE) in result.stderr, result.stderr
 
@@ -136,10 +136,14 @@ def select_missing_table(
     LOGGER.debug(create_database_stmt)
     client.command(create_database_stmt)
 
-    yql_script = f'''
+    yql_script = f"""
         SELECT *
         FROM {settings.clickhouse.cluster_name}.{test_case.qualified_table_name}
-    '''
-    result = dqrun_runner.run(test_dir=tmp_path, script=yql_script, generic_settings=test_case.generic_settings)
+    """
+    result = dqrun_runner.run(
+        test_dir=tmp_path,
+        script=yql_script,
+        generic_settings=test_case.generic_settings,
+    )
 
     assert test_case.database.missing_table_msg(data_source_pb2.CLICKHOUSE) in result.stderr, result.stderr

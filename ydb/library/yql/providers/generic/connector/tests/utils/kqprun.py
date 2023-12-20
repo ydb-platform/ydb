@@ -180,6 +180,7 @@ class KqpRunner(Runner):
         data_out = None
         data_out_with_types = None
         schema = None
+        unique_suffix = test_dir.name
 
         if out.returncode == 0:
             # Parse output
@@ -206,6 +207,7 @@ class KqpRunner(Runner):
             LOGGER.debug('Schema: %s', schema)
             LOGGER.debug('Data out: %s', data_out)
             LOGGER.debug('Data out with types: %s', data_out_with_types)
+
         else:
             LOGGER.error('STDOUT: ')
             for line in out.stdout.decode('utf-8').splitlines():
@@ -214,7 +216,6 @@ class KqpRunner(Runner):
             for line in out.stderr.decode('utf-8').splitlines():
                 LOGGER.error(line)
 
-        unique_suffix = test_dir.name
         err_file = yatest.common.output_path(f'kqprun-{unique_suffix}.err')
         with open(err_file, "w") as f:
             f.write(out.stderr.decode('utf-8'))

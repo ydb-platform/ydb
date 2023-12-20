@@ -75,7 +75,7 @@ class Settings:
             case EDataSourceKind.POSTGRESQL:
                 return self.postgresql.cluster_name
             case _:
-                raise Exception(f'invalid data source: {data_source_kind}')
+                raise Exception(f'invalid data source: {EDataSourceKind.Name(data_source_kind)}')
 
 
 @dataclass

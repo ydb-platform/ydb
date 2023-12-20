@@ -41,8 +41,8 @@ using namespace NNodes;
 
 class TYtDqIntegration: public TDqIntegrationBase {
 public:
-    TYtDqIntegration(TYtState::TPtr state)
-        : State_(std::move(state))
+    TYtDqIntegration(TYtState* state)
+        : State_(state)
     {
     }
 
@@ -674,19 +674,34 @@ public:
             return;
         }
 
-        pipeline->Add(CreateSinglePassFunctorTransformer([state = State_, providerParams](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+        auto state = TYtState::TPtr(State_);
+        pipeline->Add(CreateFunctorTransformer([state](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+            return OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+                if (TYtReadTable::Match(node.Get()) && !node->Head().IsWorld()) {
+                    YQL_CLOG(INFO, ProviderYt) << "YtTrimWorld";
+                    return ctx.ChangeChild(*node, 0, ctx.NewWorld(node->Pos()));
+                }
+                return node;
+            }, ctx, TOptimizeExprSettings{state->Types});
+        }), "YtTrimWorld", TIssuesIds::DEFAULT_ERROR);
+
+        pipeline->Add(CreateSinglePassFunctorTransformer([state, providerParams](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
             output = input;
-            return SubstTables(output, state, false, ctx);
+            auto status = SubstTables(output, state, true, ctx);
+            if (status.Level != IGraphTransformer::TStatus::Error && input != output) {
+                YQL_CLOG(INFO, ProviderYt) << "YtSubstTables";
+            }
+            return status;
         }), "YtSubstTables", TIssuesIds::DEFAULT_ERROR);
 
-        pipeline->Add(CreateYtPeepholeTransformer(State_, providerParams), "YtPeepHole", TIssuesIds::DEFAULT_ERROR);
+        pipeline->Add(CreateYtPeepholeTransformer(TYtState::TPtr(State_), providerParams), "YtPeepHole", TIssuesIds::DEFAULT_ERROR);
     }
 
 private:
-    TYtState::TPtr State_;
+    TYtState* State_;
 };
 
-THolder<IDqIntegration> CreateYtDqIntegration(TYtState::TPtr state) {
+THolder<IDqIntegration> CreateYtDqIntegration(TYtState* state) {
     Y_ABORT_UNLESS(state);
     return MakeHolder<TYtDqIntegration>(std::move(state));
 }

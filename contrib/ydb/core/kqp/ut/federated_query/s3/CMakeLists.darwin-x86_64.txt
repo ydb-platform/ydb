@@ -35,6 +35,7 @@ target_link_options(contrib-ydb-core-kqp-ut-federated_query-s3 PRIVATE
 )
 target_sources(contrib-ydb-core-kqp-ut-federated_query-s3 PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/ydb/core/kqp/ut/federated_query/s3/kqp_federated_query_ut.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/ydb/core/kqp/ut/federated_query/s3/kqp_federated_scheme_ut.cpp
   ${CMAKE_SOURCE_DIR}/contrib/ydb/core/kqp/ut/federated_query/s3/kqp_s3_plan_ut.cpp
   ${CMAKE_SOURCE_DIR}/contrib/ydb/core/kqp/ut/federated_query/s3/s3_recipe_ut_helpers.cpp
 )

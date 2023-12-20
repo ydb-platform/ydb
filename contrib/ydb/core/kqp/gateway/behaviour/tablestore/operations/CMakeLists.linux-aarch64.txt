@@ -17,6 +17,7 @@ target_link_libraries(behaviour-tablestore-operations PUBLIC
   yutil
   services-metadata-manager
   formats-arrow-compression
+  kqp-gateway-utils
   ydb-core-protos
 )
 target_sources(behaviour-tablestore-operations PRIVATE
@@ -33,6 +34,7 @@ target_link_libraries(behaviour-tablestore-operations.global PUBLIC
   yutil
   services-metadata-manager
   formats-arrow-compression
+  kqp-gateway-utils
   ydb-core-protos
 )
 target_sources(behaviour-tablestore-operations.global PRIVATE

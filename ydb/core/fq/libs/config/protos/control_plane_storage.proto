@@ -38,10 +38,6 @@ message TRetryPolicyMapping {
     TRetryPolicy Policy = 2;
 }
 
-message TStreamingQueryConfig {
-    repeated string AvailableConnections = 22;
-}
-
 message TControlPlaneStorageConfig {
     bool Enabled = 1;
     NFq.NConfig.TYdbStorageConfig Storage = 2; // TODO: remove
@@ -77,5 +73,5 @@ message TControlPlaneStorageConfig {
     bool DumpRawStatistics = 32;
     bool IgnorePrivateSources = 33;
     Ydb.Query.StatsMode StatsMode = 34;
-    TStreamingQueryConfig StreamingQueryConfig = 35;
+    repeated string AvailableStreamingConnection = 35;
 }

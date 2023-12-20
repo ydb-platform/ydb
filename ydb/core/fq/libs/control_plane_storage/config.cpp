@@ -40,8 +40,8 @@ TControlPlaneStorageConfig::TControlPlaneStorageConfig(const NConfig::TControlPl
         AvailableBindings.insert(GetBindingType(availableBinding));
     }
 
-    for (const auto& availableConnection : Proto.GetStreamingQueryConfig().GetAvailableConnections()) {
-        StreamingQueryConfig.AvailableConnections.insert(GetConnectionType(availableConnection));
+    for (const auto& availableConnection : Proto.GetAvailableStreamingConnection()) {
+        AvailableStreamingConnections.insert(GetConnectionType(availableConnection));
     }
 
     GeneratorPathsLimit =

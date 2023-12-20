@@ -13,10 +13,6 @@
 
 namespace NFq {
 
-struct TStreamingQueryConfig {
-    TSet<FederatedQuery::ConnectionSetting::ConnectionCase> AvailableConnections;
-};
-
 struct TControlPlaneStorageConfig {
     NConfig::TControlPlaneStorageConfig Proto;
     NConfig::TComputeConfig ComputeConfigProto;
@@ -34,7 +30,7 @@ struct TControlPlaneStorageConfig {
     TRetryPolicyItem TaskLeaseRetryPolicy;
     TDuration QuotaTtl;
     TDuration MetricsTtl;
-    TStreamingQueryConfig StreamingQueryConfig;
+    TSet<FederatedQuery::ConnectionSetting::ConnectionCase> AvailableStreamingConnections;
 
     TControlPlaneStorageConfig(const NConfig::TControlPlaneStorageConfig& config, const NYql::TS3GatewayConfig& s3Config, const NConfig::TCommonConfig& common, const NConfig::TComputeConfig& computeConfigProto);
 };

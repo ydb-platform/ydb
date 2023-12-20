@@ -161,8 +161,7 @@ public:
         }
 
         writer.OnBeginMap();
-            writer.OnKeyedItem("All");
-            NCommon::WriteStatistics(writer, totalOnly, State_->Statistics);
+            NCommon::WriteStatistics(writer, totalOnly, State_->Statistics, false);
             writer.OnKeyedItem("Hybrid");
             writer.OnBeginMap();
                 for (const auto& [opName, stats] : State_->HybridStatistics) {

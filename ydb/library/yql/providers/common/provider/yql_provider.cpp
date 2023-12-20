@@ -1264,14 +1264,16 @@ void WriteStatistics(NYson::TYsonWriter& writer, const TOperationStatistics& sta
     writer.OnEndMap();
 }
 
-void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics) {
+void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics, bool addExternalMap) {
     if (statistics.empty()) {
         return;
     }
 
     THashMap<TString, std::tuple<i64, i64, i64, TMaybe<i64>>> total; // sum, count, max, min
 
-    writer.OnBeginMap();
+    if (addExternalMap) {
+        writer.OnBeginMap();
+    }
 
     for (const auto& opStatistics : statistics) {
         for (auto& el : opStatistics.second.Entries) {
@@ -1331,8 +1333,9 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
         writer.OnEndMap();
     }
     writer.OnEndMap(); // total
-
-    writer.OnEndMap();
+    if (addExternalMap) {
+        writer.OnEndMap();
+    }
 }
 
 bool ValidateCompressionForInput(std::string_view format, std::string_view compression, TExprContext& ctx) {

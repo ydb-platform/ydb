@@ -127,8 +127,10 @@ private:
     static TExprNode::TPtr FinalizeOutputOp(const TYtState::TPtr& state, const TString& operationHash,
         const IYtGateway::TRunResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, bool markFinished)
     {
-        with_lock(state->StatisticsMutex) {
-            state->HybridStatistics[input->Content()].Entries.emplace_back(TString{"YtExecution"}, 0, 0, 0, 0, 1);
+        if (markFinished && !TYtDqProcessWrite::Match(input.Get())) {
+            with_lock(state->StatisticsMutex) {
+                state->HybridStatistics[input->Content()].Entries.emplace_back(TString{"YtExecution"}, 0, 0, 0, 0, 1);
+            }
         }
         auto outSection = TYtOutputOpBase(input).Output();
         YQL_ENSURE(outSection.Size() == res.OutTableStats.size(), "Invalid output table count in IYtGateway::TRunResult");
@@ -286,7 +288,12 @@ private:
     }
 
     TStatusCallbackPair HandleTryFirst(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext&) {
-        auto statWriter = [this](TStringBuf statName, TStringBuf opName) {
+        auto statWriter = [this](TStringBuf name) {
+            with_lock(State_->StatisticsMutex) {
+                State_->Statistics[Max<ui32>()].Entries.emplace_back(TString{name}, 0, 0, 0, 0, 1);
+            }
+        };
+        auto hybridStatWriter = [this](TStringBuf statName, TStringBuf opName) {
             with_lock(State_->StatisticsMutex) {
                 State_->HybridStatistics[opName].Entries.emplace_back(TString{statName}, 0, 0, 0, 0, 1);
             }
@@ -294,11 +301,13 @@ private:
 
         switch (input->Head().GetState()) {
             case TExprNode::EState::ExecutionComplete:
-                statWriter("Execution", input->TailPtr()->Content());
+                statWriter("HybridExecution");
+                hybridStatWriter("Execution", input->TailPtr()->Content());
                 output = input->HeadPtr();
                 break;
             case TExprNode::EState::Error: {
-                statWriter("Fallback", input->TailPtr()->Content());
+                statWriter("HybridFallback");
+                hybridStatWriter("Fallback", input->TailPtr()->Content());
                 if (State_->Configuration->HybridDqExecutionFallback.Get().GetOrElse(true)) {
                     output = input->TailPtr();
                 } else {

@@ -275,10 +275,12 @@ private:
                 if (const auto stat = CanReadHybrid(sort.Input().Item(0))) {
                     if (stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
                         YQL_CLOG(INFO, ProviderYt) << "Sort on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
-                        PushStat("Try", node.Raw()->Content());
+                        PushStat("HybridTry");
+                        PushHybridStat("Try", node.Raw()->Content());
                         return MakeYtSortByDq(sort, ctx);
                     }
-                    PushStat("SkipOverLimits", node.Raw()->Content());
+                    PushStat("HybridSkipOverLimits");
+                    PushHybridStat("SkipOverLimits", node.Raw()->Content());
                 }
             }
         }
@@ -294,10 +296,12 @@ private:
                 if (const auto stat = CanReadHybrid(merge.Input().Item(0))) {
                     if (stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
                         YQL_CLOG(INFO, ProviderYt) << "Merge on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
-                        PushStat("Try", node.Raw()->Content());
+                        PushStat("HybridTry");
+                        PushHybridStat("Try", node.Raw()->Content());
                         return MakeYtSortByDq(merge, ctx);
                     }
-                    PushStat("SkipOverLimits", node.Raw()->Content());
+                    PushStat("HybridSkipOverLimits");
+                    PushHybridStat("SkipOverLimits", node.Raw()->Content());
                 }
             }
         }
@@ -347,7 +351,8 @@ private:
                 if (stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
                     if (CanExecuteInHybrid(map.Mapper().Ptr(), chunksLimit, sizeLimit)) {
                         YQL_CLOG(INFO, ProviderYt) << "Map on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
-                        PushStat("Try", node.Raw()->Content());
+                        PushStat("HybridTry");
+                        PushHybridStat("Try", node.Raw()->Content());
                         TSyncMap syncList;
                         const auto& paths = map.Input().Item(0).Paths();
                         for (auto i = 0U; i < paths.Size(); ++i) {
@@ -430,7 +435,8 @@ private:
                             .Done();
                     }
                 }
-                PushStat("SkipOverLimits", node.Raw()->Content());
+                PushStat("HybridOverLimits");
+                PushHybridStat("SkipOverLimits", node.Raw()->Content());
             }
         }
 
@@ -626,12 +632,14 @@ private:
                     if (CanExecuteInHybrid(reduce.Reducer().Ptr(), chunksLimit, sizeLimit)) {
                         if (ETypeAnnotationKind::Struct == GetSeqItemType(*reduce.Reducer().Args().Arg(0).Ref().GetTypeAnn()).GetKind()) {
                             YQL_CLOG(INFO, ProviderYt) << "Reduce on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
-                            PushStat("Try", node.Raw()->Content());
+                            PushStat("HybridTry");
+                            PushHybridStat("Try", node.Raw()->Content());
                             return MakeYtReduceByDq(reduce, ctx);
                         }
                     }
                 }
-                PushStat("SkipOverLimits", node.Raw()->Content());
+                PushStat("HybridSkipOverLimits");
+                PushHybridStat("SkipOverLimits", node.Raw()->Content());
             }
         }
 
@@ -647,19 +655,27 @@ private:
                     if (CanExecuteInHybrid(mapReduce.Reducer().Ptr(), chunksLimit, sizeLimit) && CanExecuteInHybrid(mapReduce.Mapper().Ptr(), chunksLimit, sizeLimit)) {
                         if (ETypeAnnotationKind::Struct == GetSeqItemType(*mapReduce.Reducer().Args().Arg(0).Ref().GetTypeAnn()).GetKind()) {
                             YQL_CLOG(INFO, ProviderYt) << "MapReduce on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
-                            PushStat("Try", node.Raw()->Content());
+                            PushHybridStat("Try", node.Raw()->Content());
+                            PushStat("HybridTry");
                             return MakeYtReduceByDq(mapReduce, ctx);
                         }
                     }
                 }
-                PushStat("SkipOverLimits", node.Raw()->Content());
+                PushHybridStat("SkipOverLimits", node.Raw()->Content());
+                PushStat("HybridOverLimits");
             }
         }
 
         return node;
     }
 
-    void PushStat(TStringBuf statName, TStringBuf opName) const {
+    void PushStat(const std::string_view& name) const {
+        with_lock(State_->StatisticsMutex) {
+            State_->Statistics[Max<ui32>()].Entries.emplace_back(TString{name}, 0, 0, 0, 0, 1);
+        }
+    };
+
+    void PushHybridStat(TStringBuf statName, TStringBuf opName) const {
         with_lock(State_->StatisticsMutex) {
             State_->HybridStatistics[opName].Entries.emplace_back(TString{statName}, 0, 0, 0, 0, 1);
         }

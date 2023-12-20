@@ -23,6 +23,8 @@ common:
     to: /getting_started/kubernetes.md
   - from: /deploy/orchestrated/operate.md
     to: /getting_started/kubernetes.md
+  - from: /getting_started/index.md
+    to: /getting_started/quickstart.md
 
 ru:
   - from: /concepts/column-table.md

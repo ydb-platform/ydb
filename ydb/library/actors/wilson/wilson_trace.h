@@ -1,17 +1,11 @@
 #pragma once
 
-#include <util/generic/algorithm.h>
 #include <ydb/library/actors/core/monotonic.h>
 #include <ydb/library/actors/protos/actors.pb.h>
-
-#include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/stream/output.h>
 #include <util/random/random.h>
 #include <util/random/fast.h>
-
-#include <util/string/hex.h>
-#include <util/string/printf.h>
 
 #include <array>
 
@@ -187,68 +181,7 @@ namespace NWilson {
             return TTraceId();
         }
 
-        const void *GetTraceIdPtr() const { return TraceId.data(); }
-        static constexpr size_t GetTraceIdSize() { return sizeof(TTrace); }
-        const void *GetSpanIdPtr() const { return &SpanId; }
-        static constexpr size_t GetSpanIdSize() { return sizeof(ui64); }
-
-        static TTraceId FromTraceparentHeader(const TStringBuf header) {
-            constexpr size_t versionChars = 2; // Only version 0 is supported
-            constexpr size_t versionStart = 0;
-
-            constexpr size_t traceIdChars = 32;
-            constexpr size_t traceIdStart = versionStart + versionChars + 1;
-            static_assert(traceIdChars == TTraceId::GetTraceIdSize() * 2);
-
-            constexpr size_t parentSpanIdChars = 16;
-            constexpr size_t parentSpanIdStart = traceIdStart + traceIdChars + 1;
-            static_assert(parentSpanIdChars == TTraceId::GetSpanIdSize() * 2);
-
-            constexpr size_t traceFlagsChars = 2;
-            constexpr size_t traceFlagsStart = parentSpanIdStart + parentSpanIdChars + 1;
-
-            constexpr size_t expectedHeaderSize =
-                versionChars + traceIdChars + parentSpanIdChars + traceFlagsChars + 3;
-
-            if (header.Size() != expectedHeaderSize) {
-                return {};
-            }
-
-            auto isHex = [](char c) {
-                return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
-            };
-
-            if (!AllOf(header.substr(versionStart, versionChars), isHex) ||
-                    !AllOf(header.substr(traceIdStart, traceIdChars), isHex) ||
-                    !AllOf(header.substr(parentSpanIdStart, parentSpanIdChars), isHex) ||
-                    !AllOf(header.substr(traceFlagsStart, traceFlagsChars), isHex)) {
-                return {};
-            }
-
-            if (header[traceIdStart - 1] != '-' || header[parentSpanIdStart - 1] != '-' || header[traceIdChars - 1] != '-') {
-                return {};
-            }
-
-            ui8 version;
-            HexDecode(header.Data(), versionChars, &version);
-            if (version != 0) {
-                return {};
-            }
-
-
-            TTrace traceId;
-            ui64 spanId;
-            static_assert(traceIdChars == 2 * sizeof(traceId));
-            static_assert(parentSpanIdChars == 2 * sizeof(spanId));
-            HexDecode(header.Data() + traceIdStart, traceIdChars, &traceId);
-            HexDecode(header.Data() + parentSpanIdStart, parentSpanIdChars, &spanId);
-
-            if ((traceId[0] == 0 && traceId[1] == 0) || spanId == 0) {
-                return {};
-            }
-
-            return TTraceId(traceId, spanId, 15, Max<ui32>());
-        }
+        static TTraceId FromTraceparentHeader(const TStringBuf header);
 
         TTraceId Span(ui8 verbosity) const {
             Validate();
@@ -282,9 +215,12 @@ namespace NWilson {
             return Verbosity;
         }
 
-        TString GetHexTraceId() const {
-            return HexEncode(GetTraceIdPtr(), GetTraceIdSize());
-        }
+        const void *GetTraceIdPtr() const { return TraceId.data(); }
+        static constexpr size_t GetTraceIdSize() { return sizeof(TTrace); }
+        const void *GetSpanIdPtr() const { return &SpanId; }
+        static constexpr size_t GetSpanIdSize() { return sizeof(ui64); }
+
+        TString GetHexTraceId() const;
 
         void Validate() const {
             Y_DEBUG_ABORT_UNLESS(*this || !SpanId);

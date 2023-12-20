@@ -703,7 +703,7 @@ private:
 
 THolder<IDqIntegration> CreateYtDqIntegration(TYtState* state) {
     Y_ABORT_UNLESS(state);
-    return MakeHolder<TYtDqIntegration>(std::move(state));
+    return MakeHolder<TYtDqIntegration>(state);
 }
 
 }

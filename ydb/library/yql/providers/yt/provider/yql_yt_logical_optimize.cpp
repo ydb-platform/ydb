@@ -2512,7 +2512,7 @@ protected:
             return node;
         }
 
-        return TAggregateExpander::CountAggregateRewrite(aggregate, ctx, State_->Types->UseBlocks);
+        return TAggregateExpander::CountAggregateRewrite(aggregate, ctx, State_->Types->IsBlockEngineEnabled());
     }
 
     TMaybeNode<TExprBase> ZeroSampleToZeroLimit(TExprBase node, TExprContext& ctx) const {

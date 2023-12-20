@@ -308,6 +308,8 @@ namespace NSQLTranslationV1 {
         bool AnsiLike = false;
         bool FeatureR010 = false; //Row pattern recognition: FROM clause
         TMaybe<bool> CompactGroupBy;
+        bool BlockEngineEnable = false;
+        bool BlockEngineForce = false;
     };
 
     class TColumnRefScope {

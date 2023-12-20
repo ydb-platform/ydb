@@ -324,7 +324,7 @@ protected:
             auto input = aggregate.Input().Maybe<TDqConnection>();
 
             if (input) {
-                auto newNode = TAggregateExpander::CountAggregateRewrite(aggregate, ctx, TypesCtx.UseBlocks);
+                auto newNode = TAggregateExpander::CountAggregateRewrite(aggregate, ctx, TypesCtx.IsBlockEngineEnabled());
                 if (node.Ptr() != newNode) {
                     return TExprBase(newNode);
                 }

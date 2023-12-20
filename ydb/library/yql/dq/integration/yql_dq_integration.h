@@ -22,6 +22,7 @@ class TJsonValue;
 namespace NYql {
 
 struct TDqSettings;
+class TTransformationPipeline;
 
 namespace NCommon {
     class TMkqlCallableCompilerBase;
@@ -72,6 +73,8 @@ public:
     // Return true if node was handled
     virtual bool FillSourcePlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) = 0;
     virtual bool FillSinkPlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) = 0;
+    // Called to configure DQ peephole
+    virtual void ConfigurePeepholePipeline(bool beforeDqTransforms, const THashMap<TString, TString>& params, TTransformationPipeline* pipeline) = 0;
 };
 
 } // namespace NYql

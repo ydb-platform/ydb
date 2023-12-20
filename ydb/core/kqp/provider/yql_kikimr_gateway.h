@@ -569,7 +569,7 @@ struct TModifyPermissionsSettings {
 
     EAction Action = EAction::Grant;
     THashSet<TString> Permissions;
-    THashSet<TString> Pathes;
+    THashSet<TString> Paths;
     THashSet<TString> Roles;
     bool IsPermissionsClear = false;
 };

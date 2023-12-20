@@ -89,7 +89,7 @@ void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescriptio
 std::pair<TString, TString> SplitPathByDirAndBaseNames(const TString& path) {
     auto splitPos = path.find_last_of('/');
     if (splitPos == path.npos || splitPos + 1 == path.size()) {
-        ythrow yexception() << "wrong path format '" << path << "'" ;
+        ythrow yexception() << "wrong path format '" << path << "'";
     }
     return {path.substr(0, splitPos), path.substr(splitPos + 1)};
 }

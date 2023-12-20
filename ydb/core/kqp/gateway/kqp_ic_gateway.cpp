@@ -688,8 +688,8 @@ namespace {
     };
 
     struct TModifyPermissionsWrapper : public TThrRefBase {
-        using TMethod = std::function<void(NYql::TModifyPermissionsSettings::EAction action, THashSet<TString>&& permissions, THashSet<TString>&& roles, TVector<TString>&& pathes)>;
-        TMethod ModifyPermissionsForPathes;
+        using TMethod = std::function<void(NYql::TModifyPermissionsSettings::EAction action, THashSet<TString>&& permissions, THashSet<TString>&& roles, TVector<TString>&& paths)>;
+        TMethod ModifyPermissionsForPaths;
     };
 }
 
@@ -1275,8 +1275,8 @@ public:
                 return MakeFuture(ResultFromError<TGenericResult>("No permissions names for modify permissions"));
             }
 
-            if (settings.Pathes.empty()) {
-                return MakeFuture(ResultFromError<TGenericResult>("No pathes for modify permissions"));
+            if (settings.Paths.empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("No paths for modify permissions"));
             }
 
             if (settings.Roles.empty()) {
@@ -1284,9 +1284,9 @@ public:
             }
 
             TVector<TPromise<TGenericResult>> promises;
-            promises.reserve(settings.Pathes.size());
+            promises.reserve(settings.Paths.size());
             TVector<TFuture<TGenericResult>> futures;
-            futures.reserve(settings.Pathes.size());
+            futures.reserve(settings.Paths.size());
 
             NACLib::TDiffACL acl;
             switch (settings.Action) {
@@ -1322,8 +1322,8 @@ public:
             const auto serializedDiffAcl = acl.SerializeAsString();
 
             TVector<std::pair<const TString*, std::pair<TString, TString>>> pathPairs;
-            pathPairs.reserve(settings.Pathes.size());
-            for (const auto& path : settings.Pathes) {
+            pathPairs.reserve(settings.Paths.size());
+            for (const auto& path : settings.Paths) {
                 pathPairs.push_back(std::make_pair(&path, NSchemeHelpers::SplitPathByDirAndBaseNames(path)));
             }
 

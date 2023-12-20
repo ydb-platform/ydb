@@ -88,9 +88,8 @@ namespace {
             permissionsSettings.Permissions.insert(NKikimr::ConvertShortYdbPermissionNameToFullYdbPermissionName(permission));
         }
 
-        THashSet<TString> pathesMap;
-        for (auto atom : modifyPermissions.Pathes()) {
-            permissionsSettings.Pathes.insert(atom.Cast<TCoAtom>().StringValue());
+        for (auto atom : modifyPermissions.Paths()) {
+            permissionsSettings.Paths.insert(atom.Cast<TCoAtom>().StringValue());
         }
 
         for (auto atom : modifyPermissions.Roles()) {

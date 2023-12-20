@@ -546,10 +546,10 @@ message TDbToolConfig {
 
 message TGenericClusterConfig {
     // Cluster name
-    required string Name = 1;
+    optional string Name = 1;
 
     // Data source kind
-    required NYql.NConnector.NApi.EDataSourceKind Kind = 8;
+    optional NYql.NConnector.NApi.EDataSourceKind Kind = 8;
 
     // Location represents the network address of a data source instance we want to connect
     oneof Location {
@@ -561,7 +561,7 @@ message TGenericClusterConfig {
     }
 
     // Credentials used to access data source instance
-    required NYql.NConnector.NApi.TCredentials Credentials = 10;
+    optional NYql.NConnector.NApi.TCredentials Credentials = 10;
 
     // Credentials used to access MDB API.
     // When working with data source instances deployed in a cloud,
@@ -591,10 +591,10 @@ message TGenericClusterConfig {
 
 message TGenericConnectorConfig {
     // Connector instance network endpoint
-    required NYql.NConnector.NApi.TEndpoint Endpoint = 3;
+    optional NYql.NConnector.NApi.TEndpoint Endpoint = 3;
     // If true, GRPC Client will use TLS encryption.
     // Server cert will be verified with system CA cert pool.
-    required bool UseSsl = 4;
+    optional bool UseSsl = 4;
 
     reserved 1, 2;
 }
@@ -602,7 +602,7 @@ message TGenericConnectorConfig {
 message TGenericGatewayConfig {
     // Connector service network endpoint
     // TODO: replace with map<DataSourceKind, TGenericConnectorConfig>
-    required TGenericConnectorConfig Connector = 5;
+    optional TGenericConnectorConfig Connector = 5;
 
     // Database clusters supported by this particular instance
     repeated TGenericClusterConfig ClusterMapping = 3;

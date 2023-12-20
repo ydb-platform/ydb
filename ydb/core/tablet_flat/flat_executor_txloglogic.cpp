@@ -205,7 +205,7 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
                 }
             }
 
-            tx->TxSpan.Attribute("Batched", true
+            tx->TxSpan.Attribute("Batched", true)
                       .Attribute("BatchSize", batchSize);
         }
         

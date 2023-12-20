@@ -32,18 +32,25 @@ template<typename T, bool IsDictionary>
 arrow::Datum NumericConverterImpl(NUdf::IArrayBuilder* builder, std::shared_ptr<arrow::ArrayData> block) {
     if constexpr (!IsDictionary) {
         typename ::arrow::TypeTraits<T>::ArrayType val(block); // checking for compatibility
-        arrow::UInt32Array w;
         if (val.null_count()) {
             for (i64 i = 0; i < block->length; ++i) {
                 if (val.IsNull(i)) {
                     builder->Add(NUdf::TBlockItem{});
                 } else {
-                    builder->Add(NUdf::TBlockItem(val.Value(i)));
+                    if constexpr (std::is_same_v<decltype(val.Value(i)), bool>) {
+                        builder->Add(NUdf::TBlockItem((ui8)val.Value(i)));
+                    } else {
+                        builder->Add(NUdf::TBlockItem(val.Value(i)));
+                    }
                 }
             }
         } else {
             for (i64 i = 0; i < block->length; ++i) {
-                builder->Add(NUdf::TBlockItem(val.Value(i)));
+                if constexpr (std::is_same_v<decltype(val.Value(i)), bool>) {
+                    builder->Add(NUdf::TBlockItem((ui8)val.Value(i)));
+                } else {
+                    builder->Add(NUdf::TBlockItem(val.Value(i)));
+                }
             }
         }
         return builder->Build(false);
@@ -56,12 +63,20 @@ arrow::Datum NumericConverterImpl(NUdf::IArrayBuilder* builder, std::shared_ptr<
             if (dict.IsNull(i)) {
                 builder->Add(NUdf::TBlockItem{});
             } else {
-                builder->Add(NUdf::TBlockItem(val.Value(data[i])));
+                if constexpr (std::is_same_v<decltype(val.Value(data[i])), bool>) {
+                    builder->Add(NUdf::TBlockItem((ui8)val.Value(data[i])));
+                } else {
+                    builder->Add(NUdf::TBlockItem(val.Value(data[i])));
+                }
             }
         }
     } else {
         for (i64 i = 0; i < block->length; ++i) {
-            builder->Add(NUdf::TBlockItem(val.Value(data[i])));
+            if constexpr (std::is_same_v<decltype(val.Value(data[i])), bool>) {
+                builder->Add(NUdf::TBlockItem((ui8)val.Value(data[i])));
+            } else {
+                builder->Add(NUdf::TBlockItem(val.Value(data[i])));
+            }
         }
     }
     return builder->Build(false);
@@ -402,6 +417,7 @@ class TPrimitiveColumnConverter {
 public:
     TPrimitiveColumnConverter(TYtColumnConverterSettings& settings) : Settings_(settings) {
         switch (Settings_.ArrowType->id()) {
+        case arrow::Type::BOOL:     PrimitiveConverterImpl_ = GEN_TYPE(Boolean); break;
         case arrow::Type::INT8:     PrimitiveConverterImpl_ = GEN_TYPE(Int8); break;
         case arrow::Type::UINT8:    PrimitiveConverterImpl_ = GEN_TYPE(UInt8); break;
         case arrow::Type::INT16:    PrimitiveConverterImpl_ = GEN_TYPE(Int16); break;
@@ -510,8 +526,7 @@ public:
         : Settings_(std::move(settings))
         , DictYsonConverter_(Settings_)
         , YsonConverter_(Settings_)
-        , DictPrimitiveConverter_(Settings_)
-        , PrimitiveConverter_(Settings_) {}
+        , DictPrimitiveConverter_(Settings_) {}
 
     arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) override {
         if (arrow::Type::DICTIONARY == block->type->id()) {
@@ -522,9 +537,10 @@ public:
             }
         } else {
             if (block->type->Equals(Settings_.ArrowType)) {
-                return PrimitiveConverter_.Convert(block);
-            } else {
                 return block;
+            } else {
+                YQL_ENSURE(arrow::Type::BINARY == block->type->id());
+                return YsonConverter_.Convert(block);
             }
         }
     }
@@ -533,7 +549,6 @@ private:
     TYtYsonColumnConverter<Native, IsTopOptional, true> DictYsonConverter_;
     TYtYsonColumnConverter<Native, IsTopOptional, false> YsonConverter_;
     TPrimitiveColumnConverter<true> DictPrimitiveConverter_;
-    TPrimitiveColumnConverter<false> PrimitiveConverter_;
 };
 
 TYtColumnConverterSettings::TYtColumnConverterSettings(NKikimr::NMiniKQL::TType* type, const NUdf::IPgBuilder* pgBuilder, arrow::MemoryPool& pool, bool isNative) 

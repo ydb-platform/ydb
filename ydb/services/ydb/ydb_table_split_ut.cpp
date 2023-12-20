@@ -369,6 +369,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
         TKikimrWithGrpcAndRootSchema server(appConfig);
 
         // Set min uptime before merge by load to 10h

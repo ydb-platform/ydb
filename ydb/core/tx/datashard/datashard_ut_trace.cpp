@@ -337,43 +337,69 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
 
         FakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
 
-        auto deSpan = trace.Root.BFSFindOne("DataExecuter");
-        UNIT_ASSERT(deSpan);
+        std::string canon;
+        if (server->GetSettings().AppConfig->GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            auto lookupActorSpan = trace.Root.BFSFindOne("LookupActor");
+            UNIT_ASSERT(lookupActorSpan);
 
-        auto dsTxSpans = deSpan->get().FindAll("Datashard.Transaction");
-        UNIT_ASSERT_EQUAL(2, dsTxSpans.size()); // Two shards, each executes a user transaction.
+            auto dsReads = lookupActorSpan->get().FindAll("DataShard.Read"); // Lookup actor sends EvRead to each shard.
+            UNIT_ASSERT_EQUAL(dsReads.size(), 2);
 
-        for (auto dsTxSpan : dsTxSpans) {
-            auto tabletTxs = dsTxSpan.get().FindAll("Tablet.Transaction");
-            UNIT_ASSERT_EQUAL(1, tabletTxs.size());
+            canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) "
+                ", (DataExecuter -> [(WaitForTableResolve) , (WaitForSnapshot) , (ComputeActor) "
+                ", (ComputeActor -> [(LookupActor -> [(WaitForShardsResolve) , (DataShard.Read "
+                "-> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) "
+                ", (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) "
+                ", (Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) "
+                ", (Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog "
+                "-> [(Tablet.WriteLog.LogEntry)])]) , (ReadIterator.ReadOperation)]) , (DataShard.Read "
+                "-> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) "
+                ", (Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) "
+                ", (Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) "
+                ", (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit) "
+                ", (Datashard.Unit)]) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])]) "
+                ", (ReadIterator.ReadOperation)])])]) , (ComputeActor) , (RunTasks)])])";
+        } else {
+            auto deSpan = trace.Root.BFSFindOne("DataExecuter");
+            UNIT_ASSERT(deSpan);
 
-            auto propose = tabletTxs[0];
-            CheckTxHasWriteLog(propose);
+            auto dsTxSpans = deSpan->get().FindAll("Datashard.Transaction");
+            UNIT_ASSERT_EQUAL(2, dsTxSpans.size()); // Two shards, each executes a user transaction.
 
-            // Blobs are loaded from BS.
-            UNIT_ASSERT_EQUAL(2, propose.get().FindAll("Tablet.Transaction.Wait").size());
-            UNIT_ASSERT_EQUAL(2, propose.get().FindAll("Tablet.Transaction.Enqueued").size());
+            for (auto dsTxSpan : dsTxSpans) {
+                auto tabletTxs = dsTxSpan.get().FindAll("Tablet.Transaction");
+                UNIT_ASSERT_EQUAL(1, tabletTxs.size());
 
-            // We execute tx multiple times, because we have to load data for it to execute.
-            auto executeSpans = propose.get().FindAll("Tablet.Transaction.Execute");
-            UNIT_ASSERT_EQUAL(3, executeSpans.size());
+                auto propose = tabletTxs[0];
+                CheckTxHasWriteLog(propose);
 
-            CheckExecuteHasDatashardUnits(executeSpans[0], 3);
-            CheckExecuteHasDatashardUnits(executeSpans[1], 1);
-            CheckExecuteHasDatashardUnits(executeSpans[2], 3);
+                // Blobs are loaded from BS.
+                UNIT_ASSERT_EQUAL(2, propose.get().FindAll("Tablet.Transaction.Wait").size());
+                UNIT_ASSERT_EQUAL(2, propose.get().FindAll("Tablet.Transaction.Enqueued").size());
+
+                // We execute tx multiple times, because we have to load data for it to execute.
+                auto executeSpans = propose.get().FindAll("Tablet.Transaction.Execute");
+                UNIT_ASSERT_EQUAL(3, executeSpans.size());
+
+                CheckExecuteHasDatashardUnits(executeSpans[0], 3);
+                CheckExecuteHasDatashardUnits(executeSpans[1], 1);
+                CheckExecuteHasDatashardUnits(executeSpans[2], 3);
+            }
+
+            canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) "
+                ", (LiteralExecuter) , (DataExecuter -> [(WaitForTableResolve) , (WaitForSnapshot) , (ComputeActor) , (RunTasks) , "
+                "(Datashard.Transaction -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , "
+                "(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
+                "(Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
+                "(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> "
+                "[(Tablet.WriteLog.LogEntry)])])]) , (Datashard.Transaction -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> "
+                "[(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
+                "(Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
+                "(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> "
+                "[(Tablet.WriteLog.LogEntry)])])])])])";
         }
         
-        std::string canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) "
-        ", (LiteralExecuter) , (DataExecuter -> [(WaitForTableResolve) , (WaitForSnapshot) , (ComputeActor) , (RunTasks) , "
-        "(Datashard.Transaction -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , "
-        "(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
-        "(Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
-        "(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> "
-        "[(Tablet.WriteLog.LogEntry)])])]) , (Datashard.Transaction -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> "
-        "[(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
-        "(Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
-        "(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> "
-        "[(Tablet.WriteLog.LogEntry)])])])])])";
+        
         UNIT_ASSERT_VALUES_EQUAL(canon, trace.ToString());
     }
 

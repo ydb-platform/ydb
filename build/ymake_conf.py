@@ -2498,8 +2498,6 @@ def main():
 
     custom_conf.print_epilogue()
 
-    emit_with_ignore_comment('CONF_SCRIPT_DEPENDS', __file__)
-
 
 if __name__ == '__main__':
     main()

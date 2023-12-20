@@ -145,6 +145,7 @@ public:
             hFunc(TEvPush, OnChannelPush);
             hFunc(TEvSinkPop, OnSinkPop);
             hFunc(TEvSinkPopFinished, OnSinkPopFinished);
+            IgnoreFunc(TEvStatistics);
             default: {
                 auto message = TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << ev->GetTypeName() << ")" << " stageId: " << StageId;
                 auto issue = TIssue(message).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR);

@@ -84,6 +84,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AlterReplicationCard);
 
     // Queues
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AdvanceConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PullQueue);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PullConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RegisterQueueConsumer);

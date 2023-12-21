@@ -2018,6 +2018,7 @@ public:
 
     enum ELogThrottlerType {
         CheckDataTxUnit_Execute = 0,
+        CheckWriteUnit_Execute = 0,
         TxProposeTransactionBase_Execute,
         FinishProposeUnit_CompleteRequest,
         FinishProposeUnit_UpdateCounters,

@@ -1832,7 +1832,7 @@ std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(ui64 txId, NKik
     }
 
     TSerializedCellMatrix matrix(cells, rowCount, columns.size());
-    TString blobData = matrix.GetBuffer();
+    TString blobData = matrix.ReleaseBuffer();
 
     UNIT_ASSERT(blobData.size() < 8_MB);
 
@@ -1843,28 +1843,28 @@ std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(ui64 txId, NKik
     return evWrite;
 }
 
-NKikimrDataEvents::TEvWriteResult Write(Tests::TServer::TPtr server, ui64 shardId, ui64 tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, TActorId sender, ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode)
+NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, ui64 shardId, ui64 tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, TActorId sender, ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
 {
-    auto& runtime = *server->GetRuntime();
     auto request = MakeWriteRequest(txId, txMode, tableId, columns, rowCount);
     runtime.SendToPipe(shardId, sender, request.release(), 0, GetPipeConfigWithRetries());
 
     auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
     auto status = ev->Get()->Record.GetStatus();
     
-    NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus;
-    switch (txMode) {
-        case NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE:
-            expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED;
-            break;
-        case NKikimrDataEvents::TEvWrite::MODE_PREPARE:
-        case NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE:
-            expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED;
-            break;
-        default:
-            expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED;
-            UNIT_ASSERT_C(false, "Unexpected txMode: " << txMode);
-            break;
+    if (expectedStatus == NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED) {
+        switch (txMode) {
+            case NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE:
+                expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED;
+                break;
+            case NKikimrDataEvents::TEvWrite::MODE_PREPARE:
+            case NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE:
+                expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED;
+                break;
+            default:
+                expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED;
+                UNIT_ASSERT_C(false, "Unexpected txMode: " << txMode);
+                break;
+        }
     }
     UNIT_ASSERT_C(status == expectedStatus, "Status: " << ev->Get()->Record.GetStatus() << " Issues: " << ev->Get()->Record.GetIssues());
 

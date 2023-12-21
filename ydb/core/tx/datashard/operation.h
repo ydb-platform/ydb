@@ -398,7 +398,7 @@ public:
         ResetFlag(TTxFlags::AcquiredSnapshotReference);
     }
 
-    bool IsMvccSnapshotRead() { return !MvccSnapshot.IsMax(); }
+    bool IsMvccSnapshotRead() const { return !MvccSnapshot.IsMax(); }
     const TRowVersion& GetMvccSnapshot() const { return MvccSnapshot; }
     bool IsMvccSnapshotRepeatable() const { return MvccSnapshotRepeatable; }
     void SetMvccSnapshot(const TRowVersion& snapshot, bool isRepeatable = true) {

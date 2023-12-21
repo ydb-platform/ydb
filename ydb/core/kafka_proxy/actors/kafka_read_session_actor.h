@@ -19,37 +19,37 @@ namespace NKafka {
      * Pipeline:
      *
      * client                                 server
-     *          JOIN_GROUP request(topics)
-     *          ---------------->
-     *          JOIN_GROUP response()
-     *          <----------------
+     *           JOIN_GROUP request(topics)
+     *           ---------------->
+     *           JOIN_GROUP response()
+     *           <----------------
      *
-     *          SYNC_GROUP request()
-     *          ---------------->
-     *          SYNC_GROUP response(partitions to read)
-     *          <----------------
+     *           SYNC_GROUP request()
+     *           ---------------->
+     *           SYNC_GROUP response(partitions to read)
+     *           <----------------
      *
-     *          HEARTBEAT request()
-     *          ---------------->
-     *          HEARTBEAT response(status = OK)
-     *          <---------------- 
+     *           HEARTBEAT request()
+     *           ---------------->
+     *           HEARTBEAT response(status = OK)
+     *           <---------------- 
      *
-     *          HEARTBEAT request()
-     *          ---------------->
-     *          HEARTBEAT response(status = REBALANCE_IN_PROGRESS) //if partitions to read list changes
-     *          <---------------- 
+     *           HEARTBEAT request()
+     *           ---------------->
+     *           HEARTBEAT response(status = REBALANCE_IN_PROGRESS) //if partitions to read list changes
+     *           <---------------- 
      *
-     *          JOIN_GROUP request(topics) //client send again, because REBALANCE_IN_PROGRESS in heartbeat response
-     *          ---------------->
+     *           JOIN_GROUP request(topics) //client send again, because REBALANCE_IN_PROGRESS in heartbeat response
+     *           ---------------->
      *
-     *          ...
-     *          ...
-     *          ...
+     *           ...
+     *           ...
+     *           ...
      *
-     *          LEAVE_GROUP request()
-     *          ---------------->
-     *          LEAVE_GROUP response()
-     *          <----------------   
+     *           LEAVE_GROUP request()
+     *           ---------------->
+     *           LEAVE_GROUP response()
+     *           <----------------   
      */
 
 class TKafkaReadSessionActor: public NActors::TActorBootstrapped<TKafkaReadSessionActor> {

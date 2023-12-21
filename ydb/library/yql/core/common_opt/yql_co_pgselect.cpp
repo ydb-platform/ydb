@@ -3196,7 +3196,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
                 }
             }
 
-            if (!outerInputs.empty()) {
+            if (!outerInputs.empty() && finalExtTypes && 0 < finalExtTypes->Tail().ChildrenSize()) {
                 list = JoinOuter(node->Pos(), list, finalExtTypes, outerInputs, outerInputAliases, cleanedInputs, inputAliases, ctx);
             }
 

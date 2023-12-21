@@ -128,9 +128,9 @@ private:
     }
 
     TStatus HandleCreateObject(TKiCreateObject node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "CreateObject is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(node);
+        Y_UNUSED(ctx);
+        return TStatus::Ok;
     }
 
     TStatus HandleAlterObject(TKiAlterObject node, TExprContext& ctx) override {

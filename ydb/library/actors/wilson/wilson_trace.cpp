@@ -26,6 +26,9 @@ namespace NWilson {
             return {};
         }
 
+        // Specification only allows lower case letters, but we want to allow upper case
+        // letters for convenience
+        // https://w3c.github.io/trace-context/#traceparent-header-field-values
         auto isHex = [](char c) {
             return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
         };
@@ -37,7 +40,7 @@ namespace NWilson {
             return {};
         }
 
-        if (header[traceIdStart - 1] != '-' || header[parentSpanIdStart - 1] != '-' || header[traceIdChars - 1] != '-') {
+        if (header[traceIdStart - 1] != '-' || header[parentSpanIdStart - 1] != '-' || header[traceFlagsStart - 1] != '-') {
             return {};
         }
 

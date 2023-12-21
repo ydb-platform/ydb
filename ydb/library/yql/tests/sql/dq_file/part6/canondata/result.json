@@ -1158,9 +1158,9 @@
     ],
     "test.test[join-anyjoin_common_nodata_keys-off-Results]": [
         {
-            "checksum": "21d3c1e962a2f1041937d4db4d1b690a",
-            "size": 453,
-            "uri": "https://{canondata_backend}/1871002/b59ed2ad938015ca28be6d459030014e4b6ff1ea/resource.tar.gz#test.test_join-anyjoin_common_nodata_keys-off-Results_/results.txt"
+            "checksum": "6572671713355db88373ea3e154424d3",
+            "size": 529,
+            "uri": "https://{canondata_backend}/1936273/edfdc418bcbd1386a4a94dc31aee088a78a549f4/resource.tar.gz#test.test_join-anyjoin_common_nodata_keys-off-Results_/results.txt"
         }
     ],
     "test.test[join-equi_join_three_simple--Analyze]": [
@@ -1452,9 +1452,9 @@
     ],
     "test.test[join-mapjoin_with_anonymous-off-Results]": [
         {
-            "checksum": "f739adcd538e5ea310062e8784476dd9",
-            "size": 408,
-            "uri": "https://{canondata_backend}/1924537/40c66e62107c2a9e3733dec809479087bdd8f6d6/resource.tar.gz#test.test_join-mapjoin_with_anonymous-off-Results_/results.txt"
+            "checksum": "b06c92f700fb33d968deedcec51c32f3",
+            "size": 440,
+            "uri": "https://{canondata_backend}/1936273/edfdc418bcbd1386a4a94dc31aee088a78a549f4/resource.tar.gz#test.test_join-mapjoin_with_anonymous-off-Results_/results.txt"
         }
     ],
     "test.test[join-premap_map_inner--Analyze]": [
@@ -1561,9 +1561,9 @@
     ],
     "test.test[join-yql-8125-off-Results]": [
         {
-            "checksum": "660387db59c42b1e4e85f016a6d434db",
-            "size": 157,
-            "uri": "https://{canondata_backend}/1871002/b59ed2ad938015ca28be6d459030014e4b6ff1ea/resource.tar.gz#test.test_join-yql-8125-off-Results_/results.txt"
+            "checksum": "3bdb5911a299f9ea9446297b8d1fbb9c",
+            "size": 394,
+            "uri": "https://{canondata_backend}/1936273/edfdc418bcbd1386a4a94dc31aee088a78a549f4/resource.tar.gz#test.test_join-yql-8125-off-Results_/results.txt"
         }
     ],
     "test.test[key_filter-contains-default.txt-Analyze]": [

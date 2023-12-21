@@ -61,6 +61,16 @@ bool ResolvePoolNames(
 
 const TSchemeLimits TSchemeShard::DefaultLimits = {};
 
+void TSchemeShard::SubscribeToTempTableOwners() {
+    auto ctx = ActorContext();
+    auto& tempTablesBySession = TempTablesState.TempTablesBySession;
+    for (const auto& [sessionActorId, tempTables] : tempTablesBySession) {
+        ctx.Send(new IEventHandle(sessionActorId, SelfId(),
+                                new TEvSchemeShard::TEvSessionActorAck(),
+                                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
+    }
+}
+
 void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActivationOpts&& opts) {
     TPathId subDomainPathId = GetCurrentSubDomainPathId();
     TSubDomainInfo::TPtr domainPtr = ResolveDomainInfo(subDomainPathId);
@@ -132,6 +142,8 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
     ctx.Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
 
     InitializeStatistics(ctx);
+
+    SubscribeToTempTableOwners();
 
     Become(&TThis::StateWork);
 }
@@ -2490,7 +2502,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::Tables::AlterTableFull>(TString()),
             NIceDb::TUpdate<Schema::Tables::TTLSettings>(ttlSettings),
             NIceDb::TUpdate<Schema::Tables::IsBackup>(tableInfo->IsBackup),
-            NIceDb::TUpdate<Schema::Tables::ReplicationConfig>(replicationConfig));
+            NIceDb::TUpdate<Schema::Tables::IsTemporary>(tableInfo->IsTemporary),
+            NIceDb::TUpdate<Schema::Tables::OwnerActorId>(tableInfo->OwnerActorId));
     } else {
         db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::MigratedTables::NextColId>(tableInfo->NextColumnId),
@@ -2500,7 +2513,9 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::MigratedTables::AlterTableFull>(TString()),
             NIceDb::TUpdate<Schema::MigratedTables::TTLSettings>(ttlSettings),
             NIceDb::TUpdate<Schema::MigratedTables::IsBackup>(tableInfo->IsBackup),
-            NIceDb::TUpdate<Schema::MigratedTables::ReplicationConfig>(replicationConfig));
+            NIceDb::TUpdate<Schema::MigratedTables::ReplicationConfig>(replicationConfig),
+            NIceDb::TUpdate<Schema::MigratedTables::IsTemporary>(tableInfo->IsTemporary),
+            NIceDb::TUpdate<Schema::MigratedTables::OwnerActorId>(tableInfo->OwnerActorId));
     }
 
     for (auto col : tableInfo->Columns) {
@@ -4348,7 +4363,12 @@ void TSchemeShard::StateInit(STFUNC_SIG) {
         HFunc(TEvPrivate::TEvConsoleConfigsTimeout, Handle);
 
     default:
-        StateInitImpl(ev, SelfId());
+        if (!HandleDefaultEvents(ev, SelfId())) {
+            ALOG_WARN(NKikimrServices::FLAT_TX_SCHEMESHARD,
+                       "StateInit:"
+                           << " unhandled event type: " << ev->GetTypeRewrite()
+                           << " event: " << ev->ToString());
+        }
     }
 }
 

@@ -644,6 +644,11 @@ public:
 
         Y_ABORT_UNLESS(tableInfo->GetPartitions().back().EndOfRange.empty(), "End of last range must be +INF");
 
+        if (schema.HasTemporary() && schema.GetTemporary()) {
+            tableInfo->IsTemporary = true;
+            tableInfo->OwnerActorId = schema.GetSessionActorId();
+        }
+
         context.SS->Tables[newTable->PathId] = tableInfo;
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
         context.SS->IncrementPathDbRefCount(newTable->PathId, "new path created");

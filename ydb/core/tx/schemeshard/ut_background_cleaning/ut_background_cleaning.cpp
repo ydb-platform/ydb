@@ -134,7 +134,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         CheckTable(runtime, "/MyRoot/TempTable");
 
         const TActorId proxy = runtime.GetInterconnectProxy(1, 0);
-
         runtime.Send(new IEventHandle(proxy, TActorId(), new TEvInterconnect::TEvDisconnect(), 0, 0), 1, true);
         TDispatchOptions options;
         options.FinalEvents.emplace_back(TEvInterconnect::EvNodeDisconnected);
@@ -179,5 +178,102 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         env.SimulateSleep(runtime, TDuration::Seconds(50));
 
         CheckTable(runtime, "/MyRoot/TempTable", TTestTxConfig::SchemeShard, true);
+    }
+
+    Y_UNIT_TEST(SchemeshardBackgroundCleaningTestTwoTables) {
+        TTestBasicRuntime runtime(3);
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        SetBackgroundCleaning(runtime, env, TTestTxConfig::SchemeShard);
+        env.SimulateSleep(runtime, TDuration::Seconds(30));
+
+        auto sessionActorId1 = runtime.AllocateEdgeActor(1);
+        ui64 txId1 = 100;
+        TestCreateTempTable(runtime, txId1, "/MyRoot", R"(
+                  Name: "TempTable1"
+                  Columns { Name: "key"   Type: "Uint64" }
+                  Columns { Name: "value" Type: "Utf8" }
+                  KeyColumnNames: ["key"]
+            )", sessionActorId1, { NKikimrScheme::StatusAccepted }, 1);
+        env.TestWaitNotification(runtime, txId1);
+
+        auto sessionActorId2 = runtime.AllocateEdgeActor(2);
+        ui64 txId2 = ++txId1;
+        TestCreateTempTable(runtime, txId2, "/MyRoot", R"(
+                  Name: "TempTable2"
+                  Columns { Name: "key"   Type: "Uint64" }
+                  Columns { Name: "value" Type: "Utf8" }
+                  KeyColumnNames: ["key"]
+            )", sessionActorId2, { NKikimrScheme::StatusAccepted }, 2);
+        env.TestWaitNotification(runtime, txId2);
+
+        CheckTable(runtime, "/MyRoot/TempTable1");
+        CheckTable(runtime, "/MyRoot/TempTable2");
+
+        const TActorId proxy = runtime.GetInterconnectProxy(1, 0);
+        runtime.Send(new IEventHandle(proxy, TActorId(), new TEvInterconnect::TEvDisconnect(), 0, 0), 1, true);
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvInterconnect::EvNodeDisconnected);
+        runtime.DispatchEvents(options);
+
+        env.SimulateSleep(runtime, TDuration::Seconds(50));
+        CheckTable(runtime, "/MyRoot/TempTable1", TTestTxConfig::SchemeShard, false);
+        CheckTable(runtime, "/MyRoot/TempTable2", TTestTxConfig::SchemeShard);
+    }
+
+    Y_UNIT_TEST(SchemeshardBackgroundCleaningTestReboot) {
+        TTestBasicRuntime runtime(3);
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        SetBackgroundCleaning(runtime, env, TTestTxConfig::SchemeShard);
+        env.SimulateSleep(runtime, TDuration::Seconds(30));
+
+        auto sessionActorId1 = runtime.AllocateEdgeActor(1);
+        ui64 txId1 = 100;
+        TestCreateTempTable(runtime, txId1, "/MyRoot", R"(
+                  Name: "TempTable1"
+                  Columns { Name: "key"   Type: "Uint64" }
+                  Columns { Name: "value" Type: "Utf8" }
+                  KeyColumnNames: ["key"]
+            )", sessionActorId1, { NKikimrScheme::StatusAccepted }, 1);
+        env.TestWaitNotification(runtime, txId1);
+
+        auto sessionActorId2 = runtime.AllocateEdgeActor(2);
+        ui64 txId2 = ++txId1;
+        TestCreateTempTable(runtime, txId2, "/MyRoot", R"(
+                  Name: "TempTable2"
+                  Columns { Name: "key"   Type: "Uint64" }
+                  Columns { Name: "value" Type: "Utf8" }
+                  KeyColumnNames: ["key"]
+            )", sessionActorId2, { NKikimrScheme::StatusAccepted }, 2);
+        env.TestWaitNotification(runtime, txId2);
+
+        CheckTable(runtime, "/MyRoot/TempTable1");
+        CheckTable(runtime, "/MyRoot/TempTable2");
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        env.SimulateSleep(runtime, TDuration::Seconds(30));
+        SetBackgroundCleaning(runtime, env, TTestTxConfig::SchemeShard);
+        env.SimulateSleep(runtime, TDuration::Seconds(30));
+
+        const TActorId proxy = runtime.GetInterconnectProxy(1, 0);
+        runtime.Send(new IEventHandle(proxy, TActorId(), new TEvInterconnect::TEvDisconnect(), 0, 0), 1, true);
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvInterconnect::EvNodeDisconnected);
+        runtime.DispatchEvents(options);
+
+        env.SimulateSleep(runtime, TDuration::Seconds(50));
+        CheckTable(runtime, "/MyRoot/TempTable1", TTestTxConfig::SchemeShard, false);
+        CheckTable(runtime, "/MyRoot/TempTable2", TTestTxConfig::SchemeShard);
     }
 };

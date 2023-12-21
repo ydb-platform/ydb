@@ -821,6 +821,9 @@ public:
         TVector<TPathId> TablesToClean;
         TDeque<TPathId> BlockStoreVolumesToClean;
     };
+
+    void SubscribeToTempTableOwners();
+
     void ActivateAfterInitialization(const TActorContext& ctx, TActivationOpts&& opts);
 
     struct TTxInitPopulator;

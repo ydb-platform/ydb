@@ -302,7 +302,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString> TTableRec;
+    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString> TTableRec;
     typedef TDeque<TTableRec> TTableRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -316,7 +316,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::PartitioningVersion>(0),
             rowSet.template GetValueOrDefault<typename SchemaTable::TTLSettings>(),
             rowSet.template GetValueOrDefault<typename SchemaTable::IsBackup>(false),
-            rowSet.template GetValueOrDefault<typename SchemaTable::ReplicationConfig>()
+            rowSet.template GetValueOrDefault<typename SchemaTable::ReplicationConfig>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::IsTemporary>(false),
+            rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>("")
         );
     }
 
@@ -1791,6 +1793,43 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 tableInfo->IsBackup = std::get<8>(rec);
+                tableInfo->IsTemporary = std::get<10>(rec);
+                tableInfo->OwnerActorId = std::get<11>(rec);
+
+                if (tableInfo->IsTemporary) {
+                    Y_VERIFY_S(!tableInfo->OwnerActorId.empty(),  "Empty OwnerActorId for temp table");
+                    auto tempTablePath = TPath::Init(pathId, Self);
+                    auto tempTableName = tempTablePath.LeafName();
+                    auto tempTableWorkingDir = tempTablePath.Parent().PathString();
+
+                    TActorId sessionActorId;
+                    sessionActorId.Parse(tableInfo->OwnerActorId.c_str(), tableInfo->OwnerActorId.size());
+
+                    auto& tempTablesBySession = Self->TempTablesState.TempTablesBySession;
+                    auto& nodeStates = Self->TempTablesState.NodeStates;
+
+                    auto it = tempTablesBySession.find(sessionActorId);
+                    auto nodeId = sessionActorId.NodeId();
+
+                    auto itNodeStates = nodeStates.find(nodeId);
+                    if (itNodeStates == nodeStates.end()) {
+                        auto& nodeState = nodeStates[nodeId];
+                        nodeState.Sessions.insert(sessionActorId);
+                        nodeState.RetryState.CurrentDelay =
+                            TDuration::MilliSeconds(Self->BackgroundCleaningRetrySettings.GetStartDelayMs());
+                    } else {
+                        itNodeStates->second.Sessions.insert(sessionActorId);
+                    }
+
+                    if (it == tempTablesBySession.end()) {
+                        auto& currentTempTables = tempTablesBySession[sessionActorId];
+                        currentTempTables.insert(TTempTableId{
+                            tempTableWorkingDir, tempTableName, Nothing()});
+                    } else {
+                        it->second.insert(TTempTableId{
+                                tempTableWorkingDir, tempTableName, Nothing()});
+                    }
+                }
 
                 Self->Tables[pathId] = tableInfo;
                 Self->IncrementPathDbRefCount(pathId);

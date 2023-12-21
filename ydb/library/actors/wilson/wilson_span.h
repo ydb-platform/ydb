@@ -66,7 +66,7 @@ namespace NWilson {
                 , Flags(flags)
                 , ActorSystem(actorSystem != nullptr ? actorSystem : (NActors::TlsActivationContext ? NActors::TActivationContext::ActorSystem() : nullptr))
             {
-                Y_ABORT_UNLESS(ActorSystem != nullptr, "Attempting to create NWilson::TSpan outside of actor system without providing actorSystem pointer");
+                Y_DEBUG_ABORT_UNLESS(ActorSystem != nullptr, "Attempting to create NWilson::TSpan outside of actor system without providing actorSystem pointer");
             }
 
             ~TData() {

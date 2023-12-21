@@ -1,6 +1,5 @@
 #include "wilson_span.h"
 #include "wilson_uploader.h"
-#include <ydb/library/actors/core/log.h>
 #include <google/protobuf/text_format.h>
 
 namespace NWilson {
@@ -53,7 +52,9 @@ namespace NWilson {
     }
 
     void TSpan::Send() {
-        Data->ActorSystem->Send(new IEventHandle(MakeWilsonUploaderId(), {}, new TEvWilson(&Data->Span)));
+        if (Data->ActorSystem != nullptr) {
+            Data->ActorSystem->Send(new IEventHandle(MakeWilsonUploaderId(), {}, new TEvWilson(&Data->Span)));
+        }
         Data->Sent = true;
     }
 

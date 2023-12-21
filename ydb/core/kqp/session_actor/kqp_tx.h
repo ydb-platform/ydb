@@ -315,54 +315,30 @@ struct TTxId {
     }
 };
 
+}
+
+template<>
+struct THash<NKikimr::NKqp::TTxId> {
+    inline size_t operator()(const NKikimr::NKqp::TTxId& id) const noexcept {
+        return THash<NKikimr::TULID>()(id.Id);
+    }
+};
+
+namespace NKikimr::NKqp {
+
 class TTransactionsCache {
-    struct TCachedTransaction {
-        TTxId Id;
-        TIntrusivePtr<TKqpTransactionContext> Context;
-    };
-    ui64 ActiveSize;
-    TVector<TCachedTransaction> Active;
+    size_t MaxActiveSize;
+    THashMap<TTxId, TIntrusivePtr<TKqpTransactionContext>, THash<NKikimr::NKqp::TTxId>> Active;
     std::deque<TIntrusivePtr<TKqpTransactionContext>> ToBeAborted;
 
-    TCachedTransaction* FindTransactionById(const TTxId& id) {
-        for (auto& cachedTransaction : Active) {
-            if (cachedTransaction.Context && cachedTransaction.Id == id) {
-                return &cachedTransaction;
+    auto FindOldestTransaction() {
+        auto oldest = std::begin(Active);
+        for (auto it = std::next(oldest); it != std::end(Active); ++it) {
+            if (oldest->second->LastAccessTime < it->second->LastAccessTime) {
+                oldest = it;
             }
         }
-        return nullptr;
-    }
-
-    TCachedTransaction* FindOldestTransaction() {
-        TCachedTransaction* result = nullptr;
-        for (auto& cachedTransaction : Active) {
-            if (cachedTransaction.Context && (!result || result->Context->LastAccessTime < cachedTransaction.Context->LastAccessTime)) {
-                result = &cachedTransaction;
-            }
-        }
-        return result;
-    }
-
-    bool Insert(const TTxId& id, TIntrusivePtr<TKqpTransactionContext> context) {
-        for (auto& cachedTransaction : Active) {
-            if (!cachedTransaction.Context) {
-                cachedTransaction.Id = id;
-                cachedTransaction.Context = std::move(context);
-                ++ActiveSize;
-                return true;
-            }
-        }
-        return false;
-    }
-
-    TIntrusivePtr<TKqpTransactionContext> ReleaseContext(TCachedTransaction* cachedTransaction) {
-        if (cachedTransaction->Context) {
-            auto result = std::move(cachedTransaction->Context);
-            cachedTransaction->Context = nullptr;
-            --ActiveSize;
-            return result;
-        }
-        return nullptr;
+        return oldest;
     }
 
 public:
@@ -370,33 +346,36 @@ public:
     TDuration IdleTimeout;
 
     TTransactionsCache(size_t size, TDuration idleTimeout)
-        : ActiveSize(0)
-        , Active(size)
+        : MaxActiveSize(size)
         , IdleTimeout(idleTimeout)
-    {}
-
-    size_t Size() const {
-        return ActiveSize;
+    {
+        Active.reserve(MaxActiveSize);
     }
 
-    size_t MaxSize() const {
+    size_t Size() const {
         return Active.size();
     }
 
+    size_t MaxSize() const {
+        return MaxActiveSize;
+    }
+
     TIntrusivePtr<TKqpTransactionContext> Find(const TTxId& id) {
-        auto* cachedTransaction = FindTransactionById(id);
-        if (cachedTransaction) {
-            cachedTransaction->Context->Touch();
-            return cachedTransaction->Context;
+        auto it = Active.find(id);
+        if (it != std::end(Active)) {
+            it->second->Touch();
+            return it->second;
         } else {
             return nullptr;
         }
     }
 
     TIntrusivePtr<TKqpTransactionContext> ReleaseTransaction(const TTxId& id) {
-        auto* cachedTransaction = FindTransactionById(id);
-        if (cachedTransaction) {
-            return ReleaseContext(cachedTransaction);
+        const auto it = Active.find(id);
+        if (it != std::end(Active)) {
+            auto result = std::move(it->second);
+            Active.erase(it);
+            return result;
         } else {
             return nullptr;
         }
@@ -407,15 +386,16 @@ public:
     }
 
     bool RemoveOldTransactions() {
-        if (ActiveSize < Active.size()) {
+        if (Active.size() < MaxActiveSize) {
             return true;
         }
 
-        auto* oldest = FindOldestTransaction();
-        auto currentIdle = TInstant::Now() - oldest->Context->LastAccessTime;
+        auto oldestIt = FindOldestTransaction();
+        auto currentIdle = TInstant::Now() - oldestIt->second->LastAccessTime;
         if (currentIdle >= IdleTimeout) {
-            oldest->Context->Invalidate();
-            ToBeAborted.emplace_back(ReleaseContext(oldest));
+            oldestIt->second->Invalidate();
+            ToBeAborted.emplace_back(std::move(oldestIt->second));
+            Active.erase(oldestIt);
             ++EvictedTx;
             return true;
         } else {
@@ -427,16 +407,15 @@ public:
         if (!RemoveOldTransactions()) {
             return false;
         }
-        return Insert(txId, std::move(txCtx));
+        return Active.emplace(txId, txCtx).second;
     }
 
     void FinalCleanup() {
         for (auto& item : Active) {
-            if (item.Context) {
-                item.Context->Invalidate();
-                ToBeAborted.emplace_back(ReleaseContext(&item));
-            }
+            item.second->Invalidate();
+            ToBeAborted.emplace_back(std::move(item.second));
         }
+        Active.clear();
     }
 
     size_t ToBeAbortedSize() {
@@ -457,10 +436,3 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 bool HasOlapTableInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 
 }  // namespace NKikimr::NKqp
-
-template<>
-struct THash<NKikimr::NKqp::TTxId> {
-    inline size_t operator()(const NKikimr::NKqp::TTxId& id) const noexcept {
-        return THash<NKikimr::TULID>()(id.Id);
-    }
-};

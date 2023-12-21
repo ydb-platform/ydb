@@ -173,7 +173,7 @@ namespace NActors {
             // Sign bit
             i16 CurrentThreadCount = 0; // 14 bits
 
-            inline i64 ConverToI64() {
+            inline i64 ConvertToI64() {
                 i64 value = (1ll << 34) + OldSemaphore;
                 return value
                     | (((i64)CurrentSleepThreadCount + (1 << 14)) << 35)

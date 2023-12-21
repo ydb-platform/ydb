@@ -23,9 +23,6 @@
 #include <util/string/strip.h>
 #include <util/string/vector.h>
 
-#include <ydb/library/yql/utils/log/log.h>
-
-
 #include <regex>
 
 namespace NKikimr {
@@ -177,9 +174,7 @@ public:
         , TxProto(txProto)
     {}
 
-    void Serialize() {
-        YQL_CLOG(TRACE, CoreDq) << "Full plan " << Tx.Ptr()->Dump();
-    
+    void Serialize() {    
         auto& phaseNode = QueryPlanNodes[++SerializerCtx.PlanNodeId];
         phaseNode.TypeName = "Phase";
 
@@ -237,14 +232,6 @@ public:
     }
 
     void WriteToJson(NJsonWriter::TBuf& writer) const {
-        for (auto [k,v] : LambdaInputs) {
-            if (std::holds_alternative<ui32>(v)) {
-                YQL_CLOG(TRACE, CoreDq) << "Lambda inputs entry: " << (int64_t)k << ":" << k->Dump() << " : (operator id) " << std::get<ui32>(v);
-            } else {
-                YQL_CLOG(TRACE, CoreDq) << "Lambda inputs entry: " << (int64_t)k << ":" << k->Dump() << " : (plan id) " << std::get<TQueryPlanNode*>(v)->NodeId;
-            }
-        }
-
         if (!QueryPlanNodes.empty()) {
             auto phasePlanNode = QueryPlanNodes.begin();
             WritePlanNodeToJson(phasePlanNode->second, writer);
@@ -327,22 +314,16 @@ private:
                     }
                     else {
                         TExprNode* ptr = std::get<TExprNode::TPtr>(input).Get();
-
-                        if (!LambdaInputs.contains(ptr)){
-                            YQL_CLOG(TRACE, CoreDq) << "Stage inputs not found: " << (int64_t)ptr << ":" << ptr->Dump();
-                        } 
-                        else {
-                            writer.BeginObject();
-                            auto input = LambdaInputs.at(ptr);
-                            if (std::holds_alternative<ui32>(input)) {
-                                writer.WriteKey("Local");
-                                writer.WriteInt(std::get<ui32>(input));
-                            } else {
-                                writer.WriteKey("PlanNode");
-                                writer.WriteInt(std::get<TQueryPlanNode*>(input)->NodeId);
-                            }
-                            writer.EndObject();
+                        writer.BeginObject();
+                        auto input = LambdaInputs.at(ptr);
+                        if (std::holds_alternative<ui32>(input)) {
+                            writer.WriteKey("Local");
+                            writer.WriteInt(std::get<ui32>(input));
+                        } else {
+                            writer.WriteKey("PlanNode");
+                            writer.WriteInt(std::get<TQueryPlanNode*>(input)->NodeId);
                         }
+                        writer.EndObject();
                     }
                 }
 
@@ -861,8 +842,6 @@ private:
             YQL_ENSURE(stagePlanNode.StageProto, "Could not find a stage with id " << stageGuid);
             SerializerCtx.StageGuidToId[stageGuid] = SerializerCtx.PlanNodeId;
             VisitedStages.insert(expr.Raw());
-            auto node = expr.Cast<TDqStageBase>().Program().Body().Ptr();
-            Visit(node, stagePlanNode);
 
             /* is that collect stage? */
             if (stagePlanNode.TypeName.Empty()) {
@@ -894,6 +873,9 @@ private:
                 LambdaInputs[arg.Ptr().Get()] = inputIds[0];
                 inputIds.erase(inputIds.begin());
             }
+
+            auto node = expr.Cast<TDqStageBase>().Program().Body().Ptr();
+            Visit(node, stagePlanNode);
 
             if (auto outputs = expr.Cast<TDqStageBase>().Outputs()) {
                 for (auto output : outputs.Cast()) {
@@ -1002,15 +984,6 @@ private:
                     inputIds.insert(inputIds.end(), ids.begin(), ids.end());
                 }
             }
-            if (auto maybeJoin = TMaybeNode<TCoMapJoinCore>(node)) {
-                for (auto i : inputIds ){
-                    if (std::holds_alternative<ui32>(i)){
-                        YQL_CLOG(TRACE, CoreDq) << "Local Join input " << std::get<ui32>(i);
-                    } else {
-                        YQL_CLOG(TRACE, CoreDq) << "Global Join input " << std::get<TExprNode::TPtr>(i)->Dump();
-                    }
-                }
-            }
         }
 
         if (operatorId) {
@@ -1115,7 +1088,9 @@ private:
             planNode.CteRefName = TStringBuilder() << "precompute_" << txId << "_" << resId;
             op.Properties["ToFlow"] = *planNode.CteRefName;
         } else {
-            return TMaybe<std::variant<ui32, TExprNode::TPtr>>();
+            auto inputs = Visit(toflow.Input().Ptr(), planNode);
+            Y_ENSURE(inputs.size()==1);
+            return inputs[0];
         }
 
         return AddOperator(planNode, "ConstantExpr", std::move(op));
@@ -1204,24 +1179,12 @@ private:
 
         Y_ENSURE(flatMapInputs.size()==1);
 
-        
         auto input = flatMapInputs[0];
-        if (std::holds_alternative<ui32>(input)) {
-            YQL_CLOG(TRACE, CoreDq) << "Flatmap Join input: " << std::get<ui32>(input);
-        } else {
-            YQL_CLOG(TRACE, CoreDq) << "Flatmap Join input: " << std::get<TExprNode::TPtr>(input).Get()->Dump();
-            std::variant<ui32, TQueryPlanNode*> to = LambdaInputs[std::get<TExprNode::TPtr>(input).Get()];
-            if (std::holds_alternative<ui32>(to)) {
-                YQL_CLOG(TRACE, CoreDq) << "Flatmap Input goes to local stage " << std::get<ui32>(to);
-            } else {
-                YQL_CLOG(TRACE, CoreDq) << "Flatmap Input goes to qp node " << std::get<TQueryPlanNode*>(to)->TypeName;
-            }
-        }
         auto argPtr = flatMap.Lambda().Args().Arg(0).Ptr().Get();
         if (std::holds_alternative<ui32>(input)) {
             LambdaInputs[argPtr] = std::get<ui32>(input);
         } else {
-            LambdaInputs[argPtr] = LambdaInputs[std::get<TExprNode::TPtr>(input).Get()];
+            LambdaInputs[argPtr] = LambdaInputs.at(std::get<TExprNode::TPtr>(input).Get());
         }
         
         return operatorId;
@@ -1248,9 +1211,18 @@ private:
 
         auto operatorId = AddOperator(planNode, name, std::move(op));
 
-        auto inputs = Visit(flatMap.Input().Ptr(), planNode);
-        TVector<std::variant<ui32, TExprNode::TPtr>> opInputs = planNode.Operators[operatorId].Inputs;
-        opInputs.insert(opInputs.begin(), inputs.begin(), inputs.end());
+        auto flatMapInputs = Visit(flatMap.Input().Ptr(), planNode);
+
+        Y_ENSURE(flatMapInputs.size()==1);
+
+        auto input = flatMapInputs[0];
+        auto argPtr = flatMap.Lambda().Args().Arg(0).Ptr().Get();
+        if (std::holds_alternative<ui32>(input)) {
+            LambdaInputs[argPtr] = std::get<ui32>(input);
+        } else {
+            LambdaInputs[argPtr] = LambdaInputs.at(std::get<TExprNode::TPtr>(input).Get());
+        }
+
         return operatorId;
     }
 
@@ -1274,9 +1246,18 @@ private:
 
         AddOptimizerEstimates(op, join);
 
-        auto inputs = Visit(flatMap.Input().Ptr(), planNode);
-        TVector<std::variant<ui32, TExprNode::TPtr>> opInputs = planNode.Operators[operatorId].Inputs;
-        opInputs.insert(opInputs.begin(), inputs.begin(), inputs.end());
+        auto flatMapInputs = Visit(flatMap.Input().Ptr(), planNode);
+
+        Y_ENSURE(flatMapInputs.size()==1);
+
+        auto input = flatMapInputs[0];
+        auto argPtr = flatMap.Lambda().Args().Arg(0).Ptr().Get();
+        if (std::holds_alternative<ui32>(input)) {
+            LambdaInputs[argPtr] = std::get<ui32>(input);
+        } else {
+            LambdaInputs[argPtr] = LambdaInputs.at(std::get<TExprNode::TPtr>(input).Get());
+        }
+ 
         return operatorId;
     }
 

@@ -745,10 +745,7 @@ class YMake(object):
         if presets:
             print('# Variables set from command line by -D options')
             for key in sorted(presets):
-                if key in ('MY_YMAKE_BIN', 'REAL_YMAKE_BIN'):
-                    emit_with_ignore_comment(key, opts().presets[key])
-                else:
-                    emit(key, opts().presets[key])
+                emit(key, opts().presets[key])
 
     @staticmethod
     def _print_conf_content(path):
@@ -759,7 +756,7 @@ class YMake(object):
         print('@import "${CONF_ROOT}/ymake.core.conf"')
 
     def print_settings(self):
-        emit_with_ignore_comment('ARCADIA_ROOT', self.arcadia.root)
+        pass
 
 
 class System(object):
@@ -2500,8 +2497,6 @@ def main():
     build.print_build()
 
     custom_conf.print_epilogue()
-
-    emit_with_ignore_comment('CONF_SCRIPT_DEPENDS', __file__)
 
 
 if __name__ == '__main__':

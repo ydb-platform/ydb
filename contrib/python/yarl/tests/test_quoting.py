@@ -226,14 +226,21 @@ def test_unquoting_bad_percent_escapes(unquoter, input, expected):
     assert unquoter()(input) == expected
 
 
-@pytest.mark.xfail
-# FIXME: After conversion to bytes, should not cause UTF-8 decode fail.
-# See https://url.spec.whatwg.org/#percent-encoded-bytes
-def test_unquoting_invalid_utf8_sequence(unquoter):
+@pytest.mark.xfail(
+    reason="""
+    FIXME: After conversion to bytes, should not cause UTF-8 decode fail.
+    See https://url.spec.whatwg.org/#percent-encoded-bytes
+
+    Refs:
+    * https://github.com/aio-libs/yarl/pull/216
+    * https://github.com/aio-libs/yarl/pull/214
+    * https://github.com/aio-libs/yarl/pull/7
+    """,
+)
+@pytest.mark.parametrize("urlencoded_string", ("%AB", "%AB%AB"))
+def test_unquoting_invalid_utf8_sequence(unquoter, urlencoded_string):
     with pytest.raises(ValueError):
-        unquoter()("%AB")
-    with pytest.raises(ValueError):
-        unquoter()("%AB%AB")
+        unquoter()(urlencoded_string)
 
 
 def test_unquoting_mixed_case_percent_escapes(unquoter):

@@ -16,6 +16,7 @@
 
 #include <yt/yt/core/yson/tokenizer.h>
 
+#include <yt/yt/core/ytree/attributes.h>
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/fluent.h>
 

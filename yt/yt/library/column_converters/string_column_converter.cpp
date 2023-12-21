@@ -54,10 +54,12 @@ class TStringConverter
 {
 public:
     TStringConverter(
-        int columnIndex,
-        const TColumnSchema& columnSchema)
-        : ColumnIndex_(columnIndex)
+        int columnId,
+        const TColumnSchema& columnSchema,
+        int columnOffset)
+        : ColumnId_(columnId)
         , ColumnSchema_(columnSchema)
+        , ColumnOffset_(columnOffset)
     { }
 
     TConvertedColumn Convert(TRange<TUnversionedRowValues> rowsValues) override
@@ -68,8 +70,9 @@ public:
     }
 
 private:
-    const int ColumnIndex_;
+    const int ColumnId_;
     const TColumnSchema ColumnSchema_;
+    const int ColumnOffset_;
 
     ui32 RowCount_ = 0;
     ui64 AllStringsSize_ = 0;
@@ -159,7 +162,7 @@ private:
             TRef(nullBitmap));
 
         column->Type = ColumnSchema_.LogicalType();
-        column->Id = ColumnIndex_;
+        column->Id = ColumnId_;
 
         TOwningColumn owner = {
             .Column = std::move(column),
@@ -235,7 +238,7 @@ private:
 
         dictionaryColumn->Type = ColumnSchema_.LogicalType();
         primaryColumn->Type = ColumnSchema_.LogicalType();
-        primaryColumn->Id = ColumnIndex_;
+        primaryColumn->Id = ColumnId_;
 
         TOwningColumn dictOwner = {
             .Column = std::move(dictionaryColumn),
@@ -297,7 +300,7 @@ private:
     void AddValues(TRange<TUnversionedRowValues> rowsValues)
     {
         for (const auto& rowValues : rowsValues) {
-            auto unversionedValue = rowValues[ColumnIndex_];
+            auto unversionedValue = rowValues[ColumnOffset_];
             YT_VERIFY(unversionedValue);
             auto value = CaptureValue(*unversionedValue);
             Values_.push_back(value);
@@ -366,24 +369,27 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 IColumnConverterPtr CreateStringConverter(
-    int columnIndex,
-    const NTableClient::TColumnSchema& columnSchema)
+    int columnId,
+    const NTableClient::TColumnSchema& columnSchema,
+    int columnOffset)
 {
-    return std::make_unique<TStringConverter<EValueType::String>>(columnIndex, columnSchema);
+    return std::make_unique<TStringConverter<EValueType::String>>(columnId, columnSchema, columnOffset);
 }
 
 IColumnConverterPtr CreateAnyConverter(
-    int columnIndex,
-    const NTableClient::TColumnSchema& columnSchema)
+    int columnId,
+    const NTableClient::TColumnSchema& columnSchema,
+    int columnOffset)
 {
-    return std::make_unique<TStringConverter<EValueType::Any>>(columnIndex, columnSchema);
+    return std::make_unique<TStringConverter<EValueType::Any>>(columnId, columnSchema, columnOffset);
 }
 
 IColumnConverterPtr CreateCompositeConverter(
-    int columnIndex,
-    const NTableClient::TColumnSchema& columnSchema)
+    int columnId,
+    const NTableClient::TColumnSchema& columnSchema,
+    int columnOffset)
 {
-    return std::make_unique<TStringConverter<EValueType::Composite>>(columnIndex, columnSchema);
+    return std::make_unique<TStringConverter<EValueType::Composite>>(columnId, columnSchema, columnOffset);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

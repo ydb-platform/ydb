@@ -212,8 +212,10 @@ struct make_backend_from_pack
    static constexpr B value = p;
 };
 
+#if !defined(__cpp_inline_variables)
 template <class Pack, class B>
 constexpr B make_backend_from_pack<Pack, B>::value;
+#endif
 
 template <unsigned Digits>
 struct signed_cpp_int_literal_result_type

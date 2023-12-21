@@ -382,6 +382,19 @@ void FromProtoArrayImpl(
     }
 }
 
+template <class TOriginalKey, class TOriginalValue, class TSerializedArray>
+void FromProtoArrayImpl(
+    THashMap<TOriginalKey, TOriginalValue>* originalArray,
+    const TSerializedArray& serializedArray)
+{
+    originalArray->clear();
+    originalArray->reserve(serializedArray.size());
+    for (int i = 0; i < serializedArray.size(); ++i) {
+        originalArray->emplace(
+            FromProto<std::pair<TOriginalKey, TOriginalValue>>(serializedArray.Get(i)));
+    }
+}
+
 template <class TOriginal, class TSerializedArray>
 void CheckedFromProtoArrayImpl(
     THashSet<TOriginal>* originalArray,
@@ -420,90 +433,18 @@ void FromProtoArrayImpl(
 
 } // namespace NDetail
 
-template <class TSerialized, class TOriginal>
+template <class TSerialized, class TOriginalArray>
 void ToProto(
     ::google::protobuf::RepeatedPtrField<TSerialized>* serializedArray,
-    const std::vector<TOriginal>& originalArray)
+    const TOriginalArray& originalArray)
 {
     NYT::NDetail::ToProtoArrayImpl(serializedArray, originalArray);
 }
 
-template <class TSerialized, class TOriginal>
+template <class TSerialized, class TOriginalArray>
 void ToProto(
     ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
-    const std::vector<TOriginal>& originalArray)
-{
-    NYT::NDetail::ToProtoArrayImpl(serializedArray, originalArray);
-}
-
-template <class TSerialized, class TOriginal, size_t N>
-void ToProto(
-    ::google::protobuf::RepeatedPtrField<TSerialized>* serializedArray,
-    const std::array<TOriginal, N>& originalArray)
-{
-    NYT::NDetail::ToProtoArrayImpl(serializedArray, originalArray);
-}
-
-template <class TSerialized, class TOriginal, size_t N>
-void ToProto(
-    ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
-    const std::array<TOriginal, N>& originalArray)
-{
-    NYT::NDetail::ToProtoArrayImpl(serializedArray, originalArray);
-}
-
-template <class TSerialized, class TOriginal, size_t Size>
-void ToProto(
-    ::google::protobuf::RepeatedPtrField<TSerialized>* serializedArray,
-    const TCompactVector<TOriginal, Size>& originalArray)
-{
-    NYT::NDetail::ToProtoArrayImpl(serializedArray, originalArray);
-}
-
-template <class TSerialized, class TOriginal, size_t Size>
-void ToProto(
-    ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
-    const TCompactVector<TOriginal, Size>& originalArray)
-{
-    NYT::NDetail::ToProtoArrayImpl(serializedArray, originalArray);
-}
-
-template <class TSerialized, class TOriginal>
-void ToProto(
-    ::google::protobuf::RepeatedPtrField<TSerialized>* serializedArray,
-    TRange<TOriginal> originalArray)
-{
-    NYT::NDetail::ToProtoArrayImpl(serializedArray, originalArray);
-}
-
-template <class TSerialized, class TOriginal>
-void ToProto(
-    ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
-    TRange<TOriginal> originalArray)
-{
-    NYT::NDetail::ToProtoArrayImpl(serializedArray, originalArray);
-}
-
-template <class TSerialized, class T, class E, E Min, E Max>
-void ToProto(
-    ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
-    const TEnumIndexedVector<E, T, Min, Max>& originalArray)
-{
-    NYT::NDetail::ToProtoArrayImpl(serializedArray, originalArray);
-}
-
-template <class TSerialized, class T, class E, E Min, E Max>
-void ToProto(
-    ::google::protobuf::RepeatedPtrField<TSerialized>* serializedArray,
-    const TEnumIndexedVector<E, T, Min, Max>& originalArray)
-{
-    NYT::NDetail::ToProtoArrayImpl(serializedArray, originalArray);
-}
-
-template <class TSerialized, class TOriginal>
-void ToProto(
-    ::google::protobuf::RepeatedPtrField<TSerialized>* serializedArray,
-    const THashSet<TOriginal>& originalArray)
+    const TOriginalArray& originalArray)
 {
     NYT::NDetail::ToProtoArrayImpl(serializedArray, originalArray);
 }

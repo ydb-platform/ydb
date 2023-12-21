@@ -1098,11 +1098,7 @@ static ui64 RunSchemeTx(
     runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()), 0, viaActorSystem);
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
 
-    for (auto i : ev->Get()->Record.GetIssues()) {
-        Cerr << "Issue: " << i.AsJSON() << Endl;
-    }
-
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), expectedStatus);
+    UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Record.GetStatus(), expectedStatus, "Status: " << ev->Get()->Record.GetStatus() << " Issues: " << ev->Get()->Record.GetIssues());
 
     return ev->Get()->Record.GetTxId();
 }
@@ -1895,7 +1891,7 @@ void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, const TVec
     runtime.Register(actor);
 
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvUploadRowsResponse>(uploadSender);
-    UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, Ydb::StatusIds::SUCCESS, "Status: " << ev->Get()->Status << " Issues: " << ev->Get()->Issues.ToOneLineString());
+    UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, Ydb::StatusIds::SUCCESS, "Status: " << ev->Get()->Status << " Issues: " << ev->Get()->Issues);
 }
 
 void WaitTabletBecomesOffline(TServer::TPtr server, ui64 tabletId)

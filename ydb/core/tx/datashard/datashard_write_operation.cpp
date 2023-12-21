@@ -43,7 +43,7 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc,
 
     NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
 
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TxId: " << StepTxId_.TxId << ", shard " << TabletId() << ", meta: " << Record().ShortDebugString());
+    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Parsing write transaction for " << StepTxId_ << " at " << TabletId() << ", record: " << Record().ShortDebugString());
 
     if (!ParseRecord(self))
         return;
@@ -464,10 +464,10 @@ public:
         Y_UNUSED(txc);
         Y_UNUSED(ctx);
 
-        TWriteOperation* tx = dynamic_cast<TWriteOperation*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
+        Y_VERIFY_S(writeOp, "cannot cast operation of kind " << op->GetKind());
 
-        tx->FinalizeWriteTxPlan();
+        writeOp->FinalizeWriteTxPlan();
 
         return EExecutionStatus::Executed;
     }
@@ -513,13 +513,13 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::CheckWrite);
         plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
         plan.push_back(EExecutionUnitKind::ExecuteWrite);
-        plan.push_back(EExecutionUnitKind::FinishPropose);
+        plan.push_back(EExecutionUnitKind::FinishProposeWrite);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
     } 
     /*
     else if (HasVolatilePrepareFlag()) {
         plan.push_back(EExecutionUnitKind::StoreDataTx);  // note: stores in memory
-        plan.push_back(EExecutionUnitKind::FinishPropose);
+        plan.push_back(EExecutionUnitKind::FinishProposeWrite);
         Y_ABORT_UNLESS(!GetStep());
         plan.push_back(EExecutionUnitKind::WaitForPlan);
         plan.push_back(EExecutionUnitKind::PlanQueue);
@@ -532,7 +532,7 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
         if (!loaded) {
             plan.push_back(EExecutionUnitKind::CheckWrite);
             plan.push_back(EExecutionUnitKind::StoreDataTx);
-            plan.push_back(EExecutionUnitKind::FinishPropose);
+            plan.push_back(EExecutionUnitKind::FinishProposeWrite);
         }
         if (!GetStep())
             plan.push_back(EExecutionUnitKind::WaitForPlan);

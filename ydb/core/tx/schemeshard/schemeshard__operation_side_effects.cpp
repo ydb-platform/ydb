@@ -833,8 +833,7 @@ void TSideEffects::DoUpdateTempTablesToDropState(TSchemeShard* ss, const TActorC
             ss->RemoveBackgroundCleaning(TBackgroundCleaningInfo(
                 std::move(tempTableId.WorkingDir),
                 std::move(tempTableId.Name),
-                sessionActorId,
-                std::move(tempTableId.UserToken))
+                sessionActorId)
             );
         }
 

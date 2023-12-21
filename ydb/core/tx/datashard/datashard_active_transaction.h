@@ -389,17 +389,6 @@ public:
         TrackMemory();
     }
 
-    TActiveTransaction(const TBasicOpInfo &op,
-                       TValidatedDataTx::TPtr savedTx);
-    TActiveTransaction(TDataShard *self,
-                       TTransactionContext &txc,
-                       const TActorContext &ctx,
-                       const TBasicOpInfo &op,
-                       const TActorId &target,
-                       const TString &txBody,
-                       const TVector<TSysTables::TLocksTable::TLock> &locks,
-                       ui64 artifactFlags);
-
     ~TActiveTransaction();
 
     void FillTxData(TValidatedDataTx::TPtr dataTx);

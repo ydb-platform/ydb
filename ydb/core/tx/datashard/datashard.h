@@ -13,6 +13,7 @@
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tablet_flat/flat_row_versions.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 
 #include <library/cpp/lwtrace/shuttle.h>
 #include <library/cpp/time_provider/time_provider.h>
@@ -952,6 +953,9 @@ struct TEvDataShard {
 
         // Orbit used for tracking request events
         NLWTrace::TOrbit Orbit;
+
+        // Wilson span for this request.
+        NWilson::TSpan ReadSpan;
     };
 
     struct TEvReadResult : public TEventPB<TEvReadResult,

@@ -29,14 +29,14 @@ IExecutor* TTabletExecutedFlat::CreateExecutor(const TActorContext &ctx) {
     return Executor();
 }
 
-void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx, NWilson::TTraceId traceId) {
+void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) {
     Y_UNUSED(ctx);
-    Execute(transaction, std::move(traceId));
+    Execute(transaction);
 }
 
-void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction, NWilson::TTraceId traceId) {
+void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction) {
     if (transaction)
-        static_cast<TExecutor*>(Executor())->Execute(transaction, ExecutorCtx(*TlsActivationContext), std::move(traceId));
+        static_cast<TExecutor*>(Executor())->Execute(transaction, ExecutorCtx(*TlsActivationContext));
 }
 
 void TTabletExecutedFlat::EnqueueExecute(TAutoPtr<ITransaction> transaction) {

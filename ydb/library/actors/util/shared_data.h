@@ -1,7 +1,5 @@
 #pragma once
 
-#include <library/cpp/deprecated/atomic/atomic.h>
-
 #include <util/system/types.h>
 #include <util/system/compiler.h>
 #include <util/generic/array_ref.h>
@@ -25,8 +23,8 @@ namespace NActors {
         static_assert(sizeof(TPrivateHeader) == 16, "TPrivateHeader has an unexpected size");
 
         struct THeader {
-            TAtomic RefCount;
-            IOwner* Owner;
+            std::atomic<size_t> RefCount {1};
+            IOwner* Owner = nullptr;
         };
 
         static_assert(sizeof(THeader) == 16, "THeader has an unexpected size");
@@ -193,19 +191,19 @@ namespace NActors {
         }
 
         static bool IsPrivate(THeader* header) noexcept {
-            return 1 == AtomicGet(header->RefCount);
+            return 1 == header->RefCount.load(std::memory_order_acquire);
         }
 
         void AddRef() noexcept {
             if (Data_) {
-                AtomicIncrement(Header()->RefCount);
+                Header()->RefCount.fetch_add(1, std::memory_order_seq_cst);
             }
         }
 
         void Release() noexcept {
             if (Data_) {
                 auto* header = Header();
-                if (IsPrivate(header) || 0 == AtomicDecrement(header->RefCount)) {
+                if (IsPrivate(header) || 0 == header->RefCount.fetch_sub(1, std::memory_order_seq_cst) - 1) {
                     if (auto* owner = header->Owner) {
                         owner->Deallocate(Data_);
                     } else {

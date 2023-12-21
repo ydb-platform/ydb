@@ -2,8 +2,6 @@
 
 #include <atomic>
 
-#include <library/cpp/deprecated/atomic/atomic.h>
-
 #include <util/system/types.h>
 #include <util/system/compiler.h>
 #include <util/generic/array_ref.h>
@@ -15,6 +13,12 @@ struct TRcBufInternalBackend {
 public:
     struct TCookies {
         using TSelf = TCookies;
+
+        TCookies(const char * begin, const char * end)
+            : Begin(begin)
+            , End(end)
+        {}
+
         std::atomic<const char*> Begin;
         std::atomic<const char*> End;
 
@@ -30,7 +34,8 @@ public:
 private:
     // to be binary compatible with TSharedData
     struct THeader : public TCookies {
-        TAtomic RefCount;
+        using TCookies::TCookies;
+        std::atomic<size_t> RefCount { 1 };
         ui64 Zero = 0;
     };
 
@@ -167,19 +172,19 @@ private:
     }
 
     static bool IsPrivate(THeader* header) noexcept {
-        return 1 == AtomicGet(header->RefCount);
+        return 1 == header->RefCount.load(std::memory_order_acquire);
     }
 
     void AddRef() noexcept {
         if (Data_) {
-            AtomicIncrement(Header()->RefCount);
+            Header()->RefCount.fetch_add(1, std::memory_order_seq_cst);
         }
     }
 
     void Release() noexcept {
         if (Data_) {
             auto* header = Header();
-            if (IsPrivate(header) || 0 == AtomicDecrement(header->RefCount)) {
+            if (IsPrivate(header) || 0 == header->RefCount.fetch_sub(1, std::memory_order_seq_cst) - 1) {
                 Deallocate(Data_);
             }
         }
@@ -203,11 +208,7 @@ private:
             auto allocSize = OverheadSize + fullSize;
             char* raw = reinterpret_cast<char*>(y_allocate(allocSize));
 
-            auto* header = reinterpret_cast<THeader*>(raw);
-            header->Begin = raw + OverheadSize + headroom;
-            header->End = raw + allocSize - tailroom;
-            header->RefCount = 1;
-
+            new (raw) THeader(raw + OverheadSize + headroom, raw + allocSize - tailroom);
             data = raw;
         }
 
@@ -217,6 +218,9 @@ private:
     static void Deallocate(char* data) noexcept {
         if (data) {
             char* raw = data;
+
+            auto* header = reinterpret_cast<THeader*>(raw);
+            header->~THeader();
 
             y_deallocate(raw);
         }

@@ -3,12 +3,14 @@
 
 #include <ydb/library/actors/core/actor.h>
 
+#include <memory>
+
 namespace NYql::NDq {
 
 class IDqChannelStorageActor
 {
 public:
-    using TPtr = TIntrusivePtr<IDqChannelStorageActor>;
+    using TPtr = std::shared_ptr<IDqChannelStorageActor>;
     using TWakeUpCallback = std::function<void()>;
 
     virtual ~IDqChannelStorageActor() = default;

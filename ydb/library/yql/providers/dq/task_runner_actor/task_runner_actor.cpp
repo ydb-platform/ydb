@@ -13,6 +13,8 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <util/generic/size_literals.h>
+
 using namespace NYql::NDqs;
 using namespace NActors;
 
@@ -35,7 +37,7 @@ TTaskRunnerActorSensors GetSensors(const T& t) {
 
 class TSpillingStorageInfo : public TSimpleRefCount<TSpillingStorageInfo> {
 public:
-    using TPtr = TIntrusivePtr<TSpillingStorageInfo>;
+    using TPtr = std::shared_ptr<TSpillingStorageInfo>;
 
     TSpillingStorageInfo(const IDqChannelStorage::TPtr spillingStorage, ui64 channelId)
         : SpillingStorage(spillingStorage)
@@ -60,8 +62,6 @@ struct TOutputChannelReadResult {
 
 class TOutputChannelReader {
 public:
-    using TPtr = TIntrusivePtr<TOutputChannelReader>;
-
     TOutputChannelReader(NTaskRunnerProxy::IOutputChannel::TPtr channel, i64 toPopSize,
         bool wasFinished, TSpillingStorageInfo::TPtr spillingStorageInfo, ui64 cookie
     )
@@ -92,7 +92,7 @@ private:
 
         if (remain == 0) {
             // special case to WorkerActor
-            remain = 5<<20;
+            remain = 5_MB;
             maxChunks = 1;
         }
 
@@ -131,13 +131,13 @@ private:
 
         if (remain == 0) {
             // special case to WorkerActor
-            remain = 5<<20;
+            remain = 5_MB;
             maxChunks = 1;
         }
 
         auto spillingStorage = SpillingStorageInfo->SpillingStorage;
         // Read all available data from the pipe and spill it
-        for (;spillingStorage && !isChanFinished && hasData;) {
+        while (spillingStorage && !isChanFinished && hasData) {
             TDqSerializedBatch data;
             const auto lastPop = std::move(Channel->Pop(data));
 

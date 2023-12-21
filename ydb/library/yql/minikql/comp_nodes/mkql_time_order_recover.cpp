@@ -132,8 +132,9 @@ public:
             }
             WriteUi64(out, Latest);
             WriteBool(out, Terminating);
-            auto strRef = NUdf::TStringRef(out.data(), out.size());
-            return MakeString(strRef);
+            return TStateCreator::MakeSimpleBlobState(out);
+            // auto strRef = NUdf::TStringRef(out.data(), out.size());
+            // return MakeString(strRef);
         }
 
         void ClearState() {

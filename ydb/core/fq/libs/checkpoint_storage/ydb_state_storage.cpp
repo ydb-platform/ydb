@@ -6,6 +6,8 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
+#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+
 #include <util/stream/str.h>
 #include <util/string/join.h>
 
@@ -37,53 +39,124 @@ public:
 
     void Apply(NYql::NDqProto::TComputeActorState& update)
     {
-        if (update.HasMiniKqlProgram()) {
-            NYql::NDqProto::TMiniKqlProgramState* mkqlProgramState1 = State.MutableMiniKqlProgram(); 
-            NYql::NDqProto::TMiniKqlProgramState* mkqlProgramState2 = update.MutableMiniKqlProgram();
-            if (mkqlProgramState2->HasData()) {
-                *mkqlProgramState1->MutableData() = mkqlProgramState2->GetData();
-            }
-            ui64 nodeNum = 0;
-            for (const auto& nodeState: mkqlProgramState2->GetNodeState()) {
-                if (nodeState.HasSnapshot()) {
-                    Map[nodeNum].clear();
-                    const NYql::NDqProto::TNodeState_TSnaphot& snapshot = nodeState.GetSnapshot(); 
-                    for (const NYql::NDqProto::TMiniKqlStateItem& item : snapshot.GetItems()) {
-                        Map[nodeNum][item.GetKey()] = item.GetBlob();
-                    }
-                }
-
-                if (nodeState.HasIncrement()) {
-                    const NYql::NDqProto::TNodeState_TIncrement& increment = nodeState.GetIncrement(); 
-                    for (const NYql::NDqProto::TMiniKqlStateItem& item : increment.GetNewOrChanged()) {
-                        Map[nodeNum][item.GetKey()] = item.GetBlob();
-                    }
-                    for (const auto& key : increment.GetDeletedKeys()) {
-                         Map[nodeNum].erase(key);
-                    }
-                }
-                ++nodeNum;
-            }
-        }
         *State.MutableSources() = update.GetSources();
         *State.MutableSinks() = update.GetSinks();
+        ui64 nodeNum = 0;
+        
+        if (update.HasMiniKqlProgram()) {
+            const TString& blob = update.MutableMiniKqlProgram()->MutableData()->MutableStateData()->GetBlob();
+            TStringBuf buf(blob);
+
+            while (!buf.empty()) {
+                auto nodeStateSize = NKikimr::NMiniKQL::ReadUi32(buf);
+                Y_ABORT_UNLESS(buf.Size() >= nodeStateSize);
+                std::cout << "Apply size " << nodeStateSize << std::endl;
+                
+                //TStringBuf nodeStateBuf(buf.Data(), nodeStateSize);
+
+                NKikimr::NMiniKQL::TStateCreator::Reader reader(buf);
+                auto type = reader.GetType();
+                auto& nodeState = NodeStates[nodeNum];
+                nodeState.Type = type;
+
+                switch (type) {
+                    case NKikimr::NMiniKQL::TStateCreator::EType::SIMPLE_BLOB:
+                    {
+                        auto simpleBlob = reader.ReadSimpleSnapshot();
+                        nodeState.SimpleBlob = simpleBlob;
+                    }
+                    break;
+                    case NKikimr::NMiniKQL::TStateCreator::EType::SNAPSHOT:
+                    case NKikimr::NMiniKQL::TStateCreator::EType::INCREMENT:
+                        reader.ReadItems(
+                            [&](std::string_view key, std::string_view value) {
+                                std::cout << "key " << key << std::endl;
+                                std::cout << "value " << value << std::endl;
+                                nodeState.Items[TString(key)] = TString(value);
+                            },
+                            [&](std::string_view key) {
+                                std::cout << "key " << key << std::endl;
+                                nodeState.Items.erase(TString(key));
+                            });
+                        break;
+                }
+               
+                //buf.Skip(nodeStateSize);
+                ++nodeNum;
+            }
+            std::cout << "Apply buf.Size() " << buf.Size() << std::endl;
+            Y_ABORT_UNLESS(buf.empty());
+        }
     }
 
     NYql::NDqProto::TComputeActorState Get()
     {
-        for (const auto& [nodeNum, nodeState] : Map) {
-            auto* snapshot = State.MutableMiniKqlProgram()->AddNodeState()->MutableSnapshot();
-            for (const auto& [key, value] : nodeState) {
-                auto* item = snapshot->AddItems();
-                item->SetKey(key);
-                item->SetBlob(value);
-            }
+        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+
+        std::cout << "Get "  << std::endl;
+
+        TString result;                
+        for (const auto& [nodeNum, nodeState] : NodeStates) {
+            
+             NYql::NUdf::TUnboxedValue saved = 
+                nodeState.Type == NKikimr::NMiniKQL::TStateCreator::EType::SIMPLE_BLOB
+                ? NKikimr::NMiniKQL::TStateCreator::MakeSimpleBlobState(nodeState.SimpleBlob)
+                : NKikimr::NMiniKQL::TStateCreator::MakeSnapshotState(nodeState.Items);
+            const TStringBuf savedBuf = saved.AsStringRef();
+            NKikimr::NMiniKQL::WriteUi32(result, savedBuf.Size());
+            result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
         }
-        return std::move(State);
+        State.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
+        std::cout << "Get end"  << std::endl;
+        return State;
     }
+
+    static EStateType GetStateType(const NYql::NDqProto::TComputeActorState& state)
+    {
+        if (!state.HasMiniKqlProgram()) {
+            return EStateType::Snapshot;
+        }
+
+        const TString& blob = state.GetMiniKqlProgram().GetData().GetStateData().GetBlob();
+        TStringBuf buf(blob);
+        std::cout << "GetStateType buf.Size() " << buf.Size() << std::endl;
+        while (!buf.empty()) {
+            auto nodeStateSize = NKikimr::NMiniKQL::ReadUi32(buf);
+            Y_ABORT_UNLESS(buf.Size() >= nodeStateSize);
+            std::cout << "GetStateType size " << nodeStateSize << std::endl;
+            
+            TStringBuf nodeStateBuf(buf.Data(), nodeStateSize);
+
+            if (NKikimr::NMiniKQL::TStateCreator::Reader(nodeStateBuf).GetType() == NKikimr::NMiniKQL::TStateCreator::EType::INCREMENT) {
+                return EStateType::Increment;
+            }
+            buf.Skip(nodeStateSize);
+        }
+        std::cout << "GetStateType buf.Size() end " << buf.Size() << std::endl;
+        Y_ABORT_UNLESS(buf.empty());
+        return EStateType::Snapshot;
+    }
+private: 
+
+    // NYql::NDqProto::TComputeActorState MakeState(NYql::NUdf::TUnboxedValuePod&& value) {
+    //     const TStringBuf savedBuf = value.AsStringRef();
+    //     TString result;
+    //     NKikimr::NMiniKQL::WriteUi32(result, savedBuf.Size());
+    //     result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
+
+    //     std::cout << "savedBuf.Size() " << savedBuf.Size() << std::endl;
+    //     NYql::NDqProto::TComputeActorState state;
+    //     state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
+    //     return state;
+    // }
+
 private:
-    std::map<ui64, 
-        std::map<TString, TString>> Map;
+    struct NodeState {
+        NKikimr::NMiniKQL::TStateCreator::EType Type;
+        std::map<TString, TString> Items;
+        TString SimpleBlob;
+    };
+    std::map<ui64, NodeState> NodeStates;
     NYql::NDqProto::TComputeActorState State;
 };
 
@@ -212,25 +285,6 @@ TStatus ProcessRowState(
     }
 
     return selectResult;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-static EStateType GetStateType(const NYql::NDqProto::TComputeActorState& state)
-{
-    if (!state.HasMiniKqlProgram()) {
-        return EStateType::Snapshot;
-    }
-    const NYql::NDqProto::TMiniKqlProgramState& mkqlProgramState = state.GetMiniKqlProgram();
-    if (!mkqlProgramState.NodeStateSize()) {
-        return EStateType::Snapshot;
-    }
-    for (const auto& nodeState : mkqlProgramState.GetNodeState()) {
-        if (nodeState.HasIncrement()) {
-            return EStateType::Increment;
-        }
-    }
-    return EStateType::Snapshot;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -379,7 +433,7 @@ EStateType TStateStorage::DeserealizeState(TContext::TaskInfo& taskInfo)
         state.Clear();
         state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(blob);
     }
-    return GetStateType(state);
+    return TIncrementLogic::GetStateType(state);
 }
 
 std::list<TString> TStateStorage::SerializeState(const NYql::NDqProto::TComputeActorState& state)
@@ -408,7 +462,7 @@ TFuture<TIssues> TStateStorage::SaveState(
     const TCheckpointId& checkpointId,
     const NYql::NDqProto::TComputeActorState& state)
 {
-    auto type = GetStateType(state);
+    auto type = TIncrementLogic::GetStateType(state);
 
     auto serializedState = SerializeState(state);
     if (serializedState.empty()) {

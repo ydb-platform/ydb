@@ -9,6 +9,8 @@
 
 #include <google/protobuf/util/message_differencer.h>
 
+#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+
 namespace NFq {
 
 namespace {
@@ -23,6 +25,16 @@ const TCheckpointId CheckpointId4(13, 2);
 const size_t YdbRowSizeLimit = 500;
 
 ////////////////////////////////////////////////////////////////////////////////
+
+class TFixture : public NUnitTest::TBaseFixture {
+public:
+    TFixture()
+        : Alloc(__LOCATION__)
+    {}
+    
+private:
+    NKikimr::NMiniKQL::TScopedAlloc Alloc;
+};
 
 TStateStoragePtr GetStateStorage(const char* tablePrefix) {
 
@@ -41,27 +53,35 @@ TStateStoragePtr GetStateStorage(const char* tablePrefix) {
     return storage;
 }
 
-NYql::NDqProto::TComputeActorState MakeStateFromBlob(size_t blobSize) {
+NYql::NDqProto::TComputeActorState MakeState(NYql::NUdf::TUnboxedValuePod&& value) {
+    const TStringBuf savedBuf = value.AsStringRef();
+    TString result;
+    NKikimr::NMiniKQL::WriteUi32(result, savedBuf.Size());
+    result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
 
-    TString blob;
-    for (size_t i = 0; i < blobSize; ++i) {
-        blob += static_cast<TString::value_type>(std::rand() % 100);
-    }
+    std::cout << "savedBuf.Size() " << savedBuf.Size() << std::endl;
     NYql::NDqProto::TComputeActorState state;
-    state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(blob);
+    state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
     return state;
 }
 
+NYql::NDqProto::TComputeActorState MakeStateFromBlob(size_t blobSize) {
+    TString blob;
+    std::cout << "MakeStateFromBlob" << std::endl;
+    for (size_t i = 0; i < blobSize; ++i) {
+        blob += static_cast<TString::value_type>(std::rand() % 100);
+    }
+    return MakeState(NKikimr::NMiniKQL::TStateCreator::MakeSimpleBlobState(blob));
+}
+
 NYql::NDqProto::TComputeActorState MakeIncrementState(size_t miniKqlPStateSize) {
-    NYql::NDqProto::TComputeActorState state;
+    std::map<TString, TString> map;
+    std::cout << "MakeIncrementState2" << std::endl;
     size_t itemCount = 4;
     for (size_t i = 0; i < itemCount; ++i) {
-        auto* item = state.MutableMiniKqlProgram()->AddNodeState()->MutableSnapshot()->AddItems();
-        item->SetKey(ToString((777 + i)));
-        TString blob(miniKqlPStateSize / itemCount, 'a');
-        item->SetBlob(blob);
+        map[ToString((777 + i))] = TString(miniKqlPStateSize / itemCount, 'a');
     }
-    return state;
+    return MakeState(NKikimr::NMiniKQL::TStateCreator::MakeSnapshotState(map));
 }
 
 NYql::NDqProto::TComputeActorState MakeIncrementState(
@@ -69,31 +89,14 @@ NYql::NDqProto::TComputeActorState MakeIncrementState(
     const std::map<TString, TString>& increment,
     const std::set<TString>& deleted)
 {
-    NYql::NDqProto::TComputeActorState state;
-    auto* nodeState = state.MutableMiniKqlProgram()->AddNodeState();
+    //NYql::NDqProto::TComputeActorState state;
+    std::cout << "MakeIncrementState" << std::endl;
     if (!snapshot.empty()) {
-        auto* resultSnapshot = nodeState->MutableSnapshot();
-        for (const auto& [key, value] : snapshot) {
-            auto* item = resultSnapshot->AddItems();
-            item->SetKey(key);
-            item->SetBlob(value);
-        }
+        return MakeState(NKikimr::NMiniKQL::TStateCreator::MakeSnapshotState(snapshot));
     }
-
-    if (!increment.empty() || !deleted.empty()) {
-        auto* resultIncrement = nodeState->MutableIncrement();
-        for (const auto& [key, value] : increment) {
-            auto* item = resultIncrement->AddNewOrChanged();
-            item->SetKey(key);
-            item->SetBlob(value);
-        }
-
-        for (const auto& key : deleted) {
-            auto* item = resultIncrement->AddDeletedKeys();
-            *item =key;
-        }
+    else {
+        return MakeState(NKikimr::NMiniKQL::TStateCreator::MakeIncrementState(increment, deleted));
     }
-    return state;
 }
 
 void SaveState(
@@ -137,27 +140,27 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         UNIT_ASSERT(google::protobuf::util::MessageDifferencer::Equals(state, states[0]));
     }
 
-    Y_UNIT_TEST(ShouldSaveGetOldSmallState)
+    Y_UNIT_TEST_F(ShouldSaveGetOldSmallState, TFixture)
     {
         ShouldSaveGetStateImpl("TStateStorageTestShouldSaveGetState", MakeStateFromBlob(4));
     }
 
-    Y_UNIT_TEST(ShouldSaveGetOldBigState)
+    Y_UNIT_TEST_F(ShouldSaveGetOldBigState, TFixture)
     {
         ShouldSaveGetStateImpl("TStateStorageTestShouldSaveGetState", MakeStateFromBlob(YdbRowSizeLimit * 4));
     }
 
-    Y_UNIT_TEST(ShouldSaveGetIncrementSmallState)
+    Y_UNIT_TEST_F(ShouldSaveGetIncrementSmallState, TFixture)
     {
         ShouldSaveGetStateImpl("ShouldSaveGetIncrementState", MakeIncrementState(10));
     }
 
-    Y_UNIT_TEST(ShouldSaveGetIncrementBigState)
+    Y_UNIT_TEST_F(ShouldSaveGetIncrementBigState, TFixture)
     {
         ShouldSaveGetStateImpl("ShouldSaveGetIncrementState", MakeIncrementState(YdbRowSizeLimit * 5));
     }
 
-    Y_UNIT_TEST(ShouldNotGetNonExistendState)
+    Y_UNIT_TEST_F(ShouldNotGetNonExistendState, TFixture)
     {
         auto storage = GetStateStorage("TStateStorageTestShouldNotGetNonExistendState");
         auto getResult = storage->GetState({1}, "graph1", CheckpointId1).GetValueSync();
@@ -165,7 +168,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         UNIT_ASSERT(getResult.first.empty());
     }
 
-    Y_UNIT_TEST(ShouldCountStates)
+    Y_UNIT_TEST_F(ShouldCountStates, TFixture)
     {
         auto storage = GetStateStorage("TStateStorageTestShouldCountStates");
 
@@ -178,7 +181,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         UNIT_ASSERT_VALUES_EQUAL(count, 3);
     }
 
-    Y_UNIT_TEST(ShouldCountStatesNonExistentCheckpoint)
+    Y_UNIT_TEST_F(ShouldCountStatesNonExistentCheckpoint, TFixture)
     {
         auto storage = GetStateStorage("TStateStorageTestShouldCountStatesNonExistentCheckpoint");
 
@@ -187,7 +190,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         UNIT_ASSERT_VALUES_EQUAL(count, 0);
     }
 
-    Y_UNIT_TEST(ShouldDeleteNoCheckpoints)
+    Y_UNIT_TEST_F(ShouldDeleteNoCheckpoints, TFixture)
     {
         auto storage = GetStateStorage("TStateStorageTestShouldDeleteNoCheckpoints");
 
@@ -202,7 +205,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         UNIT_ASSERT_VALUES_EQUAL(countResult.first, 3);
     }
 
-    Y_UNIT_TEST(ShouldDeleteNoCheckpoints2)
+    Y_UNIT_TEST_F(ShouldDeleteNoCheckpoints2, TFixture)
     {
         auto storage = GetStateStorage("TStateStorageTestShouldDeleteNoCheckpoints2");
 
@@ -217,7 +220,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         UNIT_ASSERT_VALUES_EQUAL(countResult.first, 3);
     }
 
-    Y_UNIT_TEST(ShouldDeleteCheckpoints)
+    Y_UNIT_TEST_F(ShouldDeleteCheckpoints, TFixture)
     {
         auto storage = GetStateStorage("TStateStorageTestShouldDeleteCheckpoints");
 
@@ -250,7 +253,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         UNIT_ASSERT_VALUES_EQUAL(countResult.first, 0);
     }
 
-    Y_UNIT_TEST(ShouldDeleteGraph)
+    Y_UNIT_TEST_F(ShouldDeleteGraph, TFixture)
     {
         auto storage = GetStateStorage("TStateStorageTestShouldDeleteCheckpoints");
 
@@ -274,7 +277,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         UNIT_ASSERT_VALUES_EQUAL(countResult.first, 0);
     }
 
-    Y_UNIT_TEST(ShouldIssueErrorOnWrongGetStateParams)
+    Y_UNIT_TEST_F(ShouldIssueErrorOnWrongGetStateParams, TFixture)
     {
         auto storage = GetStateStorage("TStateStorageTestShouldIssueErrorOnWrongGetStateParams");
 
@@ -287,7 +290,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         UNIT_ASSERT(getResult.first.empty());
     }
 
-    Y_UNIT_TEST(ShouldIssueErrorOnNonExistentState) {
+    Y_UNIT_TEST_F(ShouldIssueErrorOnNonExistentState, TFixture) {
         auto storage = GetStateStorage("TStateStorageTestShouldIssueErrorOnNonExistentState");
 
         auto issues = storage->SaveState(1, "graph1", CheckpointId1, MakeStateFromBlob(4)).GetValueSync();
@@ -302,7 +305,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         UNIT_ASSERT(getResult.first.empty());
     }
 
-    Y_UNIT_TEST(ShouldGetMultipleStates)
+    Y_UNIT_TEST_F(ShouldGetMultipleStates, TFixture)
     {
         auto storage = GetStateStorage("TStateStorageTestShouldGetMultipleStates");
     
@@ -339,7 +342,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         UNIT_ASSERT(google::protobuf::util::MessageDifferencer::Equals(state3, states2[3]));
     }
 
-    Y_UNIT_TEST(ShouldLoadLastSnapshot)
+    Y_UNIT_TEST_F(ShouldLoadLastSnapshot, TFixture)
     {
         auto storage = GetStateStorage("ShouldLoadLastSnapshot");
 
@@ -353,7 +356,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         UNIT_ASSERT(google::protobuf::util::MessageDifferencer::Equals(state, state2));
     }
 
-    Y_UNIT_TEST(ShouldNotGetNonExistendSnaphotState)
+    Y_UNIT_TEST_F(ShouldNotGetNonExistendSnaphotState, TFixture)
     {
         auto storage = GetStateStorage("ShouldNotGetNonExistendSnaphotState");
         auto state = MakeIncrementState({}, {{"key1", "value1-new"}, {"key3", "value3"}}, {"key2"});
@@ -364,7 +367,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
         UNIT_ASSERT(states.empty());
     }
 
-    Y_UNIT_TEST(ShouldLoadIncrementSnapshot)
+    Y_UNIT_TEST_F(ShouldLoadIncrementSnapshot, TFixture)
     {
         auto storage = GetStateStorage("ShouldLoadIncrementSnapshot");
 

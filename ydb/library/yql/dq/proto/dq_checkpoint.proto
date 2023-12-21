@@ -59,7 +59,6 @@ message TNodeState {
 message TMiniKqlProgramState {
     TStateData Data = 1;
     uint64 RuntimeVersion = 2;
-    repeated TNodeState NodeState = 3;
 }
 
 // Checkpoint for single compute actor.

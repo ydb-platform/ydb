@@ -3,13 +3,16 @@
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/pack_num.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
 
 #include <util/generic/strbuf.h>
+#include <util/generic/maybe.h>
 
 #include <string_view>
 
 namespace NKikimr {
 namespace NMiniKQL {
+
 
 Y_FORCE_INLINE void WriteByte(TString& out, ui8 value) {
     out.append((char)value);
@@ -85,6 +88,105 @@ Y_FORCE_INLINE NUdf::TUnboxedValue ReadUnboxedValue(TStringBuf& in, const TValue
     in.Skip(size);
     return value;
 }
+
+
+class TStateCreator {
+
+public:
+    enum class EType {
+        SIMPLE_BLOB,
+        SNAPSHOT,
+        INCREMENT
+    };
+
+    static NUdf::TUnboxedValue MakeSimpleBlobState(const TString& blob) {
+        TString out;
+        WriteUi32(out, static_cast<ui32>(EType::SIMPLE_BLOB));
+        WriteString(out, blob);
+        auto strRef = NUdf::TStringRef(out);
+        std::cout << " size " << out.size() << std::endl;
+        return NMiniKQL::MakeString(strRef);
+    }
+
+    template<typename TContainer>
+    static NUdf::TUnboxedValue MakeSnapshotState(TContainer& items) {
+        TString out;
+        WriteUi32(out, static_cast<ui32>(EType::SNAPSHOT));
+        WriteUi32(out, static_cast<ui32>(items.size()));
+        for(const auto& [key, value] : items) {
+            WriteString(out, key);
+            WriteString(out, value);
+        }
+        std::cout << " size " << out.size() << std::endl;
+        auto strRef = NUdf::TStringRef(out);
+        return NMiniKQL::MakeString(strRef);
+    }
+
+    template<typename TContainer, typename TContainer2>
+    static NUdf::TUnboxedValue MakeIncrementState(TContainer& createdOrChanged, TContainer2& deleted) {
+        TString out;
+        WriteUi32(out, static_cast<ui32>(EType::INCREMENT));
+        WriteUi32(out, static_cast<ui32>(createdOrChanged.size()));
+        WriteUi32(out, static_cast<ui32>(deleted.size()));
+        for(const auto& [key, value] : createdOrChanged) {
+            WriteString(out, key);
+            WriteString(out, value);
+        }
+        for(const auto& key : deleted) {
+            WriteString(out, key);
+        }
+        auto strRef = NUdf::TStringRef(out);
+        std::cout << " size " << out.size() << std::endl;
+        return NMiniKQL::MakeString(strRef);
+    }
+
+    class Reader {
+    public:
+        Reader(TStringBuf& buf)
+            : Buf(buf)
+        {
+            MKQL_ENSURE(Buf.size(), "Serialized state is corrupted");
+            const auto type = ReadUi32(Buf);
+            Type = static_cast<EType>(type);
+        }
+
+        EType GetType() {
+            return *Type;
+        }
+
+        std::string_view ReadSimpleSnapshot() {
+            return ReadString(Buf);
+        }
+
+        using TCallback = std::function<void(std::string_view, std::string_view)>;
+        using TCallbackDelete = std::function<void(std::string_view)>;
+
+        void ReadItems(TCallback callback, TCallbackDelete callback2) {
+            MKQL_ENSURE(Buf.size(), "Serialized state is corrupted");
+            ui32 itemsCount = ReadUi32(Buf);
+            ui32 deletedCount = 0;
+            if (Type == EType::INCREMENT) {
+                deletedCount = ReadUi32(Buf);
+            }
+            for (ui32 i = 0; i < itemsCount; ++i) {
+                auto key = ReadString(Buf);
+                auto value = ReadString(Buf);
+                callback(key, value);
+            }
+            if (deletedCount) {
+                auto key = ReadString(Buf);
+                callback2(key);
+            }
+        }
+    private:
+        TStringBuf& Buf;
+        TMaybe<EType> Type;
+    };
+
+private:
+  //  TString out;
+   // EType Type;
+};
 
 } // namespace NMiniKQL
 } // namespace NKikimr

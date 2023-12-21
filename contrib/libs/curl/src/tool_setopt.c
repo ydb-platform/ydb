@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -91,7 +91,6 @@ const struct NameValue setopt_nv_CURL_HTTP_VERSION[] = {
   NV(CURL_HTTP_VERSION_2_0),
   NV(CURL_HTTP_VERSION_2TLS),
   NV(CURL_HTTP_VERSION_3),
-  NV(CURL_HTTP_VERSION_3ONLY),
   NVEND,
 };
 
@@ -294,9 +293,9 @@ CURLcode tool_setopt_enum(CURL *curl, struct GlobalConfig *config,
 
 #ifdef DEBUGBUILD
   if(ret)
-    warnf(config, "option %s returned error (%d)", name, (int)ret);
+    warnf(config, "option %s returned error (%d)\n", name, (int)ret);
 #endif
-nomem:
+  nomem:
   return ret;
 }
 
@@ -338,7 +337,7 @@ CURLcode tool_setopt_flags(CURL *curl, struct GlobalConfig *config,
       CODE2("%s%ldL);", preamble, rest);
   }
 
-nomem:
+ nomem:
   return ret;
 }
 
@@ -381,7 +380,7 @@ CURLcode tool_setopt_bitmask(CURL *curl, struct GlobalConfig *config,
       CODE2("%s%luUL);", preamble, rest);
   }
 
-nomem:
+ nomem:
   return ret;
 }
 
@@ -407,7 +406,7 @@ static CURLcode libcurl_generate_slist(struct curl_slist *slist, int *slistno)
                                        *slistno, *slistno, escaped);
   }
 
-nomem:
+ nomem:
   Curl_safefree(escaped);
   return ret;
 }
@@ -590,7 +589,7 @@ CURLcode tool_setopt_slist(CURL *curl, struct GlobalConfig *config,
       CODE2("curl_easy_setopt(hnd, %s, slist%d);", name, i);
   }
 
-nomem:
+ nomem:
   return ret;
 }
 
@@ -704,11 +703,14 @@ CURLcode tool_setopt(CURL *curl, bool str, struct GlobalConfig *global,
     }
   }
 
-nomem:
+ nomem:
   Curl_safefree(escaped);
   return ret;
 }
 
 #else /* CURL_DISABLE_LIBCURL_OPTION */
+
+#include "tool_cfgable.h"
+#include "tool_setopt.h"
 
 #endif /* CURL_DISABLE_LIBCURL_OPTION */

@@ -38,15 +38,8 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/asyn-ares.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/asyn-thread.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/base64.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/bufq.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/bufref.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/c-hyper.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/cf-h1-proxy.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/cf-h2-proxy.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/cf-haproxy.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/cf-https-connect.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/cf-socket.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/cfilters.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/conncache.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/connect.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/content_encoding.c
@@ -58,7 +51,6 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_get_line.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_gethostname.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_gssapi.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_log.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_memrchr.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_multibyte.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/curl_ntlm_core.c
@@ -72,7 +64,6 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/dict.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/doh.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/dynbuf.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/dynhds.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/easy.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/easygetopt.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/easyoptions.c
@@ -86,6 +77,7 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/getenv.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/getinfo.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/gopher.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/h2h3.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/hash.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/headers.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/hmac.c
@@ -96,7 +88,6 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/hostsyn.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/hsts.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/http.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/http1.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/http2.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/http_aws_sigv4.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/http_chunks.c
@@ -104,7 +95,7 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/http_negotiate.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/http_ntlm.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/http_proxy.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/idn.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/idn_win32.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/if2ip.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/imap.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/inet_ntop.c
@@ -112,7 +103,6 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/krb5.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/ldap.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/llist.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/macos.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/md4.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/md5.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/memdebug.c
@@ -174,9 +164,9 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vauth/vauth.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/version.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/version_win32.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vquic/curl_msh3.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vquic/curl_ngtcp2.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vquic/curl_quiche.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vquic/msh3.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vquic/ngtcp2.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vquic/quiche.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vquic/vquic.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vssh/libssh.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vssh/libssh2.c
@@ -192,5 +182,6 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/wolfssl.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/x509asn1.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/warnless.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/wildcard.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/ws.c
 )

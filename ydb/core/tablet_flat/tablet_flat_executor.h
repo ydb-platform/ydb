@@ -6,6 +6,7 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/lwtrace/shuttle.h>
 #include <util/generic/maybe.h>
 #include <util/system/type_name.h>
@@ -25,6 +26,7 @@ namespace NTabletFlatExecutor {
 class TTransactionContext;
 class TExecutor;
 struct TPageCollectionTxEnv;
+struct TSeat;
 
 class TTableSnapshotContext : public TThrRefBase, TNonCopyable {
     friend class TExecutor;
@@ -200,9 +202,10 @@ class TTransactionContext : public TTxMemoryProviderBase {
     friend class TExecutor;
 
 public:
-    TTransactionContext(ui64 tablet, ui32 gen, ui32 step, NTable::TDatabase &db, IExecuting &env,
+    TTransactionContext(TSeat &seat, ui64 tablet, ui32 gen, ui32 step, NTable::TDatabase &db, IExecuting &env,
                         ui64 memoryLimit, ui64 taskId)
         : TTxMemoryProviderBase(memoryLimit, taskId)
+        , Seat(seat)
         , Tablet(tablet)
         , Generation(gen)
         , Step(step)
@@ -226,6 +229,7 @@ public:
     }
 
 public:
+    TSeat& Seat;
     const ui64 Tablet = Max<ui32>();
     const ui32 Generation = Max<ui32>();
     const ui32 Step = Max<ui32>();
@@ -275,6 +279,12 @@ public:
         : Orbit(std::move(orbit))
     { }
 
+    ITransaction(NWilson::TTraceId &&traceId)
+        : TxSpan(NWilson::TSpan(TWilsonTablet::Tablet, std::move(traceId), "Tablet.Transaction"))
+    {
+        TxSpan.Attribute("Type", TypeName(*this));
+    }
+
     virtual ~ITransaction() = default;
     /// @return true if execution complete and transaction is ready for commit
     virtual bool Execute(TTransactionContext &txc, const TActorContext &ctx) = 0;
@@ -290,8 +300,15 @@ public:
         out << TypeName(*this);
     }
 
+    void SetupTxSpan(NWilson::TTraceId traceId) noexcept {
+        TxSpan = NWilson::TSpan(TWilsonTablet::Tablet, std::move(traceId), "Tablet.Transaction");
+        TxSpan.Attribute("Type", TypeName(*this));
+    }
+
 public:
     NLWTrace::TOrbit Orbit;
+
+    NWilson::TSpan TxSpan;
 };
 
 template<typename T>
@@ -308,6 +325,11 @@ public:
 
     TTransactionBase(T *self, NLWTrace::TOrbit &&orbit)
         : ITransaction(std::move(orbit))
+        , Self(self)
+    { }
+
+    TTransactionBase(T *self, NWilson::TTraceId &&traceId)
+        : ITransaction(std::move(traceId))
         , Self(self)
     { }
 };
@@ -515,8 +537,8 @@ namespace NFlatExecutorSetup {
         // all followers had completed log with requested gc-barrier
         virtual void FollowerGcApplied(ui32 step, TDuration followerSyncDelay) = 0;
 
-        virtual void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx, NWilson::TTraceId traceId = {}) = 0;
-        virtual void Enqueue(TAutoPtr<ITransaction> transaction, const TActorContext &ctx, NWilson::TTraceId traceId = {}) = 0;
+        virtual void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) = 0;
+        virtual void Enqueue(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) = 0;
 
         virtual void ConfirmReadOnlyLease(TMonotonic at) = 0;
         virtual void ConfirmReadOnlyLease(TMonotonic at, std::function<void()> callback) = 0;

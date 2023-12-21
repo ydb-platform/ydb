@@ -191,8 +191,8 @@ public:
         return Nothing();
     }
 
-    TMaybe<TString> GetOpenTelemetryTraceParent() const override {
-        return Nothing();
+    NWilson::TTraceId GetWilsonTraceId() const override {
+        return {};
     }
 
     TInstant GetDeadline() const override {

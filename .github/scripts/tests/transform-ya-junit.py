@@ -22,7 +22,7 @@ class YaMuteCheck:
         with open(fn, "r") as fp:
             for line in fp:
                 line = line.strip()
-                path, rest = line.split("/")
+                path, rest = line.split("/", maxsplit=1)
                 path = path.replace("-", "/")
                 rest = rest.replace("::", ".")
                 self.populate(f"{path}/{rest}")

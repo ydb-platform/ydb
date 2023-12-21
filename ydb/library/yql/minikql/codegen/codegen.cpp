@@ -1,30 +1,5 @@
 #include "codegen.h"
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/ExecutionEngine/JITEventListener.h>
-#include <llvm/ExecutionEngine/MCJIT.h>
-#include <llvm/IR/DiagnosticInfo.h>
-#include <llvm/IR/DiagnosticPrinter.h>
-#include <llvm/IR/LegacyPassManager.h>
-#include <llvm/IR/LLVMContext.h>
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Verifier.h>
-#include <llvm/IRReader/IRReader.h>
-#include <llvm/Linker/Linker.h>
-#include <llvm-c/Disassembler.h>
-#include <llvm/Support/Host.h>
-#include <llvm/Support/ManagedStatic.h>
-#include <llvm/Support/SourceMgr.h>
-#include <llvm/Support/TargetSelect.h>
-#include <llvm/Support/Timer.h>
-#include <llvm/Support/ErrorHandling.h>
-#include <llvm/Transforms/IPO.h>
-#include <llvm/Transforms/IPO/PassManagerBuilder.h>
-#include <llvm/Transforms/Instrumentation.h>
-#include <llvm/Transforms/Instrumentation/AddressSanitizer.h>
-#include <llvm/Transforms/Instrumentation/MemorySanitizer.h>
-#include <llvm/Transforms/Instrumentation/ThreadSanitizer.h>
-#include <llvm/LinkAllPasses.h>
-
+#include "codegen_llvm_deps.h" // Y_IGNORE
 #include <contrib/libs/re2/re2/re2.h>
 
 #include <util/generic/maybe.h>
@@ -211,10 +186,16 @@ namespace NCodegen {
 
 namespace {
 
-    void FatalErrorHandler(void* user_data, const std::string& reason, bool gen_crash_diag) {
+    void FatalErrorHandler(void* user_data,
+#if LLVM_VERSION_MAJOR == 12
+    const std::string& reason
+#else
+    const char* reason
+#endif
+    , bool gen_crash_diag) {
         Y_UNUSED(user_data);
         Y_UNUSED(gen_crash_diag);
-        ythrow yexception() << "LLVM fatal error: " << reason.c_str();
+        ythrow yexception() << "LLVM fatal error: " << reason;
     }
 
     void AddAddressSanitizerPasses(const llvm::PassManagerBuilder& builder, llvm::legacy::PassManagerBase& pm) {
@@ -313,7 +294,9 @@ public:
         targetOptions.EnableFastISel = true;
         // init manually, this field was lost in llvm::TargetOptions ctor :/
         // make coverity happy
+#if LLVM_VERSION_MAJOR == 12
         targetOptions.StackProtectorGuardOffset = 0;
+#endif        
 
         std::string what;
         auto&& engineBuilder = llvm::EngineBuilder(std::move(module));

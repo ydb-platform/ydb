@@ -164,7 +164,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         ui16 mbusport = tp.GetPort(2134);
         auto settings = Tests::TServerSettings(mbusport).SetDomainName("Root").SetUseRealThreads(false);
         // set small compilation timeout to avoid long timer creation
-        settings.AppConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(400);
+        settings.AppConfig->MutableTableServiceConfig()->SetCompileTimeoutMs(400);
 
         Tests::TServer::TPtr server = new Tests::TServer(settings);
 

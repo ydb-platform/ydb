@@ -1847,7 +1847,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableansiinforemptyornullableitemscollections") {
             Ctx.AnsiInForEmptyOrNullableItemsCollections = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiInForEmptyOrNullableItemsCollections");
-        } else if (normalizedPragma == "dqengine") {
+        } else if (normalizedPragma == "dqengine" || normalizedPragma == "blockengine") {
             Ctx.IncrementMonCounter("sql_pragma", "DqEngine");
             if (values.size() != 1 || !values[0].GetLiteral()
                 || ! (*values[0].GetLiteral() == "disable" || *values[0].GetLiteral() == "auto" || *values[0].GetLiteral() == "force"))
@@ -1856,15 +1856,18 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
             }
+            const bool isDqEngine = normalizedPragma == "dqengine";
+            auto& enable = isDqEngine ? Ctx.DqEngineEnable : Ctx.BlockEngineEnable;
+            auto& force =  isDqEngine ? Ctx.DqEngineForce  : Ctx.BlockEngineForce;
             if (*values[0].GetLiteral() == "disable") {
-                Ctx.DqEngineEnable = false;
-                Ctx.DqEngineForce = false;
+                enable = false;
+                force = false;
             } else if (*values[0].GetLiteral() == "force") {
-                Ctx.DqEngineEnable = true;
-                Ctx.DqEngineForce = true;
+                enable = true;
+                force = true;
             } else if (*values[0].GetLiteral() == "auto") {
-                Ctx.DqEngineEnable = true;
-                Ctx.DqEngineForce = false;
+                enable = true;
+                force = false;
             }
         } else if (normalizedPragma == "ansirankfornullablekeys") {
             Ctx.AnsiRankForNullableKeys = true;

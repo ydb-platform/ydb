@@ -2020,6 +2020,7 @@ public:
 
             ui64 ingressBytes = 0;
             ui64 ingressRows = 0;
+            auto startTimeMs = protoTask->GetStartTimeMs();
 
             if (RuntimeSettings.CollectFull()) {
                 // in full/profile mode enumerate existing protos
@@ -2033,6 +2034,12 @@ public:
                         ingressBytes += ingressStats.Bytes;
                         // ingress rows are usually not reported, so we count rows in task runner input
                         ingressRows += ingressStats.Rows ? ingressStats.Rows : taskStats->Sources.at(inputIndex)->GetPopStats().Rows;
+                        if (ingressStats.FirstMessageTs) {
+                            auto firstMessageMs = ingressStats.FirstMessageTs.MilliSeconds();
+                            if (!startTimeMs || startTimeMs > firstMessageMs) {
+                                startTimeMs = firstMessageMs;
+                            }
+                        }
                     }
                 }
             } else {
@@ -2043,13 +2050,18 @@ public:
                     // ingress rows are usually not reported, so we count rows in task runner input
                     ingressRows += ingressStats.Rows ? ingressStats.Rows : taskStats->Sources.at(inputIndex)->GetPopStats().Rows;
                 }
-            };
+            }
 
+            if (!startTimeMs) {
+                startTimeMs = taskStats->StartTs.MilliSeconds();
+            }
+            protoTask->SetStartTimeMs(startTimeMs);
             protoTask->SetIngressBytes(ingressBytes);
             protoTask->SetIngressRows(ingressRows);
 
             ui64 egressBytes = 0;
             ui64 egressRows = 0;
+            auto finishTimeMs = protoTask->GetFinishTimeMs();
 
             for (auto& [outputIndex, sinkInfo] : SinksMap) {
                 if (auto* sink = GetSink(outputIndex, sinkInfo)) {
@@ -2065,6 +2077,12 @@ public:
                         FillAsyncStats(*protoSink.MutableEgress(), egressStats);
                         protoSink.SetMaxMemoryUsage(popStats.MaxMemoryUsage);
                         protoSink.SetErrorsCount(sinkInfo.IssuesBuffer.GetAllAddedIssuesCount());
+                        if (egressStats.LastMessageTs) {
+                            auto lastMessageMs = egressStats.LastMessageTs.MilliSeconds();
+                            if (!finishTimeMs || finishTimeMs > lastMessageMs) {
+                                finishTimeMs = lastMessageMs;
+                            }
+                        }
                     }
                     egressBytes += egressStats.Bytes;
                     // egress rows are usually not reported, so we count rows in task runner output
@@ -2073,8 +2091,14 @@ public:
                 }
             }
 
+            protoTask->SetFinishTimeMs(finishTimeMs);
             protoTask->SetEgressBytes(egressBytes);
             protoTask->SetEgressRows(egressRows);
+
+            if (startTimeMs && finishTimeMs > startTimeMs) {
+                // we may loose precision here a little bit ... rework sometimes
+                dst->SetDurationUs((finishTimeMs - startTimeMs) * 1'000);
+            }
 
             for (auto& [inputIndex, transformInfo] : InputTransformsMap) {
                 auto* transform = GetInputTransform(inputIndex, transformInfo);

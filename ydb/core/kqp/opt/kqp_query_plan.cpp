@@ -1813,16 +1813,24 @@ void FillAsyncAggrStat(NJson::TJsonValue& node, const NYql::NDqProto::TDqAsyncSt
         FillAggrStat(node, asyncAggr.GetActiveTimeUs(), "ActiveTimeUs");
     }
     if (asyncAggr.HasFirstMessageMs() && asyncAggr.HasLastMessageMs()) {
-        auto& aggrStat = node.InsertValue("ActiveMessageMs", NJson::JSON_MAP);
-        aggrStat["Min"] = asyncAggr.GetFirstMessageMs().GetMin();
-        aggrStat["Max"] = asyncAggr.GetLastMessageMs().GetMax();
-        aggrStat["Count"] = asyncAggr.GetFirstMessageMs().GetCnt();
+        auto firstMessageMs = asyncAggr.GetFirstMessageMs().GetMin();
+        auto lastMessageMs = asyncAggr.GetLastMessageMs().GetMax();
+        if (firstMessageMs && lastMessageMs > firstMessageMs) {
+            auto& aggrStat = node.InsertValue("ActiveMessageMs", NJson::JSON_MAP);
+            aggrStat["Min"] = firstMessageMs;
+            aggrStat["Max"] = lastMessageMs;
+            aggrStat["Count"] = asyncAggr.GetFirstMessageMs().GetCnt();
+        }
     }
     if (asyncAggr.HasPauseMessageMs() && asyncAggr.HasResumeMessageMs()) {
-        auto& aggrStat = node.InsertValue("WaitMessageMs", NJson::JSON_MAP);
-        aggrStat["Min"] = asyncAggr.GetPauseMessageMs().GetMin();
-        aggrStat["Max"] = asyncAggr.GetResumeMessageMs().GetMax();
-        aggrStat["Count"] = asyncAggr.GetPauseMessageMs().GetCnt();
+        auto firstMessageMs = asyncAggr.GetPauseMessageMs().GetMin();
+        auto lastMessageMs = asyncAggr.GetResumeMessageMs().GetMax();
+        if (firstMessageMs && lastMessageMs > firstMessageMs) {
+            auto& aggrStat = node.InsertValue("WaitMessageMs", NJson::JSON_MAP);
+            aggrStat["Min"] = firstMessageMs;
+            aggrStat["Max"] = lastMessageMs;
+            aggrStat["Count"] = asyncAggr.GetPauseMessageMs().GetCnt();
+        }
     }
 }
 
@@ -1878,10 +1886,6 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
         SetNonZero(node, "EgressRows", taskStats.GetEgressRows());
         SetNonZero(node, "EgressBytes", taskStats.GetEgressBytes());
 
-        // equals to max if there was no first row
-        if(taskStats.GetFirstRowTimeMs() != std::numeric_limits<ui64>::max()) {
-            SetNonZero(node, "FirstRowTimeMs", taskStats.GetFirstRowTimeMs()); // need to be reviewed
-        }
         SetNonZero(node, "StartTimeMs", taskStats.GetStartTimeMs());   // need to be reviewed
         SetNonZero(node, "FinishTimeMs", taskStats.GetFinishTimeMs()); // need to be reviewed
 
@@ -1940,8 +1944,17 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
 
                 stats["Tasks"] = (*stat)->GetTotalTasksCount();
                 
-                stats["TotalDurationMs"] = (*stat)->GetDurationUs() / 1000;
+                stats["StageDurationUs"] = (*stat)->GetStageDurationUs();
 
+                if ((*stat)->HasDurationUs()) {
+                    FillAggrStat(stats, (*stat)->GetDurationUs(), "DurationUs");
+                }
+                if ((*stat)->HasWaitInputTimeUs()) {
+                    FillAggrStat(stats, (*stat)->GetWaitInputTimeUs(), "WaitInputTimeUs");
+                }
+                if ((*stat)->HasWaitOutputTimeUs()) {
+                    FillAggrStat(stats, (*stat)->GetWaitOutputTimeUs(), "WaitOutputTimeUs");
+                }
                 if ((*stat)->HasInputRows()) {
                     FillAggrStat(stats, (*stat)->GetInputRows(), "InputRows");
                 }

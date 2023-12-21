@@ -5,11 +5,9 @@
 
 #include <library/cpp/string_utils/base64/base64.h>
 
-#include <util/stream/output.h>
 #include <util/random/random.h>
 #include <util/random/fast.h>
-
-#include <util/string/hex.h>
+#include <util/stream/output.h>
 #include <util/string/printf.h>
 
 #include <array>
@@ -186,6 +184,8 @@ namespace NWilson {
             return TTraceId();
         }
 
+        static TTraceId FromTraceparentHeader(const TStringBuf header);
+
         TTraceId Span(ui8 verbosity) const {
             Validate();
             if (!*this || !TimeToLive) {
@@ -223,9 +223,7 @@ namespace NWilson {
         const void *GetSpanIdPtr() const { return &SpanId; }
         static constexpr size_t GetSpanIdSize() { return sizeof(ui64); }
 
-        TString GetHexTraceId() const {
-            return HexEncode(GetTraceIdPtr(), GetTraceIdSize());
-        }
+        TString GetHexTraceId() const;
 
         void Validate() const {
             Y_DEBUG_ABORT_UNLESS(*this || !SpanId);

@@ -19,3 +19,7 @@ END()
 RECURSE(
     protos
 )
+
+RECURSE_FOR_TESTS(
+    ut
+)

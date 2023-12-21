@@ -57,21 +57,23 @@ bool NeedFallback(const TIssues& issues) {
 
 TIssue WrapIssuesOnHybridFallback(TPosition pos, const TIssues& issues) {
     TIssue result(pos, "Hybrid execution fallback on YT");
-    result.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING);
+    result.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_INFO);
 
-    const std::function<void(TIssue& issue)> toWarning = [&](TIssue& issue) {
-        if (issue.Severity == TSeverityIds::S_ERROR || issue.Severity == TSeverityIds::S_FATAL) {
-            issue.Severity = TSeverityIds::S_WARNING;
+    const std::function<void(TIssue& issue)> toInfo = [&](TIssue& issue) {
+        if (issue.Severity == TSeverityIds::S_ERROR
+            || issue.Severity == TSeverityIds::S_FATAL
+            || issue.Severity == TSeverityIds::S_WARNING) {
+            issue.Severity = TSeverityIds::S_INFO;
         }
         for (const auto& subissue : issue.GetSubIssues()) {
-            toWarning(*subissue);
+            toInfo(*subissue);
         }
     };
 
     for (const auto& issue : issues) {
-        TIssuePtr warning(new TIssue(issue));
-        toWarning(*warning);
-        result.AddSubIssue(std::move(warning));
+        TIssuePtr info(new TIssue(issue));
+        toInfo(*info);
+        result.AddSubIssue(std::move(info));
     }
 
     return result;
@@ -125,6 +127,11 @@ private:
     static TExprNode::TPtr FinalizeOutputOp(const TYtState::TPtr& state, const TString& operationHash,
         const IYtGateway::TRunResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, bool markFinished)
     {
+        if (markFinished && !TYtDqProcessWrite::Match(input.Get())) {
+            with_lock(state->StatisticsMutex) {
+                state->HybridStatistics[input->Content()].Entries.emplace_back(TString{"YtExecution"}, 0, 0, 0, 0, 1);
+            }
+        }
         auto outSection = TYtOutputOpBase(input).Output();
         YQL_ENSURE(outSection.Size() == res.OutTableStats.size(), "Invalid output table count in IYtGateway::TRunResult");
         TExprNode::TListType newOutTables;
@@ -286,14 +293,21 @@ private:
                 State_->Statistics[Max<ui32>()].Entries.emplace_back(TString{name}, 0, 0, 0, 0, 1);
             }
         };
+        auto hybridStatWriter = [this](TStringBuf statName, TStringBuf opName) {
+            with_lock(State_->StatisticsMutex) {
+                State_->HybridStatistics[opName].Entries.emplace_back(TString{statName}, 0, 0, 0, 0, 1);
+            }
+        };
 
         switch (input->Head().GetState()) {
             case TExprNode::EState::ExecutionComplete:
                 statWriter("HybridExecution");
+                hybridStatWriter("Execution", input->TailPtr()->Content());
                 output = input->HeadPtr();
                 break;
             case TExprNode::EState::Error: {
                 statWriter("HybridFallback");
+                hybridStatWriter("Fallback", input->TailPtr()->Content());
                 if (State_->Configuration->HybridDqExecutionFallback.Get().GetOrElse(true)) {
                     output = input->TailPtr();
                 } else {

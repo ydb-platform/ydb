@@ -1869,7 +1869,7 @@ function fillDataShort(result) {
         if ("TotalTablets" in result) {
             var percent = Math.floor(result.RunningTablets * 100 / result.TotalTablets) + '%';
             var values = result.RunningTablets + ' of ' + result.TotalTablets;
-            var warmup = result.Warmup ? "<span class='glyphicon glyphicon-fire' style='color:red; margin-right:4px'></span>" : "";
+            var warmup = result.WarmUp ? "<span class='glyphicon glyphicon-fire' style='color:red; margin-right:4px'></span>" : "";
             $('#runningTablets').html(warmup + percent + ' (' + values + ')');
             $('#aliveNodes').html(result.AliveNodes);
             $('#bootQueue').html(result.BootQueueSize);

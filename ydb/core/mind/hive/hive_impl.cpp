@@ -176,14 +176,12 @@ void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet, TSideEffects& 
 }
 
 TInstant THive::GetAllowedBootingTime() {
-    TDuration passed = LastConnect - StartTime();
-    i64 connectedNodes = TabletCounters->Simple()[NHive::COUNTER_NODES_CONNECTED].Get();
+    auto connectedNodes = TabletCounters->Simple()[NHive::COUNTER_NODES_CONNECTED].Get();
     BLOG_D(connectedNodes << " nodes connected out of " << ExpectedNodes);
     if (connectedNodes == 0) {
         return {};
     }
-    TDuration avgConnectTime = passed / connectedNodes;
-    TInstant result = LastConnect + avgConnectTime * std::max<i64>(ExpectedNodes - connectedNodes, 1);
+    TInstant result = LastConnect + MaxTimeBetweenConnects * std::max<i64>(static_cast<i64>(ExpectedNodes) - static_cast<i64>(connectedNodes), 1);
     if (connectedNodes < ExpectedNodes) {
         result = std::max(result, StartTime() + GetMaxWarmUpPeriod());
     }
@@ -195,7 +193,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
     if (WarmUp) {
         TInstant allowed = GetAllowedBootingTime();
         if (now < allowed) {
-            BLOG_D("ProcessBootQueue - waiting unitl " << allowed << " because of warmup, now: " << now);
+            BLOG_D("ProcessBootQueue - waiting until " << allowed << " because of warmup, now: " << now);
             ProcessBootQueueScheduled = false;
             PostponeProcessBootQueue(allowed - now);
             return;

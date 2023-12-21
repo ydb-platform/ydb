@@ -363,8 +363,9 @@ protected:
     bool ProcessBootQueuePostponed = false;
     TInstant LastConnect;
     TInstant ProcessBootQueuePostponedUntil;
+    TDuration MaxTimeBetweenConnects;
     bool WarmUp;
-    i64 ExpectedNodes;
+    ui64 ExpectedNodes;
 
     THashMap<ui32, TEvInterconnect::TNodeInfo> NodesInfo;
     TTabletCountersBase* TabletCounters;

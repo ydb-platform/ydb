@@ -14,7 +14,8 @@
 #include <boost/iterator/iterator_adaptor.hpp>
 #include <boost/iterator/reverse_iterator.hpp>
 #include <boost/assert.hpp>
-#include <boost/utility/swap.hpp>
+#include <boost/core/invoke_swap.hpp>
+#include <boost/core/type_name.hpp>
 #include <memory>
 
 #if (defined(BOOST_MSVC) && \
@@ -211,7 +212,7 @@ namespace boost { namespace property_tree
     template<class K, class D, class C> inline
     void basic_ptree<K, D, C>::swap(basic_ptree<K, D, C> &rhs)
     {
-        boost::swap(m_data, rhs.m_data);
+        boost::core::invoke_swap(m_data, rhs.m_data);
         // Void pointers, no ADL necessary
         std::swap(m_children, rhs.m_children);
     }
@@ -669,7 +670,7 @@ namespace boost { namespace property_tree
         }
         BOOST_PROPERTY_TREE_THROW(ptree_bad_data(
             std::string("conversion of data to type \"") +
-            typeid(Type).name() + "\" failed", data()));
+            boost::core::type_name<Type>() + "\" failed", data()));
     }
 
     template<class K, class D, class C>
@@ -824,7 +825,7 @@ namespace boost { namespace property_tree
             data() = *o;
         } else {
             BOOST_PROPERTY_TREE_THROW(ptree_bad_data(
-                std::string("conversion of type \"") + typeid(Type).name() +
+                std::string("conversion of type \"") + boost::core::type_name<Type>() +
                 "\" to data failed", boost::any()));
         }
     }

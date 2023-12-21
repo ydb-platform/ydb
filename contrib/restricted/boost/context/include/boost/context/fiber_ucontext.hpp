@@ -67,7 +67,7 @@ namespace detail {
 // entered if the execution context
 // is resumed for the first time
 template <typename Record>
-#ifdef BOOST_OS_MACOS
+#if BOOST_OS_MACOS
 static void fiber_entry_func(std::uint32_t data_high,
                              std::uint32_t data_low) noexcept {
   auto data =
@@ -336,7 +336,7 @@ static fiber_activation_record * create_fiber1( StackAlloc && salloc, Fn && fn) 
     record->uctx.uc_stack.ss_size = reinterpret_cast< uintptr_t >( storage) -
             reinterpret_cast< uintptr_t >( stack_bottom) - static_cast< uintptr_t >( 64);
     record->uctx.uc_link = nullptr;
-#ifdef BOOST_OS_MACOS
+#if BOOST_OS_MACOS
     const auto integer = std::uint64_t(record);
     ::makecontext(&record->uctx, (void (*)()) & fiber_entry_func<capture_t>, 2,
                   std::uint32_t((integer >> 32) & 0xFFFFFFFF),
@@ -387,7 +387,7 @@ static fiber_activation_record * create_fiber2( preallocated palloc, StackAlloc 
     record->uctx.uc_stack.ss_size = reinterpret_cast< uintptr_t >( storage) -
             reinterpret_cast< uintptr_t >( stack_bottom) - static_cast< uintptr_t >( 64);
     record->uctx.uc_link = nullptr;
-#ifdef BOOST_OS_MACOS
+#if BOOST_OS_MACOS
     const auto integer = std::uint64_t(record);
     ::makecontext(&record->uctx, (void (*)()) & fiber_entry_func<capture_t>, 2,
                   std::uint32_t((integer >> 32) & 0xFFFFFFFF),

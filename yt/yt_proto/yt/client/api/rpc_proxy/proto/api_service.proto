@@ -1313,6 +1313,55 @@ message TRspGetTablePivotKeys
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TTableBackupManifest
+{
+    required string source_path = 1; // YPath
+    required string destination_path = 2; // YPath
+    required int32 ordered_mode = 3;
+}
+
+message TBackupManifest
+{
+    message TClusterManifest
+    {
+        required string cluster = 1;
+        repeated TTableBackupManifest table_manifests = 2;
+    }
+
+    repeated TClusterManifest clusters = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqCreateTableBackup
+{
+    required TBackupManifest manifest = 1;
+    required uint64 checkpoint_timestamp_delay = 2;
+    required uint64 checkpoint_check_period = 3;
+    required uint64 checkpoint_check_timeout = 4;
+    required bool force = 5;
+}
+
+message TRspCreateTableBackup
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqRestoreTableBackup
+{
+    required TBackupManifest manifest = 1;
+    required bool force = 2;
+    required bool mount = 3;
+    required bool enable_replicas = 4;
+}
+
+message TRspRestoreTableBackup
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqCreateNode
 {
     required string path = 1; // YPath

@@ -362,7 +362,9 @@ protected:
     bool ProcessBootQueueScheduled = false;
     bool ProcessBootQueuePostponed = false;
     TInstant LastConnect;
+    TInstant ProcessBootQueuePostponedUntil;
     bool WarmUp;
+    i64 ExpectedNodes;
 
     THashMap<ui32, TEvInterconnect::TNodeInfo> NodesInfo;
     TTabletCountersBase* TabletCounters;
@@ -901,6 +903,7 @@ protected:
     void ScheduleDisconnectNode(THolder<TEvPrivate::TEvProcessDisconnectNode> event);
     void DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet);
     void DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet, TSideEffects& sideEffects);
+    TInstant GetAllowedBootingTime();
     void ScheduleUnlockTabletExecution(TNodeInfo& node);
     TString DebugDomainsActiveNodes() const;
     TResourceNormalizedValues GetStDevResourceValues() const;

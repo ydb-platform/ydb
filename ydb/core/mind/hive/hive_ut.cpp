@@ -672,6 +672,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                     TMailboxType::Simple, 0,
                     TMailboxType::Simple, 0);
         TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(localConfig);
+        // tenantPoolConfig->AddStaticSlot(DOMAIN_NAME);
         tenantPoolConfig->AddStaticSlot(tenant);
 
         TActorId actorId = runtime.Register(
@@ -1877,6 +1878,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         Ctest << "killing tablet " << tabletId << Endl;
         runtime.Register(CreateTabletKiller(tabletId, runtime.GetNodeId(0)));
+        // runtime.Register(CreateTabletKiller(tabletId, runtime.GetNodeId(1)));
 
         waitFor([&]{ return blockedCommits.size() >= 2; }, "at least 2 blocked commits");
 

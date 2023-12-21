@@ -175,14 +175,31 @@ void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet, TSideEffects& 
     sideEffects.Send(SelfId(), new TEvTabletBase::TEvDeleteTabletResult(NKikimrProto::OK, tablet->Id));
 }
 
+TInstant THive::GetAllowedBootingTime() {
+    TDuration passed = LastConnect - StartTime();
+    i64 connectedNodes = TabletCounters->Simple()[NHive::COUNTER_NODES_CONNECTED].Get();
+    BLOG_D(connectedNodes << " nodes connected out of " << ExpectedNodes);
+    if (connectedNodes == 0) {
+        return {};
+    }
+    TDuration avgConnectTime = passed / connectedNodes;
+    TInstant result = LastConnect + avgConnectTime * std::max<i64>(ExpectedNodes - connectedNodes, 1);
+    if (connectedNodes < ExpectedNodes) {
+        result = std::max(result, StartTime() + GetMaxWarmUpPeriod());
+    }
+    return result;
+}
+
 void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffects) {
     TInstant now = TActivationContext::Now();
-    TInstant allowed = std::min(LastConnect + GetWarmUpBootWaitingPeriod(), StartTime() + GetMaxWarmUpPeriod());
-    if (WarmUp && now < allowed) {
-        BLOG_D("ProcessBootQueue - last connect was at " << LastConnect << "- not long enough ago");
-        ProcessBootQueueScheduled = false;
-        PostponeProcessBootQueue(allowed - now);
-        return;
+    if (WarmUp) {
+        TInstant allowed = GetAllowedBootingTime();
+        if (now < allowed) {
+            BLOG_D("ProcessBootQueue - waiting unitl " << allowed << " because of warmup, now: " << now);
+            ProcessBootQueueScheduled = false;
+            PostponeProcessBootQueue(allowed - now);
+            return;
+        }
     }
     BLOG_D("Handle ProcessBootQueue (size: " << BootQueue.BootQueue.size() << ")");
     THPTimer bootQueueProcessingTimer;
@@ -302,9 +319,11 @@ void THive::ProcessBootQueue() {
 }
 
 void THive::PostponeProcessBootQueue(TDuration after) {
-    if (!ProcessBootQueuePostponed) {
+    TInstant postponeUntil = TActivationContext::Now() + after;
+    if (!ProcessBootQueuePostponed || postponeUntil < ProcessBootQueuePostponedUntil) {
         BLOG_D("PostponeProcessBootQueue (" << after << ")");
         ProcessBootQueuePostponed = true;
+        ProcessBootQueuePostponedUntil = postponeUntil;
         Schedule(after, new TEvPrivate::TEvPostponeProcessBootQueue());
     }
 }

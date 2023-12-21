@@ -24,7 +24,7 @@ THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> GetTestCompactionCon
     auto* retrySettings = backgroundCleaningConfig->MutableRetrySettings();
 
     if (!withRetries) {
-        retrySettings->SetMaxRetryNumber(1);
+        retrySettings->SetMaxRetryNumber(0);
     }
 
     return request;

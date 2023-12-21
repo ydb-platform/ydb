@@ -43,6 +43,8 @@ SRCS(
     dq_yt_writer.cpp
 )
 
+INCLUDE(../../../../minikql/computation/header.ya.make.inc)
+
 YQL_LAST_ABI_VERSION()
 
 

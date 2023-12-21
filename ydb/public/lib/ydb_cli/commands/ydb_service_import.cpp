@@ -120,15 +120,32 @@ int TCommandImportFromS3::Run(TConfig& config) {
     settings.AccessKey(AwsAccessKey);
     settings.SecretKey(AwsSecretKey);
 
-    for (const auto& item : Items) {
-        settings.AppendItem({item.Source, item.Destination});
-    }
-
+    auto s3Client = CreateS3ClientWrapper(settings);
     if (Description) {
         settings.Description(Description);
     }
-
     settings.NumberOfRetries(NumberOfRetries);
+    const TString suffix = "/scheme.pb";
+    for (auto item : Items) {
+        std::optional<TString> token;
+        if (!item.Source.empty() && item.Source.back() != '/') {
+            item.Source += "/";
+        }
+        if (!item.Destination.empty() && item.Destination.back() != '/') {
+            item.Destination += "/";
+        }
+        do {
+            const auto& [keys, current_token] = s3Client->ListObjectKeys(item.Source, token);
+            token = current_token;
+            for (const auto& key : keys) {
+                if (key.EndsWith(suffix)) {
+                    TString source = key.substr(key.Size() - suffix.Size());
+                    TString destination = item.Destination + source.substr(item.Source.Size());
+                    settings.AppendItem({source, destination});
+                }
+            }
+        } while (token);
+    }
 
     TImportClient client(CreateDriver(config));
     TImportFromS3Response response = client.ImportFromS3(std::move(settings)).GetValueSync();

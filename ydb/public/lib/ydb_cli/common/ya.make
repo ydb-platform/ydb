@@ -31,6 +31,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
     library/cpp/config
     library/cpp/getopt
     library/cpp/json/writer

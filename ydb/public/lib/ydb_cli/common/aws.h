@@ -2,6 +2,8 @@
 
 #include "command.h"
 
+#include <ydb/public/sdk/cpp/client/ydb_import/import.h>
+
 #include <library/cpp/config/config.h>
 
 #include <util/generic/maybe.h>
@@ -59,5 +61,13 @@ private:
     TMaybe<NConfig::TConfig> Config;
     TMaybe<TString> AwsProfile;
 };
+
+class IS3ClientWrapper {
+public:
+    virtual std::pair<std::vector<TString>, std::optional<TString>> ListObjectKeys(const TString& prefix, const std::optional<TString>& token) = 0;
+    virtual ~IS3ClientWrapper() = default;
+};
+
+IS3ClientWrapper* CreateS3ClientWrapper(const NImport::TImportFromS3Settings& settings);
 
 }

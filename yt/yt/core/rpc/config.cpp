@@ -38,29 +38,7 @@ void TServiceCommonConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TServiceCommonDynamicConfig::Register(TRegistrar registrar)
-{
-    registrar.Parameter("enable_per_user_profiling", &TThis::EnablePerUserProfiling)
-        .Default();
-    registrar.Parameter("histogram_timer_profiling", &TThis::HistogramTimerProfiling)
-        .Default();
-    registrar.Parameter("code_counting", &TThis::EnableErrorCodeCounting)
-        .Default();
-    registrar.Parameter("tracing_mode", &TThis::TracingMode)
-        .Default();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 void TServerConfig::Register(TRegistrar registrar)
-{
-    registrar.Parameter("services", &TThis::Services)
-        .Default();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TServerDynamicConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("services", &TThis::Services)
         .Default();

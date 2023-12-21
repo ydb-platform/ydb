@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     void ChangeListNodes(TEvInterconnect::TEvNodesInfo::TPtr* ev, int nodesTotal) {
         auto& nodes = (*ev)->Get()->Nodes;
-        
+
         auto sample = nodes[0];
         nodes.clear();
 
@@ -444,7 +444,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         Ctest << "BASE_PERF = " << BASE_PERF << Endl;
 
 #ifndef SANITIZER_TYPE
-#if !defined(NDEBUG) || defined(_hardening_enabled_) 
+#if !defined(NDEBUG) || defined(_hardening_enabled_)
         UNIT_ASSERT_VALUES_EQUAL_C(timer.Passed() < 30 * BASE_PERF, true, "timer = " << timer.Passed() << ", limit = " << 30 * BASE_PERF);
 #else
         UNIT_ASSERT_VALUES_EQUAL_C(timer.Passed() < 10 * BASE_PERF, true, "timer = " << timer.Passed() << ", limit = " << 10 * BASE_PERF);

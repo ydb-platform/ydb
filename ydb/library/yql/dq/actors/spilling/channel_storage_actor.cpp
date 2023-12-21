@@ -180,6 +180,7 @@ private:
             hFunc(TEvDqSpilling::TEvWriteResult, HandleWork);
             hFunc(TEvDqSpilling::TEvReadResult, HandleWork);
             hFunc(TEvDqSpilling::TEvError, HandleWork);
+            cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 Y_ABORT("TDqChannelStorageActor::WorkState unexpected event type: %" PRIx32 " event: %s",
                     ev->GetTypeRewrite(),

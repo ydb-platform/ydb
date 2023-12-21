@@ -77,7 +77,6 @@ TMaybe<TCondenseInputResult> CondenseInput(const TExprBase& input, TExprContext&
     TVector<TCoArgument> stageArguments;
 
     if (IsDqPureExpr(input)) {
-        YQL_ENSURE(input.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List, "" << input.Ref().Dump());
         auto stream = Build<TCoToStream>(ctx, input.Pos())
             .Input<TCoJust>()
                 .Input(input)

@@ -4029,6 +4029,35 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
+    map["Sample"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+        return ctx.Builder(node->Pos())
+            .Callable("OrderedFilter")
+                .Add(0, node->HeadPtr())
+                .Lambda(1)
+                    .Param("item")
+                    .Callable("<=")
+                        .Callable(0, "Random")
+                            .Callable(0, "DependsOn")
+                                .Arg(0, "item")
+                            .Seal()
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                for (ui32 i = 2; i < node->ChildrenSize(); ++i) {
+                                    parent.Callable(i - 2 + 1, "DependsOn")
+                                        .Add(0, node->Child(i))
+                                        .Seal();
+                                }
+
+                                return parent;
+                            })
+                        .Seal()
+                        .Add(1, node->Child(1))
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    };
+
     map["TakeWhile"] = std::bind(&OptimizeWhile<true>, _1, _2);
     map["SkipWhile"] = std::bind(&OptimizeWhile<false>, _1, _2);
 

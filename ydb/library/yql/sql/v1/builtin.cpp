@@ -2885,6 +2885,7 @@ struct TBuiltinFuncData {
             {"listcollect", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListCollect", 1, 1) },
             {"listnotnull", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListNotNull", 1, 1)},
             {"listflatten", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListFlatten", 1, 1)},
+            {"listsample", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListSample", 3, -1)},
 
             // Dict builtins
             {"dictlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Length", 1, 1)},

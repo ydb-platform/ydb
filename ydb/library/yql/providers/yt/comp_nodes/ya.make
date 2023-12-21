@@ -22,6 +22,8 @@ PEERDIR(
     ydb/library/yql/providers/yt/expr_nodes
 )
 
+# INCLUDE(../../../minikql/computation/header.ya.make.inc)
+
 YQL_LAST_ABI_VERSION()
 
 END()

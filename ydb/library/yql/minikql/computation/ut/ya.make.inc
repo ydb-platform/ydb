@@ -1,5 +1,3 @@
-UNITTEST_FOR(ydb/library/yql/minikql/computation/llvm)
-
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
@@ -10,6 +8,8 @@ ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
+
+OWNER(g:yql)
 
 SRCDIR(ydb/library/yql/minikql/computation)
 
@@ -27,12 +27,9 @@ SRCS(
 PEERDIR(
     contrib/libs/apache/arrow
     library/cpp/threading/local_executor
-    ydb/library/yql/minikql/comp_nodes/llvm
     ydb/library/yql/parser/pg_wrapper
     ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/dq/proto
 )
 
 YQL_LAST_ABI_VERSION()
-
-END()

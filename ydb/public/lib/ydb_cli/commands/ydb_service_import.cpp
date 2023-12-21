@@ -131,7 +131,10 @@ int TCommandImportFromS3::Run(TConfig& config) {
         if (!item.Source.empty() && item.Source.back() != '/') {
             item.Source += "/";
         }
-        if (!item.Destination.empty() && item.Destination.back() != '/') {
+        if (!item.Destination.empty() && item.Destination.back() == '.') {
+            item.Destination.pop_back();
+        }
+        if (item.Destination.empty() || item.Destination.back() != '/') {
             item.Destination += "/";
         }
         do {

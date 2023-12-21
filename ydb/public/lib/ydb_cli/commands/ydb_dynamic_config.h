@@ -20,10 +20,10 @@ public:
     int Run(TConfig& config) override;
 
 private:
-    bool IgnoreCheck;
-    bool Force;
-    bool DryRun;
-    bool AllowUnknownFields;
+    bool IgnoreCheck = false;
+    bool Force = false;
+    bool DryRun = false;
+    bool AllowUnknownFields = false;
     TString DynamicConfig;
     TString Filename;
 };
@@ -50,13 +50,13 @@ public:
 
 private:
     TMap<TString, TString> Labels;
-    bool All;
+    bool All = false;
     TString Filename;
     TString Dir;
     TString OutDir;
-    bool FromCluster;
-    bool RemoteResolve;
-    bool SkipVolatile;
+    bool FromCluster = false;
+    bool RemoteResolve = false;
+    bool SkipVolatile = false;
     ui64 NodeId;
 };
 
@@ -73,8 +73,8 @@ public:
     int Run(TConfig& config) override;
 
 private:
-    bool IgnoreCheck;
-    bool DryRun;
+    bool IgnoreCheck = false;
+    bool DryRun = false;
     TString Filename;
 };
 
@@ -91,8 +91,8 @@ private:
     THashSet<ui64> Ids;
     TString Dir;
     TString Filename;
-    bool All;
-    bool Force;
+    bool All = false;
+    bool Force = false;
 };
 
 class TCommandConfigVolatileFetch : public TYdbCommand {
@@ -104,9 +104,9 @@ public:
 
 private:
     THashSet<ui64> Ids;
-    bool All;
+    bool All = false;
     TString OutDir;
-    bool StripMetadata;
+    bool StripMetadata = false;
 };
 
 } // namespace NYdb::NConsoleClient::NDynamicConfig

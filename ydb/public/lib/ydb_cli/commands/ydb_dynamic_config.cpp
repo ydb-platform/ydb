@@ -40,22 +40,17 @@ void TCommandConfigFetch::Config(TConfig& config) {
     config.Opts->AddLongOption("all", "Fetch both main and volatile config")
         .NoArgument().SetFlag(&All);
     config.Opts->AddLongOption("output-directory", "Directory to save config(s)")
-        .RequiredArgument("<directory>").StoreResult(&OutDir);
+        .RequiredArgument("[directory]").StoreResult(&OutDir);
     config.Opts->AddLongOption("strip-metadata", "Strip metadata from config")
         .NoArgument().SetFlag(&StripMetadata);
     config.SetFreeArgsNum(0);
+
+    config.Opts->MutuallyExclusive("all", "strip-metadata");
+    config.Opts->MutuallyExclusive("output-directory", "strip-metadata");
 }
 
 void TCommandConfigFetch::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-
-    if (All && StripMetadata) {
-        ythrow yexception() << "Invalid options: --all and --strip-metadata can't be used together";
-    }
-
-    if (OutDir && StripMetadata) {
-        ythrow yexception() << "Invalid options: --output-directory and --strip-metadata can't be used together";
-    }
 }
 
 int TCommandConfigFetch::Run(TConfig& config) {
@@ -112,7 +107,7 @@ TCommandConfigReplace::TCommandConfigReplace()
 void TCommandConfigReplace::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption('f', "filename", "Filename of the file containing configuration")
-        .Optional().RequiredArgument("<config.yaml>").StoreResult(&Filename);
+        .Required().RequiredArgument("[config.yaml]").StoreResult(&Filename);
     config.Opts->AddLongOption("ignore-local-validation", "Ignore local config applicability checks")
         .NoArgument().SetFlag(&IgnoreCheck);
     config.Opts->AddLongOption("dry-run", "Check config applicability")
@@ -128,20 +123,17 @@ void TCommandConfigReplace::Parse(TConfig& config) {
     TClientCommand::Parse(config);
 
     if (Filename == "") {
-        ythrow yexception() << "Must specify -f (--filename)";
+        ythrow yexception() << "Must specify non-empty -f (--filename)";
     }
 
-    auto configStr = Filename == "-" ? Cin.ReadAll() : TFileInput(Filename).ReadAll();
+   const auto configStr = Filename == "-" ? Cin.ReadAll() : TFileInput(Filename).ReadAll();
 
     DynamicConfig = configStr;
 
     if (!IgnoreCheck) {
         NYamlConfig::GetMetadata(configStr);
-
         auto tree = NFyaml::TDocument::Parse(configStr);
-
-        auto resolved = NYamlConfig::ResolveAll(tree);
-
+        const auto resolved = NYamlConfig::ResolveAll(tree);
         Y_UNUSED(resolved); // we can't check it better without ydbd
     }
 }
@@ -176,22 +168,22 @@ void TCommandConfigResolve::Config(TConfig& config) {
     config.Opts->AddLongOption("all", "Resolve for all combinations")
         .NoArgument().SetFlag(&All);
     config.Opts->AddLongOption("label", "Labels for this node")
-        .Optional().RequiredArgument("<LABEL=VALUE>")
+        .Optional().RequiredArgument("[LABEL=VALUE]")
         .KVHandler([this](TString key, TString val) {
             Labels[key] = val;
         });
     config.Opts->AddLongOption('f', "filename", "Filename of the file containing configuration to resolve")
-        .Optional().RequiredArgument("<config.yaml>").StoreResult(&Filename);
+        .Optional().RequiredArgument("[config.yaml]").StoreResult(&Filename);
     config.Opts->AddLongOption("directory", "Directory with config(s)")
-        .Optional().RequiredArgument("<directory>").StoreResult(&Dir);
+        .Optional().RequiredArgument("[directory]").StoreResult(&Dir);
     config.Opts->AddLongOption("output-directory", "Directory to save config(s)")
-        .Optional().RequiredArgument("<directory>").StoreResult(&OutDir);
+        .Optional().RequiredArgument("[directory]").StoreResult(&OutDir);
     config.Opts->AddLongOption("from-cluster", "Fetch current config from cluster instead of the local file")
         .NoArgument().SetFlag(&FromCluster);
     config.Opts->AddLongOption("remote-resolve", "Use resolver on cluster instead of built-in resolver")
         .NoArgument().SetFlag(&RemoteResolve);
     config.Opts->AddLongOption("node-id", "Take labels from node with the specified id")
-        .Optional().RequiredArgument("<node>").StoreResult(&NodeId);
+        .Optional().RequiredArgument("[node]").StoreResult(&NodeId);
     config.Opts->AddLongOption("skip-volatile", "Ignore volatile configs")
         .NoArgument().SetFlag(&SkipVolatile);
     config.SetFreeArgsNum(0);
@@ -200,7 +192,7 @@ void TCommandConfigResolve::Config(TConfig& config) {
 void TCommandConfigResolve::Parse(TConfig& config) {
     TClientCommand::Parse(config);
 
-    if (((ui32)(!Filename.empty()) + (ui32)(!Dir.empty()) + (ui32)FromCluster) != 1) {
+    if ((ui32(!Filename.empty()) + ui32(!Dir.empty()) + ui32(FromCluster)) != 1) {
         ythrow yexception() << "Must specify one of -f (--filename), --directory and --from-cluster";
     }
 
@@ -209,14 +201,7 @@ void TCommandConfigResolve::Parse(TConfig& config) {
     }
 }
 
-TString LabelSetHash(const TSet<NYamlConfig::TNamedLabel>& labels) {
-    TStringStream labelsStream;
-    labelsStream << "[";
-    for (const auto& label : labels) {
-        labelsStream << "(" << label.Name << ":" << (label.Inv ? "-" : label.Value.Quote()) << "),";
-    }
-    labelsStream << "]";
-    TString ser = labelsStream.Str();
+TString CalcHash(const TString& ser) {
     SHA_CTX ctx;
     SHA1_Init(&ctx);
     SHA1_Update(&ctx, ser.data(), ser.size());
@@ -228,19 +213,22 @@ TString LabelSetHash(const TSet<NYamlConfig::TNamedLabel>& labels) {
     return hex;
 }
 
+TString LabelSetHash(const TSet<NYamlConfig::TNamedLabel>& labels) {
+    TStringStream labelsStream;
+    labelsStream << "[";
+    for (const auto& label : labels) {
+        labelsStream << "(" << label.Name << ":" << (label.Inv ? "-" : label.Value.Quote()) << "),";
+    }
+    labelsStream << "]";
+    TString ser = labelsStream.Str();
+    return CalcHash(ser);
+}
+
 TString ConfigHash(const NFyaml::TNodeRef& config) {
     TStringStream configStream;
     configStream << config;
     TString ser = configStream.Str();
-    SHA_CTX ctx;
-    SHA1_Init(&ctx);
-    SHA1_Update(&ctx, ser.data(), ser.size());
-    unsigned char sha1[SHA_DIGEST_LENGTH];
-    SHA1_Final(sha1, &ctx);
-
-    TString hex = HexEncode(TString(reinterpret_cast<const char*>(sha1), SHA_DIGEST_LENGTH));
-    hex.to_lower();
-    return "0_" + hex;
+    return "0_" + CalcHash(ser);
 }
 
 int TCommandConfigResolve::Run(TConfig& config) {
@@ -360,7 +348,7 @@ int TCommandConfigResolve::Run(TConfig& config) {
 
             TVector<TString> labels(result.GetLabels().begin(), result.GetLabels().end());
 
-            for (auto& [labelSets, configStr] : result.GetConfigs()) {
+            for (const auto& [labelSets, configStr] : result.GetConfigs()) {
                 auto doc = NFyaml::TDocument::Parse("---\nlabel_sets: []\nconfig: {}\n");
                 auto config = NFyaml::TDocument::Parse(configStr);
 
@@ -394,7 +382,7 @@ int TCommandConfigResolve::Run(TConfig& config) {
                 configs.push_back(std::move(doc));
             }
         } else {
-            auto result = client.ResolveConfig(configStr, volatileConfigStrs, Labels).GetValueSync();
+            const auto result = client.ResolveConfig(configStr, volatileConfigStrs, Labels).GetValueSync();
             ThrowOnError(result);
 
             auto doc = NFyaml::TDocument::Parse("---\nlabel_sets: []\nconfig: {}\n");
@@ -453,7 +441,7 @@ TCommandConfigVolatileAdd::TCommandConfigVolatileAdd()
 void TCommandConfigVolatileAdd::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption('f', "filename", "filename to set")
-        .Optional().RequiredArgument("<config.yaml>").StoreResult(&Filename);
+        .Required().RequiredArgument("[config.yaml]").StoreResult(&Filename);
     config.Opts->AddLongOption("ignore-local-validation", "Ignore local config applicability checks")
         .NoArgument().SetFlag(&IgnoreCheck);
     config.Opts->AddLongOption("dry-run", "Check config applicability")
@@ -466,7 +454,7 @@ void TCommandConfigVolatileAdd::Parse(TConfig& config) {
     TClientCommand::Parse(config);
 
     if (Filename.empty()) {
-        ythrow yexception() << "Must specify -f (--filename)";
+        ythrow yexception() << "Must non-empty specify -f (--filename)";
     }
 }
 
@@ -474,7 +462,7 @@ int TCommandConfigVolatileAdd::Run(TConfig& config) {
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
 
-    auto configStr = Filename == "-" ? Cin.ReadAll() : TFileInput(Filename).ReadAll();
+    const auto configStr = Filename == "-" ? Cin.ReadAll() : TFileInput(Filename).ReadAll();
 
     if (!IgnoreCheck) {
         auto result = client.GetConfig().GetValueSync();
@@ -526,17 +514,17 @@ void TCommandConfigVolatileDrop::Config(TConfig& config) {
     config.Opts->AddLongOption("force", "Ignore version and cluster check")
         .NoArgument().SetFlag(&Force);
     config.Opts->AddLongOption("directory", "Directory with volatile configs")
-        .Optional().RequiredArgument("<directory>").StoreResult(&Dir);
+        .Optional().RequiredArgument("[directory]").StoreResult(&Dir);
 }
 
 void TCommandConfigVolatileDrop::Parse(TConfig& config) {
     TClientCommand::Parse(config);
 
-    if (((ui32)!Ids.empty() + (ui32)All + (ui32)!Filename.empty() + (ui32)!Dir.empty()) != 1) {
+    if ((ui32(!Ids.empty()) + ui32(All) + ui32(!Filename.empty()) + ui32(!Dir.empty())) != 1) {
         ythrow yexception() << "Must specify one of --id, --all, -f (--filename) and --directory";
     }
 
-    if ((ui32)(!Filename.empty() || !Dir.empty()) + (ui32)(!Ids.empty() || All) != 1) {
+    if ((ui32(!Filename.empty() || !Dir.empty()) + ui32(!Ids.empty() || All)) != 1) {
         ythrow yexception() << "Must specify either --directory or -f (--filename) and --id or --all";
     }
 
@@ -614,18 +602,16 @@ void TCommandConfigVolatileFetch::Config(TConfig& config) {
     config.Opts->AddLongOption("all", "Fetch all volatile configs")
         .NoArgument().SetFlag(&All);
     config.Opts->AddLongOption("output-directory", "Directory to save config(s)")
-        .RequiredArgument("<directory>").StoreResult(&OutDir);
+        .RequiredArgument("[directory]").StoreResult(&OutDir);
     config.Opts->AddLongOption("strip-metadata", "Strip metadata from config(s)")
         .NoArgument().SetFlag(&StripMetadata);
     config.SetFreeArgsNum(0);
+
+    config.Opts->MutuallyExclusive("output-directory", "strip-metadata");
 }
 
 void TCommandConfigVolatileFetch::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-
-    if (OutDir && StripMetadata) {
-        ythrow yexception() << "Invalid options: --output-directory and --strip-metadata can't be used together";
-    }
 }
 
 int TCommandConfigVolatileFetch::Run(TConfig& config) {

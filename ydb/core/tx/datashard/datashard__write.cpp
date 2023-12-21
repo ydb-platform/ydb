@@ -10,14 +10,15 @@ LWTRACE_USING(DATASHARD_PROVIDER)
 namespace NKikimr::NDataShard {
 
 TDataShard::TTxWrite::TTxWrite(TDataShard* self, NEvents::TDataEvents::TEvWrite::TPtr ev, TInstant receivedAt, ui64 tieBreakerIndex, bool delayed)
-    : TBase(self)
+    : TBase(self, std::move(ev->TraceId))
     , Ev(std::move(ev))
     , ReceivedAt(receivedAt)
     , TieBreakerIndex(tieBreakerIndex)
     , TxId(Ev->Get()->GetTxId())
     , Acked(!delayed)
-    , ProposeTransactionSpan(TWilsonKqp::ProposeTransaction, std::move(Ev->TraceId), "ProposeTransaction", NWilson::EFlags::AUTO_END)
+    , ProposeTransactionSpan(TWilsonKqp::ProposeTransaction, TxSpan.GetTraceId(), "ProposeTransaction", NWilson::EFlags::AUTO_END)
 {
+    ProposeTransactionSpan.Attribute("Shard", std::to_string(self->TabletID()));
 }
 
 bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext& ctx) {
@@ -70,7 +71,7 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 return true;
             }
 
-            TOperation::TPtr op = Self->Pipeline.BuildOperation(Ev, ReceivedAt, TieBreakerIndex, txc, ctx);
+            TOperation::TPtr op = Self->Pipeline.BuildOperation(Ev, ReceivedAt, TieBreakerIndex, txc, ctx, ProposeTransactionSpan.GetTraceId());
 
             // Unsuccessful operation parse.
             if (op->IsAborted()) {

@@ -806,6 +806,9 @@ public:
     void SetFinishProposeTs(TMonotonic now) noexcept { FinishProposeTs = now; }
     void SetFinishProposeTs() noexcept;
 
+    NWilson::TTraceId GetTraceId() const noexcept {
+        return OperationSpan.GetTraceId();
+    }
 
 protected:
     TOperation()
@@ -885,6 +888,8 @@ public:
 public:
     // Orbit used for tracking operation progress
     NLWTrace::TOrbit Orbit;
+    
+    NWilson::TSpan OperationSpan;
 };
 
 inline IOutputStream &operator <<(IOutputStream &out,

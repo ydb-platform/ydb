@@ -467,10 +467,6 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
     if (budget < -0.1) {
         isStarvedPresent = true;
     }
-    for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
-        TPoolInfo& pool = Pools[poolIdx];
-        AtomicSet(pool.PotentialMaxThreadCount, Min(pool.MaxThreadCount, budgetInt));
-    }
     double overbooked = consumed - booked;
     if (overbooked < 0) {
         isStarvedPresent = false;
@@ -590,6 +586,11 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
             LWPROBE(HarmonizeOperation, hoggishPoolIdx, pool.Pool->GetName(), "decrease by hoggish", threadCount - 1, pool.DefaultThreadCount, pool.MaxThreadCount);
             pool.SetThreadCount(threadCount - 1);
         }
+    }
+
+    for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
+        TPoolInfo& pool = Pools[poolIdx];
+        AtomicSet(pool.PotentialMaxThreadCount, std::min<i64>(pool.MaxThreadCount, pool.GetThreadCount() + budgetInt));
     }
 }
 

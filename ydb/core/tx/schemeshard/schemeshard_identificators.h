@@ -44,14 +44,11 @@ constexpr TShardIdx InvalidShardIdx = TShardIdx(InvalidOwnerId, InvalidLocalShar
 class TBackgroundCleaningInfo: public std::pair<std::pair<TString, TString>, TActorId> {
     using TBase = std::pair<std::pair<TString, TString>, TActorId>;
 
-    TMaybe<NACLib::TUserToken> UserToken;
-
 public:
     using TBase::TBase;
 
-    TBackgroundCleaningInfo(
-        TString workingDir, TString name, TActorId sessionActorId, TMaybe<NACLib::TUserToken> userToken)
-    : TBase({{std::move(workingDir), std::move(name)}, sessionActorId}), UserToken(std::move(userToken)) {
+    TBackgroundCleaningInfo(TString workingDir, TString name, TActorId sessionActorId)
+        : TBase({{std::move(workingDir), std::move(name)}, sessionActorId}) {
     }
 
     TActorId GetSessionId() const {
@@ -68,10 +65,6 @@ public:
 
     ui32 GetNodeId() const {
         return second.NodeId();
-    }
-
-    TMaybe<NACLib::TUserToken> GetUserToken() {
-        return UserToken;
     }
 
     ui64 Hash() const noexcept {
@@ -164,7 +157,6 @@ public:
 struct TTempTableId {
     TString WorkingDir;
     TString Name;
-    TMaybe<NACLib::TUserToken> UserToken;
 
     ui32 Hash() const noexcept {
         auto hasher = ::THash<TString>();

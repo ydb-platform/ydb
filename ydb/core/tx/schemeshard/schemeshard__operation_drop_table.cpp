@@ -605,7 +605,7 @@ public:
                     << ", SessionActorId: " << sessionActorIdStr);
             TActorId sessionActorId;
             sessionActorId.Parse(sessionActorIdStr.c_str(), sessionActorIdStr.size());
-            context.OnComplete.UpdateTempTablesToDropState(sessionActorId, {parentPathStr, name, context.UserToken});
+            context.OnComplete.UpdateTempTablesToDropState(sessionActorId, {parentPathStr, name});
         }
 
         context.OnComplete.ActivateTx(OperationId);

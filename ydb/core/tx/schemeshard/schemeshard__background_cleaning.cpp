@@ -52,7 +52,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TBackg
         return NOperationQueue::EStartStatus::EOperationRemove;
     }
 
-    auto tempTableIt = it->second.find(TTempTableId{info.first.first, info.first.second, Nothing()});
+    auto tempTableIt = it->second.find(TTempTableId{info.first.first, info.first.second});
     if (tempTableIt == it->second.end()) {
         return NOperationQueue::EStartStatus::EOperationRemove;
     }
@@ -70,7 +70,6 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TBackg
     auto ev = MakeHolder<TEvPrivate::TEvDropTempTable>();
     ev->WorkingDir = info.first.first;
     ev->Name = info.first.second;
-    ev->UserToken = tempTableIt->UserToken;
 
     ctx.Register(new TTempTableDropStarter(ctx.SelfID, std::move(ev)));
 
@@ -85,8 +84,7 @@ void TSchemeShard::HandleBackgroundCleaningCompletionResult(ui64 txId) {
     BackgroundCleaningQueue->OnDone(TBackgroundCleaningInfo(
         std::move(txsIt->second.WorkingDir),
         std::move(txsIt->second.Name),
-        TActorId(),
-        Nothing())
+        TActorId())
     );
 }
 
@@ -96,10 +94,6 @@ void TSchemeShard::Handle(TEvPrivate::TEvDropTempTable::TPtr& ev, const TActorCo
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(ev->Get()->TxId), TabletID());
     auto& record = propose->Record;
 
-    if (ev->Get()->UserToken) {
-        record.SetUserToken(ev->Get()->UserToken->GetSerializedToken());
-    }
-
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
     modifyScheme.SetWorkingDir(ev->Get()->WorkingDir);
@@ -108,7 +102,7 @@ void TSchemeShard::Handle(TEvPrivate::TEvDropTempTable::TPtr& ev, const TActorCo
     drop.SetName(ev->Get()->Name);
 
     ui64 txId = ev->Get()->TxId;
-    BackgroundCleaningTxs[txId] = TTempTableId{ev->Get()->WorkingDir, ev->Get()->Name, ev->Get()->UserToken};
+    BackgroundCleaningTxs[txId] = TTempTableId{ev->Get()->WorkingDir, ev->Get()->Name};
 
     Send(SelfId(), std::move(propose));
 }
@@ -187,7 +181,7 @@ void TSchemeShard::RetryNodeSubscribe(ui32 nodeId) {
 
     retryState.RetryNumber++;
 
-    if (retryState.RetryNumber >= BackgroundCleaningRetrySettings.GetMaxRetryNumber()) {
+    if (retryState.RetryNumber > BackgroundCleaningRetrySettings.GetMaxRetryNumber()) {
         for (const auto& sessionActorId: nodeState.Sessions) {
             auto& tempTablesBySession = TempTablesState.TempTablesBySession;
 
@@ -202,8 +196,7 @@ void TSchemeShard::RetryNodeSubscribe(ui32 nodeId) {
                     TBackgroundCleaningInfo(
                         std::move(tempTableId.WorkingDir),
                         std::move(tempTableId.Name),
-                        sessionActorId,
-                        std::move(tempTableId.UserToken)));
+                        sessionActorId));
             }
             tempTablesBySession.erase(itTempTables);
         }
@@ -247,8 +240,7 @@ bool TSchemeShard::CheckSessionUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
             TBackgroundCleaningInfo(
                 std::move(tempTableId.WorkingDir),
                 std::move(tempTableId.Name),
-                sessionActorId,
-                std::move(tempTableId.UserToken)));
+                sessionActorId));
     }
     tempTablesBySession.erase(it);
 
@@ -304,8 +296,7 @@ void TSchemeShard::HandleBackgroundCleaningTransactionResult(
         BackgroundCleaningQueue->OnDone(TBackgroundCleaningInfo(
             std::move(txsIt->second.WorkingDir),
             std::move(txsIt->second.Name),
-            TActorId(),
-            Nothing())
+            TActorId())
         );
         break;
     case NKikimrScheme::EStatus::StatusAccepted:
@@ -315,8 +306,7 @@ void TSchemeShard::HandleBackgroundCleaningTransactionResult(
         BackgroundCleaningQueue->OnDone(TBackgroundCleaningInfo(
             std::move(txsIt->second.WorkingDir),
             std::move(txsIt->second.Name),
-            TActorId(),
-            Nothing())
+            TActorId())
         );
         break;
     }
@@ -336,8 +326,7 @@ void TSchemeShard::ClearTempTablesState() {
                     TBackgroundCleaningInfo(
                         std::move(tempTableId.WorkingDir),
                         std::move(tempTableId.Name),
-                        sessionActorId,
-                        std::move(tempTableId.UserToken)));
+                        sessionActorId));
             }
         }
 

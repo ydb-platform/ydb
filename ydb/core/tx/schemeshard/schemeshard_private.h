@@ -198,7 +198,6 @@ struct TEvPrivate {
     struct TEvDropTempTable : public TEventLocal<TEvDropTempTable, EEv::EvDropTempTable> {
         TString WorkingDir;
         TString Name;
-        TMaybe<NACLib::TUserToken> UserToken;
         ui64 TxId;
     };
 

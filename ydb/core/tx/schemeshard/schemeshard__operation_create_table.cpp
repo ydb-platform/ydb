@@ -705,7 +705,8 @@ public:
                     << ", SessionActorId: " << sessionActorIdStr);
             TActorId sessionActorId;
             sessionActorId.Parse(sessionActorIdStr.c_str(), sessionActorIdStr.size());
-            context.OnComplete.UpdateTempTablesToCreateState(sessionActorId, {parentPathStr, name, context.UserToken});
+            context.OnComplete.UpdateTempTablesToCreateState(
+                sessionActorId, {parentPathStr, name});
         }
 
         Y_ABORT_UNLESS(shardsToCreate == txState.Shards.size());

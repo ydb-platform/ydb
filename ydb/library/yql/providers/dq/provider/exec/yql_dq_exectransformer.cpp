@@ -266,7 +266,7 @@ private:
         }
         pipeline->Add(
             NDq::CreateDqBuildPhyStagesTransformer(
-                State_->Settings->SpillingEngine.Get().GetOrElse(TDqSettings::TDefault::SpillingEngine) != TDqSettings::ESpillingEngine::Disable,
+                !State_->Settings->SplitStageOnDqReplicate.Get().GetOrElse(true),
                 *pipeline->GetTypeAnnotationContext(), mode
             ),
             "BuildPhy");

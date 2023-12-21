@@ -12,6 +12,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/yql/public/udf
+    library/cpp/ipmath
 )
 
 END()

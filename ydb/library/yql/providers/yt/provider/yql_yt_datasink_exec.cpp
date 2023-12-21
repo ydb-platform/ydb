@@ -221,7 +221,7 @@ private:
         }
 
         bool hasNonDeterministicFunctions = false;
-        if (const auto status = PeepHoleOptimizeBeforeExec<true>(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx); status.Level != TStatus::Ok) {
+        if (const auto status = PeepHoleOptimizeBeforeExec(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx); status.Level != TStatus::Ok) {
             return SyncStatus(status);
         }
 
@@ -628,7 +628,7 @@ private:
         }
 
         bool hasNonDeterministicFunctions = false;
-        if (const auto status = PeepHoleOptimizeBeforeExec<false>(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx); status.Level != TStatus::Ok) {
+        if (const auto status = PeepHoleOptimizeBeforeExec(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx); status.Level != TStatus::Ok) {
             return SyncStatus(status);
         }
 
@@ -685,50 +685,100 @@ private:
             auto clusterStr = TString{cluster.Value()};
 
             delegatedNode = input->ChildPtr(TYtDqProcessWrite::idx_Input);
-            if (const auto status = SubstTables(delegatedNode, State_, false, ctx); status.Level == TStatus::Error) {
-                return SyncStatus(status);
+
+            auto server = State_->Gateway->GetClusterServer(clusterStr);
+            YQL_ENSURE(server, "Invalid YT cluster: " << clusterStr);
+
+            NYT::TRichYPath realTable = State_->Gateway->GetWriteTable(State_->SessionId, clusterStr, tmpTable.Name().StringValue(), tmpFolder);
+            realTable.Append(true);
+            YQL_ENSURE(realTable.TransactionId_.Defined(), "Expected TransactionId");
+
+            NYT::TNode writerOptions = NYT::TNode::CreateMap();
+            if (auto maxRowWeight = config->MaxRowWeight.Get(clusterStr)) {
+                writerOptions["max_row_weight"] = static_cast<i64>(maxRowWeight->GetValue());
             }
-            bool hasNonDeterministicFunctions = false;
-            TYtExtraPeepHoleSettings settings;
-            settings.CurrentCluster = clusterStr;
-            settings.TmpTable = &tmpTable;
-            settings.TmpFolder = tmpFolder;
-            settings.Config = config;
-            if (const auto status = PeepHoleOptimizeBeforeExec<false>(delegatedNode, delegatedNode, State_, 
-                hasNonDeterministicFunctions, ctx, settings); status.Level == TStatus::Error) {
-                return SyncStatus(status);
+
+            NYT::TNode outSpec;
+            NYT::TNode type;
+            {
+                auto rowSpec = TYqlRowSpecInfo(tmpTable.RowSpec());
+                NYT::TNode spec;
+                rowSpec.FillCodecNode(spec[YqlRowSpecAttribute]);
+                outSpec = NYT::TNode::CreateMap()(TString{YqlIOSpecTables}, NYT::TNode::CreateList().Add(spec));
+                type = rowSpec.GetTypeNode();
+            }
+
+            // These settings will be passed to YT peephole callback from DQ
+            auto settings = Build<TCoNameValueTupleList>(ctx, delegatedNode->Pos())
+                .Add()
+                    .Name().Value("yt_cluster", TNodeFlags::Default).Build()
+                    .Value<TCoAtom>().Value(clusterStr).Build()
+                .Build()
+                .Add()
+                    .Name().Value("yt_server", TNodeFlags::Default).Build()
+                    .Value<TCoAtom>().Value(server).Build()
+                .Build()
+                .Add()
+                    .Name().Value("yt_table", TNodeFlags::Default).Build()
+                    .Value<TCoAtom>().Value(NYT::NodeToYsonString(NYT::PathToNode(realTable))).Build()
+                .Build()
+                .Add()
+                    .Name().Value("yt_tableName", TNodeFlags::Default).Build()
+                    .Value<TCoAtom>().Value(tmpTable.Name().Value()).Build()
+                .Build()
+                .Add()
+                    .Name().Value("yt_tableType", TNodeFlags::Default).Build()
+                    .Value<TCoAtom>().Value(NYT::NodeToYsonString(type)).Build()
+                .Build()
+                .Add()
+                    .Name().Value("yt_writeOptions", TNodeFlags::Default).Build()
+                    .Value<TCoAtom>().Value(NYT::NodeToYsonString(writerOptions)).Build()
+                .Build()
+                .Add()
+                    .Name().Value("yt_outSpec", TNodeFlags::Default).Build()
+                    .Value<TCoAtom>().Value(NYT::NodeToYsonString(outSpec)).Build()
+                .Build()
+                .Add()
+                    .Name().Value("yt_tx", TNodeFlags::Default).Build()
+                    .Value<TCoAtom>().Value(GetGuidAsString(*realTable.TransactionId_), TNodeFlags::Default).Build()
+                .Build()
+                .Done().Ptr();
+
+            auto atomType = ctx.MakeType<TUnitExprType>();
+
+            for (auto child: settings->Children()) {
+                child->Child(0)->SetTypeAnn(atomType);
+                child->Child(0)->SetState(TExprNode::EState::ConstrComplete);
+                child->Child(1)->SetTypeAnn(atomType);
+                child->Child(1)->SetState(TExprNode::EState::ConstrComplete);
             }
 
             delegatedNode = Build<TPull>(ctx, delegatedNode->Pos())
                     .Input(std::move(delegatedNode))
                     .BytesLimit()
                         .Value(TString())
-                        .Build()
+                    .Build()
                     .RowsLimit()
                         .Value(0U)
-                        .Build()
+                    .Build()
                     .FormatDetails()
                         .Value(ui32(NYson::EYsonFormat::Binary))
-                        .Build()
-                    .Settings()
-                        .Build()
+                    .Build()
+                    .Settings(settings)
                     .Format()
                         .Value(0U)
-                        .Build()
+                    .Build()
                     .PublicId()
                         .Value(ToString(State_->Types->TranslateOperationId(input->UniqueId())))
-                        .Build()
+                    .Build()
                     .Discard()
                         .Value(ToString(true), TNodeFlags::Default)
-                        .Build()
+                    .Build()
                     .Origin(input)
-                    .Done()
-                    .Ptr();
-
-            auto atomType = ctx.MakeType<TUnitExprType>();
+                    .Done().Ptr();
 
             for (auto idx: {TResOrPullBase::idx_BytesLimit, TResOrPullBase::idx_RowsLimit, TResOrPullBase::idx_FormatDetails,
-                TResOrPullBase::idx_Format, TResOrPullBase::idx_PublicId, TResOrPullBase::idx_Discard }) {
+                TResOrPullBase::idx_Settings, TResOrPullBase::idx_Format, TResOrPullBase::idx_PublicId, TResOrPullBase::idx_Discard }) {
                 delegatedNode->Child(idx)->SetTypeAnn(atomType);
                 delegatedNode->Child(idx)->SetState(TExprNode::EState::ConstrComplete);
             }

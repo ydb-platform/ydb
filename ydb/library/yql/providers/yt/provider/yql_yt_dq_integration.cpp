@@ -3,6 +3,7 @@
 #include "yql_yt_mkql_compiler.h"
 #include "yql_yt_helpers.h"
 #include "yql_yt_op_settings.h"
+#include "yql_yt_provider_impl.h"
 
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
@@ -18,6 +19,7 @@
 #include <ydb/library/yql/core/yql_type_helpers.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <yt/cpp/mapreduce/common/helpers.h>
@@ -665,6 +667,34 @@ public:
         const auto refName = param["refName"];
         YQL_ENSURE(refName.IsString(), "Expected 'refName' sub-parameter");
         NYql::WriteTableReference(writer, YtProviderName, cluster.AsString(), refName.AsString(), true, columns);
+    }
+
+    virtual void ConfigurePeepholePipeline(bool beforeDqTransforms, const THashMap<TString, TString>& providerParams, TTransformationPipeline* pipeline) override {
+        if (!beforeDqTransforms) {
+            return;
+        }
+
+        auto state = TYtState::TPtr(State_);
+        pipeline->Add(CreateFunctorTransformer([state](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+            return OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+                if (TYtReadTable::Match(node.Get()) && !node->Head().IsWorld()) {
+                    YQL_CLOG(INFO, ProviderYt) << "Peephole-YtTrimWorld";
+                    return ctx.ChangeChild(*node, 0, ctx.NewWorld(node->Pos()));
+                }
+                return node;
+            }, ctx, TOptimizeExprSettings{state->Types});
+        }), "YtTrimWorld", TIssuesIds::DEFAULT_ERROR);
+
+        pipeline->Add(CreateSinglePassFunctorTransformer([state, providerParams](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+            output = input;
+            auto status = SubstTables(output, state, true, ctx);
+            if (status.Level != IGraphTransformer::TStatus::Error && input != output) {
+                YQL_CLOG(INFO, ProviderYt) << "Peephole-YtSubstTables";
+            }
+            return status;
+        }), "YtSubstTables", TIssuesIds::DEFAULT_ERROR);
+
+        pipeline->Add(CreateYtPeepholeTransformer(TYtState::TPtr(State_), providerParams), "YtPeepHole", TIssuesIds::DEFAULT_ERROR);
     }
 
 private:

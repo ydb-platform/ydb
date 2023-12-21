@@ -1157,9 +1157,9 @@
     ],
     "test.test[join-lookupjoin_with_cache-off-Results]": [
         {
-            "checksum": "a5a7e398dc30bcb1eb092ef6ee93b65d",
-            "size": 264,
-            "uri": "https://{canondata_backend}/1900335/a5a16b7313d07b162a608c1abeab1e68e6175117/resource.tar.gz#test.test_join-lookupjoin_with_cache-off-Results_/results.txt"
+            "checksum": "4a5a14ca40382e201b3d29c142c0bbdc",
+            "size": 377,
+            "uri": "https://{canondata_backend}/1942415/2c7b7e06b3aea4ad2e9b20b79598f6f99d82c3f5/resource.tar.gz#test.test_join-lookupjoin_with_cache-off-Results_/results.txt"
         }
     ],
     "test.test[join-mapjoin_dup_key--Analyze]": [

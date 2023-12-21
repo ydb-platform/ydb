@@ -1348,9 +1348,9 @@
     ],
     "test.test[join-anyjoin_common_dup--Debug]": [
         {
-            "checksum": "3ab12fcb50a85f95b1231cb93a45abff",
+            "checksum": "8199ba5a0e9767403faed20f4cff59d6",
             "size": 7595,
-            "uri": "https://{canondata_backend}/1936842/fd32f204cf92d07ec90f2a50a26edddf6812895e/resource.tar.gz#test.test_join-anyjoin_common_dup--Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1946324/85fd14ff51e6571b3bee8a6ad27c4e3fdb9e917d/resource.tar.gz#test.test_join-anyjoin_common_dup--Debug_/opt.yql"
         }
     ],
     "test.test[join-anyjoin_common_dup--Plan]": [

@@ -435,4 +435,25 @@ SELECT COUNT(*) FROM public.t;");
         UNIT_ASSERT_C(res.Root, "Failed to parse statement, root is nullptr");
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
     }
+
+    Y_UNIT_TEST(BlockEngine) {
+        auto res = PgSqlToYql("set blockEngine='auto'; select 1;");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_STRING_CONTAINS(res.Root->ToString(), "(let world (Configure! world (DataSource 'config) 'BlockEngine 'auto))");
+
+        res = PgSqlToYql("set Blockengine='force'; select 1;");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_STRING_CONTAINS(res.Root->ToString(), "(let world (Configure! world (DataSource 'config) 'BlockEngine 'force))");
+
+        res = PgSqlToYql("set BlockEngine='disable'; select 1;");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT(!res.Root->ToString().Contains("BlockEngine"));
+
+        res = PgSqlToYql("set BlockEngine='foo'; select 1;");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_EQUAL(res.Issues.Size(), 1);
+
+        auto issue = *(res.Issues.begin());
+        UNIT_ASSERT(issue.GetMessage().Contains("VariableSetStmt, not supported BlockEngine option value: foo"));
+    }
 }

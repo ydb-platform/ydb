@@ -5918,3 +5918,28 @@ Y_UNIT_TEST_SUITE(TopicsDDL) {
         )", false);
     }
 }
+
+Y_UNIT_TEST_SUITE(BlockEnginePragma) {
+    Y_UNIT_TEST(Basic) {
+        const TVector<TString> values = {"auto", "force", "disable"};
+        for (const auto& value : values) {
+            const auto query = TStringBuilder() << "pragma Blockengine='" << value << "'; select 1;";
+            NYql::TAstParseResult res = SqlToYql(query);
+            UNIT_ASSERT(res.Root);
+
+            TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+                Y_UNUSED(word);
+                UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder() << R"(Configure! world (DataSource '"config") '"BlockEngine" '")" << value << "\"");
+            };
+
+            TWordCountHive elementStat({"BlockEngine"});
+            VerifyProgram(res, elementStat, verifyLine);
+            UNIT_ASSERT(elementStat["BlockEngine"] == ((value == "disable") ? 0 : 1));
+        }
+    }
+
+    Y_UNIT_TEST(UnknownSetting) {
+        ExpectFailWithError("use plato; pragma BlockEngine='foo';",
+            "<main>:1:31: Error: Expected `disable|auto|force' argument for: BlockEngine\n");
+    }
+}

@@ -2691,6 +2691,12 @@ public:
                 if (ctx.UseBlocks) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource, BuildQuotedAtom(Pos, "UseBlocks"))));
                 }
+
+                if (ctx.BlockEngineEnable) {
+                    TString mode = ctx.BlockEngineForce ? "force" : "auto";
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                        BuildQuotedAtom(Pos, "BlockEngine"), BuildQuotedAtom(Pos, mode))));
+                }
             }
         }
 

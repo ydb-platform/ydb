@@ -333,10 +333,10 @@ public:
     using TPtr = std::shared_ptr<TSource>;
     TSource(std::unique_ptr<TSettingsHolder>&& settings,
         size_t inflight, TType* type, std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> types, const THolderFactory& holderFactory, NKikimr::NMiniKQL::IStatsRegistry* jobStats)
-        : Settings_(std::move(settings))
+        : HolderFactory(holderFactory)
+        , Settings_(std::move(settings))
         , Inputs_(std::move(Settings_->RawInputs))
         , Listener_(std::make_shared<TListener>(Inputs_.size(), inflight))
-        , HolderFactory_(holderFactory)
         , JobStats_(jobStats)
     {
         auto structType = AS_TYPE(TStructType, type);
@@ -356,7 +356,7 @@ public:
             LocalListeners_.back()->Init(LocalListeners_.back());
         }
         BlockBuilder_.Init(ptr, *Settings_->Pool, Settings_->PgBuilder);
-        FallbackReader_.SetSpecs(*Settings_->Specs, HolderFactory_);
+        FallbackReader_.SetSpecs(*Settings_->Specs, HolderFactory);
     }
 
     void RunRead() {
@@ -471,7 +471,7 @@ public:
         while (FallbackReader_.IsValid()) {
             auto currentRow = std::move(FallbackReader_.GetRow());
             if (!Settings_->Specs->InputGroups.empty()) {
-                currentRow = std::move(HolderFactory_.CreateVariantHolder(currentRow.Release(), Settings_->Specs->InputGroups.at(Settings_->OriginalIndexes[idx])));
+                currentRow = std::move(HolderFactory.CreateVariantHolder(currentRow.Release(), Settings_->Specs->InputGroups.at(Settings_->OriginalIndexes[idx])));
             }
             BlockBuilder_.Add(currentRow);
             FallbackReader_.Next();
@@ -497,6 +497,7 @@ public:
         }
     }
 
+    const THolderFactory& HolderFactory;
 private:
     NYT::NConcurrency::IThreadPoolPtr Pool_;
     std::mutex Mtx_;
@@ -513,7 +514,6 @@ private:
     TListener::TPtr Listener_;
     TPtr Self_;
     size_t Inflight_;
-    const THolderFactory& HolderFactory_;
     NKikimr::NMiniKQL::IStatsRegistry* JobStats_;
 };
 
@@ -525,52 +525,48 @@ public:
         , Source_(std::move(source))
         , Width_(width)
         , Types_(arrowTypes)
+        , Result_(width)
     {
     }
     
-    EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+    NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
         if (GotFinish_) {
-            return EFetchResult::Finish;
+            return NUdf::EFetchStatus::Finish;
         }
+        YQL_ENSURE(width == Width_ + 1);
         auto batch = Source_->Next();
         if (!batch) {
             GotFinish_ = 1;
             Source_->Finish();
-            return EFetchResult::Finish;
+            return NUdf::EFetchStatus::Finish;
         }
+        
         for (size_t i = 0; i < Width_; ++i) {
-            if (!output[i]) {
-                continue;
-            }
-            if(!batch->Columns[i].type()->Equals(Types_->at(i))) {
-                *(output[i]) = ctx.HolderFactory.CreateArrowBlock(ARROW_RESULT(arrow::compute::Cast(batch->Columns[i], Types_->at(i))));
-                continue;
-            }
-            *(output[i]) = ctx.HolderFactory.CreateArrowBlock(std::move(batch->Columns[i]));
+            YQL_ENSURE(batch->Columns[i].type()->Equals(Types_->at(i)));
+            output[i] = Source_->HolderFactory.CreateArrowBlock(std::move(batch->Columns[i]));
         }
-        if (output[Width_]) {
-            *(output[Width_]) = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(ui64(batch->RowsCnt)));
-        }
-        return EFetchResult::One;
+        output[Width_] = Source_->HolderFactory.CreateArrowBlock(arrow::Datum(ui64(batch->RowsCnt)));
+        return NUdf::EFetchStatus::Ok;
     }
 
 private:
     TSource::TPtr Source_;
     const size_t Width_;
     std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> Types_;
+    std::vector<NUdf::TUnboxedValue*> Result_;
     bool GotFinish_ = 0;
 };
 };
 
-class TDqYtReadBlockWrapper : public TStatefulWideFlowComputationNode<TDqYtReadBlockWrapper> {
-using TBaseComputation =  TStatefulWideFlowComputationNode<TDqYtReadBlockWrapper>;
+class TDqYtReadBlockWrapper : public TMutableComputationNode<TDqYtReadBlockWrapper> {
+using TBaseComputation =  TMutableComputationNode<TDqYtReadBlockWrapper>;
 public:
 
     TDqYtReadBlockWrapper(const TComputationNodeFactoryContext& ctx, const TString& clusterName,
         const TString& token, const NYT::TNode& inputSpec, const NYT::TNode& samplingSpec,
         const TVector<ui32>& inputGroups,
         TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables, NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight,
-        size_t timeout) : TBaseComputation(ctx.Mutables, this, EValueRepresentation::Boxed)
+        size_t timeout) : TBaseComputation(ctx.Mutables, EValueRepresentation::Boxed)
         , Width_(AS_TYPE(TStructType, itemType)->GetMembersCount())
         , CodecCtx_(ctx.Env, ctx.FunctionRegistry, &ctx.HolderFactory)
         , ClusterName_(clusterName)
@@ -588,6 +584,9 @@ public:
     }
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
+    }
+
+     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto settings = CreateInputStreams(true, Token_, ClusterName_, Timeout_, Inflight_ > 1, Tables_, SamplingSpec_);
         settings->Specs = &Specs_;
         settings->Pool = arrow::default_memory_pool();
@@ -598,14 +597,7 @@ public:
         }
         auto source = std::make_shared<TSource>(std::move(settings), Inflight_, Type_, types, ctx.HolderFactory, JobStats_);
         source->SetSelfAndRun(source);
-        state = ctx.HolderFactory.Create<TReaderState>(source, Width_, types);
-    }
-
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (!state.HasValue()) {
-            MakeState(ctx, state);
-        }
-        return static_cast<TReaderState&>(*state.AsBoxed()).FetchValues(ctx, output);
+        return ctx.HolderFactory.Create<TReaderState>(source, Width_, types);
     }
 
     void RegisterDependencies() const final {}

@@ -1593,7 +1593,7 @@ message TBackgroundCleaningConfig {
     message TRetrySettings {
         optional uint32 StartDelayMs = 1 [default = 1000];
         optional uint32 MaxDelayMs = 2 [default = 256000];
-        optional uint32 MaxRetryNumber = 8 [default = 5];
+        optional uint32 MaxRetryNumber = 3 [default = 8];
     }
 
     // after MaxRetryNumber retries to connect to the node, we will send the table to the BackgroundCleaningQueue,

@@ -205,6 +205,69 @@ private:
     size_t Available_;
 };
 
+namespace {
+void SkipYson(TYsonReaderDetails& buf) {
+    switch (buf.Current()) {
+    case BeginListSymbol: {
+        buf.Next();
+        for (;;) {
+            SkipYson(buf);
+            if (buf.Current() == ListItemSeparatorSymbol) {
+                buf.Next();
+            }
+            if (buf.Current() == EndListSymbol) {
+                break;
+            }
+        }
+        buf.Next();
+        break;
+    }
+    case BeginMapSymbol: {
+        buf.Next();
+        for (;;) {
+            SkipYson(buf);
+            YQL_ENSURE(buf.Current() == KeyValueSeparatorSymbol);
+            buf.Next();
+            SkipYson(buf);
+            if (buf.Current() == KeyedItemSeparatorSymbol) {
+                buf.Next();
+            }
+            if (buf.Current() == EndMapSymbol) {
+                break;
+            }
+        }
+        buf.Next();
+        break;
+    }
+    case StringMarker:
+        buf.Next();
+        buf.Skip(buf.ReadVarI32());
+        break;
+    case Uint64Marker:
+    case Int64Marker:
+        buf.Next();
+        Y_UNUSED(buf.ReadVarI64());
+        break;
+    case TrueMarker:
+    case FalseMarker:
+        buf.Next();
+        break;
+    case DoubleMarker:
+        buf.Next();
+        Y_UNUSED(buf.NextDouble());
+        break;
+    default:
+        YQL_ENSURE(false, "Unexpected char: " + std::string{buf.Current()});
+    }
+}
+
+NUdf::TBlockItem ReadYson(TYsonReaderDetails& buf) {
+    const char* beg = buf.Data();
+    SkipYson(buf);
+    return NUdf::TBlockItem(std::string_view(beg, buf.Data() - beg));
+}
+};
+
 class IYsonBlockReader {
 public:
     virtual NUdf::TBlockItem GetItem(TYsonReaderDetails& buf) = 0;
@@ -272,7 +335,7 @@ private:
     TVector<NUdf::TBlockItem> Items_;
 };
 
-template<typename T, bool Nullable, bool Native>
+template<typename T, bool Nullable, NKikimr::NUdf::EDataSlot OriginalT, bool Native>
 class TYsonStringBlockReader final : public IYsonBlockReaderWithNativeFlag<Native> {
 public:
     NUdf::TBlockItem GetItem(TYsonReaderDetails& buf) override final {
@@ -281,13 +344,18 @@ public:
         }
         return GetNotNull(buf);
     }
+
     NUdf::TBlockItem GetNotNull(TYsonReaderDetails& buf) override final {
-        YQL_ENSURE(buf.Current() == StringMarker);
-        buf.Next();
-        const i32 length = buf.ReadVarI32();
-        auto res = NUdf::TBlockItem(NUdf::TStringRef(buf.Data(), length));
-        buf.Skip(length);
-        return res;
+        if constexpr (NUdf::EDataSlot::Yson != OriginalT) {
+            YQL_ENSURE(buf.Current() == StringMarker);
+            buf.Next();
+            const i32 length = buf.ReadVarI32();
+            auto res = NUdf::TBlockItem(NUdf::TStringRef(buf.Data(), length));
+            buf.Skip(length);
+            return res;
+        } else {
+            return ReadYson(buf);
+        }
     }
 private:
     const TVector<std::unique_ptr<IYsonBlockReader>> Children_;
@@ -300,7 +368,7 @@ struct TYtColumnConverterSettings {
     NKikimr::NMiniKQL::TType* Type;
     const NUdf::IPgBuilder* PgBuilder;
     arrow::MemoryPool& Pool;
-    bool IsNative;
+    const bool IsNative;
     bool IsTopOptional = false;
     std::shared_ptr<arrow::DataType> ArrowType;
     std::unique_ptr<NKikimr::NUdf::IArrayBuilder> Builder;
@@ -397,8 +465,8 @@ struct TYsonBlockReaderTraits {
     using TTuple = TYsonTupleBlockReader<Nullable, Native>;
     template <typename T, bool Nullable>
     using TFixedSize = TYsonFixedSizeBlockReader<T, Nullable, Native>;
-    template <typename TStringType, bool Nullable>
-    using TStrings = TYsonStringBlockReader<TStringType, Nullable, Native>;
+    template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot OriginalT>
+    using TStrings = TYsonStringBlockReader<TStringType, Nullable, OriginalT, Native>;
     using TExtOptional = TYsonExternalOptBlockReader<Native>;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
@@ -406,7 +474,7 @@ struct TYsonBlockReaderTraits {
         if (desc.PassByValue) {
             return std::make_unique<TFixedSize<ui64, true>>();
         } else {
-            return std::make_unique<TStrings<arrow::BinaryType, true>>();
+            return std::make_unique<TStrings<arrow::BinaryType, true, NKikimr::NUdf::EDataSlot::String>>();
         }
     }
 

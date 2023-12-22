@@ -768,12 +768,12 @@ void TServerBase::RegisterService(IServicePtr service)
         auto guard = WriterGuard(ServicesLock_);
         auto& serviceMap = RealmIdToServiceMap_[serviceId.RealmId];
         YT_VERIFY(serviceMap.emplace(serviceId.ServiceName, service).second);
-        if (AppliedConfig_) {
-            auto it = AppliedConfig_->Services.find(serviceId.ServiceName);
-            if (it != AppliedConfig_->Services.end()) {
-                service->Configure(AppliedConfig_, it->second);
+        if (Config_) {
+            auto it = Config_->Services.find(serviceId.ServiceName);
+            if (it != Config_->Services.end()) {
+                service->Configure(Config_, it->second);
             } else {
-                service->Configure(AppliedConfig_, nullptr);
+                service->Configure(Config_, nullptr);
             }
         }
         DoRegisterService(service);
@@ -866,52 +866,24 @@ IServicePtr TServerBase::GetServiceOrThrow(const TServiceId& serviceId) const
     return serviceIt->second;
 }
 
-void TServerBase::ApplyConfig()
-{
-    VERIFY_SPINLOCK_AFFINITY(ServicesLock_);
-
-    auto newAppliedConfig = New<TServerConfig>();
-    newAppliedConfig->EnableErrorCodeCounting = DynamicConfig_->EnableErrorCodeCounting.value_or(StaticConfig_->EnableErrorCodeCounting);
-    newAppliedConfig->EnablePerUserProfiling = DynamicConfig_->EnablePerUserProfiling.value_or(StaticConfig_->EnablePerUserProfiling);
-    newAppliedConfig->HistogramTimerProfiling = DynamicConfig_->HistogramTimerProfiling.value_or(StaticConfig_->HistogramTimerProfiling);
-    newAppliedConfig->Services = StaticConfig_->Services;
-
-    for (const auto& [name, node] : DynamicConfig_->Services) {
-        newAppliedConfig->Services[name] = node;
-    }
-
-    AppliedConfig_ = newAppliedConfig;
-
-    // Apply configuration to all existing services.
-    for (const auto& [realmId, serviceMap] : RealmIdToServiceMap_) {
-        for (const auto& [serviceName, service] : serviceMap) {
-            auto it = AppliedConfig_->Services.find(serviceName);
-            if (it != AppliedConfig_->Services.end()) {
-                service->Configure(AppliedConfig_, it->second);
-            } else {
-                service->Configure(AppliedConfig_, nullptr);
-            }
-        }
-    }
-}
-
-void TServerBase::Configure(const TServerConfigPtr& config)
+void TServerBase::Configure(TServerConfigPtr config)
 {
     auto guard = WriterGuard(ServicesLock_);
 
     // Future services will be configured appropriately.
-    StaticConfig_ = config;
+    Config_ = config;
 
-    ApplyConfig();
-}
-
-void TServerBase::OnDynamicConfigChanged(const TServerDynamicConfigPtr& config)
-{
-    auto guard = WriterGuard(ServicesLock_);
-
-    DynamicConfig_ = config;
-
-    ApplyConfig();
+    // Apply configuration to all existing services.
+    for (const auto& [realmId, serviceMap] : RealmIdToServiceMap_) {
+        for (const auto& [serviceName, service] : serviceMap) {
+            auto it = config->Services.find(serviceName);
+            if (it != config->Services.end()) {
+                service->Configure(config, it->second);
+            } else {
+                service->Configure(config, nullptr);
+            }
+        }
+    }
 }
 
 void TServerBase::Start()

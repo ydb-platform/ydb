@@ -73,14 +73,14 @@ public:
         for (size_t tableIndex = 0; tableIndex < tableSchemas.size(); ++tableIndex) {
             const auto& columns = tableSchemas[tableIndex]->Columns();
             for (const auto& column : columns) {
-                Columns_[std::pair<int,TString>(tableIndex, column.Name())] = column;
+                Columns_[std::pair<int, TString>(tableIndex, column.Name())] = column;
             }
         }
     }
 
     const TColumnSchema* GetColumnSchema(int tableIndex, TStringBuf columnName) const
     {
-        auto it = Columns_.find(std::pair<int,TString>(tableIndex, columnName));
+        auto it = Columns_.find(std::pair<int, TString>(tableIndex, columnName));
         if (it == Columns_.end()) {
             return nullptr;
         } else {

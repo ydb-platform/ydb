@@ -2816,21 +2816,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TTestEnv env(runtime, opts);
         const auto sender = runtime.AllocateEdgeActor();
 
-        auto writeRow = [&](ui64 tabletId, ui32 key, const TString& value, const char* table) {
-            NKikimrMiniKQL::TResult result;
-            TString error;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
-                (
-                    (let key   '( '('key (Uint32 '%u ) ) ) )
-                    (let row   '( '('value (Utf8 '%s) ) ) )
-                    (return (AsList (UpdateRow '__user__%s key row) ))
-                )
-            )", key, value.c_str(), table), result, error);
-
-            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
-            UNIT_ASSERT_VALUES_EQUAL(error, "");
-        };
-
         auto waitForTableStats = [&](ui32 shards) {
             TDispatchOptions options;
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvDataShard::EvPeriodicTableStats, shards));
@@ -2865,7 +2850,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             )", {NKikimrScheme::StatusAccepted});
             env.TestWaitNotification(runtime, txId);
 
-            writeRow(tabletId, 1, "value1", "Table1");
+            UpdateRow(runtime, "Table1", 1, "value1", tabletId);
             waitForTableStats(1);
 
             auto du = getDiskSpaceUsage();
@@ -2888,8 +2873,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             )", {NKikimrScheme::StatusAccepted});
             env.TestWaitNotification(runtime, txId);
 
-            writeRow(tabletId + 0, 1, "value1", "Table2");
-            writeRow(tabletId + 1, 2, "value2", "Table2");
+            UpdateRow(runtime, "Table2", 1, "value1", tabletId + 0);
+            UpdateRow(runtime, "Table2", 2, "value2", tabletId + 1);
             waitForTableStats(1 /* Table1 */ + 2 /* Table2 */);
 
             auto du = getDiskSpaceUsage();
@@ -2909,21 +2894,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TTestEnv env(runtime, opts);
         ui64 txId = 100;
-
-        auto writeRow = [&](ui64 tabletId, ui32 key, const TString& value, const char* table) {
-            NKikimrMiniKQL::TResult result;
-            TString error;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
-                (
-                    (let key   '( '('key (Uint32 '%u ) ) ) )
-                    (let row   '( '('value (Utf8 '%s) ) ) )
-                    (return (AsList (UpdateRow '__user__%s key row) ))
-                )
-            )", key, value.c_str(), table), result, error);
-
-            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
-            UNIT_ASSERT_VALUES_EQUAL(error, "");
-        };
 
         auto waitForTableStats = [&](ui32 shards) {
             TDispatchOptions options;
@@ -2972,7 +2942,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                 )", {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
 
-        writeRow(tabletId, 1, "value1", "Table1");
+        UpdateRow(runtime, "Table1", 1, "value1", tabletId);
         waitForTableStats(1);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),

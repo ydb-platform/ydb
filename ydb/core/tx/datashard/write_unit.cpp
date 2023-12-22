@@ -36,9 +36,9 @@ public:
     }
 
     void DoExecute(TDataShard* self, TWriteOperation* writeOp, TTransactionContext& txc, const TActorContext& ctx) {
-        const TValidatedWriteTx::TPtr& writeTx = writeOp->WriteTx();
+        const TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
 
-        const ui64 tableId = writeTx->TableId().PathId.LocalPathId;
+        const ui64 tableId = writeTx->GetTableId().PathId.LocalPathId;
         const TTableId fullTableId(self->GetPathOwnerId(), tableId);
         const ui64 localTableId = self->GetLocalTableId(fullTableId);
         if (localTableId == 0) {
@@ -62,7 +62,7 @@ public:
 
         TVector<TCell> keyCells;
 
-        const TSerializedCellMatrix& matrix = writeTx->Matrix();
+        const TSerializedCellMatrix& matrix = writeTx->GetMatrix();
 
         for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx)
         {
@@ -111,16 +111,16 @@ public:
 
         TableInfo_.Stats.UpdateTime = TAppData::TimeProvider->Now();
 
-        writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildCommited(writeTx->TabletId(), writeOp->GetTxId()));
+        writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildCommited(self->TabletID(), writeOp->GetTxId()));
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for " << *writeOp << " at " << writeOp->WriteTx()->TabletId());
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for " << *writeOp << " at " << self->TabletID());
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
         Y_ABORT_UNLESS(writeOp != nullptr);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executing write operation for " << *op << " at " << writeOp->WriteTx()->TabletId());
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executing write operation for " << *op << " at " << DataShard.TabletID());
 
         if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
             return EExecutionStatus::Executed;
@@ -136,7 +136,7 @@ public:
         }
         else {
             //TODO: Prepared
-            writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildPrepared(writeOp->WriteTx()->TabletId(), op->GetTxId(), {0, 0, {}}));
+            writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildPrepared(writeOp->GetTabletId(), op->GetTxId(), {0, 0, {}}));
             return EExecutionStatus::DelayCompleteNoMoreRestarts;
         }
 
@@ -169,7 +169,7 @@ public:
             return EExecutionStatus::Continue;
         }
 
-        op->ChangeRecords() = std::move(writeOp->WriteTx()->GetCollectedChanges());
+        op->ChangeRecords() = std::move(writeOp->GetWriteTx()->GetCollectedChanges());
 
         DataShard.SysLocksTable().ApplyLocks();
         DataShard.SubscribeNewLocks(ctx);
@@ -186,8 +186,8 @@ public:
         TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
         Y_ABORT_UNLESS(writeOp != nullptr);
 
-        const auto& status = writeOp->WriteResult()->Record.status();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Completed write operation for " << *op << " at " << writeOp->WriteTx()->TabletId() << ", status " << status);
+        const auto& status = writeOp->GetWriteResult()->Record.status();
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Completed write operation for " << *op << " at " << writeOp->GetTabletId() << ", status " << status);
 
         //TODO: Counters
         // if (WriteResult->Record.status() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED || WriteResult->Record.status() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED) {
@@ -196,7 +196,7 @@ public:
         //     self->IncCounter(COUNTER_WRITE_ERROR);
         // }
 
-        ctx.Send(writeOp->GetEv()->Sender, writeOp->WriteResult().release(), 0, writeOp->GetEv()->Cookie);
+        ctx.Send(writeOp->GetEv()->Sender, writeOp->ReleaseWriteResult().release(), 0, writeOp->GetEv()->Cookie);
     }
 
 };  // TWriteUnit

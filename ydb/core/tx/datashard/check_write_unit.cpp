@@ -52,7 +52,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
 
     TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
     Y_VERIFY_S(writeOp, "cannot cast operation of kind " << op->GetKind());
-    auto writeTx = writeOp->WriteTx();
+    auto writeTx = writeOp->GetWriteTx();
     Y_ABORT_UNLESS(writeTx);
     Y_ABORT_UNLESS(writeTx->Ready() || writeTx->RequirePrepare());
 
@@ -151,7 +151,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
             return EExecutionStatus::Executed;
         }
 
-        writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildPrepared(writeOp->WriteTx()->TabletId(), op->GetTxId(), {op->GetMinStep(), op->GetMaxStep(), {}}));
+        writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildPrepared(DataShard.TabletID(), op->GetTxId(), {op->GetMinStep(), op->GetMaxStep(), {}}));
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Prepared " << *op << " at " << DataShard.TabletID());
     }
 

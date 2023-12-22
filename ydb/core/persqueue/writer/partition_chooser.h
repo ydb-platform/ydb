@@ -65,7 +65,7 @@ public:
     virtual const TPartitionInfo* GetPartition(ui32 partitionId) const = 0;
 };
 
-std::shared_ptr<IPartitionChooser> CreatePartitionChooser(const NKikimrSchemeOp::TPersQueueGroupDescription& config, bool withoutHash);
+std::shared_ptr<IPartitionChooser> CreatePartitionChooser(const NKikimrSchemeOp::TPersQueueGroupDescription& config, bool withoutHash = false);
 
 NActors::IActor* CreatePartitionChooserActor(TActorId parentId,
                                              const NKikimrSchemeOp::TPersQueueGroupDescription& config,

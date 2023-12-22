@@ -860,6 +860,7 @@ private:
 
 
 IActor* CreatePartitionWriter(const TActorId& client,
+                             // const NKikimrSchemeOp::TPersQueueGroupDescription& config,
                               ui64 tabletId,
                               ui32 partitionId, 
                               const TPartitionWriterOpts& opts) {

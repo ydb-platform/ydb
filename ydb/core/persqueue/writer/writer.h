@@ -9,6 +9,8 @@
 
 #include <variant>
 
+#include "partition_chooser.h"
+
 namespace NKikimr::NPQ {
 
 constexpr ui64 INVALID_WRITE_ID = Max<ui64>();
@@ -205,6 +207,7 @@ struct TPartitionWriterOpts {
 };
 
 IActor* CreatePartitionWriter(const TActorId& client,
+                             // const NKikimrSchemeOp::TPersQueueGroupDescription& config,
                               ui64 tabletId,
                               ui32 partitionId,
                               const TPartitionWriterOpts& opts = {});

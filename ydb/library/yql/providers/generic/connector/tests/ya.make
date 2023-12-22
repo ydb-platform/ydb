@@ -57,3 +57,8 @@ DEPENDS(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    test_cases
+    utils
+)

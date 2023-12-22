@@ -1,4 +1,3 @@
-from os import environ
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
@@ -46,7 +45,7 @@ class Settings:
             connector=cls.Connector(
                 grpc_host='localhost',
                 grpc_port=50051,
-                paging_bytes_per_page=4*1024*1024,
+                paging_bytes_per_page=4 * 1024 * 1024,
                 paging_prefetch_queue_capacity=2,
             ),
             clickhouse=cls.ClickHouse(

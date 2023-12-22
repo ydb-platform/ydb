@@ -241,7 +241,7 @@ class Factory:
         test_cases = []
         for data_source_kind in data_source_kinds:
             tc = TestCase(
-                name=f'large_table',
+                name='large_table',
                 data_source_kind=data_source_kind,
                 data_in=data_in,
                 data_out_=data_in,

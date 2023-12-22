@@ -850,23 +850,7 @@ public:
 public:
     using TCreateDirFunc = std::function<void(const TString&, const TString&, NThreading::TPromise<TGenericResult>)>;
 
-    static TString CanonizePath(const TString& path);
-
-    template <typename TIter>
-    static TString CombinePath(TIter begin, TIter end, bool canonize = true) {
-        auto path = JoinRange("/", begin, end);
-        return canonize
-            ? CanonizePath(path)
-            : path;
-    }
-
-    static TVector<TString> SplitPath(const TString& path);
-
-    static bool TrySplitTablePath(const TString& path, std::pair<TString, TString>& result, TString& error);
-
     static NThreading::TFuture<TGenericResult> CreatePath(const TString& path, TCreateDirFunc createDir);
-
-    static TString CreateIndexTablePath(const TString& tableName, const TString& indexName);
 
     static void BuildIndexMetadata(TTableMetadataResult& loadTableMetadataResult);
 };

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yt/yql/plugin/plugin.h>
+#include <ydb/library/yql/yt/plugin.h>
 
 namespace NYT::NYqlPlugin {
 

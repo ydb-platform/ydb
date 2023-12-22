@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yt/yql/plugin/bridge/interface.h>
+#include <ydb/library/yql/yt/bridge/interface.h>
 
 #include <library/cpp/logger/log.h>
 

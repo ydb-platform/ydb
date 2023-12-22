@@ -480,8 +480,16 @@ public:
         UserName = userName;
     }
 
+    TString GetCluster() const {
+        return Cluster;
+    }
+
     TString GetDatabase() const {
         return Database;
+    }
+
+    void SetCluster(const TString& cluster) {
+        Cluster = cluster;
     }
 
     void SetDatabase(const TString& database) {
@@ -512,6 +520,7 @@ public:
 
 private:
     TString UserName;
+    TString Cluster;
     TString Database;
     TKikimrConfiguration::TPtr Configuration;
     TIntrusivePtr<TKikimrTablesData> TablesData;

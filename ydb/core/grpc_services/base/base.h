@@ -598,6 +598,10 @@ public:
         return {};
     }
 
+    TMaybe<TString> GetOpenTelemetryTraceParent() const override {
+        return {};
+    }
+
     TMaybe<TString> GetSdkBuildInfo() const {
         return {};
     }
@@ -815,6 +819,10 @@ public:
 
     TMaybe<TString> GetTraceId() const override {
         return GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER);
+    }
+
+    TMaybe<TString> GetOpenTelemetryTraceParent() const override {
+        return GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER);
     }
 
     const TMaybe<TString> GetSdkBuildInfo() const {
@@ -1137,6 +1145,10 @@ public:
 
     TMaybe<TString> GetTraceId() const override {
         return GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER);
+    }
+
+    TMaybe<TString> GetOpenTelemetryTraceParent() const override {
+        return GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER);
     }
 
     const TMaybe<TString> GetSdkBuildInfo() const {

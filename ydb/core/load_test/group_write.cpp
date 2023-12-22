@@ -416,10 +416,6 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         TQuantileTracker<ui32> ReadsInFlightQT;
         TQuantileTracker<ui64> ReadBytesInFlightQT;
 
-        // Collecting garbage
-        TIntervalGenerator GarbageCollectIntervalGen;
-    
-        TDeque<TLogoBlobID> ConfirmedBlobIds;
         TIntrusivePtr<NMonitoring::TCounterForPtr> MaxInFlightLatency;
         bool IsWorkingNow = true;
 
@@ -437,6 +433,16 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         TInitialAllocation InitialAllocation;
 
         bool MainCycleStarted = false;
+        // Blobs management
+        TDeque<TLogoBlobID> ConfirmedBlobIds;
+
+        // Garbage collection
+        ui32 GarbageCollectionsInFlight = 0;
+        TMonotonic NextGarbageCollectionTimestamp;
+        bool NextGarbageCollectionInQueue = false;
+        TIntervalGenerator GarbageCollectIntervalGen;
+        // There is no point in having more than 1 active garbage collection request at the moment
+        constexpr static ui32 MaxGarbageCollectionsInFlight = 1;
 
     public:
         TTabletWriter(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
@@ -478,12 +484,12 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                     "items", Percentiles)
             , ReadBytesInFlightQT(ExposePeriod, Counters->GetSubgroup("metric", "readBytesInFlight"),
                     "bytes", Percentiles)
-            , GarbageCollectIntervalGen(garbageCollectIntervalGen)
             , ScriptedRoundDuration(scriptedRoundDuration)
             , ScriptedCounter(0)
             , ScriptedRound(0)
             , ScriptedRequests(std::move(scriptedRequests))
             , InitialAllocation(initialAllocation)
+            , GarbageCollectIntervalGen(garbageCollectIntervalGen)
         {
             *Counters->GetCounter("tabletId") = tabletId;
             const auto& percCounters = Counters->GetSubgroup("sensor", "microseconds");
@@ -516,6 +522,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         // Issue TEvDiscover
         void Bootstrap(const TActorContext& ctx) {
             NextWriteTimestamp = TActivationContext::Monotonic();
+            NextGarbageCollectionTimestamp = TActivationContext::Monotonic();
             auto ev = std::make_unique<TEvBlobStorage::TEvDiscover>(TabletId, Generation, false, true, TInstant::Max(), 0, true);
             LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " is bootstrapped, going to send "
                     << ev->ToString());
@@ -568,13 +575,13 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                     return;
                 }
 
-                IssueTEvCollectGarbage(ctx);
+                IssueTEvCollectGarbageOnce(ctx);
             };
 
             SendToBSProxy(ctx, GroupId, ev.release(), Self.QueryDispatcher.ObtainCookie(std::move(callback)));
         }
 
-        void IssueTEvCollectGarbage(const TActorContext& ctx) {
+        void IssueTEvCollectGarbageOnce(const TActorContext& ctx) {
             auto ev = TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier(TabletId, Generation, GarbageCollectStep,
                     Channel, Generation, 0, TInstant::Max());
             LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " going to send " << ev->ToString());
@@ -582,6 +589,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             auto callback = [this] (IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult *>(event);
                 Y_ABORT_UNLESS(res);
+                --GarbageCollectionsInFlight;
                 if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK})) {
                     return;
                 }
@@ -589,6 +597,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 MakeInitialAllocation(ctx);
             };
 
+            ++GarbageCollectionsInFlight;
             SendToBSProxy(ctx, GroupId, ev.Release(), Self.QueryDispatcher.ObtainCookie(std::move(callback)));
         }
 
@@ -603,7 +612,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             IssueWriteIfPossible(ctx);
             ReadSettings.DelayManager->Start(StartTimestamp);
             IssueReadIfPossible(ctx);
-            ScheduleGarbageCollect(ctx);
+            IssueGarbageCollectionIfPossible(ctx);
             ExposeCounters(ctx);
         }
 
@@ -662,16 +671,20 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             auto callback = [this](IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult *>(event);
                 Y_ABORT_UNLESS(res);
+                --GarbageCollectionsInFlight;
+
                 if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK})) {
                     return;
                 }
                 LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " recieved " << res->ToString());
-
+    
                 if (IsWorkingNow) {
                     ctx.Send(ctx.SelfID, new TEvStopTest());
                 }
             };
             SendToBSProxy(ctx, GroupId, ev.Release(), Self.QueryDispatcher.ObtainCookie(std::move(callback)));
+
+            ++GarbageCollectionsInFlight;
         }
 
         void InitializeTrackers(TMonotonic now) {
@@ -771,6 +784,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 DUMP_PARAM(ReadSettings.InFlightTracker.ToString())
                 DUMP_PARAM(ConfirmedBlobIds.size())
                 DUMP_PARAM(InitialAllocation.ToString())
+                DUMP_PARAM(GarbageCollectionsInFlight)
 
                 static constexpr size_t count = 5;
                 std::array<size_t, count> nums{{9000, 9900, 9990, 9999, 10000}};
@@ -823,6 +837,12 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 using namespace std::placeholders;
                 Self.WakeupQueue.Put(NextReadTimestamp, std::bind(&TTabletWriter::IssueReadIfPossible, this, _1), ctx);
                 NextReadInQueue = true;
+            }
+
+            if (now < NextGarbageCollectionTimestamp && !NextGarbageCollectionInQueue) {
+                using namespace std::placeholders;
+                WakeupQueue.Put(NextGarbageCollectionTimestamp, std::bind(&TTabletWriter::IssueGarbageCollectionIfPossible, this, _1), ctx);
+                NextGarbageCollectionInQueue = true;
             }
         }
 
@@ -951,23 +971,26 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             }
         }
 
-        void ScheduleGarbageCollect(const TActorContext& ctx) {
-            TDuration duration = GarbageCollectIntervalGen.Generate();
-            if (duration != TDuration()) {
-                using namespace std::placeholders;
-                Self.WakeupQueue.Put(TActivationContext::Monotonic() + duration,
-                        std::bind(&TTabletWriter::IssueGarbageCollectRequest, this, _1), ctx);
+        void IssueGarbageCollectionIfPossible(const TActorContext& ctx) {
+            const TMonotonic now = TActivationContext::Monotonic();
+            while (GarbageCollectionsInFlight < MaxGarbageCollectionsInFlight &&
+                    NextGarbageCollectionTimestamp <= now) {
+                IssueGarbageCollectRequest(ctx);
             }
+            UpdateNextWakeups(ctx, now);
         }
 
         void IssueGarbageCollectRequest(const TActorContext& ctx) {
-            auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, Generation, GarbageCollectStep, Channel,
-                    true, Generation, GarbageCollectStep, nullptr, nullptr, TInstant::Max(), false);
-            auto callback = [](IEventBase *event, const TActorContext& /*ctx*/) {
+            auto ev = TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier(TabletId, Generation, GarbageCollectStep,
+                    Channel, Generation, 0, TInstant::Max());
+            auto callback = [this](IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult *>(event);
                 Y_ABORT_UNLESS(res);
+                --GarbageCollectionsInFlight;
+                IssueGarbageCollectionIfPossible(ctx);
             };
             SendToBSProxy(ctx, GroupId, ev.release(), Self.QueryDispatcher.ObtainCookie(std::move(callback)));
+            ++GarbageCollectionsInFlight;
 
             // just as we have sent this request, we have to trim all confirmed blobs which are going to be deleted
             const auto it = std::lower_bound(ConfirmedBlobIds.begin(), ConfirmedBlobIds.end(),
@@ -978,7 +1001,9 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             ++GarbageCollectStep;
             ++WriteStep;
             Cookie = 1;
-            ScheduleGarbageCollect(ctx);
+
+            NextGarbageCollectionTimestamp += GarbageCollectIntervalGen.Generate();
+            NextGarbageCollectionInQueue = false;
         }
 
         void IssueReadIfPossible(const TActorContext& ctx) {

@@ -2550,9 +2550,9 @@
     ],
     "test.test[produce-reduce_with_assume_in_subquery--Debug]": [
         {
-            "checksum": "9e4f9fc6370f5c170b123655017d9bf0",
-            "size": 2156,
-            "uri": "https://{canondata_backend}/1942278/4753a3574c7d4c4cc4a6ef5262a4559e7e493c80/resource.tar.gz#test.test_produce-reduce_with_assume_in_subquery--Debug_/opt.yql_patched"
+            "checksum": "eab3242a5bc79ff73f2d44fc7fa24ac4",
+            "size": 2246,
+            "uri": "https://{canondata_backend}/1814674/3660a2396e26152d8c8f050da9f28116b76739a2/resource.tar.gz#test.test_produce-reduce_with_assume_in_subquery--Debug_/opt.yql_patched"
         }
     ],
     "test.test[produce-reduce_with_assume_in_subquery--Plan]": [

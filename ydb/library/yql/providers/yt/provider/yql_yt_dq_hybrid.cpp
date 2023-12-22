@@ -129,7 +129,7 @@ private:
                 flow = node->IsCallable(TCoToFlow::CallableName()) && node->Head().IsCallable(TYtTableContent::CallableName());
                 return false;
             })) {
-                                TExprNode::TListType flags;
+                TExprNode::TListType flags;
                 flags.emplace_back(ctx.NewAtom(fill.Pos(), "FallbackOnError", TNodeFlags::Default));
                 flags.emplace_back(ctx.NewAtom(fill.Pos(), "FallbackOpYtFill", TNodeFlags::Default));
 

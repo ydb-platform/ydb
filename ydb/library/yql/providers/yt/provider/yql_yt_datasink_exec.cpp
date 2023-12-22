@@ -802,8 +802,9 @@ private:
             if (const auto flags = op.Flags()) {
                 TString fallbackOpName;
                 for (const auto& atom : flags.Cast()) {
-                    if (atom.Value().StartsWith("FallbackOp")) {
-                        fallbackOpName = atom.Value();
+                    TStringBuf flagName = atom.Value();
+                    if (flagName.SkipPrefix("FallbackOp")) {
+                        fallbackOpName = flagName;
                         break;
                     }
                 }
@@ -867,8 +868,9 @@ private:
                             if (const auto flags = TYtDqProcessWrite(input).Flags()) {
                                 TString fallbackOpName;
                                 for (const auto& atom : flags.Cast()) {
-                                    if (atom.Value().StartsWith("FallbackOp")) {
-                                        fallbackOpName = atom.Value();
+                                    TStringBuf flagName = atom.Value();
+                                    if (flagName.SkipPrefix("FallbackOp")) {
+                                        fallbackOpName = flagName;
                                         break;
                                     }
                                 }

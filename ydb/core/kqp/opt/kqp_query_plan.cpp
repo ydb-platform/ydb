@@ -307,7 +307,7 @@ private:
 
                     if (std::holds_alternative<ui32>(input)) {
                         writer.BeginObject();
-                        writer.WriteKey("Local");
+                        writer.WriteKey("InternalOperatorId");
                         writer.WriteInt(std::get<ui32>(input));
                         writer.EndObject();
                     }

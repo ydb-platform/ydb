@@ -35,11 +35,11 @@ NYql::TIssues ValidateCreateOrDeleteRateLimiterResource(const TString& queryId, 
 std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable, const TString& jobId, const TString& scope, const TString& sourceId);
 TString GetPrettyStatistics(const TString& statistics);
 
-void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::QueryInternal_NamedValue>& dest, std::string_view statsStr);
+void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest, std::string_view statsStr);
 
 using StatsValuesList = std::vector<std::pair<TString, ui64>>;
 
-StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::QueryInternal_NamedValue>& statsProto);
+StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto);
 
 struct Statistics {
     operator bool() const noexcept { return !Stats.empty(); }

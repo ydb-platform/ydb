@@ -341,7 +341,7 @@ std::unordered_map<TString, i64> AggregateStatisticsBySources(const NJson::TJson
 }
 }
 
-void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::QueryInternal_NamedValue>& dest, std::string_view statsStr) {
+void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest, std::string_view statsStr) {
     NJson::TJsonValue statsJson;
     if (!NJson::ReadJsonFastTree(statsStr, &statsJson)) {
         return;
@@ -375,7 +375,7 @@ void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery:
     }
 }
 
-StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::QueryInternal_NamedValue>& statsProto) {
+StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto) {
     StatsValuesList statPairs;
     statPairs.reserve(statsProto.size());
     for (const auto& stat : statsProto) {

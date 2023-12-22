@@ -87,9 +87,9 @@ namespace NFake {
 
         void Enqueue(TEventHandlePtr &eh) override
         {
-            const auto *name = eh->GetTypeName().c_str();
+            const auto &name = eh->GetTypeName();
 
-            Y_ABORT("Got unexpected event %s on tablet booting", name);
+            Y_ABORT("Got unexpected event %s on tablet booting", name.c_str());
         }
 
         void DefaultSignalTabletActive(const TActorContext&) override

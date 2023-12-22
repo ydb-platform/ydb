@@ -14,12 +14,12 @@ public:
         , Hash(THash<TString>()(data))
     {}
 
-    const TString & getData() const
+    const TString & GetData() const
     {
         return Data;
     }
 
-    uint64_t getHash() const
+    uint64_t GetHash() const
     {
         return Hash;
     }
@@ -44,6 +44,6 @@ private:
 template<>
 struct THash<NKikimr::NMiniKQL::TSerializedProgram> {
     inline ui64 operator()(const NKikimr::NMiniKQL::TSerializedProgram& serializedProgram) const noexcept {
-        return serializedProgram.getHash();
+        return serializedProgram.GetHash();
     }
 };

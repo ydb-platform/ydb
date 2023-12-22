@@ -3923,6 +3923,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             case ETabletType::StatisticsAggregator:
                 Self->TabletCounters->Simple()[COUNTER_STATISTICS_AGGREGATOR_COUNT].Add(1);
                 break;
+            case ETabletType::GraphShard:
+                Self->TabletCounters->Simple()[COUNTER_GRAPHSHARD_COUNT].Add(1);
+                break;
             default:
                 Y_FAIL_S("dont know how to interpret tablet type"
                          << ", type id: " << (ui32)si.second.TabletType

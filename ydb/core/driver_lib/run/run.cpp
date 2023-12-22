@@ -1617,6 +1617,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TDatabaseMetadataCacheInitializer(runConfig));
     }
 
+    if (serviceMask.EnableGraphService) {
+        sil->AddServiceInitializer(new TGraphServiceInitializer(runConfig));
+    }
+
     return sil;
 }
 

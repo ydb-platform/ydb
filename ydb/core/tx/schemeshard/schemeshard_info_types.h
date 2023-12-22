@@ -1576,6 +1576,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return TTabletId(ProcessingParams.GetStatisticsAggregator());
     }
 
+    TTabletId GetTenantGraphShardID() const {
+        if (!ProcessingParams.HasGraphShard()) {
+            return InvalidTabletId;
+        }
+        return TTabletId(ProcessingParams.GetGraphShard());
+    }
+
     ui64 GetPathsInside() const {
         return PathsInsideCount;
     }
@@ -1952,6 +1959,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         Y_VERIFY_S(statisticsAggregators.size() <= 1, "size was: " << statisticsAggregators.size());
         if (statisticsAggregators.size()) {
             ProcessingParams.SetStatisticsAggregator(ui64(statisticsAggregators.front()));
+        }
+
+        ProcessingParams.ClearGraphShard();
+        TVector<TTabletId> graphs = FilterPrivateTablets(ETabletType::GraphShard, allShards);
+        Y_VERIFY_S(graphs.size() <= 1, "size was: " << graphs.size());
+        if (graphs.size()) {
+            ProcessingParams.SetGraphShard(ui64(graphs.front()));
         }
     }
 

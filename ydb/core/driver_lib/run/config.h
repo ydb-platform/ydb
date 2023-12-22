@@ -83,6 +83,7 @@ union TBasicKikimrServicesMask {
         // next 64 flags
 
         bool EnableDatabaseMetadataCache:1;
+        bool EnableGraphService:1;
     };
 
     struct {

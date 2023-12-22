@@ -77,6 +77,8 @@ namespace NSchemeShardUT_Private {
         THolder<NYdb::TDriver> YdbDriver;
 
     public:
+        static bool ENABLE_SCHEMESHARD_LOG;
+
         TTestEnv(TTestActorRuntime& runtime, ui32 nchannels = 4, bool enablePipeRetries = true,
             TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard, bool enableSystemViews = false);
         TTestEnv(TTestActorRuntime& runtime, const TTestEnvOptions& opts,

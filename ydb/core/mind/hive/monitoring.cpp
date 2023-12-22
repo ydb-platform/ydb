@@ -1,4 +1,4 @@
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <util/string/vector.h>
@@ -747,7 +747,8 @@ public:
              TTabletTypes::NodeBroker,
              TTabletTypes::TestShard,
              TTabletTypes::BlobDepot,
-             TTabletTypes::ColumnShard}) {
+             TTabletTypes::ColumnShard,
+             TTabletTypes::GraphShard}) {
             if (shortType == LongToShortTabletName(TTabletTypes::TypeToStr(tabletType))) {
                 return tabletType;
             }
@@ -1280,6 +1281,8 @@ public:
             return "BD";
         case TTabletTypes::StatisticsAggregator:
             return "SA";
+        case TTabletTypes::GraphShard:
+            return "GS";
         default:
             return Sprintf("%d", (int)type);
         }

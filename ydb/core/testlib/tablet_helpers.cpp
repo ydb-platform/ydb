@@ -44,6 +44,7 @@
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/statistics/aggregator/aggregator.h>
+#include <ydb/core/graph/api/shard.h>
 
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -1221,6 +1222,8 @@ namespace NKikimr {
                     bootstrapperActorId = Boot(ctx, type, &CreatePersQueue, DataGroupErasure);
                 } else if (type == TTabletTypes::StatisticsAggregator) {
                     bootstrapperActorId = Boot(ctx, type, &NStat::CreateStatisticsAggregator, DataGroupErasure);
+                } else if (type == TTabletTypes::GraphShard) {
+                    bootstrapperActorId = Boot(ctx, type, &NGraph::CreateGraphShard, DataGroupErasure);
                 } else {
                     status = NKikimrProto::ERROR;
                 }

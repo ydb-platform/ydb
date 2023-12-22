@@ -37,6 +37,7 @@ struct TParamsDelta {
     uint8_t AddExternalHive = 0;
     uint8_t AddExternalSysViewProcessor = 0;
     uint8_t AddExternalStatisticsAggregator = 0;
+    uint8_t AddGraphShard = 0;
     bool SharedTxSupportAdded = false;
     TVector<TStoragePool> StoragePoolsAdded;
 };
@@ -188,6 +189,21 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
         }
     }
 
+    // GraphShard checks
+    uint8_t addGraphShard = 0;
+    if (input.GetGraphShard()) {
+        const bool prev = bool(current->GetTenantGraphShardID());
+        const bool next = input.GetGraphShard();
+        const bool changed = (prev != next);
+
+        if (changed) {
+            if (next == false) {
+                return paramError("GraphShard could only be added, not removed");
+            }
+            addGraphShard = 1;
+        }
+    }
+
     // Second params check: combinations
 
     bool sharedTxSupportAdded = (coordinatorsAdded + mediatorsAdded) > 0;
@@ -271,6 +287,7 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
     delta->AddExternalHive = addExternalHive;
     delta->AddExternalSysViewProcessor = addExternalSysViewProcessor;
     delta->AddExternalStatisticsAggregator = addExternalStatisticsAggregator;
+    delta->AddGraphShard = addGraphShard;
     delta->SharedTxSupportAdded = sharedTxSupportAdded;
     delta->StoragePoolsAdded = std::move(storagePoolsAdded);
 
@@ -780,7 +797,7 @@ public:
 
         //NOTE: ExternalHive, ExternalSysViewProcessor and ExternalStatisticsAggregator are _not_ counted against limits
         ui64 tabletsToCreateUnderLimit = delta.AddExternalSchemeShard + delta.CoordinatorsAdded + delta.MediatorsAdded;
-        ui64 tabletsToCreateOverLimit = delta.AddExternalSysViewProcessor + delta.AddExternalStatisticsAggregator;
+        ui64 tabletsToCreateOverLimit = delta.AddExternalSysViewProcessor + delta.AddExternalStatisticsAggregator + delta.AddGraphShard;
         ui64 tabletsToCreateTotal = tabletsToCreateUnderLimit + tabletsToCreateOverLimit;
 
         // Check path limits
@@ -857,7 +874,8 @@ public:
                 delta.AddExternalSchemeShard ||
                 delta.AddExternalSysViewProcessor ||
                 delta.AddExternalHive ||
-                delta.AddExternalStatisticsAggregator)
+                delta.AddExternalStatisticsAggregator ||
+                delta.AddGraphShard)
             {
                 if (!context.SS->ResolveSubdomainsChannels(alter->GetStoragePools(), channelsBinding)) {
                     result->SetError(NKikimrScheme::StatusInvalidParameter, "failed to construct channels binding");
@@ -866,8 +884,8 @@ public:
             }
 
             // Declare shards.
-            // - hive always come first (OwnerIdx 1)
-            // - schemeshard always come second (OwnerIdx 2)
+            // - hive always comes first (OwnerIdx 1)
+            // - schemeshard always comes second (OwnerIdx 2)
             // - others follow
             //
             if (delta.AddExternalHive && !context.SS->EnableAlterDatabaseCreateHiveFirst) {
@@ -886,6 +904,9 @@ public:
             }
             if (delta.AddExternalStatisticsAggregator) {
                 AddShardsTo(txState, OperationId.GetTxId(), basenameId, 1, TTabletTypes::StatisticsAggregator, channelsBinding, context.SS);
+            }
+            if (delta.AddGraphShard) {
+                AddShardsTo(txState, OperationId.GetTxId(), basenameId, 1, TTabletTypes::GraphShard, channelsBinding, context.SS);
             }
             Y_ABORT_UNLESS(txState.Shards.size() == tabletsToCreateTotal);
         }

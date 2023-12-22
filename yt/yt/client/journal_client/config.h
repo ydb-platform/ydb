@@ -2,9 +2,9 @@
 
 #include "public.h"
 
-#include <yt/yt/core/ytree/yson_serializable.h>
-
 #include <yt/yt/client/chunk_client/config.h>
+
+#include <yt/yt/core/ytree/yson_struct.h>
 
 namespace NYT::NJournalClient {
 

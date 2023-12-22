@@ -1,7 +1,6 @@
 from pathlib import Path
 import subprocess
 from typing import Final
-import json
 
 import jinja2
 

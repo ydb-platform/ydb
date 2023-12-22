@@ -34,6 +34,9 @@ protected:
     double ReadA = WriteA;
     double ReadB = WriteB;
 
+    double HugeWriteA = 1.26748409e+06;
+    double HugeWriteB = 2.69514462e+01;
+
 private:
     enum class EMemoryOperationType {
         Read = 0,
@@ -86,6 +89,10 @@ protected:
 
     ui64 EstimatedWriteCost(ui64 chunkSize) const {
         return WriteA + WriteB * chunkSize;
+    }
+
+    ui64 EstimatedHugeWriteCost(ui64 chunkSize) const {
+        return HugeWriteA + HugeWriteB * chunkSize;
     }
 
 public:
@@ -163,7 +170,7 @@ public:
         if (handleType == NPriPut::Log) {
             return EstimatedWriteCost(size);
         } else {
-            return HugeWriteCost(size);
+            return EstimatedHugeWriteCost(size);
         }
     }
 
@@ -178,7 +185,7 @@ public:
             if (handleType == NPriPut::Log) {
                 cost += EstimatedWriteCost(size);
             } else {
-                cost += HugeWriteCost(size);
+                cost += EstimatedHugeWriteCost(size);
             }
         }
         return cost;
@@ -201,7 +208,7 @@ public:
         if (ev.PriorityClass == NPriPut::Log) {
             return EstimatedWriteCost(ev.PartsPtr->Size());
         } else {
-            return HugeWriteCost(ev.PartsPtr->Size());
+            return EstimatedHugeWriteCost(ev.PartsPtr->Size());
         }
     }
 };

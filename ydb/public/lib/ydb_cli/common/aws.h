@@ -68,6 +68,9 @@ public:
     virtual ~IS3ClientWrapper() = default;
 };
 
-IS3ClientWrapper* CreateS3ClientWrapper(const NImport::TImportFromS3Settings& settings);
+std::unique_ptr<IS3ClientWrapper> CreateS3ClientWrapper(const NImport::TImportFromS3Settings& settings);
+
+void InitAwsAPI();
+void ShutdownAwsAPI();
 
 }

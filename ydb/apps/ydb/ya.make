@@ -1,6 +1,6 @@
 PROGRAM(ydb)
 
-STRIP()
+#STRIP()
 
 SRCS(
     main.cpp

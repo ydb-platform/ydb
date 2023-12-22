@@ -42,8 +42,7 @@ TString TCommandWithAwsCredentials::ReadIniKey(const TString& iniKey) {
 class TS3ClientWrapper : public IS3ClientWrapper {
 public:
     TS3ClientWrapper(const NImport::TImportFromS3Settings& settings) {
-        Aws::InitAPI(Aws::SDKOptions());
-        Aws::Client::ClientConfiguration config;
+        Aws::S3::S3ClientConfiguration config;
         config.endpointOverride = settings.Endpoint_;
         if (settings.Scheme_ == ES3Scheme::HTTP) {
             config.scheme = Aws::Http::Scheme::HTTP;
@@ -53,14 +52,10 @@ public:
             throw TMisuseException() << "\"" << settings.Scheme_ << "\" scheme type is not supported";
         }
         Bucket = settings.Bucket_;
-        Client = Aws::S3::S3Client(Aws::Auth::AWSCredentials(settings.AccessKey_, settings.SecretKey_),
+        Client = std::make_unique<Aws::S3::S3Client>(Aws::Auth::AWSCredentials(settings.AccessKey_, settings.SecretKey_),
                                    config,
                                    Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
                                    true);
-    }
-
-    ~TS3ClientWrapper() override {
-        Aws::ShutdownAPI(Aws::SDKOptions());
     }
 
     std::pair<std::vector<TString>, std::optional<TString>> ListObjectKeys(const TString& prefix, const std::optional<TString>& token) override {
@@ -70,7 +65,7 @@ public:
         if (token) {
             request.WithContinuationToken(*token);
         }
-        auto response = Client.ListObjectsV2(request);
+        auto response = Client->ListObjectsV2(request);
         if (!response.IsSuccess()) {
             throw TMisuseException() << "ListObjectKeys error: " << response.GetError().GetMessage();
         }
@@ -87,12 +82,20 @@ public:
     }
 
 private:
-    Aws::S3::S3Client Client;
+    std::unique_ptr<Aws::S3::S3Client> Client;
     TString Bucket;
 };
 
-IS3ClientWrapper* CreateS3ClientWrapper(const NImport::TImportFromS3Settings& settings) {
-    return Singleton<TS3ClientWrapper>(settings);
+std::unique_ptr<IS3ClientWrapper> CreateS3ClientWrapper(const NImport::TImportFromS3Settings& settings) {
+    return std::make_unique<TS3ClientWrapper>(settings);
+}
+
+void InitAwsAPI() {
+    Aws::InitAPI(Aws::SDKOptions());
+}
+
+void ShutdownAwsAPI() {
+    Aws::ShutdownAPI(Aws::SDKOptions());
 }
 
 }

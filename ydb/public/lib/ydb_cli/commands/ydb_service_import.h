@@ -21,6 +21,7 @@ class TCommandImportFromS3 : public TYdbOperationCommand,
                            public TCommandWithFormat {
 public:
     TCommandImportFromS3();
+    ~TCommandImportFromS3() override;
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     int Run(TConfig& config) override;

@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/library/yql/sql/sql.h>
 
 #include <format>
 
@@ -61,6 +62,31 @@ Y_UNIT_TEST_SUITE(TKQPViewTest) {
 
         const auto viewDescription = GetViewDescription(runtime, path);
         UNIT_ASSERT_EQUAL(viewDescription.GetQueryText(), queryInView);
+    }
+
+    Y_UNIT_TEST(InvalidQuery) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        SetEnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        constexpr const char* path = "/Root/TheView";
+        constexpr const char* queryInView = R"(
+            SELECT "foo" / "bar"
+        )";
+
+        const auto parsedAst = NSQLTranslation::SqlToYql(queryInView, {});
+        UNIT_ASSERT_C(parsedAst.IsOk(), parsedAst.Issues.ToString());
+
+        const TString creationQuery = std::format(R"(
+                CREATE VIEW `{}` WITH (security_invoker = true) AS {};
+            )",
+            path,
+            queryInView
+        );
+
+        const auto creationResult = session.ExecuteSchemeQuery(creationQuery, {}).ExtractValueSync();
+        UNIT_ASSERT(!creationResult.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(creationResult.GetIssues().ToString(), "Error: Cannot divide type String and String");
     }
 
     Y_UNIT_TEST(ListCreatedView) {

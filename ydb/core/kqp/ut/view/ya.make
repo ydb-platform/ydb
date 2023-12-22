@@ -10,6 +10,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp/ut/common
+    ydb/library/yql/sql
+
     ydb/core/testlib/basics/default
 )
 

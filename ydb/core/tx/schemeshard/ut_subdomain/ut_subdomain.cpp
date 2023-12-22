@@ -2907,6 +2907,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             runtime.DispatchEvents(options);
         };
 
+        auto createTable = [&]() {
+            TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
+                            Name: "Table1"
+                            Columns { Name: "key"        Type: "Uint32"}
+                            Columns { Name: "value"      Type: "Utf8"}
+                            KeyColumnNames: ["key"]
+                )", {NKikimrScheme::StatusAccepted});
+            env.TestWaitNotification(runtime, txId);
+        };
+
+        auto checkQuotaAndDropTable = [&]() {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {LsCheckDiskQuotaExceeded(true, "Table was created and data was written")});
+
+            TestDropTable(runtime, ++txId, "/MyRoot/USER_0", "Table1");
+            waitForSchemaChanged(1);
+            env.TestWaitNotification(runtime, txId);
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {LsCheckDiskQuotaExceeded(false, "Table dropped")});
+        };
+
         // Subdomain with a 1-byte data size quota
         TestCreateSubDomain(runtime, ++txId,  "/MyRoot", R"(
                         Name: "USER_0"
@@ -2931,29 +2951,30 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {LsCheckDiskQuotaExceeded(false, "SubDomain created")});
 
-        // skip a single coordinator and mediator
-        ui64 tabletId = TTestTxConfig::FakeHiveTablets + 2;
+        // UpdateRow
+        {
+            createTable();
 
-        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
-                            Name: "Table1"
-                            Columns { Name: "key"        Type: "Uint32"}
-                            Columns { Name: "value"      Type: "Utf8"}
-                            KeyColumnNames: ["key"]
-                )", {NKikimrScheme::StatusAccepted});
-        env.TestWaitNotification(runtime, txId);
+            ui64 tabletId = TTestTxConfig::FakeHiveTablets + 2;  // skip a single coordinator and mediator
+            UpdateRow(runtime, "Table1", 1, "value1", tabletId);
+            waitForTableStats(1);
 
-        UpdateRow(runtime, "Table1", 1, "value1", tabletId);
-        waitForTableStats(1);
+            checkQuotaAndDropTable();
+        }
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {LsCheckDiskQuotaExceeded(true, "Table was created and data was written")});
+        // WriteRow
+        {
+            createTable();
 
-        TestDropTable(runtime, ++txId, "/MyRoot/USER_0", "Table1");
-        waitForSchemaChanged(1);
-        env.TestWaitNotification(runtime, txId);
+            bool successIsExpected = true;
+            WriteRow(runtime, ++txId, "/MyRoot/USER_0/Table1", 0, 1, "value1", successIsExpected);
+            waitForTableStats(1);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {LsCheckDiskQuotaExceeded(false, "Table dropped")});
+            successIsExpected = false;
+            WriteRow(runtime, ++txId, "/MyRoot/USER_0/Table1", 0, 1, "value1", successIsExpected);
+
+            checkQuotaAndDropTable();
+        }
     }
 
     Y_UNIT_TEST(SchemeDatabaseQuotaRejects) {

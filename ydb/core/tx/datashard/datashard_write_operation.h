@@ -148,7 +148,7 @@ public:
     }
 
     bool ParseRecord(const TDataShard::TTableInfos& tableInfos);
-    void SetTxKeys(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnIds, const NScheme::TTypeRegistry& typeRegistry, const TActorContext& ctx);
+    void SetTxKeys(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnIds, const NScheme::TTypeRegistry& typeRegistry, ui64 tabletId, const TActorContext& ctx);
 
     ui32 ExtractKeys(bool allowErrors);
     bool ReValidateKeys();
@@ -181,7 +181,6 @@ private:
     YDB_ACCESSOR_DEF(TActorId, Source);
 
     YDB_READONLY(TStepOrder, StepTxId, TStepOrder(0, 0));
-    YDB_READONLY(ui64, TabletId, 0);
     YDB_READONLY_DEF(TTableId, TableId);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
     YDB_READONLY_DEF(TInstant, ReceivedAt);
@@ -220,10 +219,6 @@ public:
         UntrackMemory();
         Ev.Reset();
         TrackMemory();
-    }
-
-    ui64 GetTabletId() const {
-        return WriteTx->GetTabletId();
     }
 
     void Deactivate() override {
@@ -268,8 +263,8 @@ public:
         return ArtifactFlags & LOCKS_STORED;
     }
 
-    void DbStoreLocksAccessLog(TTransactionContext& txc, const TActorContext& ctx);
-    void DbStoreArtifactFlags(TTransactionContext& txc, const TActorContext& ctx);
+    void DbStoreLocksAccessLog(ui64 tabletId, TTransactionContext& txc, const TActorContext& ctx);
+    void DbStoreArtifactFlags(ui64 tabletId, TTransactionContext& txc, const TActorContext& ctx);
 
     ui64 GetMemoryConsumption() const;
 
@@ -338,7 +333,7 @@ public:
         return std::move(WriteResult);
     }
 
-    void SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg);
+    void SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg, ui64 tabletId);
     void SetWriteResult(std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>&& writeResult);
 
 private:

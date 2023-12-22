@@ -55,8 +55,8 @@ bool NeedFallback(const TIssues& issues) {
     return false;
 }
 
-TIssue WrapIssuesOnHybridFallback(TPosition pos, const TIssues& issues) {
-    TIssue result(pos, "Hybrid execution fallback on YT");
+TIssue WrapIssuesOnHybridFallback(TPosition pos, const TIssues& issues, TString fallbackOpName) {
+    TIssue result(pos, "Hybrid execution fallback on YT: " + fallbackOpName);
     result.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_INFO);
 
     const std::function<void(TIssue& issue)> toInfo = [&](TIssue& issue) {
@@ -800,13 +800,21 @@ private:
         if (auto status = dqProvider->GetCallableExecutionTransformer().Transform(delegatedNode, delegatedNodeOutput, ctx); status.Level != TStatus::Async) {
             YQL_ENSURE(status.Level != TStatus::Ok, "Asynchronous execution is expected in a happy path.");
             if (const auto flags = op.Flags()) {
+                TString fallbackOpName;
+                for (const auto& atom : flags.Cast()) {
+                    TStringBuf flagName = atom.Value();
+                    if (flagName.SkipPrefix("FallbackOp")) {
+                        fallbackOpName = flagName;
+                        break;
+                    }
+                }
                 for (const auto& atom : flags.Cast()) {
                     if (atom.Value() == "FallbackOnError") {
                         input->SetResult(atom.Ptr());
                         input->SetState(TExprNode::EState::Error);
                         if (const auto issies = ctx.AssociativeIssues.extract(delegatedNode.Get())) {
                             if (NeedFallback(issies.mapped())) {
-                                ctx.IssueManager.RaiseIssue(WrapIssuesOnHybridFallback(ctx.GetPosition(input->Pos()), issies.mapped()));
+                                ctx.IssueManager.RaiseIssue(WrapIssuesOnHybridFallback(ctx.GetPosition(input->Pos()), issies.mapped(), fallbackOpName));
                                 return SyncStatus(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
                             } else {
                                 ctx.IssueManager.RaiseIssues(issies.mapped());
@@ -858,13 +866,21 @@ private:
                         if (dqWriteStatus != TStatus::Ok) {
                             output = input;
                             if (const auto flags = TYtDqProcessWrite(input).Flags()) {
+                                TString fallbackOpName;
+                                for (const auto& atom : flags.Cast()) {
+                                    TStringBuf flagName = atom.Value();
+                                    if (flagName.SkipPrefix("FallbackOp")) {
+                                        fallbackOpName = flagName;
+                                        break;
+                                    }
+                                }
                                 for (const auto& atom : flags.Cast()) {
                                     if (atom.Value() == "FallbackOnError") {
                                         output->SetResult(atom.Ptr());
                                         output->SetState(TExprNode::EState::Error);
                                         if (const auto issies = ctx.AssociativeIssues.extract(delegatedNode.Get())) {
                                             if (NeedFallback(issies.mapped())) {
-                                                ctx.IssueManager.RaiseIssue(WrapIssuesOnHybridFallback(ctx.GetPosition(input->Pos()), issies.mapped()));
+                                                ctx.IssueManager.RaiseIssue(WrapIssuesOnHybridFallback(ctx.GetPosition(input->Pos()), issies.mapped(), fallbackOpName));
                                                 return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
                                             } else {
                                                 ctx.IssueManager.RaiseIssues(issies.mapped());

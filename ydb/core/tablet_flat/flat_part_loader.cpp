@@ -184,7 +184,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     // TODO: put index size to stat?
     // TODO: include history indexes bytes
     size_t indexesRawSize = 0;
-    if (AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex()) {
+    if (BTreeGroupIndexes) {
         for (const auto &meta : BTreeGroupIndexes) {
             indexesRawSize += meta.IndexSize;
         }

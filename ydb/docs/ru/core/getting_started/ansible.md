@@ -12,7 +12,8 @@
 
 #|
 || Статическая нода | Динамическая нода ||
-|| ```bash
+|| 
+```bash
 ExecStart={{ ydb_dir }}/release/{{ ydb_version }}/bin/ydbd server \
     --log-level 3 --syslog --tcp --yaml-config  {{ ydb_dir }}/cfg/static_config.yaml \
     --grpc-port {{ grpc_port }} \

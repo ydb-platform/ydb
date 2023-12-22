@@ -73,7 +73,7 @@ public:
         }
         std::vector<TString> keys;
         for (const auto& object : response.GetResult().GetContents()) {
-            keys.emplace_back(object.GetKey());
+            keys.push_back(TString(object.GetKey()));
         }
         std::optional<TString> nextToken;
         if (response.GetResult().GetIsTruncated()) {

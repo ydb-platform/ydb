@@ -90,40 +90,6 @@ DEFINE_REFCOUNTED_TYPE(TServerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Common options shared between all services in one server.
-class TServiceCommonDynamicConfig
-    : public NYTree::TYsonStruct
-{
-public:
-    std::optional<bool> EnablePerUserProfiling;
-    std::optional<THistogramConfigPtr> HistogramTimerProfiling;
-    std::optional<bool> EnableErrorCodeCounting;
-    std::optional<ERequestTracingMode> TracingMode;
-
-    REGISTER_YSON_STRUCT(TServiceCommonDynamicConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TServiceCommonDynamicConfig)
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TServerDynamicConfig
-    : public TServiceCommonDynamicConfig
-{
-public:
-    THashMap<TString, NYTree::INodePtr> Services;
-
-    REGISTER_YSON_STRUCT(TServerDynamicConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TServerDynamicConfig)
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TServiceConfig
     : public NYTree::TYsonStruct
 {

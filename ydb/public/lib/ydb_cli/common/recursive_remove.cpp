@@ -184,7 +184,7 @@ NYdb::TStatus RemovePathRecursive(NScheme::TSchemeClient& schemeClient, NTable::
     if (!entity.IsSuccess()) {
         return entity;
     }
-    switch(entity.GetEntry().Type) {
+    switch (entity.GetEntry().Type) {
     case ESchemeEntryType::Directory:
     case ESchemeEntryType::ColumnStore:
         return RemoveDirectoryRecursive(schemeClient, tableClient, topicClient, path, prompt, settings, true, createProgressBar);

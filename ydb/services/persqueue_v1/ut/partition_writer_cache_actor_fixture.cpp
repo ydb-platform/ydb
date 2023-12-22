@@ -66,12 +66,12 @@ TActorId TPartitionWriterCacheActorFixture::CreatePartitionWriterCacheActor(cons
     NPQ::TPartitionWriterOpts options;
     options.WithDeduplication(params.WithDeduplication);
     options.WithDatabase(params.Database);
+    options.WithExpectedGeneration(params.Generation);
+    options.WithSourceId(params.SourceId);
 
     auto actor = std::make_unique<TPartitionWriterCacheActor>(Ctx->Edge,
                                                               params.Partition,
                                                               PQTabletId,
-                                                              params.Generation,
-                                                              params.SourceId,
                                                               options);
     TActorId actorId = Ctx->Runtime->Register(actor.release());
 

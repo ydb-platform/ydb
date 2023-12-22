@@ -587,8 +587,10 @@ std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::Partit
     auto tabletId = pit->second;
     TPartitionWriterOpts opts;
     opts.WithDeduplication(false)
+        .WithSourceId(SourceId)
+        .WithTopicPath(topicPath)
         .WithCheckRequestUnits(topicInfo.MeteringMode, Context->RlContext);
-    auto* writerActor = CreatePartitionWriter(SelfId(), topicPath, tabletId, partitionId, {/*expectedGeneration*/}, SourceId, opts);
+    auto* writerActor = CreatePartitionWriter(SelfId(), tabletId, partitionId, opts);
 
     auto& writerInfo = partitionWriters[partitionId];
     writerInfo.ActorId = ctx.RegisterWithSameMailbox(writerActor);

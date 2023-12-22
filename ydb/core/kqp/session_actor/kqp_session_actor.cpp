@@ -2001,7 +2001,7 @@ public:
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);
 
-                hFunc(NSchemeShard::TEvSchemeShard::TEvSessionActorAck, HandleNoop);
+                hFunc(NSchemeShard::TEvSchemeShard::TEvOwnerActorAck, HandleNoop);
             default:
                 UnexpectedEvent("ReadyState", ev);
             }
@@ -2042,7 +2042,7 @@ public:
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvQueryResponse, ForwardResponse);
 
-                hFunc(NSchemeShard::TEvSchemeShard::TEvSessionActorAck, HandleNoop);
+                hFunc(NSchemeShard::TEvSchemeShard::TEvOwnerActorAck, HandleNoop);
             default:
                 UnexpectedEvent("ExecuteState", ev);
             }
@@ -2081,7 +2081,7 @@ public:
                 hFunc(TEvKqp::TEvQueryResponse, HandleNoop);
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop)
 
-                hFunc(NSchemeShard::TEvSchemeShard::TEvSessionActorAck, HandleNoop);
+                hFunc(NSchemeShard::TEvSchemeShard::TEvOwnerActorAck, HandleNoop);
             default:
                 UnexpectedEvent("CleanupState", ev);
             }

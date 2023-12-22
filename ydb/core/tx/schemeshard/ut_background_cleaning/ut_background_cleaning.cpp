@@ -48,7 +48,7 @@ void SetBackgroundCleaning(TTestActorRuntime &runtime, TTestEnv& env, ui64 schem
     SetFeatures(runtime, env, schemeShard, features, withRetries);
 }
 
-void AsyncCreateTempTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownertorId, ui32 nodeIdx) {
+void AsyncCreateTempTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx) {
     auto ev = CreateTableRequest(txId, workingDir, scheme);
     auto* tx = ev->Record.MutableTransaction(0);
     auto* desc = tx->MutableCreateTable();
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
             )", ownerActorId1, { NKikimrScheme::StatusAccepted }, 1);
         env.TestWaitNotification(runtime, txId1);
 
-        auto ownerrId2 = runtime.AllocateEdgeActor(2);
+        auto ownerActorId2 = runtime.AllocateEdgeActor(2);
         ui64 txId2 = ++txId1;
         TestCreateTempTable(runtime, txId2, "/MyRoot", R"(
                   Name: "TempTable2"

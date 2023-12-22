@@ -23,38 +23,13 @@ struct TypeHelper {
 };
 
 #define GEN_TYPE(type)\
-    NumericConverterImpl<arrow::type ## Type, IsDictionary>
+    NumericConverterImpl<arrow::type ## Type>
 
 #define GEN_TYPE_STR(type)\
-    StringConverterImpl<arrow::type ## Type, IsDictionary>
+    StringConverterImpl<arrow::type ## Type>
 
-template<typename T, bool IsDictionary>
+template<typename T>
 arrow::Datum NumericConverterImpl(NUdf::IArrayBuilder* builder, std::shared_ptr<arrow::ArrayData> block) {
-    if constexpr (!IsDictionary) {
-        typename ::arrow::TypeTraits<T>::ArrayType val(block); // checking for compatibility
-        if (val.null_count()) {
-            for (i64 i = 0; i < block->length; ++i) {
-                if (val.IsNull(i)) {
-                    builder->Add(NUdf::TBlockItem{});
-                } else {
-                    if constexpr (std::is_same_v<decltype(val.Value(i)), bool>) {
-                        builder->Add(NUdf::TBlockItem((ui8)val.Value(i)));
-                    } else {
-                        builder->Add(NUdf::TBlockItem(val.Value(i)));
-                    }
-                }
-            }
-        } else {
-            for (i64 i = 0; i < block->length; ++i) {
-                if constexpr (std::is_same_v<decltype(val.Value(i)), bool>) {
-                    builder->Add(NUdf::TBlockItem((ui8)val.Value(i)));
-                } else {
-                    builder->Add(NUdf::TBlockItem(val.Value(i)));
-                }
-            }
-        }
-        return builder->Build(false);
-    }
     arrow::DictionaryArray dict(block);
     typename ::arrow::TypeTraits<T>::ArrayType val(dict.dictionary()->data());
     auto data = dict.indices()->data()->GetValues<ui32>(1);
@@ -82,29 +57,8 @@ arrow::Datum NumericConverterImpl(NUdf::IArrayBuilder* builder, std::shared_ptr<
     return builder->Build(false);
 }
 
-template<typename T, bool IsDictionary>
+template<typename T>
 arrow::Datum StringConverterImpl(NUdf::IArrayBuilder* builder, std::shared_ptr<arrow::ArrayData> block) {
-    if constexpr (!IsDictionary) {
-        typename ::arrow::TypeTraits<T>::ArrayType val(block); // checking for compatibility
-        if (val.null_count()) {
-            for (i64 i = 0; i < block->length; ++i) {
-                if (val.IsNull(i)) {
-                    builder->Add(NUdf::TBlockItem{});
-                } else {
-                    i32 len;
-                    auto ptr = reinterpret_cast<const char*>(val.GetValue(i, &len));
-                    builder->Add(NUdf::TBlockItem(std::string_view(ptr, len)));
-                }
-            }
-        } else {
-            for (i64 i = 0; i < block->length; ++i) {
-                    i32 len;
-                    auto ptr = reinterpret_cast<const char*>(val.GetValue(i, &len));
-                    builder->Add(NUdf::TBlockItem(std::string_view(ptr, len)));
-            }
-        }
-        return builder->Build(false);
-    }
     arrow::DictionaryArray dict(block);
     typename ::arrow::TypeTraits<T>::ArrayType val(dict.dictionary()->data());
     auto data = dict.indices()->data()->GetValues<ui32>(1);
@@ -222,7 +176,9 @@ void SkipYson(TYsonReaderDetails& buf) {
         buf.Next();
         break;
     }
+    case BeginAttributesSymbol:
     case BeginMapSymbol: {
+        auto originalEnd = buf.Current()  == BeginMapSymbol ? EndMapSymbol : EndAttributesSymbol;
         buf.Next();
         for (;;) {
             SkipYson(buf);
@@ -232,7 +188,7 @@ void SkipYson(TYsonReaderDetails& buf) {
             if (buf.Current() == KeyedItemSeparatorSymbol) {
                 buf.Next();
             }
-            if (buf.Current() == EndMapSymbol) {
+            if (buf.Current() == originalEnd) {
                 break;
             }
         }
@@ -369,7 +325,7 @@ struct TYtColumnConverterSettings {
     const NUdf::IPgBuilder* PgBuilder;
     arrow::MemoryPool& Pool;
     const bool IsNative;
-    bool IsTopOptional = false;
+    const bool IsTopOptional;
     std::shared_ptr<arrow::DataType> ArrowType;
     std::unique_ptr<NKikimr::NUdf::IArrayBuilder> Builder;
 };
@@ -484,26 +440,31 @@ template<bool IsDictionary>
 class TPrimitiveColumnConverter {
 public:
     TPrimitiveColumnConverter(TYtColumnConverterSettings& settings) : Settings_(settings) {
-        switch (Settings_.ArrowType->id()) {
-        case arrow::Type::BOOL:     PrimitiveConverterImpl_ = GEN_TYPE(Boolean); break;
-        case arrow::Type::INT8:     PrimitiveConverterImpl_ = GEN_TYPE(Int8); break;
-        case arrow::Type::UINT8:    PrimitiveConverterImpl_ = GEN_TYPE(UInt8); break;
-        case arrow::Type::INT16:    PrimitiveConverterImpl_ = GEN_TYPE(Int16); break;
-        case arrow::Type::UINT16:   PrimitiveConverterImpl_ = GEN_TYPE(UInt16); break;
-        case arrow::Type::INT32:    PrimitiveConverterImpl_ = GEN_TYPE(Int32); break;
-        case arrow::Type::UINT32:   PrimitiveConverterImpl_ = GEN_TYPE(UInt32); break;
-        case arrow::Type::INT64:    PrimitiveConverterImpl_ = GEN_TYPE(Int64); break;
-        case arrow::Type::UINT64:   PrimitiveConverterImpl_ = GEN_TYPE(UInt64); break;
-        case arrow::Type::DOUBLE:   PrimitiveConverterImpl_ = GEN_TYPE(Double); break;
-        case arrow::Type::FLOAT:    PrimitiveConverterImpl_ = GEN_TYPE(Float); break;
-        case arrow::Type::STRING:   PrimitiveConverterImpl_ = GEN_TYPE_STR(String); break;
-        case arrow::Type::BINARY:   PrimitiveConverterImpl_ = GEN_TYPE_STR(Binary); break;
-        default:
-            return; // will check in runtime
-        };
+        if constexpr (IsDictionary) {
+            switch (Settings_.ArrowType->id()) {
+            case arrow::Type::BOOL:     PrimitiveConverterImpl_ = GEN_TYPE(Boolean); break;
+            case arrow::Type::INT8:     PrimitiveConverterImpl_ = GEN_TYPE(Int8); break;
+            case arrow::Type::UINT8:    PrimitiveConverterImpl_ = GEN_TYPE(UInt8); break;
+            case arrow::Type::INT16:    PrimitiveConverterImpl_ = GEN_TYPE(Int16); break;
+            case arrow::Type::UINT16:   PrimitiveConverterImpl_ = GEN_TYPE(UInt16); break;
+            case arrow::Type::INT32:    PrimitiveConverterImpl_ = GEN_TYPE(Int32); break;
+            case arrow::Type::UINT32:   PrimitiveConverterImpl_ = GEN_TYPE(UInt32); break;
+            case arrow::Type::INT64:    PrimitiveConverterImpl_ = GEN_TYPE(Int64); break;
+            case arrow::Type::UINT64:   PrimitiveConverterImpl_ = GEN_TYPE(UInt64); break;
+            case arrow::Type::DOUBLE:   PrimitiveConverterImpl_ = GEN_TYPE(Double); break;
+            case arrow::Type::FLOAT:    PrimitiveConverterImpl_ = GEN_TYPE(Float); break;
+            case arrow::Type::STRING:   PrimitiveConverterImpl_ = GEN_TYPE_STR(String); break;
+            case arrow::Type::BINARY:   PrimitiveConverterImpl_ = GEN_TYPE_STR(Binary); break;
+            default:
+                return; // will check in runtime
+            };
+        }
     }
     arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) {
-        return PrimitiveConverterImpl_(Settings_.Builder.get(), block);
+        if constexpr (IsDictionary) {
+            return PrimitiveConverterImpl_(Settings_.Builder.get(), block);
+        }
+        return block;
     }
 private:
     TYtColumnConverterSettings& Settings_;
@@ -620,11 +581,10 @@ private:
 };
 
 TYtColumnConverterSettings::TYtColumnConverterSettings(NKikimr::NMiniKQL::TType* type, const NUdf::IPgBuilder* pgBuilder, arrow::MemoryPool& pool, bool isNative) 
-    : Type(type), PgBuilder(pgBuilder), Pool(pool), IsNative(isNative)
+    : Type(type), PgBuilder(pgBuilder), Pool(pool), IsNative(isNative), IsTopOptional(!isNative && type->IsOptional())
 {
     if (!isNative) {
         if (Type->IsOptional()) {
-            IsTopOptional = true;
             Type = static_cast<NKikimr::NMiniKQL::TOptionalType*>(Type)->GetItemType();
         }
     }

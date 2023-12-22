@@ -135,8 +135,9 @@ int TCommandImportFromS3::Run(TConfig& config) {
     }
 
     settings.NumberOfRetries(NumberOfRetries);
-    auto s3Client = CreateS3ClientWrapper(settings);
+
     const size_t suffixSize = strlen(NDump::SCHEME_FILE_NAME);
+    auto s3Client = CreateS3ClientWrapper(settings);
     for (auto item : Items) {
         std::optional<TString> token;
         if (!item.Source.empty() && item.Source.back() != '/') {

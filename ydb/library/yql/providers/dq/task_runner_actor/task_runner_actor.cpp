@@ -125,7 +125,6 @@ private:
         bool changed = false;
         bool isChanFinished = false;
         i64 remain = ToPopSize;
-        ui32 dataSize = 0;
         bool hasData = true;
         TOutputChannelReadResult result;
 
@@ -146,7 +145,6 @@ private:
             }
 
             hasData = lastPop.GetResult();
-            dataSize = data.Size();
             isChanFinished = !hasData && Channel->IsFinished();
             changed = changed || hasData || (isChanFinished != WasFinished);
             if (hasData) {

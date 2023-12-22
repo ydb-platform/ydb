@@ -47,11 +47,11 @@ class TBackgroundCleaningInfo: public std::pair<std::pair<TString, TString>, TAc
 public:
     using TBase::TBase;
 
-    TBackgroundCleaningInfo(TString workingDir, TString name, TActorId sessionActorId)
-        : TBase({{std::move(workingDir), std::move(name)}, sessionActorId}) {
+    TBackgroundCleaningInfo(TString workingDir, TString name, TActorId ownerActorId)
+        : TBase({{std::move(workingDir), std::move(name)}, ownerActorId}) {
     }
 
-    TActorId GetSessionId() const {
+    TActorId GetOwnerId() const {
         return second;
     }
 

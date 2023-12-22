@@ -48,20 +48,20 @@ void SetBackgroundCleaning(TTestActorRuntime &runtime, TTestEnv& env, ui64 schem
     SetFeatures(runtime, env, schemeShard, features, withRetries);
 }
 
-void AsyncCreateTempTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& sessionActorId, ui32 nodeIdx) {
+void AsyncCreateTempTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownertorId, ui32 nodeIdx) {
     auto ev = CreateTableRequest(txId, workingDir, scheme);
     auto* tx = ev->Record.MutableTransaction(0);
     auto* desc = tx->MutableCreateTable();
     desc->SetTemporary(true);
-    desc->SetSessionActorId(sessionActorId.ToString());
+    desc->SetOwnerActorId(ownerActorId.ToString());
 
-    runtime.Send(new IEventHandle(MakeTabletResolverID(), sessionActorId,
-            new TEvTabletResolver::TEvForward(schemeShardId, new IEventHandle(TActorId(), sessionActorId, ev), { },
+    runtime.Send(new IEventHandle(MakeTabletResolverID(), ownerActorId,
+            new TEvTabletResolver::TEvForward(schemeShardId, new IEventHandle(TActorId(), ownerActorId, ev), { },
                 TEvTabletResolver::TEvForward::EActor::Tablet)), nodeIdx);
 }
 
-void TestCreateTempTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& sessionActorId, const TVector<TExpectedResult>& expectedResults, ui32 sessionNodeIdx) {
-    AsyncCreateTempTable(runtime, TTestTxConfig::SchemeShard, txId, workingDir, scheme, sessionActorId, sessionNodeIdx);
+void TestCreateTempTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, const TVector<TExpectedResult>& expectedResults, ui32 ownerNodeIdx) {
+    AsyncCreateTempTable(runtime, TTestTxConfig::SchemeShard, txId, workingDir, scheme, ownerActorId, ownerNodeIdx);
     TestModificationResults(runtime, txId, expectedResults);
 }
 
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         SetBackgroundCleaning(runtime, env, TTestTxConfig::SchemeShard);
         env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-        auto sessionActorId = runtime.AllocateEdgeActor(1);
+        auto ownerActorId = runtime.AllocateEdgeActor(1);
 
         ui64 txId = 100;
         TestCreateTempTable(runtime, txId, "/MyRoot", R"(
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
                   Columns { Name: "key"   Type: "Uint64" }
                   Columns { Name: "value" Type: "Utf8" }
                   KeyColumnNames: ["key"]
-            )", sessionActorId, { NKikimrScheme::StatusAccepted }, 1);
+            )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
 
         env.TestWaitNotification(runtime, txId);
 
@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         SetBackgroundCleaning(runtime, env, TTestTxConfig::SchemeShard, true);
         env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-        auto sessionActorId = runtime.AllocateEdgeActor(1);
+        auto ownerActorId = runtime.AllocateEdgeActor(1);
 
         ui64 txId = 100;
         TestCreateTempTable(runtime, txId, "/MyRoot", R"(
@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
                   Columns { Name: "key"   Type: "Uint64" }
                   Columns { Name: "value" Type: "Utf8" }
                   KeyColumnNames: ["key"]
-            )", sessionActorId, { NKikimrScheme::StatusAccepted }, 1);
+            )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
 
         env.TestWaitNotification(runtime, txId);
 
@@ -191,24 +191,24 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         SetBackgroundCleaning(runtime, env, TTestTxConfig::SchemeShard);
         env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-        auto sessionActorId1 = runtime.AllocateEdgeActor(1);
+        auto ownerActorId1 = runtime.AllocateEdgeActor(1);
         ui64 txId1 = 100;
         TestCreateTempTable(runtime, txId1, "/MyRoot", R"(
                   Name: "TempTable1"
                   Columns { Name: "key"   Type: "Uint64" }
                   Columns { Name: "value" Type: "Utf8" }
                   KeyColumnNames: ["key"]
-            )", sessionActorId1, { NKikimrScheme::StatusAccepted }, 1);
+            )", ownerActorId1, { NKikimrScheme::StatusAccepted }, 1);
         env.TestWaitNotification(runtime, txId1);
 
-        auto sessionActorId2 = runtime.AllocateEdgeActor(2);
+        auto ownerrId2 = runtime.AllocateEdgeActor(2);
         ui64 txId2 = ++txId1;
         TestCreateTempTable(runtime, txId2, "/MyRoot", R"(
                   Name: "TempTable2"
                   Columns { Name: "key"   Type: "Uint64" }
                   Columns { Name: "value" Type: "Utf8" }
                   KeyColumnNames: ["key"]
-            )", sessionActorId2, { NKikimrScheme::StatusAccepted }, 2);
+            )", ownerActorId2, { NKikimrScheme::StatusAccepted }, 2);
         env.TestWaitNotification(runtime, txId2);
 
         CheckTable(runtime, "/MyRoot/TempTable1");
@@ -236,24 +236,24 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         SetBackgroundCleaning(runtime, env, TTestTxConfig::SchemeShard);
         env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-        auto sessionActorId1 = runtime.AllocateEdgeActor(1);
+        auto ownerActorId1 = runtime.AllocateEdgeActor(1);
         ui64 txId1 = 100;
         TestCreateTempTable(runtime, txId1, "/MyRoot", R"(
                   Name: "TempTable1"
                   Columns { Name: "key"   Type: "Uint64" }
                   Columns { Name: "value" Type: "Utf8" }
                   KeyColumnNames: ["key"]
-            )", sessionActorId1, { NKikimrScheme::StatusAccepted }, 1);
+            )", ownerActorId1, { NKikimrScheme::StatusAccepted }, 1);
         env.TestWaitNotification(runtime, txId1);
 
-        auto sessionActorId2 = runtime.AllocateEdgeActor(2);
+        auto ownerActorId2 = runtime.AllocateEdgeActor(2);
         ui64 txId2 = ++txId1;
         TestCreateTempTable(runtime, txId2, "/MyRoot", R"(
                   Name: "TempTable2"
                   Columns { Name: "key"   Type: "Uint64" }
                   Columns { Name: "value" Type: "Utf8" }
                   KeyColumnNames: ["key"]
-            )", sessionActorId2, { NKikimrScheme::StatusAccepted }, 2);
+            )", ownerActorId2, { NKikimrScheme::StatusAccepted }, 2);
         env.TestWaitNotification(runtime, txId2);
 
         CheckTable(runtime, "/MyRoot/TempTable1");

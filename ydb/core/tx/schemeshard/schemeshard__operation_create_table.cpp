@@ -646,7 +646,7 @@ public:
 
         if (schema.HasTemporary() && schema.GetTemporary()) {
             tableInfo->IsTemporary = true;
-            tableInfo->OwnerActorId = schema.GetSessionActorId();
+            tableInfo->OwnerActorId = schema.GetOwnerActorId();
         }
 
         context.SS->Tables[newTable->PathId] = tableInfo;
@@ -698,15 +698,15 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
 
         if (schema.HasTemporary() && schema.GetTemporary()) {
-            const auto& sessionActorIdStr = schema.GetSessionActorId();
+            const auto& ownerActorIdStr = schema.GetOwnerActorId();
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Processing create temp table with Name: " << name
                     << ", WorkingDir: " << parentPathStr
-                    << ", SessionActorId: " << sessionActorIdStr);
-            TActorId sessionActorId;
-            sessionActorId.Parse(sessionActorIdStr.c_str(), sessionActorIdStr.size());
+                    << ", OwnerActorId: " << ownerActorIdStr);
+            TActorId ownerActorId;
+            ownerActorId.Parse(ownerActorIdStr.c_str(), ownerActorIdStr.size());
             context.OnComplete.UpdateTempTablesToCreateState(
-                sessionActorId, {parentPathStr, name});
+                ownerActorId, {parentPathStr, name});
         }
 
         Y_ABORT_UNLESS(shardsToCreate == txState.Shards.size());

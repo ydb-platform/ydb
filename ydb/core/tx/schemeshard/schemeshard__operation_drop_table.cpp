@@ -598,14 +598,14 @@ public:
         }
 
         if (drop.HasTemporary() && drop.GetTemporary()) {
-            const auto& sessionActorIdStr = drop.GetSessionActorId();
+            const auto& ownerActorIdStr = drop.GetOwnerActorId();
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Processing drop temp table with Name: " << name
                     << ", WorkingDir: " << parentPathStr
-                    << ", SessionActorId: " << sessionActorIdStr);
-            TActorId sessionActorId;
-            sessionActorId.Parse(sessionActorIdStr.c_str(), sessionActorIdStr.size());
-            context.OnComplete.UpdateTempTablesToDropState(sessionActorId, {parentPathStr, name});
+                    << ", OwnerActorId: " << ownerActorIdStr);
+            TActorId ownerActorId;
+            ownerActorId.Parse(ownerActorIdStr.c_str(), ownerActorIdStr.size());
+            context.OnComplete.UpdateTempTablesToDropState(ownerActorId, {parentPathStr, name});
         }
 
         context.OnComplete.ActivateTx(OperationId);

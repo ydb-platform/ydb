@@ -1802,27 +1802,27 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     auto tempTableName = tempTablePath.LeafName();
                     auto tempTableWorkingDir = tempTablePath.Parent().PathString();
 
-                    TActorId sessionActorId;
-                    sessionActorId.Parse(tableInfo->OwnerActorId.c_str(), tableInfo->OwnerActorId.size());
+                    TActorId ownerActorId;
+                    ownerActorId.Parse(tableInfo->OwnerActorId.c_str(), tableInfo->OwnerActorId.size());
 
-                    auto& tempTablesBySession = Self->TempTablesState.TempTablesBySession;
+                    auto& tempTablesByOwner = Self->TempTablesState.TempTablesByOwner;
                     auto& nodeStates = Self->TempTablesState.NodeStates;
 
-                    auto it = tempTablesBySession.find(sessionActorId);
-                    auto nodeId = sessionActorId.NodeId();
+                    auto it = tempTablesByOwner.find(ownerActorId);
+                    auto nodeId = ownerActorId.NodeId();
 
                     auto itNodeStates = nodeStates.find(nodeId);
                     if (itNodeStates == nodeStates.end()) {
                         auto& nodeState = nodeStates[nodeId];
-                        nodeState.Sessions.insert(sessionActorId);
+                        nodeState.Owners.insert(ownerActorId);
                         nodeState.RetryState.CurrentDelay =
                             TDuration::MilliSeconds(Self->BackgroundCleaningRetrySettings.GetStartDelayMs());
                     } else {
-                        itNodeStates->second.Sessions.insert(sessionActorId);
+                        itNodeStates->second.Owners.insert(ownerActorId);
                     }
 
-                    if (it == tempTablesBySession.end()) {
-                        auto& currentTempTables = tempTablesBySession[sessionActorId];
+                    if (it == tempTablesByOwner.end()) {
+                        auto& currentTempTables = tempTablesByOwner[ownerActorId];
                         currentTempTables.insert(TTempTableId{
                             tempTableWorkingDir, tempTableName});
                     } else {

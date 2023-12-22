@@ -63,10 +63,10 @@ const TSchemeLimits TSchemeShard::DefaultLimits = {};
 
 void TSchemeShard::SubscribeToTempTableOwners() {
     auto ctx = ActorContext();
-    auto& tempTablesBySession = TempTablesState.TempTablesBySession;
-    for (const auto& [sessionActorId, tempTables] : tempTablesBySession) {
-        ctx.Send(new IEventHandle(sessionActorId, SelfId(),
-                                new TEvSchemeShard::TEvSessionActorAck(),
+    auto& tempTablesByOwner = TempTablesState.TempTablesByOwner;
+    for (const auto& [ownerActorId, tempTables] : tempTablesByOwner) {
+        ctx.Send(new IEventHandle(ownerActorId, SelfId(),
+                                new TEvSchemeShard::TEvOwnerActorAck(),
                                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
     }
 }
@@ -4579,7 +4579,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         HFuncTraced(TEvPrivate::TEvSendBaseStatsToSA, Handle);
 
-        // for subscriptions on sessions
+        // for subscriptions on owners
         HFuncTraced(TEvInterconnect::TEvNodeDisconnected, Handle);
         HFuncTraced(TEvPrivate::TEvDropTempTable, Handle);
         HFuncTraced(TEvPrivate::TEvRetryNodeSubscribe, Handle);
@@ -6736,7 +6736,7 @@ void TSchemeShard::Handle(TEvPrivate::TEvConsoleConfigsTimeout::TPtr&, const TAc
 }
 
 void TSchemeShard::Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
-    if (CheckSessionUndelivered(ev)) {
+    if (CheckOwnerUndelivered(ev)) {
         return;
     }
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot subscribe to console configs");

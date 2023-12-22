@@ -45,10 +45,10 @@ private:
 };
 
 NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TBackgroundCleaningInfo& info) {
-    auto& tempTablesBySession = TempTablesState.TempTablesBySession;
+    auto& tempTablesByOwner = TempTablesState.TempTablesByOwner;
 
-    auto it = tempTablesBySession.find(info.second);
-    if (it == tempTablesBySession.end()) {
+    auto it = tempTablesByOwner.find(info.second);
+    if (it == tempTablesByOwner.end()) {
         return NOperationQueue::EStartStatus::EOperationRemove;
     }
 
@@ -60,7 +60,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TBackg
     auto ctx = ActorContext();
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "RunBackgroundCleaning "
         "for temp table# " << JoinPath({info.first.first, info.first.second})
-        << ", sessionId# " << info.second
+        << ", ownerId# " << info.second
         << ", next wakeup# " << BackgroundCleaningQueue->GetWakeupDelta()
         << ", rate# " << BackgroundCleaningQueue->GetRate()
         << ", in queue# " << BackgroundCleaningQueue->Size() << " cleaning events"
@@ -112,7 +112,7 @@ void TSchemeShard::OnBackgroundCleaningTimeout(const TBackgroundCleaningInfo& in
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Background cleaning timeout "
         "for temp table# " << JoinPath({info.first.first, info.first.second})
-        << ", sessionId# " << info.second
+        << ", ownerId# " << info.second
         << ", next wakeup# " << BackgroundCleaningQueue->GetWakeupDelta()
         << ", in queue# " << BackgroundCleaningQueue->GetRate() << " cleaning events"
         << ", running# " << BackgroundCleaningQueue->RunningSize() << " cleaning events"
@@ -182,11 +182,11 @@ void TSchemeShard::RetryNodeSubscribe(ui32 nodeId) {
     retryState.RetryNumber++;
 
     if (retryState.RetryNumber > BackgroundCleaningRetrySettings.GetMaxRetryNumber()) {
-        for (const auto& sessionActorId: nodeState.Sessions) {
-            auto& tempTablesBySession = TempTablesState.TempTablesBySession;
+        for (const auto& ownerActorId: nodeState.Owners) {
+            auto& tempTablesByOwner = TempTablesState.TempTablesByOwner;
 
-            auto itTempTables = tempTablesBySession.find(sessionActorId);
-            if (itTempTables == tempTablesBySession.end()) {
+            auto itTempTables = tempTablesByOwner.find(ownerActorId);
+            if (itTempTables == tempTablesByOwner.end()) {
                 continue;
             }
 
@@ -196,9 +196,9 @@ void TSchemeShard::RetryNodeSubscribe(ui32 nodeId) {
                     TBackgroundCleaningInfo(
                         std::move(tempTableId.WorkingDir),
                         std::move(tempTableId.Name),
-                        sessionActorId));
+                        ownerActorId));
             }
-            tempTablesBySession.erase(itTempTables);
+            tempTablesByOwner.erase(itTempTables);
         }
         nodeStates.erase(it);
 
@@ -215,21 +215,21 @@ void TSchemeShard::RetryNodeSubscribe(ui32 nodeId) {
         return;
     }
 
-    for (const auto& sessionActorId: nodeState.Sessions) {
-        Send(new IEventHandle(sessionActorId, SelfId(),
-            new TEvSchemeShard::TEvSessionActorAck(),
+    for (const auto& ownerActorId: nodeState.Owners) {
+        Send(new IEventHandle(ownerActorId, SelfId(),
+            new TEvSchemeShard::TEvOwnerActorAck(),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
     }
     retryState.LastRetryAt = now;
     return;
 }
 
-bool TSchemeShard::CheckSessionUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
-    auto& tempTablesBySession = TempTablesState.TempTablesBySession;
+bool TSchemeShard::CheckOwnerUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
+    auto& tempTablesByOwner = TempTablesState.TempTablesByOwner;
 
-    auto sessionActorId = ev->Sender;
-    auto it = tempTablesBySession.find(sessionActorId);
-    if (it == tempTablesBySession.end()) {
+    auto ownerActorId = ev->Sender;
+    auto it = tempTablesByOwner.find(ownerActorId);
+    if (it == tempTablesByOwner.end()) {
         return false;
     }
 
@@ -240,23 +240,23 @@ bool TSchemeShard::CheckSessionUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
             TBackgroundCleaningInfo(
                 std::move(tempTableId.WorkingDir),
                 std::move(tempTableId.Name),
-                sessionActorId));
+                ownerActorId));
     }
-    tempTablesBySession.erase(it);
+    tempTablesByOwner.erase(it);
 
     auto& nodeStates = TempTablesState.NodeStates;
-    auto itNodeStates = nodeStates.find(sessionActorId.NodeId());
+    auto itNodeStates = nodeStates.find(ownerActorId.NodeId());
     if (itNodeStates == nodeStates.end()) {
         return true;
     }
-    auto itSession = itNodeStates->second.Sessions.find(sessionActorId);
-    if (itSession == itNodeStates->second.Sessions.end()) {
+    auto itOwner = itNodeStates->second.Owners.find(ownerActorId);
+    if (itOwner == itNodeStates->second.Owners.end()) {
         return true;
     }
-    itNodeStates->second.Sessions.erase(itSession);
-    if (itNodeStates->second.Sessions.empty()) {
+    itNodeStates->second.Owners.erase(itOwner);
+    if (itNodeStates->second.Owners.empty()) {
         nodeStates.erase(itNodeStates);
-        Send(new IEventHandle(TActivationContext::InterconnectProxy(sessionActorId.NodeId()), SelfId(),
+        Send(new IEventHandle(TActivationContext::InterconnectProxy(ownerActorId.NodeId()), SelfId(),
             new TEvents::TEvUnsubscribe, 0));
     }
 
@@ -315,18 +315,18 @@ void TSchemeShard::HandleBackgroundCleaningTransactionResult(
 void TSchemeShard::ClearTempTablesState() {
     auto ctx = ActorContext();
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "Clear TempTablesState with sessions number: "
-        << TempTablesState.TempTablesBySession.size());
+        "Clear TempTablesState with owners number: "
+        << TempTablesState.TempTablesByOwner.size());
 
     if (BackgroundCleaningQueue) {
-        auto& tempTablesBySession = TempTablesState.TempTablesBySession;
-        for (const auto& [sessionActorId, tempTables] : tempTablesBySession) {
+        auto& tempTablesByOwner = TempTablesState.TempTablesByOwner;
+        for (const auto& [ownerActorId, tempTables] : tempTablesByOwner) {
             for (const auto& tempTableId : tempTables) {
                 EnqueueBackgroundCleaning(
                     TBackgroundCleaningInfo(
                         std::move(tempTableId.WorkingDir),
                         std::move(tempTableId.Name),
-                        sessionActorId));
+                        ownerActorId));
             }
         }
 
@@ -337,7 +337,7 @@ void TSchemeShard::ClearTempTablesState() {
         }
         BackgroundCleaningQueue->Clear();
     }
-    TempTablesState.TempTablesBySession.clear();
+    TempTablesState.TempTablesByOwner.clear();
     TempTablesState.NodeStates.clear();
 }
 

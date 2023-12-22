@@ -874,7 +874,7 @@ public:
     NOperationQueue::EStartStatus StartBackgroundCleaning(const TBackgroundCleaningInfo& info);
     void OnBackgroundCleaningTimeout(const TBackgroundCleaningInfo& info);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
-    bool CheckSessionUndelivered(TEvents::TEvUndelivered::TPtr& ev);
+    bool CheckOwnerUndelivered(TEvents::TEvUndelivered::TPtr& ev);
     void RetryNodeSubscribe(ui32 nodeId);
     void Handle(TEvPrivate::TEvRetryNodeSubscribe::TPtr& ev, const TActorContext& ctx);
     void HandleBackgroundCleaningTransactionResult(

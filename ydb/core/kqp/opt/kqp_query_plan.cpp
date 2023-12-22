@@ -174,7 +174,7 @@ public:
         , TxProto(txProto)
     {}
 
-    void Serialize() {    
+    void Serialize() {
         auto& phaseNode = QueryPlanNodes[++SerializerCtx.PlanNodeId];
         phaseNode.TypeName = "Phase";
 
@@ -265,7 +265,6 @@ private:
     };
 
     void WritePlanNodeToJson(const TQueryPlanNode& planNode, NJsonWriter::TBuf& writer) const {
-
         writer.BeginObject();
 
         writer.WriteKey("PlanNodeId").WriteInt(planNode.NodeId);
@@ -317,10 +316,10 @@ private:
                         writer.BeginObject();
                         auto input = LambdaInputs.at(ptr);
                         if (std::holds_alternative<ui32>(input)) {
-                            writer.WriteKey("Local");
+                            writer.WriteKey("InternalOperatorId");
                             writer.WriteInt(std::get<ui32>(input));
                         } else {
-                            writer.WriteKey("PlanNode");
+                            writer.WriteKey("ExternalPlanNodeId");
                             writer.WriteInt(std::get<TQueryPlanNode*>(input)->NodeId);
                         }
                         writer.EndObject();
@@ -813,7 +812,7 @@ private:
         AddOperator(stagePlanNode, "Sink", op);
     }
 
-    TQueryPlanNode* Visit(const TExprBase& expr, TQueryPlanNode& planNode) {
+    void Visit(const TExprBase& expr, TQueryPlanNode& planNode) {
         if (expr.Maybe<TDqPhyStage>()) {
             auto stageGuid = NDq::TDqStageSettings::Parse(expr.Cast<TDqPhyStage>()).Id;
 
@@ -833,7 +832,7 @@ private:
                 parentNode.CteRefName = *cteNode.CteName;
                 planNode.CteRefName = *cteNode.CteName;
 
-                return &cteNode;
+                return;
             }
 
             auto& stagePlanNode = AddPlanNode(planNode);
@@ -842,15 +841,6 @@ private:
             YQL_ENSURE(stagePlanNode.StageProto, "Could not find a stage with id " << stageGuid);
             SerializerCtx.StageGuidToId[stageGuid] = SerializerCtx.PlanNodeId;
             VisitedStages.insert(expr.Raw());
-
-            /* is that collect stage? */
-            if (stagePlanNode.TypeName.Empty()) {
-                if (expr.Cast<TDqStageBase>().Program().Body().Maybe<TCoArgument>()) {
-                    stagePlanNode.TypeName = "Collect";
-                } else {
-                    stagePlanNode.TypeName = "Stage";
-                }
-            }
 
             TVector<TQueryPlanNode*> inputIds;
 
@@ -864,18 +854,29 @@ private:
                     auto& inputPlanNode = AddPlanNode(stagePlanNode);
                     FillConnectionPlanNode(inputCn, inputPlanNode);
 
-                    auto planNode = Visit(inputCn.Output().Stage(), inputPlanNode);
-                    inputIds.emplace_back(planNode);
+                    Visit(inputCn.Output().Stage(), inputPlanNode);
+                    inputIds.emplace_back(&inputPlanNode);
                 }
             }
 
-            for (const auto& arg : expr.Cast<TDqStageBase>().Program().Args()) {
-                LambdaInputs[arg.Ptr().Get()] = inputIds[0];
-                inputIds.erase(inputIds.begin());
+            if (inputIds.size() == expr.Cast<TDqStageBase>().Program().Args().Size()) {
+                for (const auto& arg : expr.Cast<TDqStageBase>().Program().Args()) {
+                    LambdaInputs[arg.Ptr().Get()] = inputIds[0];
+                    inputIds.erase(inputIds.begin());
+                }
             }
 
             auto node = expr.Cast<TDqStageBase>().Program().Body().Ptr();
             Visit(node, stagePlanNode);
+
+            /* is that collect stage? */
+            if (stagePlanNode.TypeName.Empty()) {
+                if (expr.Cast<TDqStageBase>().Program().Body().Maybe<TCoArgument>()) {
+                    stagePlanNode.TypeName = "Collect";
+                } else {
+                    stagePlanNode.TypeName = "Stage";
+                }
+            }
 
             if (auto outputs = expr.Cast<TDqStageBase>().Outputs()) {
                 for (auto output : outputs.Cast()) {
@@ -891,8 +892,6 @@ private:
                 planNode.TypeName = "Stage";
             }
         }
-
-        return &planNode;
     }
 
     TVector<std::variant<ui32, TExprNode::TPtr>> Visit(TExprNode::TPtr node, TQueryPlanNode& planNode) {
@@ -968,7 +967,7 @@ private:
         } else if (auto maybeDelete = TMaybeNode<TKqpDeleteRows>(node)) {
             operatorId = Visit(maybeDelete.Cast(), planNode);
         } else if (auto maybeArg = TMaybeNode<TCoArgument>(node)) {
-            operatorId = Visit(maybeArg.Cast(), planNode);
+            return {node};
         }
 
         TVector<std::variant<ui32, TExprNode::TPtr>> inputIds;
@@ -998,11 +997,6 @@ private:
         }
 
         return inputIds;
-    }
-
-    std::variant<ui32, TExprNode::TPtr> Visit(const TCoArgument& arg, TQueryPlanNode& planNode) {
-        Y_UNUSED(planNode);
-        return arg.Ptr();
     }
 
     std::variant<ui32, TExprNode::TPtr> Visit(const TCoCondense1& /*condense*/, TQueryPlanNode& planNode) {
@@ -1089,8 +1083,11 @@ private:
             op.Properties["ToFlow"] = *planNode.CteRefName;
         } else {
             auto inputs = Visit(toflow.Input().Ptr(), planNode);
-            Y_ENSURE(inputs.size()==1);
-            return inputs[0];
+            if (inputs.size() == 1) {
+                return inputs[0];
+            } else {
+                return TMaybe<std::variant<ui32, TExprNode::TPtr>> ();
+            }
         }
 
         return AddOperator(planNode, "ConstantExpr", std::move(op));
@@ -1177,14 +1174,14 @@ private:
 
         auto flatMapInputs = Visit(flatMap.Input().Ptr(), planNode);
 
-        Y_ENSURE(flatMapInputs.size()==1);
-
-        auto input = flatMapInputs[0];
-        auto argPtr = flatMap.Lambda().Args().Arg(0).Ptr().Get();
-        if (std::holds_alternative<ui32>(input)) {
-            LambdaInputs[argPtr] = std::get<ui32>(input);
-        } else {
-            LambdaInputs[argPtr] = LambdaInputs.at(std::get<TExprNode::TPtr>(input).Get());
+        if (flatMapInputs.size() == 1) {
+            auto input = flatMapInputs[0];
+            auto argPtr = flatMap.Lambda().Args().Arg(0).Ptr().Get();
+            if (std::holds_alternative<ui32>(input)) {
+                LambdaInputs[argPtr] = std::get<ui32>(input);
+            } else {
+                LambdaInputs[argPtr] = LambdaInputs.at(std::get<TExprNode::TPtr>(input).Get());
+            }
         }
         
         return operatorId;

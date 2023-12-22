@@ -41,7 +41,9 @@ TString TCommandWithAwsCredentials::ReadIniKey(const TString& iniKey) {
 
 class TS3ClientWrapper : public IS3ClientWrapper {
 public:
-    TS3ClientWrapper(const NImport::TImportFromS3Settings& settings) {
+    TS3ClientWrapper(const NImport::TImportFromS3Settings& settings) 
+        : Bucket(settings.Bucket_)
+    {
         Aws::S3::S3ClientConfiguration config;
         config.endpointOverride = settings.Endpoint_;
         if (settings.Scheme_ == ES3Scheme::HTTP) {
@@ -51,7 +53,7 @@ public:
         } else {
             throw TMisuseException() << "\"" << settings.Scheme_ << "\" scheme type is not supported";
         }
-        Bucket = settings.Bucket_;
+
         Client = std::make_unique<Aws::S3::S3Client>(Aws::Auth::AWSCredentials(settings.AccessKey_, settings.SecretKey_),
                                    config,
                                    Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
@@ -59,9 +61,9 @@ public:
     }
 
     std::pair<std::vector<TString>, std::optional<TString>> ListObjectKeys(const TString& prefix, const std::optional<TString>& token) override {
-        Aws::S3::Model::ListObjectsV2Request request;
-        request.WithBucket(Bucket);
-        request.WithPrefix(prefix);
+        auto request = Aws::S3::Model::ListObjectsV2Request()
+            .WithBucket(Bucket)
+            .WithPrefix(prefix);
         if (token) {
             request.WithContinuationToken(*token);
         }
@@ -70,9 +72,8 @@ public:
             throw TMisuseException() << "ListObjectKeys error: " << response.GetError().GetMessage();
         }
         std::vector<TString> keys;
-        Aws::Vector<Aws::S3::Model::Object> objects = response.GetResult().GetContents();
-        for (const auto& object : objects) {
-            keys.push_back(TString(object.GetKey()));
+        for (const auto& object : response.GetResult().GetContents()) {
+            keys.emplace_back(object.GetKey());
         }
         std::optional<TString> nextToken;
         if (response.GetResult().GetIsTruncated()) {
@@ -83,7 +84,7 @@ public:
 
 private:
     std::unique_ptr<Aws::S3::S3Client> Client;
-    TString Bucket;
+    const TString Bucket;
 };
 
 std::unique_ptr<IS3ClientWrapper> CreateS3ClientWrapper(const NImport::TImportFromS3Settings& settings) {

@@ -1,8 +1,11 @@
 #include "ydb_service_import.h"
 
+#include "ydb_common.h"
+
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/dump/dump.h>
 #include <ydb/public/lib/ydb_cli/import/import.h>
 #include <ydb/library/backup/util.h>
 
@@ -15,6 +18,8 @@
 #elif defined(_unix_)
 #include <unistd.h>
 #endif
+
+extern const char NYdb::NDump::SCHEME_FILE_NAME[];
 
 namespace NYdb::NConsoleClient {
 
@@ -125,12 +130,12 @@ int TCommandImportFromS3::Run(TConfig& config) {
     settings.AccessKey(AwsAccessKey);
     settings.SecretKey(AwsSecretKey);
 
-    auto s3Client = CreateS3ClientWrapper(settings);
     if (Description) {
         settings.Description(Description);
     }
     settings.NumberOfRetries(NumberOfRetries);
-    const TString suffix = "scheme.pb";
+    auto s3Client = CreateS3ClientWrapper(settings);
+    const size_t suffixSize = strlen(NDump::SCHEME_FILE_NAME);
     for (auto item : Items) {
         std::optional<TString> token;
         if (!item.Source.empty() && item.Source.back() != '/') {
@@ -146,8 +151,8 @@ int TCommandImportFromS3::Run(TConfig& config) {
             const auto& [keys, current_token] = s3Client->ListObjectKeys(item.Source, token);
             token = current_token;
             for (const auto& key : keys) {
-                if (key.EndsWith(suffix)) {
-                    TString source = key.substr(0, key.Size() - suffix.Size());
+                if (key.EndsWith(NDump::SCHEME_FILE_NAME)) {
+                    TString source = key.substr(0, key.Size() - suffixSize);
                     TString destination = item.Destination + source.substr(item.Source.Size());
                     settings.AppendItem({std::move(source), std::move(destination)});
                 }

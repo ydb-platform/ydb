@@ -52,6 +52,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
                     for data in r['Write']:
                         if sort and 'Data' in data:
                             data['Data'] = sorted(data['Data'])
+                return res
 
             program_sql = os.path.join(DATA_PATH, suite, '%s.sql' % case)
             with codecs.open(program_sql, encoding='utf-8') as program_file_descr:

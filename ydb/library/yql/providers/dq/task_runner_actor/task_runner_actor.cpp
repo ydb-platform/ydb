@@ -13,6 +13,8 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <util/generic/size_literals.h>
+
 using namespace NYql::NDqs;
 using namespace NActors;
 
@@ -33,6 +35,23 @@ TTaskRunnerActorSensors GetSensors(const T& t) {
     return result;
 }
 
+class TSpillingStorageInfo : public TSimpleRefCount<TSpillingStorageInfo> {
+public:
+    using TPtr = std::shared_ptr<TSpillingStorageInfo>;
+
+    TSpillingStorageInfo(const IDqChannelStorage::TPtr spillingStorage, ui64 channelId)
+        : SpillingStorage(spillingStorage)
+        , ChannelId(channelId)
+        , FirstStoredId(0)
+        , NextStoredId(0)
+    {}
+
+    const IDqChannelStorage::TPtr SpillingStorage = nullptr;
+    ui64 ChannelId = 0;
+    ui64 FirstStoredId = 0;
+    ui64 NextStoredId = 0;
+};
+
 struct TOutputChannelReadResult {
     bool IsChanged = false;
     bool IsFinished = false;
@@ -43,13 +62,26 @@ struct TOutputChannelReadResult {
 
 class TOutputChannelReader {
 public:
-    TOutputChannelReader(NTaskRunnerProxy::IOutputChannel::TPtr channel, i64 toPopSize, bool wasFinished)
+    TOutputChannelReader(NTaskRunnerProxy::IOutputChannel::TPtr channel, i64 toPopSize,
+        bool wasFinished, TSpillingStorageInfo::TPtr spillingStorageInfo, ui64 cookie
+    )
         : Channel(channel)
+        , SpillingStorageInfo(spillingStorageInfo)
         , ToPopSize(toPopSize)
         , WasFinished(wasFinished)
+        , Cookie(cookie)
     {}
 
     TOutputChannelReadResult Read() {
+        if (SpillingStorageInfo) {
+            return ReadWithSpilling();
+        }
+        return ReadDirectly();
+    }
+
+private:
+
+    TOutputChannelReadResult ReadDirectly() {
         int maxChunks = std::numeric_limits<int>::max();
         bool changed = false;
         bool isFinished = false;
@@ -60,7 +92,7 @@ public:
 
         if (remain == 0) {
             // special case to WorkerActor
-            remain = 5<<20;
+            remain = 5_MB;
             maxChunks = 1;
         }
 
@@ -70,7 +102,6 @@ public:
             const auto lastPop = std::move(Channel->Pop(data));
 
             for (auto& metric : lastPop.GetMetric()) {
-                // *response.AddMetric() = metric;
                 result.Metrics.push_back(metric);
             }
 
@@ -89,10 +120,67 @@ public:
         return result;
     }
 
-private:
+    TOutputChannelReadResult ReadWithSpilling() {
+        int maxChunks = std::numeric_limits<int>::max();
+        bool changed = false;
+        bool isChanFinished = false;
+        i64 remain = ToPopSize;
+        bool hasData = true;
+        TOutputChannelReadResult result;
+
+        if (remain == 0) {
+            // special case to WorkerActor
+            remain = 5_MB;
+            maxChunks = 1;
+        }
+
+        auto spillingStorage = SpillingStorageInfo->SpillingStorage;
+        // Read all available data from the pipe and spill it
+        while (spillingStorage && !isChanFinished && hasData) {
+            TDqSerializedBatch data;
+            const auto lastPop = std::move(Channel->Pop(data));
+
+            for (auto& metric : lastPop.GetMetric()) {
+                result.Metrics.push_back(metric);
+            }
+
+            hasData = lastPop.GetResult();
+            isChanFinished = !hasData && Channel->IsFinished();
+            changed = changed || hasData || (isChanFinished != WasFinished);
+            if (hasData) {
+                spillingStorage->Put(SpillingStorageInfo->NextStoredId++, SaveForSpilling(std::move(data)), Cookie);
+            }
+        }
+
+        changed = false;
+        result.DataChunks.reserve(SpillingStorageInfo->NextStoredId - SpillingStorageInfo->FirstStoredId);
+        while (SpillingStorageInfo->FirstStoredId < SpillingStorageInfo->NextStoredId && remain > 0) {
+            TDqSerializedBatch data;
+            YQL_ENSURE(spillingStorage);
+            TBuffer blob;
+            if (!spillingStorage->Get(SpillingStorageInfo->FirstStoredId, blob, Cookie)) {
+                break;
+            }
+            ++SpillingStorageInfo->FirstStoredId;
+            data = LoadSpilled(std::move(blob));
+            remain -= data.Size();
+            result.DataChunks.emplace_back(std::move(data));
+            --maxChunks;
+            changed = true;
+            hasData = true;
+        }
+
+        result.IsFinished = isChanFinished && SpillingStorageInfo->FirstStoredId == SpillingStorageInfo->NextStoredId;
+        result.IsChanged = changed;
+        result.HasData = hasData;
+        return result;
+    }
+
     NTaskRunnerProxy::IOutputChannel::TPtr Channel;
+    TSpillingStorageInfo::TPtr SpillingStorageInfo;
     i64 ToPopSize;
     bool WasFinished;
+    ui64 Cookie;
 };
 
 } // namespace
@@ -369,11 +457,15 @@ private:
         auto cookie = ev->Cookie;
         auto wasFinished = ev->Get()->WasFinished;
         auto toPop = ev->Get()->Size;
-        Invoker->Invoke([cookie,selfId,channelId=ev->Get()->ChannelId, actorSystem, replyTo, wasFinished, toPop, taskRunner=TaskRunner, settings=Settings, stageId=StageId]() {
+        ui64 channelId = ev->Get()->ChannelId;
+
+        TSpillingStorageInfo::TPtr spillingStorageInfo = GetSpillingStorage(channelId, actorSystem);
+
+        Invoker->Invoke([spillingStorageInfo, cookie, selfId, channelId=ev->Get()->ChannelId, actorSystem, replyTo, wasFinished, toPop, taskRunner=TaskRunner, settings=Settings, stageId=StageId]() {
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
                 auto channel = taskRunner->GetOutputChannel(channelId);
-                TOutputChannelReader reader(channel, toPop, wasFinished);
+                TOutputChannelReader reader(channel, toPop, wasFinished, spillingStorageInfo, cookie);
                 TOutputChannelReadResult result = reader.Read();
 
                 NDqProto::TPopResponse response;
@@ -484,6 +576,7 @@ private:
         auto taskId = ev->Get()->Task.GetId();
         auto& inputs = ev->Get()->Task.GetInputs();
         auto startTime = TInstant::Now();
+        ExecCtx = ev->Get()->ExecCtx;
 
         for (auto inputId = 0; inputId < inputs.size(); inputId++) {
             auto& input = inputs[inputId];
@@ -615,6 +708,22 @@ private:
         });
     }
 
+    TSpillingStorageInfo::TPtr GetSpillingStorage(ui64 channelId, TActorSystem* actorSystem) {
+        TSpillingStorageInfo::TPtr spillingStorageInfo = nullptr;
+        auto channelStorage = ExecCtx->CreateChannelStorage(channelId, actorSystem, true /*isConcurrent*/);
+
+        if (channelStorage) {
+            auto spillingIt = SpillingStoragesInfos.find(channelId);
+            if (spillingIt == SpillingStoragesInfos.end()) {
+                TSpillingStorageInfo* info = new TSpillingStorageInfo(channelStorage, channelId);
+                spillingIt = SpillingStoragesInfos.emplace(channelId, info).first;
+            }
+            spillingStorageInfo = spillingIt->second;
+        }
+
+        return spillingStorageInfo;
+    }
+
     NActors::TActorId ParentId;
     ITaskRunnerActor::ICallbacks* Parent;
     const TString TraceId;
@@ -630,6 +739,9 @@ private:
     ui64 StageId;
     TWorkerRuntimeData* RuntimeData;
     TString ClusterName;
+
+    std::shared_ptr<IDqTaskRunnerExecutionContext> ExecCtx;
+    std::unordered_map<ui64, TSpillingStorageInfo::TPtr> SpillingStoragesInfos;
 };
 
 class TTaskRunnerActorFactory: public ITaskRunnerActorFactory {

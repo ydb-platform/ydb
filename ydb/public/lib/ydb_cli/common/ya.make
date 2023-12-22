@@ -46,6 +46,7 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_topic
     ydb/public/sdk/cpp/client/ydb_types
     ydb/public/sdk/cpp/client/ydb_types/credentials
+    ydb/library/arrow_parquet
 )
 
 GENERATE_ENUM_SERIALIZATION(formats.h)

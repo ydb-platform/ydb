@@ -5,6 +5,7 @@
 
 #include <yt/yt/core/yson/string.h>
 
+#include <yt/yt/core/ytree/attributes.h>
 #include <yt/yt/core/ytree/convert.h>
 
 #include <util/stream/str.h>

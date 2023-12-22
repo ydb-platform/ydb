@@ -1,5 +1,7 @@
 #pragma once
 
+#include "public.h"
+
 #include <optional>
 
 #include <yt/yt/client/tablet_client/public.h>
@@ -10,12 +12,6 @@
 #include <yt/yt_proto/yt/client/bundle_controller/proto/bundle_controller_service.pb.h>
 
 namespace NYT::NBundleControllerClient {
-
-////////////////////////////////////////////////////////////////////////////////
-
-DECLARE_REFCOUNTED_STRUCT(TCpuLimits)
-DECLARE_REFCOUNTED_STRUCT(TMemoryLimits)
-DECLARE_REFCOUNTED_STRUCT(TInstanceResources)
 
 ////////////////////////////////////////////////////////////////////////////////
 

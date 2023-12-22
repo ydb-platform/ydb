@@ -4,6 +4,7 @@
 #include "convert.h"
 #endif
 
+#include "attribute_consumer.h"
 #include "default_building_consumer.h"
 #include "serialize.h"
 #include "tree_builder.h"

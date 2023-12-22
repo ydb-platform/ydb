@@ -233,6 +233,8 @@ class URL:
             raise ValueError(
                 'Can\'t mix "authority" with "user", "password", "host" or "port".'
             )
+        if not isinstance(port, (int, type(None))):
+            raise TypeError("The port is required to be int.")
         if port and not host:
             raise ValueError('Can\'t build URL with "port" but without "host".')
         if query and query_string:
@@ -507,7 +509,7 @@ class URL:
             return None
         if "%" in raw:
             # Hack for scoped IPv6 addresses like
-            # fe80::2%Проверка
+            # fe80::2%Перевірка
             # presence of '%' sign means only IPv6 address, so idna is useless.
             return raw
         return _idna_decode(raw)

@@ -76,10 +76,20 @@ struct TIssueTokenOptions
     : public TTimeoutOptions
 { };
 
+struct TIssueTemporaryTokenOptions
+    : public TIssueTokenOptions
+{
+    TDuration ExpirationTimeout;
+};
+
 struct TIssueTokenResult
 {
     TString Token;
 };
+
+struct TRefreshTemporaryTokenOptions
+    : public TTimeoutOptions
+{ };
 
 struct TRevokeTokenOptions
     : public TTimeoutOptions

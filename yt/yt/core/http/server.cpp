@@ -262,6 +262,11 @@ private:
                 }
             }));
 
+            auto finally = Finally([&] {
+                auto count = ActiveConnections_.fetch_sub(1) - 1;
+                ConnectionsActive_.Update(count);
+            });
+
             if (Config_->NoDelay) {
                 connection->SetNoDelay();
             }
@@ -274,11 +279,6 @@ private:
 
     void DoHandleConnection(const IConnectionPtr& connection, TGuid connectionId)
     {
-        auto finally = Finally([&] {
-            auto count = ActiveConnections_.fetch_sub(1) - 1;
-            ConnectionsActive_.Update(count);
-        });
-
         auto request = New<THttpInput>(
             connection,
             connection->RemoteAddress(),

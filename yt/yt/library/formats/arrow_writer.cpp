@@ -45,6 +45,7 @@ struct TTypedBatchColumn
 ////////////////////////////////////////////////////////////////////////////////
 
 constexpr i64 ArrowAlignment = 8;
+const TString AlignmentString(ArrowAlignment, 0);
 
 flatbuffers::Offset<flatbuffers::String> SerializeString(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
@@ -1287,18 +1288,19 @@ private:
                 auto metadataPtr = message.FlatbufBuilder->GetBufferPointer();
 
 
-                ui32 metadataSz = AlignUp<i64>(metadataSize, ArrowAlignment);
+                ui32 metadataAlignSize = AlignUp<i64>(metadataSize, ArrowAlignment);
 
-                output->Write(&metadataSz, sizeof(ui32));
+                output->Write(&metadataAlignSize, sizeof(ui32));
                 output->Write(metadataPtr, metadataSize);
+
+                output->Write(AlignmentString.Data(), metadataAlignSize - metadataSize);
 
                 // Body
                 if (message.BodyWriter) {
-                    TString current;
-                    current.resize(message.BodySize);
+                    TString current(AlignUp<i64>(message.BodySize, ArrowAlignment), 0);
                     // Double copying.
-                    message.BodyWriter(TMutableRef::FromString(current));
-                    output->Write(current.data(), message.BodySize);
+                    message.BodyWriter(TMutableRef(current.begin(), current.begin() + message.BodySize));
+                    output->Write(current.data(), current.Size());
                 } else {
                     YT_VERIFY(message.BodySize == 0);
                 }

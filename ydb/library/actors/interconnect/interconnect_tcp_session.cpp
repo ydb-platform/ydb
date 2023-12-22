@@ -402,9 +402,10 @@ namespace NActors {
 
             if (!canProducePackets && !canWriteData) {
                 SetEnoughCpu(true); // we do not starve
+                StarvingInRow = 0;
                 break;
             } else if (TimeLimit->CheckExceeded()) {
-                SetEnoughCpu(false);
+                SetEnoughCpu(++StarvingInRow < StarvingInRowForNotEnoughCpu);
                 IssueRam(false);
                 break;
             }

@@ -214,9 +214,7 @@ namespace NWilson {
             return *this;
         }
 
-        TSpan& Link(const TTraceId& traceId) {
-            return Link(traceId, {});
-        }
+        TSpan& Link(const TTraceId& traceId);
 
         void EndOk() {
             if (Y_UNLIKELY(*this)) {

@@ -269,8 +269,7 @@ public:
     IServicePtr FindService(const TServiceId& serviceId) const override;
     IServicePtr GetServiceOrThrow(const TServiceId& serviceId) const override;
 
-    void Configure(const TServerConfigPtr& config) override;
-    void OnDynamicConfigChanged(const TServerDynamicConfigPtr& config) override;
+    void Configure(TServerConfigPtr config) override;
 
     void Start() override;
     TFuture<void> Stop(bool graceful) override;
@@ -281,17 +280,13 @@ protected:
     std::atomic<bool> Started_ = false;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, ServicesLock_);
-    TServerConfigPtr StaticConfig_;
-    TServerDynamicConfigPtr DynamicConfig_ = New<TServerDynamicConfig>();
-    TServerConfigPtr AppliedConfig_;
+    TServerConfigPtr Config_;
 
     //! Service name to service.
     using TServiceMap = THashMap<TString, IServicePtr>;
     THashMap<TGuid, TServiceMap> RealmIdToServiceMap_;
 
     explicit TServerBase(NLogging::TLogger logger);
-
-    void ApplyConfig();
 
     virtual void DoStart();
     virtual TFuture<void> DoStop(bool graceful);

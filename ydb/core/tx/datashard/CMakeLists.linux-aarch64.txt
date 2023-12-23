@@ -36,6 +36,7 @@ add_subdirectory(ut_snapshot)
 add_subdirectory(ut_stats)
 add_subdirectory(ut_upload_rows)
 add_subdirectory(ut_volatile)
+add_subdirectory(ut_write)
 get_built_tool_path(
   TOOL_enum_parser_bin
   TOOL_enum_parser_dependency
@@ -181,6 +182,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_read_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_scheme_tx_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_snapshot_tx_unit.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_write_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/complete_data_tx_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/completed_operations_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/conflicts_cache.cpp
@@ -217,6 +219,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__stats.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__store_table_path.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__store_scan_state.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard__write.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_change_receiving.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_change_sender_activation.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_change_sending.cpp
@@ -258,6 +261,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_repl_offsets_client.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_repl_offsets_server.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_subdomain_path_id.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_write_operation.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/direct_tx_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/drop_cdc_stream_unit.cpp
@@ -314,6 +318,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/volatile_tx.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/wait_for_plan_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/wait_for_stream_clearance_unit.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/write_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/upload_stats.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_buffer_raw.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_buffer_zstd.cpp

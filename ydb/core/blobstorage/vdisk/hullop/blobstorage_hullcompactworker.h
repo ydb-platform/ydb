@@ -246,6 +246,7 @@ namespace NKikimr {
             void Update(const NPDisk::TEvChunkRead *msg) {
                 BytesRead += msg->Size;
                 ReadIOPS++;
+                ++HullCtx->LsmHullGroup.LsmCompactionReadRequests();
                 HullCtx->LsmHullGroup.LsmCompactionBytesRead() += msg->Size;
             }
 
@@ -253,6 +254,7 @@ namespace NKikimr {
                 ui32 bytes = msg->PartsPtr ? msg->PartsPtr->ByteSize() : 0;
                 BytesWritten += bytes;
                 WriteIOPS++;
+                ++HullCtx->LsmHullGroup.LsmCompactionWriteRequests();
                 HullCtx->LsmHullGroup.LsmCompactionBytesWritten() += bytes;
             }
         };

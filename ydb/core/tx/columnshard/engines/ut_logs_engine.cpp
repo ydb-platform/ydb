@@ -400,7 +400,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // load
         TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
         TSnapshot indexSnaphot(1, 1);
-        engine.UpdateDefaultSchema(indexSnaphot, TIndexInfo(tableInfo));
+        engine.RegisterSchemaVersion(indexSnaphot, TIndexInfo(tableInfo));
         for (auto&& i : paths) {
             engine.RegisterTable(i);
         }
@@ -485,7 +485,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         TSnapshot indexSnapshot(1, 1);
         TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
-        engine.UpdateDefaultSchema(indexSnapshot, TIndexInfo(tableInfo));
+        engine.RegisterSchemaVersion(indexSnapshot, TIndexInfo(tableInfo));
         engine.RegisterTable(pathId);
         engine.Load(db);
 
@@ -585,7 +585,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
         TSnapshot indexSnapshot(1, 1);
-        engine.UpdateDefaultSchema(indexSnapshot, TIndexInfo(tableInfo));
+        engine.RegisterSchemaVersion(indexSnapshot, TIndexInfo(tableInfo));
         engine.RegisterTable(pathId);
         engine.Load(db);
 
@@ -612,7 +612,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         { // check it's overloaded after reload
             TColumnEngineForLogs tmpEngine(0, TestLimits(), CommonStoragesManager);
-            tmpEngine.UpdateDefaultSchema(TSnapshot::Zero(), TIndexInfo(tableInfo));
+            tmpEngine.RegisterSchemaVersion(TSnapshot::Zero(), TIndexInfo(tableInfo));
             tmpEngine.RegisterTable(pathId);
             tmpEngine.Load(db);
         }
@@ -643,7 +643,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         { // check it's not overloaded after reload
             TColumnEngineForLogs tmpEngine(0, TestLimits(), CommonStoragesManager);
-            tmpEngine.UpdateDefaultSchema(TSnapshot::Zero(), TIndexInfo(tableInfo));
+            tmpEngine.RegisterSchemaVersion(TSnapshot::Zero(), TIndexInfo(tableInfo));
             tmpEngine.RegisterTable(pathId);
             tmpEngine.Load(db);
         }
@@ -661,7 +661,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TSnapshot indexSnapshot(1, 1);
         {
             TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
-            engine.UpdateDefaultSchema(indexSnapshot, TIndexInfo(tableInfo));
+            engine.RegisterSchemaVersion(indexSnapshot, TIndexInfo(tableInfo));
             engine.RegisterTable(pathId);
             engine.Load(db);
 
@@ -728,7 +728,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         {
             // load
             TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
-            engine.UpdateDefaultSchema(indexSnapshot, TIndexInfo(tableInfo));
+            engine.RegisterSchemaVersion(indexSnapshot, TIndexInfo(tableInfo));
             engine.RegisterTable(pathId);
             engine.Load(db);
 

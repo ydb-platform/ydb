@@ -25,7 +25,9 @@ target_compile_options(restricted-aws-aws-c-io PRIVATE
   -DS2N_MADVISE_SUPPORTED
   -DS2N_STACKTRACE
   -DS2N___RESTRICT__SUPPORTED
-  -DUSE_S2N
+  -DAWS_IO_EXPORTS
+  -DAWS_USE_IO_COMPLETION_PORTS
+  -std=c99
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-aws-aws-c-io PUBLIC
@@ -34,7 +36,6 @@ target_include_directories(restricted-aws-aws-c-io PUBLIC
 target_link_libraries(restricted-aws-aws-c-io PUBLIC
   restricted-aws-aws-c-cal
   restricted-aws-aws-c-common
-  restricted-aws-s2n
 )
 target_sources(restricted-aws-aws-c-io PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/alpn_handler.c
@@ -49,12 +50,7 @@ target_sources(restricted-aws-aws-c-io PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/pkcs11_lib.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/pkcs11_tls_op_handler.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/pki_utils.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/host_resolver.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/pipe.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/shared_library.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/socket.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/retry_strategy.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/s2n/s2n_tls_channel_handler.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/socket_channel_handler.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/standard_retry_strategy.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/statistics.c

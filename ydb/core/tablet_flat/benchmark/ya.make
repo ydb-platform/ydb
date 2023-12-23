@@ -1,10 +1,12 @@
 G_BENCHMARK()
 
-SIZE(MEDIUM)
-TIMEOUT(600)
+TAG(ya:fat)
+SIZE(LARGE)
+TIMEOUT(1200)
 
 SRCS(
     b_charge.cpp
+    b_part_index.cpp
 )
 
 PEERDIR(

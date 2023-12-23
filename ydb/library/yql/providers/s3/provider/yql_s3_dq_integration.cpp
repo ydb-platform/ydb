@@ -53,6 +53,15 @@ bool GetMultipart(const TExprNode& settings) {
     return false;
 }
 
+std::optional<ui64> TryExtractLimitHint(const TS3SourceSettingsBase& settings) {
+    auto limitHint = settings.RowsLimitHint();
+    if (limitHint.Ref().Content().empty()) {
+        return std::nullopt;
+    }
+
+    return FromString<ui64>(limitHint.Ref().Content());
+}
+
 using namespace NYql::NS3Details;
 
 class TS3DqIntegration: public TDqIntegrationBase {
@@ -64,8 +73,11 @@ public:
 
     ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
         std::vector<std::vector<TPath>> parts;
+        std::optional<ui64> mbLimitHint;
         if (const TMaybeNode<TDqSource> source = &node) {
             const auto settings = source.Cast().Settings().Cast<TS3SourceSettingsBase>();
+            mbLimitHint = TryExtractLimitHint(settings);
+
             for (auto i = 0u; i < settings.Paths().Size(); ++i) {
                 const auto& packed = settings.Paths().Item(i);
                 TPathList paths;
@@ -78,6 +90,12 @@ public:
                     parts.emplace_back(1U, path);
                 }
             }
+        }
+
+        constexpr ui64 maxTaskRatio = 20;
+        if (!maxPartitions || (mbLimitHint && maxPartitions > *mbLimitHint / maxTaskRatio)) {
+            maxPartitions = std::max(*mbLimitHint / maxTaskRatio, ui64{1});
+            YQL_CLOG(TRACE, ProviderS3) << "limited max partitions to " << maxPartitions;
         }
 
         if (maxPartitions && parts.size() > maxPartitions) {

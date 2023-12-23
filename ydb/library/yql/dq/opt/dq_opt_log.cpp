@@ -21,7 +21,7 @@ TExprBase DqRewriteAggregate(TExprBase node, TExprContext& ctx, TTypeAnnotationC
     if (!node.Maybe<TCoAggregateBase>()) {
         return node;
     }
-    TAggregateExpander aggExpander(true, !typesCtx.UseBlocks && !useFinalizeByKey, useFinalizeByKey, node.Ptr(), ctx, typesCtx, false, compactForDistinct, usePhases);
+    TAggregateExpander aggExpander(true, !typesCtx.IsBlockEngineEnabled() && !useFinalizeByKey, useFinalizeByKey, node.Ptr(), ctx, typesCtx, false, compactForDistinct, usePhases);
     auto result = aggExpander.ExpandAggregate();
     YQL_ENSURE(result);
 
@@ -76,7 +76,7 @@ TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TP
 
     auto topSortCount = take.Count();
     if (maybeSkip) {
-        topSortCount = Build<TCoPlus>(ctx, node.Pos())
+        topSortCount = Build<TCoAggrAdd>(ctx, node.Pos())
             .Left(take.Count())
             .Right(maybeSkip.Cast().Count())
             .Done();

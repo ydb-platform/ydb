@@ -116,7 +116,11 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
         }))));
     }
     TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> rawInputs;
-    NYT::NConcurrency::WaitFor(NYT::AllSucceeded(waitFor)).ValueOrThrow().swap(rawInputs);
+    auto result = NYT::NConcurrency::WaitFor(NYT::AllSucceeded(waitFor));
+    if (!result.IsOK()) {
+        Cerr << "YT RPC Reader exception:\n";
+    }
+    result.ValueOrThrow().swap(rawInputs);
     return std::make_unique<TSettingsHolder>(std::move(connection), std::move(client), std::move(rawInputs), std::move(originalIndexes));
 }
 

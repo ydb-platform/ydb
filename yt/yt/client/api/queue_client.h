@@ -39,6 +39,10 @@ struct TPullRowsResult
     bool Versioned = true;
 };
 
+struct TAdvanceConsumerOptions
+    : public TTimeoutOptions
+{ };
+
 struct TPullQueueOptions
     : public TSelectRowsOptions
     , public TFallbackReplicaOptions
@@ -99,7 +103,7 @@ struct IQueueClient
     virtual TFuture<NQueueClient::IQueueRowsetPtr> PullConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
-        i64 offset,
+        std::optional<i64> offset,
         int partitionIndex,
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
         const TPullConsumerOptions& options = {}) = 0;

@@ -83,15 +83,19 @@ struct TListMultipartUploads {
     }
 
     TString BuildUrl() const {
+        // We have to sort the cgi parameters for the correct aws signature
+        // This requirement will be fixed in the curl library
+        // https://github.com/curl/curl/commit/fc76a24c53b08cdf6eec8ba787d8eac64651d56e
+        // https://github.com/curl/curl/commit/c87920353883ef9d5aa952e724a8e2589d76add5
         TUrlBuilder urlBuilder(Url);
-        urlBuilder.AddUrlParam("uploads");
-        urlBuilder.AddUrlParam("prefix", Prefix);
         if (KeyMarker) {
             urlBuilder.AddUrlParam("key-marker", KeyMarker);
         }
+        urlBuilder.AddUrlParam("prefix", Prefix);
         if (UploadIdMarker) {
             urlBuilder.AddUrlParam("upload-id-marker", UploadIdMarker);
         }
+        urlBuilder.AddUrlParam("uploads");
         return urlBuilder.Build();
     }
 };
@@ -133,11 +137,15 @@ struct TListParts {
     }
 
     TString BuildUrl() const {
+        // We have to sort the cgi parameters for the correct aws signature
+        // This requirement will be fixed in the curl library
+        // https://github.com/curl/curl/commit/fc76a24c53b08cdf6eec8ba787d8eac64651d56e
+        // https://github.com/curl/curl/commit/c87920353883ef9d5aa952e724a8e2589d76add5
         TUrlBuilder urlBuilder(Url);
-        urlBuilder.AddUrlParam("uploadId", UploadId);
         if (PartNumberMarker) {
             urlBuilder.AddUrlParam("part-number-marker", PartNumberMarker);
         }
+        urlBuilder.AddUrlParam("uploadId", UploadId);
         return urlBuilder.Build();
     }
 };

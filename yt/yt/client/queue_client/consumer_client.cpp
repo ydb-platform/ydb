@@ -575,6 +575,11 @@ ISubConsumerClientPtr CreateSubConsumerClient(
     return CreateConsumerClient(client, consumerPath)->GetSubConsumerClient(queueRef);
 }
 
+const TTableSchemaPtr& GetConsumerSchema()
+{
+    return YTConsumerTableSchema;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NQueueClient

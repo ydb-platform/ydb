@@ -24,42 +24,182 @@ TTypeEnvironment::TTypeEnvironment(TScopedAlloc& alloc)
     , EmptyStruct(nullptr)
     , EmptyTuple(nullptr)
 {
-    NamesPool.reserve(64);
-    TypeOfType = TTypeType::Create(*this);
-    TypeOfType->Type = TypeOfType;
-    TypeOfVoid = TVoidType::Create(TypeOfType, *this);
-    Void = TVoid::Create(*this);
-    TypeOfNull = TNullType::Create(TypeOfType, *this);
-    Null = TNull::Create(*this);
-    TypeOfEmptyList = TEmptyListType::Create(TypeOfType, *this);
-    EmptyList = TEmptyList::Create(*this);
-    TypeOfEmptyDict = TEmptyDictType::Create(TypeOfType, *this);
-    EmptyDict = TEmptyDict::Create(*this);
-    Ui32 = TDataType::Create(NUdf::TDataType<ui32>::Id, *this);
-    Ui64 = TDataType::Create(NUdf::TDataType<ui64>::Id, *this);
-    AnyType = TAnyType::Create(TypeOfType, *this);
-    EmptyStruct = TStructLiteral::Create(0, nullptr, TStructType::Create(0, nullptr, *this), *this);
-    EmptyTuple = TTupleLiteral::Create(0, nullptr, TTupleType::Create(0, nullptr, *this), *this);
-    ListOfVoid = TListLiteral::Create(nullptr, 0, TListType::Create(Void->GetGenericType(), *this), *this);
 }
 
 TTypeEnvironment::~TTypeEnvironment() {
 }
 
 void TTypeEnvironment::ClearCookies() const {
-    TypeOfType->SetCookie(0);
-    TypeOfVoid->SetCookie(0);
-    Void->SetCookie(0);
-    TypeOfNull->SetCookie(0);
-    Null->SetCookie(0);
-    TypeOfEmptyList->SetCookie(0);
-    EmptyList->SetCookie(0);
-    TypeOfEmptyDict->SetCookie(0);
-    EmptyDict->SetCookie(0);
-    EmptyStruct->SetCookie(0);
-    ListOfVoid->SetCookie(0);
-    AnyType->SetCookie(0);
-    EmptyTuple->SetCookie(0);
+    if (TypeOfType) {
+        TypeOfType->SetCookie(0);
+    }
+    if (TypeOfVoid) {
+        TypeOfVoid->SetCookie(0);
+    }
+    if (Void) {
+        Void->SetCookie(0);
+    }
+    if (TypeOfNull) {
+        TypeOfNull->SetCookie(0);
+    }
+    if (Null) {
+        Null->SetCookie(0);
+    }
+    if (TypeOfEmptyList) {
+        TypeOfEmptyList->SetCookie(0);
+    }
+    if (EmptyList) {
+        EmptyList->SetCookie(0);
+    }
+    if (TypeOfEmptyDict) {
+        TypeOfEmptyDict->SetCookie(0);
+    }
+    if (EmptyDict) {
+        EmptyDict->SetCookie(0);
+    }
+    if (EmptyStruct) {
+        EmptyStruct->SetCookie(0);
+    }
+    if (ListOfVoid) {
+        ListOfVoid->SetCookie(0);
+    }
+    if (AnyType) {
+        AnyType->SetCookie(0);
+    }
+    if (EmptyTuple) {
+        EmptyTuple->SetCookie(0);
+    }
+}
+
+TTypeType* TTypeEnvironment::GetTypeOfTypeLazy() const {
+    if (!TypeOfType) {
+        TypeOfType = TTypeType::Create(*this);
+        TypeOfType->Type = TypeOfType;
+    }
+    return TypeOfType;
+}
+
+TVoidType* TTypeEnvironment::GetTypeOfVoidLazy() const {
+    if (!TypeOfVoid) {
+        TypeOfVoid = TVoidType::Create(GetTypeOfTypeLazy(), *this);
+    }
+    return TypeOfVoid;
+}
+
+TVoid* TTypeEnvironment::GetVoidLazy() const {
+    if (!Void) {
+        Void = TVoid::Create(*this);
+    }
+    return Void;
+}
+
+TNullType* TTypeEnvironment::GetTypeOfNullLazy() const {
+    if (!TypeOfNull) {
+        TypeOfNull = TNullType::Create(GetTypeOfTypeLazy(), *this);
+    }
+    return TypeOfNull;
+}
+
+TNull* TTypeEnvironment::GetNullLazy() const {
+    if (!Null) {
+        Null = TNull::Create(*this);
+    }
+    return Null;
+}
+
+TEmptyListType* TTypeEnvironment::GetTypeOfEmptyListLazy() const {
+    if (!TypeOfEmptyList) {
+        TypeOfEmptyList = TEmptyListType::Create(GetTypeOfTypeLazy(), *this);
+    }
+    return TypeOfEmptyList;
+}
+
+TEmptyList* TTypeEnvironment::GetEmptyListLazy() const {
+    if (!EmptyList) {
+        EmptyList = TEmptyList::Create(*this);
+    }
+    return EmptyList;
+}
+
+TEmptyDictType* TTypeEnvironment::GetTypeOfEmptyDictLazy() const {
+    if (!TypeOfEmptyDict) {
+        TypeOfEmptyDict = TEmptyDictType::Create(GetTypeOfTypeLazy(), *this);
+    }
+    return TypeOfEmptyDict;
+}
+
+TEmptyDict* TTypeEnvironment::GetEmptyDictLazy() const {
+    if (!EmptyDict) {
+        EmptyDict = TEmptyDict::Create(*this);
+    }
+    return EmptyDict;
+}
+
+TStructLiteral* TTypeEnvironment::GetEmptyStructLazy() const {
+    if (!EmptyStruct) {
+        EmptyStruct = TStructLiteral::Create(
+            0,
+            nullptr,
+            TStructType::Create(0, nullptr, *this), *this, false);
+    }
+    return EmptyStruct;
+}
+
+TListLiteral* TTypeEnvironment::GetListOfVoidLazy() const {
+    if (!ListOfVoid) {
+        ListOfVoid = TListLiteral::Create(nullptr, 0, TListType::Create(GetVoidLazy()->GetGenericType(), *this), *this);
+    }
+    return ListOfVoid;
+}
+
+TAnyType* TTypeEnvironment::GetAnyTypeLazy() const {
+    if (!AnyType) {
+        AnyType = TAnyType::Create(GetTypeOfTypeLazy(), *this);
+    }
+    return AnyType;
+}
+
+TTupleLiteral* TTypeEnvironment::GetEmptyTupleLazy() const {
+    if (!EmptyTuple) {
+        EmptyTuple = TTupleLiteral::Create(0, nullptr, TTupleType::Create(0, nullptr, *this), *this, false);
+    }
+    return EmptyTuple;
+}
+
+TDataType* TTypeEnvironment::GetUi32Lazy() const {
+    if (!Ui32) {
+        Ui32 = TDataType::Create(NUdf::TDataType<ui32>::Id, *this);
+    }
+    return Ui32;
+}
+
+TDataType* TTypeEnvironment::GetUi64Lazy() const {
+    if (!Ui64) {
+        Ui64 = TDataType::Create(NUdf::TDataType<ui64>::Id, *this);
+    }
+    return Ui64;
+}
+
+std::vector<TNode*>& TTypeEnvironment::GetNodeStack() const {
+    return Stack;
+}
+
+TInternName TTypeEnvironment::InternName(const TStringBuf& name) const {
+    if (NamesPool.empty()) {
+        NamesPool.reserve(64);
+    }
+
+    auto it = NamesPool.find(name);
+    if (it != NamesPool.end()) {
+        return TInternName(*it);
+    }
+
+    // Copy to arena and null-terminate
+    char* data = (char*)AllocateBuffer(name.size()+1);
+    memcpy(data, name.data(), name.size());
+    data[name.size()] = 0;
+
+    return TInternName(*NamesPool.insert(TStringBuf(data, name.size())).first);
 }
 
 #define LITERALS_LIST(xx) \
@@ -375,7 +515,7 @@ bool TTypeType::CalculatePresortSupport() {
 }
 
 TDataType::TDataType(NUdf::TDataTypeId schemeType, const TTypeEnvironment& env)
-    : TType(EKind::Data, env.GetTypeOfType())
+    : TType(EKind::Data, env.GetTypeOfTypeLazy())
     , SchemeType(schemeType)
     , DataSlot(NUdf::FindDataSlot(schemeType))
 {
@@ -509,7 +649,7 @@ bool TDataLiteral::Equals(const TDataLiteral& nodeToCompare) const {
 }
 
 TPgType::TPgType(ui32 typeId, const TTypeEnvironment& env)
-    : TType(EKind::Pg, env.GetTypeOfType())
+    : TType(EKind::Pg, env.GetTypeOfTypeLazy())
     , TypeId(typeId)
 {
 }
@@ -568,7 +708,7 @@ const TString& TPgType::GetName() const {
 
 TStructType::TStructType(ui32 membersCount, std::pair<TInternName, TType*>* members, const TTypeEnvironment& env,
     bool validate)
-    : TType(EKind::Struct, env.GetTypeOfType())
+    : TType(EKind::Struct, env.GetTypeOfTypeLazy())
     , MembersCount(membersCount)
     , Members(members)
 {
@@ -755,7 +895,7 @@ TStructLiteral::TStructLiteral(TRuntimeNode* values, TStructType* type, bool val
     }
 }
 
-TStructLiteral* TStructLiteral::Create(ui32 valuesCount, const TRuntimeNode* values, TStructType* type, const TTypeEnvironment& env) {
+TStructLiteral* TStructLiteral::Create(ui32 valuesCount, const TRuntimeNode* values, TStructType* type, const TTypeEnvironment& env, bool useCachedEmptyStruct) {
     MKQL_ENSURE(valuesCount == type->GetMembersCount(), "Wrong count of members");
     TRuntimeNode* allocatedValues = nullptr;
     if (valuesCount) {
@@ -763,9 +903,8 @@ TStructLiteral* TStructLiteral::Create(ui32 valuesCount, const TRuntimeNode* val
         for (ui32 i = 0; i < valuesCount; ++i) {
             allocatedValues[i] = values[i];
         }
-    } else if (env.GetEmptyStruct()) {
-        // if EmptyStruct has already been initialized
-        return env.GetEmptyStruct();
+    } else if (useCachedEmptyStruct) {
+        return env.GetEmptyStructLazy();
     }
 
     return ::new(env.Allocate<TStructLiteral>()) TStructLiteral(allocatedValues, type);
@@ -843,9 +982,9 @@ bool TStructLiteral::Equals(const TStructLiteral& nodeToCompare) const {
 }
 
 TListType::TListType(TType* itemType, const TTypeEnvironment& env, bool validate)
-    : TType(EKind::List, env.GetTypeOfType())
+    : TType(EKind::List, env.GetTypeOfTypeLazy())
     , Data(itemType)
-    , IndexDictKey(env.GetUi64())
+    , IndexDictKey(env.GetUi64Lazy())
 {
     Y_UNUSED(validate);
 }
@@ -1023,7 +1162,7 @@ bool TListLiteral::Equals(const TListLiteral& nodeToCompare) const {
 }
 
 TStreamType::TStreamType(TType* itemType, const TTypeEnvironment& env, bool validate)
-    : TType(EKind::Stream, env.GetTypeOfType())
+    : TType(EKind::Stream, env.GetTypeOfTypeLazy())
     , Data(itemType)
 {
     Y_UNUSED(validate);
@@ -1071,7 +1210,7 @@ bool TStreamType::CalculatePresortSupport() {
 }
 
 TFlowType::TFlowType(TType* itemType, const TTypeEnvironment& env, bool validate)
-    : TType(EKind::Flow, env.GetTypeOfType())
+    : TType(EKind::Flow, env.GetTypeOfTypeLazy())
     , Data(itemType)
 {
     Y_UNUSED(validate);
@@ -1119,7 +1258,7 @@ bool TFlowType::CalculatePresortSupport() {
 }
 
 TOptionalType::TOptionalType(TType* itemType, const TTypeEnvironment& env, bool validate)
-    : TType(EKind::Optional, env.GetTypeOfType())
+    : TType(EKind::Optional, env.GetTypeOfTypeLazy())
     , Data(itemType)
 {
     Y_UNUSED(validate);
@@ -1167,7 +1306,7 @@ bool TOptionalType::CalculatePresortSupport() {
 }
 
 TTaggedType::TTaggedType(TType* baseType, TInternName tag, const TTypeEnvironment& env)
-    : TType(EKind::Tagged, env.GetTypeOfType())
+    : TType(EKind::Tagged, env.GetTypeOfTypeLazy())
     , BaseType(baseType)
     , Tag(tag)
 {
@@ -1348,7 +1487,7 @@ bool TDictType::CalculatePresortSupport() {
 }
 
 TDictType::TDictType(TType* keyType, TType* payloadType, const TTypeEnvironment& env, bool validate)
-    : TType(EKind::Dict, env.GetTypeOfType())
+    : TType(EKind::Dict, env.GetTypeOfTypeLazy())
     , KeyType(keyType)
     , PayloadType(payloadType)
 {
@@ -1492,7 +1631,7 @@ bool TDictLiteral::Equals(const TDictLiteral& nodeToCompare) const {
 
 TCallableType::TCallableType(const TInternName &name, TType* returnType, ui32 argumentsCount,
         TType **arguments, TNode* payload, const TTypeEnvironment& env)
-    : TType(EKind::Callable, env.GetTypeOfType())
+    : TType(EKind::Callable, env.GetTypeOfTypeLazy())
     , IsMergeDisabled0(false)
     , ArgumentsCount(argumentsCount)
     , Name(name)
@@ -1937,7 +2076,7 @@ TAnyType* TAnyType::Create(TTypeType* type, const TTypeEnvironment& env) {
 }
 
 TAny* TAny::Create(const TTypeEnvironment& env) {
-    return ::new(env.Allocate<TAny>()) TAny(env.GetAnyType());
+    return ::new(env.Allocate<TAny>()) TAny(env.GetAnyTypeLazy());
 }
 
 void TAny::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
@@ -2010,7 +2149,7 @@ TTupleLiteral::TTupleLiteral(TRuntimeNode* values, TTupleType* type, bool valida
     }
 }
 
-TTupleLiteral* TTupleLiteral::Create(ui32 valuesCount, const TRuntimeNode* values, TTupleType* type, const TTypeEnvironment& env) {
+TTupleLiteral* TTupleLiteral::Create(ui32 valuesCount, const TRuntimeNode* values, TTupleType* type, const TTypeEnvironment& env, bool useCachedEmptyTuple) {
     MKQL_ENSURE(valuesCount == type->GetElementsCount(), "Wrong count of elements");
     TRuntimeNode* allocatedValues = nullptr;
     if (valuesCount) {
@@ -2018,9 +2157,8 @@ TTupleLiteral* TTupleLiteral::Create(ui32 valuesCount, const TRuntimeNode* value
         for (ui32 i = 0; i < valuesCount; ++i) {
             allocatedValues[i] = values[i];
         }
-    } else if (env.GetEmptyTuple()) {
-        // if EmptyTuple has already been initialized
-        return env.GetEmptyTuple();
+    } else if (useCachedEmptyTuple) {
+        return env.GetEmptyTupleLazy();
     }
 
     return ::new(env.Allocate<TTupleLiteral>()) TTupleLiteral(allocatedValues, type);
@@ -2128,7 +2266,7 @@ bool TResourceType::CalculatePresortSupport() {
 }
 
 TResourceType* TResourceType::Create(const TStringBuf& tag, const TTypeEnvironment& env) {
-    return ::new(env.Allocate<TResourceType>()) TResourceType(env.GetTypeOfType(), env.InternName(tag));
+    return ::new(env.Allocate<TResourceType>()) TResourceType(env.GetTypeOfTypeLazy(), env.InternName(tag));
 }
 
 TVariantType* TVariantType::Create(TType* underlyingType, const TTypeEnvironment& env) {
@@ -2148,7 +2286,7 @@ bool TVariantType::IsConvertableTo(const TVariantType& typeToCompare, bool ignor
 }
 
 TVariantType::TVariantType(TType* underlyingType, const TTypeEnvironment& env, bool validate)
-    : TType(EKind::Variant, env.GetTypeOfType())
+    : TType(EKind::Variant, env.GetTypeOfTypeLazy())
     , Data(underlyingType)
 {
     if (validate) {
@@ -2256,7 +2394,7 @@ void TVariantLiteral::DoFreeze(const TTypeEnvironment& env) {
 }
 
 TBlockType::TBlockType(TType* itemType, EShape shape, const TTypeEnvironment& env)
-    : TType(EKind::Block, env.GetTypeOfType())
+    : TType(EKind::Block, env.GetTypeOfTypeLazy())
     , ItemType(itemType)
     , Shape(shape)
 {

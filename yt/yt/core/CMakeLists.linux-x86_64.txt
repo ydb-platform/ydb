@@ -82,6 +82,7 @@ target_sources(yt-yt-core PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/core/compression/brotli.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/compression/bzip2.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/compression/codec.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/compression/dictionary_codec.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/compression/stream.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/compression/lz.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/compression/lzma.cpp

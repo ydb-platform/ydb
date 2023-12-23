@@ -1,6 +1,6 @@
-// Boost.Geometry (aka GGL, Generic Geometry Library)
+// Boost.Geometry
 
-// Copyright (c) 2007-2021 Barend Gehrels, Amsterdam, the Netherlands.
+// Copyright (c) 2007-2023 Barend Gehrels, Amsterdam, the Netherlands.
 // Copyright (c) 2017 Adam Wulkiewicz, Lodz, Poland.
 
 // This file was modified by Oracle on 2015-2022.
@@ -46,10 +46,7 @@ public:
         message += method;
     }
 
-    virtual ~turn_info_exception()
-    {}
-
-    virtual char const* what() const noexcept
+    virtual char const* What() const noexcept
     {
         return message.c_str();
     }
@@ -592,7 +589,7 @@ struct touch : public base_turn_handler
         // >----->P     qj is LEFT of P1 and pi is LEFT of Q2
         //              (the other way round is also possible)
 
-        auto has_distance = [&](const auto& r1, const auto& r2) -> bool
+        auto has_distance = [&](auto const& r1, auto const& r2) -> bool
         {
             auto const d1 = get_distance_measure(r1.at(0), r1.at(1), r2.at(1), umbrella_strategy);
             auto const d2 = get_distance_measure(r2.at(1), r2.at(2), r1.at(0), umbrella_strategy);
@@ -855,24 +852,15 @@ struct equal : public base_turn_handler
         int const side_pk_p = has_pk ? side.pk_wrt_p1() : 0;
         int const side_qk_p = has_qk ? side.qk_wrt_p1() : 0;
 
-        if (BOOST_GEOMETRY_CONDITION(VerifyPolicy::use_side_verification)
-            && has_pk && has_qk && side_pk_p == side_qk_p)
+        if (has_pk && has_qk && side_pk_p == side_qk_p)
         {
             // They turn to the same side, or continue both collinearly
-            // Without rescaling, to check for union/intersection,
-            // try to check side values (without any thresholds)
-            auto const dm_pk_q2
-               = get_distance_measure(range_q.at(1), range_q.at(2), range_p.at(2),
-                                      umbrella_strategy);
-            auto const dm_qk_p2
-               = get_distance_measure(range_p.at(1), range_p.at(2), range_q.at(2),
-                                      umbrella_strategy);
+            // To check for union/intersection, try to check side values
+            int const side_qk_p2 = side.qk_wrt_p2();
 
-            if (dm_qk_p2.measure != dm_pk_q2.measure)
+            if (opposite(side_qk_p2, side_pk_q2))
             {
-                // A (possibly very small) difference is detected, which
-                // can be used to distinguish between union/intersection
-                ui_else_iu(dm_qk_p2.measure < dm_pk_q2.measure, ti);
+                ui_else_iu(side_pk_q2 == 1, ti);
                 return;
             }
         }

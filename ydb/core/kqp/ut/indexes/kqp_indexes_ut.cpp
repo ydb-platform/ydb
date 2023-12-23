@@ -36,11 +36,12 @@ TIntrusivePtr<NKqp::IKqpGateway> GetIcGateway(Tests::TServer& server) {
     counters->TxProxyMon = new NTxProxy::TTxProxyMon(server.GetRuntime()->GetAppData(0).Counters);
     std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(server.GetRuntime()->GetAnyNodeActorSystem(),TIntrusivePtr<NYql::TKikimrConfiguration>(nullptr),false);
     return NKqp::CreateKikimrIcGateway(TestCluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, "/Root", std::move(loader), server.GetRuntime()->GetAnyNodeActorSystem(),
-        server.GetRuntime()->GetNodeId(0), counters, server.GetSettings().AppConfig.GetQueryServiceConfig());
+        server.GetRuntime()->GetNodeId(0), counters, server.GetSettings().AppConfig->GetQueryServiceConfig());
 }
 
 TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, NYql::IModuleResolver::TPtr moduleResolver,
+    NActors::TActorSystem* actorSystem,
     const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry = nullptr,
     const TVector<NKikimrKqp::TKqpSetting>& settings = {}, bool keepConfigChanges = false)
 {
@@ -54,7 +55,7 @@ TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> ga
 
     auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}});
     return NKqp::CreateKqpHost(gateway, cluster, "/Root", kikimrConfig, moduleResolver,
-                               federatedQuerySetup, funcRegistry, funcRegistry, keepConfigChanges);
+                               federatedQuerySetup, funcRegistry, funcRegistry, keepConfigChanges, nullptr, actorSystem);
 }
 
 NYql::NNodes::TExprBase GetExpr(const TString& ast, NYql::TExprContext& ctx, NYql::IModuleResolver* moduleResolver) {
@@ -95,7 +96,7 @@ void CreateTableWithIndexWithState(
     metadata->KeyColumnNames.push_back("key");
 
     {
-        auto gatewayProxy = CreateKqpGatewayProxy(gateway, nullptr);
+        auto gatewayProxy = CreateKqpGatewayProxy(gateway, nullptr, server.GetRuntime()->GetAnyNodeActorSystem());
         auto result = gatewayProxy->CreateTable(metadata, true).ExtractValueSync();
         UNIT_ASSERT(result.Success());
     }
@@ -125,7 +126,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         NYql::IModuleResolver::TPtr moduleResolver;
         YQL_ENSURE(GetYqlDefaultModuleResolver(moduleCtx, moduleResolver));
         auto qp = CreateKikimrQueryProcessor(gateway, TestCluster, moduleResolver,
-            server.GetFunctionRegistry());
+            server.GetRuntime()->GetAnyNodeActorSystem(), server.GetFunctionRegistry());
 
         {
             const TString query = Q_(R"(
@@ -281,7 +282,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         NYql::IModuleResolver::TPtr moduleResolver;
         YQL_ENSURE(GetYqlDefaultModuleResolver(moduleCtx, moduleResolver));
         auto qp = CreateKikimrQueryProcessor(gateway, TestCluster, moduleResolver,
-            server.GetFunctionRegistry());
+            server.GetRuntime()->GetAnyNodeActorSystem(), server.GetFunctionRegistry());
 
         {
             const TString query = Q_(R"(
@@ -593,6 +594,122 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), NYdb::EStatus::ABORTED, result2.GetIssues().ToString().c_str());
     }
 
+    void DoUpsertWithoutIndexUpdate(bool uniq) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto tableBuilder = db.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::String)
+                .AddNullableColumn("fk1", EPrimitiveType::String)
+                .AddNullableColumn("fk2", EPrimitiveType::Int32)
+                .AddNullableColumn("fk3", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::String);
+            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            if (uniq) {
+                tableBuilder.AddUniqueSecondaryIndex("Index", TVector<TString>{"fk1", "fk2", "fk3"});
+            } else {
+                tableBuilder.AddSecondaryIndex("Index", TVector<TString>{"fk1", "fk2", "fk3"});
+            }
+            auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            // Upsert - add new row
+            const TString query2 = Q1_(R"(
+                UPSERT INTO `/Root/TestTable` (Key, fk1, fk3, Value) VALUES
+                ("Primary1", "fk1_str", 1000000000u, "Value1_1");
+            )");
+
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+            auto result = session.ExecuteDataQuery(
+                                 query2,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                                 execSettings)
+                          .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
+
+            // One read from main table
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 0);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 0);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access().size(), 2);
+
+            // One update of main table
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(4).table_access(0).has_deletes());
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(1).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(4).table_access(1).has_deletes());
+
+            {
+                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
+                const TString expected = R"([[["fk1_str"];#;[1000000000u];["Primary1"]]])";
+                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+            }
+        }
+
+        {
+            // Same query - should not touch index
+            const TString query2 = Q1_(R"(
+                UPSERT INTO `/Root/TestTable` (Key, fk1, fk3, Value) VALUES
+                ("Primary1", "fk1_str", 1000000000u, "Value1_1");
+            )");
+
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+            auto result = session.ExecuteDataQuery(
+                                 query2,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                                 execSettings)
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
+
+            // One read from main table
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 0);
+
+            // One update of main table
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(4).table_access(0).has_deletes());
+
+            {
+                const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
+                const TString expected = R"([[["fk1_str"];#;[1000000000u];["Primary1"]]])";
+                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DoUpsertWithoutIndexUpdate, UniqIndex) {
+        if (UniqIndex)
+            return; // TODO: fixit!!!
+        DoUpsertWithoutIndexUpdate(UniqIndex);
+    }
+
     Y_UNIT_TEST(UpsertWithoutExtraNullDelete) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
@@ -637,18 +754,22 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access().size(), 2);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(1).updates().rows(), 1);
-            UNIT_ASSERT(!stats.query_phases(3).table_access(0).has_deletes());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(4).table_access(0).has_deletes());
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(1).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(4).table_access(1).has_deletes());
         }
 
         {
@@ -666,23 +787,26 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
 
-            int idx = 3;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access().size(), 2);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(4).table_access(0).has_deletes());
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).updates().rows(), 1);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(1).updates().rows(), 1);
-            UNIT_ASSERT(stats.query_phases(idx).table_access(1).has_deletes());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(1).deletes().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(1).updates().rows(), 1);
+            UNIT_ASSERT(             stats.query_phases(4).table_access(1).has_deletes());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(1).deletes().rows(), 1);
         }
 
         {
@@ -701,22 +825,21 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
 
             // One read from main table
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
 
-            int idx = 3;
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access().size(), 1);
 
             // One update of main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).updates().rows(), 1);
-
-            // No touching index
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(4).table_access(0).has_deletes());
 
             {
                 const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
@@ -757,7 +880,6 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).updates().rows(), 1);
 
             // Thats it, no phase for index table - we remove it on compile time
-
             {
                 const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
                 const TString expected = R"([[["Secondary1_1"];["Primary1"]]])";
@@ -799,7 +921,6 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 UNIT_ASSERT_VALUES_EQUAL(yson, expected);
             }
         }
-
     }
 
     Y_UNIT_TEST(UpsertWithNullKeysSimple) {
@@ -1041,7 +1162,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         const auto& config = kikimr.GetTestServer().GetSettings().AppConfig;
-        auto& tableSettings = config.GetTableServiceConfig();
+        auto& tableSettings = config->GetTableServiceConfig();
         bool useSchemeCacheMeta = tableSettings.GetUseSchemeCacheMetadata();
 
         {
@@ -1749,7 +1870,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             {
                 auto settings = TExplainDataQuerySettings();
                 settings.WithCollectFullDiagnostics(true);
-            
+
                 auto result = session.ExplainDataQuery(
                     query, settings)
                     .ExtractValueSync();
@@ -1782,7 +1903,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             {
                 auto settings = TExplainDataQuerySettings();
-            
+
                 auto result = session.ExplainDataQuery(
                     query, settings)
                     .ExtractValueSync();
@@ -4699,7 +4820,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             auto reads = table["reads"].GetArraySafe();
             UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
-            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
         }
         {
             // Check that data colomns not from involved index aren't in read columns

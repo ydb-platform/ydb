@@ -26,6 +26,7 @@
 #include <boost/geometry/geometries/concepts/check.hpp>
 
 #include <boost/geometry/util/range.hpp>
+#include <boost/range/size.hpp>
 
 namespace boost { namespace geometry
 {

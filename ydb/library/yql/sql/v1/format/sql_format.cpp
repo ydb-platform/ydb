@@ -1,6 +1,7 @@
 #include "sql_format.h"
 
 #include <ydb/library/yql/parser/lexer_common/lexer.h>
+#include <ydb/library/yql/core/sql_types/simple_types.h>
 
 #include <ydb/library/yql/sql/v1/lexer/lexer.h>
 #include <ydb/library/yql/sql/v1/proto_parser/proto_parser.h>
@@ -212,8 +213,10 @@ enum class EScope {
     DoubleQuestion
 };
 
-class TVisitor;
-using TFunctor = std::function<void(TVisitor&, const NProtoBuf::Message& msg)>;
+class TPrettyVisitor;
+using TPrettyFunctor = std::function<void(TPrettyVisitor&, const NProtoBuf::Message& msg)>;
+class TObfuscatingVisitor;
+using TObfuscatingFunctor = std::function<void(TObfuscatingVisitor&, const NProtoBuf::Message& msg)>;
 
 struct TStaticData {
     TStaticData();
@@ -223,13 +226,200 @@ struct TStaticData {
 
     THashSet<TString> Keywords;
     THashMap<const NProtoBuf::Descriptor*, EScope> ScopeDispatch;
-    THashMap<const NProtoBuf::Descriptor*, TFunctor> VisitDispatch;
+    THashMap<const NProtoBuf::Descriptor*, TPrettyFunctor> PrettyVisitDispatch;
+    THashMap<const NProtoBuf::Descriptor*, TObfuscatingFunctor> ObfuscatingVisitDispatch;
 };
 
-class TVisitor {
-    friend struct TStaticData;
+template <typename T, void (T::*Func)(const NProtoBuf::Message&)>
+void VisitAllFieldsImpl(T* obj, const NProtoBuf::Descriptor* descr, const NProtoBuf::Message& msg) {
+    for (int i = 0; i < descr->field_count(); ++i) {
+        const NProtoBuf::FieldDescriptor* fd = descr->field(i);
+        NProtoBuf::TConstField field(msg, fd);
+        if (field.IsMessage()) {
+            for (size_t j = 0; j < field.Size(); ++j) {
+                (obj->*Func)(*field.template Get<NProtoBuf::Message>(j));
+            }
+        }
+    }
+}
+
+class TObfuscatingVisitor {
+friend struct TStaticData;
 public:
-    TVisitor(const TParsedTokenList& parsedTokens, const TParsedTokenList& comments)
+    TObfuscatingVisitor()
+        : StaticData(TStaticData::GetInstance())
+    {}
+
+    TString Process(const NProtoBuf::Message& msg) {
+        Scopes.push_back(EScope::Default);
+        Visit(msg);
+        return SB;
+    }
+
+private:
+    void VisitToken(const TToken& token) {
+        auto str = token.GetValue();
+        if (str == "<EOF>") {
+            return;
+        }
+
+        if (!First) {
+            SB << ' ';
+        } else {
+            First = false;
+        }
+
+        if (Scopes.back() == EScope::Identifier && !FuncCall) {
+            if (str != "$" && !NYql::LookupSimpleTypeBySqlAlias(str, true)) {
+                SB << "id";
+            } else {
+                SB << str;
+            }
+        } else if (NextToken) {
+            SB << *NextToken;
+            NextToken = Nothing();
+        } else {
+            SB << str;
+        }
+    }
+
+    void VisitLiteralValue(const TRule_literal_value& msg) {
+        switch (msg.Alt_case()) {
+        case TRule_literal_value::kAltLiteralValue1: {
+            NextToken = "0";
+            break;
+        }
+        case TRule_literal_value::kAltLiteralValue2: {
+            NextToken = "0.0";
+            break;
+        }
+        case TRule_literal_value::kAltLiteralValue3: {
+            NextToken = "'str'";
+            break;
+        }
+        case TRule_literal_value::kAltLiteralValue9: {
+            NextToken = "false";
+            break;
+        }
+        default:;
+        }
+
+        VisitAllFields(TRule_literal_value::GetDescriptor(), msg);
+    }
+
+    void VisitAtomExpr(const TRule_atom_expr& msg) {
+        switch (msg.Alt_case()) {
+        case TRule_atom_expr::kAltAtomExpr7: {
+            FuncCall = true;
+            break;
+        }
+        default:;
+        }
+
+        VisitAllFields(TRule_atom_expr::GetDescriptor(), msg);
+        FuncCall = false;
+    }
+
+    void VisitInAtomExpr(const TRule_in_atom_expr& msg) {
+        switch (msg.Alt_case()) {
+        case TRule_in_atom_expr::kAltInAtomExpr6: {
+            FuncCall = true;
+            break;
+        }
+        default:;
+        }
+
+        VisitAllFields(TRule_in_atom_expr::GetDescriptor(), msg);
+        FuncCall = false;
+    }
+
+    void VisitUnaryCasualSubexpr(const TRule_unary_casual_subexpr& msg) {
+        bool invoke = false;
+        for (auto& b : msg.GetRule_unary_subexpr_suffix2().GetBlock1()) {
+            switch (b.Alt_case()) {
+            case TRule_unary_subexpr_suffix::TBlock1::kAlt2: {
+                invoke = true;
+                break;
+            }
+            default:;
+            }
+
+            break;
+        }
+
+        if (invoke) {
+            FuncCall = true;
+        }
+
+        Visit(msg.GetBlock1());
+        if (invoke) {
+            FuncCall = false;
+        }
+
+        Visit(msg.GetRule_unary_subexpr_suffix2());
+    }
+
+    void VisitInUnaryCasualSubexpr(const TRule_in_unary_casual_subexpr& msg) {
+        bool invoke = false;
+        for (auto& b : msg.GetRule_unary_subexpr_suffix2().GetBlock1()) {
+            switch (b.Alt_case()) {
+            case TRule_unary_subexpr_suffix::TBlock1::kAlt2: {
+                invoke = true;
+                break;
+            }
+            default:;
+            }
+
+            break;
+        }
+
+        if (invoke) {
+            FuncCall = true;
+        }
+
+        Visit(msg.GetBlock1());
+        if (invoke) {
+            FuncCall = false;
+        }
+
+        Visit(msg.GetRule_unary_subexpr_suffix2());
+    }
+
+    void Visit(const NProtoBuf::Message& msg) {
+        const NProtoBuf::Descriptor* descr = msg.GetDescriptor();
+        auto scopePtr = StaticData.ScopeDispatch.FindPtr(descr);
+        if (scopePtr) {
+            Scopes.push_back(*scopePtr);
+        }
+
+        auto funcPtr = StaticData.ObfuscatingVisitDispatch.FindPtr(descr);
+        if (funcPtr) {
+            (*funcPtr)(*this, msg);
+        } else {
+            VisitAllFields(descr, msg);
+        }
+        
+        if (scopePtr) {
+            Scopes.pop_back();
+        }
+    }
+
+    void VisitAllFields(const NProtoBuf::Descriptor* descr, const NProtoBuf::Message& msg) {
+        VisitAllFieldsImpl<TObfuscatingVisitor, &TObfuscatingVisitor::Visit>(this, descr, msg);
+    }
+
+    const TStaticData& StaticData;
+    TStringBuilder SB;
+    bool First = true;
+    TMaybe<TString> NextToken;
+    TVector<EScope> Scopes;
+    bool FuncCall = false;
+};
+
+class TPrettyVisitor {
+friend struct TStaticData;
+public:
+    TPrettyVisitor(const TParsedTokenList& parsedTokens, const TParsedTokenList& comments)
         : StaticData(TStaticData::GetInstance())
         , ParsedTokens(parsedTokens)
         , Comments(comments)
@@ -378,7 +568,7 @@ private:
             InsideExpr = 0;
         }
 
-        VisitAllFieldsImpl<&TVisitor::MarkTokens>(descr, msg);
+        VisitAllFieldsImpl<TPrettyVisitor, &TPrettyVisitor::MarkTokens>(this, descr, msg);
         if (suppressExpr) {
             InsideExpr = prevInsideExpr;
         }
@@ -461,7 +651,7 @@ private:
             Scopes.push_back(*scopePtr);
         }
 
-        auto funcPtr = StaticData.VisitDispatch.FindPtr(descr);
+        auto funcPtr = StaticData.PrettyVisitDispatch.FindPtr(descr);
         if (funcPtr) {
             (*funcPtr)(*this, msg);
         } else {
@@ -1212,21 +1402,8 @@ private:
         VisitAllFields(TRule_drop_replication_stmt::GetDescriptor(), msg);
     }
 
-    template <void (TVisitor::*Func)(const NProtoBuf::Message&)>
-    void VisitAllFieldsImpl(const NProtoBuf::Descriptor* descr, const NProtoBuf::Message& msg) {
-        for (int i = 0; i < descr->field_count(); ++i) {
-            const NProtoBuf::FieldDescriptor* fd = descr->field(i);
-            NProtoBuf::TConstField field(msg, fd);
-            if (field.IsMessage()) {
-                for (size_t j = 0; j < field.Size(); ++j) {
-                    (this->*Func)(*field.template Get<NProtoBuf::Message>(j));
-                }
-            }
-        }
-    }
-
     void VisitAllFields(const NProtoBuf::Descriptor* descr, const NProtoBuf::Message& msg) {
-        VisitAllFieldsImpl<&TVisitor::Visit>(descr, msg);
+        VisitAllFieldsImpl<TPrettyVisitor, &TPrettyVisitor::Visit>(this, descr, msg);
     }
 
     void WriteComments() {
@@ -2285,8 +2462,15 @@ private:
 };
 
 template <typename T>
-TFunctor MakeFunctor(void (TVisitor::*memberPtr)(const T& msg)) {
-    return [memberPtr](TVisitor& visitor, const NProtoBuf::Message& rawMsg) {
+TPrettyFunctor MakePrettyFunctor(void (TPrettyVisitor::*memberPtr)(const T& msg)) {
+    return [memberPtr](TPrettyVisitor& visitor, const NProtoBuf::Message& rawMsg) {
+        (visitor.*memberPtr)(dynamic_cast<const T&>(rawMsg));
+    };
+}
+
+template <typename T>
+TObfuscatingFunctor MakeObfuscatingFunctor(void (TObfuscatingVisitor::*memberPtr)(const T& msg)) {
+    return [memberPtr](TObfuscatingVisitor& visitor, const NProtoBuf::Message& rawMsg) {
         (visitor.*memberPtr)(dynamic_cast<const T&>(rawMsg));
     };
 }
@@ -2311,93 +2495,101 @@ TStaticData::TStaticData()
         {TRule_bind_parameter::GetDescriptor(), EScope::Identifier},
         {TRule_an_id_as_compat::GetDescriptor(), EScope::Identifier},
         })
-    , VisitDispatch({
-        {TToken::GetDescriptor(), MakeFunctor(&TVisitor::VisitToken)},
-        {TRule_into_values_source::GetDescriptor(), MakeFunctor(&TVisitor::VisitIntoValuesSource)},
-        {TRule_select_kind::GetDescriptor(), MakeFunctor(&TVisitor::VisitSelectKind)},
-        {TRule_process_core::GetDescriptor(), MakeFunctor(&TVisitor::VisitProcessCore)},
-        {TRule_reduce_core::GetDescriptor(), MakeFunctor(&TVisitor::VisitReduceCore)},
-        {TRule_sort_specification_list::GetDescriptor(), MakeFunctor(&TVisitor::VisitSortSpecificationList)},
-        {TRule_select_core::GetDescriptor(), MakeFunctor(&TVisitor::VisitSelectCore)},
-        {TRule_join_source::GetDescriptor(), MakeFunctor(&TVisitor::VisitJoinSource)},
-        {TRule_single_source::GetDescriptor(), MakeFunctor(&TVisitor::VisitSingleSource)},
-        {TRule_flatten_source::GetDescriptor(), MakeFunctor(&TVisitor::VisitFlattenSource)},
-        {TRule_named_single_source::GetDescriptor(), MakeFunctor(&TVisitor::VisitNamedSingleSource)},
-        {TRule_simple_table_ref::GetDescriptor(), MakeFunctor(&TVisitor::VisitSimpleTableRef)},
-        {TRule_into_simple_table_ref::GetDescriptor(), MakeFunctor(&TVisitor::VisitIntoSimpleTableRef)},
-        {TRule_select_kind_partial::GetDescriptor(), MakeFunctor(&TVisitor::VisitSelectKindPartial)},
-        {TRule_flatten_by_arg::GetDescriptor(), MakeFunctor(&TVisitor::VisitFlattenByArg)},
-        {TRule_without_column_list::GetDescriptor(), MakeFunctor(&TVisitor::VisitWithoutColumnList)},
-        {TRule_table_ref::GetDescriptor(), MakeFunctor(&TVisitor::VisitTableRef)},
-        {TRule_grouping_element_list::GetDescriptor(), MakeFunctor(&TVisitor::VisitGroupingElementList)},
-        {TRule_group_by_clause::GetDescriptor(), MakeFunctor(&TVisitor::VisitGroupByClause)},
-        {TRule_window_definition_list::GetDescriptor(), MakeFunctor(&TVisitor::VisitWindowDefinitionList)},
-        {TRule_window_specification::GetDescriptor(), MakeFunctor(&TVisitor::VisitWindowSpecification)},
-        {TRule_window_partition_clause::GetDescriptor(), MakeFunctor(&TVisitor::VisitWindowParitionClause)},
-        {TRule_lambda_body::GetDescriptor(), MakeFunctor(&TVisitor::VisitLambdaBody)},
-        {TRule_in_atom_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitInAtomExpr)},
-        {TRule_select_kind_parenthesis::GetDescriptor(), MakeFunctor(&TVisitor::VisitSelectKindParenthesis)},
-        {TRule_cast_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitCastExpr)},
-        {TRule_bitcast_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitBitCastExpr)},
-        {TRule_ext_order_by_clause::GetDescriptor(), MakeFunctor(&TVisitor::VisitExtOrderByClause)},
-        {TRule_key_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitKeyExpr)},
-        {TRule_define_action_or_subquery_body::GetDescriptor(), MakeFunctor(&TVisitor::VisitDefineActionOrSubqueryBody)},
-        {TRule_exists_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitExistsExpr)},
-        {TRule_case_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitCaseExpr)},
-        {TRule_when_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitWhenExpr)},
+    , PrettyVisitDispatch({
+        {TToken::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitToken)},
+        {TRule_into_values_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIntoValuesSource)},
+        {TRule_select_kind::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectKind)},
+        {TRule_process_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitProcessCore)},
+        {TRule_reduce_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitReduceCore)},
+        {TRule_sort_specification_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSortSpecificationList)},
+        {TRule_select_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectCore)},
+        {TRule_join_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitJoinSource)},
+        {TRule_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSingleSource)},
+        {TRule_flatten_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitFlattenSource)},
+        {TRule_named_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNamedSingleSource)},
+        {TRule_simple_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSimpleTableRef)},
+        {TRule_into_simple_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIntoSimpleTableRef)},
+        {TRule_select_kind_partial::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectKindPartial)},
+        {TRule_flatten_by_arg::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitFlattenByArg)},
+        {TRule_without_column_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWithoutColumnList)},
+        {TRule_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableRef)},
+        {TRule_grouping_element_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupingElementList)},
+        {TRule_group_by_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupByClause)},
+        {TRule_window_definition_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWindowDefinitionList)},
+        {TRule_window_specification::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWindowSpecification)},
+        {TRule_window_partition_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWindowParitionClause)},
+        {TRule_lambda_body::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitLambdaBody)},
+        {TRule_in_atom_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitInAtomExpr)},
+        {TRule_select_kind_parenthesis::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectKindParenthesis)},
+        {TRule_cast_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCastExpr)},
+        {TRule_bitcast_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitBitCastExpr)},
+        {TRule_ext_order_by_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExtOrderByClause)},
+        {TRule_key_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitKeyExpr)},
+        {TRule_define_action_or_subquery_body::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDefineActionOrSubqueryBody)},
+        {TRule_exists_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExistsExpr)},
+        {TRule_case_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCaseExpr)},
+        {TRule_when_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWhenExpr)},
 
-        {TRule_expr::GetDescriptor(), MakeFunctor(&TVisitor::VisitExpr)},
-        {TRule_or_subexpr::GetDescriptor(), MakeFunctor(&TVisitor::VisitOrSubexpr)},
-        {TRule_and_subexpr::GetDescriptor(), MakeFunctor(&TVisitor::VisitAndSubexpr)},
-        {TRule_eq_subexpr::GetDescriptor(), MakeFunctor(&TVisitor::VisitEqSubexpr)},
-        {TRule_neq_subexpr::GetDescriptor(), MakeFunctor(&TVisitor::VisitNeqSubexpr)},
-        {TRule_bit_subexpr::GetDescriptor(), MakeFunctor(&TVisitor::VisitBitSubexpr)},
-        {TRule_add_subexpr::GetDescriptor(), MakeFunctor(&TVisitor::VisitAddSubexpr)},
-        {TRule_mul_subexpr::GetDescriptor(), MakeFunctor(&TVisitor::VisitMulSubexpr)},
+        {TRule_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExpr)},
+        {TRule_or_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitOrSubexpr)},
+        {TRule_and_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAndSubexpr)},
+        {TRule_eq_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitEqSubexpr)},
+        {TRule_neq_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNeqSubexpr)},
+        {TRule_bit_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitBitSubexpr)},
+        {TRule_add_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAddSubexpr)},
+        {TRule_mul_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitMulSubexpr)},
 
-        {TRule_rot_right::GetDescriptor(), MakeFunctor(&TVisitor::VisitRotRight)},
-        {TRule_shift_right::GetDescriptor(), MakeFunctor(&TVisitor::VisitShiftRight)},
+        {TRule_rot_right::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRotRight)},
+        {TRule_shift_right::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitShiftRight)},
 
-        {TRule_pragma_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitPragma)},
-        {TRule_select_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitSelect)},
-        {TRule_select_unparenthesized_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitSelectUnparenthesized)},
-        {TRule_named_nodes_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitNamedNodes)},
-        {TRule_create_table_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitCreateTable)},
-        {TRule_drop_table_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropTable)},
-        {TRule_use_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitUse)},
-        {TRule_into_table_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitIntoTable)},
-        {TRule_commit_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitCommit)},
-        {TRule_update_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitUpdate)},
-        {TRule_delete_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDelete)},
-        {TRule_rollback_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitRollback)},
-        {TRule_declare_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDeclare)},
-        {TRule_import_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitImport)},
-        {TRule_export_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitExport)},
-        {TRule_alter_table_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitAlterTable)},
-        {TRule_do_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDo)},
-        {TRule_define_action_or_subquery_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitAction)},
-        {TRule_if_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitIf)},
-        {TRule_for_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitFor)},
-        {TRule_values_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitValues)},
-        {TRule_create_user_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitCreateUser)},
-        {TRule_alter_user_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitAlterUser)},
-        {TRule_create_group_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitCreateGroup)},
-        {TRule_alter_group_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitAlterGroup)},
-        {TRule_drop_role_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropRole)},
-        {TRule_upsert_object_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitUpsertObject)},
-        {TRule_create_object_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitCreateObject)},
-        {TRule_alter_object_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitAlterObject)},
-        {TRule_drop_object_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropObject)},
-        {TRule_create_external_data_source_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitCreateExternalDataSource)},
-        {TRule_drop_external_data_source_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropExternalDataSource)},
-        {TRule_create_replication_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitCreateAsyncReplication)},
-        {TRule_drop_replication_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropAsyncReplication)},
-        {TRule_create_topic_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitCreateTopic)},
-        {TRule_alter_topic_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitAlterTopic)},
-        {TRule_drop_topic_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropTopic)},
-        {TRule_grant_permissions_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitGrantPermissions)},
-        {TRule_revoke_permissions_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitRevokePermissions)},
-        {TRule_alter_table_store_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitAlterTableStore)}
+        {TRule_pragma_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitPragma)},
+        {TRule_select_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelect)},
+        {TRule_select_unparenthesized_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectUnparenthesized)},
+        {TRule_named_nodes_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNamedNodes)},
+        {TRule_create_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateTable)},
+        {TRule_drop_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTable)},
+        {TRule_use_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitUse)},
+        {TRule_into_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIntoTable)},
+        {TRule_commit_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCommit)},
+        {TRule_update_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitUpdate)},
+        {TRule_delete_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDelete)},
+        {TRule_rollback_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRollback)},
+        {TRule_declare_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDeclare)},
+        {TRule_import_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitImport)},
+        {TRule_export_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExport)},
+        {TRule_alter_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTable)},
+        {TRule_do_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDo)},
+        {TRule_define_action_or_subquery_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAction)},
+        {TRule_if_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIf)},
+        {TRule_for_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitFor)},
+        {TRule_values_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitValues)},
+        {TRule_create_user_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateUser)},
+        {TRule_alter_user_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterUser)},
+        {TRule_create_group_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateGroup)},
+        {TRule_alter_group_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterGroup)},
+        {TRule_drop_role_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropRole)},
+        {TRule_upsert_object_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitUpsertObject)},
+        {TRule_create_object_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateObject)},
+        {TRule_alter_object_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterObject)},
+        {TRule_drop_object_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropObject)},
+        {TRule_create_external_data_source_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateExternalDataSource)},
+        {TRule_drop_external_data_source_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropExternalDataSource)},
+        {TRule_create_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateAsyncReplication)},
+        {TRule_drop_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropAsyncReplication)},
+        {TRule_create_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateTopic)},
+        {TRule_alter_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTopic)},
+        {TRule_drop_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTopic)},
+        {TRule_grant_permissions_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGrantPermissions)},
+        {TRule_revoke_permissions_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRevokePermissions)},
+        {TRule_alter_table_store_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTableStore)}
+        })
+    , ObfuscatingVisitDispatch({
+        {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},
+        {TRule_literal_value::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitLiteralValue)},
+        {TRule_atom_expr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitAtomExpr)},
+        {TRule_in_atom_expr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitInAtomExpr)},
+        {TRule_unary_casual_subexpr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitUnaryCasualSubexpr)},
+        {TRule_in_unary_casual_subexpr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitInUnaryCasualSubexpr)},
         })
 {
     // ensure that all statements has a visitor
@@ -2416,7 +2608,7 @@ TStaticData::TStaticData()
             }
 
             auto stmtMessage = fd2->message_type();
-            Y_ENSURE(VisitDispatch.contains(stmtMessage), TStringBuilder() << "Missing visitor for " << stmtMessage->name());
+            Y_ENSURE(PrettyVisitDispatch.contains(stmtMessage), TStringBuilder() << "Missing visitor for " << stmtMessage->name());
         }
     }
 }
@@ -2427,15 +2619,25 @@ public:
         : Settings(settings)
     {}
 
-    bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues) override {
-        formattedQuery = query;
+    bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues, EFormatMode mode) override {
+        formattedQuery = (mode == EFormatMode::Obfuscate) ? "" : query;
         auto parsedSettings = Settings;
         if (!NSQLTranslation::ParseTranslationSettings(query, parsedSettings, issues)) {
             return false;
         }
 
         if (parsedSettings.PgParser) {
-            return true;
+            return mode != EFormatMode::Obfuscate;
+        }
+
+        if (mode == EFormatMode::Obfuscate) {
+            auto message = NSQLTranslationV1::SqlAST(query, "Query", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
+            if (!message) {
+                return false;
+            }
+
+            TObfuscatingVisitor visitor;
+            return Format(visitor.Process(*message), formattedQuery, issues, EFormatMode::Pretty);
         }
 
         auto lexer = NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer);
@@ -2502,7 +2704,7 @@ public:
                 continue;
             }
 
-            TVisitor visitor(parsedTokens, comments);
+            TPrettyVisitor visitor(parsedTokens, comments);
             bool addLine;
             auto currentFormattedQuery = visitor.Process(*message, addLine);
             TParsedTokenList stmtFormattedTokens;

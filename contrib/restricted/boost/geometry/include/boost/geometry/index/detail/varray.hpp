@@ -21,7 +21,6 @@
 #include <boost/concept_check.hpp>
 #include <boost/config.hpp>
 #include <boost/core/ignore_unused.hpp>
-#include <boost/core/swap.hpp>
 #include <boost/integer.hpp>
 
 // TODO - use std::reverse_iterator and std::iterator_traits
@@ -1566,7 +1565,6 @@ private:
         {
             //std::iter_swap(first_sm, first_la);
             //std::swap(*first_sm, *first_la);                                      // may throw
-            //boost::swap(*first_sm, *first_la);
             value_type temp(std::move(*first_sm));                                  // may throw
             *first_sm = std::move(*first_la);                                       // may throw
             *first_la = std::move(temp);                                            // may throw

@@ -172,7 +172,7 @@ import_bits(
     number<cpp_int_backend<MinBits, MaxBits, SignType, Checked, Allocator>, ExpressionTemplates>& val, T* i, T* j, std::size_t chunk_size = 0, bool msv_first = true)
 {
 #if BOOST_MP_ENDIAN_LITTLE_BYTE
-   if (((chunk_size % CHAR_BIT) == 0) && !msv_first)
+   if (((chunk_size % CHAR_BIT) == 0) && !msv_first && (sizeof(*i) * CHAR_BIT == chunk_size))
       return detail::import_bits_fast(val, i, j, chunk_size);
 #endif
    return detail::import_bits_generic(val, i, j, chunk_size, msv_first);

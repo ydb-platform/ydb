@@ -73,7 +73,7 @@ public:
     explicit TAlignedPagePoolImpl(const TSourceLocation& location,
             const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters())
         : Counters(counters)
-        , DebugInfo(TStringBuilder() << location)
+        , DebugInfo(location)
     {
         if (Counters.PoolsCntr) {
             ++(*Counters.PoolsCntr);
@@ -136,8 +136,8 @@ public:
 
     void PrintStat(size_t usedPages, IOutputStream& out) const;
 
-    const TString& GetInfo() const {
-        return DebugInfo;
+    TString GetDebugInfo() const {
+        return ToString(DebugInfo);
     }
 
     void* GetBlock(size_t size);
@@ -252,7 +252,7 @@ protected:
     ui64 AllocNotifyCurrentBytes = 0;
 
     TIncreaseMemoryLimitCallback IncreaseMemoryLimitCallback;
-    TString DebugInfo;
+    const TSourceLocation DebugInfo;
 };
 
 using TAlignedPagePool = TAlignedPagePoolImpl<>;

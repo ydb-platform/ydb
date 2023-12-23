@@ -8,6 +8,12 @@ namespace NYT::NCompression {
 
 struct ICodec;
 
+struct TDictionaryCompressionFrameInfo;
+DECLARE_REFCOUNTED_STRUCT(IDictionaryCompressor)
+DECLARE_REFCOUNTED_STRUCT(IDictionaryDecompressor)
+DECLARE_REFCOUNTED_STRUCT(IDigestedCompressionDictionary)
+DECLARE_REFCOUNTED_STRUCT(IDigestedDecompressionDictionary)
+
 DEFINE_AMBIGUOUS_ENUM_WITH_UNDERLYING_TYPE(ECodec, i8,
     ((None)                       (0))
     ((Snappy)                     (1))

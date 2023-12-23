@@ -51,6 +51,9 @@ ui32 TKernelRequestBuilder::AddBinaryOp(EBinaryOp op, const TTypeAnnotationNode*
     case EBinaryOp::Xor:
         Items_.emplace_back(Pb_.BlockXor(arg1, arg2));
         break;
+    case EBinaryOp::Coalesce:
+        Items_.emplace_back(Pb_.BlockCoalesce(arg1, arg2));
+        break;
     case EBinaryOp::Add:
     case EBinaryOp::Sub:
     case EBinaryOp::Mul:

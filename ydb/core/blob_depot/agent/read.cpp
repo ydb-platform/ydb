@@ -187,7 +187,8 @@ namespace NKikimr::NBlobDepot {
                 readContext.BlobWithoutData = blob.Id;
                 return;
             } else if (blob.Status != NKikimrProto::OK) {
-                return readContext.EndWithError(this, blob.Status, TStringBuilder() << "failed to read BlobId# " << blob.Id);
+                return readContext.EndWithError(this, blob.Status, TStringBuilder() << "failed to read BlobId# " << blob.Id
+                    << " Status# " << blob.Status << " ErrorReason# '" << msg.ErrorReason << "'");
             }
 
             const ui64 offset = partContext.Offsets[i];

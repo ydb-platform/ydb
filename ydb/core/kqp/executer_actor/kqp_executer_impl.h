@@ -4,6 +4,7 @@
 #include "kqp_executer_stats.h"
 #include "kqp_planner.h"
 #include "kqp_partition_helper.h"
+#include "kqp_result_channel.h"
 #include "kqp_table_resolver.h"
 #include "kqp_shards_resolver.h"
 
@@ -1076,7 +1077,7 @@ protected:
         }
     }
 
-    void BuildComputeTasks(TStageInfo& stageInfo) {
+    void BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount) {
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         ui32 partitionsCount = 1;
@@ -1127,7 +1128,7 @@ protected:
         }
 
         if (isShuffle) {
-            partitionsCount = std::max(partitionsCount, GetMaxTasksAggregation(stageInfo, inputTasks, ShardsOnNode.size()));
+            partitionsCount = std::max(partitionsCount, GetMaxTasksAggregation(stageInfo, inputTasks, nodesCount));
         }
 
         for (ui32 i = 0; i < partitionsCount; ++i) {
@@ -1598,9 +1599,9 @@ protected:
         IActor* proxy;
         if (txResult.IsStream && txResult.QueryResultIndex.Defined()) {
             proxy = CreateResultStreamChannelProxy(TxId, channel.Id, txResult.MkqlItemType,
-                txResult.ColumnOrder, *txResult.QueryResultIndex, Target, Stats, this->SelfId());
+                txResult.ColumnOrder, *txResult.QueryResultIndex, Target, this->SelfId());
         } else {
-            proxy = CreateResultDataChannelProxy(TxId, channel.Id, Stats, this->SelfId(),
+            proxy = CreateResultDataChannelProxy(TxId, channel.Id, this->SelfId(),
                 channel.DstInputIndex, ResponseEv.get());
         }
 
@@ -1687,7 +1688,7 @@ protected:
     const TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpRequestCounters::TPtr Counters;
-    std::shared_ptr<TQueryExecutionStats> Stats;
+    std::unique_ptr<TQueryExecutionStats> Stats;
     TInstant LastProgressStats;
     TInstant StartTime;
     TMaybe<TInstant> Deadline;

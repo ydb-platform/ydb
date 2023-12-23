@@ -13,7 +13,7 @@ import (
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
-type columnarBufferArrowIPCStreamingDefault struct {
+type columnarBufferArrowIPCStreamingDefault[T utils.Acceptor] struct {
 	arrowAllocator memory.Allocator
 	builders       []array.Builder
 	schema         *arrow.Schema
@@ -21,9 +21,11 @@ type columnarBufferArrowIPCStreamingDefault struct {
 }
 
 // AddRow saves a row obtained from the datasource into the buffer
-func (cb *columnarBufferArrowIPCStreamingDefault) addRow(transformer utils.Transformer) error {
+func (cb *columnarBufferArrowIPCStreamingDefault[T]) addRow(transformer utils.RowTransformer[T]) error {
 	if len(cb.builders) != len(transformer.GetAcceptors()) {
-		return fmt.Errorf("expected row %v values, got %v", len(cb.builders), len(transformer.GetAcceptors()))
+		return fmt.Errorf(
+			"expected %v values in a row, got %v instead",
+			len(cb.builders), len(transformer.GetAcceptors()))
 	}
 
 	if err := transformer.AppendToArrowBuilders(cb.builders); err != nil {
@@ -34,7 +36,7 @@ func (cb *columnarBufferArrowIPCStreamingDefault) addRow(transformer utils.Trans
 }
 
 // ToResponse returns all the accumulated data and clears buffer
-func (cb *columnarBufferArrowIPCStreamingDefault) ToResponse() (*api_service_protos.TReadSplitsResponse, error) {
+func (cb *columnarBufferArrowIPCStreamingDefault[T]) ToResponse() (*api_service_protos.TReadSplitsResponse, error) {
 	chunk := make([]arrow.Array, 0, len(cb.builders))
 
 	// prepare arrow record
@@ -70,10 +72,10 @@ func (cb *columnarBufferArrowIPCStreamingDefault) ToResponse() (*api_service_pro
 	return out, nil
 }
 
-func (cb *columnarBufferArrowIPCStreamingDefault) TotalRows() int { return cb.builders[0].Len() }
+func (cb *columnarBufferArrowIPCStreamingDefault[T]) TotalRows() int { return cb.builders[0].Len() }
 
 // Frees resources if buffer is no longer used
-func (cb *columnarBufferArrowIPCStreamingDefault) Release() {
+func (cb *columnarBufferArrowIPCStreamingDefault[T]) Release() {
 	// cleanup builders
 	for _, b := range cb.builders {
 		b.Release()

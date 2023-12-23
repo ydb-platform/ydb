@@ -116,6 +116,7 @@ public:
         , GroupId(groupId)
         , GroupInfo(part->Scheme->GetLayout(groupId))
         , Meta(groupId.IsHistoric() ? part->IndexPages.BTreeHistoric[groupId.Index] : part->IndexPages.BTreeGroups[groupId.Index])
+        , State(Reserve(Meta.LevelsCount + 1))
     {
         const static TCellsIterable EmptyKey(static_cast<const char*>(nullptr), TColumns());
         State.emplace_back(Meta, 0, GetEndRowId(), EmptyKey, EmptyKey);
@@ -127,6 +128,14 @@ public:
         }
 
         return DoSeek<TSeekRowId>({rowId});
+    }
+
+    EReady SeekLast() override {
+        if (Y_UNLIKELY(GetEndRowId() == 0)) {
+            Y_DEBUG_ABORT_UNLESS(false, "TPart can't be empty");
+            return Exhaust();
+        }
+        return Seek(GetEndRowId() - 1);
     }
 
     /**

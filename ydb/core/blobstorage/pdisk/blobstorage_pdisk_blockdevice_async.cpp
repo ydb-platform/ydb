@@ -1359,7 +1359,7 @@ public:
 
             for (auto it = range.first; it != range.second; ++it) {
                 TRead &read = it->second;
-                
+
                 Y_ABORT_UNLESS(read.CompletionAction);
 
                 read.CompletionAction->SetResult(completion->Result);

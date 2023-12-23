@@ -132,7 +132,7 @@ namespace NKikimr {
             } else {
                 LOG_WARN(ctx, NKikimrServices::BS_SYNCER,
                     VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                        "SelfCommit in TSyncerCommitter is disabled"));                
+                        "SelfCommit in TSyncerCommitter is disabled"));
             }
             TThis::Become(&TThis::StateFunc);
         }

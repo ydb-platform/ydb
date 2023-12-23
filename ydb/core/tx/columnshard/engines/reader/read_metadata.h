@@ -42,12 +42,16 @@ struct TReadStats {
 
     ui32 SelectedRows = 0;
 
-    TReadStats(ui32 indexNo)
+    TReadStats(ui32 indexNo = 0)
         : BeginTimestamp(TInstant::Now())
         , SelectedIndex(indexNo)
     {}
 
     void PrintToLog();
+
+    ui64 GetReadBytes() const {
+        return CompactedPortionsBytes + InsertedPortionsBytes + CompactedPortionsBytes;
+    }
 
     TDuration Duration() {
         return TInstant::Now() - BeginTimestamp;
@@ -99,7 +103,7 @@ public:
     }
     virtual ~TReadMetadataBase() = default;
 
-    ui64 Limit{0}; // TODO
+    ui64 Limit = 0;
 
     virtual void Dump(IOutputStream& out) const {
         out << " predicate{" << (PKRangesFilter ? PKRangesFilter->DebugString() : "no_initialized") << "}"
@@ -149,6 +153,7 @@ public:
         return result;
     }
     std::shared_ptr<TSelectInfo> SelectInfo;
+    NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     std::vector<TCommittedBlob> CommittedBlobs;
     std::shared_ptr<TReadStats> ReadStats;
 
@@ -209,16 +214,12 @@ public:
         return SelectInfo->PortionsOrderedPK.empty() && CommittedBlobs.empty();
     }
 
-    std::shared_ptr<arrow::Schema> GetSortingKey() const {
-        return ResultIndexSchema->GetIndexInfo().GetSortingKey();
-    }
-
     std::shared_ptr<arrow::Schema> GetReplaceKey() const {
         return ResultIndexSchema->GetIndexInfo().GetReplaceKey();
     }
 
     std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {
-        return ResultIndexSchema->GetIndexInfo().GetPrimaryKey();
+        return ResultIndexSchema->GetIndexInfo().GetPrimaryKeyColumns();
     }
 
     size_t NumIndexedChunks() const {

@@ -20,7 +20,7 @@ from clickhouse_connect.driver.options import check_arrow, pd_extended_dtypes
 from clickhouse_connect.driver.context import BaseQueryContext
 
 logger = logging.getLogger(__name__)
-commands = 'CREATE|ALTER|SYSTEM|GRANT|REVOKE|CHECK|DETACH|DROP|DELETE|KILL|' + \
+commands = 'CREATE|ALTER|SYSTEM|GRANT|REVOKE|CHECK|DETACH|ATTACH|DROP|DELETE|KILL|' + \
            'OPTIMIZE|SET|RENAME|TRUNCATE|USE'
 
 limit_re = re.compile(r'\s+LIMIT($|\s)', re.IGNORECASE)

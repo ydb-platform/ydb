@@ -21,5 +21,4 @@ target_link_libraries(restricted-boost-function INTERFACE
   restricted-boost-preprocessor
   restricted-boost-throw_exception
   restricted-boost-type_traits
-  restricted-boost-typeof
 )

@@ -27,6 +27,10 @@
 #include <boost/geometry/strategies/default_distance_result.hpp>
 #include <boost/geometry/strategies/default_length_result.hpp>
 
+#include <boost/range/begin.hpp>
+#include <boost/range/end.hpp>
+#include <boost/range/size.hpp>
+#include <boost/range/value_type.hpp>
 
 namespace boost { namespace geometry { namespace index { namespace detail {
 

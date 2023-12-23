@@ -112,10 +112,6 @@ std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& cl
         writeSettings.MessageGroupId(producer);
     }
 
-    writeSettings.EventHandlers_.AcksHandler([&](TWriteSessionEvent::TAcksEvent& ev) {
-        Cerr << ">>>>> Received TWriteSessionEvent::TAcksEvent " <<  ev.DebugString() << Endl << Flush;
-    });
-
     return client.CreateSimpleBlockingWriteSession(writeSettings);
 }
 
@@ -145,8 +141,8 @@ struct TTestReadSession {
             for (size_t i = 0u; i < messages.size(); ++i) {
                 auto& message = messages[i];
 
-                Cerr << ">>>>> Received TDataReceivedEvent message partitionId=" << message.GetPartitionSession()->GetPartitionId() 
-                     << ", message=" << message.GetData() 
+                Cerr << ">>>>> Received TDataReceivedEvent message partitionId=" << message.GetPartitionSession()->GetPartitionId()
+                     << ", message=" << message.GetData()
                      << ", seqNo=" << message.GetSeqNo()
                      << ", offset=" << message.GetOffset()
                      << Endl;

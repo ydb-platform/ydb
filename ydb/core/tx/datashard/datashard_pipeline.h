@@ -265,7 +265,11 @@ public:
     TOperation::TPtr BuildOperation(TEvDataShard::TEvProposeTransaction::TPtr &ev,
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
-                                    const TActorContext &ctx);
+                                    const TActorContext &ctx, NWilson::TTraceId traceId);
+    TOperation::TPtr BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr &ev,
+                                    TInstant receivedAt, ui64 tieBreakerIndex,
+                                    NTabletFlatExecutor::TTransactionContext &txc,
+                                    const TActorContext &ctx, NWilson::TTraceId traceId);
     void BuildDataTx(TActiveTransaction *tx,
                      TTransactionContext &txc,
                      const TActorContext &ctx);
@@ -344,7 +348,9 @@ public:
     void MaybeActivateWaitingSchemeOps(const TActorContext& ctx) const;
 
     ui64 WaitingTxs() const { return WaitingDataTxOps.size(); } // note that without iterators
+    bool CheckInflightLimit() const;
     bool AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
+    bool AddWaitingTxOp(NEvents::TDataEvents::TEvWrite::TPtr& ev);
     void ActivateWaitingTxOps(TRowVersion edge, bool prioritizedReads, const TActorContext& ctx);
     void ActivateWaitingTxOps(const TActorContext& ctx);
 
@@ -507,7 +513,7 @@ private:
     TWaitingSchemeOpsOrder WaitingSchemeOpsOrder;
     TWaitingSchemeOps WaitingSchemeOps;
 
-    TMultiMap<TRowVersion, TEvDataShard::TEvProposeTransaction::TPtr> WaitingDataTxOps;
+    TMultiMap<TRowVersion, TAutoPtr<IEventHandle>> WaitingDataTxOps;
     TCommittingDataTxOps CommittingOps;
 
     THashMap<ui64, TOperation::TPtr> CompletingOps;

@@ -608,7 +608,7 @@ struct TEvChunkUnlock : public TEventLocal<TEvChunkUnlock, TEvBlobStorage::EvChu
     TOwner Owner = 0;
     TVDiskID VDiskId = TVDiskID::InvalidId;
     bool IsGenerationSet = true;
-    
+
     TEvChunkUnlock(TEvChunkLock::ELockFrom lockFrom)
         : LockFrom(lockFrom)
     {
@@ -643,7 +643,7 @@ struct TEvChunkUnlock : public TEventLocal<TEvChunkUnlock, TEvBlobStorage::EvChu
         str << "{EvChunkLock LockFrom# " << TEvChunkLock::ELockFrom_Name(record.LockFrom);
         if (record.Owner) {
             str << " Owner# " << record.Owner;
-        } 
+        }
         if (record.ByVDiskId) {
             if (record.IsGenerationSet) {
                 str << " VDiskId# " << record.VDiskId.ToString();

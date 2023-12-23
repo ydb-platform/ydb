@@ -1,6 +1,6 @@
 #include <ydb/library/yaml_config/validator/validator_builder.h>
 
-namespace NYamlConfig::NValidator {
+namespace NKikimr::NYamlConfig::NValidator {
 namespace Configurators {
 
 std::function<void(TInt64Builder&)> nonNegative();
@@ -28,4 +28,4 @@ std::function<void(Builder&)> combine(
 TNodeWrapper walkFrom(TNodeWrapper node, TString path);
 TNodeWrapper walkFrom(TNodeWrapper node, const TVector<TString>& pathTokens);
 
-} // namespace NYamlConfig::NValidator
+} // namespace NKikimr::NYamlConfig::NValidator

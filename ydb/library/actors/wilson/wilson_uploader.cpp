@@ -21,6 +21,8 @@ namespace NWilson {
         class TWilsonUploader
             : public TActorBootstrapped<TWilsonUploader>
         {
+            static constexpr size_t WILSON_SERVICE_ID = 430;
+
             TString Host;
             ui16 Port;
             TString RootCA;
@@ -72,20 +74,19 @@ namespace NWilson {
                 }) : grpc::InsecureChannelCredentials());
                 Stub = NServiceProto::TraceService::NewStub(Channel);
 
-                LOG_INFO_S(*TlsActivationContext, 430 /* NKikimrServices::WILSON */, "TWilsonUploader::Bootstrap");
+                LOG_INFO_S(*TlsActivationContext, WILSON_SERVICE_ID, "TWilsonUploader::Bootstrap");
             }
 
             void Handle(TEvWilson::TPtr ev) {
                 if (SpansSize >= 100'000'000) {
-                    LOG_ERROR_S(*TlsActivationContext, 430 /* NKikimrServices::WILSON */, "dropped span due to overflow");
+                    LOG_ERROR_S(*TlsActivationContext, WILSON_SERVICE_ID, "dropped span due to overflow");
                 } else {
                     const TMonotonic expirationTimestamp = TActivationContext::Monotonic() + MaxSpanTimeInQueue;
                     auto& span = ev->Get()->Span;
                     const ui32 size = span.ByteSizeLong();
                     Spans.push_back(TSpanQueueItem{expirationTimestamp, std::move(span), size});
                     SpansSize += size;
-                    CheckIfDone();
-                    TryToSend();
+                    TryMakeProgress();
                 }
             }
 
@@ -105,7 +106,7 @@ namespace NWilson {
                 }
 
                 if (numSpansDropped) {
-                    LOG_ERROR_S(*TlsActivationContext, 430 /* NKikimrServices::WILSON */,
+                    LOG_ERROR_S(*TlsActivationContext, WILSON_SERVICE_ID,
                         "dropped " << numSpansDropped << " span(s) due to expiration");
                 }
 
@@ -128,7 +129,7 @@ namespace NWilson {
                     auto& item = Spans.front();
                     auto& s = item.Span;
 
-                    LOG_DEBUG_S(*TlsActivationContext, 430 /* NKikimrServices::WILSON */, "exporting span"
+                    LOG_DEBUG_S(*TlsActivationContext, WILSON_SERVICE_ID, "exporting span"
                         << " TraceId# " << HexEncode(s.trace_id())
                         << " SpanId# " << HexEncode(s.span_id())
                         << " ParentSpanId# " << HexEncode(s.parent_span_id())
@@ -139,6 +140,7 @@ namespace NWilson {
                     NextSendTimestamp += TDuration::MicroSeconds(1'000'000 / MaxSpansPerSecond);
                 }
 
+                ScheduleWakeup(NextSendTimestamp);
                 Context = std::make_unique<grpc::ClientContext>();
                 Reader = Stub->AsyncExport(Context.get(), std::move(request), &CQ);
                 Reader->Finish(&Response, &Status, nullptr);
@@ -150,7 +152,7 @@ namespace NWilson {
                     bool ok;
                     if (CQ.AsyncNext(&tag, &ok, std::chrono::system_clock::now()) == grpc::CompletionQueue::GOT_EVENT) {
                         if (!Status.ok()) {
-                            LOG_ERROR_S(*TlsActivationContext, 430 /* NKikimrServices::WILSON */,
+                            LOG_ERROR_S(*TlsActivationContext, WILSON_SERVICE_ID,
                                 "failed to commit traces: " << Status.error_message());
                         }
 
@@ -174,6 +176,10 @@ namespace NWilson {
             void HandleWakeup() {
                 Y_ABORT_UNLESS(WakeupScheduled);
                 WakeupScheduled = false;
+                TryMakeProgress();
+            }
+
+            void TryMakeProgress() {
                 CheckIfDone();
                 TryToSend();
             }

@@ -73,7 +73,7 @@ Y_UNIT_TEST_SUITE(TKernelRegistryTest) {
             auto blockBoolType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Bool));
             return b.AddBinaryOp(TKernelRequestBuilder::EBinaryOp::Xor, blockBoolType, blockBoolType, blockBoolType);
         });
-    }    
+    }
 
     Y_UNIT_TEST(TestAdd) {
         TestOne([](auto& b,auto& ctx) {
@@ -101,6 +101,30 @@ Y_UNIT_TEST_SUITE(TKernelRegistryTest) {
             auto blockInt32Type = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Int32));
             auto blockOptInt32Type = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TOptionalExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Int32)));
             return b.AddBinaryOp(TKernelRequestBuilder::EBinaryOp::Div, blockInt32Type, blockInt32Type, blockOptInt32Type);
+        });
+    }
+
+    Y_UNIT_TEST(TestMod) {
+        TestOne([](auto& b,auto& ctx) {
+            auto blockInt32Type = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Int32));
+            auto blockOptInt32Type = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TOptionalExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Int32)));
+            return b.AddBinaryOp(TKernelRequestBuilder::EBinaryOp::Mod, blockInt32Type, blockInt32Type, blockOptInt32Type);
+        });
+    }
+
+    Y_UNIT_TEST(TestSize) {
+        TestOne([](auto& b,auto& ctx) {
+            auto blockStrType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::String));
+            auto blockUint32Type = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Uint32));
+            return b.AddUnaryOp(TKernelRequestBuilder::EUnaryOp::Size, blockStrType, blockUint32Type);
+        });
+    }
+
+    Y_UNIT_TEST(TestCoalesece) {
+        TestOne([](auto& b,auto& ctx) {
+            auto blockStringType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::String));
+            auto blockOptStringType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TOptionalExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::String)));
+            return b.AddBinaryOp(TKernelRequestBuilder::EBinaryOp::Coalesce, blockOptStringType, blockStringType, blockStringType);
         });
     }
 

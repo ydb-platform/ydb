@@ -70,6 +70,25 @@ TExprNode::TPtr ExpandPgNot(const TExprNode::TPtr& input, TExprContext& ctx) {
         .Build();
 }
 
+TExprNode::TPtr OptimizePgCastOverPgConst(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (input->ChildrenSize() != 2) {
+        return input;
+    }
+    auto val = input->Child(0);
+    if (!val->IsCallable("PgConst")) { 
+        return input;
+    }
+
+    auto castFromType = val->Child(1);
+    auto castToType = input->Child(1);
+    if (castFromType->Child(0)->Content() == "unknown" && castToType->Child(0)->Content() == "text") {
+        YQL_CLOG(DEBUG, Core) << "Remove PgCast unknown->text over PgConst";
+        return ctx.ChangeChild(*val, 1, castToType);
+    }
+    
+    return input;
+}
+
 template<typename TInt>
 class TMinAggregate {
 public:
@@ -6235,6 +6254,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["PgAnd"] = std::bind(&ExpandPgAnd, _1, _2);
     map["PgOr"] = std::bind(&ExpandPgOr, _1, _2);
     map["PgNot"] = std::bind(&ExpandPgNot, _1, _2);
+    map["PgCast"] = std::bind(&OptimizePgCastOverPgConst, _1, _2);
 
     map["Ensure"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& /*optCtx*/) {
         TCoEnsure self(node);

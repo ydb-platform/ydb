@@ -48,6 +48,12 @@ CFLAGS(
     -DS2N___RESTRICT__SUPPORTED
 )
 
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DAWS_MQTT_EXPORTS
+    )
+ENDIF()
+
 SRCS(
     source/client.c
     source/client_channel_handler.c

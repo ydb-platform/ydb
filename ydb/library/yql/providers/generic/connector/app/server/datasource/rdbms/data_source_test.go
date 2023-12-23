@@ -10,6 +10,7 @@ import (
 	"github.com/ydb-platform/ydb-go-genproto/protos/Ydb"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/datasource/rdbms/postgresql"
+	rdbms_utils "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/datasource/rdbms/utils"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
@@ -49,18 +50,18 @@ func TestReadSplit(t *testing.T) {
 	t.Run("positive", func(t *testing.T) {
 		logger := utils.NewTestLogger(t)
 
-		connectionManager := &utils.ConnectionManagerMock{}
+		connectionManager := &rdbms_utils.ConnectionManagerMock{}
 
 		preset := &Preset{
 			ConnectionManager: connectionManager,
 			SQLFormatter:      postgresql.NewSQLFormatter(), // TODO: parametrize
 		}
 
-		connection := &utils.ConnectionMock{}
+		connection := &rdbms_utils.ConnectionMock{}
 		connectionManager.On("Make", split.Select.DataSourceInstance).Return(connection, nil).Once()
 		connectionManager.On("Release", connection).Return().Once()
 
-		rows := &utils.RowsMock{
+		rows := &rdbms_utils.RowsMock{
 			PredefinedData: [][]any{
 				{int32(1), "a"},
 				{int32(2), "b"},
@@ -68,7 +69,7 @@ func TestReadSplit(t *testing.T) {
 		}
 		connection.On("Query", `SELECT "col1", "col2" FROM "example_1"`).Return(rows, nil).Once()
 
-		transformer := &utils.TransformerMock{
+		transformer := &rdbms_utils.RowTransformerMock{
 			Acceptors: []any{
 				new(int32),
 				new(string),
@@ -95,18 +96,18 @@ func TestReadSplit(t *testing.T) {
 	t.Run("scan error", func(t *testing.T) {
 		logger := utils.NewTestLogger(t)
 
-		connectionManager := &utils.ConnectionManagerMock{}
+		connectionManager := &rdbms_utils.ConnectionManagerMock{}
 
 		preset := &Preset{
 			ConnectionManager: connectionManager,
 			SQLFormatter:      postgresql.NewSQLFormatter(), // TODO: parametrize
 		}
 
-		connection := &utils.ConnectionMock{}
+		connection := &rdbms_utils.ConnectionMock{}
 		connectionManager.On("Make", split.Select.DataSourceInstance).Return(connection, nil).Once()
 		connectionManager.On("Release", connection).Return().Once()
 
-		rows := &utils.RowsMock{
+		rows := &rdbms_utils.RowsMock{
 			PredefinedData: [][]any{
 				{int32(1), "a"},
 				{int32(2), "b"},
@@ -114,7 +115,7 @@ func TestReadSplit(t *testing.T) {
 		}
 		connection.On("Query", `SELECT "col1", "col2" FROM "example_1"`).Return(rows, nil).Once()
 
-		transformer := &utils.TransformerMock{
+		transformer := &rdbms_utils.RowTransformerMock{
 			Acceptors: []any{
 				new(int32),
 				new(string),

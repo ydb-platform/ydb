@@ -440,7 +440,7 @@ private:
             }
 
             auto& taskOpts = dqTask.GetProgram().GetSettings();
-            auto limit = taskOpts.GetHasMapJoin() /* || opts.GetHasSort()*/
+            auto limit = taskOpts.GetHasMapJoin() || taskOpts.GetHasStateAggregation()
                 ? memoryLimits.MkqlHeavyProgramMemoryLimit
                 : memoryLimits.MkqlLightProgramMemoryLimit;
 

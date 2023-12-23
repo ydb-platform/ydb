@@ -331,10 +331,7 @@ bool IsMemberColumn(const TExprBase& node, const TExprNode* lambdaArg) {
 }
 
 bool IsSupportedArithmeticalExpression(const TExprBase& node, const TSettings& settings) {
-    if (!settings.IsEnabled(TSettings::EFeatureFlag::ArithmeticalExpressions)) {
-        return false;
-    }
-    return node.Maybe<TCoMul>() || node.Maybe<TCoPlus>() || node.Maybe<TCoMinus>();
+    return settings.IsEnabled(TSettings::EFeatureFlag::ArithmeticalExpressions) && node.Maybe<TCoBinaryArithmetic>();
 }
 
 bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg, const TSettings& settings) {

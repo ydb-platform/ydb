@@ -1,4 +1,5 @@
 #pragma once
+#include "blobstorage_cost_tracker.h"
 #include "defs.h"
 #include "memusage.h"
 #include "vdisk_config.h"
@@ -67,6 +68,7 @@ namespace NKikimr {
         TString LocalRecoveryErrorStr;
 
         std::unique_ptr<TCostModel> CostModel;
+        std::shared_ptr<TBsCostTracker> CostTracker;
 
     private:
         // Managing disk space
@@ -172,6 +174,7 @@ namespace NKikimr {
             if (CostModel) {
                 CostMonGroup.DefragCostNs() += CostModel->GetCost(ev);
             }
+            CostTracker->CountDefragRequest(ev);
         }
 
         template<class TEvent>
@@ -179,12 +182,21 @@ namespace NKikimr {
             if (CostModel) {
                 CostMonGroup.ScrubCostNs() += CostModel->GetCost(ev);
             }
+            CostTracker->CountScrubRequest(ev);
         }
 
         template<class TEvent>
         void CountCompactionCost(const TEvent& ev) {
             if (CostModel) {
                 CostMonGroup.CompactionCostNs() += CostModel->GetCost(ev);
+            }
+            CostTracker->CountCompactionRequest(ev);
+        }
+
+        void UpdateCostModel(std::unique_ptr<TCostModel>&& newCostModel) {
+            CostModel = std::move(newCostModel);
+            if (CostModel) {
+                CostTracker->UpdateCostModel(*CostModel);
             }
         }
 

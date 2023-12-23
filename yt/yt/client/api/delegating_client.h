@@ -72,7 +72,7 @@ public:
     TFuture<NQueueClient::IQueueRowsetPtr> PullConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
-        i64 offset,
+        std::optional<i64> offset,
         int partitionIndex,
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
         const TPullConsumerOptions& options = {}) override;
@@ -618,7 +618,7 @@ public:
         NQueryTrackerClient::TQueryId queryId,
         const TAlterQueryOptions& options) override;
 
-    virtual TFuture<TBundleConfigDescriptor> GetBundleConfig(
+    virtual TFuture<TBundleConfigDescriptorPtr> GetBundleConfig(
         const TString& bundleName,
         const TGetBundleConfigOptions& options = {}) override;
 

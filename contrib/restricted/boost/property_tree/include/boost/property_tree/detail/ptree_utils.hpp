@@ -73,7 +73,7 @@ namespace boost { namespace property_tree { namespace detail
         Str result;
         while (*text)
         {
-            if (*text < 0 || *text > (std::numeric_limits<char>::max)())
+            if (*text < 0 || *text > static_cast<char_type>((std::numeric_limits<char>::max)()))
                 result += '*';
             else
                 result += typename Str::value_type(*text);

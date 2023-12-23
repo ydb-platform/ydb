@@ -14,6 +14,12 @@ struct TEvKqpCompute {
     struct TEvRemoteScanData : public TEventPB<TEvRemoteScanData, NKikimrKqp::TEvRemoteScanData,
         TKqpComputeEvents::EvRemoteScanData> {};
 
+    class IShardScanStats {
+    public:
+        virtual ~IShardScanStats() = default;
+        virtual THashMap<TString, ui64> GetMetrics() const = 0;
+    };
+
     /*
      * Scan communications.
      *
@@ -46,6 +52,19 @@ struct TEvKqpCompute {
         bool Finished = false;
         bool PageFault = false; // page fault was the reason for sending this message
         mutable THolder<TEvRemoteScanData> Remote;
+        std::shared_ptr<IShardScanStats> StatsOnFinished;
+
+        template <class T>
+        const T& GetStatsAs() const {
+            Y_ABORT_UNLESS(!!StatsOnFinished);
+            return VerifyDynamicCast<const T&>(*StatsOnFinished);
+        }
+
+        template <class T>
+        bool CheckStatsIs() const {
+            auto p = dynamic_cast<const T*>(StatsOnFinished.get());
+            return p;
+        }
 
         ui32 GetRowsCount() const {
             if (ArrowBatch) {
@@ -225,6 +244,7 @@ struct TEvKqpCompute {
 
     struct TEvKillScanTablet : public NActors::TEventPB<TEvKillScanTablet, NKikimrKqp::TEvKillScanTablet,
         TKqpComputeEvents::EvKillScanTablet> {};
+
 };
 
 } // namespace NKikimr::NKqp

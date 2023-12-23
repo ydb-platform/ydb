@@ -6,23 +6,24 @@ import (
 
 	"github.com/ydb-platform/ydb/library/go/core/log"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/datasource"
+	rdbms_utils "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/datasource/rdbms/utils"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
 type Preset struct {
-	SQLFormatter      utils.SQLFormatter
-	ConnectionManager utils.ConnectionManager
+	SQLFormatter      rdbms_utils.SQLFormatter
+	ConnectionManager rdbms_utils.ConnectionManager
 	TypeMapper        utils.TypeMapper
 }
 
-var _ datasource.DataSource = (*dataSourceImpl)(nil)
+var _ datasource.DataSource[any] = (*dataSourceImpl)(nil)
 
 type dataSourceImpl struct {
 	typeMapper        utils.TypeMapper
-	sqlFormatter      utils.SQLFormatter
-	connectionManager utils.ConnectionManager
+	sqlFormatter      rdbms_utils.SQLFormatter
+	connectionManager rdbms_utils.ConnectionManager
 	logger            log.Logger
 }
 
@@ -31,7 +32,7 @@ func (ds *dataSourceImpl) DescribeTable(
 	logger log.Logger,
 	request *api_service_protos.TDescribeTableRequest,
 ) (*api_service_protos.TDescribeTableResponse, error) {
-	query, args := utils.MakeDescribeTableQuery(logger, ds.sqlFormatter, request)
+	query, args := rdbms_utils.MakeDescribeTableQuery(logger, ds.sqlFormatter, request)
 
 	conn, err := ds.connectionManager.Make(ctx, logger, request.DataSourceInstance)
 	if err != nil {
@@ -80,9 +81,9 @@ func (ds *dataSourceImpl) doReadSplit(
 	ctx context.Context,
 	logger log.Logger,
 	split *api_service_protos.TSplit,
-	sink paging.Sink,
+	sink paging.Sink[any],
 ) error {
-	query, args, err := utils.MakeReadSplitQuery(logger, ds.sqlFormatter, split.Select)
+	query, args, err := rdbms_utils.MakeReadSplitQuery(logger, ds.sqlFormatter, split.Select)
 	if err != nil {
 		return fmt.Errorf("make read split query: %w", err)
 	}
@@ -111,6 +112,8 @@ func (ds *dataSourceImpl) doReadSplit(
 		return fmt.Errorf("make transformer: %w", err)
 	}
 
+	// FIXME: use https://pkg.go.dev/database/sql#Rows.NextResultSet
+	// Very important! Possible data loss.
 	for rows.Next() {
 		if err := rows.Scan(transformer.GetAcceptors()...); err != nil {
 			return fmt.Errorf("rows scan error: %w", err)
@@ -132,7 +135,7 @@ func (ds *dataSourceImpl) ReadSplit(
 	ctx context.Context,
 	logger log.Logger,
 	split *api_service_protos.TSplit,
-	sink paging.Sink,
+	sink paging.Sink[any],
 ) {
 	err := ds.doReadSplit(ctx, logger, split, sink)
 	if err != nil {
@@ -142,12 +145,10 @@ func (ds *dataSourceImpl) ReadSplit(
 	sink.Finish()
 }
 
-func (ds *dataSourceImpl) TypeMapper() utils.TypeMapper { return ds.typeMapper }
-
 func NewDataSource(
 	logger log.Logger,
 	preset *Preset,
-) datasource.DataSource {
+) datasource.DataSource[any] {
 	return &dataSourceImpl{
 		logger:            logger,
 		sqlFormatter:      preset.SQLFormatter,

@@ -8,6 +8,8 @@
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
+#include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
@@ -1096,16 +1098,12 @@ static ui64 RunSchemeTx(
     runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()), 0, viaActorSystem);
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
 
-    for (auto i : ev->Get()->Record.GetIssues()) {
-        Cerr << "Issue: " << i.AsJSON() << Endl;
-    }
-
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), expectedStatus);
+    UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Record.GetStatus(), expectedStatus, "Status: " << ev->Get()->Record.GetStatus() << " Issues: " << ev->Get()->Record.GetIssues());
 
     return ev->Get()->Record.GetTxId();
 }
 
-void CreateShardedTable(
+std::tuple<TVector<ui64>, ui64> CreateShardedTable(
         Tests::TServer::TPtr server,
         TActorId sender,
         const TString &root,
@@ -1223,9 +1221,15 @@ void CreateShardedTable(
     }
 
     WaitTxNotification(server, sender, RunSchemeTx(*server->GetRuntime(), std::move(request), sender));
+
+    TString path = TStringBuilder() << root << "/" << name;
+    const auto& shards = GetTableShards(server, sender, path);
+    const ui64 tableId = ResolveTableId(server, sender, path).PathId.LocalPathId;
+
+    return {shards, tableId};
 }
 
-void CreateShardedTable(
+std::tuple<TVector<ui64>, ui64> CreateShardedTable(
         Tests::TServer::TPtr server,
         TActorId sender,
         const TString &root,
@@ -1240,7 +1244,7 @@ void CreateShardedTable(
         .EnableOutOfOrder(enableOutOfOrder)
         .Policy(policy)
         .ShadowData(shadowData);
-    CreateShardedTable(server, sender, root, name, opts);
+    return CreateShardedTable(server, sender, root, name, opts);
 }
 
 ui64 AsyncCreateCopyTable(
@@ -1803,6 +1807,70 @@ void ExecSQL(Tests::TServer::TPtr server,
     UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetRef().GetYdbStatus(), code);
 }
 
+std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, ui64 tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount) {
+    std::vector<ui32> columnIds(columns.size());
+    std::iota(columnIds.begin(), columnIds.end(), 1);
+
+    TVector<TString> stringValues;
+    TVector<TCell> cells;
+    for (ui32 row = 0; row < rowCount; ++row) {
+        for (ui32 col = 0; col < columns.size(); ++col) {
+            const TString& columnType = columns[col].Type;
+            ui64 value = row * columns.size() + col;
+            if (columnType == "Uint64") {
+                cells.emplace_back(TCell((const char*)&value, sizeof(ui64)));
+            } else if (columnType == "Uint32") {
+                ui32 value32 = (ui32)value;
+                cells.emplace_back(TCell((const char*)&value32, sizeof(ui32)));
+            } else if (columnType == "Utf8") {
+                stringValues.emplace_back(Sprintf("String_%" PRIu64, value));
+                cells.emplace_back(TCell(stringValues.back().c_str(), stringValues.back().size()));
+            } else {
+                Y_ABORT("Unsupported column type");
+            }
+        }
+    }
+
+    TSerializedCellMatrix matrix(cells, rowCount, columns.size());
+    TString blobData = matrix.ReleaseBuffer();
+
+    UNIT_ASSERT(blobData.size() < 8_MB);
+
+    auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, txMode);
+    ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
+    evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, 1, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+
+    return evWrite;
+}
+
+NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, ui64 shardId, ui64 tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, TActorId sender, ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
+{
+    auto request = MakeWriteRequest(txId, txMode, tableId, columns, rowCount);
+    runtime.SendToPipe(shardId, sender, request.release(), 0, GetPipeConfigWithRetries());
+
+    auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+    auto status = ev->Get()->Record.GetStatus();
+    
+    if (expectedStatus == NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED) {
+        switch (txMode) {
+            case NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE:
+                expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED;
+                break;
+            case NKikimrDataEvents::TEvWrite::MODE_PREPARE:
+            case NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE:
+                expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED;
+                break;
+            default:
+                expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED;
+                UNIT_ASSERT_C(false, "Unexpected txMode: " << txMode);
+                break;
+        }
+    }
+    UNIT_ASSERT_C(status == expectedStatus, "Status: " << ev->Get()->Record.GetStatus() << " Issues: " << ev->Get()->Record.GetIssues());
+
+    return ev->Get()->Record;
+}
+
 void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, const TVector<std::pair<TString, Ydb::Type_PrimitiveTypeId>>& types, const TVector<TCell>& keys, const TVector<TCell>& values)
 {
     auto txTypes = std::make_shared<NTxProxy::TUploadTypes>();
@@ -1823,7 +1891,7 @@ void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, const TVec
     runtime.Register(actor);
 
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvUploadRowsResponse>(uploadSender);
-    UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, Ydb::StatusIds::SUCCESS, "Status: " << ev->Get()->Status << " Issues: " << ev->Get()->Issues.ToOneLineString());
+    UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, Ydb::StatusIds::SUCCESS, "Status: " << ev->Get()->Status << " Issues: " << ev->Get()->Issues);
 }
 
 void WaitTabletBecomesOffline(TServer::TPtr server, ui64 tabletId)
@@ -1832,8 +1900,8 @@ void WaitTabletBecomesOffline(TServer::TPtr server, ui64 tabletId)
     {
         IsShardStateChange(ui64 tabletId)
             : TabletId(tabletId)
-        {
-        }
+            {
+            }
 
         bool operator()(IEventHandle& ev)
         {

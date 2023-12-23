@@ -8,6 +8,8 @@
 
 #include <library/cpp/yt/threading/spin_lock.h>
 
+#include <util/random/shuffle.h>
+
 namespace NYT::NTableClient {
 
 using namespace NConcurrency;
@@ -293,6 +295,30 @@ ISchemafulUnversionedReaderPtr CreateFullPrefetchingOrderedSchemafulReader(
     while (auto nextReader = getNextReader()) {
         readers.push_back(nextReader);
     }
+
+    auto readerGenerator = [
+        index = 0,
+        readers = std::move(readers)
+    ] () mutable -> ISchemafulUnversionedReaderPtr {
+        if (index == std::ssize(readers)) {
+            return nullptr;
+        }
+        return readers[index++];
+    };
+
+    return CreateUnorderedSchemafulReader(readerGenerator, 1);
+}
+
+ISchemafulUnversionedReaderPtr CreateFullPrefetchingShufflingSchemafulReader(
+    std::function<ISchemafulUnversionedReaderPtr()> getNextReader)
+{
+    std::vector<ISchemafulUnversionedReaderPtr> readers;
+
+    while (auto nextReader = getNextReader()) {
+        readers.push_back(std::move(nextReader));
+    }
+
+    Shuffle(readers.begin(), readers.end());
 
     auto readerGenerator = [
         index = 0,

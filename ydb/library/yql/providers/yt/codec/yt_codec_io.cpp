@@ -1636,7 +1636,7 @@ void TMkqlReaderImpl::Next() {
 
 NUdf::TUnboxedValue TMkqlReaderImpl::BuildOthers(const TMkqlIOSpecs::TDecoderSpec& decoder, TValuesDictHashMap& others) {
     if (others.empty()) {
-        return HolderFactoryPtr->GetEmptyContainer();
+        return HolderFactoryPtr->GetEmptyContainerLazy();
     } else {
         auto filler = [&others](TValuesDictHashMap& map) {
             map.swap(others);

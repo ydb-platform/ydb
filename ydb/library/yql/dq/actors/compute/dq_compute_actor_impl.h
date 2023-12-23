@@ -2018,64 +2018,63 @@ public:
             }
             protoTask->SetSourceCpuTimeUs(SourceCpuTime.MicroSeconds());
 
-            THashMap<TString, TDqAsyncStats> ingressStats;
-            THashMap<TString, TDqAsyncStats> egressStats;
-            TDqAsyncStats pushStats;
+            ui64 ingressBytes = 0;
+            ui64 ingressRows = 0;
 
             if (RuntimeSettings.CollectFull()) {
                 // in full/profile mode enumerate existing protos
                 for (auto& protoSource : *protoTask->MutableSources()) {
-                    if (auto* sourceInfoPtr = SourcesMap.FindPtr(protoSource.GetInputIndex())) {
+                    auto inputIndex = protoSource.GetInputIndex();
+                    if (auto* sourceInfoPtr = SourcesMap.FindPtr(inputIndex)) {
                         auto& sourceInfo = *sourceInfoPtr;
                         protoSource.SetIngressName(sourceInfo.Type);
-                        FillAsyncStats(*protoSource.MutableIngress(), sourceInfo.AsyncInput->GetIngressStats());
-                        ingressStats[sourceInfo.Type].MergeData(sourceInfo.AsyncInput->GetIngressStats());
+                        const auto& ingressStats = sourceInfo.AsyncInput->GetIngressStats();
+                        FillAsyncStats(*protoSource.MutableIngress(), ingressStats);
+                        ingressBytes += ingressStats.Bytes;
+                        // ingress rows are usually not reported, so we count rows in task runner input
+                        ingressRows += ingressStats.Rows ? ingressStats.Rows : taskStats->Sources.at(inputIndex)->GetPopStats().Rows;
                     }
                 }
             } else {
                 // in basic mode enum sources directly
                 for (auto& [inputIndex, sourceInfo] : SourcesMap) {
-                    ingressStats[sourceInfo.Type].MergeData(sourceInfo.AsyncInput->GetIngressStats());
+                    const auto& ingressStats = sourceInfo.AsyncInput->GetIngressStats();
+                    ingressBytes += ingressStats.Bytes;
+                    // ingress rows are usually not reported, so we count rows in task runner input
+                    ingressRows += ingressStats.Rows ? ingressStats.Rows : taskStats->Sources.at(inputIndex)->GetPopStats().Rows;
                 }
             };
 
+            protoTask->SetIngressBytes(ingressBytes);
+            protoTask->SetIngressRows(ingressRows);
+
+            ui64 egressBytes = 0;
+            ui64 egressRows = 0;
+
             for (auto& [outputIndex, sinkInfo] : SinksMap) {
                 if (auto* sink = GetSink(outputIndex, sinkInfo)) {
+                    const auto& egressStats = sinkInfo.AsyncOutput->GetEgressStats();
+                    const auto& pushStats = sink->GetPushStats();
                     if (RuntimeSettings.CollectFull()) {
+                        const auto& popStats = sink->GetPopStats();
                         auto& protoSink = *protoTask->AddSinks();
                         protoSink.SetOutputIndex(outputIndex);
                         protoSink.SetEgressName(sinkInfo.Type);
-                        FillAsyncStats(*protoSink.MutablePush(), sink->GetPushStats());
-                        FillAsyncStats(*protoSink.MutablePop(), sink->GetPopStats());
-                        FillAsyncStats(*protoSink.MutableEgress(), sinkInfo.AsyncOutput->GetEgressStats());
-                        protoSink.SetMaxMemoryUsage(sink->GetPopStats().MaxMemoryUsage);
+                        FillAsyncStats(*protoSink.MutablePush(), pushStats);
+                        FillAsyncStats(*protoSink.MutablePop(), popStats);
+                        FillAsyncStats(*protoSink.MutableEgress(), egressStats);
+                        protoSink.SetMaxMemoryUsage(popStats.MaxMemoryUsage);
                         protoSink.SetErrorsCount(sinkInfo.IssuesBuffer.GetAllAddedIssuesCount());
                     }
-                    egressStats[sinkInfo.Type].MergeData(sinkInfo.AsyncOutput->GetEgressStats());
-                    pushStats.MergeData(sink->GetPushStats());
+                    egressBytes += egressStats.Bytes;
+                    // egress rows are usually not reported, so we count rows in task runner output
+                    egressRows += egressStats.Rows ? egressStats.Rows : pushStats.Rows;
                     // p.s. sink == sinkInfo.Buffer
                 }
             }
 
-            for (auto& [name, stats] : ingressStats) {
-                auto& protoIngress = *protoTask->AddIngress();
-                protoIngress.SetName(name);
-                protoIngress.SetBytes(stats.Bytes);
-                protoIngress.SetRows(stats.Rows);
-                protoIngress.SetChunks(stats.Chunks);
-                protoIngress.SetSplits(stats.Splits);
-            }
-            for (auto& [name, stats] : egressStats) {
-                auto& protoEgress = *protoTask->AddEgress();
-                protoEgress.SetName(name);
-                protoEgress.SetBytes(stats.Bytes);
-                protoEgress.SetRows(stats.Rows);
-                protoEgress.SetChunks(stats.Chunks);
-                protoEgress.SetSplits(stats.Splits);
-            }
-            // add egress to output channel stats
-            protoTask->SetOutputRows(protoTask->GetOutputRows() + pushStats.Rows);
-            protoTask->SetOutputBytes(protoTask->GetOutputBytes() + pushStats.Bytes);
+            protoTask->SetEgressBytes(egressBytes);
+            protoTask->SetEgressRows(egressRows);
 
             for (auto& [inputIndex, transformInfo] : InputTransformsMap) {
                 auto* transform = GetInputTransform(inputIndex, transformInfo);

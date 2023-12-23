@@ -1,27 +1,20 @@
 #pragma once
 
-#include "defs.h"
 #include "flat_table_part.h"
 #include "flat_part_iface.h"
-#include "flat_part_slice.h"
 #include "flat_part_index_iter.h"
+#include "flat_part_charge_iface.h"
 
 #include <util/generic/bitmap.h>
 
 namespace NKikimr {
 namespace NTable {
 
-    class TCharge {
+    class TCharge : public ICharge {
     public:
-        using TCells = NPage::TCells;
         using TIter = NPage::TIndex::TIter;
         using TDataPage = NPage::TDataPage;
         using TGroupId = NPage::TGroupId;
-        
-        struct TResult {
-            bool Ready;     /* All required pages are already in memory */
-            bool Overshot;  /* Search may start outside of bounds */
-        };
 
         TCharge(IPages *env, const TPart &part, TTagsRef tags, bool includeHistory = false)
             : Env(env)
@@ -49,131 +42,8 @@ namespace NTable {
             }
         }
 
-        static bool Range(IPages *env, const TCells key1, const TCells key2,
-                    const TRun &run, const TKeyCellDefaults &keyDefaults, TTagsRef tags,
-                    ui64 items, ui64 bytes, bool includeHistory = false) noexcept
-        {
-            if (run.size() == 1) {
-                auto pos = run.begin();
-                TRowId row1 = pos->Slice.BeginRowId();
-                TRowId row2 = pos->Slice.EndRowId() - 1;
-                return TCharge(env, *pos->Part, tags, includeHistory).Do(key1, key2, row1, row2, keyDefaults, items, bytes).Ready;
-            }
-
-            bool ready = true;
-            auto pos = run.LowerBound(key1);
-
-            if (pos == run.end())
-                return true;
-
-            bool fromStart = TSlice::CompareSearchKeyFirstKey(key1, pos->Slice, keyDefaults) <= 0;
-
-            while (pos != run.end()) {
-                TRowId row1 = pos->Slice.BeginRowId();
-                TRowId row2 = pos->Slice.EndRowId() - 1;
-
-                const int cmp = TSlice::CompareLastKeySearchKey(pos->Slice, key2, keyDefaults);
-
-                TArrayRef<const TCell> key1r;
-                if (!fromStart) {
-                    key1r = key1;
-                }
-                TArrayRef<const TCell> key2r;
-                if (cmp > 0 /* slice->LastKey > key2 */) {
-                    key2r = key2;
-                }
-
-                auto r = TCharge(env, *pos->Part, tags, includeHistory).Do(key1r, key2r, row1, row2, keyDefaults, items, bytes);
-                ready &= r.Ready;
-
-                if (cmp >= 0 /* slice->LastKey >= key2 */) {
-                    if (r.Overshot && ++pos != run.end()) {
-                        // Unfortunately key > key2 might be at the start of the next slice
-                        TRowId firstRow = pos->Slice.BeginRowId();
-                        // Precharge the first row on the next slice
-                        TCharge(env, *pos->Part, tags, includeHistory).Do(firstRow, firstRow, keyDefaults, items, bytes);
-                    }
-
-                    break;
-                }
-
-                // Will consume this slice before encountering key2
-                fromStart = true;
-                ++pos;
-            }
-
-            return ready;
-        }
-
-        static bool RangeReverse(IPages *env, const TCells key1, const TCells key2,
-                    const TRun &run, const TKeyCellDefaults &keyDefaults, TTagsRef tags,
-                    ui64 items, ui64 bytes, bool includeHistory = false) noexcept
-        {
-            if (run.size() == 1) {
-                auto pos = run.begin();
-                TRowId row1 = pos->Slice.EndRowId() - 1;
-                TRowId row2 = pos->Slice.BeginRowId();
-                return TCharge(env, *pos->Part, tags, includeHistory).DoReverse(key1, key2, row1, row2, keyDefaults, items, bytes).Ready;
-            }
-
-            bool ready = true;
-            auto pos = run.LowerBoundReverse(key1);
-
-            if (pos == run.end())
-                return true;
-
-            bool fromEnd = TSlice::CompareLastKeySearchKey(pos->Slice, key1, keyDefaults) <= 0;
-
-            for (;;) {
-                TRowId row1 = pos->Slice.EndRowId() - 1;
-                TRowId row2 = pos->Slice.BeginRowId();
-
-                // N.B. empty key2 is like -inf during reverse iteration
-                const int cmp = key2 ? TSlice::CompareSearchKeyFirstKey(key2, pos->Slice, keyDefaults) : -1;
-
-                TArrayRef<const TCell> key1r;
-                if (!fromEnd) {
-                    key1r = key1;
-                }
-                TArrayRef<const TCell> key2r;
-                if (cmp > 0 /* key2 > slice->FirstKey */) {
-                    key2r = key2;
-                }
-
-                auto r = TCharge(env, *pos->Part, tags, includeHistory).DoReverse(key1r, key2r, row1, row2, keyDefaults, items, bytes);
-                ready &= r.Ready;
-
-                if (pos == run.begin()) {
-                    break;
-                }
-
-                if (cmp >= 0 /* key2 >= slice->FirstKey */) {
-                    if (r.Overshot) {
-                        --pos;
-                        // Unfortunately key <= key2 might be at the end of the previous slice
-                        TRowId lastRow = pos->Slice.EndRowId() - 1;
-                        // Precharge the last row on the previous slice
-                        TCharge(env, *pos->Part, tags, includeHistory).DoReverse(lastRow, lastRow, keyDefaults, items, bytes);
-                    }
-
-                    break;
-                }
-
-                // Will consume this slice before encountering key2
-                fromEnd = true;
-                --pos;
-            }
-
-            return ready;
-        }
-
-        /**
-         * Precharges data for rows between row1 and row2 inclusive
-         *
-         * Important caveat: assumes iteration won't touch any row > row2
-         */
         bool Do(const TRowId row1, const TRowId row2,
-                    const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept
+                const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override
         {
             auto index = Index.TryLoadRaw();
             if (!index) {
@@ -199,13 +69,8 @@ namespace NTable {
             return DoPrecharge(TCells{}, TCells{}, TIter{}, TIter{}, first, last, startRow, endRow, keyDefaults, itemsLimit, bytesLimit);
         }
 
-        /**
-         * Precharges data for rows between row1 and row2 inclusive in reverse
-         *
-         * Important caveat: assumes iteration won't touch any row > row2
-         */
         bool DoReverse(const TRowId row1, const TRowId row2, 
-                const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept
+                const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override
         {
             auto index = Index.TryLoadRaw();
             if (!index) {
@@ -236,12 +101,9 @@ namespace NTable {
             return DoPrechargeReverse(TCells{}, TCells{}, TIter{}, TIter{}, first, last, startRow, endRow, keyDefaults, itemsLimit, bytesLimit);
         }
 
-        /**
-         * Precharges data for rows between max(key1, row1) and min(key2, row2) inclusive
-         */
         TResult Do(const TCells key1, const TCells key2, const TRowId row1,
                 const TRowId row2, const TKeyCellDefaults &keyDefaults, ui64 itemsLimit,
-                ui64 bytesLimit) const noexcept
+                ui64 bytesLimit) const noexcept override
         {
             auto index = Index.TryLoadRaw();
             if (!index) {
@@ -307,12 +169,9 @@ namespace NTable {
             return { ready, overshot };
         }
 
-        /**
-         * Precharges data for rows between min(key1, row1) and max(key2, row2) inclusive in reverse
-         */
         TResult DoReverse(const TCells key1, const TCells key2, const TRowId row1,
                 const TRowId row2, const TKeyCellDefaults &keyDefaults, ui64 itemsLimit,
-                ui64 bytesLimit) const noexcept
+                ui64 bytesLimit) const noexcept override
         {
             auto index = Index.TryLoadRaw();
             if (!index) {

@@ -106,18 +106,20 @@ private:
     struct THandlersVisitor : public TParent::TBaseHandlersVisitor {
         using TParent::TBaseHandlersVisitor::TBaseHandlersVisitor;
 
-#define DECLARE_HANDLER(type, handler, answer)          \
-        bool operator()(type& event) {                  \
-            if (Settings.EventHandlers_.handler) {      \
-                Settings.EventHandlers_.handler(event); \
-                return answer;                          \
-            }                                           \
-            return false;                               \
-        }                                               \
+#define DECLARE_HANDLER(type, handler, answer)                      \
+        bool operator()(type&) {                                    \
+            if (this->PushHandler<type>(                            \
+                std::move(TParent::TBaseHandlersVisitor::Event),    \
+                this->Settings.EventHandlers_.handler,              \
+                this->Settings.EventHandlers_.CommonHandler_)) {    \
+                return answer;                                      \
+            }                                                       \
+            return false;                                           \
+        }                                                           \
         /**/
 
         DECLARE_HANDLER(TWriteSessionEvent::TAcksEvent, AcksHandler_, true);
-        DECLARE_HANDLER(TWriteSessionEvent::TReadyToAcceptEvent, ReadyToAcceptHander_, true);
+        DECLARE_HANDLER(TWriteSessionEvent::TReadyToAcceptEvent, ReadyToAcceptHandler_, true);
         DECLARE_HANDLER(TSessionClosedEvent, SessionClosedHandler_, false); // Not applied
 
 #undef DECLARE_HANDLER
@@ -125,7 +127,6 @@ private:
         bool Visit() {
             return std::visit(*this, Event);
         }
-
     };
 
     bool ApplyHandler(TEventInfo& eventInfo) {
@@ -158,7 +159,8 @@ namespace NTests {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSessionImpl
 
-class TWriteSessionImpl : public TEnableSelfContext<TWriteSessionImpl> {
+class TWriteSessionImpl : public TContinuationTokenIssuer,
+                          public TEnableSelfContext<TWriteSessionImpl> {
 private:
     friend class TWriteSession;
     friend class TSimpleBlockingWriteSession;
@@ -319,6 +321,10 @@ public:
     bool Close(TDuration closeTimeout = TDuration::Max());
 
     TWriterCounters::TPtr GetCounters() {Y_ABORT("Unimplemented"); } //ToDo - unimplemented;
+
+    const TWriteSessionSettings& GetSettings() const {
+        return Settings;
+    }
 
     ~TWriteSessionImpl(); // will not call close - destroy everything without acks
 

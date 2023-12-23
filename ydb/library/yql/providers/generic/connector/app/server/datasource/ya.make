@@ -10,4 +10,5 @@ END()
 
 RECURSE(
     rdbms
+    s3
 )

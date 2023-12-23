@@ -517,18 +517,19 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TPartitionChooserActor<TChooser>::MakeUpd
 
 template<typename TChooser>
 void TPartitionChooserActor<TChooser>::RequestPQRB(const NActors::TActorContext& ctx) {
-    Y_ABORT_UNLESS(!PipeToBalancer);
     Y_ABORT_UNLESS(BalancerTabletId);
 
-    NTabletPipe::TClientConfig clientConfig;
-    clientConfig.RetryPolicy = {
-        .RetryLimitCount = 6,
-        .MinRetryTime = TDuration::MilliSeconds(10),
-        .MaxRetryTime = TDuration::MilliSeconds(100),
-        .BackoffMultiplier = 2,
-        .DoFirstRetryInstantly = true
-    };
-    PipeToBalancer = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, BalancerTabletId, clientConfig));
+    if (!PipeToBalancer) {
+        NTabletPipe::TClientConfig clientConfig;
+        clientConfig.RetryPolicy = {
+            .RetryLimitCount = 6,
+            .MinRetryTime = TDuration::MilliSeconds(10),
+            .MaxRetryTime = TDuration::MilliSeconds(100),
+            .BackoffMultiplier = 2,
+            .DoFirstRetryInstantly = true
+        };
+        PipeToBalancer = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, BalancerTabletId, clientConfig));
+    }
 
     TThisActor::Become(&TThis::StateSelect);
     NTabletPipe::SendData(ctx, PipeToBalancer, new TEvPersQueue::TEvGetPartitionIdForWrite());

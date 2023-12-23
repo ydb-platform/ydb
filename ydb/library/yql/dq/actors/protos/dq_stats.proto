@@ -171,13 +171,20 @@ message TDqTaskStats {
     uint64 BuildCpuTimeUs = 103;   // prepare task time: build computation graph, prepare parameters, ...
     uint64 ComputeCpuTimeUs = 102; // compute time only
 
-    repeated TDqDataProviderStats Ingress = 13;
-    repeated TDqDataProviderStats Egress = 14;
+    reserved 13;
+    reserved 14;
 
     uint64 InputRows = 6;
     uint64 InputBytes = 7;
     uint64 OutputRows = 8;
     uint64 OutputBytes = 9;
+    uint64 ResultRows = 20;
+    uint64 ResultBytes = 21;
+
+    uint64 IngressBytes = 16;
+    uint64 IngressRows = 17;
+    uint64 EgressBytes = 18;
+    uint64 EgressRows = 19;
 
     // full stats
     repeated TDqAsyncInputBufferStats Sources = 150;
@@ -297,6 +304,13 @@ message TDqStageStats {
     TDqStatsAggr InputBytes = 10;
     TDqStatsAggr OutputRows = 11;
     TDqStatsAggr OutputBytes = 12;
+    TDqStatsAggr ResultRows = 26;
+    TDqStatsAggr ResultBytes = 27;
+
+    TDqStatsAggr IngressBytes = 28;
+    TDqStatsAggr IngressRows = 29;
+    TDqStatsAggr EgressBytes = 30;
+    TDqStatsAggr EgressRows = 31;
 
     TDqStatsMinMax FirstRowTimeMs = 13;
     TDqStatsMinMax FinishTimeMs = 14;
@@ -326,8 +340,9 @@ message TDqExecutionStats {
     uint64 CpuTimeUs = 1;  // total cpu time, executer + compute actors + ...
     uint64 DurationUs = 2; // execution wall time
 
-    uint64 ResultRows = 3;
-    uint64 ResultBytes = 4;
+    // these feilds are never used, needs to be reviewed
+    reserved 3; // uint64 ResultRows = 3;
+    reserved 4; // uint64 ResultBytes = 4;
 
     repeated TDqTableStats Tables = 6;
 

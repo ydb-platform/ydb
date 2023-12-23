@@ -270,11 +270,10 @@ private:
         YQL_CLOG(TRACE, ProviderDq) << " " << SelfId() << " ExportStats " << (taskId ? ToString(taskId) : "Summary");
         TString name;
         std::map<TString, TString> labels;
-        static const TString SourceLabel = "Source";
-        static const TString SinkLabel = "Sink";
         for (const auto& [k, v] : stat.Get()) {
             labels.clear();
             if (auto group = GroupForExport(stat, k, taskId, name, labels)) {
+                auto taskLevelCounter = labels.size() == 1 && labels.contains("Stage") && labels["Stage"] == "Total"; 
                 *group->GetCounter(name) = v.Sum;
                 if (ServiceCounters.PublicCounters && taskId == 0 && IsAggregatedStage(labels)) {
                     TString publicCounterName;
@@ -284,17 +283,17 @@ private:
                     } else if (name == "CpuTimeUs") {
                         publicCounterName = "query.cpu_usage_us";
                         isDeriv = true;
-                    } else if (name == "IngressBytes") {
-                        if (labels.count(SourceLabel)) publicCounterName = "query.input_bytes";
+                    } else if (name == "IngressBytes" && taskLevelCounter) {
+                        publicCounterName = "query.input_bytes";
                         isDeriv = true;
-                    } else if (name == "EgressBytes") {
-                        if (labels.count(SinkLabel)) publicCounterName = "query.output_bytes";
+                    } else if (name == "EgressBytes" && taskLevelCounter) {
+                        publicCounterName = "query.output_bytes";
                         isDeriv = true;
-                    } else if (name == "OutputRows") {
-                        if (labels.count(SourceLabel)) publicCounterName = "query.source_input_records";
+                    } else if (name == "IngressRows" && taskLevelCounter) {
+                        publicCounterName = "query.source_input_records";
                         isDeriv = true;
-                    } else if (name == "InputRows") {
-                        if (labels.count(SinkLabel)) publicCounterName = "query.sink_output_records";
+                    } else if (name == "EgressRows" && taskLevelCounter) {
+                        publicCounterName = "query.sink_output_records";
                         isDeriv = true;
                     } else if (name == "TaskCount") {
                         publicCounterName = "query.running_tasks";
@@ -371,10 +370,16 @@ private:
         ADD_COUNTER(SourceCpuTimeUs)
         // ADD_COUNTER(FirstRowTimeMs)
         // ADD_COUNTER(FinishTimeMs)
+        ADD_COUNTER(IngressRows)
+        ADD_COUNTER(IngressBytes)
+        ADD_COUNTER(EgressRows)
+        ADD_COUNTER(EgressBytes)
         ADD_COUNTER(InputRows)
         ADD_COUNTER(InputBytes)
         ADD_COUNTER(OutputRows)
         ADD_COUNTER(OutputBytes)
+        ADD_COUNTER(ResultRows)
+        ADD_COUNTER(ResultBytes)
         // ADD_COUNTER(StartTimeMs)
 
         ADD_COUNTER(WaitInputTimeUs)
@@ -382,24 +387,6 @@ private:
 
         // profile stats
         ADD_COUNTER(BuildCpuTimeUs)
-
-        ui64 ingressBytes = 0;
-        for (const auto& ingress : s.GetIngress()) {
-            ingressBytes += ingress.GetBytes();
-            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Ingress" + ingress.GetName() + "Bytes"), ingress.GetBytes());
-        }
-        if (ingressBytes) {
-            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "IngressBytes"), ingressBytes);
-        }
-
-        ui64 egressBytes = 0;
-        for (const auto& egress : s.GetEgress()) {
-            egressBytes += egress.GetBytes();
-            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Egress" + egress.GetName() + "Bytes"), egress.GetBytes());
-        }
-        if (egressBytes) {
-            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "EgressBytes"), egressBytes);
-        }
 
         if (auto v = x.GetMkqlMaxMemoryUsage()) {
             TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "MkqlMaxMemoryUsage"), v);

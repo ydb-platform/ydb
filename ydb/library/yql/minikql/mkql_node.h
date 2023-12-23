@@ -406,91 +406,32 @@ public:
         return Arena.Alloc(size);
     }
 
-    TInternName InternName(const TStringBuf& name) const {
-        auto it = NamesPool.find(name);
-        if (it != NamesPool.end()) {
-            return TInternName(*it);
-        }
+    TInternName InternName(const TStringBuf& name) const;
 
-        // Copy to arena and null-terminate
-        char* data = (char*)AllocateBuffer(name.size()+1);
-        memcpy(data, name.data(), name.size());
-        data[name.size()] = 0;
+    TTypeType* GetTypeOfTypeLazy() const;
+    TVoidType* GetTypeOfVoidLazy() const;
+    TVoid* GetVoidLazy() const;
+    TNullType* GetTypeOfNullLazy() const;
+    TNull* GetNullLazy() const;
+    TEmptyListType* GetTypeOfEmptyListLazy() const;
+    TEmptyList* GetEmptyListLazy() const;
+    TEmptyDictType* GetTypeOfEmptyDictLazy() const;
+    TEmptyDict* GetEmptyDictLazy() const;
+    TStructLiteral* GetEmptyStructLazy() const;
+    TListLiteral* GetListOfVoidLazy() const;
+    TAnyType* GetAnyTypeLazy() const;
+    TTupleLiteral* GetEmptyTupleLazy() const;
+    TDataType* GetUi32Lazy() const;
+    TDataType* GetUi64Lazy() const;
 
-        return TInternName(*NamesPool.insert(TStringBuf(data, name.size())).first);
-    }
-
-    TTypeType* GetTypeOfType() const {
-        return TypeOfType;
-    }
-
-    TVoidType* GetTypeOfVoid() const {
-        return TypeOfVoid;
-    }
-
-    TVoid* GetVoid() const {
-        return Void;
-    }
-
-    TNullType* GetTypeOfNull() const {
-        return TypeOfNull;
-    }
-
-    TNull* GetNull() const {
-        return Null;
-    }
-
-    TEmptyListType* GetTypeOfEmptyList() const {
-        return TypeOfEmptyList;
-    }
-
-    TEmptyList* GetEmptyList() const {
-        return EmptyList;
-    }
-
-    TEmptyDictType* GetTypeOfEmptyDict() const {
-        return TypeOfEmptyDict;
-    }
-
-    TEmptyDict* GetEmptyDict() const {
-        return EmptyDict;
-    }
-
-    TStructLiteral* GetEmptyStruct() const {
-        return EmptyStruct;
-    }
-
-    TListLiteral* GetListOfVoid() const {
-        return ListOfVoid;
-    }
-
-    TAnyType* GetAnyType() const {
-        return AnyType;
-    }
-
-    TTupleLiteral* GetEmptyTuple() const {
-        return EmptyTuple;
-    }
-
-    TDataType* GetUi32() const {
-        return Ui32;
-    }
-
-    TDataType* GetUi64() const {
-        return Ui64;
-    }
-
-
-    std::vector<TNode*>& GetNodeStack() const {
-        return Stack;
-    }
+    std::vector<TNode*>& GetNodeStack() const;
 
     void ClearCookies() const;
 
     NUdf::TUnboxedValuePod NewStringValue(const NUdf::TStringRef& data) const {
         Y_DEBUG_ABORT_UNLESS(TlsAllocState);
         Y_DEBUG_ABORT_UNLESS(&Alloc.Ref() == TlsAllocState, "%s", (TStringBuilder()
-            << "typeEnv's: " << Alloc.Ref().GetInfo() << " Tls: " << TlsAllocState->GetInfo()
+            << "typeEnv's: " << Alloc.Ref().GetDebugInfo() << " Tls: " << TlsAllocState->GetDebugInfo()
         ).data());
         if (data.Size() > NUdf::TUnboxedValue::InternalBufferSize) {
             auto value = NewString(data.Size());
@@ -510,7 +451,7 @@ public:
     const NUdf::TStringValue& NewString(ui32 size) const {
         Y_DEBUG_ABORT_UNLESS(TlsAllocState);
         Y_DEBUG_ABORT_UNLESS(&Alloc.Ref() == TlsAllocState, "%s", (TStringBuilder()
-            << "typeEnv's: " << Alloc.Ref().GetInfo() << " Tls: " << TlsAllocState->GetInfo()
+            << "typeEnv's: " << Alloc.Ref().GetDebugInfo() << " Tls: " << TlsAllocState->GetDebugInfo()
         ).data());
         Strings.emplace(size);
         return Strings.top();
@@ -523,46 +464,46 @@ private:
     mutable THashSet<TStringBuf> NamesPool;
     mutable std::vector<TNode*> Stack;
 
-    TTypeType* TypeOfType;
-    TVoidType* TypeOfVoid;
-    TVoid* Void;
-    TNullType* TypeOfNull;
-    TNull* Null;
-    TEmptyListType* TypeOfEmptyList;
-    TEmptyList* EmptyList;
-    TEmptyDictType* TypeOfEmptyDict;
-    TEmptyDict* EmptyDict;
-    TDataType* Ui32;
-    TDataType* Ui64;
-    TAnyType* AnyType;
-    TStructLiteral* EmptyStruct;
-    TTupleLiteral* EmptyTuple;
-    TListLiteral* ListOfVoid;
+    mutable TTypeType* TypeOfType = nullptr;
+    mutable TVoidType* TypeOfVoid = nullptr;
+    mutable TVoid* Void = nullptr;
+    mutable TNullType* TypeOfNull = nullptr;
+    mutable TNull* Null = nullptr;
+    mutable TEmptyListType* TypeOfEmptyList = nullptr;
+    mutable TEmptyList* EmptyList = nullptr;
+    mutable TEmptyDictType* TypeOfEmptyDict = nullptr;
+    mutable TEmptyDict* EmptyDict = nullptr;
+    mutable TDataType* Ui32 = nullptr;
+    mutable TDataType* Ui64 = nullptr;
+    mutable TAnyType* AnyType = nullptr;
+    mutable TStructLiteral* EmptyStruct = nullptr;
+    mutable TTupleLiteral* EmptyTuple = nullptr;
+    mutable TListLiteral* ListOfVoid = nullptr;
 };
 
 template <>
 inline TType* GetTypeOfSingular<TType::EKind::Void>(const TTypeEnvironment& env) {
-    return env.GetTypeOfVoid();
+    return env.GetTypeOfVoidLazy();
 }
 
 template <>
 inline TType* GetTypeOfSingular<TType::EKind::Null>(const TTypeEnvironment& env) {
-    return env.GetTypeOfNull();
+    return env.GetTypeOfNullLazy();
 }
 
 template <>
 inline TType* GetTypeOfSingular<TType::EKind::EmptyList>(const TTypeEnvironment& env) {
-    return env.GetTypeOfEmptyList();
+    return env.GetTypeOfEmptyListLazy();
 }
 
 template <>
 inline TType* GetTypeOfSingular<TType::EKind::EmptyDict>(const TTypeEnvironment& env) {
-    return env.GetTypeOfEmptyDict();
+    return env.GetTypeOfEmptyDictLazy();
 }
 
 template <>
 inline TTupleLiteral* GetEmptyLiteral(const TTypeEnvironment& env) {
-    return env.GetEmptyTuple();
+    return env.GetEmptyTupleLazy();
 }
 
 class TDataType : public TType {
@@ -743,7 +684,9 @@ private:
 class TStructLiteral : public TNode {
 friend class TNode;
 public:
-    static TStructLiteral* Create(ui32 valuesCount, const TRuntimeNode* values, TStructType* type, const TTypeEnvironment& env);
+    static TStructLiteral* Create(
+        ui32 valuesCount, const TRuntimeNode* values, TStructType* type,
+        const TTypeEnvironment& env, bool useCachedEmptyStruct = true);
     TStructType* GetType() const {
         return static_cast<TStructType*>(GetGenericType());
     }
@@ -1295,7 +1238,7 @@ public:
 
   protected:
     TTupleLikeType(ui32 elementsCount, TType** elements, const TTypeEnvironment& env)
-        : TType(DerivedKind, env.GetTypeOfType())
+        : TType(DerivedKind, env.GetTypeOfTypeLazy())
         , ElementsCount(elementsCount)
         , Elements(elements)
     {
@@ -1388,7 +1331,9 @@ private:
 class TTupleLiteral : public TNode {
     friend class TNode;
 public:
-    static TTupleLiteral* Create(ui32 valuesCount, const TRuntimeNode* items, TTupleType* type, const TTypeEnvironment& env);
+    static TTupleLiteral* Create(
+        ui32 valuesCount, const TRuntimeNode* items, TTupleType* type,
+        const TTypeEnvironment& env, bool useCachedEmptyTuple = true);
     TTupleType* GetType() const {
         return static_cast<TTupleType*>(GetGenericType());
     }

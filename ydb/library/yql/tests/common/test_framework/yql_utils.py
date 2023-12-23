@@ -877,6 +877,18 @@ def ansi_lexer_enabled(program):
     return 'ansi_lexer' in program
 
 
+def pytest_get_current_part(path):
+    folder = os.path.dirname(path)
+    folder_name = os.path.basename(folder)
+    assert folder_name.startswith('part'), "Current folder is {}".format(folder_name)
+    current = int(folder_name[len('part'):])
+
+    parent = os.path.dirname(folder)
+    maxpart = max([int(part[len('part'):]) if part.startswith('part') else -1 for part in os.listdir(parent)])
+    assert maxpart > 0, "Cannot find parts in {}".format(parent)
+    return (current, 1 + maxpart)
+
+
 class LoggingDowngrade(object):
 
     def __init__(self, loggers, level=logging.CRITICAL):

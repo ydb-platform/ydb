@@ -16,8 +16,9 @@
 
 
 #include <boost/core/ignore_unused.hpp>
-#include <boost/geometry/core/coordinate_type.hpp>
+#include <boost/range/size.hpp>
 
+#include <boost/geometry/core/coordinate_type.hpp>
 #include <boost/geometry/algorithms/detail/buffer/buffer_policies.hpp>
 #include <boost/geometry/algorithms/detail/disjoint/interface.hpp>
 #include <boost/geometry/algorithms/expand.hpp>

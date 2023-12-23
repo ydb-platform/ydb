@@ -964,7 +964,7 @@ private:
     }
 
     template<class TConstraint, bool OrderedMap, class TInput>
-    static void GetFromMapLambda(const TInput& input, const TConstraintSet& handler, TConstraintSet& output, TExprContext& ctx) {
+    static void GetFromMapLambda(const TInput& input, const TConstraintSet& handler, TConstraintSet& output, bool isSingleItem, TExprContext& ctx) {
         constexpr bool isOrderConstraint = std::is_same<typename TConstraint::TMainConstraint, TSortedConstraintNode>() || std::is_same<typename TConstraint::TMainConstraint, TChoppedConstraintNode>();
         if (const auto lambda = handler.GetConstraint<TConstraint>()) {
             const auto original = input.template GetConstraint<typename TConstraint::TMainConstraint>();
@@ -986,7 +986,7 @@ private:
                 if (!mapping.empty()) {
                     output.AddConstraint(ctx.MakeConstraint<TConstraint>(std::move(mapping)));
                 }
-            } else if constexpr (isOrderConstraint) {
+            } else if (isOrderConstraint || isSingleItem) {
                 if (const auto filtered = lambda->RemoveOriginal(ctx, original))
                     output.AddConstraint(filtered);
             }
@@ -994,7 +994,7 @@ private:
     }
 
     template<class TConstraint, bool OrderedMap, bool WideOutput>
-    static void GetFromMapLambda(const TExprNode::TPtr& input, TExprContext& ctx) {
+    static void GetFromMapLambda(const TExprNode::TPtr& input, bool isSingleItem, TExprContext& ctx) {
         constexpr bool isOrderConstraint = std::is_same<typename TConstraint::TMainConstraint, TSortedConstraintNode>() || std::is_same<typename TConstraint::TMainConstraint, TChoppedConstraintNode>();
         if (const auto lambda = GetConstraintFromLambda<TConstraint, WideOutput>(input->Tail(), ctx)) {
             const auto original = GetDetailed(input->Head().GetConstraint<typename TConstraint::TMainConstraint>(), *input->Head().GetTypeAnn(), ctx);
@@ -1016,7 +1016,7 @@ private:
                 if (!mapping.empty()) {
                     input->AddConstraint(ctx.MakeConstraint<TConstraint>(std::move(mapping)));
                 }
-            } else if constexpr (isOrderConstraint) {
+            } else if (isOrderConstraint || isSingleItem) {
                 if (const auto filtered = lambda->RemoveOriginal(ctx, original))
                     input->AddConstraint(filtered);
             }
@@ -1051,10 +1051,11 @@ private:
             }
         }
 
-        GetFromMapLambda<TPartOfUniqueConstraintNode, Ordered, WideOutput>(input, ctx);
-        GetFromMapLambda<TPartOfDistinctConstraintNode, Ordered, WideOutput>(input, ctx);
-        GetFromMapLambda<TPartOfSortedConstraintNode, Ordered, WideOutput>(input, ctx);
-        GetFromMapLambda<TPartOfChoppedConstraintNode, Ordered, WideOutput>(input, ctx);
+        const bool singleItem = ETypeAnnotationKind::Optional == input->GetTypeAnn()->GetKind();
+        GetFromMapLambda<TPartOfUniqueConstraintNode, Ordered, WideOutput>(input, singleItem, ctx);
+        GetFromMapLambda<TPartOfDistinctConstraintNode, Ordered, WideOutput>(input, singleItem, ctx);
+        GetFromMapLambda<TPartOfSortedConstraintNode, Ordered, WideOutput>(input, singleItem, ctx);
+        GetFromMapLambda<TPartOfChoppedConstraintNode, Ordered, WideOutput>(input, singleItem, ctx);
 
         const auto lambdaVarIndex = GetConstraintFromLambda<TVarIndexConstraintNode, WideOutput>(input->Tail(), ctx);
         const auto lambdaMulti = GetConstraintFromLambda<TMultiConstraintNode, WideOutput>(input->Tail(), ctx);
@@ -1101,10 +1102,10 @@ private:
                             }
                         }
                     }
-                    GetFromMapLambda<TPartOfUniqueConstraintNode, Ordered>(input->Head(), item.second, remappedItems.back().second, ctx);
-                    GetFromMapLambda<TPartOfDistinctConstraintNode, Ordered>(input->Head(), item.second, remappedItems.back().second, ctx);
-                    GetFromMapLambda<TPartOfSortedConstraintNode, Ordered>(input->Head(), item.second, remappedItems.back().second, ctx);
-                    GetFromMapLambda<TPartOfChoppedConstraintNode, Ordered>(input->Head(), item.second, remappedItems.back().second, ctx);
+                    GetFromMapLambda<TPartOfUniqueConstraintNode, Ordered>(input->Head(), item.second, remappedItems.back().second, singleItem, ctx);
+                    GetFromMapLambda<TPartOfDistinctConstraintNode, Ordered>(input->Head(), item.second, remappedItems.back().second, singleItem, ctx);
+                    GetFromMapLambda<TPartOfSortedConstraintNode, Ordered>(input->Head(), item.second, remappedItems.back().second, singleItem, ctx);
+                    GetFromMapLambda<TPartOfChoppedConstraintNode, Ordered>(input->Head(), item.second, remappedItems.back().second, singleItem, ctx);
 
                     if (const auto empty = item.second.template GetConstraint<TEmptyConstraintNode>()) {
                         remappedItems.pop_back();
@@ -1127,10 +1128,10 @@ private:
                                     }
                                 }
                             }
-                            GetFromMapLambda<TPartOfUniqueConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, ctx);
-                            GetFromMapLambda<TPartOfDistinctConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, ctx);
-                            GetFromMapLambda<TPartOfSortedConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, ctx);
-                            GetFromMapLambda<TPartOfChoppedConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, ctx);
+                            GetFromMapLambda<TPartOfUniqueConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
+                            GetFromMapLambda<TPartOfDistinctConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
+                            GetFromMapLambda<TPartOfSortedConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
+                            GetFromMapLambda<TPartOfChoppedConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
 
                             if (const auto empty = item.second.template GetConstraint<TEmptyConstraintNode>()) {
                                 remappedItems.pop_back();

@@ -11,16 +11,15 @@ import (
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
-type columnarBufferFactoryImpl struct {
-	arrowAllocator     memory.Allocator
-	readLimiterFactory *ReadLimiterFactory
-	logger             log.Logger
-	format             api_service_protos.TReadSplitsRequest_EFormat
-	schema             *arrow.Schema
-	ydbTypes           []*Ydb.Type
+type columnarBufferFactoryImpl[T utils.Acceptor] struct {
+	arrowAllocator memory.Allocator
+	logger         log.Logger
+	format         api_service_protos.TReadSplitsRequest_EFormat
+	schema         *arrow.Schema
+	ydbTypes       []*Ydb.Type
 }
 
-func (cbf *columnarBufferFactoryImpl) MakeBuffer() (ColumnarBuffer, error) {
+func (cbf *columnarBufferFactoryImpl[T]) MakeBuffer() (ColumnarBuffer[T], error) {
 	switch cbf.format {
 	case api_service_protos.TReadSplitsRequest_ARROW_IPC_STREAMING:
 		builders, err := utils.YdbTypesToArrowBuilders(cbf.ydbTypes, cbf.arrowAllocator)
@@ -29,14 +28,14 @@ func (cbf *columnarBufferFactoryImpl) MakeBuffer() (ColumnarBuffer, error) {
 		}
 
 		if len(cbf.ydbTypes) == 0 {
-			return &columnarBufferArrowIPCStreamingEmptyColumns{
+			return &columnarBufferArrowIPCStreamingEmptyColumns[T]{
 				arrowAllocator: cbf.arrowAllocator,
 				schema:         cbf.schema,
 				rowsAdded:      0,
 			}, nil
 		}
 
-		return &columnarBufferArrowIPCStreamingDefault{
+		return &columnarBufferArrowIPCStreamingDefault[T]{
 			arrowAllocator: cbf.arrowAllocator,
 			builders:       builders,
 			schema:         cbf.schema,
@@ -47,13 +46,12 @@ func (cbf *columnarBufferFactoryImpl) MakeBuffer() (ColumnarBuffer, error) {
 	}
 }
 
-func NewColumnarBufferFactory(
+func NewColumnarBufferFactory[T utils.Acceptor](
 	logger log.Logger,
 	arrowAllocator memory.Allocator,
-	readLimiterFactory *ReadLimiterFactory,
 	format api_service_protos.TReadSplitsRequest_EFormat,
 	selectWhat *api_service_protos.TSelect_TWhat,
-) (ColumnarBufferFactory, error) {
+) (ColumnarBufferFactory[T], error) {
 	ydbTypes, err := utils.SelectWhatToYDBTypes(selectWhat)
 	if err != nil {
 		return nil, fmt.Errorf("convert Select.What to Ydb types: %w", err)
@@ -64,13 +62,12 @@ func NewColumnarBufferFactory(
 		return nil, fmt.Errorf("convert Select.What to Arrow schema: %w", err)
 	}
 
-	cbf := &columnarBufferFactoryImpl{
-		logger:             logger,
-		arrowAllocator:     arrowAllocator,
-		readLimiterFactory: readLimiterFactory,
-		format:             format,
-		schema:             schema,
-		ydbTypes:           ydbTypes,
+	cbf := &columnarBufferFactoryImpl[T]{
+		logger:         logger,
+		arrowAllocator: arrowAllocator,
+		format:         format,
+		schema:         schema,
+		ydbTypes:       ydbTypes,
 	}
 
 	return cbf, nil

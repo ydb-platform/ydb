@@ -419,7 +419,7 @@ public:
             case EValueType::Any:
             case EValueType::Composite: {
                 const auto data = value.AsStringBuf();
-                auto key = std::pair<int,int>(tableIndex, value.Id);
+                auto key = std::pair<int, int>(tableIndex, value.Id);
                 auto it = YsonConverters_.find(key);
                 if (it == YsonConverters_.end()) {
                     Consumer_->OnNodeWeightLimited(data, FieldWeightLimit_);

@@ -895,8 +895,11 @@ public:
 
         Counters->CreatedIterators->Inc();
         ReadIdByTabletId[state->TabletId].push_back(id);
+
+        NWilson::TTraceId traceId; // TODO: get traceId from kqp.        
+
         Send(PipeCacheId, new TEvPipeCache::TEvForward(ev.Release(), state->TabletId, true),
-            IEventHandle::FlagTrackDelivery);
+            IEventHandle::FlagTrackDelivery, 0, std::move(traceId));
 
         if (!FirstShardStarted) {
             state->IsFirst = true;
@@ -1100,7 +1103,7 @@ public:
         }
         YQL_ENSURE(packed == 0);
         if (Settings->ColumnsSize() == 0) {
-            batch->resize(result->Get()->GetRowsCount(), HolderFactory.GetEmptyContainer());
+            batch->resize(result->Get()->GetRowsCount(), HolderFactory.GetEmptyContainerLazy());
         } else {
             TVector<NUdf::TUnboxedValue*> editAccessors(result->Get()->GetRowsCount());
             batch->reserve(result->Get()->GetRowsCount());

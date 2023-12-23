@@ -346,11 +346,11 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
         if (strong && result.DiscoveryStatus.IsTransportError()) {
             strong->StatCollector.IncDiscoveryFailDueTransportError();
         }
-        return NThreading::MakeFuture<TListEndpointsResult>(MutateDiscovery(std::move(result), strong->Database));
+        return NThreading::MakeFuture<TListEndpointsResult>(MutateDiscovery(std::move(result), *strong));
     });
 }
 
-TListEndpointsResult TGRpcConnectionsImpl::MutateDiscovery(TListEndpointsResult result, const TStringType& database) {
+TListEndpointsResult TGRpcConnectionsImpl::MutateDiscovery(TListEndpointsResult result, const TDbDriverState& dbDriverState) {
     std::lock_guard lock(ExtensionsLock_);
     if (!DiscoveryMutatorCb)
         return result;
@@ -358,7 +358,12 @@ TListEndpointsResult TGRpcConnectionsImpl::MutateDiscovery(TListEndpointsResult 
     auto endpoint = result.DiscoveryStatus.Endpoint;
     auto ydbStatus = NYdb::TStatus(std::move(result.DiscoveryStatus));
 
-    ydbStatus = DiscoveryMutatorCb(&result.Result, std::move(ydbStatus), database);
+    auto aux = IDiscoveryMutatorApi::TAuxInfo {
+        .Database = dbDriverState.Database,
+        .DiscoveryEndpoint = dbDriverState.DiscoveryEndpoint
+    };
+
+    ydbStatus = DiscoveryMutatorCb(&result.Result, std::move(ydbStatus), aux);
 
     auto issues = ydbStatus.GetIssues();
 

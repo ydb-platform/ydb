@@ -1,6 +1,7 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_gateway.h"
 
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
@@ -126,7 +127,7 @@ struct TKiExploreTxResults {
         auto view = key.GetView();
         if (view && view->Name) {
             const auto& indexName = view->Name;
-            const auto indexTablePath = IKikimrGateway::CreateIndexTablePath(tableMeta->Name, indexName);
+            const auto indexTablePath = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, indexName);
 
             auto indexIt = std::find_if(tableMeta->Indexes.begin(), tableMeta->Indexes.end(), [&indexName](const auto& index){
                 return index.Name == indexName;
@@ -176,7 +177,7 @@ struct TKiExploreTxResults {
                 continue;
             }
 
-            const auto indexTable = IKikimrGateway::CreateIndexTablePath(tableMeta->Name, index.Name);
+            const auto indexTable = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, index.Name);
 
             ops[tableMeta->Name] |= TPrimitiveYdbOperation::Read;
             ops[indexTable] = TPrimitiveYdbOperation::Write;
@@ -198,7 +199,7 @@ struct TKiExploreTxResults {
                 continue;
             }
 
-            const auto indexTable = IKikimrGateway::CreateIndexTablePath(tableMeta->Name, index.Name);
+            const auto indexTable = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, index.Name);
             for (const auto& column : index.KeyColumns) {
                 if (updateColumns.contains(column)) {
                     // delete old index values and upsert rows into index table
@@ -560,6 +561,18 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(alterGroup.World(), ctx, dataSink, txRes, tablesData, types);
         txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::AlterGroup, alterGroup.Pos(), ctx));
+        return result;
+    }
+
+    if (auto maybeRenameGroup = node.Maybe<TKiRenameGroup>()) {
+        auto renameGroup = maybeRenameGroup.Cast();
+        if (!checkDataSink(renameGroup.DataSink())) {
+            return false;
+        }
+
+        txRes.Ops.insert(node.Raw());
+        auto result = ExploreTx(renameGroup.World(), ctx, dataSink, txRes, tablesData, types);
+        txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::RenameGroup, renameGroup.Pos(), ctx));
         return result;
     }
 

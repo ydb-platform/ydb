@@ -89,7 +89,7 @@ struct ranked_point
 struct less_by_turn_index
 {
     template <typename T>
-    inline bool operator()(const T& first, const T& second) const
+    inline bool operator()(T const& first, T const& second) const
     {
         return first.turn_index == second.turn_index
             ? first.index < second.index
@@ -101,7 +101,7 @@ struct less_by_turn_index
 struct less_by_index
 {
     template <typename T>
-    inline bool operator()(const T& first, const T& second) const
+    inline bool operator()(T const& first, T const& second) const
     {
         // Length might be considered too
         // First order by from/to
@@ -123,7 +123,7 @@ struct less_by_index
 struct less_false
 {
     template <typename T>
-    inline bool operator()(const T&, const T& ) const
+    inline bool operator()(T const&, T const& ) const
     {
         return false;
     }
@@ -132,14 +132,14 @@ struct less_false
 template <typename PointOrigin, typename PointTurn, typename SideStrategy, typename LessOnSame, typename Compare>
 struct less_by_side
 {
-    less_by_side(const PointOrigin& p1, const PointTurn& p2, SideStrategy const& strategy)
+    less_by_side(PointOrigin const& p1, PointTurn const& p2, SideStrategy const& strategy)
         : m_origin(p1)
         , m_turn_point(p2)
         , m_strategy(strategy)
     {}
 
     template <typename T>
-    inline bool operator()(const T& first, const T& second) const
+    inline bool operator()(T const& first, T const& second) const
     {
         typedef typename SideStrategy::cs_tag cs_tag;
 
@@ -325,7 +325,8 @@ public :
                 double
             >::type;
 
-        ct_type const tolerance = 1000000000;
+        static auto const tolerance
+            = common_approximately_equals_epsilon_multiplier<ct_type>::value();
 
         int offset = 0;
         while (approximately_equals(point_from, turn.point, tolerance)
@@ -417,7 +418,7 @@ public :
 
         for (std::size_t i = 0; i < m_ranked_points.size(); i++)
         {
-            const rp& ranked = m_ranked_points[i];
+            rp const& ranked = m_ranked_points[i];
             if (ranked.direction != dir_from)
             {
                 continue;
@@ -439,7 +440,7 @@ public :
         bool handled[2] = {false, false};
         for (std::size_t i = 0; i < m_ranked_points.size(); i++)
         {
-            const rp& ranked = m_ranked_points[i];
+            rp const& ranked = m_ranked_points[i];
             if (ranked.direction != dir_from)
             {
                 continue;

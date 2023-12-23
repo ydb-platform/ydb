@@ -30,6 +30,7 @@ END()
 
 RECURSE(
     anubis_osiris
+    balance
     common
     defrag
     handoff

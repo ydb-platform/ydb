@@ -15,7 +15,7 @@
 
 #include <boost/variant/detail/apply_visitor_unary.hpp>
 #include <boost/variant/detail/apply_visitor_binary.hpp>
-#include <boost/variant/variant_fwd.hpp> // for BOOST_VARIANT_DO_NOT_USE_VARIADIC_TEMPLATES
+#include <boost/variant/variant_fwd.hpp>
 
 
 #include <boost/variant/detail/has_result_type.hpp>
@@ -57,34 +57,12 @@ public: // structors
     {
     }
 
-#if !defined(BOOST_VARIANT_DO_NOT_USE_VARIADIC_TEMPLATES)
-
 public: // N-ary visitor interface
     template <typename... Visitables>
     result_type operator()(Visitables&... visitables) const
     {
         return apply_visitor(visitor_, visitables...);
     }
-
-#else // !defined(BOOST_VARIANT_DO_NOT_USE_VARIADIC_TEMPLATES)
-
-public: // unary visitor interface
-
-    template <typename Visitable>
-    result_type operator()(Visitable& visitable) const
-    {
-        return apply_visitor(visitor_, visitable);
-    }
-
-public: // binary visitor interface
-
-    template <typename Visitable1, typename Visitable2>
-    result_type operator()(Visitable1& visitable1, Visitable2& visitable2) const
-    {
-        return apply_visitor(visitor_, visitable1, visitable2);
-    }
-
-#endif // !defined(BOOST_VARIANT_DO_NOT_USE_VARIADIC_TEMPLATES)
 
 private:
     apply_visitor_delayed_t& operator=(const apply_visitor_delayed_t&);
@@ -100,8 +78,7 @@ inline typename boost::enable_if<
     return apply_visitor_delayed_t<Visitor>(visitor);
 }
 
-#if !defined(BOOST_NO_CXX14_DECLTYPE_AUTO) && !defined(BOOST_NO_CXX11_DECLTYPE_N3276) \
-    && !defined(BOOST_VARIANT_DO_NOT_USE_VARIADIC_TEMPLATES)
+#if !defined(BOOST_NO_CXX14_DECLTYPE_AUTO)
 
 template <typename Visitor>
 class apply_visitor_delayed_cpp14_t
@@ -137,8 +114,7 @@ inline  typename boost::disable_if<
     return apply_visitor_delayed_cpp14_t<Visitor>(visitor);
 }
 
-#endif // !defined(BOOST_NO_CXX14_DECLTYPE_AUTO) && !defined(BOOST_NO_CXX11_DECLTYPE_N3276)
-            // && !defined(BOOST_VARIANT_DO_NOT_USE_VARIADIC_TEMPLATES)
+#endif // !defined(BOOST_NO_CXX14_DECLTYPE_AUTO)
 
 
 } // namespace boost

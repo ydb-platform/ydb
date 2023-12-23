@@ -18,6 +18,7 @@ import (
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/config"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/datasource/rdbms"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/datasource/rdbms/clickhouse"
+	rdbms_utils "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/datasource/rdbms/utils"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service"
@@ -150,13 +151,13 @@ func (tc testCaseStreaming) execute(t *testing.T) {
 
 	stream.On("Context").Return(ctx)
 
-	connection := &utils.ConnectionMock{}
+	connection := &rdbms_utils.ConnectionMock{}
 
-	connectionManager := &utils.ConnectionManagerMock{}
+	connectionManager := &rdbms_utils.ConnectionManagerMock{}
 	connectionManager.On("Make", split.Select.DataSourceInstance).Return(connection, nil).Once()
 	connectionManager.On("Release", connection).Return().Once()
 
-	rows := &utils.RowsMock{
+	rows := &rdbms_utils.RowsMock{
 		PredefinedData: tc.src,
 	}
 	connection.On("Query", `SELECT "col0", "col1" FROM "example_1"`).Return(rows, nil).Once()
@@ -166,7 +167,7 @@ func (tc testCaseStreaming) execute(t *testing.T) {
 	col1Acceptor := new(*string)
 	*col1Acceptor = new(string)
 
-	transformer := &utils.TransformerMock{
+	transformer := &rdbms_utils.RowTransformerMock{
 		Acceptors: []any{
 			col0Acceptor,
 			col1Acceptor,
@@ -226,16 +227,15 @@ func (tc testCaseStreaming) execute(t *testing.T) {
 
 	dataSource := rdbms.NewDataSource(logger, dataSourcePreset)
 
-	columnarBufferFactory, err := paging.NewColumnarBufferFactory(
+	columnarBufferFactory, err := paging.NewColumnarBufferFactory[any](
 		logger,
 		memory.NewGoAllocator(),
-		paging.NewReadLimiterFactory(nil),
 		api_service_protos.TReadSplitsRequest_ARROW_IPC_STREAMING,
 		split.Select.What)
 	require.NoError(t, err)
 
 	pagingCfg := &config.TPagingConfig{RowsPerPage: uint64(tc.rowsPerPage)}
-	trafficTracker := paging.NewTrafficTracker(pagingCfg)
+	trafficTracker := paging.NewTrafficTracker[any](pagingCfg)
 	readLimiterFactory := paging.NewReadLimiterFactory(nil)
 	sink, err := paging.NewSink(
 		ctx,

@@ -17,7 +17,7 @@ func TestTrafficTracker(t *testing.T) {
 			RowsPerPage: 2,
 		}
 
-		tt := NewTrafficTracker(cfg)
+		tt := NewTrafficTracker[any](cfg)
 
 		col1Acceptor := new(int32)
 		col2Acceptor := new(string)
@@ -87,7 +87,7 @@ func TestTrafficTracker(t *testing.T) {
 			BytesPerPage: 40,
 		}
 
-		tt := NewTrafficTracker(cfg)
+		tt := NewTrafficTracker[any](cfg)
 
 		col1Acceptor := new(uint64)
 		col2Acceptor := new([]byte)
@@ -127,7 +127,7 @@ func TestTrafficTracker(t *testing.T) {
 			BytesPerPage: 1,
 		}
 
-		tt := NewTrafficTracker(cfg)
+		tt := NewTrafficTracker[any](cfg)
 		col1Acceptor := new(int32)
 		acceptors := []any{col1Acceptor}
 

@@ -123,7 +123,7 @@ public:
             }
 
             if (count >= Count) {
-                return Ctx.HolderFactory.GetEmptyContainer().AsBoxed();
+                return Ctx.HolderFactory.GetEmptyContainerLazy().AsBoxed();
             }
 
             return Ctx.HolderFactory.Create<TValue>(Ctx, Item, Count - count).AsBoxed();
@@ -132,7 +132,7 @@ public:
         NUdf::IBoxedValuePtr TakeListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override {
             Y_UNUSED(builder);
             if (count == 0) {
-                return Ctx.HolderFactory.GetEmptyContainer().AsBoxed();
+                return Ctx.HolderFactory.GetEmptyContainerLazy().AsBoxed();
             }
 
             if (count >= Count) {
@@ -207,7 +207,7 @@ public:
         }
 
         if (!count) {
-            return ctx.HolderFactory.GetEmptyContainer();
+            return ctx.HolderFactory.GetEmptyContainerLazy();
         }
 
         return ctx.HolderFactory.Create<TValue>(ctx, Item->GetValue(ctx), count);

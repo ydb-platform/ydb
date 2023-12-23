@@ -23,6 +23,14 @@ using TStatus = IGraphTransformer::TStatus;
 
 namespace {
 
+bool RightJoinSideAllowed(const TStringBuf& joinType) {
+    return joinType != "LeftOnly";
+}
+
+bool RightJoinSideOptional(const TStringBuf& joinType) {
+    return joinType == "Left";
+}
+
 const TTypeAnnotationNode* MakeKqpEffectType(TExprContext& ctx) {
     return ctx.MakeType<TResourceExprType>(KqpEffectTag);
 }
@@ -828,27 +836,22 @@ bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* 
             }
         }
         return res;
-    } else if (TKqpOlapFilterCompare::Match(node)) {
+    } else if (TKqpOlapFilterBinaryOp::Match(node)) {
         if (!EnsureArgsCount(*node, 3, ctx)) {
             return false;
         }
-        auto op = node->Child(TKqpOlapFilterCompare::idx_Operator);
+        const auto op = node->Child(TKqpOlapFilterBinaryOp::idx_Operator);
         if (!EnsureAtom(*op, ctx)) {
+            return false;
+        }
+        if (!op->IsAtom({"eq", "neq", "lt", "lte", "gt", "gte", "string_contains", "starts_with", "ends_with", "+", "-", "*", "/", "%"})) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
-                TStringBuilder() << "Expected string as operator in OLAP comparison filter, got: " << op->Content()
+                TStringBuilder() << "Unexpected OLAP binary operation: " << op->Content()
             ));
             return false;
         }
-        static const std::unordered_set<std::string> FilterOps = {"eq", "neq", "lt", "lte", "gt", "gte", "string_contains", "starts_with", "ends_with"};
-        auto opStr = op->Content();
-        if (FilterOps.find(TString(opStr)) == FilterOps.end()) {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
-                TStringBuilder() << "Expected one of eq/neq/lt/lte/gt/gte/string_contains/starts_with/ends_with operators in OLAP comparison filter, got: " << op->Content()
-            ));
-            return false;
-        }
-        return ValidateOlapFilterConditions(node->Child(TKqpOlapFilterCompare::idx_Left), itemType, ctx)
-            && ValidateOlapFilterConditions(node->Child(TKqpOlapFilterCompare::idx_Right), itemType, ctx);
+        return ValidateOlapFilterConditions(node->Child(TKqpOlapFilterBinaryOp::idx_Left), itemType, ctx)
+            && ValidateOlapFilterConditions(node->Child(TKqpOlapFilterBinaryOp::idx_Right), itemType, ctx);
     } else if (TKqpOlapFilterExists::Match(node)) {
         if (!EnsureArgsCount(*node, 1, ctx)) {
             return false;
@@ -1270,7 +1273,7 @@ TStatus AnnotateSequencer(const TExprNode::TPtr& node, TExprContext& ctx, const 
     auto table = resolveResult.second;
     YQL_ENSURE(rowType);
     absl::flat_hash_set<TString, THash<TString>> columnsToGenerate;
-    TCoAtomList generatedOnWriteColumns (node->Child(TKqlSequencer::idx_DefaultConstraintColumns)); 
+    TCoAtomList generatedOnWriteColumns (node->Child(TKqlSequencer::idx_DefaultConstraintColumns));
     for(const auto& col : generatedOnWriteColumns) {
         auto [_, inserted] = columnsToGenerate.emplace(TString(col.Value()));
         YQL_ENSURE(inserted, "unexpected duplicates in the names of columns.");
@@ -1363,6 +1366,7 @@ TStatus AnnotateStreamIdxLookupJoin(const TExprNode::TPtr& node, TExprContext& c
     }
 
     TCoAtom rightLabel(node->Child(TKqlStreamIdxLookupJoin::idx_RightLabel));
+    TCoAtom joinType(node->Child(TKqlStreamIdxLookupJoin::idx_JoinType));
 
     const TStructExprType* leftDataType = leftInputTupleType->GetItems()[1]->Cast<TStructExprType>();
     TVector<const TItemExprType*> resultStructItems;
@@ -1372,10 +1376,18 @@ TStatus AnnotateStreamIdxLookupJoin(const TExprNode::TPtr& node, TExprContext& c
         );
     }
 
-    for (const auto& member : rightDataType->Cast<TStructExprType>()->GetItems()) {
-        resultStructItems.emplace_back(
-            ctx.MakeType<TItemExprType>(TString::Join(rightLabel.Value(), ".", member->GetName()), member->GetItemType())
-        );
+    if (RightJoinSideAllowed(joinType.Value())) {
+        for (const auto& member : rightDataType->Cast<TStructExprType>()->GetItems()) {
+            const bool makeOptional = RightJoinSideOptional(joinType.Value()) && !member->GetItemType()->IsOptionalOrNull();
+
+            const TTypeAnnotationNode* memberType = makeOptional
+                ? ctx.MakeType<TOptionalExprType>(member->GetItemType())
+                : member->GetItemType();
+
+            resultStructItems.emplace_back(
+                ctx.MakeType<TItemExprType>(TString::Join(rightLabel.Value(), ".", member->GetName()), memberType)
+            );
+        }
     }
 
     auto rowType = ctx.MakeType<TStructExprType>(resultStructItems);
@@ -1686,6 +1698,7 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
     }
 
     TCoAtom rightLabel(node->Child(TKqpIndexLookupJoin::idx_RightLabel));
+    TCoAtom joinType(node->Child(TKqpIndexLookupJoin::idx_JoinType));
 
     TVector<const TItemExprType*> resultStructItems;
     for (const auto& item : leftRowType->GetItems()) {
@@ -1694,10 +1707,18 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
         );
     }
 
-    for (const auto& item : rightRowType->Cast<TStructExprType>()->GetItems()) {
-        resultStructItems.emplace_back(
-            ctx.MakeType<TItemExprType>(TString::Join(rightLabel.Value(), ".", item->GetName()), item->GetItemType())
-        );
+    if (RightJoinSideAllowed(joinType.Value())) {
+        for (const auto& item : rightRowType->Cast<TStructExprType>()->GetItems()) {
+            const bool makeOptional = RightJoinSideOptional(joinType.Value()) && !item->GetItemType()->IsOptionalOrNull();
+
+            const TTypeAnnotationNode* itemType = makeOptional
+                ? ctx.MakeType<TOptionalExprType>(item->GetItemType())
+                : item->GetItemType();
+
+            resultStructItems.emplace_back(
+                ctx.MakeType<TItemExprType>(TString::Join(rightLabel.Value(), ".", item->GetName()), itemType)
+            );
+        }
     }
 
     auto outputRowType = ctx.MakeType<TStructExprType>(resultStructItems);

@@ -5,6 +5,8 @@ on:
     branches:
       - 'main'
       - 'stable-**'
+    paths: 
+      - 'ydb/docs/**'
   workflow_dispatch:
 
 jobs:

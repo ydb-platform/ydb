@@ -114,7 +114,7 @@ inline void discard_duplicate_start_turns(Turns& turns,
     {
         if (turn.method == method_start)
         {
-            for (const auto& op : turn.operations)
+            for (auto const& op : turn.operations)
             {
                 start_turns_per_segment[adapt_id(op.seg_id)].push_back(index);
             }
@@ -130,7 +130,7 @@ inline void discard_duplicate_start_turns(Turns& turns,
         // Also avoid comparing "start" with itself.
         if (turn.method != method_crosses && turn.method != method_start)
         {
-            for (const auto& op : turn.operations)
+            for (auto const& op : turn.operations)
             {
                 auto it = start_turns_per_segment.find(adapt_id(op.seg_id));
                 if (it != start_turns_per_segment.end())

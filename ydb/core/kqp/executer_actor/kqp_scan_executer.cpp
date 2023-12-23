@@ -1,7 +1,6 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
 #include "kqp_partition_helper.h"
-#include "kqp_result_channel.h"
 #include "kqp_tasks_graph.h"
 #include "kqp_tasks_validate.h"
 #include "kqp_shards_resolver.h"
@@ -206,7 +205,7 @@ private:
                         YQL_ENSURE(false, "unknown source type");
                 }
             } else if (stageInfo.Meta.ShardOperations.empty()) {
-                BuildComputeTasks(stageInfo);
+                BuildComputeTasks(stageInfo, ShardsOnNode.size());
             } else if (stageInfo.Meta.IsSysView()) {
                 BuildSysViewScanTasks(stageInfo);
             } else if (stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()) {

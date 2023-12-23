@@ -121,5 +121,7 @@ items:
       href: workload-kv.md
     - name: Topic load
       href: workload-topic.md
+    - name: Transfer load
+      href: workload-transfer.md
     - name: TPC-H load
       href: workload-tpch.md

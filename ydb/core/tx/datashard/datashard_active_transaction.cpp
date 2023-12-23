@@ -312,30 +312,6 @@ void TValidatedDataTx::ComputeDeadline() {
     }
 }
 
-//
-
-TActiveTransaction::TActiveTransaction(const TBasicOpInfo &op,
-                                       TValidatedDataTx::TPtr dataTx)
-    : TActiveTransaction(op)
-{
-    TrackMemory();
-    FillTxData(dataTx);
-}
-
-TActiveTransaction::TActiveTransaction(TDataShard *self,
-                                       TTransactionContext &txc,
-                                       const TActorContext &ctx,
-                                       const TBasicOpInfo &op,
-                                       const TActorId &target,
-                                       const TString &txBody,
-                                       const TVector<TSysTables::TLocksTable::TLock> &locks,
-                                       ui64 artifactFlags)
-    : TActiveTransaction(op)
-{
-    TrackMemory();
-    FillTxData(self, txc, ctx, target, txBody, locks, artifactFlags);
-}
-
 TActiveTransaction::~TActiveTransaction()
 {
     UntrackMemory();

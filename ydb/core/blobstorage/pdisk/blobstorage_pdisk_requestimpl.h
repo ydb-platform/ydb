@@ -673,7 +673,7 @@ public:
     TOwner Owner;
     TVDiskID VDiskId;
     bool IsGenerationSet;
-    
+
     TChunkUnlock(const NPDisk::TEvChunkUnlock &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ChunkUnlock, reqIdx), 0, 0, NPriInternal::Other)
         , LockFrom(ev.LockFrom)

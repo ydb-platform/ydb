@@ -26,3 +26,4 @@ The following types of load tests are supported at the moment:
 * [ClickBench](../../../workload-click-bench.md): ClickBench analytical benchmark (https://github.com/ClickHouse/ClickBench).
 * [TPC-H](../../../workload-tpch.md): TPC-H benchmark (https://www.tpc.org/tpch/).
 * [Topic](../../../workload-topic.md): Topic load.
+* [Transfer](../../../workload-transfer.md): Transfer load.

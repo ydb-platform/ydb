@@ -211,14 +211,15 @@ public:
         NWilson::TTraceId id;
         if (false) { // change to enable Wilson tracing
             id = NWilson::TTraceId::NewTraceId(15, 4095);
-            LOG_I("wilson tracing started, id: " + std::to_string(id.GetTraceId()));
+            LOG_I("wilson tracing started, id: " + id.GetHexTraceId());
         }
         auto selfId = SelfId();
         auto as = TActivationContext::ActorSystem();
         ev->Get()->SetClientLostAction(selfId, as);
         QueryState = std::make_shared<TKqpQueryState>(
             ev, QueryId, Settings.Database, Settings.Cluster, Settings.DbCounters, Settings.LongSession,
-            Settings.TableService, Settings.QueryService, std::move(id), SessionId);
+            Settings.TableService, Settings.QueryService, std::move(id), SessionId,
+            AppData()->MonotonicTimeProvider->Now());
         if (QueryState->UserRequestContext->TraceId.empty()) {
             QueryState->UserRequestContext->TraceId = UlidGen.Next().ToString();
         }
@@ -1161,7 +1162,7 @@ public:
                     ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats));
                 }
             }
-            
+
             LOG_D("Forwarded TEvExecuterProgress to " << QueryState->RequestActorId);
             Send(QueryState->RequestActorId, ev->Release().Release(), 0, QueryState->ProxyRequestId);
         }
@@ -1286,6 +1287,10 @@ public:
             exec->Swap(executerResults.MutableStats());
         }
 
+        if (!response->GetIssues().empty()){
+            NYql::IssuesFromMessage(response->GetIssues(), QueryState->Issues);
+        }
+
         ExecuteOrDefer();
     }
 
@@ -1305,10 +1310,12 @@ public:
         TString logMsg = TStringBuilder() << "got TEvAbortExecution in " << CurrentStateFuncName();
         LOG_I(logMsg << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode()) << " send to: " << ExecuterId);
 
+        TString reason = TStringBuilder() << "Request timeout exceeded, cancelling after "
+            << (AppData()->MonotonicTimeProvider->Now() - QueryState->StartedAt).MilliSeconds()
+            << " milliseconds.";
+
         if (ExecuterId) {
-            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(
-                msg.GetStatusCode(),
-                "Request timeout exceeded");
+            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(msg.GetStatusCode(), reason);
             Send(ExecuterId, abortEv.Release(), IEventHandle::FlagTrackDelivery);
         } else {
             const auto& issues = ev->Get()->GetIssues();
@@ -1456,6 +1463,8 @@ public:
         if (QueryState->CompileResult) {
             AddQueryIssues(*response, QueryState->CompileResult->Issues);
         }
+
+        AddQueryIssues(*response, QueryState->Issues);
 
         FillStats(record);
 

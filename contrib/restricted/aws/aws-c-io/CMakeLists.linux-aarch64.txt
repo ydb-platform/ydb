@@ -50,12 +50,7 @@ target_sources(restricted-aws-aws-c-io PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/pkcs11_lib.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/pkcs11_tls_op_handler.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/pki_utils.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/host_resolver.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/pipe.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/shared_library.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/socket.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/retry_strategy.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/s2n/s2n_tls_channel_handler.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/socket_channel_handler.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/standard_retry_strategy.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/statistics.c
@@ -63,4 +58,9 @@ target_sources(restricted-aws-aws-c-io PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/tls_channel_handler.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/tls_channel_handler_shared.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/linux/epoll_event_loop.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/host_resolver.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/pipe.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/shared_library.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/posix/socket.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-io/source/s2n/s2n_tls_channel_handler.c
 )

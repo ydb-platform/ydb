@@ -141,6 +141,7 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
     }
 
     TDqAsyncStats taskPopStats;
+    TDqAsyncStats resultStats;
 
     for (auto& [dstStageId, outputChannels] : taskStats.OutputChannels) {
         switch (level) {
@@ -149,6 +150,9 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
             case TCollectStatsLevel::Basic:
                 for (auto& [channelId, outputChannel] : outputChannels) {
                     taskPopStats.MergeData(outputChannel->GetPopStats());
+                    if (dstStageId == 0) {
+                        resultStats.MergeData(outputChannel->GetPopStats());
+                    }
                 }
                 break;
             case TCollectStatsLevel::Full:
@@ -158,6 +162,9 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
                     bool firstChannelInStage = true;
                     for (auto& [channelId, outputChannel] : outputChannels) {
                         taskPopStats.MergeData(outputChannel->GetPopStats());
+                        if (dstStageId == 0) {
+                            resultStats.MergeData(outputChannel->GetPopStats());
+                        }
                         if (firstChannelInStage) {
                             pushStats = outputChannel->GetPushStats();
                             popStats = outputChannel->GetPopStats();
@@ -195,7 +202,10 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
             case TCollectStatsLevel::Profile:
                 for (auto& [channelId, outputChannel] : outputChannels) {
                     taskPopStats.MergeData(outputChannel->GetPopStats());
-                    auto& protoChannel = *protoTask->AddOutputChannels();
+                    if (dstStageId == 0) {
+                        resultStats.MergeData(outputChannel->GetPopStats());
+                    }
+                auto& protoChannel = *protoTask->AddOutputChannels();
                     protoChannel.SetChannelId(channelId);
                     protoChannel.SetDstStageId(dstStageId);
                     FillAsyncStats(*protoChannel.MutablePush(), outputChannel->GetPushStats());
@@ -213,6 +223,8 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
 
     protoTask->SetOutputRows(taskPopStats.Rows);
     protoTask->SetOutputBytes(taskPopStats.Bytes);
+    protoTask->SetResultRows(resultStats.Rows);
+    protoTask->SetResultBytes(resultStats.Bytes);
 }
 
 } // namespace NDq

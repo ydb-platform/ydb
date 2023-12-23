@@ -34,15 +34,10 @@ TCommandImport::TCommandImport()
 TCommandImportFromS3::TCommandImportFromS3()
     : TYdbOperationCommand("s3", {}, "Create import from S3")
 {
-    InitAwsAPI();
     TItem::DefineFields({
         {"Source", {{"source", "src", "s"}, "S3 object key prefix", true}},
         {"Destination", {{"destination", "dst", "d"}, "Database path to a table to import to", true}},
     });
-}
-
-TCommandImportFromS3::~TCommandImportFromS3() {
-    ShutdownAwsAPI();
 }
 
 void TCommandImportFromS3::Config(TConfig& config) {
@@ -137,30 +132,37 @@ int TCommandImportFromS3::Run(TConfig& config) {
     settings.NumberOfRetries(NumberOfRetries);
 
     const size_t suffixSize = strlen(NDump::SCHEME_FILE_NAME);
-    auto s3Client = CreateS3ClientWrapper(settings);
-    for (auto item : Items) {
-        std::optional<TString> token;
-        if (!item.Source.empty() && item.Source.back() != '/') {
-            item.Source += "/";
-        }
-        if (!item.Destination.empty() && item.Destination.back() == '.') {
-            item.Destination.pop_back();
-        }
-        if (item.Destination.empty() || item.Destination.back() != '/') {
-            item.Destination += "/";
-        }
-        do {
-            const auto& [keys, current_token] = s3Client->ListObjectKeys(item.Source, token);
-            token = current_token;
-            for (const auto& key : keys) {
-                if (key.EndsWith(NDump::SCHEME_FILE_NAME)) {
-                    TString source = key.substr(0, key.Size() - suffixSize);
-                    TString destination = item.Destination + source.substr(item.Source.Size());
-                    settings.AppendItem({std::move(source), std::move(destination)});
-                }
+    InitAwsAPI();
+    try {
+        auto s3Client = CreateS3ClientWrapper(settings);
+        for (auto item : Items) {
+            std::optional<TString> token;
+            if (!item.Source.empty() && item.Source.back() != '/') {
+                item.Source += "/";
             }
-        } while (token);
+            if (!item.Destination.empty() && item.Destination.back() == '.') {
+                item.Destination.pop_back();
+            }
+            if (item.Destination.empty() || item.Destination.back() != '/') {
+                item.Destination += "/";
+            }
+            do {
+                const auto& [keys, current_token] = s3Client->ListObjectKeys(item.Source, token);
+                token = current_token;
+                for (const auto& key : keys) {
+                    if (key.EndsWith(NDump::SCHEME_FILE_NAME)) {
+                        TString source = key.substr(0, key.Size() - suffixSize);
+                        TString destination = item.Destination + source.substr(item.Source.Size());
+                        settings.AppendItem({std::move(source), std::move(destination)});
+                    }
+                }
+            } while (token);
+        }
+    } catch (...) {
+        ShutdownAwsAPI();
+        throw;
     }
+    ShutdownAwsAPI();
 
     TImportClient client(CreateDriver(config));
     TImportFromS3Response response = client.ImportFromS3(std::move(settings)).GetValueSync();

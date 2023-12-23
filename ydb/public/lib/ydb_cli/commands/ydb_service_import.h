@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ydb_command.h"
+#include "ydb_common.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_import/import.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -20,7 +21,6 @@ class TCommandImportFromS3 : public TYdbOperationCommand,
                            public TCommandWithFormat {
 public:
     TCommandImportFromS3();
-    ~TCommandImportFromS3() override;
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     int Run(TConfig& config) override;

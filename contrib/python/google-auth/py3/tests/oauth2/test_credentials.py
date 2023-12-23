@@ -27,8 +27,8 @@ from google.auth import transport
 from google.oauth2 import credentials
 
 
-import yatest.common
-DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+import yatest.common as yc
+DATA_DIR = os.path.join(os.path.dirname(yc.source_path(__file__)), "..", "data")
 
 AUTH_USER_JSON_FILE = os.path.join(DATA_DIR, "authorized_user.json")
 

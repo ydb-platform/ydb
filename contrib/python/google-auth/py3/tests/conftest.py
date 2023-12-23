@@ -21,9 +21,14 @@ import pytest  # type: ignore
 
 def pytest_configure():
     """Load public certificate and private key."""
-    import __res
-    pytest.private_key_bytes = __res.find("data/privatekey.pem")
-    pytest.public_cert_bytes = __res.find("data/public_cert.pem")
+    import yatest.common as yc
+    pytest.data_dir = os.path.join(os.path.dirname(yc.source_path("contrib/python/google-auth/py3/tests/conftest.py")), "data")
+
+    with open(os.path.join(pytest.data_dir, "privatekey.pem"), "rb") as fh:
+        pytest.private_key_bytes = fh.read()
+
+    with open(os.path.join(pytest.data_dir, "public_cert.pem"), "rb") as fh:
+        pytest.public_cert_bytes = fh.read()
 
 
 @pytest.fixture

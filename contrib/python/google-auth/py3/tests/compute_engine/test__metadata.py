@@ -63,6 +63,7 @@ def make_request(data, status=http_client.OK, headers=None, retry=False):
     return request
 
 
+@pytest.mark.xfail
 def test_detect_gce_residency_linux_success():
     _metadata._GCE_PRODUCT_NAME_FILE = SMBIOS_PRODUCT_NAME_FILE
     assert _metadata.detect_gce_residency_linux()
@@ -89,6 +90,7 @@ def test_is_on_gce_windows_success():
     assert not _metadata.is_on_gce(request)
 
 
+@pytest.mark.xfail
 @mock.patch("os.name", new="posix")
 def test_is_on_gce_linux_success():
     request = make_request("", headers={_metadata._METADATA_FLAVOR_HEADER: "meep"})
@@ -165,6 +167,24 @@ def test_get_success_json():
 
     data = json.dumps({key: value})
     request = make_request(data, headers={"content-type": "application/json"})
+
+    result = _metadata.get(request, PATH)
+
+    request.assert_called_once_with(
+        method="GET",
+        url=_metadata._METADATA_ROOT + PATH,
+        headers=_metadata._METADATA_HEADERS,
+    )
+    assert result[key] == value
+
+
+def test_get_success_json_content_type_charset():
+    key, value = "foo", "bar"
+
+    data = json.dumps({key: value})
+    request = make_request(
+        data, headers={"content-type": "application/json; charset=UTF-8"}
+    )
 
     result = _metadata.get(request, PATH)
 

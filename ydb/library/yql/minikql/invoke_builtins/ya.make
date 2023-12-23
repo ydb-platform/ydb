@@ -22,5 +22,6 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
-    ut
+    llvm/ut
+    llvm14/ut
 )

@@ -11,6 +11,10 @@ add_library(yt-comp_nodes-dq)
 target_compile_options(yt-comp_nodes-dq PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
+target_include_directories(yt-comp_nodes-dq PUBLIC
+  ${CMAKE_BINARY_DIR}/contrib/ydb/library/yql/providers/yt/comp_nodes/dq
+  ${CMAKE_BINARY_DIR}/contrib/ydb/library/yql/providers/yt/comp_nodes/dq/contrib/ydb/library/yql/minikql/computation
+)
 target_include_directories(yt-comp_nodes-dq PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/flatbuffers/include
 )
@@ -34,4 +38,8 @@ target_sources(yt-comp_nodes-dq PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_reader.cpp
   ${CMAKE_SOURCE_DIR}/contrib/ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.cpp
   ${CMAKE_SOURCE_DIR}/contrib/ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_writer.cpp
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/contrib/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h.txt
+  ${CMAKE_BINARY_DIR}/contrib/ydb/library/yql/providers/yt/comp_nodes/dq/contrib/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
 )

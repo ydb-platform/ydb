@@ -22,7 +22,7 @@ target_link_libraries(providers-common-codec PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  minikql-computation-llvm
+  yql-minikql-computation
   parser-pg_wrapper-interface
   providers-common-mkql
   cpp-yson-node

@@ -7,5 +7,6 @@
 
 
 add_subdirectory(llvm)
+add_subdirectory(llvm14)
 add_subdirectory(no_llvm)
 add_subdirectory(ut)

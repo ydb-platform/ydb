@@ -26,6 +26,7 @@ target_link_libraries(clicommands PUBLIC
   cpp-threading-local_executor
   kikimr_backup
   ydb-library-workload
+  library-yaml_config-public
   public-lib-operation_id
   public-lib-stat_visualization
   common
@@ -63,8 +64,10 @@ target_sources(clicommands PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/ydb/public/lib/ydb_cli/commands/tpch.cpp
   ${CMAKE_SOURCE_DIR}/contrib/ydb/public/lib/ydb_cli/commands/tpcc_workload.cpp
   ${CMAKE_SOURCE_DIR}/contrib/ydb/public/lib/ydb_cli/commands/query_workload.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/ydb/public/lib/ydb_cli/commands/ydb_admin.cpp
   ${CMAKE_SOURCE_DIR}/contrib/ydb/public/lib/ydb_cli/commands/ydb_sdk_core_access.cpp
   ${CMAKE_SOURCE_DIR}/contrib/ydb/public/lib/ydb_cli/commands/ydb_command.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/ydb/public/lib/ydb_cli/commands/ydb_dynamic_config.cpp
   ${CMAKE_SOURCE_DIR}/contrib/ydb/public/lib/ydb_cli/commands/ydb_profile.cpp
   ${CMAKE_SOURCE_DIR}/contrib/ydb/public/lib/ydb_cli/commands/ydb_root_common.cpp
   ${CMAKE_SOURCE_DIR}/contrib/ydb/public/lib/ydb_cli/commands/ydb_service_auth.cpp
@@ -93,6 +96,7 @@ target_link_libraries(clicommands.global PUBLIC
   cpp-threading-local_executor
   kikimr_backup
   ydb-library-workload
+  library-yaml_config-public
   public-lib-operation_id
   public-lib-stat_visualization
   common

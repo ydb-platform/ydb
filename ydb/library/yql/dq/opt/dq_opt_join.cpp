@@ -431,38 +431,27 @@ TDqJoin DqSuppressSortOnJoinInput(const TDqJoin& join, TExprContext& ctx) {
 
     if (lOrdered && rOrdered)
         return Build<TDqJoin>(ctx, join.Pos())
+            .InitFrom(join)
             .LeftInput<TCoUnordered>()
                 .Input(join.LeftInput())
                 .Build()
             .RightInput<TCoUnordered>()
                 .Input(join.RightInput())
                 .Build()
-            .LeftLabel(join.RightLabel())
-            .RightLabel(join.LeftLabel())
-            .JoinType(join.JoinType())
-            .JoinKeys(join.JoinKeys())
             .Done();
     else if (lOrdered)
         return Build<TDqJoin>(ctx, join.Pos())
+            .InitFrom(join)
             .LeftInput<TCoUnordered>()
                 .Input(join.LeftInput())
                 .Build()
-            .RightInput(join.RightInput())
-            .LeftLabel(join.RightLabel())
-            .RightLabel(join.LeftLabel())
-            .JoinType(join.JoinType())
-            .JoinKeys(join.JoinKeys())
             .Done();
     else if (rOrdered)
         return Build<TDqJoin>(ctx, join.Pos())
-            .LeftInput(join.LeftInput())
+            .InitFrom(join)
             .RightInput<TCoUnordered>()
                 .Input(join.RightInput())
                 .Build()
-            .LeftLabel(join.RightLabel())
-            .RightLabel(join.LeftLabel())
-            .JoinType(join.JoinType())
-            .JoinKeys(join.JoinKeys())
             .Done();
     return join;
 }
@@ -475,6 +464,22 @@ TExprBase DqRewriteRightJoinToLeft(const TExprBase node, TExprContext& ctx) {
     auto dqJoin = node.Cast<TDqJoin>();
     if (!dqJoin.JoinType().Value().StartsWith("Right")) {
         return node;
+    }
+
+    TMaybeNode<TCoAtomList> newFlags;
+    if (TMaybeNode<TCoAtomList> flags = dqJoin.Flags()) {
+        auto flagsBuilder = Build<TCoAtomList>(ctx, flags.Cast().Pos());
+        for (auto flag: flags.Cast()) {
+            TStringBuf tail;
+            if( flag.Value().AfterPrefix("Left", tail)) {
+                flagsBuilder.Add().Value("Right" + TString(tail)).Build();
+            } else if ( flag.Value().AfterPrefix("Right", tail)) {
+                flagsBuilder.Add().Value("Left" + TString(tail)).Build();
+            } else {
+                flagsBuilder.Add(flag);
+            }
+        }
+        newFlags = flagsBuilder.Done();
     }
 
     auto joinKeysBuilder = Build<TDqJoinKeyTupleList>(ctx, dqJoin.Pos());
@@ -496,6 +501,7 @@ TExprBase DqRewriteRightJoinToLeft(const TExprBase node, TExprContext& ctx) {
             .Value(RotateRightJoinType(dqJoin.JoinType().Value()))
             .Build()
         .JoinKeys(joinKeysBuilder.Done())
+        .Flags(newFlags)
         .Done();
 }
 
@@ -552,12 +558,9 @@ TExprBase DqRewriteLeftPureJoin(const TExprBase node, TExprContext& ctx, const T
     // all right input data to single task, we can do a "partial" right semi join
     // on in the right stage to extract only necessary rows.
     return Build<TDqJoin>(ctx, join.Pos())
+        .InitFrom(join)
         .LeftInput(leftConnection)
-        .LeftLabel(join.LeftLabel())
-        .RightInput(join.RightInput())
-        .RightLabel(join.RightLabel())
         .JoinType().Build(joinType)
-        .JoinKeys(join.JoinKeys())
         .Done();
 }
 
@@ -1179,11 +1182,9 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
 
         return Build<TCoExtractMembers>(ctx, join.Pos())
             .Input<TDqJoin>()
+                .InitFrom(join)
                 .LeftInput(connLeft)
-                .LeftLabel(join.LeftLabel())
                 .RightInput(connRight)
-                .RightLabel(join.RightLabel())
-                .JoinType(join.JoinType())
                 .JoinKeys(ctx.ChangeChildren(join.JoinKeys().Ref(), std::move(joinKeys)))
                 .Build()
             .Members().Add(std::move(fields)).Build()

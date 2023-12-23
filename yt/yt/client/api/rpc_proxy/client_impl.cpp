@@ -504,17 +504,38 @@ TFuture<TYsonString> TClient::GetTablePivotKeys(
 }
 
 TFuture<void> TClient::CreateTableBackup(
-    const TBackupManifestPtr& /*manifest*/,
-    const TCreateTableBackupOptions& /*options*/)
+    const TBackupManifestPtr& manifest,
+    const TCreateTableBackupOptions& options)
 {
-    ThrowUnimplemented("CreateTableBackup");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.CreateTableBackup();
+    ToProto(req->mutable_manifest(), *manifest);
+
+    SetTimeoutOptions(*req, options);
+    req->set_checkpoint_timestamp_delay(ToProto<i64>(options.CheckpointTimestampDelay));
+    req->set_checkpoint_check_period(ToProto<i64>(options.CheckpointCheckPeriod));
+    req->set_checkpoint_check_timeout(ToProto<i64>(options.CheckpointCheckTimeout));
+    req->set_force(options.Force);
+
+    return req->Invoke().As<void>();
 }
 
 TFuture<void> TClient::RestoreTableBackup(
-    const TBackupManifestPtr& /*manifest*/,
-    const TRestoreTableBackupOptions& /*options*/)
+    const TBackupManifestPtr& manifest,
+    const TRestoreTableBackupOptions& options)
 {
-    ThrowUnimplemented("RestoreTableBackup");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.RestoreTableBackup();
+    ToProto(req->mutable_manifest(), *manifest);
+
+    SetTimeoutOptions(*req, options);
+    req->set_force(options.Force);
+    req->set_mount(options.Mount);
+    req->set_enable_replicas(options.EnableReplicas);
+
+    return req->Invoke().As<void>();
 }
 
 TFuture<std::vector<TTableReplicaId>> TClient::GetInSyncReplicas(
@@ -745,7 +766,7 @@ TFuture<IQueueRowsetPtr> TClient::PullQueue(
 TFuture<IQueueRowsetPtr> TClient::PullConsumer(
     const TRichYPath& consumerPath,
     const TRichYPath& queuePath,
-    i64 offset,
+    std::optional<i64> offset,
     int partitionIndex,
     const TQueueRowBatchReadOptions& rowBatchReadOptions,
     const TPullConsumerOptions& options)
@@ -758,7 +779,9 @@ TFuture<IQueueRowsetPtr> TClient::PullConsumer(
 
     ToProto(req->mutable_consumer_path(), consumerPath);
     ToProto(req->mutable_queue_path(), queuePath);
-    req->set_offset(offset);
+    if (offset) {
+        req->set_offset(*offset);
+    }
     req->set_partition_index(partitionIndex);
     ToProto(req->mutable_row_batch_read_options(), rowBatchReadOptions);
 
@@ -2031,7 +2054,7 @@ TFuture<void> TClient::AlterQuery(
     ThrowUnimplemented("AlterQuery");
 }
 
-TFuture<TBundleConfigDescriptor> TClient::GetBundleConfig(
+TFuture<TBundleConfigDescriptorPtr> TClient::GetBundleConfig(
     const TString& /*bundleName*/,
     const TGetBundleConfigOptions& /*options*/)
 {

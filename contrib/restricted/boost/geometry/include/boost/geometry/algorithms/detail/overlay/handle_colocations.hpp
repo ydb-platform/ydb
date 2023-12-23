@@ -296,7 +296,7 @@ inline void assign_cluster_ids(Turns& turns, Clusters const& clusters)
     }
     for (auto const& kv : clusters)
     {
-        for (const auto& index : kv.second.turn_indices)
+        for (auto const& index : kv.second.turn_indices)
         {
             turns[index].cluster_id = kv.first;
         }

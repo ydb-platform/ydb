@@ -6,25 +6,25 @@ import (
 	"sync"
 
 	"github.com/ydb-platform/ydb/library/go/core/log"
-	data_source "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/datasource"
+	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/datasource"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/paging"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
-type Streamer struct {
+type Streamer[T utils.Acceptor] struct {
 	stream     api_service.Connector_ReadSplitsServer
 	request    *api_service_protos.TReadSplitsRequest
-	dataSource data_source.DataSource
+	dataSource datasource.DataSource[T]
 	split      *api_service_protos.TSplit
-	sink       paging.Sink
+	sink       paging.Sink[T]
 	logger     log.Logger
 	ctx        context.Context // clone of a stream context
 	cancel     context.CancelFunc
 }
 
-func (s *Streamer) writeDataToStream() error {
+func (s *Streamer[T]) writeDataToStream() error {
 	// exit from this function will cause publisher's goroutine termination as well
 	defer s.cancel()
 
@@ -51,7 +51,7 @@ func (s *Streamer) writeDataToStream() error {
 	}
 }
 
-func (s *Streamer) sendResultToStream(result *paging.ReadResult) error {
+func (s *Streamer[T]) sendResultToStream(result *paging.ReadResult[T]) error {
 	// buffer must be explicitly marked as unused,
 	// otherwise memory will leak
 	defer result.ColumnarBuffer.Release()
@@ -72,7 +72,7 @@ func (s *Streamer) sendResultToStream(result *paging.ReadResult) error {
 	return nil
 }
 
-func (s *Streamer) Run() error {
+func (s *Streamer[T]) Run() error {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 
@@ -94,17 +94,17 @@ func (s *Streamer) Run() error {
 	return nil
 }
 
-func NewStreamer(
+func NewStreamer[T utils.Acceptor](
 	logger log.Logger,
 	stream api_service.Connector_ReadSplitsServer,
 	request *api_service_protos.TReadSplitsRequest,
 	split *api_service_protos.TSplit,
-	sink paging.Sink,
-	dataSource data_source.DataSource,
-) *Streamer {
+	sink paging.Sink[T],
+	dataSource datasource.DataSource[T],
+) *Streamer[T] {
 	ctx, cancel := context.WithCancel(stream.Context())
 
-	return &Streamer{
+	return &Streamer[T]{
 		logger:     logger,
 		stream:     stream,
 		split:      split,

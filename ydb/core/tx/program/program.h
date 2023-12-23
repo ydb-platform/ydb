@@ -14,6 +14,7 @@ class IColumnResolver {
 public:
     virtual ~IColumnResolver() = default;
     virtual TString GetColumnName(ui32 id, bool required = true) const = 0;
+    virtual std::optional<ui32> GetColumnIdOptional(const TString& name) const = 0;
     virtual const NTable::TScheme::TTableSchema& GetSchema() const = 0;
     virtual NSsa::TColumnInfo GetDefaultColumn() const = 0;
 };

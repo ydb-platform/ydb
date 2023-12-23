@@ -163,7 +163,7 @@ public:
                 NUdf::TUnboxedValue* inplaceArg = nullptr;
                 NUdf::TUnboxedValue arg = ctx.HolderFactory.CreateDirectArrayHolder(3, inplaceArg);
                 auto flags = castedType->GetArguments()[i].Flags;
-                NUdf::TUnboxedValue flagsList = ctx.HolderFactory.GetEmptyContainer();
+                NUdf::TUnboxedValue flagsList = ctx.HolderFactory.GetEmptyContainerLazy();
                 if (flags & NUdf::ICallablePayload::TArgumentFlags::AutoMap) {
                     NUdf::TUnboxedValue* inplaceFlags = nullptr;
                     flagsList = ctx.HolderFactory.CreateDirectArrayHolder(1, inplaceFlags);

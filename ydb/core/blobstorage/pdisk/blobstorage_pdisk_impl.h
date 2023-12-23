@@ -187,7 +187,7 @@ public:
     TAtomic SlowDeviceMs = 0;
 
     const bool UseHugePages;
-    
+
     // Chunk locking
     TMap<TOwner, ui32> OwnerLocks;
 

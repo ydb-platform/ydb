@@ -216,7 +216,7 @@ public:
     }
 
     template<typename TEvent>
-    bool CheckForTermErrors(TAutoPtr<TEventHandle<TEvent>>& ev) {
+    bool CheckForTermErrors(TAutoPtr<TEventHandle<TEvent>>& ev, bool suppressCommonErrors) {
         auto& record = ev->Get()->Record;
         auto& self = Derived();
 
@@ -260,6 +260,9 @@ public:
         if (status != NKikimrProto::RACE && status != NKikimrProto::BLOCKED && status != NKikimrProto::DEADLINE) {
             return false; // these statuses are non-terminal
         } else if (status != NKikimrProto::RACE) {
+            if (suppressCommonErrors) {
+                return false; // these errors will be handled in host code
+            }
             // this status is terminal and we have nothing to do about it
             return done(status, TStringBuilder() << "status# " << NKikimrProto::EReplyStatus_Name(status) << " from# "
                 << vdiskId.ToString());
@@ -314,9 +317,9 @@ public:
         return true;
     }
 
-    bool ProcessEvent(TAutoPtr<IEventHandle>& ev) {
+    bool ProcessEvent(TAutoPtr<IEventHandle>& ev, bool suppressCommonErrors = false) {
         switch (ev->GetTypeRewrite()) {
-#define CHECK(T) case TEvBlobStorage::T::EventType: return CheckForTermErrors(reinterpret_cast<TEvBlobStorage::T::TPtr&>(ev))
+#define CHECK(T) case TEvBlobStorage::T::EventType: return CheckForTermErrors(reinterpret_cast<TEvBlobStorage::T::TPtr&>(ev), suppressCommonErrors)
             CHECK(TEvVPutResult);
             CHECK(TEvVMultiPutResult);
             CHECK(TEvVGetResult);
@@ -351,17 +354,23 @@ public:
         return false;
     }
 
-    void CountPuts(const TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>>& q) {
+    template<typename TEv>
+    void CountPut(const std::unique_ptr<TEv>& ev) {
+        ++GeneratedSubrequests;
+        GeneratedSubrequestBytes += ev->GetBufferBytes();
+    }
+
+    template<typename TEv>
+    void CountPuts(const TDeque<std::unique_ptr<TEv>>& q) {
         for (const auto& item : q) {
-            ++GeneratedSubrequests;
-            GeneratedSubrequestBytes += item->GetBufferBytes();
+            CountPut(item);
         }
     }
 
-    void CountPuts(const TDeque<std::unique_ptr<TEvBlobStorage::TEvVMultiPut>>& q) {
+    template<typename... TOptions>
+    void CountPuts(const TDeque<std::variant<TOptions...>>& q) {
         for (const auto& item : q) {
-            ++GeneratedSubrequests;
-            GeneratedSubrequestBytes += item->GetBufferBytes();
+            std::visit([&](auto& item) { CountPut(item); }, item);
         }
     }
 

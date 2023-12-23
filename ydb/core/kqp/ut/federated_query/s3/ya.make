@@ -11,6 +11,7 @@ ENDIF()
 
 SRCS(
     kqp_federated_query_ut.cpp
+    kqp_federated_scheme_ut.cpp
     kqp_s3_plan_ut.cpp
     s3_recipe_ut_helpers.cpp
 )

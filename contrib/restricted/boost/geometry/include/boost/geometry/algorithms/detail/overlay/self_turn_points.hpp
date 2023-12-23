@@ -24,7 +24,6 @@
 #include <boost/geometry/algorithms/detail/overlay/get_turns.hpp>
 #include <boost/geometry/algorithms/detail/sections/section_box_policies.hpp>
 
-#include <boost/geometry/core/access.hpp>
 #include <boost/geometry/core/coordinate_dimension.hpp>
 #include <boost/geometry/core/point_order.hpp>
 #include <boost/geometry/core/tags.hpp>

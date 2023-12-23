@@ -98,7 +98,7 @@ TFuture<NQueueClient::IQueueRowsetPtr> TDelegatingClient::PullQueue(
 TFuture<NQueueClient::IQueueRowsetPtr> TDelegatingClient::PullConsumer(
     const NYPath::TRichYPath& consumerPath,
     const NYPath::TRichYPath& queuePath,
-    i64 offset,
+    std::optional<i64> offset,
     int partitionIndex,
     const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
     const TPullConsumerOptions& options)
@@ -1004,7 +1004,7 @@ TFuture<void> TDelegatingClient::AlterQuery(
     return Underlying_->AlterQuery(queryId, options);
 }
 
-TFuture<TBundleConfigDescriptor> TDelegatingClient::GetBundleConfig(
+TFuture<TBundleConfigDescriptorPtr> TDelegatingClient::GetBundleConfig(
     const TString& bundleName,
     const TGetBundleConfigOptions& options)
 {

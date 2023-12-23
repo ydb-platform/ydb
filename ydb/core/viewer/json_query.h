@@ -38,9 +38,17 @@ class TJsonQuery : public TViewerPipeClient<TJsonQuery> {
     TString Database;
     TString Action;
     TString Stats;
-    TString Schema = "classic";
     TString Syntax;
     TString UserToken;
+    bool IsBase64Encode;
+
+    enum ESchemaType {
+        Classic,
+        Modern,
+        Multi,
+        Ydb,
+    };
+    ESchemaType Schema = ESchemaType::Classic;
 
     std::optional<TNodeId> SubscribedNodeId;
     std::vector<TNodeId> TenantDynamicNodes;
@@ -52,6 +60,20 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
+    ESchemaType StringToSchemaType(const TString& schemaStr) {
+        if (schemaStr == "classic") {
+            return ESchemaType::Classic;
+        } else if (schemaStr == "modern") {
+            return ESchemaType::Modern;
+        } else if (schemaStr == "multi") {
+            return ESchemaType::Multi;
+        } else if (schemaStr == "ydb") {
+            return ESchemaType::Ydb;
+        } else {
+            return ESchemaType::Classic;
+        }
+    }
+
     void ParseCgiParameters(const TCgiParameters& params) {
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
@@ -60,12 +82,11 @@ public:
         Database = params.Get("database");
         Stats = params.Get("stats");
         Action = params.Get("action");
-        Schema = params.Get("schema");
-        if (Schema.empty()) {
-            Schema = "classic";
-        }
+        TString schemaStr = params.Get("schema");
+        Schema = StringToSchemaType(schemaStr);
         Syntax = params.Get("syntax");
         Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
+        IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), true);
     }
 
     void ParsePostContent(const TStringBuf& content) {
@@ -233,7 +254,7 @@ public:
     }
 
 private:
-    static NJson::TJsonValue ColumnPrimitiveValueToJsonValue(NYdb::TValueParser& valueParser) {
+    NJson::TJsonValue ColumnPrimitiveValueToJsonValue(NYdb::TValueParser& valueParser) {
         switch (valueParser.GetPrimitiveType()) {
             case NYdb::EPrimitiveType::Bool:
                 return valueParser.GetBool();
@@ -274,7 +295,7 @@ private:
             case NYdb::EPrimitiveType::TzTimestamp:
                 return valueParser.GetTzTimestamp();
             case NYdb::EPrimitiveType::String:
-                return Base64Encode(valueParser.GetString());
+                return IsBase64Encode ? Base64Encode(valueParser.GetString()) : valueParser.GetString();
             case NYdb::EPrimitiveType::Yson:
                 return valueParser.GetYson();
             case NYdb::EPrimitiveType::Json:
@@ -288,7 +309,7 @@ private:
         }
     }
 
-    static NJson::TJsonValue ColumnValueToJsonValue(NYdb::TValueParser& valueParser) {
+    NJson::TJsonValue ColumnValueToJsonValue(NYdb::TValueParser& valueParser) {
         switch (valueParser.GetKind()) {
             case NYdb::TTypeParser::ETypeKind::Primitive:
                 return ColumnPrimitiveValueToJsonValue(valueParser);
@@ -381,7 +402,7 @@ private:
                 MakeErrorReply(out, jsonResponse, record);
             }
 
-            if (Schema == "classic" && Stats.empty() && (Action.empty() || Action == "execute")) {
+            if (Schema == ESchemaType::Classic && Stats.empty() && (Action.empty() || Action == "execute")) {
                 jsonResponse = std::move(jsonResponse["result"]);
             }
 
@@ -497,7 +518,7 @@ private:
 
         out << Viewer->GetHTTPOKJSON(Event->Get());
         if (ResultSets.size() > 0) {
-            if (Schema == "classic") {
+            if (Schema == ESchemaType::Classic) {
                 NJson::TJsonValue& jsonResults = jsonResponse["result"];
                 jsonResults.SetType(NJson::JSON_ARRAY);
                 for (auto it = ResultSets.begin(); it != ResultSets.end(); ++it) {
@@ -514,7 +535,7 @@ private:
                 }
             }
 
-            if (Schema == "modern") {
+            if (Schema == ESchemaType::Modern) {
                 {
                     NJson::TJsonValue& jsonColumns = jsonResponse["columns"];
                     NYdb::TResultSet resultSet(ResultSets.front());
@@ -545,7 +566,7 @@ private:
                 }
             }
 
-            if (Schema == "multi") {
+            if (Schema == ESchemaType::Multi) {
                 NJson::TJsonValue& jsonResults = jsonResponse["result"];
                 jsonResults.SetType(NJson::JSON_ARRAY);
                 for (auto it = ResultSets.begin(); it != ResultSets.end(); ++it) {
@@ -575,7 +596,7 @@ private:
                 }
             }
 
-            if (Schema == "ydb") {
+            if (Schema == ESchemaType::Ydb) {
                 NJson::TJsonValue& jsonResults = jsonResponse["result"];
                 jsonResults.SetType(NJson::JSON_ARRAY);
                 for (auto it = ResultSets.begin(); it != ResultSets.end(); ++it) {
@@ -584,7 +605,7 @@ private:
                     NYdb::TResultSetParser rsParser(resultSet);
                     while (rsParser.TryNextRow()) {
                         NJson::TJsonValue& jsonRow = jsonResults.AppendValue({});
-                        TString row = NYdb::FormatResultRowJson(rsParser, columnsMeta, NYdb::EBinaryStringEncoding::Base64);
+                        TString row = NYdb::FormatResultRowJson(rsParser, columnsMeta, IsBase64Encode ? NYdb::EBinaryStringEncoding::Base64 : NYdb::EBinaryStringEncoding::Unicode);
                         NJson::ReadJsonTree(row, &jsonRow);
                     }
                 }
@@ -614,6 +635,7 @@ struct TJsonRequestParameters<TJsonQuery> {
                       {"name":"schema","in":"query","description":"result format schema (classic, modern, ydb, multi)","required":false,"type":"string"},
                       {"name":"stats","in":"query","description":"return stats (profile)","required":false,"type":"string"},
                       {"name":"action","in":"query","description":"execute method (execute-scan, execute-script, execute-query, execute-data,explain-ast, explain-scan, explain-script, explain-query, explain-data)","required":false,"type":"string"},
+                      {"name":"base64","in":"query","description":"return strings using base64 encoding","required":false,"type":"string"},
                       {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
     }
 };

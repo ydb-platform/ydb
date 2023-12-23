@@ -251,7 +251,7 @@ public:
             }
 
             void AfterOptimize(TTransformationPipeline* pipeline) const final {
-                pipeline->Add(CreateTYtWideFlowTransformer(nullptr), "WideFlow");
+                pipeline->Add(CreateYtWideFlowTransformer(nullptr), "WideFlow");
                 pipeline->Add(MakePeepholeOptimization(pipeline->GetTypeAnnotationContext()), "PeepHole");
             }
         };

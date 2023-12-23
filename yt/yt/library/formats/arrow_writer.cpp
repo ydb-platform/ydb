@@ -45,6 +45,7 @@ struct TTypedBatchColumn
 ////////////////////////////////////////////////////////////////////////////////
 
 constexpr i64 ArrowAlignment = 8;
+const TString AlignmentString(ArrowAlignment, 0);
 
 flatbuffers::Offset<flatbuffers::String> SerializeString(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
@@ -906,6 +907,11 @@ public:
         YT_VERIFY(tableSchemas.size() > 0);
 
         auto tableSchema = tableSchemas[0];
+
+        for (const auto& columnSchema : tableSchema->Columns()) {
+            NameTable_->GetIdOrRegisterName(columnSchema.Name());
+        }
+
         auto columnCount = NameTable_->GetSize();
         SchemaExistenceFlags_.resize(columnCount, true);
 
@@ -933,7 +939,7 @@ private:
     {
         Reset();
 
-        auto convertedColumns = NColumnConverters::ConvertRowsToColumns(rows, ColumnSchemas_);
+        auto convertedColumns = ColumnConverters_.ConvertRowsToColumns(rows, ColumnSchemas_);
 
         std::vector<const TBatchColumn*> rootColumns;
         rootColumns.reserve( std::ssize(convertedColumns));
@@ -985,6 +991,7 @@ private:
     std::vector<TColumnSchema> ColumnSchemas_;
     std::vector<IUnversionedColumnarRowBatch::TDictionaryId> ArrowDictionaryIds_;
     std::vector<bool> SchemaExistenceFlags_;
+    NColumnConverters::TColumnConverters ColumnConverters_;
 
     struct TMessage
     {
@@ -1281,18 +1288,19 @@ private:
                 auto metadataPtr = message.FlatbufBuilder->GetBufferPointer();
 
 
-                ui32 metadataSz = AlignUp<i64>(metadataSize, ArrowAlignment);
+                ui32 metadataAlignSize = AlignUp<i64>(metadataSize, ArrowAlignment);
 
-                output->Write(&metadataSz, sizeof(ui32));
+                output->Write(&metadataAlignSize, sizeof(ui32));
                 output->Write(metadataPtr, metadataSize);
+
+                output->Write(AlignmentString.Data(), metadataAlignSize - metadataSize);
 
                 // Body
                 if (message.BodyWriter) {
-                    TString current;
-                    current.resize(message.BodySize);
+                    TString current(AlignUp<i64>(message.BodySize, ArrowAlignment), 0);
                     // Double copying.
-                    message.BodyWriter(TMutableRef::FromString(current));
-                    output->Write(current.data(), message.BodySize);
+                    message.BodyWriter(TMutableRef(current.begin(), current.begin() + message.BodySize));
+                    output->Write(current.data(), current.Size());
                 } else {
                     YT_VERIFY(message.BodySize == 0);
                 }

@@ -1608,6 +1608,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`uid` LIKE "%001")",
             R"(`uid` LIKE "uid%001")",
 #endif
+#if SSA_RUNTIME_VERSION >= 4U
+            R"(`level` + 2 < 5)",
+            R"(`level` - 2 >= 1)",
+            R"(`level` * 3 > 4)",
+            R"(`level` / 2 <= 1)",
+            R"(`level` % 3 != 1)",
+#endif
         };
 
         for (const auto& predicate: testData) {
@@ -1680,6 +1687,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`uid` LIKE "uid%")",
             R"(`uid` LIKE "%001")",
             R"(`uid` LIKE "uid%001")",
+#endif
+#if SSA_RUNTIME_VERSION < 4U
+            R"(`level` + 2 < 5)",
+            R"(`level` - 2 >= 1)",
+            R"(`level` * 3 > 4)",
+            R"(`level` / 2 <= 1)",
+            R"(`level` % 3 != 1)",
 #endif
         };
 
@@ -1902,9 +1916,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto result = CollectStreamResult(it);
         auto ast = result.QueryStats->Getquery_ast();
-        UNIT_ASSERT_C(ast.find(R"("eq" '"resource_id")") != std::string::npos,
+        UNIT_ASSERT_C(ast.find(R"(('eq '"resource_id")") != std::string::npos,
                           TStringBuilder() << "Predicate not pushed down. Query: " << query);
-        UNIT_ASSERT_C(ast.find(R"("gt" '"level")") == std::string::npos,
+        UNIT_ASSERT_C(ast.find(R"(('gt '"level")") == std::string::npos,
                           TStringBuilder() << "Predicate pushed down. Query: " << query);
         UNIT_ASSERT_C(ast.find("NarrowMap") != std::string::npos,
                           TStringBuilder() << "NarrowMap was removed. Query: " << query);

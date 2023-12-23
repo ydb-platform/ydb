@@ -18,3 +18,1036 @@ INSERT INTO DATE_TBL VALUES ('2038-04-08');
 INSERT INTO DATE_TBL VALUES ('2039-04-09');
 INSERT INTO DATE_TBL VALUES ('2040-04-10');
 INSERT INTO DATE_TBL VALUES ('2040-04-10 BC');
+SELECT date 'January 8, 1999';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '1999-01-08';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '1999-01-18';
+    date    
+------------
+ 1999-01-18
+(1 row)
+
+SELECT date '18/1/1999';
+ERROR:  date/time field value out of range: "18/1/1999"
+LINE 1: SELECT date '18/1/1999';
+                    ^
+HINT:  Perhaps you need a different "datestyle" setting.
+SELECT date '19990108';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '990108';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '1999.008';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date 'J2451187';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '1999-Jan-08';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '08-Jan-1999';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date 'Jan-08-1999';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '99-08-Jan';
+ERROR:  invalid input syntax for type date: "99-08-Jan"
+LINE 1: SELECT date '99-08-Jan';
+                    ^
+SELECT date '1999-08-Jan';
+ERROR:  invalid input syntax for type date: "1999-08-Jan"
+LINE 1: SELECT date '1999-08-Jan';
+                    ^
+SELECT date '1999 Jan 08';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '08 Jan 1999';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date 'Jan 08 1999';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '1999 08 Jan';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '1999-01-08';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '1999-08-01';
+    date    
+------------
+ 1999-08-01
+(1 row)
+
+SELECT date '1999 01 08';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '1999 08 01';
+    date    
+------------
+ 1999-08-01
+(1 row)
+
+SELECT date 'January 8, 1999';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '1999-01-08';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '1999-01-18';
+    date    
+------------
+ 1999-01-18
+(1 row)
+
+SELECT date '19990108';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '990108';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '1999.008';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date 'J2451187';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date 'January 8, 99 BC';
+     date      
+---------------
+ 0099-01-08 BC
+(1 row)
+
+SELECT date '99-Jan-08';
+ERROR:  date/time field value out of range: "99-Jan-08"
+LINE 1: SELECT date '99-Jan-08';
+                    ^
+HINT:  Perhaps you need a different "datestyle" setting.
+SELECT date '1999-Jan-08';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '08-Jan-99';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '08-Jan-1999';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date 'Jan-08-99';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date 'Jan-08-1999';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '99-08-Jan';
+ERROR:  invalid input syntax for type date: "99-08-Jan"
+LINE 1: SELECT date '99-08-Jan';
+                    ^
+SELECT date '1999-08-Jan';
+ERROR:  invalid input syntax for type date: "1999-08-Jan"
+LINE 1: SELECT date '1999-08-Jan';
+                    ^
+SELECT date '1999 Jan 08';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '08 Jan 99';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '08 Jan 1999';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date 'Jan 08 99';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date 'Jan 08 1999';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '99 08 Jan';
+ERROR:  invalid input syntax for type date: "99 08 Jan"
+LINE 1: SELECT date '99 08 Jan';
+                    ^
+SELECT date '1999 08 Jan';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '99-01-08';
+ERROR:  date/time field value out of range: "99-01-08"
+LINE 1: SELECT date '99-01-08';
+                    ^
+HINT:  Perhaps you need a different "datestyle" setting.
+SELECT date '1999-01-08';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '99-08-01';
+ERROR:  date/time field value out of range: "99-08-01"
+LINE 1: SELECT date '99-08-01';
+                    ^
+HINT:  Perhaps you need a different "datestyle" setting.
+SELECT date '1999-08-01';
+    date    
+------------
+ 1999-08-01
+(1 row)
+
+SELECT date '99 01 08';
+ERROR:  date/time field value out of range: "99 01 08"
+LINE 1: SELECT date '99 01 08';
+                    ^
+HINT:  Perhaps you need a different "datestyle" setting.
+SELECT date '1999 01 08';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '99 08 01';
+ERROR:  date/time field value out of range: "99 08 01"
+LINE 1: SELECT date '99 08 01';
+                    ^
+HINT:  Perhaps you need a different "datestyle" setting.
+SELECT date '1999 08 01';
+    date    
+------------
+ 1999-08-01
+(1 row)
+
+SELECT date 'January 8, 1999';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '1999-01-08';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '1999-01-18';
+    date    
+------------
+ 1999-01-18
+(1 row)
+
+SELECT date '1/8/1999';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '1/18/1999';
+    date    
+------------
+ 1999-01-18
+(1 row)
+
+SELECT date '18/1/1999';
+ERROR:  date/time field value out of range: "18/1/1999"
+LINE 1: SELECT date '18/1/1999';
+                    ^
+HINT:  Perhaps you need a different "datestyle" setting.
+SELECT date '01/02/03';
+    date    
+------------
+ 2003-01-02
+(1 row)
+
+SELECT date '19990108';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '990108';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '1999.008';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date 'J2451187';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date 'January 8, 99 BC';
+     date      
+---------------
+ 0099-01-08 BC
+(1 row)
+
+SELECT date '99-Jan-08';
+ERROR:  date/time field value out of range: "99-Jan-08"
+LINE 1: SELECT date '99-Jan-08';
+                    ^
+HINT:  Perhaps you need a different "datestyle" setting.
+SELECT date '1999-Jan-08';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '08-Jan-99';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '08-Jan-1999';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date 'Jan-08-99';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date 'Jan-08-1999';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '99-08-Jan';
+ERROR:  invalid input syntax for type date: "99-08-Jan"
+LINE 1: SELECT date '99-08-Jan';
+                    ^
+SELECT date '1999-08-Jan';
+ERROR:  invalid input syntax for type date: "1999-08-Jan"
+LINE 1: SELECT date '1999-08-Jan';
+                    ^
+SELECT date '99 Jan 08';
+ERROR:  invalid input syntax for type date: "99 Jan 08"
+LINE 1: SELECT date '99 Jan 08';
+                    ^
+SELECT date '1999 Jan 08';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '08 Jan 99';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '08 Jan 1999';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date 'Jan 08 99';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date 'Jan 08 1999';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '99 08 Jan';
+ERROR:  invalid input syntax for type date: "99 08 Jan"
+LINE 1: SELECT date '99 08 Jan';
+                    ^
+SELECT date '1999 08 Jan';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '99-01-08';
+ERROR:  date/time field value out of range: "99-01-08"
+LINE 1: SELECT date '99-01-08';
+                    ^
+HINT:  Perhaps you need a different "datestyle" setting.
+SELECT date '1999-01-08';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '08-01-99';
+    date    
+------------
+ 1999-08-01
+(1 row)
+
+SELECT date '08-01-1999';
+    date    
+------------
+ 1999-08-01
+(1 row)
+
+SELECT date '01-08-99';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '01-08-1999';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '99-08-01';
+ERROR:  date/time field value out of range: "99-08-01"
+LINE 1: SELECT date '99-08-01';
+                    ^
+HINT:  Perhaps you need a different "datestyle" setting.
+SELECT date '1999-08-01';
+    date    
+------------
+ 1999-08-01
+(1 row)
+
+SELECT date '99 01 08';
+ERROR:  date/time field value out of range: "99 01 08"
+LINE 1: SELECT date '99 01 08';
+                    ^
+HINT:  Perhaps you need a different "datestyle" setting.
+SELECT date '1999 01 08';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '08 01 99';
+    date    
+------------
+ 1999-08-01
+(1 row)
+
+SELECT date '08 01 1999';
+    date    
+------------
+ 1999-08-01
+(1 row)
+
+SELECT date '01 08 99';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '01 08 1999';
+    date    
+------------
+ 1999-01-08
+(1 row)
+
+SELECT date '99 08 01';
+ERROR:  date/time field value out of range: "99 08 01"
+LINE 1: SELECT date '99 08 01';
+                    ^
+HINT:  Perhaps you need a different "datestyle" setting.
+SELECT date '1999 08 01';
+    date    
+------------
+ 1999-08-01
+(1 row)
+
+-- Check upper and lower limits of date range
+SELECT date '4714-11-24 BC';
+     date      
+---------------
+ 4714-11-24 BC
+(1 row)
+
+SELECT date '4714-11-23 BC';  -- out of range
+ERROR:  date out of range: "4714-11-23 BC"
+LINE 1: SELECT date '4714-11-23 BC';
+                    ^
+SELECT date '5874897-12-31';
+     date      
+---------------
+ 5874897-12-31
+(1 row)
+
+SELECT date '5874898-01-01';  -- out of range
+ERROR:  date out of range: "5874898-01-01"
+LINE 1: SELECT date '5874898-01-01';
+                    ^
+SELECT date 'yesterday' - date 'today' AS "One day";
+ One day 
+---------
+      -1
+(1 row)
+
+SELECT date 'today' - date 'tomorrow' AS "One day";
+ One day 
+---------
+      -1
+(1 row)
+
+SELECT date 'yesterday' - date 'tomorrow' AS "Two days";
+ Two days 
+----------
+       -2
+(1 row)
+
+SELECT date 'tomorrow' - date 'today' AS "One day";
+ One day 
+---------
+       1
+(1 row)
+
+SELECT date 'today' - date 'yesterday' AS "One day";
+ One day 
+---------
+       1
+(1 row)
+
+SELECT date 'tomorrow' - date 'yesterday' AS "Two days";
+ Two days 
+----------
+        2
+(1 row)
+
+--
+-- century
+--
+SELECT EXTRACT(CENTURY FROM DATE '0101-12-31 BC'); -- -2
+ extract 
+---------
+      -2
+(1 row)
+
+SELECT EXTRACT(CENTURY FROM DATE '0100-12-31 BC'); -- -1
+ extract 
+---------
+      -1
+(1 row)
+
+SELECT EXTRACT(CENTURY FROM DATE '0001-12-31 BC'); -- -1
+ extract 
+---------
+      -1
+(1 row)
+
+SELECT EXTRACT(CENTURY FROM DATE '0001-01-01');    --  1
+ extract 
+---------
+       1
+(1 row)
+
+SELECT EXTRACT(CENTURY FROM DATE '0001-01-01 AD'); --  1
+ extract 
+---------
+       1
+(1 row)
+
+SELECT EXTRACT(CENTURY FROM DATE '1900-12-31');    -- 19
+ extract 
+---------
+      19
+(1 row)
+
+SELECT EXTRACT(CENTURY FROM DATE '1901-01-01');    -- 20
+ extract 
+---------
+      20
+(1 row)
+
+SELECT EXTRACT(CENTURY FROM DATE '2000-12-31');    -- 20
+ extract 
+---------
+      20
+(1 row)
+
+SELECT EXTRACT(CENTURY FROM DATE '2001-01-01');    -- 21
+ extract 
+---------
+      21
+(1 row)
+
+SELECT EXTRACT(CENTURY FROM CURRENT_DATE)>=21 AS True;     -- true
+ true 
+------
+ t
+(1 row)
+
+--
+-- millennium
+--
+SELECT EXTRACT(MILLENNIUM FROM DATE '0001-12-31 BC'); -- -1
+ extract 
+---------
+      -1
+(1 row)
+
+SELECT EXTRACT(MILLENNIUM FROM DATE '0001-01-01 AD'); --  1
+ extract 
+---------
+       1
+(1 row)
+
+SELECT EXTRACT(MILLENNIUM FROM DATE '1000-12-31');    --  1
+ extract 
+---------
+       1
+(1 row)
+
+SELECT EXTRACT(MILLENNIUM FROM DATE '1001-01-01');    --  2
+ extract 
+---------
+       2
+(1 row)
+
+SELECT EXTRACT(MILLENNIUM FROM DATE '2000-12-31');    --  2
+ extract 
+---------
+       2
+(1 row)
+
+SELECT EXTRACT(MILLENNIUM FROM DATE '2001-01-01');    --  3
+ extract 
+---------
+       3
+(1 row)
+
+-- next test to be fixed on the turn of the next millennium;-)
+SELECT EXTRACT(MILLENNIUM FROM CURRENT_DATE);         --  3
+ extract 
+---------
+       3
+(1 row)
+
+--
+-- decade
+--
+SELECT EXTRACT(DECADE FROM DATE '1994-12-25');    -- 199
+ extract 
+---------
+     199
+(1 row)
+
+SELECT EXTRACT(DECADE FROM DATE '0010-01-01');    --   1
+ extract 
+---------
+       1
+(1 row)
+
+SELECT EXTRACT(DECADE FROM DATE '0002-12-31 BC'); --  -1
+ extract 
+---------
+      -1
+(1 row)
+
+SELECT EXTRACT(DECADE FROM DATE '0011-01-01 BC'); --  -1
+ extract 
+---------
+      -1
+(1 row)
+
+SELECT EXTRACT(DECADE FROM DATE '0012-12-31 BC'); --  -2
+ extract 
+---------
+      -2
+(1 row)
+
+--
+-- all possible fields
+--
+SELECT EXTRACT(MICROSECONDS  FROM DATE '2020-08-11');
+ERROR:  date units "microseconds" not supported
+SELECT EXTRACT(MILLISECONDS  FROM DATE '2020-08-11');
+ERROR:  date units "milliseconds" not supported
+SELECT EXTRACT(SECOND        FROM DATE '2020-08-11');
+ERROR:  date units "second" not supported
+SELECT EXTRACT(MINUTE        FROM DATE '2020-08-11');
+ERROR:  date units "minute" not supported
+SELECT EXTRACT(HOUR          FROM DATE '2020-08-11');
+ERROR:  date units "hour" not supported
+SELECT EXTRACT(DAY           FROM DATE '2020-08-11');
+ extract 
+---------
+      11
+(1 row)
+
+SELECT EXTRACT(MONTH         FROM DATE '2020-08-11');
+ extract 
+---------
+       8
+(1 row)
+
+SELECT EXTRACT(YEAR          FROM DATE '2020-08-11');
+ extract 
+---------
+    2020
+(1 row)
+
+SELECT EXTRACT(YEAR          FROM DATE '2020-08-11 BC');
+ extract 
+---------
+   -2020
+(1 row)
+
+SELECT EXTRACT(DECADE        FROM DATE '2020-08-11');
+ extract 
+---------
+     202
+(1 row)
+
+SELECT EXTRACT(CENTURY       FROM DATE '2020-08-11');
+ extract 
+---------
+      21
+(1 row)
+
+SELECT EXTRACT(MILLENNIUM    FROM DATE '2020-08-11');
+ extract 
+---------
+       3
+(1 row)
+
+SELECT EXTRACT(ISOYEAR       FROM DATE '2020-08-11');
+ extract 
+---------
+    2020
+(1 row)
+
+SELECT EXTRACT(ISOYEAR       FROM DATE '2020-08-11 BC');
+ extract 
+---------
+   -2020
+(1 row)
+
+SELECT EXTRACT(QUARTER       FROM DATE '2020-08-11');
+ extract 
+---------
+       3
+(1 row)
+
+SELECT EXTRACT(WEEK          FROM DATE '2020-08-11');
+ extract 
+---------
+      33
+(1 row)
+
+SELECT EXTRACT(DOW           FROM DATE '2020-08-11');
+ extract 
+---------
+       2
+(1 row)
+
+SELECT EXTRACT(ISODOW        FROM DATE '2020-08-11');
+ extract 
+---------
+       2
+(1 row)
+
+SELECT EXTRACT(ISODOW        FROM DATE '2020-08-16');
+ extract 
+---------
+       7
+(1 row)
+
+SELECT EXTRACT(DOY           FROM DATE '2020-08-11');
+ extract 
+---------
+     224
+(1 row)
+
+SELECT EXTRACT(TIMEZONE      FROM DATE '2020-08-11');
+ERROR:  date units "timezone" not supported
+SELECT EXTRACT(TIMEZONE_M    FROM DATE '2020-08-11');
+ERROR:  date units "timezone_m" not supported
+SELECT EXTRACT(TIMEZONE_H    FROM DATE '2020-08-11');
+ERROR:  date units "timezone_h" not supported
+SELECT EXTRACT(EPOCH         FROM DATE '2020-08-11');
+  extract   
+------------
+ 1597104000
+(1 row)
+
+SELECT EXTRACT(JULIAN        FROM DATE '2020-08-11');
+ extract 
+---------
+ 2459073
+(1 row)
+
+--
+-- test infinity
+--
+select 'infinity'::date, '-infinity'::date;
+   date   |   date    
+----------+-----------
+ infinity | -infinity
+(1 row)
+
+select 'infinity'::date > 'today'::date as t;
+ t 
+---
+ t
+(1 row)
+
+select '-infinity'::date < 'today'::date as t;
+ t 
+---
+ t
+(1 row)
+
+select isfinite('infinity'::date), isfinite('-infinity'::date), isfinite('today'::date);
+ isfinite | isfinite | isfinite 
+----------+----------+----------
+ f        | f        | t
+(1 row)
+
+--
+-- oscillating fields from non-finite date:
+--
+SELECT EXTRACT(DAY FROM DATE 'infinity');      -- NULL
+ extract 
+---------
+        
+(1 row)
+
+SELECT EXTRACT(DAY FROM DATE '-infinity');     -- NULL
+ extract 
+---------
+        
+(1 row)
+
+-- all supported fields
+SELECT EXTRACT(DAY           FROM DATE 'infinity');    -- NULL
+ extract 
+---------
+        
+(1 row)
+
+SELECT EXTRACT(MONTH         FROM DATE 'infinity');    -- NULL
+ extract 
+---------
+        
+(1 row)
+
+SELECT EXTRACT(QUARTER       FROM DATE 'infinity');    -- NULL
+ extract 
+---------
+        
+(1 row)
+
+SELECT EXTRACT(WEEK          FROM DATE 'infinity');    -- NULL
+ extract 
+---------
+        
+(1 row)
+
+SELECT EXTRACT(DOW           FROM DATE 'infinity');    -- NULL
+ extract 
+---------
+        
+(1 row)
+
+SELECT EXTRACT(ISODOW        FROM DATE 'infinity');    -- NULL
+ extract 
+---------
+        
+(1 row)
+
+SELECT EXTRACT(DOY           FROM DATE 'infinity');    -- NULL
+ extract 
+---------
+        
+(1 row)
+
+--
+-- monotonic fields from non-finite date:
+--
+SELECT EXTRACT(EPOCH FROM DATE 'infinity');         --  Infinity
+ extract  
+----------
+ Infinity
+(1 row)
+
+SELECT EXTRACT(EPOCH FROM DATE '-infinity');        -- -Infinity
+  extract  
+-----------
+ -Infinity
+(1 row)
+
+-- all supported fields
+SELECT EXTRACT(YEAR       FROM DATE 'infinity');    --  Infinity
+ extract  
+----------
+ Infinity
+(1 row)
+
+SELECT EXTRACT(DECADE     FROM DATE 'infinity');    --  Infinity
+ extract  
+----------
+ Infinity
+(1 row)
+
+SELECT EXTRACT(CENTURY    FROM DATE 'infinity');    --  Infinity
+ extract  
+----------
+ Infinity
+(1 row)
+
+SELECT EXTRACT(MILLENNIUM FROM DATE 'infinity');    --  Infinity
+ extract  
+----------
+ Infinity
+(1 row)
+
+SELECT EXTRACT(JULIAN     FROM DATE 'infinity');    --  Infinity
+ extract  
+----------
+ Infinity
+(1 row)
+
+SELECT EXTRACT(ISOYEAR    FROM DATE 'infinity');    --  Infinity
+ extract  
+----------
+ Infinity
+(1 row)
+
+SELECT EXTRACT(EPOCH      FROM DATE 'infinity');    --  Infinity
+ extract  
+----------
+ Infinity
+(1 row)
+
+--
+-- wrong fields from non-finite date:
+--
+SELECT EXTRACT(MICROSEC  FROM DATE 'infinity');     -- error
+ERROR:  date units "microsec" not recognized
+select make_time(8, 20, 0.0);
+ make_time 
+-----------
+ 08:20:00
+(1 row)
+
+-- should fail
+select make_date(0, 7, 15);
+ERROR:  date field value out of range: 0-07-15
+select make_date(2013, 2, 30);
+ERROR:  date field value out of range: 2013-02-30
+select make_date(2013, 13, 1);
+ERROR:  date field value out of range: 2013-13-01
+select make_date(2013, 11, -1);
+ERROR:  date field value out of range: 2013-11--1
+select make_time(10, 55, 100.1);
+ERROR:  time field value out of range: 10:55:100.1
+select make_time(24, 0, 2.1);
+ERROR:  time field value out of range: 24:00:2.1

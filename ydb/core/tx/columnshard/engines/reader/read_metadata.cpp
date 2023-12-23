@@ -42,6 +42,7 @@ bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataSto
     CommittedBlobs = dataAccessor.GetCommitedBlobs(readDescription, ResultIndexSchema->GetIndexInfo().GetReplaceKey());
 
     SelectInfo = dataAccessor.Select(readDescription);
+    StatsMode = readDescription.StatsMode;
     return true;
 }
 
@@ -68,7 +69,7 @@ std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
 std::set<ui32> TReadMetadata::GetPKColumnIds() const {
     std::set<ui32> result;
     auto& indexInfo = ResultIndexSchema->GetIndexInfo();
-    for (auto&& i : indexInfo.GetPrimaryKey()) {
+    for (auto&& i : indexInfo.GetPrimaryKeyColumns()) {
         Y_ABORT_UNLESS(result.emplace(indexInfo.GetColumnId(i.first)).second);
     }
     return result;

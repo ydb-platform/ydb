@@ -546,9 +546,9 @@
             "Match": {"Type": "Callable", "Name": "KqpOlapXor"}
         },
         {
-            "Name": "TKqpOlapFilterCompare",
+            "Name": "TKqpOlapFilterBinaryOp",
             "Base": "TExprBase",
-            "Match": {"Type": "Tuple", "Name": "KqpOlapFilterCompare"},
+            "Match": {"Type": "Tuple", "Name": "KqpOlapFilterBinaryOp"},
             "Children": [
                 {"Index": 0, "Name": "Operator", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "Left", "Type": "TExprBase"},

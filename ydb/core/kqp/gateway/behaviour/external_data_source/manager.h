@@ -11,11 +11,23 @@ class TExternalDataSourceManager: public NMetadata::NModifications::IOperationsM
     NThreading::TFuture<TYqlConclusionStatus> DropExternalDataSource(const NYql::TObjectSettingsImpl& settings,
                                                                      TInternalModificationContext& context) const;
 
+    void PrepareCreateExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings,
+                                         TInternalModificationContext& context) const;
+
+    void PrepareDropExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings,
+                                       TInternalModificationContext& context) const;
+
 protected:
     NThreading::TFuture<TYqlConclusionStatus> DoModify(const NYql::TObjectSettingsImpl& settings,
                                                        const ui32 nodeId,
-                                                       NMetadata::IClassBehaviour::TPtr manager,
+                                                       const NMetadata::IClassBehaviour::TPtr& manager,
                                                        TInternalModificationContext& context) const override;
+
+    IOperationsManager::TYqlConclusionStatus DoPrepare(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings,
+        const NMetadata::IClassBehaviour::TPtr& manager, IOperationsManager::TInternalModificationContext& context) const override;
+
+    NThreading::TFuture<IOperationsManager::TYqlConclusionStatus> ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation,
+        const NMetadata::IClassBehaviour::TPtr& manager, const IOperationsManager::TExternalModificationContext& context) const override;
 
 public:
     using NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus;

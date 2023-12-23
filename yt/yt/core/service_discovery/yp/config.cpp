@@ -1,5 +1,7 @@
 #include "config.h"
 
+#include "service_discovery.h"
+
 namespace NYT::NServiceDiscovery::NYP {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -7,7 +9,7 @@ namespace NYT::NServiceDiscovery::NYP {
 void TServiceDiscoveryConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("enable", &TThis::Enable)
-        .Default(true);
+        .Default(GetServiceDiscoveryEnableDefault());
 
     registrar.Parameter("fqdn", &TThis::Fqdn)
         .Default("sd.yandex.net");

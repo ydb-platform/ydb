@@ -160,12 +160,12 @@ std::string convert_to_string(Backend b, std::streamsize digits, std::ios_base::
             // Bankers rounding:
             if ((*result.rbegin() - '0') & 1)
             {
-               round_string_up_at(result, result.size() - 1, expon);
+               round_string_up_at(result, static_cast<std::ptrdiff_t>(result.size() - 1u), expon);
             }
          }
          else if (cdigit >= 5)
          {
-            round_string_up_at(result, result.size() - 1, expon);
+            round_string_up_at(result, static_cast<std::ptrdiff_t>(result.size() - 1u), expon);
          }
       }
       eval_floor(t, b);
@@ -174,7 +174,7 @@ std::string convert_to_string(Backend b, std::streamsize digits, std::ios_base::
          // Input is an integer, sometimes we get a result which is not an integer here as a result of printing too
          // many digits, so lets round if required:
          round_string_up_at(result, expon + 1, expon);
-         result.erase(expon + 1);
+         result.erase(static_cast<std::string::size_type>(expon + 1));
       }
    }
    while ((static_cast<std::streamsize>(result.size()) > digits) && (result.size() != 0U))

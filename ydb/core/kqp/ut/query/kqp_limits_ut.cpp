@@ -852,8 +852,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe(), "Aggregate-TableFullScan");
         UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Tables"][0].GetStringSafe(), "ManyShardsTable");
-        UNIT_ASSERT(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["TotalTasks"].GetIntegerSafe() < 100);
-        UNIT_ASSERT(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["TotalTasks"].GetIntegerSafe() > 1);
+        UNIT_ASSERT(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe() < 100);
+        UNIT_ASSERT(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe() > 1);
     }
 
     Y_UNIT_TEST(ManyPartitionsSorting) {
@@ -889,8 +889,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe(), "Collect-TableFullScan");
         UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Tables"][0].GetStringSafe(), "ManyShardsTable");
-        UNIT_ASSERT(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["TotalTasks"].GetIntegerSafe() < 100);
-        UNIT_ASSERT(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["TotalTasks"].GetIntegerSafe() > 1);
+        UNIT_ASSERT(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe() < 100);
+        UNIT_ASSERT(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe() > 1);
 
         const auto resultSet = result.GetResultSet(0);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1100);
@@ -936,7 +936,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe(), "Limit-TableFullScan");
         UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Tables"][0].GetStringSafe(), "ManyShardsTable");
-        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["TotalTasks"].GetIntegerSafe(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
 
         const auto resultSet = result.GetResultSet(0);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1100);

@@ -118,6 +118,8 @@ ISubConsumerClientPtr CreateSubConsumerClient(
     const NYPath::TYPath& consumerPath,
     NYPath::TRichYPath queuePath);
 
+const NTableClient::TTableSchemaPtr& GetConsumerSchema();
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NQueueClient

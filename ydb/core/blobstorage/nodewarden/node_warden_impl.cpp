@@ -80,7 +80,7 @@ void TNodeWarden::RemoveDrivesWithBadSerialsAndReport(TVector<NPDisk::TDriveData
 
         // Output bad serial number in base64 encoding.
         STLOG(PRI_WARN, BS_NODE, NW03, "Bad serial number", (Path, path), (SerialBase64, encoded.Quote()), (Details, details.Str()));
-        
+
         mapIt->second.BadSerialsRead->Inc();
     }
 
@@ -666,7 +666,7 @@ bool NKikimr::ObtainPDiskKey(NPDisk::TMainKey *mainKey, const NKikimrProto::TKey
         const ui8 *key;
         ui32 keySize;
         keys[i].Key.GetKeyBytes(&key, &keySize);
-        Y_DEBUG_ABORT_UNLESS(keySize == sizeof(ui64));
+        Y_DEBUG_ABORT_UNLESS(keySize == 4 * sizeof(ui64));
         mainKey->Keys.push_back(*(ui64*)key);
     }
     mainKey->IsInitialized = true;

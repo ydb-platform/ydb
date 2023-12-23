@@ -4,6 +4,7 @@ import re
 import json
 import os
 import sys
+import urllib.parse
 from xml.etree import ElementTree as ET
 from mute_utils import mute_target, pattern_to_re
 from junit_utils import add_junit_link_property, is_faulty_testcase
@@ -21,7 +22,7 @@ class YaMuteCheck:
         with open(fn, "r") as fp:
             for line in fp:
                 line = line.strip()
-                path, rest = line.split("/")
+                path, rest = line.split("/", maxsplit=1)
                 path = path.replace("-", "/")
                 rest = rest.replace("::", ".")
                 self.populate(f"{path}/{rest}")
@@ -100,7 +101,7 @@ class YTestReportTrace:
 def filter_empty_logs(logs):
     result = {}
     for k, v in logs.items():
-        if os.stat(v).st_size == 0:
+        if not os.path.isfile(v) or os.stat(v).st_size == 0:
             continue
         result[k] = v
     return result
@@ -130,8 +131,8 @@ def save_log(build_root, fn, out_dir, log_url_prefix, trunc_size):
                         out_fp.write(buf)
         else:
             os.symlink(fn, out_fn)
-
-    return f"{log_url_prefix}{fpath}"
+    quoted_fpath = urllib.parse.quote(fpath)
+    return f"{log_url_prefix}{quoted_fpath}"
 
 
 def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_prefix, log_out_dir, log_trunc_size):

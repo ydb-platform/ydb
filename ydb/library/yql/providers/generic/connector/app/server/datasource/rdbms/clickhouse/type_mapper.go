@@ -13,7 +13,6 @@ import (
 )
 
 var _ utils.TypeMapper = typeMapper{}
-var _ utils.Transformer = Transformer{}
 
 type typeMapper struct {
 	isFixedString *regexp.Regexp
@@ -121,26 +120,7 @@ func makeYdbDateTimeType(ydbTypeID Ydb.Type_PrimitiveTypeId, format api_service_
 	}
 }
 
-type Transformer struct {
-	acceptors []any
-	appenders []func(acceptor any, builder array.Builder) error
-}
-
-func (t Transformer) GetAcceptors() []any {
-	return t.acceptors
-}
-
-func (t Transformer) AppendToArrowBuilders(builders []array.Builder) error {
-	for i, acceptor := range t.acceptors {
-		if err := t.appenders[i](acceptor, builders[i]); err != nil {
-			return fmt.Errorf("append acceptor %#v of %d column to arrow builder %#v: %w", acceptor, i, builders[i], err)
-		}
-	}
-
-	return nil
-}
-
-func transformerFromSQLTypes(typeNames []string, ydbTypes []*Ydb.Type) (utils.Transformer, error) {
+func transformerFromSQLTypes(typeNames []string, ydbTypes []*Ydb.Type) (utils.RowTransformer[any], error) {
 	acceptors := make([]any, 0, len(typeNames))
 	appenders := make([]func(acceptor any, builder array.Builder) error, 0, len(typeNames))
 	isNullable := regexp.MustCompile(`Nullable\((?P<Internal>[\w\(\)]+)\)`)
@@ -260,7 +240,7 @@ func transformerFromSQLTypes(typeNames []string, ydbTypes []*Ydb.Type) (utils.Tr
 		}
 	}
 
-	return Transformer{acceptors: acceptors, appenders: appenders}, nil
+	return utils.NewRowTransformer[any](acceptors, appenders, nil), nil
 }
 
 func appendValueToArrowBuilder[IN utils.ValueType, OUT utils.ValueType, AB utils.ArrowBuilder[OUT], CONV utils.ValueConverter[IN, OUT]](

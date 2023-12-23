@@ -1,6 +1,9 @@
-SRCDIR(ydb/library/yql/minikql/comp_nodes)
+INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/minikql/computation/header.ya.make.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/minikql/invoke_builtins/header.ya.make.inc)
 
-SRCS(
+SET(ORIG_SRC_DIR ${ARCADIA_ROOT}/ydb/library/yql/minikql/comp_nodes)
+
+SET(ORIG_SOURCES
     mkql_addmember.cpp
     mkql_aggrcount.cpp
     mkql_append.cpp
@@ -127,6 +130,21 @@ SRCS(
     mkql_zip.cpp
 )
 
+ADDINCL(
+    ${ORIG_SRC_DIR}
+)
+
+COPY(
+    WITH_CONTEXT
+    AUTO
+    FROM ${ORIG_SRC_DIR}
+    ${ORIG_SOURCES}
+    OUTPUT_INCLUDES 
+    ${BINDIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
+    ${BINDIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen.h
+    ${BINDIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_decimal.h
+)
+
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/library/binary_json
@@ -136,6 +154,7 @@ PEERDIR(
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/utils
     ydb/library/actors/core
+    ydb/library/yql/public/issue/protos
 )
 
 CFLAGS(
@@ -144,4 +163,4 @@ CFLAGS(
 
 YQL_LAST_ABI_VERSION()
 
-PROVIDES(mkql_comp_nodes)
+PROVIDES(MINIKQL_COMP_NODES)

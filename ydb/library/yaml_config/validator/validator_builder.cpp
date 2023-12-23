@@ -6,7 +6,7 @@
 
 #include <utility>
 
-namespace NYamlConfig::NValidator {
+namespace NKikimr::NYamlConfig::NValidator {
 
 namespace NDetail {
 
@@ -565,4 +565,4 @@ TEnumValidator TEnumBuilder::CreateValidator() {
     return result;
 }
 
-} // namespace NYamlConfig::NValidator
+} // namespace NKikimr::NYamlConfig::NValidator

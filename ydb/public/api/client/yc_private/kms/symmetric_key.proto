@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.kms.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/kms;kms";
+option java_outer_classname = "PSK";
+
+enum SymmetricAlgorithm {
+  SYMMETRIC_ALGORITHM_UNSPECIFIED = 0;
+  AES_128 = 1;
+  AES_192 = 2;
+  AES_256 = 3;
+  AES_256_HSM = 4;
+}
+
+message SymmetricKeyVersion {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    ACTIVE = 1;
+    SCHEDULED_FOR_DESTRUCTION = 2;
+    DESTROYED = 3;
+  }
+
+  string id = 1;
+  string key_id = 2;
+  Status status = 3;
+  SymmetricAlgorithm algorithm = 4;
+  google.protobuf.Timestamp created_at = 5;
+  bool primary = 6; // true for _primary_ version
+  google.protobuf.Timestamp destroy_at = 7; // optional
+  bool hosted_by_hsm = 8;
+}
+
+
+message SymmetricKey {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    CREATING = 1;
+    ACTIVE = 2;
+    INACTIVE = 3;
+    DELETED = 4;
+  }
+
+  string id = 1;
+  string folder_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  string name = 4;
+  string description = 5;
+  map<string, string> labels = 6;
+
+  Status status = 7;
+
+  SymmetricKeyVersion primary_version = 8;
+  SymmetricAlgorithm default_algorithm = 9;
+
+  google.protobuf.Timestamp rotated_at = 10;
+  google.protobuf.Duration rotation_period = 11;
+
+  bool deletion_protection = 12;
+}

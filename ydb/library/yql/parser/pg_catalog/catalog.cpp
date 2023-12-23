@@ -1482,11 +1482,12 @@ struct TCatalog {
         AmProcs = ParseAmProcs(amProcData, TypeByName, ProcByName, Procs, opFamilies);
         for (auto& [k, v] : Types) {
             if (v.TypeId != v.ArrayTypeId) {
-                auto btreeOpClassPtr = OpClasses.FindPtr(std::make_pair(EOpClassMethod::Btree, v.TypeId));
+                auto lookupId = (v.TypeId == VarcharOid ? TextOid : v.TypeId);
+                auto btreeOpClassPtr = OpClasses.FindPtr(std::make_pair(EOpClassMethod::Btree, lookupId));
                 if (btreeOpClassPtr) {
-                    auto lessAmOpPtr = AmOps.FindPtr(std::make_tuple(btreeOpClassPtr->FamilyId, ui32(EBtreeAmStrategy::Less), v.TypeId, v.TypeId));
+                    auto lessAmOpPtr = AmOps.FindPtr(std::make_tuple(btreeOpClassPtr->FamilyId, ui32(EBtreeAmStrategy::Less), lookupId, lookupId));
                     Y_ENSURE(lessAmOpPtr);
-                    auto equalAmOpPtr = AmOps.FindPtr(std::make_tuple(btreeOpClassPtr->FamilyId, ui32(EBtreeAmStrategy::Equal), v.TypeId, v.TypeId));
+                    auto equalAmOpPtr = AmOps.FindPtr(std::make_tuple(btreeOpClassPtr->FamilyId, ui32(EBtreeAmStrategy::Equal), lookupId, lookupId));
                     Y_ENSURE(equalAmOpPtr);
                     auto lessOperPtr = Operators.FindPtr(lessAmOpPtr->OperId);
                     Y_ENSURE(lessOperPtr);
@@ -1495,14 +1496,14 @@ struct TCatalog {
                     v.LessProcId = lessOperPtr->ProcId;
                     v.EqualProcId = equalOperPtr->ProcId;
 
-                    auto compareAmProcPtr = AmProcs.FindPtr(std::make_tuple(btreeOpClassPtr->FamilyId, ui32(EBtreeAmProcNum::Compare), v.TypeId, v.TypeId));
+                    auto compareAmProcPtr = AmProcs.FindPtr(std::make_tuple(btreeOpClassPtr->FamilyId, ui32(EBtreeAmProcNum::Compare), lookupId, lookupId));
                     Y_ENSURE(compareAmProcPtr);
                     v.CompareProcId = compareAmProcPtr->ProcId;
                 }
 
-                auto hashOpClassPtr = OpClasses.FindPtr(std::make_pair(EOpClassMethod::Hash, v.TypeId));
+                auto hashOpClassPtr = OpClasses.FindPtr(std::make_pair(EOpClassMethod::Hash, lookupId));
                 if (hashOpClassPtr) {
-                    auto hashAmProcPtr = AmProcs.FindPtr(std::make_tuple(hashOpClassPtr->FamilyId, ui32(EHashAmProcNum::Hash), v.TypeId, v.TypeId));
+                    auto hashAmProcPtr = AmProcs.FindPtr(std::make_tuple(hashOpClassPtr->FamilyId, ui32(EHashAmProcNum::Hash), lookupId, lookupId));
                     Y_ENSURE(hashAmProcPtr);
                     v.HashProcId = hashAmProcPtr->ProcId;
                 }
@@ -2580,7 +2581,8 @@ bool HasOpClass(EOpClassMethod method, ui32 typeId) {
 
 const TOpClassDesc* LookupDefaultOpClass(EOpClassMethod method, ui32 typeId) {
     const auto& catalog = TCatalog::Instance();
-    const auto opClassPtr = catalog.OpClasses.FindPtr(std::make_pair(method, typeId));
+    auto lookupId = (typeId == VarcharOid ? TextOid : typeId);
+    const auto opClassPtr = catalog.OpClasses.FindPtr(std::make_pair(method, lookupId));
     if (opClassPtr)
         return opClassPtr;
 

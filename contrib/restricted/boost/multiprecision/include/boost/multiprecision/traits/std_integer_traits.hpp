@@ -1,5 +1,6 @@
 ///////////////////////////////////////////////////////////////
-//  Copyright 2012 John Maddock. Distributed under the Boost
+//  Copyright 2012-2022 John Maddock.
+//  Copyright 2022 Matt Borland. Distributed under the Boost
 //  Software License, Version 1.0. (See accompanying file
 //  LICENSE_1_0.txt or copy at https://www.boost.org/LICENSE_1_0.txt
 
@@ -29,21 +30,21 @@ struct make_signed : public std::make_signed<T> {};
 #ifdef BOOST_HAS_INT128
 
 template <>
-struct is_signed<int128_type> : public std::integral_constant<bool, true> {};
+struct is_signed<int128_type> : public std::true_type {};
 template <>
-struct is_signed<uint128_type> : public std::integral_constant<bool, false> {};
+struct is_signed<uint128_type> : public std::false_type {};
 template <>
-struct is_unsigned<int128_type> : public std::integral_constant<bool, false> {};
+struct is_unsigned<int128_type> : public std::false_type {};
 template <>
-struct is_unsigned<uint128_type> : public std::integral_constant<bool, true> {};
+struct is_unsigned<uint128_type> : public std::true_type {};
 template <>
-struct is_integral<int128_type> : public std::integral_constant<bool, true> {};
+struct is_integral<int128_type> : public std::true_type {};
 template <>
-struct is_integral<uint128_type> : public std::integral_constant<bool, true> {};
+struct is_integral<uint128_type> : public std::true_type {};
 template <>
-struct is_arithmetic<int128_type> : public std::integral_constant<bool, true> {};
+struct is_arithmetic<int128_type> : public std::true_type {};
 template <>
-struct is_arithmetic<uint128_type> : public std::integral_constant<bool, true> {};
+struct is_arithmetic<uint128_type> : public std::true_type {};
 template <>
 struct make_unsigned<int128_type>
 {
@@ -66,6 +67,23 @@ struct make_signed<uint128_type>
 };
 
 #endif
+
+// C++17-esque helpers
+#if defined(__cpp_variable_templates) && __cpp_variable_templates >= 201304L
+template <typename T>
+BOOST_INLINE_CONSTEXPR bool is_signed_v = is_signed<T>::value;
+template <typename T>
+BOOST_INLINE_CONSTEXPR bool is_unsigned_v = is_unsigned<T>::value;
+template <typename T>
+BOOST_INLINE_CONSTEXPR bool is_integral_v = is_integral<T>::value;
+template <typename T>
+BOOST_INLINE_CONSTEXPR bool is_arithmetic_v = is_arithmetic<T>::value;
+#endif
+
+template <typename T>
+using make_unsigned_t = typename make_unsigned<T>::type;
+template <typename T>
+using make_signed_t = typename make_signed<T>::type;
 
 }}} // namespace boost::multiprecision::detail
 

@@ -1,6 +1,7 @@
 #include "mkql_computation_node_holders.h"
+#include "mkql_computation_node_holders_codegen.h"
 #include "mkql_value_builder.h"
-#include "mkql_computation_node_codegen.h"
+#include "mkql_computation_node_codegen.h" // Y_IGNORE
 #include <ydb/library/yql/minikql/arrow/mkql_memory_pool.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
@@ -360,11 +361,11 @@ private:
     }
 
     void Visit(TEmptyList& node) override {
-        AddNode(node, NodeFactory->CreateImmutableNode(PatternNodes->HolderFactory->GetEmptyContainer()));
+        AddNode(node, NodeFactory->CreateImmutableNode(PatternNodes->HolderFactory->GetEmptyContainerLazy()));
     }
 
     void Visit(TEmptyDict& node) override {
-        AddNode(node, NodeFactory->CreateImmutableNode(PatternNodes->HolderFactory->GetEmptyContainer()));
+        AddNode(node, NodeFactory->CreateImmutableNode(PatternNodes->HolderFactory->GetEmptyContainerLazy()));
     }
 
     void Visit(TDataLiteral& node) override {

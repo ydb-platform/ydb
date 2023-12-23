@@ -319,7 +319,7 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
     auto before = ResourceValues;
     auto maximum = GetResourceMaximumValues();
     if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kCPUFieldNumber) != allowedMetricIds.end()) {
-        if (metrics.HasCPU() || ResourceValues.HasCPU()) {
+        if (metrics.HasCPU()) {
             if (metrics.GetCPU() > static_cast<ui64>(std::get<NMetrics::EResource::CPU>(maximum))) {
                 BLOG_W("Ignoring too high CPU metric (" << metrics.GetCPU() << ") for tablet " << ToString());
             } else {
@@ -329,7 +329,7 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
         }
     }
     if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kMemoryFieldNumber) != allowedMetricIds.end()) {
-        if (metrics.HasMemory() || ResourceValues.HasMemory()) {
+        if (metrics.HasMemory()) {
             if (metrics.GetMemory() > static_cast<ui64>(std::get<NMetrics::EResource::Memory>(maximum))) {
                 BLOG_W("Ignoring too high Memory metric (" << metrics.GetMemory() << ") for tablet " << ToString());
             } else {
@@ -339,7 +339,7 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
         }
     }
     if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kNetworkFieldNumber) != allowedMetricIds.end()) {
-        if (metrics.HasNetwork() || ResourceValues.HasNetwork()) {
+        if (metrics.HasNetwork()) {
             if (metrics.GetNetwork() > static_cast<ui64>(std::get<NMetrics::EResource::Network>(maximum))) {
                 BLOG_W("Ignoring too high Network metric (" << metrics.GetNetwork() << ") for tablet " << ToString());
             } else {

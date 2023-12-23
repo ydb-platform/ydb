@@ -17,6 +17,7 @@ from ydb.core.protos import (
     cms_pb2,
     config_pb2,
     feature_flags_pb2,
+    key_pb2,
     netclassifier_pb2,
     pqconfig_pb2,
     resource_broker_pb2,
@@ -99,6 +100,7 @@ class StaticConfigGenerator(object):
             "netclassifier.txt": None,
             "pqcd.txt": None,
             "failure_injection.txt": None,
+            "pdisk_key.txt": None,
         }
         self.__optional_config_files = set(
             (
@@ -107,6 +109,7 @@ class StaticConfigGenerator(object):
                 "audit.txt",
                 "fq.txt",
                 "failure_injection.txt",
+                "pdisk_key.txt",
             )
         )
         self._enable_cms_config_cache = template.get("enable_cms_config_cache", enable_cms_config_cache)
@@ -252,6 +255,14 @@ class StaticConfigGenerator(object):
     @property
     def fq_txt_enabled(self):
         return self.__proto_config("fq.txt").ByteSize() > 0
+
+    @property
+    def pdisk_key_txt(self):
+        return self.__proto_config("pdisk_key.txt", key_pb2.TKeyConfig, self.__cluster_details.pdisk_key_config)
+
+    @property
+    def pdisk_key_txt_enabled(self):
+        return self.__proto_config("pdisk_key.txt").ByteSize() > 0
 
     @property
     def mbus_enabled(self):
@@ -499,6 +510,8 @@ class StaticConfigGenerator(object):
         if self.hive_config.ByteSize() > 0:
             app_config.HiveConfig.CopyFrom(self.hive_config)
         app_config.MergeFrom(self.tracing_txt)
+        if self.pdisk_key_txt_enabled:
+            app_config.PDiskKeyConfig.CopyFrom(self.pdisk_key_txt)
         return app_config
 
     def __proto_config(self, config_file, config_class=None, cluster_details_for_field=None):

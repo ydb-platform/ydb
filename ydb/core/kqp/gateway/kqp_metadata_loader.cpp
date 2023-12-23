@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/stat_service.h>
 
@@ -545,7 +546,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
 
     for (size_t i = 0; i < indexesCount; i++) {
         const auto& index = tableMetadata->Indexes[i];
-        auto indexTablePath = NYql::IKikimrGateway::CreateIndexTablePath(tableName, index.Name);
+        auto indexTablePath = NSchemeHelpers::CreateIndexTablePath(tableName, index.Name);
 
         if (!index.SchemaVersion) {
             LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load index metadata without schema version check index: " << index.Name);

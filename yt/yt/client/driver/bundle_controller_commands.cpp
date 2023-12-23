@@ -22,10 +22,7 @@ void TGetBundleConfigCommand::DoExecute(ICommandContextPtr context)
         Options))
         .ValueOrThrow();
 
-    context->ProduceOutputValue(BuildYsonStringFluently()
-        .BeginMap()
-            .Item("bundle_name").Value(result.BundleName)
-        .EndMap());
+    context->ProduceOutputValue(ConvertToYsonString(result));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

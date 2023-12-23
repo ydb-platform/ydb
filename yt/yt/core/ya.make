@@ -32,6 +32,7 @@ SRCS(
     compression/brotli.cpp
     compression/bzip2.cpp
     compression/codec.cpp
+    compression/dictionary_codec.cpp
     compression/stream.cpp
     compression/lz.cpp
     compression/lzma.cpp

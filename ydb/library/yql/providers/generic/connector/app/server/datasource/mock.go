@@ -10,13 +10,13 @@ import (
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
-var _ DataSource = (*DataSourceMock)(nil)
+var _ DataSource[any] = (*DataSourceMock[any])(nil)
 
-type DataSourceMock struct {
+type DataSourceMock[T utils.Acceptor] struct {
 	mock.Mock
 }
 
-func (m *DataSourceMock) DescribeTable(
+func (m *DataSourceMock[T]) DescribeTable(
 	ctx context.Context,
 	logger log.Logger,
 	request *api_service_protos.TDescribeTableRequest,
@@ -24,15 +24,15 @@ func (m *DataSourceMock) DescribeTable(
 	panic("not implemented") // TODO: Implement
 }
 
-func (m *DataSourceMock) ReadSplit(
+func (m *DataSourceMock[T]) ReadSplit(
 	ctx context.Context,
 	logger log.Logger,
 	split *api_service_protos.TSplit,
-	pagingWriter paging.Sink,
+	pagingWriter paging.Sink[T],
 ) {
 	m.Called(split, pagingWriter)
 }
 
-func (m *DataSourceMock) TypeMapper() utils.TypeMapper {
+func (m *DataSourceMock[T]) TypeMapper() utils.TypeMapper {
 	panic("not implemented") // TODO: Implement
 }

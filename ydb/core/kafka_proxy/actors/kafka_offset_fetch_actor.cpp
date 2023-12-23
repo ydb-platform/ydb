@@ -41,8 +41,8 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
             std::shared_ptr<TSet<ui32>> partitions)
         : TBase(request, requester)
         , TDescribeTopicActorImpl(ConsumerOffsetSettings(consumers, partitions))
-        , Requester_(requester)
-        , TopicName_(request.Topic)
+        , Requester(requester)
+        , TopicName(request.Topic)
         {
             Y_UNUSED(requester);
         };
@@ -63,7 +63,6 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
         }
     }
 
-    // Noop
     void RaiseError(const TString& error,
             const Ydb::PersQueue::ErrorCode::ErrorCode errorCode,
             const Ydb::StatusIds::StatusCode status,
@@ -72,6 +71,12 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
         Y_UNUSED(errorCode);
         Y_UNUSED(status);
         Y_UNUSED(ctx);
+
+        THolder<TEvKafka::TEvCommitedOffsetsResponse> response(new TEvKafka::TEvCommitedOffsetsResponse());
+        response->TopicName = TopicName;
+        response->Status = TEvKafka::TEvCommitedOffsetsResponse::EStatus::ERROR;
+        Send(Requester, response.Release());
+        Die(ctx);
     }
 
     void ApplyResponse(TTabletInfo& tabletInfo,
@@ -86,7 +91,7 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
                     consumerToOffset[consumerResult.GetConsumer()] = consumerResult.GetCommitedOffset();
                 }
             }
-            (*PartitionIdToOffsets_)[partResult.GetPartition()] = consumerToOffset;
+            (*PartitionIdToOffsets)[partResult.GetPartition()] = consumerToOffset;
         }
     };
 
@@ -99,17 +104,24 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
         Y_UNUSED(ev);
     };
 
-    // Noop
+    // Should never be called
     bool ApplyResponse(NKikimr::TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev,
                        const TActorContext& ctx) override {
         Y_UNUSED(ctx);
         Y_UNUSED(ev);
-        return true;
+        Y_ABORT();
     };
 
     void HandleCacheNavigateResponse(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) override {
         const auto& response = ev->Get()->Request.Get()->ResultSet.front();
-        Y_ABORT_UNLESS(response.PQGroupInfo);
+        if (!response.PQGroupInfo) {
+            THolder<TEvKafka::TEvCommitedOffsetsResponse> response(new TEvKafka::TEvCommitedOffsetsResponse());
+            response->TopicName = TopicName;
+            response->Status = TEvKafka::TEvCommitedOffsetsResponse::EStatus::UNKNOWN_TOPIC;
+            Send(Requester, response.Release());
+            TActorBootstrapped::PassAway();
+            return;
+        }
 
         const auto& pqDescr = response.PQGroupInfo->Description;
         ProcessTablets(pqDescr, ActorContext());
@@ -117,17 +129,18 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
 
     void Reply(const TActorContext& ctx) override {
         THolder<TEvKafka::TEvCommitedOffsetsResponse> response(new TEvKafka::TEvCommitedOffsetsResponse());
-        response->TopicName = TopicName_;
-        response->PartitionIdToOffsets = PartitionIdToOffsets_;
-        Send(Requester_, response.Release());
+        response->TopicName = TopicName;
+        response->Status = TEvKafka::TEvCommitedOffsetsResponse::EStatus::OK;
+        response->PartitionIdToOffsets = PartitionIdToOffsets;
+        Send(Requester, response.Release());
         Die(ctx);
     };
 
     private:
-        TActorId Requester_;
-        TString TopicName_;
-        std::unordered_map<ui32, ui32> PartitionIdToOffset_ {};
-        std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, ui32>>> PartitionIdToOffsets_ = std::make_shared<std::unordered_map<ui32, std::unordered_map<TString, ui32>>>();
+        TActorId Requester;
+        TString TopicName;
+        std::unordered_map<ui32, ui32> PartitionIdToOffset {};
+        std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, ui32>>> PartitionIdToOffsets = std::make_shared<std::unordered_map<ui32, std::unordered_map<TString, ui32>>>();
 };
 
 NActors::IActor* CreateKafkaOffsetFetchActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TOffsetFetchRequestData>& message) {
@@ -143,7 +156,27 @@ TOffsetFetchResponseData::TPtr TKafkaOffsetFetchActor::GetOffsetFetchResponse() 
             TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics topic;
             TString topicName = requestTopic.Name.value();
             topic.Name = topicName;
-            auto partitionsToOffsets = TopicToOffsets_[topicName];
+            if (UnknownTopics.contains(topicName)) {
+                for (auto requestPartition: requestTopic.PartitionIndexes) {
+                    TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions partition;
+                    partition.PartitionIndex = requestPartition;
+                    partition.ErrorCode = UNKNOWN_TOPIC_OR_PARTITION;
+                    topic.Partitions.push_back(partition);
+                }
+                group.Topics.push_back(topic);
+                continue;
+            }
+            if (ErroredTopics.contains(topicName)) {
+                for (auto requestPartition: requestTopic.PartitionIndexes) {
+                    TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions partition;
+                    partition.PartitionIndex = requestPartition;
+                    partition.ErrorCode = UNKNOWN_SERVER_ERROR;
+                    topic.Partitions.push_back(partition);
+                }
+                group.Topics.push_back(topic);
+                continue;
+            }
+            auto partitionsToOffsets = TopicToOffsets[topicName];
             for (auto requestPartition: requestTopic.PartitionIndexes) {
                 TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions partition;
                 partition.PartitionIndex = requestPartition;
@@ -169,11 +202,11 @@ TOffsetFetchResponseData::TPtr TKafkaOffsetFetchActor::GetOffsetFetchResponse() 
                 partition.PartitionIndex = sourcePartition.PartitionIndex;
                 partition.ErrorCode = sourcePartition.ErrorCode;
             }
+            response->Topics.push_back(topic);
         }
     }
     return response;
 }
-
 
 void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
     // If API level <= 7, Groups would be empty. In this case we convert message to level 8 and process it uniformely later
@@ -196,7 +229,7 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
         }
     }
 
-    for (const auto& topicToEntities : TopicToEntities_) {
+    for (const auto& topicToEntities : TopicToEntities) {
         NKikimr::NGRpcProxy::V1::TGetPartitionsLocationRequest locationRequest{};
         locationRequest.Topic = topicToEntities.first;
         locationRequest.Token = Context->UserToken->GetSerializedToken();
@@ -207,7 +240,7 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
             SelfId(),
             topicToEntities.second.Partitions
         ));
-        InflyTopics_++;
+        InflyTopics++;
     }
     Become(&TKafkaOffsetFetchActor::StateWork);
 }
@@ -215,27 +248,26 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
 
 void TKafkaOffsetFetchActor::ExtractPartitions(const TString& group, const NKafka::TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics& topic) {
     TString topicName = topic.Name.value();
-    if (!TopicToEntities_.contains(topicName)) {
+    if (!TopicToEntities.contains(topicName)) {
         TopicEntities newEntities;
-        TopicToEntities_[topicName] = newEntities;
+        TopicToEntities[topicName] = newEntities;
     }
-    TopicEntities& entities = TopicToEntities_[topicName];
+    TopicEntities& entities = TopicToEntities[topicName];
     entities.Consumers->insert(group);
     for (auto partition: topic.PartitionIndexes) {
         entities.Partitions->insert(partition);
     }
 };
 
-void TKafkaOffsetFetchActor::StateWork(TAutoPtr<IEventHandle>& ev) {
-    switch (ev->GetTypeRewrite()) {
-        HFunc(TEvKafka::TEvCommitedOffsetsResponse, Handle);
-    }
-}
-
 void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& ev, const TActorContext& ctx) {
-    InflyTopics_--;
-    TopicToOffsets_[ev->Get()->TopicName] = ev->Get()->PartitionIdToOffsets;
-    if (InflyTopics_ == 0) {
+    InflyTopics--;
+    TopicToOffsets[ev->Get()->TopicName] = ev->Get()->PartitionIdToOffsets;
+    if (ev->Get()->Status == TEvKafka::TEvCommitedOffsetsResponse::ERROR) {
+        ErroredTopics.insert(ev->Get()->TopicName);
+    } else if (ev->Get()->Status == TEvKafka::TEvCommitedOffsetsResponse::UNKNOWN_TOPIC) {
+        UnknownTopics.insert(ev->Get()->TopicName);
+    }
+    if (InflyTopics == 0) {
         auto response = GetOffsetFetchResponse();
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, static_cast<EKafkaErrors>(response->ErrorCode)));
         Die(ctx);

@@ -13,7 +13,6 @@
 
 
 #include <boost/geometry/algorithms/detail/covered_by/implementation.hpp>
-#include <boost/geometry/core/access.hpp>
 #include <boost/geometry/core/tags.hpp>
 #include <boost/geometry/iterators/point_iterator.hpp>
 

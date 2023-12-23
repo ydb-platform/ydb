@@ -21,6 +21,9 @@ ISchemafulUnversionedReaderPtr CreatePrefetchingOrderedSchemafulReader(
 ISchemafulUnversionedReaderPtr CreateFullPrefetchingOrderedSchemafulReader(
     std::function<ISchemafulUnversionedReaderPtr()> getNextReader);
 
+ISchemafulUnversionedReaderPtr CreateFullPrefetchingShufflingSchemafulReader(
+    std::function<ISchemafulUnversionedReaderPtr()> getNextReader);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NTableClient

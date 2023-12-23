@@ -196,7 +196,7 @@ TRuntimeNode OptimizeMap(TCallable& callable, const TTypeEnvironment& env) {
     auto listType = static_cast<TListType*>(returnType);
     auto newItemInput = callable.GetInput(2);
     if (listType->GetItemType()->IsVoid() && newItemInput.HasValue()) {
-        return TRuntimeNode(env.GetListOfVoid(), true);
+        return TRuntimeNode(env.GetListOfVoidLazy(), true);
     }
 
     return TRuntimeNode(&callable, false);
@@ -216,12 +216,12 @@ TRuntimeNode OptimizeFlatMap(TCallable& callable, const TTypeEnvironment& env) {
         if (newItemInput.GetStaticType()->IsList()) {
             TListLiteral* list = AS_VALUE(TListLiteral, newItemInput);
             if (list->GetItemsCount() == 0) {
-                return TRuntimeNode(env.GetListOfVoid(), true);
+                return TRuntimeNode(env.GetListOfVoidLazy(), true);
             }
         } else {
             TOptionalLiteral* opt = AS_VALUE(TOptionalLiteral, newItemInput);
             if (!opt->HasItem()) {
-                return TRuntimeNode(env.GetListOfVoid(), true);
+                return TRuntimeNode(env.GetListOfVoidLazy(), true);
             }
         }
     }
@@ -307,7 +307,7 @@ TRuntimeNode OptimizeExtend(TCallable& callable, const TTypeEnvironment& env) {
         }
     }
 
-    return TRuntimeNode(env.GetListOfVoid(), true);
+    return TRuntimeNode(env.GetListOfVoidLazy(), true);
 }
 
 struct TOptimizationFuncMapFiller {

@@ -38,10 +38,12 @@ extern "C" __float128 strtoflt128(const char*, char**) throw();
 using std::ldexp;
 using std::frexp;
 using std::floor;
+using std::nextafter;
 #else
 inline __float128 ldexp(__float128 f, int i) throw() { return ldexpq(f, i); }
 inline __float128 frexp(__float128 f, int* p) throw() { return frexpq(f, p); }
 inline __float128 floor(__float128 f) throw() { return floorq(f); }
+inline __float128 nextafter(__float128 a, __float128 b) throw() { return nextafterq(a, b); }
 #endif
 }
 
@@ -73,7 +75,7 @@ namespace math {
 
 }}
 
-#define BOOST_MP_FLOAT128_USING using boost::multiprecision::float128_procs::ldexp; using boost::multiprecision::float128_procs::frexp; using boost::multiprecision::float128_procs::floor; using boost::math::isinf; using boost::math::isnan;
+#define BOOST_MP_FLOAT128_USING using boost::multiprecision::float128_procs::ldexp; using boost::multiprecision::float128_procs::frexp; using boost::multiprecision::float128_procs::floor; using boost::multiprecision::float128_procs::nextafter; using boost::math::isinf; using boost::math::isnan;
 
 #else
 #define BOOST_MP_FLOAT128_USING

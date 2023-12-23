@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+using namespace NKikimr;
+
 const char *WholeConfig = R"(---
 cluster: test
 version: 12.1

@@ -39,7 +39,6 @@
 #include <boost/geometry/algorithms/detail/sections/section_functions.hpp>
 #include <boost/geometry/algorithms/detail/sections/sectionalize.hpp>
 
-#include <boost/geometry/core/access.hpp>
 #include <boost/geometry/core/assert.hpp>
 #include <boost/geometry/core/coordinate_dimension.hpp>
 #include <boost/geometry/core/exterior_ring.hpp>
@@ -669,10 +668,6 @@ struct get_turns_cs
         // into account (not in the iterator, nor in the retrieve policy)
         iterator_type it = boost::begin(view);
 
-        //bool first = true;
-
-        //char previous_side[2] = {0, 0};
-
         signed_size_type index = 0;
 
         for (iterator_type prev = it++;
@@ -684,64 +679,19 @@ struct get_turns_cs
 
             unique_sub_range_from_view_policy view_unique_sub_range(view, *prev, *it, it);
 
-            /*if (first)
-            {
-                previous_side[0] = get_side<0>(box, *prev);
-                previous_side[1] = get_side<1>(box, *prev);
-            }
-
-            char current_side[2];
-            current_side[0] = get_side<0>(box, *it);
-            current_side[1] = get_side<1>(box, *it);
-
-            // There can NOT be intersections if
-            // 1) EITHER the two points are lying on one side of the box (! 0 && the same)
-            // 2) OR same in Y-direction
-            // 3) OR all points are inside the box (0)
-            if (! (
-                (current_side[0] != 0 && current_side[0] == previous_side[0])
-                || (current_side[1] != 0 && current_side[1] == previous_side[1])
-                || (current_side[0] == 0
-                        && current_side[1] == 0
-                        && previous_side[0] == 0
-                        && previous_side[1] == 0)
-                  )
-                )*/
-            if (true)
-            {
-                get_turns_with_box(seg_id, source_id2,
-                        view_unique_sub_range,
-                        box_points,
-                        intersection_strategy,
-                        robust_policy,
-                        turns,
-                        interrupt_policy);
-                // Future performance enhancement:
-                // return if told by the interrupt policy
-            }
+            get_turns_with_box(seg_id, source_id2,
+                    view_unique_sub_range,
+                    box_points,
+                    intersection_strategy,
+                    robust_policy,
+                    turns,
+                    interrupt_policy);
+            // Future performance enhancement:
+            // return if told by the interrupt policy
         }
     }
 
 private:
-    template<std::size_t Index, typename Point>
-    static inline int get_side(Box const& box, Point const& point)
-    {
-        // Inside -> 0
-        // Outside -> -1 (left/below) or 1 (right/above)
-        // On border -> -2 (left/lower) or 2 (right/upper)
-        // The only purpose of the value is to not be the same,
-        // and to denote if it is inside (0)
-
-        typename coordinate_type<Point>::type const& c = get<Index>(point);
-        typename coordinate_type<Box>::type const& left = get<min_corner, Index>(box);
-        typename coordinate_type<Box>::type const& right = get<max_corner, Index>(box);
-
-        if (geometry::math::equals(c, left)) return -2;
-        else if (geometry::math::equals(c, right)) return 2;
-        else if (c < left) return -1;
-        else if (c > right) return 1;
-        else return 0;
-    }
 
     template
     <

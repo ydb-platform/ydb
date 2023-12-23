@@ -97,5 +97,7 @@ jobs:
         testman_url: ${{ vars.TESTMO_URL }}
         testman_project_id: ${{ vars.TESTMO_PROJECT_ID }}
         bazel_remote_uri: ${{ vars.REMOTE_CACHE_URL_YA || '' }}
+        bazel_remote_username: ${{ inputs.put_build_results_to_cache && secrets.REMOTE_CACHE_USERNAME || '' }}
+        bazel_remote_password: ${{ inputs.put_build_results_to_cache && secrets.REMOTE_CACHE_PASSWORD || '' }}
         link_threads: ${{ inputs.link_threads }}
         test_threads: ${{ inputs.test_threads }}

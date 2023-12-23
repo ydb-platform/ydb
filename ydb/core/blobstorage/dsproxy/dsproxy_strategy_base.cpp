@@ -193,24 +193,6 @@ void TStrategyBase::AddGetRequest(TLogContext &logCtx, TGroupDiskRequests &group
     disk.DiskParts[partIdx].Requested.Add(intervalSet);
 }
 
-bool TStrategyBase::VerifyTheWholeSituation(TBlobState &state) {
-    switch (state.WholeSituation) {
-        case TBlobState::ESituation::Unknown:
-            Y_ABORT("Blob Id# %s whole situation Unknown", state.Id.ToString().c_str());
-        case TBlobState::ESituation::Lost:
-            Y_ABORT("Blob Id# %s whole situation Lost", state.Id.ToString().c_str());
-        case TBlobState::ESituation::Error:
-            Y_ABORT("Blob Id# %s whole situation Error", state.Id.ToString().c_str());
-        case TBlobState::ESituation::Sent:
-            Y_ABORT("Blob Id# %s whole situation Sent", state.Id.ToString().c_str());
-        case TBlobState::ESituation::Absent:
-            return true;
-        case TBlobState::ESituation::Present:
-            return false;
-    }
-    Y_ABORT("Blob Id# %s unexpected WholeSituation# %" PRIu32, state.Id.ToString().c_str(), (ui32)state.WholeSituation);
-}
-
 void TStrategyBase::PreparePartLayout(const TBlobState &state, const TBlobStorageGroupInfo &info,
         TBlobStorageGroupType::TPartLayout *layout, ui32 slowDiskIdx) {
     Y_ABORT_UNLESS(layout);
@@ -337,8 +319,7 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
                     << " blob Id# " << partId.ToString());
             Y_ABORT_UNLESS(state.Parts[record.PartIdx].Data.IsMonolith());
             groupDiskRequests.AddPut(disk.OrderNumber, partId, state.Parts[record.PartIdx].Data.GetMonolith(),
-                    TDiskPutRequest::ReasonInitial, info.Type.IsHandoffInSubgroup(record.VDiskIdx),
-                    state.ExtraBlockChecks, state.Span, state.BlobIdx);
+                TDiskPutRequest::ReasonInitial, info.Type.IsHandoffInSubgroup(record.VDiskIdx), state.BlobIdx);
             disk.DiskParts[record.PartIdx].Situation = TBlobState::ESituation::Sent;
         }
     }

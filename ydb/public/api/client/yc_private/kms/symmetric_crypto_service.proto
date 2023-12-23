@@ -1,0 +1,209 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.kms.v1;
+
+import "ydb/public/api/client/yc_private/kms/symmetric_key.proto";
+import "ydb/public/api/client/yc_private/kms/asymmetricencryption/asymmetric_encryption_key.proto";
+import "ydb/public/api/client/yc_private/kms/asymmetricsignature/asymmetric_signature_key.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/kms;kms";
+option java_outer_classname = "PSCS";
+
+// --- data plane for KMS symmetric cryptography operations
+
+service SymmetricCryptoService {
+
+  rpc Encrypt (SymmetricEncryptRequest) returns (SymmetricEncryptResponse);
+
+  rpc Decrypt (SymmetricDecryptRequest) returns (SymmetricDecryptResponse);
+
+  rpc BatchEncrypt (SymmetricBatchEncryptRequest) returns (SymmetricBatchEncryptResponse);
+
+  rpc BatchDecrypt (SymmetricBatchDecryptRequest) returns (SymmetricBatchDecryptResponse);
+
+  rpc ReEncrypt (SymmetricReEncryptRequest) returns (SymmetricReEncryptResponse);
+
+  rpc GenerateDataKey (GenerateDataKeyRequest) returns (GenerateDataKeyResponse);
+
+  rpc GenerateRandom (GenerateRandomRequest) returns (GenerateRandomResponse);
+
+  rpc GenerateAsymmetricDataKey (GenerateAsymmetricDataKeyRequest) returns (GenerateAsymmetricDataKeyResponse);
+
+}
+
+message SymmetricEncryptRequest {
+  string key_id = 1;
+  // Version ID, defaults to primary version if not given
+  string version_id = 2;
+  // Additional authenticated data, optional
+  bytes aad_context = 3;
+  // Plaintext to be encrypted
+  bytes plaintext = 4;
+}
+
+message SymmetricEncryptResponse {
+  string key_id = 1;
+  string version_id = 2; // version was used for encryption
+  bytes ciphertext = 3; // encrypted text
+}
+
+message SymmetricDecryptRequest {
+  string key_id = 1;
+  // Additional authenticated data, same as in corresponding EncryptRequest
+  bytes aad_context = 2;
+  // Encrypted text to be decrypted
+  bytes ciphertext = 3;
+}
+
+message SymmetricDecryptResponse {
+  string key_id = 1;
+  string version_id = 2; // version was used for decryption
+  bytes plaintext = 3; // decrypted text
+}
+
+message SymmetricBatchEncryptRequest {
+  string key_id = 1;
+  // Items to encrypt
+  repeated Item items = 2;
+
+  message Item {
+      // Version ID, defaults to primary version if not given
+      string version_id = 1;
+      // Additional authenticated data, optional
+      bytes aad_context = 2;
+      // Plaintext to be encrypted
+      bytes plaintext = 3;
+  }
+}
+
+message SymmetricBatchEncryptResponse {
+  string key_id = 1;
+  repeated Item items = 2; // encrypted items
+
+  message Item {
+    oneof data {
+      Success success = 1;
+      Failure failure = 2;
+    }
+  }
+
+  message Success {
+    string version_id = 1; // version used for encryption
+    bytes ciphertext = 2; // encrypted text
+  }
+
+  message Failure {
+    string error_message = 1; // error message
+  }
+}
+
+message SymmetricBatchDecryptRequest {
+  string key_id = 1;
+  // Items to decrypt
+  repeated Item items = 2;
+
+  message Item {
+    // Additional authenticated data, same as in corresponding EncryptRequest
+    bytes aad_context = 1;
+    // Encrypted text to be decrypted
+    bytes ciphertext = 2;
+  }
+}
+
+message SymmetricBatchDecryptResponse {
+  string key_id = 1;
+  repeated Item items = 2; // decrypted items
+
+  message Item {
+    oneof data {
+      Success success = 1;
+      Failure failure = 2;
+    }
+  }
+
+  message Success {
+    string version_id = 1; // version used for decryption
+    bytes plaintext = 2; // decrypted text
+  }
+
+  message Failure {
+    string error_message = 1; // error message
+  }
+}
+
+message GenerateDataKeyRequest {
+  string key_id = 1;
+  // Version ID, defaults to primary version if not given
+  string version_id = 2;
+  // Additional authenticated data to be used by encryption algorithm (optional)
+  bytes aad_context = 3;
+  // Encryption algorithm create data key for
+  SymmetricAlgorithm data_key_spec = 4;
+  // Plaintext for data key won't be returned if this parameter is true
+  bool skip_plaintext = 5;
+}
+
+message GenerateDataKeyResponse {
+  string key_id = 1;
+  string version_id = 2; // key version used for encryption of data key, optional
+  bytes data_key_plaintext = 3;  // data key in plaintext
+  bytes data_key_ciphertext = 4; // ciphered data key
+}
+
+message SymmetricReEncryptRequest {
+  // Target key id
+  string key_id = 1;
+  // Target key version id, optional, defaults to primary
+  string version_id = 2;
+  // Target additional authenticated data, optional
+  bytes aad_context = 3;
+  // Source key id, may be equal to target key id
+  string source_key_id = 4;
+  // Source add-context, may differ from target add-context
+  bytes source_aad_context = 5;
+  // Encrypted text to re-encrypt
+  bytes ciphertext = 6;
+}
+
+message SymmetricReEncryptResponse {
+  string key_id = 1; // target key id
+  string version_id = 2; // target key version id used for encryption
+  string source_key_id = 3; // source key id
+  string source_version_id = 4; // source key version used for decryption
+  bytes ciphertext = 5; // re-encrypted text
+}
+
+message GenerateRandomRequest {
+  // The folder id to identify and charge customer
+  string folder_id = 1;
+  // The size of the generated random bytes.
+  int64 size = 2;
+}
+
+message GenerateRandomResponse {
+  bytes random = 1;
+}
+
+message GenerateAsymmetricDataKeyRequest {
+  enum KeyType {
+    KEY_TYPE_UNSPECIFIED = 0;
+    ENCRYPTION = 1;
+    SIGNATURE = 2;
+  }
+  string key_id = 1;
+  string version_id = 2;
+  bytes aad_context = 3;
+  KeyType key_type = 4;
+  oneof key_spec {
+    asymmetricencryption.AsymmetricEncryptionAlgorithm encryption_key_spec = 5;
+    asymmetricsignature.AsymmetricSignatureAlgorithm signature_key_spec = 6;
+  }
+  bool skip_plaintext = 7;
+}
+
+message GenerateAsymmetricDataKeyResponse {
+  string key_id = 1;
+  string version_id = 2; // key version used for encryption of data key, optional
+  bytes asymmetric_data_key_plaintext = 3;
+  bytes asymmetric_data_key_ciphertext = 4;
+}

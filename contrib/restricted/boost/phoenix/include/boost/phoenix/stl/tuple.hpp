@@ -106,14 +106,17 @@ namespace boost { namespace phoenix {
         tuple_detail::idx_wrap<N>(), t);
     }
 
+#if 0 // Disabled this for now due to ODR viaolations $$$ Fix Me $$$
     // Make unpacked argument placeholders
     namespace placeholders {
         #define BOOST_PP_LOCAL_LIMITS (1, BOOST_PHOENIX_ARG_LIMIT)
-        #define BOOST_PP_LOCAL_MACRO(N)                                                \
-            const auto uarg##N =                                                       \
+        #define BOOST_PP_LOCAL_MACRO(N)                                                 \
+            const auto uarg##N =                                                        \
             boost::phoenix::get_<(N)-1>(boost::phoenix::placeholders::arg1);
         #include BOOST_PP_LOCAL_ITERATE()
     }
+#endif
+
 }} // namespace boost::phoenix
 
 #endif // C++ 14

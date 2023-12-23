@@ -33,13 +33,26 @@ public:
     }
 private:
     NSsa::TColumnInfo GetColumnInfo(const NKikimrSSA::TProgram::TColumn& column) const {
-        const ui32 columnId = column.GetId();
-        const TString name = ColumnResolver.GetColumnName(columnId, false);
-        if (name.Empty()) {
-            return NSsa::TColumnInfo::Generated(columnId, GenerateName(column));
+        if (column.HasId() && column.GetId()) {
+            const ui32 columnId = column.GetId();
+            const TString name = ColumnResolver.GetColumnName(columnId, false);
+            if (name.Empty()) {
+                return NSsa::TColumnInfo::Generated(columnId, GenerateName(column));
+            } else {
+                Sources.emplace(columnId, NSsa::TColumnInfo::Original(columnId, name));
+                return NSsa::TColumnInfo::Original(columnId, name);
+            }
+        } else if (column.HasName() && !!column.GetName()) {
+            const TString name = column.GetName();
+            const std::optional<ui32> columnId = ColumnResolver.GetColumnIdOptional(name);
+            if (columnId) {
+                Sources.emplace(*columnId, NSsa::TColumnInfo::Original(*columnId, name));
+                return NSsa::TColumnInfo::Original(*columnId, name);
+            } else {
+                return NSsa::TColumnInfo::Generated(0, GenerateName(column));
+            }
         } else {
-            Sources.emplace(columnId, NSsa::TColumnInfo::Original(columnId, name));
-            return NSsa::TColumnInfo::Original(columnId, name);
+            return NSsa::TColumnInfo::Generated(0, GenerateName(column));
         }
     }
 

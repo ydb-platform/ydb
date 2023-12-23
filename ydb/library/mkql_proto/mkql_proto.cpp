@@ -1013,10 +1013,10 @@ TStructType* TProtoImporter::ImportStructTypeFromProto(const NKikimrMiniKQL::TSt
 TType* TProtoImporter::ImportTypeFromProto(const NKikimrMiniKQL::TType& type) {
     switch (type.GetKind()) {
         case NKikimrMiniKQL::ETypeKind::Void: {
-            return env.GetVoid()->GetType();
+            return env.GetVoidLazy()->GetType();
         }
         case NKikimrMiniKQL::ETypeKind::Null: {
-            return env.GetNull()->GetType();
+            return env.GetNullLazy()->GetType();
         }
         case NKikimrMiniKQL::ETypeKind::Data: {
             const NKikimrMiniKQL::TDataType& protoData = type.GetData();
@@ -1045,7 +1045,7 @@ TType* TProtoImporter::ImportTypeFromProto(const NKikimrMiniKQL::TType& type) {
             return TTaggedType::Create(child, protoTaggedType.GetTag(), env);
         }
         case NKikimrMiniKQL::ETypeKind::EmptyList: {
-            return env.GetTypeOfEmptyList();
+            return env.GetTypeOfEmptyListLazy();
         }
         case NKikimrMiniKQL::ETypeKind::List: {
             const NKikimrMiniKQL::TListType& protoListType = type.GetList();
@@ -1063,7 +1063,7 @@ TType* TProtoImporter::ImportTypeFromProto(const NKikimrMiniKQL::TType& type) {
             return ImportStructTypeFromProto(protoStructType);
         }
         case NKikimrMiniKQL::ETypeKind::EmptyDict: {
-            return env.GetTypeOfEmptyDict();
+            return env.GetTypeOfEmptyDictLazy();
         }
         case NKikimrMiniKQL::ETypeKind::Dict: {
             const NKikimrMiniKQL::TDictType& protoDictType = type.GetDict();
@@ -1104,10 +1104,10 @@ TType* TProtoImporter::ImportTypeFromProto(const NKikimrMiniKQL::TType& type) {
 TNode* TProtoImporter::ImportNodeFromProto(TType* type, const NKikimrMiniKQL::TValue& value) {
     switch (type->GetKind()) {
         case TType::EKind::Void: {
-            return env.GetVoid();
+            return env.GetVoidLazy();
         }
         case TType::EKind::Null: {
-            return env.GetNull();
+            return env.GetNullLazy();
         }
         case TType::EKind::Data: {
             TDataType* dataType = static_cast<TDataType*>(type);
@@ -1338,13 +1338,13 @@ TStructType* TProtoImporter::ImportStructTypeFromProto(const Ydb::StructType& pr
 TType* TProtoImporter::ImportTypeFromProto(const Ydb::Type& input) {
     switch (input.type_case()) {
         case Ydb::Type::kVoidType:
-            return env.GetTypeOfVoid();
+            return env.GetTypeOfVoidLazy();
         case Ydb::Type::kNullType:
-            return env.GetTypeOfNull();
+            return env.GetTypeOfNullLazy();
         case Ydb::Type::kEmptyListType:
-            return env.GetTypeOfEmptyList();
+            return env.GetTypeOfEmptyListLazy();
         case Ydb::Type::kEmptyDictType:
-            return env.GetTypeOfEmptyDict();
+            return env.GetTypeOfEmptyDictLazy();
         case Ydb::Type::kPgType: {
             if (const auto& typeName = input.pg_type().type_name()) {
                 auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
@@ -1850,7 +1850,7 @@ TRuntimeNode ImportValueFromProto(const NKikimrMiniKQL::TParams& params, const T
     if (params.HasType() && params.HasValue()) {
         return ImportValueFromProto(params.GetType(), params.GetValue(), env);
     }
-    return TRuntimeNode(env.GetEmptyStruct(), true);
+    return TRuntimeNode(env.GetEmptyStructLazy(), true);
 }
 
 }

@@ -200,8 +200,16 @@ Y_DECLARE_OUT_SPEC(, NKikimrSubDomains::EServerlessComputeResourcesMode, stream,
     stream << NKikimrSubDomains::EServerlessComputeResourcesMode_Name(value);
 }
 
+Y_DECLARE_OUT_SPEC(, NKikimrDataEvents::EDataFormat, stream, value) {
+    stream << NKikimrDataEvents::EDataFormat_Name(value);
+}
+
 Y_DECLARE_OUT_SPEC(, NKikimrDataEvents::TEvWriteResult::EStatus, stream, value) {
     stream << NKikimrDataEvents::TEvWriteResult::EStatus_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrDataEvents::TEvWrite::TOperation::EOperationType, stream, value) {
+    stream << NKikimrDataEvents::TEvWrite::TOperation::EOperationType_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrDataEvents::TEvWrite::ETxMode, stream, value) {

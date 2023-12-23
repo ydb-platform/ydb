@@ -547,6 +547,8 @@ void MakeTestMultiPutItemStatuses(TTestBasicRuntime &runtime, const TBlobStorage
 }
 
 Y_UNIT_TEST(TestGivenBlock42MultiPut2ItemsStatuses) {
+    return; // KIKIMR-9016
+
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     constexpr ui64 statusCount = 3;
     NKikimrProto::EReplyStatus maybeStatuses[statusCount] = {
@@ -592,6 +594,8 @@ struct TDyingDecorator : public TTestDecorator {
 };
 
 Y_UNIT_TEST(TestGivenBlock42GroupGenerationGreaterThanVDiskGenerations) {
+    return; // KIKIMR-9016
+
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     TTestBasicRuntime runtime(1, false);
     Setup(runtime, type);

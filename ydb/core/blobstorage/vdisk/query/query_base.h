@@ -5,6 +5,7 @@
 #include "query_spacetracker.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr {
 
@@ -24,6 +25,8 @@ namespace NKikimr {
         TQueryResultSizeTracker ResultSize;
         const TActorId ReplSchedulerId;
 
+        NWilson::TSpan Span;
+
         TLevelIndexQueryBase(
                 std::shared_ptr<TQueryCtx> &queryCtx,
                 const TActorId &parentId,
@@ -31,7 +34,8 @@ namespace NKikimr {
                 TBarriersSnapshot &&barrierSnapshot,
                 TEvBlobStorage::TEvVGet::TPtr &ev,
                 std::unique_ptr<TEvBlobStorage::TEvVGetResult> result,
-                TActorId replSchedulerId)
+                TActorId replSchedulerId,
+                const char* name)
             : QueryCtx(queryCtx)
             , ParentId(parentId)
             , LogoBlobsSnapshot(std::move(logoBlobsSnapshot))
@@ -41,6 +45,7 @@ namespace NKikimr {
             , ShowInternals(Record.GetShowInternals())
             , Result(std::move(result))
             , ReplSchedulerId(replSchedulerId)
+            , Span(TWilson::VDiskTopLevel, std::move(BatcherCtx->OrigEv->TraceId), name)
         {
             Y_DEBUG_ABORT_UNLESS(Result);
         }
@@ -87,11 +92,13 @@ namespace NKikimr {
                         Result->AddResult(NKikimrProto::ERROR, id, &cookie);
                     }
                 }
-                LOG_CRIT(ctx, NKikimrServices::BS_VDISK_GET,
-                        VDISKP(QueryCtx->HullCtx->VCtx->VDiskLogPrefix,
+                auto msg = VDISKP(QueryCtx->HullCtx->VCtx->VDiskLogPrefix,
                             "TEvVGetResult: Result message is too large; size# %" PRIu64 " orig# %s;"
                             " VDISK CAN NOT REPLY ON TEvVGet REQUEST",
-                            ResultSize.GetSize(), BatcherCtx->OrigEv->Get()->ToString().data()));
+                            ResultSize.GetSize(), BatcherCtx->OrigEv->Get()->ToString().data());
+                LOG_CRIT(ctx, NKikimrServices::BS_VDISK_GET, msg);
+
+                Span.EndError(std::move(msg));
             } else {
                 ui64 total = 0;
                 for (const auto& result : Result->Record.GetResult()) {
@@ -102,6 +109,8 @@ namespace NKikimr {
                 LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_GET,
                         VDISKP(QueryCtx->HullCtx->VCtx->VDiskLogPrefix,
                             "TEvVGetResult: %s", Result->ToString().data()));
+
+                Span.EndOk();
             }
 
             if (hasNotYet && ReplSchedulerId) {

@@ -125,7 +125,7 @@ void ReadPod(TInput& input, T& obj)
 }
 
 template <class T>
-void ReadPod(char*& ptr, T& obj)
+void ReadPod(const char*& ptr, T& obj)
 {
     static_assert(TTypeTraits<T>::IsPod || std::is_trivial_v<T>, "T must be a pod-type.");
     memcpy(&obj, ptr, sizeof(obj));

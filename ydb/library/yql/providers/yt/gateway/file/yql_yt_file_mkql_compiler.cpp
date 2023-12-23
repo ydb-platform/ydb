@@ -7,6 +7,7 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_mkql_compiler.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
+#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -22,6 +23,7 @@
 
 #include <util/generic/xrange.h>
 #include <util/string/cast.h>
+#include <util/stream/str.h>
 
 namespace NYql {
 
@@ -216,7 +218,7 @@ TRuntimeNode ApplyPathRanges(TRuntimeNode inputList, const TExprNode& input, NCo
         if (!tableIndexDictItems.empty()) {
             auto dictType = ctx.ProgramBuilder.NewDictType(
                 ctx.ProgramBuilder.NewDataType(NUdf::TDataType<ui32>::Id),
-                ctx.ProgramBuilder.GetTypeEnvironment().GetTypeOfVoid(),
+                ctx.ProgramBuilder.GetTypeEnvironment().GetTypeOfVoidLazy(),
                 false
             );
             auto dict = ctx.ProgramBuilder.NewDict(dictType, tableIndexDictItems);
@@ -477,14 +479,14 @@ TRuntimeNode SortListBy(TRuntimeNode list, const TVector<std::pair<TString, bool
 TRuntimeNode BuildTableOutput(TRuntimeNode list, NCommon::TMkqlBuildContext& ctx) {
     list = ToStream(list, ctx);
 
-    TCallableBuilder fileWriteCall(ctx.ProgramBuilder.GetTypeEnvironment(), "YtWriteFile", ctx.ProgramBuilder.GetTypeEnvironment().GetTypeOfVoid());
+    TCallableBuilder fileWriteCall(ctx.ProgramBuilder.GetTypeEnvironment(), "YtWriteFile", ctx.ProgramBuilder.GetTypeEnvironment().GetTypeOfVoidLazy());
     fileWriteCall.Add(list);
 
     return ctx.ProgramBuilder.AsList(TRuntimeNode(fileWriteCall.Build(), false));
 }
 
 TRuntimeNode BuildDqWrite(TRuntimeNode item, TStringBuf path, NCommon::TMkqlBuildContext& ctx) {
-    TCallableBuilder fileWriteCall(ctx.ProgramBuilder.GetTypeEnvironment(), "DqWriteFile", ctx.ProgramBuilder.GetTypeEnvironment().GetTypeOfVoid());
+    TCallableBuilder fileWriteCall(ctx.ProgramBuilder.GetTypeEnvironment(), "DqWriteFile", ctx.ProgramBuilder.GetTypeEnvironment().GetTypeOfVoidLazy());
     fileWriteCall.Add(item);
     fileWriteCall.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(path));
 
@@ -1061,13 +1063,17 @@ void RegisterDqYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler)
 
             auto values = NCommon::MkqlBuildExpr(wideWrite.Input().Ref(), ctx);
 
-            TYtOutTable table{GetSetting(wideWrite.Settings().Ref(), "outTable")->Child(1)};
-            auto inputItemType = NCommon::BuildType(wideWrite.Input().Ref(), GetSeqItemType(*table.Ref().GetTypeAnn()), ctx.ProgramBuilder);
+            auto tableName = GetSetting(wideWrite.Settings().Ref(), "tableName")->Child(1)->Content();
+            auto tableType = GetSetting(wideWrite.Settings().Ref(), "tableType")->Child(1)->Content();
+
+            TStringStream err;
+            auto inputItemType = NCommon::ParseTypeFromYson(tableType, ctx.ProgramBuilder, err);
+            YQL_ENSURE(inputItemType, "Parse type error: " << err.Str());
 
             auto structType = AS_TYPE(TStructType, inputItemType);
             values = NarrowFlow(values, *structType, ctx);
             values = ctx.ProgramBuilder.Map(values, [&](TRuntimeNode item) {
-                return BuildDqWrite(item, table.Name().Value(), ctx);
+                return BuildDqWrite(item, tableName, ctx);
             });
             return values;
         });

@@ -4,7 +4,6 @@
 #include "kv_workload.h"
 #include "click_bench.h"
 #include "tpch.h"
-#include "tpcc_workload.h"
 #include "topic_workload/topic_workload.h"
 #include "transfer_workload/transfer_workload.h"
 #include "query_workload.h"
@@ -13,8 +12,9 @@
 #include <ydb/library/workload/workload_factory.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 
-#include <util/random/random.h>
 #include <library/cpp/threading/local_executor/local_executor.h>
+
+#include <util/random/random.h>
 
 #include <atomic>
 #include <iomanip>
@@ -48,7 +48,6 @@ TCommandWorkload::TCommandWorkload()
     AddCommand(std::make_unique<TCommandWorkloadTopic>());
     AddCommand(std::make_unique<TCommandWorkloadTransfer>());
     AddCommand(std::make_unique<TCommandTpch>());
-    AddCommand(std::make_unique<TCommandTPCCWorkload>());
     AddCommand(std::make_unique<TCommandQueryWorkload>());
 }
 

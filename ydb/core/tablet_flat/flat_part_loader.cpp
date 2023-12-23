@@ -184,8 +184,15 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     // TODO: put index size to stat?
     // TODO: include history indexes bytes
     size_t indexesRawSize = 0;
-    for (auto indexPage : groupIndexesIds) {
-        indexesRawSize += GetPageSize(indexPage);
+    if (BTreeGroupIndexes) {
+        for (const auto &meta : BTreeGroupIndexes) {
+            indexesRawSize += meta.IndexSize;
+        }
+        // Note: although we also have flat index, it shouldn't be loaded; so let's not count it here
+    } else {
+        for (auto indexPage : groupIndexesIds) {
+            indexesRawSize += GetPageSize(indexPage);
+        }
     }
 
     auto *partStore = new TPartStore(

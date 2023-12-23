@@ -40,6 +40,10 @@ TControlPlaneStorageConfig::TControlPlaneStorageConfig(const NConfig::TControlPl
         AvailableBindings.insert(GetBindingType(availableBinding));
     }
 
+    for (const auto& availableConnection : Proto.GetAvailableStreamingConnection()) {
+        AvailableStreamingConnections.insert(GetConnectionType(availableConnection));
+    }
+
     GeneratorPathsLimit =
         s3Config.HasGeneratorPathsLimit() ? s3Config.GetGeneratorPathsLimit() : 50'000;
 

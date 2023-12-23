@@ -7,6 +7,16 @@ namespace NFq {
 
 using TAggregates = std::map<TString, std::optional<ui64>>;
 
+void WriteValue(NYson::TYsonWriter& writer, const TString& name, ui64 value) {
+    if (name.EndsWith("Us")) {
+        writer.OnStringScalar(FormatDurationUs(value));
+    } else if (name.EndsWith("Ms")) {
+        writer.OnStringScalar(FormatInstant(TInstant::MilliSeconds(value)));
+    } else {
+        writer.OnInt64Scalar(value);
+    }
+}
+
 // TODO Dedup Code with KQP and YQL
 struct TAggregate {
     ui64 Min = 0;
@@ -27,18 +37,19 @@ struct TAggregate {
         }
         Count++;
     }
+    
     void Write(NYson::TYsonWriter& writer, const TString& keyName) {
         if (Count) {
             writer.OnKeyedItem(keyName);
             writer.OnBeginMap();
                 writer.OnKeyedItem("min");
-                writer.OnInt64Scalar(Min);
+                WriteValue(writer, keyName, Min);
                 writer.OnKeyedItem("max");
-                writer.OnInt64Scalar(Max);
+                WriteValue(writer, keyName, Max);
                 writer.OnKeyedItem("avg");
-                writer.OnInt64Scalar(Sum / Count);
+                WriteValue(writer, keyName, Sum / Count);
                 writer.OnKeyedItem("sum");
-                writer.OnInt64Scalar(Sum);
+                WriteValue(writer, keyName, Sum);
                 writer.OnKeyedItem("count");
                 writer.OnInt64Scalar(Count);
             writer.OnEndMap();
@@ -50,12 +61,17 @@ struct TTotalStatistics {
     TAggregate MaxMemoryUsage;
     TAggregate CpuTimeUs;
     TAggregate SourceCpuTimeUs;
-    TAggregate InputRows;
     TAggregate InputBytes;
-    TAggregate OutputRows;
+    TAggregate InputRows;
     TAggregate OutputBytes;
+    TAggregate OutputRows;
+    TAggregate ResultBytes;
+    TAggregate ResultRows;
     TAggregate IngressBytes;
+    TAggregate IngressRows;
     TAggregate EgressBytes;
+    TAggregate EgressRows;
+    TAggregate Tasks;
     TAggregates Aggregates;
 };
 
@@ -134,44 +150,23 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
                     totals.OutputRows.Add(sum);
                 } else if (name == "TotalOutputBytes") {
                     totals.OutputBytes.Add(sum);
+                } else if (name == "Tasks") {
+                    totals.Tasks.Add(sum);
                 }
                 writer.OnKeyedItem(name);
                 writer.OnBeginMap();
                     writer.OnKeyedItem("sum");
-                    if (name.EndsWith("Us")) {
-                        writer.OnStringScalar(FormatDurationUs(sum));
-                    } else if (name.EndsWith("Ms")) {
-                        writer.OnStringScalar(FormatInstant(TInstant::MilliSeconds(sum)));
-                    } else {
-                        writer.OnInt64Scalar(sum);
-                    }
+                    WriteValue(writer, name, sum);
                     writer.OnKeyedItem("count");
                     writer.OnInt64Scalar(1);
                 writer.OnEndMap();
             }
             break;
         case NJson::JSON_ARRAY: {
-            ui64 ingressBytes = 0;
-            ui64 egressBytes = 0;
             for (auto item : node.GetArray()) {
                 if (auto* subNode = item.GetValueByPath("Name")) {
                     WriteNamedNode(writer, item, name + "=" + subNode->GetStringSafe(), totals);
                 }
-                if (name == "Ingress") {
-                    if (auto* ingressNode = item.GetValueByPath("Ingress.Bytes.Sum")) {
-                        ingressBytes += ingressNode->GetIntegerSafe();
-                    }
-                } else if (name == "Egress") {
-                    if (auto* egressNode = item.GetValueByPath("Egress.Bytes.Sum")) {
-                        egressBytes += egressNode->GetIntegerSafe();
-                    }
-                }
-            }
-            if (ingressBytes) {
-                totals.IngressBytes.Add(ingressBytes);
-            }
-            if (egressBytes) {
-                totals.EgressBytes.Add(egressBytes);
             }
             break;
         }
@@ -189,12 +184,36 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
             }
             if (auto* subNode = node.GetValueByPath("Sum")) {
                 sum = subNode->GetIntegerSafe();
-                if (name == "MaxMemoryUsage") {
-                    totals.MaxMemoryUsage.Add(*sum);
-                } else if (name == "CpuTimeUs") {
-                    totals.CpuTimeUs.Add(*sum);
-                } else if (name == "SourceCpuTimeUs") {
-                    totals.SourceCpuTimeUs.Add(*sum);
+                if (sum && *sum) {
+                           if (name == "InputBytes") {
+                        totals.InputBytes.Add(*sum);
+                    } else if (name == "InputRows") {
+                        totals.InputRows.Add(*sum);
+                    } else if (name == "OutputBytes") {
+                        totals.OutputBytes.Add(*sum);
+                    } else if (name == "OutputRows") {
+                        totals.OutputRows.Add(*sum);
+                    } else if (name == "ResultBytes") {
+                        totals.ResultBytes.Add(*sum);
+                    } else if (name == "ResultRows") {
+                        totals.ResultRows.Add(*sum);
+                    } else if (name == "IngressBytes") {
+                        totals.IngressBytes.Add(*sum);
+                    } else if (name == "IngressRows") {
+                        totals.IngressRows.Add(*sum);
+                    } else if (name == "EgressBytes") {
+                        totals.EgressBytes.Add(*sum);
+                    } else if (name == "EgressRows") {
+                        totals.EgressRows.Add(*sum);
+                    } else if (name == "MaxMemoryUsage") {
+                        totals.MaxMemoryUsage.Add(*sum);
+                    } else if (name == "CpuTimeUs") {
+                        totals.CpuTimeUs.Add(*sum);
+                    } else if (name == "SourceCpuTimeUs") {
+                        totals.SourceCpuTimeUs.Add(*sum);
+                    } else if (name == "Tasks") {
+                        totals.Tasks.Add(*sum);
+                    }
                 }
             }
             if (auto* subNode = node.GetValueByPath("Min")) {
@@ -339,12 +358,17 @@ TString GetV1StatFromV2Plan(const TString& plan) {
                         totals.MaxMemoryUsage.Write(writer, "MaxMemoryUsage");
                         totals.CpuTimeUs.Write(writer, "CpuTimeUs");
                         totals.SourceCpuTimeUs.Write(writer, "SourceCpuTimeUs");
-                        totals.InputRows.Write(writer, "InputRows");
                         totals.InputBytes.Write(writer, "InputBytes");
-                        totals.OutputRows.Write(writer, "OutputRows");
+                        totals.InputRows.Write(writer, "InputRows");
                         totals.OutputBytes.Write(writer, "OutputBytes");
+                        totals.OutputRows.Write(writer, "OutputRows");
+                        totals.ResultBytes.Write(writer, "ResultBytes");
+                        totals.ResultRows.Write(writer, "ResultRows");
                         totals.IngressBytes.Write(writer, "IngressBytes");
+                        totals.IngressRows.Write(writer, "IngressRows");
                         totals.EgressBytes.Write(writer, "EgressBytes");
+                        totals.EgressRows.Write(writer, "EgressRows");
+                        totals.Tasks.Write(writer, "Tasks");
                         writer.OnEndMap();
                     }
                 }
@@ -713,11 +737,11 @@ TPublicStat GetPublicStat(const TString& statistics) {
         for (const auto& p : stat.GetMap()) {
             counters.MemoryUsageBytes = Sum(counters.MemoryUsageBytes, GetNodeValue(p.second, "MaxMemoryUsage"));
             counters.CpuUsageUs = Sum(counters.CpuUsageUs, GetNodeValue(p.second, "CpuTimeUs"));
-            counters.InputBytes = Sum(counters.InputBytes, GetNodeValue(p.second, "InputBytes"));
-            counters.OutputBytes = Sum(counters.OutputBytes, GetNodeValue(p.second, "OutputBytes"));
-            counters.SourceInputRecords = Sum(counters.SourceInputRecords, GetNodeValue(p.second, "InputRows"));
-            counters.SinkOutputRecords = Sum(counters.SinkOutputRecords, GetNodeValue(p.second, "OutputRows"));
-            counters.RunningTasks = Sum(counters.RunningTasks, GetNodeValue(p.second, "TotalTasks", true));
+            counters.InputBytes = Sum(counters.InputBytes, GetNodeValue(p.second, "IngressBytes"));
+            counters.OutputBytes = Sum(counters.OutputBytes, GetNodeValue(p.second, "EgressBytes"));
+            counters.SourceInputRecords = Sum(counters.SourceInputRecords, GetNodeValue(p.second, "IngressRows"));
+            counters.SinkOutputRecords = Sum(counters.SinkOutputRecords, GetNodeValue(p.second, "EgressRows"));
+            counters.RunningTasks = Sum(counters.RunningTasks, GetNodeValue(p.second, "Tasks", true));
         }
     }
     return counters;

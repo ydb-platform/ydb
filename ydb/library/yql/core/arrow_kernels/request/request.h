@@ -34,6 +34,8 @@ public:
         LessOrEqual,
         Greater,
         GreaterOrEqual,
+
+        Coalesce
     };
 
     TKernelRequestBuilder(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry);

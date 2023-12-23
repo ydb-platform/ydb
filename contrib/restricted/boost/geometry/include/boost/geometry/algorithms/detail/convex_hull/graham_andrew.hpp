@@ -23,6 +23,8 @@
 #include <algorithm>
 #include <vector>
 
+#include <boost/range/size.hpp>
+
 #include <boost/geometry/algorithms/detail/for_each_range.hpp>
 #include <boost/geometry/core/assert.hpp>
 #include <boost/geometry/core/closure.hpp>

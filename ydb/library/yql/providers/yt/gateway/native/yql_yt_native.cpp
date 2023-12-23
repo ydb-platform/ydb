@@ -2982,7 +2982,6 @@ private:
                             execCtx->Options_.OptLLVM()),
                         &columns,
                         execCtx->Options_.FillSettings().Format);
-                    break;
                 default:
                     YQL_LOG_CTX_THROW yexception() << "Invalid result type: " << execCtx->Options_.FillSettings().Format;
             }

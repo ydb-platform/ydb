@@ -20,6 +20,7 @@
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/ephemeral_node_factory.h>
 #include <yt/yt/core/ytree/tree_builder.h>
+#include <yt/yt/core/ytree/fluent.h>
 
 #include <yt/yt_proto/yt/core/ytree/proto/attributes.pb.h>
 
@@ -180,6 +181,8 @@ void SetProtobufInteropConfig(TProtobufInteropDynamicConfigPtr config)
 {
     GlobalProtobufInteropConfig()->Config.Store(std::move(config));
 }
+
+void WriteSchema(const TProtobufEnumType* enumType, IYsonConsumer* consumer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -354,7 +357,7 @@ private:
     YT_DECLARE_SPIN_LOCK(TForkAwareSpinLock, Lock_);
     THashMap<const Descriptor*, std::unique_ptr<TProtobufMessageType>> MessageTypeMap_;
     TForkAwareSyncMap<const Descriptor*, const TProtobufMessageType*> MessageTypeSyncMap_;
-    THashMap<const EnumDescriptor*,std::unique_ptr<TProtobufEnumType>> EnumTypeMap_;
+    THashMap<const EnumDescriptor*, std::unique_ptr<TProtobufEnumType>> EnumTypeMap_;
     TForkAwareSyncMap<const EnumDescriptor*, const TProtobufEnumType*> EnumTypeSyncMap_;
 
     THashMap<const Descriptor*, TProtobufMessageConverter> MessageTypeConverterMap_;
@@ -498,6 +501,77 @@ public:
         return EnumYsonStorageType_;
     }
 
+    void WriteSchema(IYsonConsumer* consumer) const
+    {
+        if (IsYsonMap()) {
+            BuildYsonFluently(consumer)
+                .BeginMap()
+                    .Item("type_name").Value("dict")
+                    .Item("key").Do([&] (auto fluent) {
+                        GetYsonMapKeyField()->WriteSchema(fluent.GetConsumer());
+                    })
+                    .Item("value").Do([&] (auto fluent) {
+                        GetYsonMapValueField()->WriteSchema(fluent.GetConsumer());
+                    })
+                .EndMap();
+
+            return;
+        }
+        if (IsRepeated()) {
+            consumer->OnBeginMap();
+            consumer->OnKeyedItem("type_name");
+            consumer->OnStringScalar("list");
+            consumer->OnKeyedItem("item");
+        }
+
+        switch (GetType()) {
+            case FieldDescriptor::TYPE_INT32:
+            case FieldDescriptor::TYPE_FIXED32:
+            case FieldDescriptor::TYPE_UINT32:
+                consumer->OnStringScalar("uint32");
+                break;
+            case FieldDescriptor::TYPE_INT64:
+            case FieldDescriptor::TYPE_FIXED64:
+            case FieldDescriptor::TYPE_UINT64:
+                consumer->OnStringScalar("uint64");
+                break;
+            case FieldDescriptor::TYPE_SINT32:
+            case FieldDescriptor::TYPE_SFIXED32:
+                consumer->OnStringScalar("int32");
+                break;
+            case FieldDescriptor::TYPE_SINT64:
+            case FieldDescriptor::TYPE_SFIXED64:
+                consumer->OnStringScalar("int64");
+                break;
+            case FieldDescriptor::TYPE_BOOL:
+                consumer->OnStringScalar("bool");
+                break;
+            case FieldDescriptor::TYPE_FLOAT:
+                consumer->OnStringScalar("float");
+                break;
+            case FieldDescriptor::TYPE_DOUBLE:
+                consumer->OnStringScalar("double");
+                break;
+            case FieldDescriptor::TYPE_STRING:
+                consumer->OnStringScalar("utf8");
+                break;
+            case FieldDescriptor::TYPE_BYTES:
+                consumer->OnStringScalar("string");
+                break;
+            case FieldDescriptor::TYPE_ENUM:
+                NYson::WriteSchema(GetEnumType(), consumer);
+                break;
+            case FieldDescriptor::TYPE_MESSAGE:
+                NYson::WriteSchema(GetMessageType(), consumer);
+                break;
+            default:
+                break;
+        }
+        if (IsRepeated()) {
+            consumer->OnEndMap();
+        }
+    }
+
 private:
     const FieldDescriptor* const Underlying_;
     const TStringBuf YsonName_;
@@ -617,6 +691,26 @@ public:
         }
     }
 
+    void WriteSchema(IYsonConsumer* consumer) const
+    {
+        BuildYsonFluently(consumer).BeginMap()
+            .Item("type_name").Value("struct")
+            .Item("members").DoListFor(0, Underlying_->field_count(), [&] (auto fluent, int index) {
+                auto* field = GetFieldByNumber(Underlying_->field(index)->number());
+                fluent.Item()
+                    .BeginMap()
+                        .Item("name").Value(field->GetYsonName())
+                        .Item("type").Do([&] (auto fluent) {
+                            field->WriteSchema(fluent.GetConsumer());
+                        })
+                        .DoIf(!field->IsYsonMap() && !field->IsRepeated() && !field->IsOptional(), [] (auto fluent) {
+                            fluent.Item("required").Value(true);
+                        })
+                    .EndMap();
+            })
+            .EndMap();
+    }
+
 private:
     TProtobufTypeRegistry* const Registry_;
     const Descriptor* const Underlying_;
@@ -727,6 +821,18 @@ public:
     {
         auto it = ValueToLiteral_.find(value);
         return it == ValueToLiteral_.end() ? TStringBuf() : it->second;
+    }
+
+    void WriteSchema(IYsonConsumer* consumer) const
+    {
+        BuildYsonFluently(consumer)
+            .BeginMap()
+                .Item("type_name").Value("enum")
+                .Item("enum_name").Value(Underlying_->name())
+                .Item("values").DoListFor(0, Underlying_->value_count(), [&] (auto fluent, int index) {
+                    fluent.Item().Value(FindLiteralByValue(Underlying_->value(index)->number()));
+                })
+            .EndMap();
     }
 
 private:
@@ -3035,6 +3141,16 @@ TString YsonStringToProto(
     auto protobufWriter = CreateProtobufWriter(&protobufStream, payloadType, std::move(options));
     ParseYsonStringBuffer(ysonString.AsStringBuf(), EYsonType::Node, protobufWriter.get());
     return serializedProto;
+}
+
+void WriteSchema(const TProtobufEnumType* type, IYsonConsumer* consumer)
+{
+    type->WriteSchema(consumer);
+}
+
+void WriteSchema(const TProtobufMessageType* type, IYsonConsumer* consumer)
+{
+    type->WriteSchema(consumer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

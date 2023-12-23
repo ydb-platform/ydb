@@ -23,7 +23,6 @@ ENDIF()
         ydb/library/yql/tools/yqlrun
         ydb/library/yql/tools/sql_formatter
         contrib/libs/protobuf/python
-        ydb/library/yql/providers/common/proto/python
     )
     DATA(
         arcadia/ydb/library/yql/tests/sql # python files

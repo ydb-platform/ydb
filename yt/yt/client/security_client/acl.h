@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <yt/yt/core/misc/arithmetic_formula.h>
+
 #include <yt/yt/core/yson/consumer.h>
 
 #include <yt/yt/core/ytree/permission.h>
@@ -18,6 +20,7 @@ struct TSerializableAccessControlEntry
     std::vector<TString> Subjects;
     NYTree::EPermissionSet Permissions;
     EAceInheritanceMode InheritanceMode = EAceInheritanceMode::ObjectAndDescendants;
+    TString SubjectTagFilter;
     std::optional<std::vector<TString>> Columns;
     std::optional<bool> Vital;
 

@@ -11,25 +11,22 @@ namespace NKikimr {
 
 using TPutResultVec = TPutImpl::TPutResultVec;
 
-bool TPutImpl::RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults) {
+void TPutImpl::RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults, const TBlobStorageGroupInfo::TGroupVDisks& expired) {
     switch (Info->Type.GetErasure()) {
         case TBlobStorageGroupType::ErasureMirror3dc:
-            return RunStrategy(logCtx, TPut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy), outPutResults);
+            return RunStrategy(logCtx, TPut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy), outPutResults, expired);
         case TBlobStorageGroupType::ErasureMirror3of4:
-            return RunStrategy(logCtx, TPut3of4Strategy(Tactic), outPutResults);
+            return RunStrategy(logCtx, TPut3of4Strategy(Tactic), outPutResults, expired);
         default:
-            return RunStrategy(logCtx, TRestoreStrategy(), outPutResults);
+            return RunStrategy(logCtx, TRestoreStrategy(), outPutResults, expired);
     }
 }
 
-bool TPutImpl::RunStrategy(TLogContext &logCtx, const IStrategy& strategy, TPutResultVec &outPutResults) {
+void TPutImpl::RunStrategy(TLogContext &logCtx, const IStrategy& strategy, TPutResultVec &outPutResults,
+        const TBlobStorageGroupInfo::TGroupVDisks& expired) {
     TBatchedVec<TBlackboard::TBlobStates::value_type*> finished;
-    const EStrategyOutcome outcome = Blackboard.RunStrategy(logCtx, strategy, &finished);
-    if (finished) {
-        PrepareReply(logCtx, outcome.ErrorReason, finished, outPutResults);
-        return true;
-    }
-    return false;
+    const EStrategyOutcome outcome = Blackboard.RunStrategy(logCtx, strategy, &finished, &expired);
+    PrepareReply(logCtx, outcome.ErrorReason, finished, outPutResults);
 }
 
 NLog::EPriority GetPriorityForReply(TAtomicLogPriorityMuteChecker<NLog::PRI_ERROR, NLog::PRI_DEBUG> &checker,

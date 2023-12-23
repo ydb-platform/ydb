@@ -53,7 +53,7 @@
                                                                 "Node Type": "Aggregate-TableFullScan",
                                                                 "Operators": [
                                                                     {
-                                                                        "Aggregation": "{_yql_agg_1: SUM(state._yql_agg_1),_yql_agg_2: SUM(item.IsRefresh)}",
+                                                                        "Aggregation": "{_yql_agg_1: SUM(state._yql_agg_1,1),_yql_agg_2: SUM(item.IsRefresh,state._yql_agg_2)}",
                                                                         "GroupBy": "",
                                                                         "Name": "Aggregate"
                                                                     },

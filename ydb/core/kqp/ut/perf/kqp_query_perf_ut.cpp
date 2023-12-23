@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
 
         i64 totalTasks = 0;
         for (const auto& stage : stages) {
-            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe();
+            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
         }
 
         UNIT_ASSERT_VALUES_EQUAL(totalTasks, EnableSourceRead ? 1 : 2);
@@ -219,7 +219,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
 
         i64 totalTasks = 0;
         for (const auto& stage : stages) {
-            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe();
+            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
         }
         UNIT_ASSERT_VALUES_EQUAL(totalTasks, 3);
     }
@@ -270,7 +270,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
 
         i64 totalTasks = 0;
         for (const auto& stage : stages) {
-            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe();
+            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
         }
         UNIT_ASSERT_VALUES_EQUAL(totalTasks, EnableSourceRead ? 2 : 3);
     }
@@ -581,7 +581,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
     }
 
     Y_UNIT_TEST(IndexReplace) {
@@ -604,7 +604,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
     }
 
     Y_UNIT_TEST(IndexUpdateOn) {
@@ -627,7 +627,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
     }
 
     Y_UNIT_TEST(IndexDeleteOn) {

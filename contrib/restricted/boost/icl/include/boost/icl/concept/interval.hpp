@@ -922,11 +922,9 @@ template<class Type>
 typename boost::enable_if<is_interval<Type>, bool>::type
 operator < (const Type& left, const Type& right)
 {
-    if(icl::is_empty(left))
-        return !icl::is_empty(right);
-    else
-        return lower_less(left,right)
-            || (lower_equal(left,right) && upper_less(left,right));
+    return (!icl::is_empty(left) && !icl::is_empty(right))
+        && (     lower_less(left,right)
+             || (lower_equal(left,right) && upper_less(left,right)) );
 }
 
 template<class Type>
@@ -934,6 +932,27 @@ inline typename boost::enable_if<is_interval<Type>, bool>::type
 operator > (const Type& left, const Type& right)
 {
     return right < left;
+}
+
+//- operator <= ----------------------------------------------------------------
+template<class Type>
+inline typename boost::enable_if<is_interval<Type>, bool>::type
+operator <= (const Type& left, const Type& right)
+{
+    if(icl::is_empty(left) || icl::is_empty(right))
+        return false;
+
+    return !(left > right);
+}
+
+template<class Type>
+inline typename boost::enable_if<is_interval<Type>, bool>::type
+operator >= (const Type& left, const Type& right)
+{
+    if(icl::is_empty(left) || icl::is_empty(right))
+        return false;
+
+    return !(left < right);
 }
 
 

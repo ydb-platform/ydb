@@ -1,24 +1,19 @@
-SRCDIR(ydb/library/yql/minikql/computation)
+OWNER(
+    g:yql
+    g:yql_ydb_core
+)
 
-SRCS(
-    mkql_block_builder.cpp
-    mkql_block_impl.cpp
-    mkql_block_reader.cpp
-    mkql_block_transport.cpp
-    mkql_computation_node.cpp
+
+INCLUDE(header.ya.make.inc)
+
+SET(ORIG_SRC_DIR ydb/library/yql/minikql/computation)
+
+SET(ORIG_SOURCES
     mkql_computation_node_codegen.cpp
     mkql_computation_node_graph.cpp
     mkql_computation_node_graph_saveload.cpp
-    mkql_computation_node_holders.cpp
-    mkql_computation_node_impl.cpp
-    mkql_computation_node_pack.cpp
-    mkql_computation_node_pack_impl.cpp
-    mkql_custom_list.cpp
+    mkql_computation_node_holders_codegen.cpp
     mkql_llvm_base.cpp
-    mkql_validate.cpp
-    mkql_value_builder.cpp
-    mkql_computation_pattern_cache.cpp
-    presort.cpp
 )
 
 PEERDIR(
@@ -30,12 +25,25 @@ PEERDIR(
     library/cpp/time_provider
     ydb/library/yql/minikql
     ydb/library/yql/minikql/arrow
+    ydb/library/yql/minikql/computation
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/public/udf
     ydb/library/yql/utils
     library/cpp/threading/future
 )
 
-PROVIDES(mkql_computation)
-
 YQL_LAST_ABI_VERSION()
+
+ADDINCL(
+    ${ORIG_SRC_DIR}
+)
+
+COPY(
+    WITH_CONTEXT
+    AUTO
+    FROM ${ORIG_SRC_DIR}
+    ${ORIG_SOURCES}
+    OUTPUT_INCLUDES ${BINDIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
+)
+
+PROVIDES(MINIKQL_COMPUTATION)

@@ -3,7 +3,7 @@
 #include <util/generic/yexception.h>
 #include <util/generic/ptr.h>
 
-namespace NYamlConfig::NValidator {
+namespace NKikimr::NYamlConfig::NValidator {
 
 enum class ENodeType {
     Generic, Map, Array, Int64, String, Bool, Enum
@@ -57,4 +57,4 @@ template <typename TThis, typename TContext> class TCommonBuilderOps;
 template <typename TThis, typename TContext> class TValidatorCommonOps;
 
 } // namespace NDetail
-} // namespace NYamlConfig::NValidator
+} // namespace NKikimr::NYamlConfig::NValidator

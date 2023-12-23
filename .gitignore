@@ -34,3 +34,7 @@ __pycache__/
 /build-*
 
 .idea/
+.vscode/
+
+# KDevelop IDE
+*.kdev4

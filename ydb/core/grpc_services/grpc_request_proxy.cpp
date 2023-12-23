@@ -11,6 +11,7 @@
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <shared_mutex>
 
@@ -71,7 +72,6 @@ public:
     }
 
 private:
-    void HandleRefreshToken(TRefreshTokenImpl::TPtr& ev, const TActorContext& ctx);
     void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
     void HandleProxyService(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev);
@@ -80,12 +80,15 @@ private:
     void HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev);
     void ReplayEvents(const TString& databaseName, const TActorContext& ctx);
 
+    void StartTracing(IRequestProxyCtx& ctx);
+
     static bool IsAuthStateOK(const IRequestProxyCtx& ctx);
 
     template <typename TEvent>
     void Handle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
+            requestBaseCtx->LegacyFinishSpan();
             TGRpcRequestProxyHandleMethods::Handle(event, ctx);
         }
     }
@@ -93,6 +96,7 @@ private:
     void Handle(TEvListEndpointsRequest::TPtr& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
+            requestBaseCtx->LegacyFinishSpan();
             TGRpcRequestProxy::Handle(event, ctx);
         }
     }
@@ -104,7 +108,8 @@ private:
         }
     }
 
-    void Handle(TRefreshTokenImpl::TPtr& event, const TActorContext& ctx) {
+    template <ui32 TRpcId>
+    void Handle(TAutoPtr<TEventHandle<TRefreshTokenImpl<TRpcId>>>& event, const TActorContext& ctx) {
         const auto record = event->Get();
         ctx.Send(record->GetFromId(), new TGRpcRequestProxy::TEvRefreshTokenResponse {
             record->GetAuthState().State == NYdbGrpc::TAuthState::EAuthState::AS_OK,
@@ -144,6 +149,9 @@ private:
             requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
             return;
         }
+
+
+        StartTracing(*requestBaseCtx);
 
         if (IsAuthStateOK(*requestBaseCtx)) {
             Handle(event, ctx);
@@ -356,15 +364,6 @@ void TGRpcRequestProxyImpl::ReplayEvents(const TString& databaseName, const TAct
     }
 }
 
-void TGRpcRequestProxyImpl::HandleRefreshToken(TRefreshTokenImpl::TPtr& ev, const TActorContext& ctx) {
-    const auto record = ev->Get();
-    ctx.Send(record->GetFromId(), new TGRpcRequestProxy::TEvRefreshTokenResponse {
-        record->GetAuthState().State == NYdbGrpc::TAuthState::EAuthState::AS_OK,
-        record->GetInternalToken(),
-        record->GetAuthState().State == NYdbGrpc::TAuthState::EAuthState::AS_UNAVAILABLE,
-        NYql::TIssues()});
-}
-
 void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
     LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Subscribed for config changes");
 }
@@ -408,6 +407,15 @@ bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
     return state.State == NYdbGrpc::TAuthState::AS_OK ||
            state.State == NYdbGrpc::TAuthState::AS_FAIL && state.NeedAuth == false ||
            state.NeedAuth == false && !ctx.GetYdbToken();
+}
+
+void TGRpcRequestProxyImpl::StartTracing(IRequestProxyCtx& ctx) {
+    if (const auto otelHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER)) {
+        if (auto traceId = NWilson::TTraceId::FromTraceparentHeader(otelHeader.GetRef())) {
+            NWilson::TSpan grpcRequestProxySpan(TWilsonGrpc::RequestProxy, std::move(traceId), "GrpcRequestProxy");
+            ctx.StartTracing(std::move(grpcRequestProxySpan));
+        }
+    }
 }
 
 void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev, const TActorContext& ctx) {
@@ -540,7 +548,8 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
 
     // handle external events
     switch (ev->GetTypeRewrite()) {
-        HFunc(TRefreshTokenImpl, PreHandle);
+        HFunc(TRefreshTokenGenericRequest, PreHandle);
+        HFunc(TRefreshTokenStreamWriteSpecificRequest, PreHandle);
         HFunc(TEvLoginRequest, PreHandle);
         HFunc(TEvListEndpointsRequest, PreHandle);
         HFunc(TEvBiStreamPingRequest, PreHandle);

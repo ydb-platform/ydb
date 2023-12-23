@@ -6,6 +6,8 @@
 
 #include <util/stream/str.h>
 
+using namespace NKikimr;
+
 Y_UNIT_TEST_SUITE(FYamlCpp) {
     Y_UNIT_TEST(EnumEquals) {
         UNIT_ASSERT_EQUAL((int)NFyaml::ENodeType::Scalar, FYNT_SCALAR);

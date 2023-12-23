@@ -16,3 +16,72 @@ SELECT text 'this is a text string' = text 'this is a text strin' AS false;
 CREATE TABLE TEXT_TBL (f1 text);
 INSERT INTO TEXT_TBL VALUES ('doh!');
 INSERT INTO TEXT_TBL VALUES ('hi de ho neighbor');
+select reverse('abcde');
+ reverse 
+---------
+ edcba
+(1 row)
+
+select i, left('ahoj', i), right('ahoj', i) from generate_series(-5, 5) t(i) order by i;
+ i  | left | right 
+----+------+-------
+ -5 |      | 
+ -4 |      | 
+ -3 | a    | j
+ -2 | ah   | oj
+ -1 | aho  | hoj
+  0 |      | 
+  1 | a    | j
+  2 | ah   | oj
+  3 | aho  | hoj
+  4 | ahoj | ahoj
+  5 | ahoj | ahoj
+(11 rows)
+
+select quote_literal('');
+ quote_literal 
+---------------
+ ''
+(1 row)
+
+select quote_literal('abc''');
+ quote_literal 
+---------------
+ 'abc'''
+(1 row)
+
+select quote_literal(e'\\');
+ quote_literal 
+---------------
+ E'\\'
+(1 row)
+
+/*
+ * format
+ */
+select format(NULL);
+ format 
+--------
+ 
+(1 row)
+
+select format('Hello');
+ format 
+--------
+ Hello
+(1 row)
+
+select format('Hello %%');
+ format  
+---------
+ Hello %
+(1 row)
+
+select format('Hello %%%%');
+  format  
+----------
+ Hello %%
+(1 row)
+
+select format('Hello %s');
+ERROR:  too few arguments for format()

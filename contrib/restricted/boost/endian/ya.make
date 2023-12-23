@@ -6,15 +6,12 @@ LICENSE(BSL-1.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.83.0)
+VERSION(1.84.0)
 
-ORIGINAL_SOURCE(https://github.com/boostorg/endian/archive/boost-1.83.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/boostorg/endian/archive/boost-1.84.0.tar.gz)
 
 PEERDIR(
     contrib/restricted/boost/config
-    contrib/restricted/boost/core
-    contrib/restricted/boost/static_assert
-    contrib/restricted/boost/type_traits
 )
 
 ADDINCL(

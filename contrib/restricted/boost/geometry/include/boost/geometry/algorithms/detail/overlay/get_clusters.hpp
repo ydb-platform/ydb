@@ -35,28 +35,24 @@ namespace detail { namespace overlay
 template <typename Tag = no_rescale_policy_tag, bool Integral = false>
 struct sweep_equal_policy
 {
-private:
-    template <typename T>
-    static inline T threshold()
-    {
-        // Points within some epsilons are considered as equal.
-        return T(100);
-    }
+
 public:
-    // Returns true if point are considered equal (within an epsilon)
+    // Returns true if point are considered equal
     template <typename P>
     static inline bool equals(P const& p1, P const& p2)
     {
         using coor_t = typename coordinate_type<P>::type;
-        return approximately_equals(p1, p2, threshold<coor_t>());
+        static auto const tolerance
+            = common_approximately_equals_epsilon_multiplier<coor_t>::value();
+        return approximately_equals(p1, p2, tolerance);
     }
 
     template <typename T>
     static inline bool exceeds(T value)
     {
-        // This threshold is an arbitrary value
-        // as long as it is bigger than the used value above
-        T const limit = T(1) / threshold<T>();
+        static auto const tolerance
+            = common_approximately_equals_epsilon_multiplier<T>::value();
+        T const limit = T(1) / tolerance;
         return value > limit;
     }
 };

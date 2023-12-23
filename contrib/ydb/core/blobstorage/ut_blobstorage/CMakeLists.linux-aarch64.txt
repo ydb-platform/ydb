@@ -7,6 +7,7 @@
 
 
 add_subdirectory(lib)
+add_subdirectory(ut_balancing)
 add_subdirectory(ut_blob_depot)
 add_subdirectory(ut_blob_depot_fat)
 add_subdirectory(ut_donor)

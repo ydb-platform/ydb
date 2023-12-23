@@ -21,6 +21,7 @@ target_link_libraries(benchmark PUBLIC
 )
 target_sources(benchmark PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/ydb/core/tablet_flat/benchmark/b_charge.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/ydb/core/tablet_flat/benchmark/b_part_index.cpp
 )
 add_test(
   NAME

@@ -14,6 +14,7 @@ target_link_libraries(blobstorage-vdisk-skeleton PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-base
+  blobstorage-vdisk-balance
   vdisk-hulldb-base
   vdisk-hulldb-bulksst_add
   blobstorage-vdisk-synclog

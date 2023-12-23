@@ -7,7 +7,12 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
-#include <ydb/library/arrow_parquet/result_set_parquet_printer.h>
+
+namespace NYdb {
+
+    class TResultSetParquetPrinter;
+
+}
 
 namespace NYdb {
 namespace NConsoleClient {

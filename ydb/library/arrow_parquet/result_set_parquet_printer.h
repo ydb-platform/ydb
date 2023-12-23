@@ -1,12 +1,15 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <util/system/types.h>
+#include <string>
 
 namespace NYdb {
 
+    class TResultSet;
+
     class TResultSetParquetPrinter {
     public:
-        explicit TResultSetParquetPrinter(const TString& outputPath, ui64 rowGroupSize = 100000);
+        explicit TResultSetParquetPrinter(const std::string& outputPath, ui64 rowGroupSize = 100000);
         ~TResultSetParquetPrinter();
         void Reset();
         void Print(const TResultSet& resultSet);

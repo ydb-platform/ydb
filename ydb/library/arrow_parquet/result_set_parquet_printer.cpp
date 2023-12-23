@@ -1,6 +1,7 @@
 #include "result_set_parquet_printer.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/file.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/stdio.h>
@@ -13,7 +14,7 @@ namespace NYdb {
 
     class TResultSetParquetPrinter::TImpl {
     public:
-        explicit TImpl(const TString& outputPath, ui64 rowGroupSize);
+        explicit TImpl(const std::string& outputPath, ui64 rowGroupSize);
         void Reset();
         void Print(const TResultSet& resultSet);
 
@@ -23,7 +24,7 @@ namespace NYdb {
 
     private:
         std::unique_ptr<parquet::StreamWriter> Stream;
-        const TString OutputPath;
+        const std::string OutputPath;
         const ui64 RowGroupSize;
     };
 
@@ -44,14 +45,13 @@ namespace NYdb {
         builder.compression(parquet::Compression::ZSTD);
         builder.disable_dictionary();
         std::shared_ptr<arrow::io::OutputStream> outstream;
-        if (OutputPath) {
-            if (auto parent = TFsPath(OutputPath).Parent()) {
+        if (OutputPath.empty()) {
+            outstream = std::make_shared<arrow::io::StdoutStream>();
+        } else {
+            if (auto parent = TFsPath(OutputPath.c_str()).Parent()) {
                 parent.MkDirs();
             }
-            outstream = *arrow::io::FileOutputStream::Open(OutputPath.c_str());
-        }
-        else {
-            outstream = std::make_shared<arrow::io::StdoutStream>();
+            outstream = *arrow::io::FileOutputStream::Open(OutputPath);
         }
         Stream = std::make_unique<parquet::StreamWriter>(parquet::ParquetFileWriter::Open(outstream, schema, builder.build()));
         Stream->SetMaxRowGroupSize(RowGroupSize);
@@ -61,7 +61,7 @@ namespace NYdb {
         if (type.GetKind() != TTypeParser::ETypeKind::Primitive) {
             ythrow yexception() << "Cannot save not primitive type to parquet: " << type.GetKind();
         }
-        parquet::Repetition::type repType = nullable ? parquet::Repetition::OPTIONAL : parquet::Repetition::REQUIRED;
+        const auto repType = nullable ? parquet::Repetition::OPTIONAL : parquet::Repetition::REQUIRED;
         switch (type.GetPrimitive()) {
         case EPrimitiveType::Bool:
             return parquet::schema::PrimitiveNode::Make(name, repType, parquet::Type::BOOLEAN);
@@ -108,7 +108,7 @@ namespace NYdb {
         }
     }
 
-    TResultSetParquetPrinter::TImpl::TImpl(const TString& outputPath, ui64 rowGroupSize)
+    TResultSetParquetPrinter::TImpl::TImpl(const std::string& outputPath, ui64 rowGroupSize)
         : OutputPath(outputPath)
         , RowGroupSize(rowGroupSize)
     {}
@@ -206,7 +206,7 @@ namespace NYdb {
         }
     }
 
-    TResultSetParquetPrinter::TResultSetParquetPrinter(const TString& outputPath, ui64 rowGroupSize /*= 100000*/)
+    TResultSetParquetPrinter::TResultSetParquetPrinter(const std::string& outputPath, ui64 rowGroupSize /*= 100000*/)
         : Impl(std::make_unique<TImpl>(outputPath, rowGroupSize))
     {}
 

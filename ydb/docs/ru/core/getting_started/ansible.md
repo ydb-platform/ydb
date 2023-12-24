@@ -44,26 +44,26 @@
 {% list tabs %}
 
 - Windows
-    1. Проверка версии Python:
-        * Откройте командную строку (Cmd) или PowerShell и введите:
-            ```cmd
-            python --version
-            ```
-            Если Python не установлен или его версия ниже 3, установите Python версии 3+ с официального сайта [Python.org](https://www.python.org/downloads/).
-    2. Установка и обновление пакетного менеджера `pip`:
-        * Если Python установлен, то `pip` обычно устанавливается автоматически. Проверить, что он установлен можно следующей командой:
-            ```cmd
-            pip --version
-            ```
-        * Обновить pip до последней версии можно командой:
-            ```cmd
-            python -m pip install --upgrade pip
-            ``` 
-    3. Установка Ansible:
-        * Устанавливается Ansible командой:
-            ```cmd
-            pip install ansible
-            ```    
+1. Проверка версии Python:
+    * Откройте командную строку (Cmd) или PowerShell и введите:
+        ```cmd
+        python --version
+        ```
+        Если Python не установлен или его версия ниже 3, установите Python версии 3+ с официального сайта [Python.org](https://www.python.org/downloads/).
+2. Установка и обновление пакетного менеджера `pip`:
+    * Если Python установлен, то `pip` обычно устанавливается автоматически. Проверить, что он установлен можно следующей командой:
+        ```cmd
+        pip --version
+        ```
+    * Обновить pip до последней версии можно командой:
+        ```cmd
+        python -m pip install --upgrade pip
+        ``` 
+3. Установка Ansible:
+    * Устанавливается Ansible командой:
+        ```cmd
+        pip install ansible
+        ```    
 
 - Linux
     1. В дистрибутивах Ubuntu 20-22 идёт предустановленный Python версий 3.6-3.9 и pip3. Их обновлять не надо, можно сразу переходить к шагу установки Ansible. Если у вас Ubuntu 18 или иной дистрибутив, то проверка версию Python можно так:
@@ -126,17 +126,17 @@
 Далее следует секция `tasks`, где и происходит основная работа. Мы разбили `tasks` на логические группы задач, чтобы было легче ориентироваться:
 1. Сбор информации о ВМ:
     * Формирование списка доступных для использования YDB блочных устройств, исключая стартовый диск. Полученный список дисков сохраняется в переменной `disk_info`. Далее при копировании конфигурационного файла для статической ноды Ansible сформирует секцию `drive` из данных переменной `disk_info`.
-    ```yaml
-    - name: List disk IDs matching 'virtio-ydb-disk-'
-      ansible.builtin.shell: ls -l /dev/disk/by-id/ | grep 'virtio-ydb-disk-' | awk '{print $9}'
-      register: disk_info
-    ```
+        ```yaml
+        - name: List disk IDs matching 'virtio-ydb-disk-'
+        ansible.builtin.shell: ls -l /dev/disk/by-id/ | grep 'virtio-ydb-disk-' | awk '{print $9}'
+        register: disk_info
+        ```
     * Подсчитывание количества доступных для использования YDB дисков. Эта информация используется далее при создании базы данных.
-    ```yaml
-    - name: Count disks matching 'virtio-ydb-disk-'
-      ansible.builtin.shell: ls -l /dev/disk/by-id/ | grep 'virtio-ydb-disk-' | awk '{print $9}' | wc -l
-      register: disk_value  
-    ```
+        ```yaml
+        - name: Count disks matching 'virtio-ydb-disk-'
+        ansible.builtin.shell: ls -l /dev/disk/by-id/ | grep 'virtio-ydb-disk-' | awk '{print $9}' | wc -l
+        register: disk_value  
+        ```
     * Подсчитывание количества ядер процессора для их дальнейшего распределения между статической и динамической нодой.
     ```yaml
     - name: Get number of CPU cores

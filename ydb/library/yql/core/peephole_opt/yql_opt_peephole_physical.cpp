@@ -2524,9 +2524,36 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
                 .Seal()
                 .Build();
         }
+
+        if (auto keys = GetPathsToKeys(node->Child(1U)->Tail(), node->Child(1U)->Head().Head()); !keys.empty()) {
+            if (const auto sortKeySelector = node->Child(2U); sortKeySelector->IsLambda()) {
+                auto sortKeys = GetPathsToKeys(sortKeySelector->Tail(), sortKeySelector->Head().Head());
+                std::move(sortKeys.begin(), sortKeys.end(), std::back_inserter(keys));
+                std::sort(keys.begin(), keys.end());
+            }
+
+            TExprNode::TListType columns;
+            columns.reserve(keys.size());
+            for (const auto& path : keys) {
+                if (1U == path.size())
+                    columns.emplace_back(ctx.NewAtom(node->Pos(), path.front()));
+                else {
+                    TExprNode::TListType atoms(path.size());
+                    std::transform(path.cbegin(), path.cend(), atoms.begin(), [&](const std::string_view& name) { return ctx.NewAtom(node->Pos(), name); });
+                    columns.emplace_back(ctx.NewList(node->Pos(), std::move(atoms)));
+                }
+            }
+
+            sort = ctx.Builder(node->Pos())
+                .Callable("AssumeChopped")
+                    .Add(0, std::move(sort))
+                    .List(1).Add(std::move(columns)).Seal()
+                .Seal()
+                .Build();
+        }
     }
 
-    return KeepConstraints(ctx.ReplaceNode(node->Tail().TailPtr(), node->Tail().Head().Head(), std::move(sort)), *node, ctx);
+    return ctx.ReplaceNode(node->Tail().TailPtr(), node->Tail().Head().Head(), std::move(sort));
 }
 
 TExprNode::TPtr ExpandIsKeySwitch(const TExprNode::TPtr& node, TExprContext& ctx) {

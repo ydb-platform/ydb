@@ -66,35 +66,35 @@
             ```    
 
 - Linux
-    1. В дистрибутивах Ubuntu 20-22 идёт предустановленный Python версий 3.6-3.9 и pip3. Их обновлять не надо, можно сразу переходить к шагу установки Ansible. Если у вас Ubuntu 18 или иной дистрибутив, то проверка версию Python можно так:
-        * Откройте терминал и введите:
+    * В дистрибутивах Ubuntu 20-22 идёт предустановленный Python версий 3.6-3.9 и pip3. Их обновлять не надо, можно сразу переходить к шагу установки Ansible. Если у вас Ubuntu 18 или иной дистрибутив, то проверка версию Python можно так:
+        + Откройте терминал и введите:
             ```bash
             python3 --version
             ```
-        * Если Python не установлен или версии ниже 3.6 – установите более актуальную версию:
+        + Если Python не установлен или версии ниже 3.6 – установите более актуальную версию:
             ```bash
             sudo apt-get install software-properties-common
             sudo add-apt-repository ppa:deadsnakes/ppa
             udo apt-get update
             sudo apt-get install python3
             ```
-    2. Проверка версии pip3:
-        * Проверить версию pip3 можно командой:
+    * Проверка версии pip3:
+        + Проверить версию pip3 можно командой:
             ```bash
             pip3 --version
             ```
-        * Обновить pip3 до последней актуальной версии можно командой:
+        + Обновить pip3 до последней актуальной версии можно командой:
             ```bash
             pip3 install --upgrade pip
             ```   
-    3. Установка Ansible:
-        * Ansible устанавливается командой:
+    * Установка Ansible:
+        + Ansible устанавливается командой:
             ```bash
             pip3 install ansible
             ```     
 
 - macOS
-    1. Откройте Lauchpad и введите в поисковую строку terminal.   
+    * Откройте Lauchpad и введите в поисковую строку terminal.   
 
 {% endlist %}
 
@@ -203,3 +203,43 @@
                 group=bin
                 owner=root
         ```
+    * Скачивание архива YDB и назначение пользователя, группы и прав
+        ```yaml
+        - name: Download the YDB sources archive
+            get_url: url={{ ydb_download_url }} dest={{ ydb_dir }}/release/{{ ydb_version }}/{{ ydb_archive }} 
+        - name: Set owner and group for the YDB sources archive
+            file: 
+                path="{{ ydb_dir }}/release/{{ ydb_version }}/{{ ydb_archive }}"
+                group=bin
+                owner=root    
+        ```
+    * Распаковка архива YDB и присваивание пользователя, группы и прав
+        ```yaml
+        - name: Install the YDB server binary package
+            ansible.builtin.unarchive:
+            remote_src: yes
+            creates: "{{ ydb_dir }}/release/{{ ydb_version }}/bin/ydbd"
+            dest: "{{ ydb_dir }}/release/{{ ydb_version }}"
+            group: bin
+            owner: root
+            src: "{{ ydb_dir }}/release/{{ ydb_version }}/{{ ydb_archive }}"
+            extra_opts: "{{ ydb_unpack_options }}"
+
+        - name: Create the YDB CLI default binary directory
+            file: state=directory path={{ ydb_dir }}/home/ydb/bin recurse=true group=ydb owner=ydb mode=700      
+        ```  
+3. Генерирование конфигурационных файлов для нод:
+    * Генерирование конфигурационного файла для статической ноды. 
+        ```yaml
+        - name: Generate YDB static configuration file from template
+          ansible.builtin.template:
+            src: ./files/static_config.j2 
+            dest: "{{ ydb_dir }}/cfg/static_config.yaml"
+        vars:
+            disk_info: "{{ disk_info }}"
+        ```      
+        В задачи задаются следующие параметры: 
+            + `src` – ссылка на шаблон конфигурационного файла;
+            + `dest` – путь расположения сгенерированного конфигурационного файла;   
+            + `vars` – переменная, из которой будет браться информация для генерации файла. 
+       

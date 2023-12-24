@@ -44,26 +44,26 @@
 {% list tabs %}
 
 - Windows
-1. Проверка версии Python:
-    * Откройте командную строку (Cmd) или PowerShell и введите:
-        ```cmd
-        python --version
-        ```
-        Если Python не установлен или его версия ниже 3, установите Python версии 3+ с официального сайта [Python.org](https://www.python.org/downloads/).
-2. Установка и обновление пакетного менеджера `pip`:
-    * Если Python установлен, то `pip` обычно устанавливается автоматически. Проверить, что он установлен можно следующей командой:
-        ```cmd
-        pip --version
-        ```
-    * Обновить pip до последней версии можно командой:
-        ```cmd
-        python -m pip install --upgrade pip
-        ``` 
-3. Установка Ansible:
-    * Устанавливается Ansible командой:
-        ```cmd
-        pip install ansible
-        ```    
+    * Проверка версии Python:
+        + Откройте командную строку (Cmd) или PowerShell и введите:
+            ```cmd
+            python --version
+            ```
+            Если Python не установлен или его версия ниже 3, установите Python версии 3+ с официального сайта [Python.org](https://www.python.org/downloads/).
+    * Установка и обновление пакетного менеджера `pip`:
+        + Если Python установлен, то `pip` обычно устанавливается автоматически. Проверить, что он установлен можно следующей командой:
+            ```cmd
+            pip --version
+            ```
+        + Обновить pip до последней версии можно командой:
+            ```cmd
+            python -m pip install --upgrade pip
+            ``` 
+    * Установка Ansible:
+        + Устанавливается Ansible командой:
+            ```cmd
+            pip install ansible
+            ```    
 
 - Linux
     1. В дистрибутивах Ubuntu 20-22 идёт предустановленный Python версий 3.6-3.9 и pip3. Их обновлять не надо, можно сразу переходить к шагу установки Ansible. Если у вас Ubuntu 18 или иной дистрибутив, то проверка версию Python можно так:
@@ -138,68 +138,68 @@
         register: disk_value  
         ```
     * Подсчитывание количества ядер процессора для их дальнейшего распределения между статической и динамической нодой.
-    ```yaml
-    - name: Get number of CPU cores
-      ansible.builtin.shell: lscpu | grep '^CPU(s):' | awk '{print $2}'
-      register: cpu_cores_info
-    ```
+        ```yaml
+        - name: Get number of CPU cores
+        ansible.builtin.shell: lscpu | grep '^CPU(s):' | awk '{print $2}'
+        register: cpu_cores_info
+        ```
     * Запрос значение переменной окружения `host`. Оно используется в блоке `host` конфигурационных файлов нод.
-    ```yaml
-    - name: Get the hostname
-      ansible.builtin.command: hostname
-      register: hostname
-    ```  
+        ```yaml
+        - name: Get the hostname
+        ansible.builtin.command: hostname
+        register: hostname
+        ```  
     
 
 2.  Создание структуры директорий, скачивание и установка исполняемого файла YDB:
     * Создание группы `ydb`
-    ```yaml
-    - name: Create the ydb group
-      group: name=ydb system=true  
-    ```
+        ```yaml
+        - name: Create the ydb group
+        group: name=ydb system=true  
+        ```
     * Создание пользователя `ydb`, включенного в группы `ydb` и `disks`
-    ```yaml
-    - name: Create the ydb user with disk group access
-      user: 
-      name: ydb
-      group: ydb 
-      groups: disk 
-      system: true 
-      create_home: true 
-      home: "{{ ydb_dir }}/home"
-      comment: "YDB Service Account"
-    ```
+        ```yaml
+        - name: Create the ydb user with disk group access
+        user: 
+        name: ydb
+        group: ydb 
+        groups: disk 
+        system: true 
+        create_home: true 
+        home: "{{ ydb_dir }}/home"
+        comment: "YDB Service Account"
+        ```
     * Создание директории для временных файлов пользователя `ydb`
-    ```yaml
-    - name: Create the Ansible remote_tmp for the ydb user
-      file:
-        path: "{{ ydb_dir }}/home/.ansible/tmp"
-        state: directory
-        recurse: true
-        group: ydb
-        owner: ydb
-    ```
+        ```yaml
+        - name: Create the Ansible remote_tmp for the ydb user
+        file:
+            path: "{{ ydb_dir }}/home/.ansible/tmp"
+            state: directory
+            recurse: true
+            group: ydb
+            owner: ydb
+        ```
     * Создание директорий и присваивание им владельцев и прав доступа
-    ```yaml
-    - name: Create the YDB release directory
-      file: state=directory path={{ ydb_dir }}/release group=bin owner=root mode=755
+        ```yaml
+        - name: Create the YDB release directory
+        file: state=directory path={{ ydb_dir }}/release group=bin owner=root mode=755
 
-    - name: Create the YDB configuration directory
-      file: state=directory path={{ ydb_dir }}/cfg group=ydb owner=ydb mode=755
+        - name: Create the YDB configuration directory
+        file: state=directory path={{ ydb_dir }}/cfg group=ydb owner=ydb mode=755
 
-    - name: Create the YDB audit directory
-      file: state=directory path={{ ydb_dir }}/audit group=ydb owner=ydb mode=700
+        - name: Create the YDB audit directory
+        file: state=directory path={{ ydb_dir }}/audit group=ydb owner=ydb mode=700
 
-    - name: Create the YDB certs directory
-      file: state=directory path={{ ydb_dir }}/certs group=ydb owner=ydb mode=700
+        - name: Create the YDB certs directory
+        file: state=directory path={{ ydb_dir }}/certs group=ydb owner=ydb mode=700
 
-    - name: Create the YDB configuration backup directory
-      file: state=directory path={{ ydb_dir }}/reserve group=ydb owner=ydb mode=700
+        - name: Create the YDB configuration backup directory
+        file: state=directory path={{ ydb_dir }}/reserve group=ydb owner=ydb mode=700
 
-    - name: Create the YDB server binary directory for the specified version
-      file: state=directory
-            path="{{ ydb_dir }}/release/{{ ydb_version }}"
-            recurse=true
-            group=bin
-            owner=root
-    ```
+        - name: Create the YDB server binary directory for the specified version
+        file: state=directory
+                path="{{ ydb_dir }}/release/{{ ydb_version }}"
+                recurse=true
+                group=bin
+                owner=root
+        ```

@@ -1,5 +1,9 @@
 LIBRARY()
 
+OWNER(
+    g:kikimr
+)
+
 SRCS(
     read.cpp
     storage.cpp

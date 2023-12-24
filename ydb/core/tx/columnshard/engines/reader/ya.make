@@ -1,5 +1,9 @@
 LIBRARY()
 
+OWNER(
+    g:kikimr
+)
+
 SRCS(
     conveyor_task.cpp
     description.cpp

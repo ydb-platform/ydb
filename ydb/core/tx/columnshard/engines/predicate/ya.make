@@ -1,5 +1,9 @@
 LIBRARY()
 
+OWNER(
+    g:kikimr
+)
+
 SRCS(
     container.cpp
     range.cpp

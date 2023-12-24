@@ -1,5 +1,9 @@
 LIBRARY()
 
+OWNER(
+    g:kikimr
+)
+
 SRCS(
     scanner.cpp
     source.cpp

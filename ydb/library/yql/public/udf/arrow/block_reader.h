@@ -97,7 +97,7 @@ public:
     }
 };
 
-template<typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot OriginalT = NKikimr::NUdf::EDataSlot::String>
+template<typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot TOriginal = NKikimr::NUdf::EDataSlot::String>
 class TStringBlockReader final : public IBlockReader {
 public:
     using TOffset = typename TStringType::offset_type;
@@ -364,8 +364,8 @@ struct TReaderTraits {
     using TTuple = TTupleBlockReader<Nullable>;
     template <typename T, bool Nullable>
     using TFixedSize = TFixedSizeBlockReader<T, Nullable>;
-    template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot OriginalT>
-    using TStrings = TStringBlockReader<TStringType, Nullable, OriginalT>;
+    template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot TOriginal>
+    using TStrings = TStringBlockReader<TStringType, Nullable, TOriginal>;
     using TExtOptional = TExternalOptionalBlockReader;
 
     static std::unique_ptr<TResult> MakePg(const TPgTypeDescription& desc, const IPgBuilder* pgBuilder) {
@@ -396,12 +396,12 @@ std::unique_ptr<typename TTraits::TResult> MakeFixedSizeBlockReaderImpl(bool isO
     }
 }
 
-template <typename TTraits, typename T, NKikimr::NUdf::EDataSlot OriginalT>
+template <typename TTraits, typename T, NKikimr::NUdf::EDataSlot TOriginal>
 std::unique_ptr<typename TTraits::TResult> MakeStringBlockReaderImpl(bool isOptional) {
     if (isOptional) {
-        return std::make_unique<typename TTraits::template TStrings<T, true, OriginalT>>();
+        return std::make_unique<typename TTraits::template TStrings<T, true, TOriginal>>();
     } else {
-        return std::make_unique<typename TTraits::template TStrings<T, false, OriginalT>>();
+        return std::make_unique<typename TTraits::template TStrings<T, false, TOriginal>>();
     }
 }
 

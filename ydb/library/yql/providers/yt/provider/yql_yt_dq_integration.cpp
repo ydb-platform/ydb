@@ -40,9 +40,8 @@ using namespace NNodes;
 
 class TYtDqIntegration: public TDqIntegrationBase {
 public:
-    TYtDqIntegration(TYtState* state, const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry)
+    TYtDqIntegration(TYtState* state)
         : State_(state)
-        , ArrowResolver_(MakeSimpleArrowResolver(functionRegistry))
     {
     }
 
@@ -377,7 +376,7 @@ public:
             subTypeAnn.emplace_back(type->GetItemType());
         }
 
-        if (ArrowResolver_->AreTypesSupported(ctx.GetPosition(node.Pos()), subTypeAnn, ctx) != IArrowResolver::EStatus::OK) {
+        if (State_->Types->ArrowResolver->AreTypesSupported(ctx.GetPosition(node.Pos()), subTypeAnn, ctx) != IArrowResolver::EStatus::OK) {
             return false;
         }
 
@@ -675,12 +674,11 @@ public:
 
 private:
     TYtState* State_;
-    IArrowResolver::TPtr ArrowResolver_;
 };
 
-THolder<IDqIntegration> CreateYtDqIntegration(TYtState* state, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry) {
+THolder<IDqIntegration> CreateYtDqIntegration(TYtState* state) {
     Y_ABORT_UNLESS(state);
-    return MakeHolder<TYtDqIntegration>(state, *functionRegistry);
+    return MakeHolder<TYtDqIntegration>(state);
 }
 
 }

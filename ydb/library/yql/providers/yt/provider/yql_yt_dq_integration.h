@@ -9,6 +9,6 @@
 
 namespace NYql {
 
-THolder<IDqIntegration> CreateYtDqIntegration(TYtState* state, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry);
+THolder<IDqIntegration> CreateYtDqIntegration(TYtState* state);
 
 }

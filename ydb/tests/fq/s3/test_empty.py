@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import boto3
-import json
-
 import pytest
 
 import ydb.public.api.protos.draft.fq_pb2 as fq

@@ -151,7 +151,7 @@ public:
 
     TRpcOperationRequestActor(IRequestOpCtx* request)
         : TBase(request)
-        , Span_(TWilsonGrpc::RequestProxy, request->GetWilsonTraceId(),
+        , Span_(TWilsonGrpc::RequestActor, request->GetWilsonTraceId(),
                 "RequestProxy.RpcOperationRequestActor", NWilson::EFlags::AUTO_END)
     {}
 

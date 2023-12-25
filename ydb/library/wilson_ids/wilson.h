@@ -47,6 +47,7 @@ namespace NKikimr {
     struct TWilsonGrpc {
         enum {
             RequestProxy = 9,
+            RequestActor = 9,
         };
     };
 

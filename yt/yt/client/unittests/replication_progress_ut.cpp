@@ -406,5 +406,136 @@ INSTANTIATE_TEST_SUITE_P(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TReplicationProgressSerialization
+    : public ::testing::Test
+    , public ::testing::WithParamInterface<std::tuple<
+        const char*,
+        const char*>>
+{ };
+
+TEST_P(TReplicationProgressSerialization, Simple)
+{
+    const auto& params = GetParam();
+    auto progress = ConvertTo<TReplicationProgress>(TYsonStringBuf(std::get<0>(params)));
+    auto expected = TString(std::get<1>(params));
+
+    auto result = ToString(progress);
+
+    EXPECT_EQ(result, expected)
+        << "progresses: " << std::get<0>(params) << std::endl
+        << "expected: " << expected << std::endl
+        << "actual: " << result << std::endl;
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    TReplicationProgressSerialization,
+    TReplicationProgressSerialization,
+    ::testing::Values(
+        std::make_tuple(
+            "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}",
+            "{Segments: [<[], 1>], UpperKey: [0#<Max>]}"),
+        std::make_tuple(
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2}];upper_key=[<type=max>#]}",
+            "{Segments: [<[], 1>, <[0#1], 2>], UpperKey: [0#<Max>]}"),
+        std::make_tuple(
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2};{lower_key=[2];timestamp=3}];upper_key=[<type=max>#]}",
+            "{Segments: [<[], 1>, <[0#1], 2>, <[0#2], 3>], UpperKey: [0#<Max>]}"),
+        std::make_tuple(
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2};{lower_key=[2];timestamp=3};{lower_key=[3];timestamp=4};{lower_key=[4];timestamp=5};"
+            "{lower_key=[5];timestamp=6};{lower_key=[6];timestamp=7};{lower_key=[7];timestamp=8};{lower_key=[8];timestamp=9}];upper_key=[<type=max>#]}",
+            "{Segments: [<[], 1>, <[0#1], 2>, <[0#2], 3>, <[0#3], 4>, <[0#4], 5>, <[0#5], 6>, <[0#6], 7>, <[0#7], 8>, <[0#8], 9>], UpperKey: [0#<Max>]}")
+));
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TReplicationProgressProjectedSerialization
+    : public ::testing::Test
+    , public ::testing::WithParamInterface<std::tuple<
+        const char*,
+        const char*,
+        const char*,
+        const char*>>
+{ };
+
+TEST_P(TReplicationProgressProjectedSerialization, Simple)
+{
+    const auto& params = GetParam();
+    auto progress = ConvertTo<TReplicationProgress>(TYsonStringBuf(std::get<0>(params)));
+    auto from = ConvertTo<TUnversionedOwningRow>(TYsonStringBuf(std::get<1>(params)));
+    auto to = ConvertTo<TUnversionedOwningRow>(TYsonStringBuf(std::get<2>(params)));
+    auto expected = TString(std::get<3>(params));
+
+    TStringBuilder builder;
+    FormatValue(&builder, progress, {}, {{from,  to}});
+    auto result = builder.Flush();
+
+    EXPECT_EQ(result, expected)
+        << "progresses: " << std::get<0>(params) << std::endl
+        << "from: " << std::get<1>(params) << std::endl
+        << "to: " << std::get<2>(params) << std::endl
+        << "expected: " << expected << std::endl
+        << "actual: " << result << std::endl;
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    TReplicationProgressProjectedSerialization,
+    TReplicationProgressProjectedSerialization,
+    ::testing::Values(
+        std::make_tuple(
+            "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}",
+            "[0]",
+            "[1]",
+            "{Segments: [<[], 1>], UpperKey: [0#<Max>]}"),
+        std::make_tuple(
+            "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}",
+            "[0]",
+            "[<type=max>#]",
+            "{Segments: [<[], 1>], UpperKey: [0#<Max>]}"),
+        std::make_tuple(
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2}];upper_key=[<type=max>#]}",
+            "[0]",
+            "[1]",
+            "{Segments: [<[], 1>, <[0#1], 2>], UpperKey: [0#<Max>]}"),
+        std::make_tuple(
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2}];upper_key=[<type=max>#]}",
+            "[1]",
+            "[2]",
+            "{Segments: [<[], 1>, <[0#1], 2>], UpperKey: [0#<Max>]}"),
+        std::make_tuple(
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2}];upper_key=[<type=max>#]}",
+            "[1]",
+            "[<type=max>#]",
+            "{Segments: [<[], 1>, <[0#1], 2>], UpperKey: [0#<Max>]}"),
+        std::make_tuple(
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2};{lower_key=[2];timestamp=3}];upper_key=[<type=max>#]}",
+            "[]",
+            "[1]",
+            "{Segments: [<[], 1>, <[0#1], 2>, ...], UpperKey: [0#<Max>]}"),
+        std::make_tuple(
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2};{lower_key=[2];timestamp=3}];upper_key=[<type=max>#]}",
+            "[1]",
+            "[2]",
+            "{Segments: [<[], 1>, <[0#1], 2>, <[0#2], 3>], UpperKey: [0#<Max>]}"),
+        std::make_tuple(
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2};{lower_key=[2];timestamp=3}];upper_key=[<type=max>#]}",
+            "[2]",
+            "[3]",
+            "{Segments: [<[], 1>, ..., <[0#2], 3>], UpperKey: [0#<Max>]}"),
+        std::make_tuple(
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2};{lower_key=[2];timestamp=3}];upper_key=[<type=max>#]}",
+            "[2]",
+            "[<type=max>#]",
+            "{Segments: [<[], 1>, ..., <[0#2], 3>], UpperKey: [0#<Max>]}"),
+        std::make_tuple(
+            "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2};{lower_key=[2];timestamp=3};{lower_key=[3];timestamp=4};{lower_key=[4];timestamp=5};"
+            "{lower_key=[5];timestamp=6};{lower_key=[6];timestamp=7};{lower_key=[7];timestamp=8};{lower_key=[8];timestamp=9}];upper_key=[<type=max>#]}",
+            "[5]",
+            "[6]",
+            "{Segments: [<[], 1>, ..., <[0#5], 6>, <[0#6], 7>, ...], UpperKey: [0#<Max>]}")
+));
+
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT::NChaosClient

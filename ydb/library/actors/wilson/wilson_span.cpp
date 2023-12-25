@@ -52,7 +52,7 @@ namespace NWilson {
     }
 
     void TSpan::Send() {
-        if (Data->ActorSystem != nullptr) {
+        if (Data->ActorSystem) {
             Data->ActorSystem->Send(new IEventHandle(MakeWilsonUploaderId(), {}, new TEvWilson(&Data->Span)));
         }
         Data->Sent = true;

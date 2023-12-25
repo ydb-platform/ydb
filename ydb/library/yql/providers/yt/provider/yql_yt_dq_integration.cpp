@@ -360,20 +360,28 @@ public:
         return false;
     }
 
-    bool CanBlockRead(const NNodes::TExprBase& node, TExprContext&, TTypeAnnotationContext&) override {
+    bool CanBlockRead(const NNodes::TExprBase& node, TExprContext& ctx, TTypeAnnotationContext&) override {
         auto wrap = node.Cast<TDqReadWideWrap>();
         auto maybeRead = wrap.Input().Maybe<TYtReadTable>();
         if (!maybeRead) {
             return false;
         }
 
-
         if (!State_->Configuration->UseRPCReaderInDQ.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_USE_RPC_READER_IN_DQ)) {
             return false;
         }
 
         const auto structType = GetSeqItemType(maybeRead.Raw()->GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back())->Cast<TStructExprType>();
-        if (!CanBlockReadTypes(structType)) {
+        TVector<const TTypeAnnotationNode*> subTypeAnn(Reserve(structType->GetItems().size()));
+        for (const auto& type: structType->GetItems()) {
+            subTypeAnn.emplace_back(type->GetItemType());
+        }
+
+        if (!State_->Types->ArrowResolver) {
+            return false;
+        }
+
+        if (State_->Types->ArrowResolver->AreTypesSupported(ctx.GetPosition(node.Pos()), subTypeAnn, ctx) != IArrowResolver::EStatus::OK) {
             return false;
         }
 

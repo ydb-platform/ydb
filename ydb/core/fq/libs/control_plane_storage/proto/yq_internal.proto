@@ -21,6 +21,11 @@ message Consumer {
     string name = 1;
 }
 
+message StatisticsNamedValue {
+    string name = 1;
+    int64 value = 2;
+}
+
 message QueryInternal {
     string token = 1;
     repeated NYql.NDqProto.TDqTask task = 2; // deprecated and should not be used, will be removed in future
@@ -50,6 +55,7 @@ message QueryInternal {
     NFq.NConfig.TYdbStorageConfig compute_connection = 26;
     google.protobuf.Duration result_ttl = 27;
     NYql.NDqProto.StatusIds.StatusCode pending_status_code = 28;
+    repeated StatisticsNamedValue statistics = 29;
 }
 
 message JobInternal {

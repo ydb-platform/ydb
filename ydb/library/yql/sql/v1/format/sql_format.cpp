@@ -1390,6 +1390,18 @@ private:
         VisitAllFields(TRule_drop_external_data_source_stmt::GetDescriptor(), msg);
     }
 
+    void VisitCreateView(const TRule_create_view_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_create_view_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropView(const TRule_drop_view_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_drop_view_stmt::GetDescriptor(), msg);
+    }
+
     void VisitCreateAsyncReplication(const TRule_create_replication_stmt& msg) {
         PosFromToken(msg.GetToken1());
         NewLine();
@@ -2581,7 +2593,9 @@ TStaticData::TStaticData()
         {TRule_drop_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTopic)},
         {TRule_grant_permissions_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGrantPermissions)},
         {TRule_revoke_permissions_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRevokePermissions)},
-        {TRule_alter_table_store_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTableStore)}
+        {TRule_alter_table_store_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTableStore)},
+        {TRule_create_view_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateView)},
+        {TRule_drop_view_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropView)}
         })
     , ObfuscatingVisitDispatch({
         {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},

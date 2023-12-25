@@ -113,7 +113,7 @@
 #include "mkql_withcontext.h"
 #include "mkql_zip.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 
 #include <string_view>
 #include <unordered_map>

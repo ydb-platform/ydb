@@ -57,6 +57,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiDropObject::CallableName());
         DataSinkNames.insert(TKiCreateGroup::CallableName());
         DataSinkNames.insert(TKiAlterGroup::CallableName());
+        DataSinkNames.insert(TKiRenameGroup::CallableName());
         DataSinkNames.insert(TKiDropGroup::CallableName());
         DataSinkNames.insert(TKiDataQueryBlock::CallableName());
         DataSinkNames.insert(TKiDataQueryBlocks::CallableName());
@@ -105,6 +106,7 @@ struct TKikimrData {
             TYdbOperation::CreateGroup |
             TYdbOperation::AlterGroup |
             TYdbOperation::DropGroup |
+            TYdbOperation::RenameGroup |
             TYdbOperation::ModifyPermission;
 
         SystemColumns = {

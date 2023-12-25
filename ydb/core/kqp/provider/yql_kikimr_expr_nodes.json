@@ -279,7 +279,8 @@
             "Children": [
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
-                {"Index": 2, "Name": "GroupName", "Type": "TCoAtom"}
+                {"Index": 2, "Name": "GroupName", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Roles", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -292,6 +293,17 @@
                 {"Index": 2, "Name": "GroupName", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Action", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "Roles", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TKiRenameGroup",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiRenameGroup!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "GroupName", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "NewName", "Type": "TCoAtom"}
             ]
         },
         {
@@ -375,7 +387,7 @@
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Action", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Permissions", "Type": "TCoAtomList"},
-                {"Index": 4, "Name": "Pathes", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "Paths", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "Roles", "Type": "TCoAtomList"}
             ]
         },

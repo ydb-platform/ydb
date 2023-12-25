@@ -1306,7 +1306,7 @@ void TPipeline::ForgetTx(ui64 txId) {
 TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::TPtr &ev,
                                            TInstant receivedAt, ui64 tieBreakerIndex,
                                            NTabletFlatExecutor::TTransactionContext &txc,
-                                           const TActorContext &ctx)
+                                           const TActorContext &ctx, NWilson::TTraceId traceId)
 {
     auto &rec = ev->Get()->Record;
     Y_ABORT_UNLESS(!(rec.GetFlags() & TTxFlags::PrivateFlagsMask));
@@ -1323,6 +1323,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
     tx->SetTxBody(rec.GetTxBody());
     tx->SetCookie(ev->Cookie);
     tx->Orbit = std::move(ev->Get()->Orbit);
+    tx->OperationSpan = NWilson::TSpan(TWilsonTablet::Tablet, std::move(traceId), "ActiveTransaction", NWilson::EFlags::AUTO_END);
 
     auto malformed = [&](const TStringBuf txType, const TString& txBody) {
         const TString error = TStringBuilder() << "Malformed " << txType << " tx"
@@ -1556,11 +1557,15 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
     return tx;
 }
 
-TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr& ev, TInstant receivedAt, ui64 tieBreakerIndex, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx)
+TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr& ev,
+                                           TInstant receivedAt, ui64 tieBreakerIndex,
+                                           NTabletFlatExecutor::TTransactionContext& txc,
+                                           const TActorContext& ctx, NWilson::TTraceId traceId)
 {
     const auto& rec = ev->Get()->Record;
     TBasicOpInfo info(rec.GetTxId(), EOperationKind::DataTx, EvWrite::Convertor::GetProposeFlags(rec.GetTxMode()), 0, receivedAt, tieBreakerIndex);
     auto op = MakeIntrusive<TWriteOperation>(info, ev, Self, txc, ctx);
+    op->OperationSpan = NWilson::TSpan(TWilsonTablet::Tablet, std::move(traceId), "WriteOperation", NWilson::EFlags::AUTO_END);
 
     auto badRequest = [&](const TString& error) {
         op->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, error);

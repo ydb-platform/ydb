@@ -392,7 +392,7 @@ public:
 
     template<class Cmd>
     bool CheckCmds(THolder<TIntermediate>& intermediate, const TDeque<Cmd>& cmds, const TActorContext& ctx,
-        TKeySet& keys, const TTabletStorageInfo* info);        
+        TKeySet& keys, const TTabletStorageInfo* info);
     bool CheckCmds(THolder<TIntermediate>& intermediate, const TActorContext& /*ctx*/, TKeySet& keys,
             const TTabletStorageInfo* /*info*/);
 

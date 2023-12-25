@@ -145,7 +145,7 @@ cdef inline int _write_utf8(Writer* writer, Py_UCS4 symbol):
         if _write_pct(writer, <uint8_t>(0xe0 | (utf >> 12)), True) < 0:
             return -1
         if _write_pct(writer, <uint8_t>(0x80 | ((utf >> 6) & 0x3f)),
-                       True) < 0:
+                      True) < 0:
             return -1
         return _write_pct(writer, <uint8_t>(0x80 | (utf & 0x3f)), True)
     elif utf > 0x10FFFF:
@@ -155,10 +155,10 @@ cdef inline int _write_utf8(Writer* writer, Py_UCS4 symbol):
         if _write_pct(writer,  <uint8_t>(0xf0 | (utf >> 18)), True) < 0:
             return -1
         if _write_pct(writer,  <uint8_t>(0x80 | ((utf >> 12) & 0x3f)),
-                       True) < 0:
-           return -1
+                      True) < 0:
+            return -1
         if _write_pct(writer,  <uint8_t>(0x80 | ((utf >> 6) & 0x3f)),
-                       True) < 0:
+                      True) < 0:
             return -1
         return _write_pct(writer, <uint8_t>(0x80 | (utf & 0x3f)), True)
 

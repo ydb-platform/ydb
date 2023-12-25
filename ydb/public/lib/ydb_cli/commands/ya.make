@@ -12,10 +12,11 @@ SRCS(
     topic_write_scenario.cpp
     topic_readwrite_scenario.cpp
     tpch.cpp
-    tpcc_workload.cpp
     query_workload.cpp
+    ydb_admin.cpp
     ydb_sdk_core_access.cpp
     ydb_command.cpp
+    ydb_dynamic_config.cpp
     ydb_profile.cpp
     ydb_root_common.cpp
     ydb_service_auth.cpp
@@ -41,6 +42,7 @@ PEERDIR(
     library/cpp/threading/local_executor
     ydb/library/backup
     ydb/library/workload
+    ydb/library/yaml_config/public
     ydb/public/lib/operation_id
     ydb/public/lib/stat_visualization
     ydb/public/lib/ydb_cli/common

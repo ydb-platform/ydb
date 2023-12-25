@@ -611,9 +611,15 @@ public:
     }
 
     TConstArrayRef<TCell> GetCells() const { return Cells; }
+    const TCell& GetCell(ui32 row, ui16 column) const;
 
     ui32 GetRowCount() const { return RowCount; }
     ui16 GetColCount() const { return ColCount; }
+
+    static size_t CalcIndex(ui32 row, ui16 column, ui16 columnCount) { return row * columnCount + column; }
+    size_t CalcIndex(ui32 row, ui16 column) const { return CalcIndex(row, column, ColCount); }
+
+    void GetSubmatrix(ui32 firstRow, ui32 lastRow, ui16 firstColumn, ui16 lastColumn, TVector<TCell>& resultCells) const;
 
     static void Serialize(TString& res, TConstArrayRef<TCell> cells, ui32 rowCount, ui16 colCount);
 

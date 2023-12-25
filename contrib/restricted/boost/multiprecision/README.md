@@ -1,8 +1,7 @@
 Boost Multiprecision Library
 ============================
 
->ANNOUNCEMENT: Support for C++11 will be deprecated in this library starting in July 2023 (Boost 1.82).  
->New features will require *at least* C++14, as will existing features starting with the deprecation release.
+>ANNOUNCEMENT: This library now requires a compliant C++14 compiler.
 
 |                  |  Master  |   Develop   |
 |------------------|----------|-------------|
@@ -26,11 +25,11 @@ for better performance than naive user-defined types.
 
 The full documentation is available on [boost.org](http://www.boost.org/doc/libs/release/libs/multiprecision/index.html).
 
-## Standalone (BETA) ##
+## Standalone ##
 
-Defining BOOST_MP_STANDALONE allows Boost.Multiprecision to be used with the only dependency being [Boost.Config](https://github.com/boostorg/config). Our package on this page
+Defining BOOST_MP_STANDALONE allows Boost.Multiprecision to be used with the only dependency being [Boost.Config](https://github.com/boostorg/config). Our [package on this page](https://github.com/boostorg/multiprecision/releases)
 already includes a copy of Boost.Config so no other donwloads are required. Some functionality is reduced in this mode. A static_assert message will alert you if a particular feature has been disabled by standalone mode.
-[Boost.Math](https://github.com/boostorg/math) standalone mode is compatiable, and recommended if special functions is required.
+[Boost.Math](https://github.com/boostorg/math) standalone mode is compatiable, and recommended if special functions are required for the floating point types.
 
 ## Support, bugs and feature requests ##
 

@@ -707,8 +707,14 @@ message TLoginRemoveGroupMembership {
     optional string Member = 2;
 }
 
+message TLoginRenameGroup {
+    optional string Group = 1;
+    optional string NewName = 2;
+}
+
 message TLoginRemoveGroup {
     optional string Group = 1;
+    optional bool MissingOk = 2;
 }
 
 message TAlterLogin {
@@ -720,6 +726,7 @@ message TAlterLogin {
         TLoginAddGroupMembership AddGroupMembership = 5;
         TLoginRemoveGroupMembership RemoveGroupMembership = 6;
         TLoginRemoveGroup RemoveGroup = 7;
+        TLoginRenameGroup RenameGroup = 8;
     }
 }
 

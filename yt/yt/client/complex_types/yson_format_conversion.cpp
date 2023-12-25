@@ -1119,7 +1119,7 @@ TYsonCursorConverter CreateYsonConverterImpl(
             }
         }
         case ELogicalMetatype::VariantTuple: {
-            std::vector<std::pair<int,TYsonCursorConverter>> elementConverters;
+            std::vector<std::pair<int, TYsonCursorConverter>> elementConverters;
             const auto size = type->GetElements().size();
             for (size_t i = 0; i != size; ++i) {
                 elementConverters.emplace_back(i, CreateYsonConverterImpl(descriptor.VariantTupleElement(i), cache, config));

@@ -33,7 +33,7 @@ public:
 protected:
     virtual NThreading::TFuture<TYqlConclusionStatus> DoModify(
         const NYql::TObjectSettingsImpl& settings, const ui32 nodeId,
-        IClassBehaviour::TPtr manager, TInternalModificationContext& context) const override
+        const IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const override
     {
         if (!manager) {
             return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("modification object behaviour not initialized"));

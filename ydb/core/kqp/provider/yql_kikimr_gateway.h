@@ -569,7 +569,7 @@ struct TModifyPermissionsSettings {
 
     EAction Action = EAction::Grant;
     THashSet<TString> Permissions;
-    THashSet<TString> Pathes;
+    THashSet<TString> Paths;
     THashSet<TString> Roles;
     bool IsPermissionsClear = false;
 };
@@ -587,6 +587,7 @@ struct TDropUserSettings {
 
 struct TCreateGroupSettings {
     TString GroupName;
+    std::vector<TString> Roles;
 };
 
 struct TAlterGroupSettings {
@@ -598,6 +599,11 @@ struct TAlterGroupSettings {
     TString GroupName;
     EAction Action;
     std::vector<TString> Roles;
+};
+
+struct TRenameGroupSettings {
+    TString GroupName;
+    TString NewName;
 };
 
 struct TDropGroupSettings {
@@ -817,6 +823,8 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> AlterGroup(const TString& cluster, TAlterGroupSettings& settings) = 0;
 
+    virtual NThreading::TFuture<TGenericResult> RenameGroup(const TString& cluster, TRenameGroupSettings& settings) = 0;
+
     virtual NThreading::TFuture<TGenericResult> DropGroup(const TString& cluster, const TDropGroupSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateColumnTable(TKikimrTableMetadataPtr metadata, bool createDir) = 0;
@@ -842,23 +850,7 @@ public:
 public:
     using TCreateDirFunc = std::function<void(const TString&, const TString&, NThreading::TPromise<TGenericResult>)>;
 
-    static TString CanonizePath(const TString& path);
-
-    template <typename TIter>
-    static TString CombinePath(TIter begin, TIter end, bool canonize = true) {
-        auto path = JoinRange("/", begin, end);
-        return canonize
-            ? CanonizePath(path)
-            : path;
-    }
-
-    static TVector<TString> SplitPath(const TString& path);
-
-    static bool TrySplitTablePath(const TString& path, std::pair<TString, TString>& result, TString& error);
-
     static NThreading::TFuture<TGenericResult> CreatePath(const TString& path, TCreateDirFunc createDir);
-
-    static TString CreateIndexTablePath(const TString& tableName, const TString& indexName);
 
     static void BuildIndexMetadata(TTableMetadataResult& loadTableMetadataResult);
 };

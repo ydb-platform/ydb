@@ -272,6 +272,7 @@ public:
         : AstParseResult(astParseResult)
         , Settings(settings)
         , DqEngineEnabled(Settings.DqDefaultAuto->Allow())
+        , BlockEngineEnabled(Settings.BlockDefaultAuto->Allow())
     {
         Positions.push_back({});
         ScanRows(query);
@@ -281,6 +282,10 @@ public:
                 DqEngineEnabled = true;
             } else if (flag == "DqEngineForce") {
                 DqEngineForce = true;
+            } else if (flag == "BlockEngineEnable") {
+                BlockEngineEnabled = true;
+            } else if (flag == "BlockEngineForce") {
+                BlockEngineForce = true;
             }
         }
 
@@ -300,6 +305,7 @@ public:
                 typeOid != UNKNOWNOID ? NPg::LookupType(typeOid).Name : DEFAULT_PARAM_TYPE;
             ParamNameToPgTypeName[paramName] = typeName;
         }
+
     }
 
     void OnResult(const List* raw) {
@@ -319,6 +325,8 @@ public:
         Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
             QA("OrderedColumns"))));
 
+        ui32 blockEnginePgmPos = Statements.size();
+        Statements.push_back(configSource);
         ui32 costBasedOptimizerPos = Statements.size();
         Statements.push_back(configSource);
         ui32 dqEnginePgmPos = Statements.size();
@@ -356,6 +364,13 @@ public:
                 QA("CostBasedOptimizer"), QA(CostBasedOptimizer)));
         } else {
             Statements.erase(Statements.begin() + costBasedOptimizerPos);
+        }
+
+        if (BlockEngineEnabled) {
+            Statements[blockEnginePgmPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+                QA("BlockEngine"), QA(BlockEngineForce ? "force" : "auto")));
+        } else {
+            Statements.erase(Statements.begin() + blockEnginePgmPos);
         }
 
         return VL(Statements.data(), Statements.size());
@@ -452,7 +467,7 @@ public:
         Y_ABORT_UNLESS(rawValuesLists);
         size_t rows = ListLength(rawValuesLists);
 
-        if (rows == 0 || !Settings.AutoParametrizeEnabled) {
+        if (rows == 0 || !Settings.AutoParametrizeEnabled || !Settings.AutoParametrizeValuesStmt) {
             return false;
         }
 
@@ -580,8 +595,8 @@ public:
         }
 
         TVector<TPgConst> pgConsts;
-        bool allValsAreLiteral = ExtractPgConstsForAutoParam(valuesLists, pgConsts);
-        if (allValsAreLiteral) {
+        bool canAutoparametrize = ExtractPgConstsForAutoParam(valuesLists, pgConsts);
+        if (canAutoparametrize) {
             auto maybeColumnTypes = InferColumnTypesForValuesStmt(pgConsts, valNames.size());
             if (maybeColumnTypes) {
                 auto valuesNode = MakeValuesStmtAutoParam(std::move(pgConsts), std::move(maybeColumnTypes.GetRef()));
@@ -2000,7 +2015,7 @@ public:
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
-        } else if (name == "dqengine") {
+        } else if (name == "dqengine" || name == "blockengine") {
             if (ListLength(value->args) != 1) {
                 AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
                 return nullptr;
@@ -2010,17 +2025,20 @@ public:
             if (NodeTag(arg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String)) {
                 auto rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
                 auto str = to_lower(TString(rawStr));
+                const bool isDqEngine = name == "dqengine";
+                auto& enable = isDqEngine ? DqEngineEnabled : BlockEngineEnabled;
+                auto& force =  isDqEngine ? DqEngineForce   : BlockEngineForce;
                 if (str == "auto") {
-                    DqEngineEnabled = true;
-                    DqEngineForce = false;
+                    enable = true;
+                    force = false;
                 } else if (str == "force") {
-                    DqEngineEnabled = true;
-                    DqEngineForce = true;
+                    enable = true;
+                    force = true;
                 } else if (str == "disable") {
-                    DqEngineEnabled = false;
-                    DqEngineForce = false;
+                    enable = false;
+                    force = false;
                 } else {
-                    AddError(TStringBuilder() << "VariableSetStmt, not supported DqEngine option value: " << rawStr);
+                    AddError(TStringBuilder() << "VariableSetStmt, not supported " << value->name << " option value: " << rawStr);
                     return nullptr;
                 }
             } else {
@@ -2928,11 +2946,10 @@ public:
         typedValue.mutable_type()->mutable_pg_type()->set_oid(oid);
 
         auto* value = typedValue.mutable_value();
-        if (valueNType.value) {
-            value->set_text_value(std::move(valueNType.value.GetRef()));
-        } else {
-            Y_ABORT_UNLESS(valueNType.type == TPgConst::Type::unknown, "NULL is allowed to only be of unknown type");
+        if (valueNType.type == TPgConst::Type::nil) {
             value->set_null_flag_value(NProtoBuf::NULL_VALUE);
+        } else {
+            value->set_text_value(std::move(valueNType.value.GetRef()));
         }
 
         const auto& paramName = AddAutoParam(std::move(typedValue));
@@ -2955,8 +2972,7 @@ public:
             ? L(A("PgType"), QA(TPgConst::ToString(valueNType->type)))
             : L(A("PgType"), QA("unknown"));
 
-        if (Settings.AutoParametrizeEnabled &&
-            Settings.AutoParametrizeEnabledScopes.contains(settings.Scope)) {
+        if (Settings.AutoParametrizeEnabled && !Settings.AutoParametrizeExprDisabledScopes.contains(settings.Scope)) {
             return AutoParametrizeConst(std::move(valueNType.GetRef()), pgTypeNode);
         }
 
@@ -4248,6 +4264,8 @@ private:
     bool DqEngineEnabled = false;
     bool DqEngineForce = false;
     TString CostBasedOptimizer;
+    bool BlockEngineEnabled = false;
+    bool BlockEngineForce = false;
     TVector<TAstNode*> Statements;
     ui32 ReadIndex = 0;
     TViews Views;

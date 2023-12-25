@@ -745,10 +745,7 @@ class YMake(object):
         if presets:
             print('# Variables set from command line by -D options')
             for key in sorted(presets):
-                if key in ('MY_YMAKE_BIN', 'REAL_YMAKE_BIN'):
-                    emit_with_ignore_comment(key, opts().presets[key])
-                else:
-                    emit(key, opts().presets[key])
+                emit(key, opts().presets[key])
 
     @staticmethod
     def _print_conf_content(path):
@@ -759,7 +756,7 @@ class YMake(object):
         print('@import "${CONF_ROOT}/ymake.core.conf"')
 
     def print_settings(self):
-        emit_with_ignore_comment('ARCADIA_ROOT', self.arcadia.root)
+        pass
 
 
 class System(object):
@@ -1166,9 +1163,6 @@ class GnuToolchain(Toolchain):
             ])
 
         if self.tc.is_clang:
-            if not self.tc.is_system_cxx:
-                if 'CLANG' in self.tc.name_marker:
-                    self.c_flags_platform.append('-isystem{}/share/include'.format(self.tc.name_marker))
             target_triple = self.tc.triplet_opt.get(target.arch, None)
             if not target_triple:
                 target_triple = select(default=None, selectors=[
@@ -1987,9 +1981,6 @@ class MSVCCompiler(MSVC, Compiler):
         cxx_warnings = []
 
         if self.tc.use_clang:
-            if self.tc.from_arcadia:
-                flags += ['-imsvc{}/share/include'.format(self.tc.name_marker)]
-
             flags += [
                 # Allow <windows.h> to be included via <Windows.h> in case-sensitive file-systems.
                 '-fcase-insensitive-paths',
@@ -2506,8 +2497,6 @@ def main():
     build.print_build()
 
     custom_conf.print_epilogue()
-
-    emit_with_ignore_comment('CONF_SCRIPT_DEPENDS', __file__)
 
 
 if __name__ == '__main__':

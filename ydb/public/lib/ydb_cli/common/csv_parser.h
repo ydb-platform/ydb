@@ -9,19 +9,34 @@ namespace NConsoleClient {
 
 class TCsvParser {
 public:
-    TCsvParser(TString&& headerRow, const char delimeter, const std::map<TString, TType>& paramTypes, const std::map<TString, TString>& paramSources);
+    TCsvParser() = default;
 
-    void GetParams(TString&& data, TParamsBuilder& builder);
-    void GetValue(TString&& data, const TType& type, TValueBuilder& builder);
+    TCsvParser(const TCsvParser&) = delete;
+    TCsvParser(TCsvParser&&) = default;
+    TCsvParser& operator=(const TCsvParser&) = delete;
+    TCsvParser& operator=(TCsvParser&&) = default;
+    ~TCsvParser() = default;
+
+    TCsvParser(TString&& headerRow, const char delimeter, const std::optional<TString>& nullValue,
+               const std::map<TString, TType>* paramTypes = nullptr,
+               const std::map<TString, TString>* paramSources = nullptr);
+    TCsvParser(TVector<TString>&& header, const char delimeter, const std::optional<TString>& nullValue,
+               const std::map<TString, TType>* paramTypes = nullptr,
+               const std::map<TString, TString>* paramSources = nullptr);
+
+    void GetParams(TString&& data, TParamsBuilder& builder) const;
+    void GetValue(TString&& data, TValueBuilder& builder, const TType& type) const;
+    TType GetColumnsType() const;
 
 private:
-    TValue FieldToValue(TTypeParser& parser, TStringBuf token);
+    TValue FieldToValue(TTypeParser& parser, TStringBuf token) const;
 
     TVector<TString> Header;
     TString HeaderRow;
-    const char Delimeter;
-    const std::map<TString, TType>& ParamTypes;
-    const std::map<TString, TString>& ParamSources;
+    char Delimeter;
+    std::optional<TString> NullValue;
+    const std::map<TString, TType>* ParamTypes;
+    const std::map<TString, TString>* ParamSources;
 };
 
 }

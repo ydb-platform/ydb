@@ -52,6 +52,9 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <util/string/join.h>
 
@@ -2015,6 +2018,7 @@ public:
 
     enum ELogThrottlerType {
         CheckDataTxUnit_Execute = 0,
+        CheckWriteUnit_Execute = 0,
         TxProposeTransactionBase_Execute,
         FinishProposeUnit_CompleteRequest,
         FinishProposeUnit_UpdateCounters,

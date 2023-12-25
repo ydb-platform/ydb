@@ -11,10 +11,12 @@
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
-#include <yt/yt/core/ytree/yson_serializable.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 #include <yt/yt/core/misc/serialize.h>
+
 #include <yt/yt/core/utilex/random.h>
+
+#include <yt/yt/core/ytree/yson_struct.h>
 
 #include <util/string/cast.h>
 #include <util/string/reverse.h>

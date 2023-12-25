@@ -12,6 +12,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -653,7 +654,7 @@ private:
 
 template<typename TResult>
 TFuture<TResult> InvalidCluster(const TString& cluster) {
-    return MakeFuture(ResultFromError<TResult>("Invalid cluster:" + cluster));
+    return MakeFuture(ResultFromError<TResult>("Invalid cluster: " + cluster));
 }
 
 void KqpResponseToQueryResult(const NKikimrKqp::TEvQueryResponse& response, IKqpGateway::TQueryResult& queryResult) {
@@ -687,8 +688,8 @@ namespace {
     };
 
     struct TModifyPermissionsWrapper : public TThrRefBase {
-        using TMethod = std::function<void(NYql::TModifyPermissionsSettings::EAction action, THashSet<TString>&& permissions, THashSet<TString>&& roles, TVector<TString>&& pathes)>;
-        TMethod ModifyPermissionsForPathes;
+        using TMethod = std::function<void(NYql::TModifyPermissionsSettings::EAction action, THashSet<TString>&& permissions, THashSet<TString>&& roles, TVector<TString>&& paths)>;
+        TMethod ModifyPermissionsForPaths;
     };
 }
 
@@ -1212,7 +1213,7 @@ public:
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalTable);
 
             NKikimrSchemeOp::TExternalTableDescription& externalTableDesc = *schemeTx.MutableCreateExternalTable();
-            FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, settings);
+            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, settings);
             return SendSchemeRequest(ev.Release(), true);
         }
         catch (yexception& e) {
@@ -1274,8 +1275,8 @@ public:
                 return MakeFuture(ResultFromError<TGenericResult>("No permissions names for modify permissions"));
             }
 
-            if (settings.Pathes.empty()) {
-                return MakeFuture(ResultFromError<TGenericResult>("No pathes for modify permissions"));
+            if (settings.Paths.empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("No paths for modify permissions"));
             }
 
             if (settings.Roles.empty()) {
@@ -1283,9 +1284,9 @@ public:
             }
 
             TVector<TPromise<TGenericResult>> promises;
-            promises.reserve(settings.Pathes.size());
+            promises.reserve(settings.Paths.size());
             TVector<TFuture<TGenericResult>> futures;
-            futures.reserve(settings.Pathes.size());
+            futures.reserve(settings.Paths.size());
 
             NACLib::TDiffACL acl;
             switch (settings.Action) {
@@ -1321,9 +1322,9 @@ public:
             const auto serializedDiffAcl = acl.SerializeAsString();
 
             TVector<std::pair<const TString*, std::pair<TString, TString>>> pathPairs;
-            pathPairs.reserve(settings.Pathes.size());
-            for (const auto& path : settings.Pathes) {
-                pathPairs.push_back(std::make_pair(&path, SplitPathByDirAndBaseNames(path)));
+            pathPairs.reserve(settings.Paths.size());
+            for (const auto& path : settings.Paths) {
+                pathPairs.push_back(std::make_pair(&path, NSchemeHelpers::SplitPathByDirAndBaseNames(path)));
             }
 
             for (const auto& path : pathPairs) {
@@ -1772,6 +1773,47 @@ public:
         }
     }
 
+    TFuture<TGenericResult> RenameGroup(const TString& cluster, NYql::TRenameGroupSettings& settings) override {
+        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
+
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            TString database;
+            if (!GetDatabaseForLoginOperation(database)) {
+                return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+            }
+
+            TPromise<TGenericResult> renameGroupPromise = NewPromise<TGenericResult>();
+
+            auto ev = MakeHolder<TRequest>();
+            ev->Record.SetDatabaseName(database);
+            if (UserToken) {
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
+            }
+            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
+            schemeTx.SetWorkingDir(database);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+            auto& renameGroup = *schemeTx.MutableAlterLogin()->MutableRenameGroup();
+
+            renameGroup.SetGroup(settings.GroupName);
+            renameGroup.SetNewName(settings.NewName);
+
+            SendSchemeRequest(ev.Release()).Apply(
+                [renameGroupPromise](const TFuture<TGenericResult>& future) mutable {
+                    renameGroupPromise.SetValue(future.GetValue());
+                }
+            );
+
+            return renameGroupPromise.GetFuture();
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
     TFuture<TGenericResult> DropGroup(const TString& cluster, const NYql::TDropGroupSettings& settings) override {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
@@ -1798,17 +1840,11 @@ public:
             auto& dropGroup = *schemeTx.MutableAlterLogin()->MutableRemoveGroup();
 
             dropGroup.SetGroup(settings.GroupName);
+            dropGroup.SetMissingOk(settings.Force);
 
             SendSchemeRequest(ev.Release()).Apply(
-                [dropGroupPromise, &settings](const TFuture<TGenericResult>& future) mutable {
-                    const auto& realResult = future.GetValue();
-                    if (!realResult.Success() && realResult.Status() == TIssuesIds::DEFAULT_ERROR && settings.Force) {
-                        IKqpGateway::TGenericResult fakeResult;
-                        fakeResult.SetSuccess();
-                        dropGroupPromise.SetValue(std::move(fakeResult));
-                    } else {
-                        dropGroupPromise.SetValue(realResult);
-                    }
+                [dropGroupPromise](const TFuture<TGenericResult>& future) mutable {
+                    dropGroupPromise.SetValue(future.GetValue());
                 }
             );
 
@@ -2265,24 +2301,16 @@ private:
     }
 
     bool GetDatabaseForLoginOperation(TString& database) {
-        return SetDatabaseForLoginOperation(database, GetDomainLoginOnly(), GetDomainName(), GetDatabase());
+        return NSchemeHelpers::SetDatabaseForLoginOperation(database, GetDomainLoginOnly(), GetDomainName(), GetDatabase());
     }
 
     bool GetPathPair(const TString& tableName, std::pair<TString, TString>& pathPair,
         TString& error, bool createDir)
     {
-        return SplitTablePath(tableName, Database, pathPair, error, createDir);
+        return NSchemeHelpers::SplitTablePath(tableName, Database, pathPair, error, createDir);
     }
 
 private:
-    static std::pair<TString, TString> SplitPathByDirAndBaseNames(const TString& path) {
-        auto splitPos = path.find_last_of('/');
-        if (splitPos == path.npos || splitPos + 1 == path.size()) {
-            ythrow yexception() << "wrong path format '" << path << "'" ;
-        }
-        return {path.substr(0, splitPos), path.substr(splitPos + 1)};
-    }
-
     static TListPathResult GetListPathResult(const TPathDescription& pathDesc, const TString& path) {
         if (pathDesc.GetSelf().GetPathType() != EPathTypeDir) {
             return ResultFromError<TListPathResult>(TString("Directory not found: ") + path);
@@ -2320,33 +2348,6 @@ private:
         }
 
         schema.SetEngine(NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES);
-    }
-
-    static void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescription& externalTableDesc,
-                                                  const TString& name,
-                                                  const NYql::TCreateExternalTableSettings& settings)
-    {
-        externalTableDesc.SetName(name);
-        externalTableDesc.SetDataSourcePath(settings.DataSourcePath);
-        externalTableDesc.SetLocation(settings.Location);
-        externalTableDesc.SetSourceType("General");
-
-        Y_ENSURE(settings.ColumnOrder.size() == settings.Columns.size());
-        for (const auto& name : settings.ColumnOrder) {
-            auto columnIt = settings.Columns.find(name);
-            Y_ENSURE(columnIt != settings.Columns.end());
-
-            TColumnDescription& columnDesc = *externalTableDesc.AddColumns();
-            columnDesc.SetName(columnIt->second.Name);
-            columnDesc.SetType(columnIt->second.Type);
-            columnDesc.SetNotNull(columnIt->second.NotNull);
-        }
-        NKikimrExternalSources::TGeneral general;
-        auto& attributes = *general.mutable_attributes();
-        for (const auto& [key, value]: settings.SourceTypeParameters) {
-            attributes.insert({key, value});
-        }
-        externalTableDesc.SetContent(general.SerializeAsString());
     }
 
     static void FillParameters(TQueryData::TPtr params, ::google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>* output) {
@@ -2433,27 +2434,6 @@ TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, NKikimr
     return MakeIntrusive<TKikimrIcGateway>(cluster, queryType, database, std::move(metadataLoader), actorSystem, nodeId,
         counters, queryServiceConfig);
 }
-
-bool SplitTablePath(const TString& tableName, const TString& database, std::pair<TString, TString>& pathPair,
-    TString& error, bool createDir)
-{
-    if (createDir) {
-        return TrySplitPathByDb(tableName, database, pathPair, error);
-    } else {
-        return IKqpGateway::TrySplitTablePath(tableName, pathPair, error);
-    }
-}
-
-bool SetDatabaseForLoginOperation(TString& result, bool getDomainLoginOnly, TMaybe<TString> domainName,
-    const TString& database)
-{
-    if (getDomainLoginOnly && !domainName) {
-        return false;
-    }
-    result = domainName ? "/" + *domainName : database;
-    return true;
-}
-
 
 } // namespace NKqp
 } // namespace NKikimr

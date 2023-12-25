@@ -282,6 +282,13 @@ Y_UNIT_TEST_SUITE(Scheme) {
 
         UNIT_ASSERT_VALUES_EQUAL(matrix.GetBuffer().size(), 2146);
 
+        //test submatrix
+        {
+            TVector<TCell> submatrix;
+            matrix.GetSubmatrix(1, 2, 3, 5, submatrix);
+            UNIT_ASSERT_VALUES_EQUAL(submatrix.size(), 6);
+        }
+
         TSerializedCellMatrix matrix2(matrix.GetBuffer());
         CompareTypedCellMatrix(matrix2, cells, types, hash);
 

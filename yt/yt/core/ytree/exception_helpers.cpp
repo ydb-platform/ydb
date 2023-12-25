@@ -1,4 +1,5 @@
 #include "exception_helpers.h"
+#include "attributes.h"
 #include "node.h"
 
 #include <yt/yt/core/misc/error.h>

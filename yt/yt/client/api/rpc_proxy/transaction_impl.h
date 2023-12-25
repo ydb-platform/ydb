@@ -73,6 +73,14 @@ public:
         TSharedRange<NApi::TRowModification> modifications,
         const NApi::TModifyRowsOptions& options) override;
 
+    TFuture<void> AdvanceConsumer(
+        const NYPath::TRichYPath& consumerPath,
+        const NYPath::TRichYPath& queuePath,
+        int partitionIndex,
+        std::optional<i64> oldOffset,
+        i64 newOffset,
+        const TAdvanceConsumerOptions& options) override;
+
     // IClientBase implementation.
     TFuture<NApi::ITransactionPtr> StartTransaction(
         NTransactionClient::ETransactionType type,

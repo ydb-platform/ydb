@@ -1,5 +1,7 @@
 #include <ydb/core/fq/libs/checkpoint_storage/ydb_state_storage.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
+#include <ydb/core/testlib/actor_helpers.h>
+#include <ydb/core/testlib/basics/runtime.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
@@ -10,6 +12,7 @@
 #include <google/protobuf/util/message_differencer.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+#include <ydb/core/fq/libs/actors/logging/log.h>
 
 namespace NFq {
 
@@ -31,9 +34,9 @@ public:
     TFixture()
         : Alloc(__LOCATION__)
     {}
-    
 private:
     NKikimr::NMiniKQL::TScopedAlloc Alloc;
+    NKikimr::TActorSystemStub ActorSystemStub;
 };
 
 TStateStoragePtr GetStateStorage(const char* tablePrefix) {

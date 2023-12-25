@@ -72,8 +72,9 @@ public:
             WriteBool(out, Started);
             WriteBool(out, Finished);
 
-            auto strRef = NUdf::TStringRef(out.data(), out.size());
-            return MakeString(strRef);
+            return TStateCreator::MakeSimpleBlobState(out);
+            //auto strRef = NUdf::TStringRef(out.data(), out.size());
+            //return MakeString(strRef);
         }
 
         void Load(const NUdf::TStringRef& state) override {

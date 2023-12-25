@@ -123,13 +123,18 @@ public:
 
             WriteBool(out, Finished);
 
-            auto strRef = NUdf::TStringRef(out.data(), out.size());
-            return MakeString(strRef);
+            //auto strRef = NUdf::TStringRef(out.data(), out.size());
+            //return MakeString(strRef);
+            return TStateCreator::MakeSimpleBlobState(out);
         }
 
         void Load(const NUdf::TStringRef& state) override {
-            TStringBuf in(state.Data(), state.Size());
+            TStringBuf stateBuf(state.Data(), state.Size());
+            TStateCreator::Reader reader(stateBuf);
+            MKQL_ENSURE(reader.GetType() == TStateCreator::EType::SIMPLE_BLOB, "Wrong type");
+            auto stringView = reader.ReadSimpleSnapshot();
 
+            TStringBuf in(stringView.data(), stringView.size());
             const auto stateVersion = ReadUi32(in);
             if (stateVersion == 1) {
                 const auto statesMapSize = ReadUi32(in);

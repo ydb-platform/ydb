@@ -7,6 +7,7 @@
 #include "two_level_fair_share_thread_pool.h"
 #include "new_fair_share_thread_pool.h"
 
+#include <yt/yt/core/misc/collection_helpers.h>
 #include <yt/yt/core/misc/proc.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 #include <yt/yt/core/misc/ref_tracked.h>

@@ -1,5 +1,6 @@
 #include "datashard_active_transaction.h"
 #include "datashard_ut_read_table.h"
+#include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 
 namespace NKikimr {
@@ -10,7 +11,7 @@ using namespace Tests;
 using namespace NDataShardReadTableTest;
 
 Y_UNIT_TEST_SUITE(DataShardWrite) {
-    std::tuple<Tests::TServer::TPtr, TActorId> TestCreateServer() {
+    std::tuple<TTestActorRuntime&, Tests::TServer::TPtr, TActorId> TestCreateServer() {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
@@ -25,18 +26,18 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         InitRoot(server, sender);
 
-        return {server, sender};
+        return {runtime, server, sender};
     }
 
     Y_UNIT_TEST(WriteImmediateOnShard) {
-        auto [server, sender] = TestCreateServer();
+        auto [runtime, server, sender] = TestCreateServer();
 
         auto opts = TShardedTableOptions().Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}});
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
 
         const ui32 rowCount = 3;
         ui64 txId = 100;
-        Write(server, shards[0], tableId, opts.Columns_, rowCount, sender, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        Write(runtime, shards[0], tableId, opts.Columns_, rowCount, sender, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
 
         auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
 
@@ -46,7 +47,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     }
 
     Y_UNIT_TEST(WriteImmediateOnShardManyColumns) {
-       auto [server, sender] = TestCreateServer();
+        auto [runtime, server, sender] = TestCreateServer();
 
         auto opts = TShardedTableOptions().Columns({{"key64", "Uint64", true, false}, {"key32", "Uint32", true, false},
                                                     {"value64", "Uint64", false, false}, {"value32", "Uint32", false, false}, {"valueUtf8", "Utf8", false, false}});
@@ -54,7 +55,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         const ui32 rowCount = 3;
         ui64 txId = 100;
-        Write(server, shards[0], tableId, opts.Columns_, rowCount, sender, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        Write(runtime, shards[0], tableId, opts.Columns_, rowCount, sender, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
 
         auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
 
@@ -63,15 +64,37 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                                               "key64 = 10, key32 = 11, value64 = 12, value32 = 13, valueUtf8 = String_14\n");
     }
 
+    Y_UNIT_TEST(WriteImmediateHugeKey) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        auto opts = TShardedTableOptions().Columns({{"key", "Utf8", true, false}});
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+
+        TString hugeStringValue(NLimits::MaxWriteKeySize + 1, 'X');
+        TSerializedCellMatrix matrix({TCell(hugeStringValue.c_str(), hugeStringValue.size())}, 1, 1);
+
+        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(100, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(matrix.ReleaseBuffer());
+        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, 1, {1}, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+
+        runtime.SendToPipe(shards[0], sender, evWrite.release(), 0, GetPipeConfigWithRetries());
+        auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+
+        const auto& record = ev->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetIssues().size(), 1);
+        UNIT_ASSERT(record.GetIssues(0).message().Contains("Operation [0:100] writes key of 1049601 bytes which exceeds limit 1049600 bytes"));
+    }
+
     Y_UNIT_TEST(WriteOnShard) {
-        auto [server, sender] = TestCreateServer();
+        auto [runtime, server, sender] = TestCreateServer();
 
         TShardedTableOptions opts;
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
 
         const ui32 rowCount = 3;
         ui64 txId = 100;
-        Write(server, shards[0], tableId, opts.Columns_, rowCount, sender, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+        Write(runtime, shards[0], tableId, opts.Columns_, rowCount, sender, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
         auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
 

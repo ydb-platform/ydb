@@ -1,9 +1,14 @@
 LIBRARY()
 
+OWNER(
+    g:yql
+    g:yql_ydb_core
+)
+
 NO_COMPILER_WARNINGS()
 
 PEERDIR(
-    ydb/library/yql/minikql/codegen
+    ydb/library/yql/minikql/codegen/llvm
     ydb/library/yql/minikql/invoke_builtins/llvm
     contrib/libs/llvm12/lib/IR
     contrib/libs/llvm12/lib/ExecutionEngine/MCJIT
@@ -16,4 +21,8 @@ PEERDIR(
 INCLUDE(../ya.make.inc)
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)
 

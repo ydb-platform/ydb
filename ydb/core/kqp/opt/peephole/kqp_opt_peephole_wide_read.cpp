@@ -58,7 +58,7 @@ TExprBase KqpBuildWideReadTable(const TExprBase& node, TExprContext& ctx, TTypeA
     } else if (auto maybeRead = node.Maybe<TKqpReadOlapTableRanges>()) {
         auto read = maybeRead.Cast();
 
-        if (typesCtx.UseBlocks) {
+        if (typesCtx.IsBlockEngineEnabled()) {
             wideRead = Build<TCoWideFromBlocks>(ctx, node.Pos())
                 .Input<TKqpBlockReadOlapTableRanges>()
                     .Table(read.Table())

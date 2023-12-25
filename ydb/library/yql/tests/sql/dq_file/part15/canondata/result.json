@@ -1350,9 +1350,9 @@
     ],
     "test.test[join-premap_merge_with_remap-off-Results]": [
         {
-            "checksum": "2be66749732358ddfd9a8ef30ec27518",
-            "size": 471,
-            "uri": "https://{canondata_backend}/1600758/aad142702907f13e911494c1a7b312bad34f692a/resource.tar.gz#test.test_join-premap_merge_with_remap-off-Results_/results.txt"
+            "checksum": "114e220ddf7ec64e2faedb36603ea6b1",
+            "size": 511,
+            "uri": "https://{canondata_backend}/1942415/46b4dec49c8d2a38bf8ce01066b72bfee9407ffe/resource.tar.gz#test.test_join-premap_merge_with_remap-off-Results_/results.txt"
         }
     ],
     "test.test[join-pushdown_filter_over_inner_with_assume_strict-off-Analyze]": [

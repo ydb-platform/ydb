@@ -6,7 +6,6 @@ on:
       - 'stable-*'
     paths-ignore:
       - 'ydb/docs/**'
-      - '.github/**'
       - '*'
     types:
       - 'opened'
@@ -122,5 +121,5 @@ jobs:
       test_type: "unittest,py3test,py2test,pytest"
       test_threads: 52
       runner_label: auto-provisioned
-      put_build_results_to_cache: false
+      put_build_results_to_cache: true
     secrets: inherit

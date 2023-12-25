@@ -133,6 +133,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
     Y_UNIT_TEST(CreateGroup) {
         TCases cases = {
             {"use plato;create group user;","USE plato;\n\nCREATE GROUP user;\n"},
+            {"use plato;create group user with user user;","USE plato;\n\nCREATE GROUP user WITH USER user;\n"},
+            {"use plato;create group user with user user, user,;","USE plato;\n\nCREATE GROUP user WITH USER user, user,;\n"},
         };
 
         TSetup setup;
@@ -1498,4 +1500,24 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
         TSetup setup;
         setup.Run(cases, NSQLFormat::EFormatMode::Obfuscate);
     }    
+
+    Y_UNIT_TEST(CreateView) {
+        TCases cases = {
+            {"creAte vIEw TheView wiTh (security_invoker = trUE) As SELect 1",
+             "CREATE VIEW TheView WITH (security_invoker = TRUE) AS\nSELECT\n\t1;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(DropView) {
+        TCases cases = {
+            {"dRop viEW theVIEW",
+             "DROP VIEW theVIEW;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
 }

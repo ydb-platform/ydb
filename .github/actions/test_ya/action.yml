@@ -82,6 +82,74 @@ runs:
       shell: bash
       run: npm install -g @testmo/testmo-cli
 
+    - name: Upload tests result to testmo
+      id: th
+      if: inputs.testman_token
+      shell: bash
+      env:
+        PR_NUMBER: ${{ github.event.number }}
+      run: |
+        RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        BRANCH_TAG="$GITHUB_REF_NAME"
+        ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
+        
+        BUILD_PRESET="${{ inputs.build_preset }}"
+        case "$BUILD_PRESET" in
+          relwithdebinfo)
+            TESTMO_SOURCE="ya-${ARCH}"
+            ;;
+          debug)
+            TESTMO_SOURCE="ya-${ARCH}-debug"
+            ;;
+          release-*)
+            TESTMO_SOURCE="ya-${ARCH}-${BUILD_PRESET/release-/}"
+            ;;
+          *)
+            echo "Invalid preset: ${{ inputs.build_preset }}"
+            exit 1
+            ;;
+        esac
+        
+        case $GITHUB_EVENT_NAME in
+          workflow_dispatch)
+            TESTMO_RUN_NAME="${{ github.run_id }} manual"
+            EXTRA_TAG="manual"
+            ;;
+          pull_request | pull_request_target)
+            TESTMO_RUN_NAME="${{ github.run_id }} PR #${PR_NUMBER}"
+            EXTRA_TAG="pr"
+            BRANCH_TAG=""
+            ;;
+          schedule)
+            TESTMO_RUN_NAME="${{ github.run_id }} schedule"
+            EXTRA_TAG="schedule"
+            ;;
+          push)
+            TESTMO_RUN_NAME="${{ github.run_id }} POST"
+            EXTRA_TAG="post-commit"
+            ;;
+          *)
+            TESTMO_RUN_NAME="${{ github.run_id }}"
+            EXTRA_TAG=""
+            ;;
+        esac
+        
+        testmo automation:resources:add-link --name build --url "$RUN_URL" --resources testmo.json
+        testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
+        RUN_ID=$(
+        testmo automation:run:create --instance "$TESTMO_URL" --project-id ${{ inputs.testman_project_id }} \
+          --name "$TESTMO_RUN_NAME" --source "$TESTMO_SOURCE" --resources testmo.json \
+          --tags "$BRANCH_TAG" --tags "$EXTRA_TAG"
+        )
+        echo "runid=${RUN_ID}" >> $GITHUB_OUTPUT
+        echo "TEST_HISTORY_URL=${TESTMO_URL}/automation/runs/view/${RUN_ID}" >> $GITHUB_ENV
+
+    - name: Print test history link
+      shell: bash
+      if: inputs.testman_token
+      run: |
+        echo "10 [Test history](${TEST_HISTORY_URL})" >> $SUMMARY_LINKS
+
     - name: set environment variables required by some tests
       shell: bash
       run: |
@@ -149,7 +217,7 @@ runs:
           echo "::debug::start tests"
 
           ./ya test "${params[@]}" \
-            --bazel-remote-put --bazel-remote-username "${{ inputs.bazel_remote_username }}" --bazel-remote-password "${{ inputs.bazel_remote_password }}" \
+            --bazel-remote-put --bazel-remote-username "${{ inputs.bazel_remote_username }}" --bazel-remote-password "${{ inputs.bazel_remote_password }}" -DCONSISTENT_DEBUG \
             --log-file "$LOG_DIR/ya_log_prewarm.txt" --evlog-file "$LOG_DIR/ya_evlog_prewarm.jsonl" \
             --dist-cache-evict-bins --cache-tests --no-dir-outputs --test-node-output-limit 100000 --drop-graph-result-before-tests || (
               RC=$?
@@ -159,7 +227,7 @@ runs:
         
         echo "::debug::save tests reports"
         ./ya test "${params[@]}" \
-          --stat --log-file "$LOG_DIR/ya_log.txt" --evlog-file "$LOG_DIR/ya_evlog.jsonl" \
+          --stat --log-file "$LOG_DIR/ya_log.txt" --evlog-file "$LOG_DIR/ya_evlog.jsonl" -DCONSISTENT_DEBUG \
           --cache-tests --dist-cache-evict-bins --no-dir-outputs --test-node-output-limit 100000 --drop-graph-result-before-tests \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || (
             RC=$?
@@ -199,68 +267,10 @@ runs:
       run: |
         tar -C $JUNIT_REPORT_PARTS/.. -czf $REPORTS_ARTIFACTS_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
 
-    - name: Upload tests result to testmo
-      id: th
+    - name: Unit test history upload results
       if: inputs.testman_token
       shell: bash
-      env:
-        PR_NUMBER: ${{ github.event.number }}
       run: |
-        RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-        BRANCH_TAG="$GITHUB_REF_NAME"
-        ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
-        
-        BUILD_PRESET="${{ inputs.build_preset }}"
-        case "$BUILD_PRESET" in
-          relwithdebinfo)
-            TESTMO_SOURCE="ya-${ARCH}"
-            ;;
-          debug)
-            TESTMO_SOURCE="ya-${ARCH}-debug"
-            ;;
-          release-*)
-            TESTMO_SOURCE="ya-${ARCH}-${BUILD_PRESET/release-/}"
-            ;;
-          *)
-            echo "Invalid preset: ${{ inputs.build_preset }}"
-            exit 1
-            ;;
-        esac
-        
-        case $GITHUB_EVENT_NAME in
-        workflow_dispatch)
-         TESTMO_RUN_NAME="${{ github.run_id }} manual"
-         EXTRA_TAG="manual"
-         ;;
-        pull_request | pull_request_target)
-         TESTMO_RUN_NAME="${{ github.run_id }} PR #${PR_NUMBER}"
-         EXTRA_TAG="pr"
-         BRANCH_TAG=""
-         ;;
-        schedule)
-         TESTMO_RUN_NAME="${{ github.run_id }} schedule"
-         EXTRA_TAG="schedule"
-         ;;
-        push)
-         TESTMO_RUN_NAME="${{ github.run_id }} POST"
-         EXTRA_TAG="post-commit"
-         ;;
-        *)
-         TESTMO_RUN_NAME="${{ github.run_id }}"
-         EXTRA_TAG=""
-         ;;
-        esac
-        
-        testmo automation:resources:add-link --name build --url "$RUN_URL" --resources testmo.json
-        testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources testmo.json
-        RUN_ID=$(
-        testmo automation:run:create --instance "$TESTMO_URL" --project-id ${{ inputs.testman_project_id }} \
-          --name "$TESTMO_RUN_NAME" --source "$TESTMO_SOURCE" --resources testmo.json \
-          --tags "$BRANCH_TAG" --tags "$EXTRA_TAG"
-        )
-        echo "runid=${RUN_ID}" >> $GITHUB_OUTPUT
-        echo "TEST_HISTORY_URL=${TESTMO_URL}/automation/runs/view/${RUN_ID}" >> $GITHUB_ENV
-        
         PROXY_ADDR=127.0.0.1:8888
 
         openssl req -x509 -newkey rsa:2048 \
@@ -277,15 +287,10 @@ runs:
         proxy_pid=$!
         
         NODE_TLS_REJECT_UNAUTHORIZED=0 testmo automation:run:submit-thread \
-          --instance "https://$PROXY_ADDR" --run-id "$RUN_ID" \
+          --instance "https://$PROXY_ADDR" --run-id "${{ steps.th.outputs.runid }}" \
           --results "$JUNIT_REPORT_PARTS/*.xml"
         
         kill $proxy_pid
-
-    - name: Print test history link
-      shell: bash
-      run: |
-        echo "10 [Test history](${TEST_HISTORY_URL})" >> $SUMMARY_LINKS
 
     - name: Test history run complete
       if: always() && inputs.testman_token

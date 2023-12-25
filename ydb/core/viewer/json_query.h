@@ -40,6 +40,7 @@ class TJsonQuery : public TViewerPipeClient<TJsonQuery> {
     TString Stats;
     TString Syntax;
     TString UserToken;
+    bool IsBase64Encode;
 
     enum ESchemaType {
         Classic,
@@ -85,6 +86,7 @@ public:
         Schema = StringToSchemaType(schemaStr);
         Syntax = params.Get("syntax");
         Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
+        IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), true);
     }
 
     void ParsePostContent(const TStringBuf& content) {
@@ -252,7 +254,7 @@ public:
     }
 
 private:
-    static NJson::TJsonValue ColumnPrimitiveValueToJsonValue(NYdb::TValueParser& valueParser) {
+    NJson::TJsonValue ColumnPrimitiveValueToJsonValue(NYdb::TValueParser& valueParser) {
         switch (valueParser.GetPrimitiveType()) {
             case NYdb::EPrimitiveType::Bool:
                 return valueParser.GetBool();
@@ -293,7 +295,7 @@ private:
             case NYdb::EPrimitiveType::TzTimestamp:
                 return valueParser.GetTzTimestamp();
             case NYdb::EPrimitiveType::String:
-                return Base64Encode(valueParser.GetString());
+                return IsBase64Encode ? Base64Encode(valueParser.GetString()) : valueParser.GetString();
             case NYdb::EPrimitiveType::Yson:
                 return valueParser.GetYson();
             case NYdb::EPrimitiveType::Json:
@@ -307,7 +309,7 @@ private:
         }
     }
 
-    static NJson::TJsonValue ColumnValueToJsonValue(NYdb::TValueParser& valueParser) {
+    NJson::TJsonValue ColumnValueToJsonValue(NYdb::TValueParser& valueParser) {
         switch (valueParser.GetKind()) {
             case NYdb::TTypeParser::ETypeKind::Primitive:
                 return ColumnPrimitiveValueToJsonValue(valueParser);
@@ -603,7 +605,7 @@ private:
                     NYdb::TResultSetParser rsParser(resultSet);
                     while (rsParser.TryNextRow()) {
                         NJson::TJsonValue& jsonRow = jsonResults.AppendValue({});
-                        TString row = NYdb::FormatResultRowJson(rsParser, columnsMeta, NYdb::EBinaryStringEncoding::Base64);
+                        TString row = NYdb::FormatResultRowJson(rsParser, columnsMeta, IsBase64Encode ? NYdb::EBinaryStringEncoding::Base64 : NYdb::EBinaryStringEncoding::Unicode);
                         NJson::ReadJsonTree(row, &jsonRow);
                     }
                 }
@@ -633,6 +635,7 @@ struct TJsonRequestParameters<TJsonQuery> {
                       {"name":"schema","in":"query","description":"result format schema (classic, modern, ydb, multi)","required":false,"type":"string"},
                       {"name":"stats","in":"query","description":"return stats (profile)","required":false,"type":"string"},
                       {"name":"action","in":"query","description":"execute method (execute-scan, execute-script, execute-query, execute-data,explain-ast, explain-scan, explain-script, explain-query, explain-data)","required":false,"type":"string"},
+                      {"name":"base64","in":"query","description":"return strings using base64 encoding","required":false,"type":"string"},
                       {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
     }
 };

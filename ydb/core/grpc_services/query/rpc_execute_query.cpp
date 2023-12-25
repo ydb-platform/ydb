@@ -211,7 +211,7 @@ private:
                 HFunc(TRpcServices::TEvGrpcNextReply, Handle);
                 HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
                 HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
-                HFunc(NKikimr::NGRpcService::TEvSubscribeGrpcCancel, Handle);
+                hFunc(NKikimr::NGRpcService::TEvSubscribeGrpcCancel, Handle);
                 default:
                     UnexpectedEvent(__func__, ev);
             }
@@ -278,8 +278,9 @@ private:
         }
     }
 
-    void Handle(NKikimr::NGRpcService::TEvSubscribeGrpcCancel::TPtr&, const TActorContext&) {
-        // Ignore event now
+    void Handle(NKikimr::NGRpcService::TEvSubscribeGrpcCancel::TPtr& ev) {
+        auto as = TActivationContext::ActorSystem();
+        PassSubscription(ev->Get(), Request_.get(), as);
     }
 
     void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {

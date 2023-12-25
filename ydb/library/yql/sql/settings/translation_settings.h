@@ -101,13 +101,15 @@ namespace NSQLTranslation {
         bool WarnOnV0;
         ISqlFeaturePolicy::TPtr V0WarnAsError;
         ISqlFeaturePolicy::TPtr DqDefaultAuto;
+        ISqlFeaturePolicy::TPtr BlockDefaultAuto;
         bool AssumeYdbOnClusterWithSlash;
         TString DynamicClusterProvider;
         TString FileAliasPrefix;
 
         TVector<ui32> PgParameterTypeOids;
         bool AutoParametrizeEnabled = false;
-        THashSet<TString> AutoParametrizeEnabledScopes = {};
+        bool AutoParametrizeValuesStmt = false;
+        THashSet<TString> AutoParametrizeExprDisabledScopes = {};
     };
 
     bool ParseTranslationSettings(const TString& query, NSQLTranslation::TTranslationSettings& settings, NYql::TIssues& issues);

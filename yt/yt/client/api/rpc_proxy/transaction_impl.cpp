@@ -485,6 +485,39 @@ void TTransaction::ModifyRows(
     }
 }
 
+TFuture<void> TTransaction::AdvanceConsumer(
+    const NYPath::TRichYPath& consumerPath,
+    const NYPath::TRichYPath& queuePath,
+    int partitionIndex,
+    std::optional<i64> oldOffset,
+    i64 newOffset,
+    const TAdvanceConsumerOptions& options)
+{
+    ValidateTabletTransactionId(GetId());
+
+    THROW_ERROR_EXCEPTION_IF(newOffset < 0, "Queue consumer offset %v cannot be negative", newOffset);
+
+    auto req = Proxy_.AdvanceConsumer();
+    SetTimeoutOptions(*req, options);
+
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        req->TracingTags().emplace_back("yt.consumer_path", ToString(consumerPath));
+        req->TracingTags().emplace_back("yt.queue_path", ToString(queuePath));
+    }
+
+    ToProto(req->mutable_transaction_id(), GetId());
+
+    ToProto(req->mutable_consumer_path(), consumerPath);
+    ToProto(req->mutable_queue_path(), queuePath);
+    req->set_partition_index(partitionIndex);
+    if (oldOffset) {
+        req->set_old_offset(*oldOffset);
+    }
+    req->set_new_offset(newOffset);
+
+    return req->Invoke().As<void>();
+}
+
 TFuture<ITransactionPtr> TTransaction::StartTransaction(
     ETransactionType type,
     const TTransactionStartOptions& options)

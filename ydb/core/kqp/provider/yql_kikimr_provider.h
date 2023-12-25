@@ -235,7 +235,8 @@ enum class TYdbOperation : ui32 {
     CreateTopic          = 1 << 19,
     AlterTopic           = 1 << 20,
     DropTopic            = 1 << 21,
-    ModifyPermission     = 1 << 22
+    ModifyPermission     = 1 << 22,
+    RenameGroup          = 1 << 23
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);
@@ -479,8 +480,16 @@ public:
         UserName = userName;
     }
 
+    TString GetCluster() const {
+        return Cluster;
+    }
+
     TString GetDatabase() const {
         return Database;
+    }
+
+    void SetCluster(const TString& cluster) {
+        Cluster = cluster;
     }
 
     void SetDatabase(const TString& database) {
@@ -511,6 +520,7 @@ public:
 
 private:
     TString UserName;
+    TString Cluster;
     TString Database;
     TKikimrConfiguration::TPtr Configuration;
     TIntrusivePtr<TKikimrTablesData> TablesData;

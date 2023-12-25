@@ -2,13 +2,10 @@ name: CheckAllowedDirs
 
 on:
   push:
-    branches: [ main ]
   pull_request:
-    branches: [ main ]
 
 jobs:
   build:
-    if: ${{ vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).allowed_dirs == true}}
     runs-on: ubuntu-latest
 
     steps:

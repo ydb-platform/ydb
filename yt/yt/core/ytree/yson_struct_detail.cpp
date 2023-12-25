@@ -315,20 +315,21 @@ void TYsonStructMeta::SetUnrecognizedStrategy(EUnrecognizedStrategy strategy)
     MetaUnrecognizedStrategy_ = strategy;
 }
 
-void TYsonStructMeta::GetSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const
+void TYsonStructMeta::WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const
 {
     BuildYsonFluently(consumer)
         .BeginMap()
             .Item("type_name").Value("struct")
-            .Item("members").DoListFor(Parameters_, [&] (auto&& fluent, auto&& pair) {
-                fluent.Item().BeginMap()
-                    .Item("name").Value(pair.first)
-                    .Item("type").Do([&] (auto&& fluent) {
-                        pair.second->GetSchema(target, fluent.GetConsumer());
-                    })
-                    .DoIf(pair.second->IsRequired(), [] (auto&& fluent) {
-                        fluent.Item("required").Value(true);
-                    })
+            .Item("members").DoListFor(Parameters_, [&] (auto fluent, const auto& pair) {
+                fluent.Item()
+                    .BeginMap()
+                        .Item("name").Value(pair.first)
+                        .Item("type").Do([&] (auto fluent) {
+                            pair.second->WriteSchema(target, fluent.GetConsumer());
+                        })
+                        .DoIf(pair.second->IsRequired(), [] (auto fluent) {
+                            fluent.Item("required").Value(true);
+                        })
                     .EndMap();
             })
         .EndMap();

@@ -103,7 +103,7 @@ TSharedRefArray TClientRequest::Serialize()
 
     if (!retry) {
         auto output = CreateRequestMessage(Header_, headerlessMessage);
-        return TrackMemory(std::move(output));
+        return std::move(output);
     }
 
     if (StreamingEnabled_) {
@@ -114,7 +114,7 @@ TSharedRefArray TClientRequest::Serialize()
     patchedHeader.set_retry(true);
 
     auto output = CreateRequestMessage(patchedHeader, headerlessMessage);
-    return TrackMemory(std::move(output));
+    return std::move(output);
 }
 
 IClientRequestControlPtr TClientRequest::Send(IClientResponseHandlerPtr responseHandler)
@@ -489,11 +489,6 @@ bool IsRequestSticky(const IClientRequestPtr& request)
     }
     const auto& balancingExt = request->Header().GetExtension(NProto::TBalancingExt::balancing_ext);
     return balancingExt.enable_stickiness();
-}
-
-TSharedRefArray TClientRequest::TrackMemory(TSharedRefArray array) const
-{
-    return NYT::TrackMemory(MemoryReferenceTracker_, std::move(array));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

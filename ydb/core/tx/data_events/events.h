@@ -1,15 +1,13 @@
 #pragma once
 
-#include "write_data.h"
-
 #include <library/cpp/lwtrace/shuttle.h>
 
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/base/events.h>
 
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/log.h>
-
 
 namespace NKikimr::NEvents {
 
@@ -107,6 +105,16 @@ struct TDataEvents {
             result->Record.MutableDomainCoordinators()->CopyFrom(transactionInfo.GetDomainCoordinators());
             return result;
         }
+
+        TString GetError() const {
+            return TStringBuilder() << "Status: " << Record.GetStatus() << " Issues: " << Record.GetIssues();
+        }
+
+        NKikimrDataEvents::TEvWriteResult::EStatus GetStatus() const { return Record.GetStatus(); }
+
+        bool IsPrepared() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED; }
+        bool IsComplete() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED; }
+        bool IsError() const { return !IsPrepared() && !IsComplete(); }
 
         void SetOrbit(NLWTrace::TOrbit&& orbit) { Orbit = std::move(orbit); }
         NLWTrace::TOrbit& GetOrbit() { return Orbit; }

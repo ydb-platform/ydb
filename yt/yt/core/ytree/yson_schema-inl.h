@@ -46,7 +46,7 @@ concept CIsAssociativeArray = CIsArray<T> && CIsMapping<T>;
 ////////////////////////////////////////////////////////////////////////////////
 
 #define DEFINE_SCHEMA_FOR_SIMPLE_TYPE(type, name) \
-inline void GetSchema(type, NYson::IYsonConsumer* consumer) \
+inline void WriteSchema(type, NYson::IYsonConsumer* consumer) \
 { \
     BuildYsonFluently(consumer) \
         .Value(#name); \
@@ -79,83 +79,88 @@ DEFINE_SCHEMA_FOR_SIMPLE_TYPE(TGuid, guid)
 #undef DEFINE_SCHEMA_FOR_SIMPLE_TYPE
 
 template <CIsEnum T>
-void GetSchema(const T&, NYson::IYsonConsumer* consumer)
+void WriteSchema(const T&, NYson::IYsonConsumer* consumer)
 {
-    BuildYsonFluently(consumer).BeginMap()
-        .Item("type_name").Value("enum")
-        .Item("enum_name").Value(TEnumTraits<T>::GetTypeName())
-        .Item("values").DoListFor(
-            TEnumTraits<T>::GetDomainNames(), [] (auto&& fluent, TStringBuf name) {
-                fluent.Item().Value(EncodeEnumValue(name));
+    BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("type_name").Value("enum")
+            .Item("enum_name").Value(TEnumTraits<T>::GetTypeName())
+            .Item("values").DoListFor(
+                TEnumTraits<T>::GetDomainNames(), [] (auto fluent, TStringBuf name) {
+                    fluent.Item().Value(EncodeEnumValue(name));
+                })
+        .EndMap();
+}
+
+template <CIsYsonStruct T>
+void WriteSchema(const NYT::TIntrusivePtr<T>& value, NYson::IYsonConsumer* consumer)
+{
+    BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("type_name").Value("optional")
+            .Item("item").Do([&] (auto fluent) {
+                (value ? value : New<T>())->WriteSchema(fluent.GetConsumer());
             })
         .EndMap();
 }
 
 template <CIsYsonStruct T>
-void GetSchema(const NYT::TIntrusivePtr<T>& value, NYson::IYsonConsumer* consumer)
+void WriteSchema(const T& value, NYson::IYsonConsumer* consumer)
 {
-    BuildYsonFluently(consumer) .BeginMap()
-        .Item("type_name").Value("optional")
-        .Item("item").Do([&] (auto&& fluent) {
-            (value ? value : New<T>())->GetSchema(fluent.GetConsumer());
-        })
-        .EndMap();
-}
-
-template <CIsYsonStruct T>
-void GetSchema(const T& value, NYson::IYsonConsumer* consumer)
-{
-    return value.GetSchema(consumer);
+    return value.WriteSchema(consumer);
 }
 
 template <CIsProtobufMessage T>
-void GetSchema(const T&, NYson::IYsonConsumer* consumer)
+void WriteSchema(const T&, NYson::IYsonConsumer* consumer)
 {
-    return NYson::GetSchema(NYson::ReflectProtobufMessageType<T>(), consumer);
+    return NYson::WriteSchema(NYson::ReflectProtobufMessageType<T>(), consumer);
 }
 
 template <CIsArray T>
-void GetSchema(const T& value, NYson::IYsonConsumer* consumer)
+void WriteSchema(const T& value, NYson::IYsonConsumer* consumer)
 {
-    BuildYsonFluently(consumer).BeginMap()
-        .Item("type_name").Value("list")
-        .Item("item").Do([&] (auto&& fluent) {
-            GetSchema(
-                std::begin(value) != std::end(value)
-                    ? *std::begin(value)
-                    : std::decay_t<decltype(*std::begin(value))>{},
-                fluent.GetConsumer());
-        })
+    BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("type_name").Value("list")
+            .Item("item").Do([&] (auto fluent) {
+                WriteSchema(
+                    std::begin(value) != std::end(value)
+                        ? *std::begin(value)
+                        : std::decay_t<decltype(*std::begin(value))>{},
+                    fluent.GetConsumer());
+            })
         .EndMap();
 }
 
 template <CIsAssociativeArray T>
-void GetSchema(const T& value, NYson::IYsonConsumer* consumer)
+void WriteSchema(const T& value, NYson::IYsonConsumer* consumer)
 {
-    BuildYsonFluently(consumer).BeginMap()
-        .Item("type_name").Value("dict")
-        .Item("key").Do([&] (auto&& fluent) {
-            GetSchema(value.empty() ? typename T::key_type{} : value.begin()->first, fluent.GetConsumer());
-        })
-        .Item("value").Do([&] (auto&& fluent) {
-            GetSchema(value.empty() ? typename T::mapped_type{} : value.begin()->second, fluent.GetConsumer());
-        })
+    BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("type_name").Value("dict")
+            .Item("key").Do([&] (auto fluent) {
+                WriteSchema(value.empty() ? typename T::key_type{} : value.begin()->first, fluent.GetConsumer());
+            })
+            .Item("value").Do([&] (auto fluent) {
+                WriteSchema(value.empty() ? typename T::mapped_type{} : value.begin()->second, fluent.GetConsumer());
+            })
         .EndMap();
 }
 
 template <CIsNullable T>
-void GetSchema(const T& value, NYson::IYsonConsumer* consumer)
+void WriteSchema(const T& value, NYson::IYsonConsumer* consumer)
 {
-    BuildYsonFluently(consumer) .BeginMap()
-        .Item("type_name").Value("optional")
-        .Item("item").Do([&] (auto&& fluent) {
-            GetSchema(value ? *value : std::decay_t<decltype(*value)>{}, fluent.GetConsumer());
-        })
+    BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("type_name").Value("optional")
+            .Item("item").Do([&] (auto fluent) {
+                WriteSchema(value ? *value : std::decay_t<decltype(*value)>{}, fluent.GetConsumer());
+            })
         .EndMap();
 }
 
 template <class T>
-void GetSchema(const T& value, NYson::IYsonConsumer* consumer)
+void WriteSchema(const T& value, NYson::IYsonConsumer* consumer)
 {
     auto node = ConvertToNode(value);
     BuildYsonFluently(consumer).Value(FormatEnum(node->GetType()));

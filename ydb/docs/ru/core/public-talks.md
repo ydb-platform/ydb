@@ -4,6 +4,13 @@
 
 * [{{ ydb-name }} Whitepaper](https://storage.yandexcloud.net/ydb-public-talks/yandex-database-a4.pdf).
 
+### 2023: YaTalks. Разработка и эксплуатация {#yatalks-2023}
+
+* Тема: Искусство бенчмаркинга распределённых баз данных на примере YDB
+
+  * [Запись трансляции](https://youtu.be/iMjq96GQTHQ?si=moMbI3Je90s3zY60).
+  * [Презентация] (https://https://github.com/ydb-platform/ydb-presentations/blob/main/2023/ru/yatalks/ydb_benchmarking/presentation.pdf)
+  * Из доклада вы узнаете, какие проблемы производительности мы нашли в популярных бенчмарках Yahoo! Cloud Serving Benchmark (YCSB) и Benchbase TPC-C. Как их исправили и как теперь используют эти бенчмарки, чтобы находить узкие места в YDB и делать оптимизацию. И насколько, согласно этим бенчмаркам, YDB опережает своих основных конкурентов CockroachDB и YugabyteDB, которые тоже являются распределёнными СУБД с открытым исходным кодом.
 
 ### 2023: Открытые системы. СУБД {#ospdatabases2023}
 
@@ -17,7 +24,7 @@
 * Тема: YDB в Open Source — что это такое?
 
   * [Запись трансляции](https://www.youtube.com/watch?v=s238or35z48).
-  * Описание: Рассказ о выходе YDB в Open Source, о сообществе платформы, а также и балансе между потребностями внутренних и внешних пользователей.  
+  * Описание: Рассказ о выходе YDB в Open Source, о сообществе платформы, а также и балансе между потребностями внутренних и внешних пользователей.
 
 ### 2022: Вебинар YDB 2022-09-11 {#webinar20220911}
 
@@ -37,7 +44,7 @@
 
   * [Запись трансляции](https://www.youtube.com/watch?v=eYpyKXihGaY).
   * Описание: In this talk we will cover two layers of YDB: Tablet and BlobStorage layers that together provide fault tolerance, scalability, and user isolation.
-  
+
 ### 2022: Hydra {#hydra-2022}
 
 * Тема: Parallel Asynchronous Replication between YDB Database Instances — материал доступен только на английском языке.

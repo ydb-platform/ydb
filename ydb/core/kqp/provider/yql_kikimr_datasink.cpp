@@ -128,9 +128,9 @@ private:
     }
 
     TStatus HandleCreateObject(TKiCreateObject node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "CreateObject is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(node);
+        Y_UNUSED(ctx);
+        return TStatus::Ok;
     }
 
     TStatus HandleAlterObject(TKiAlterObject node, TExprContext& ctx) override {
@@ -154,6 +154,12 @@ private:
     TStatus HandleAlterGroup(TKiAlterGroup node, TExprContext& ctx) override {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
             << "AlterGroup is not yet implemented for intent determination transformer"));
+        return TStatus::Error;
+    }
+
+    TStatus HandleRenameGroup(TKiRenameGroup node, TExprContext& ctx) override {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+            << "RenameGroup is not yet implemented for intent determination transformer"));
         return TStatus::Error;
     }
 
@@ -466,6 +472,7 @@ public:
             || node.IsCallable(TKiDropUser::CallableName())
             || node.IsCallable(TKiCreateGroup::CallableName())
             || node.IsCallable(TKiAlterGroup::CallableName())
+            || node.IsCallable(TKiRenameGroup::CallableName())
             || node.IsCallable(TKiDropGroup::CallableName())
             || node.IsCallable(TKiUpsertObject::CallableName())
             || node.IsCallable(TKiCreateObject::CallableName())
@@ -916,6 +923,7 @@ public:
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .GroupName().Build(key.GetRoleName())
+                        .Roles(settings.Roles.Cast())
                         .Done()
                         .Ptr();
                 } else if (mode == "addUsersToGroup" || mode == "dropUsersFromGroup") {
@@ -925,6 +933,14 @@ public:
                         .GroupName().Build(key.GetRoleName())
                         .Action().Build(mode)
                         .Roles(settings.Roles.Cast())
+                        .Done()
+                        .Ptr();
+                } else if (mode == "renameGroup") {
+                    return Build<TKiRenameGroup>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .GroupName().Build(key.GetRoleName())
+                        .NewName(settings.NewName.Cast())
                         .Done()
                         .Ptr();
                 } else if (mode == "dropGroup") {
@@ -951,7 +967,7 @@ public:
                         .DataSink(node->Child(1))
                         .Action().Build(mode)
                         .Permissions(settings.Permissions.Cast())
-                        .Pathes(settings.Pathes.Cast())
+                        .Paths(settings.Paths.Cast())
                         .Roles(settings.RoleNames.Cast())
                         .Done()
                         .Ptr();
@@ -1101,6 +1117,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = TMaybeNode<TKiAlterGroup>(input)) {
         return HandleAlterGroup(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiRenameGroup>(input)) {
+        return HandleRenameGroup(node.Cast(), ctx);
     }
 
     if (auto node = TMaybeNode<TKiDropGroup>(input)) {

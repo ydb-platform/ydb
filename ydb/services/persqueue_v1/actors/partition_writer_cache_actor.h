@@ -12,8 +12,6 @@ public:
     TPartitionWriterCacheActor(const TActorId& owner,
                                ui32 partition,
                                ui64 tabletId,
-                               std::optional<ui32> expectedGeneration,
-                               const TString& sourceId,
                                const NPQ::TPartitionWriterOpts& opts);
 
     void Bootstrap(const TActorContext& ctx);
@@ -68,8 +66,6 @@ private:
     TActorId Owner; // WriteSessionActor
     ui32 Partition;
     ui64 TabletId;
-    std::optional<ui32> ExpectedGeneration;
-    TString SourceId;
     NPQ::TPartitionWriterOpts Opts;
 
     THashMap<std::pair<TString, TString>, TPartitionWriterPtr> Writers;

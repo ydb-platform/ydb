@@ -213,6 +213,7 @@ class DqRunner(Runner):
         data_out = None
         data_out_with_types = None
         schema = None
+        unique_suffix = test_dir.name
 
         if out.returncode == 0:
             # Parse output
@@ -236,7 +237,6 @@ class DqRunner(Runner):
             for line in out.stderr.decode('utf-8').splitlines():
                 LOGGER.error(line)
 
-        unique_suffix = test_dir.name
         err_file = yatest.common.output_path(f'dqrun-{unique_suffix}.err')
         with open(err_file, "w") as f:
             f.write(out.stderr.decode('utf-8'))

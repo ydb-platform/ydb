@@ -11,6 +11,7 @@ IF (NOT OS_WINDOWS)
         library/cpp/testing/unittest
         ydb/core/protos
         ydb/core/testlib/basics/default
+        ydb/library/yql/minikql/comp_nodes/llvm
         ydb/core/wrappers/ut_helpers
     )
     SRCS(

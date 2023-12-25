@@ -55,12 +55,16 @@ public:                                                                         
             {
                 COUNTER_INIT(LsmCompactionBytesRead, true);
                 COUNTER_INIT(LsmCompactionBytesWritten, true);
+                COUNTER_INIT(LsmCompactionReadRequests, true);
+                COUNTER_INIT(LsmCompactionWriteRequests, true);
                 COUNTER_INIT(LsmHugeBytesWritten, true);
                 COUNTER_INIT(LsmLogBytesWritten, true);
             }
 
             COUNTER_DEF(LsmCompactionBytesRead)
             COUNTER_DEF(LsmCompactionBytesWritten)
+            COUNTER_DEF(LsmCompactionReadRequests)
+            COUNTER_DEF(LsmCompactionWriteRequests)
             COUNTER_DEF(LsmHugeBytesWritten)
             COUNTER_DEF(LsmLogBytesWritten)
         };
@@ -545,6 +549,16 @@ public:                                                                         
             }
 
             COUNTER_DEF(DefragBytesRewritten);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TBalancingGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TBalancingGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TBalancingGroup)
+            {
+            }
         };
 
     } // NMonGroup

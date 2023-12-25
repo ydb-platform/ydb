@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -87,6 +87,8 @@ static char *max5data(curl_off_t bytes, char *max5)
               CURL_FORMAT_CURL_OFF_T "M", bytes/ONE_MEGABYTE,
               (bytes%ONE_MEGABYTE) / (ONE_MEGABYTE/CURL_OFF_T_C(10)) );
 
+#if (SIZEOF_CURL_OFF_T > 4)
+
   else if(bytes < CURL_OFF_T_C(10000) * ONE_MEGABYTE)
     /* 'XXXXM' is good until we're at 10000MB or above */
     msnprintf(max5, 6, "%4" CURL_FORMAT_CURL_OFF_T "M", bytes/ONE_MEGABYTE);
@@ -109,8 +111,15 @@ static char *max5data(curl_off_t bytes, char *max5)
     /* up to 10000PB, display without decimal: XXXXP */
     msnprintf(max5, 6, "%4" CURL_FORMAT_CURL_OFF_T "P", bytes/ONE_PETABYTE);
 
-  /* 16384 petabytes (16 exabytes) is the maximum a 64 bit unsigned number can
-     hold, but our data type is signed so 8192PB will be the maximum. */
+    /* 16384 petabytes (16 exabytes) is the maximum a 64 bit unsigned number
+       can hold, but our data type is signed so 8192PB will be the maximum. */
+
+#else
+
+  else
+    msnprintf(max5, 6, "%4" CURL_FORMAT_CURL_OFF_T "M", bytes/ONE_MEGABYTE);
+
+#endif
 
   return max5;
 }
@@ -157,11 +166,14 @@ void Curl_pgrsResetTransferSizes(struct Curl_easy *data)
 
 /*
  *
- * Curl_pgrsTimeWas(). Store the timestamp time at the given label.
+ * Curl_pgrsTime(). Store the current time at the given label. This fetches a
+ * fresh "now" and returns it.
+ *
+ * @unittest: 1399
  */
-void Curl_pgrsTimeWas(struct Curl_easy *data, timerid timer,
-                      struct curltime timestamp)
+struct curltime Curl_pgrsTime(struct Curl_easy *data, timerid timer)
 {
+  struct curltime now = Curl_now();
   timediff_t *delta = NULL;
 
   switch(timer) {
@@ -171,15 +183,15 @@ void Curl_pgrsTimeWas(struct Curl_easy *data, timerid timer,
     break;
   case TIMER_STARTOP:
     /* This is set at the start of a transfer */
-    data->progress.t_startop = timestamp;
+    data->progress.t_startop = now;
     break;
   case TIMER_STARTSINGLE:
     /* This is set at the start of each single fetch */
-    data->progress.t_startsingle = timestamp;
+    data->progress.t_startsingle = now;
     data->progress.is_t_startransfer_set = false;
     break;
   case TIMER_STARTACCEPT:
-    data->progress.t_acceptdata = timestamp;
+    data->progress.t_acceptdata = now;
     break;
   case TIMER_NAMELOOKUP:
     delta = &data->progress.t_nslookup;
@@ -202,7 +214,7 @@ void Curl_pgrsTimeWas(struct Curl_easy *data, timerid timer,
      * changing the t_starttransfer time.
      */
     if(data->progress.is_t_startransfer_set) {
-      return;
+      return now;
     }
     else {
       data->progress.is_t_startransfer_set = true;
@@ -212,30 +224,15 @@ void Curl_pgrsTimeWas(struct Curl_easy *data, timerid timer,
     /* this is the normal end-of-transfer thing */
     break;
   case TIMER_REDIRECT:
-    data->progress.t_redirect = Curl_timediff_us(timestamp,
-                                                 data->progress.start);
+    data->progress.t_redirect = Curl_timediff_us(now, data->progress.start);
     break;
   }
   if(delta) {
-    timediff_t us = Curl_timediff_us(timestamp, data->progress.t_startsingle);
+    timediff_t us = Curl_timediff_us(now, data->progress.t_startsingle);
     if(us < 1)
       us = 1; /* make sure at least one microsecond passed */
     *delta += us;
   }
-}
-
-/*
- *
- * Curl_pgrsTime(). Store the current time at the given label. This fetches a
- * fresh "now" and returns it.
- *
- * @unittest: 1399
- */
-struct curltime Curl_pgrsTime(struct Curl_easy *data, timerid timer)
-{
-  struct curltime now = Curl_now();
-
-  Curl_pgrsTimeWas(data, timer, now);
   return now;
 }
 

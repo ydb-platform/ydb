@@ -262,6 +262,34 @@ TSerializedCellMatrix::TSerializedCellMatrix(TConstArrayRef<TCell> cells, ui32 r
     SerializeCellMatrix(cells, rowCount, colCount, Buf, &Cells);
 }
 
+const TCell& TSerializedCellMatrix::GetCell(ui32 row, ui16 column) const {
+    Y_ABORT_UNLESS(row < RowCount && column < ColCount);
+    return Cells.at(CalcIndex(row, column));
+}
+
+
+void TSerializedCellMatrix::GetSubmatrix(ui32 firstRow, ui32 lastRow, ui16 firstColumn, ui16 lastColumn, TVector<TCell>& resultCells) const {
+    Y_ABORT_UNLESS(firstColumn < ColCount &&
+                   lastColumn < ColCount &&
+                   firstRow < RowCount &&
+                   lastRow < RowCount &&
+                   firstColumn <= lastColumn &&
+                   firstRow <= lastRow);
+
+    ui32 rowCount = (lastRow - firstRow + 1);
+    ui16 colCount = (lastColumn - firstColumn + 1);
+    size_t cellCount = colCount * rowCount;
+    resultCells.clear();
+    resultCells.resize_uninitialized(cellCount);
+
+    for (ui32 row = firstRow; row <= lastRow; ++row) {
+            for (ui16 col = firstColumn; col <= lastColumn; ++col) {
+                    resultCells[CalcIndex(row - firstRow, col - firstColumn, colCount)] = GetCell(row, col);
+                }
+            }
+}
+
+
 void TSerializedCellMatrix::Serialize(TString& res, TConstArrayRef<TCell> cells, ui32 rowCount, ui16 colCount) {
     SerializeCellMatrix(cells, rowCount, colCount, res, nullptr /*resultCells*/);
 }

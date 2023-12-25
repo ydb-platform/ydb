@@ -152,14 +152,60 @@ Y_UNIT_TEST_SUITE(Login) {
             UNIT_ASSERT(Count(groups, "group5") == 1);
         }
         {
-            auto response1 = provider.RemoveGroupMembership({.Group = "group2", .Member = "group4"});
+            auto response1 = provider.RenameGroup({.Group = "group3", .NewName = "group33"});
             UNIT_ASSERT(!response1.Error);
+
+            auto sids = provider.Sids;
+            UNIT_ASSERT(sids.size() == 6);
+            UNIT_ASSERT(sids.count("user1") == 1);
+            UNIT_ASSERT(sids.count("group1") == 1);
+            UNIT_ASSERT(sids.count("group2") == 1);
+            UNIT_ASSERT(sids.count("group33") == 1);
+            UNIT_ASSERT(sids.count("group4") == 1);
+            UNIT_ASSERT(sids.count("group5") == 1);
+
+            auto groups = provider.GetGroupsMembership("user1");
+            UNIT_ASSERT(groups.size() == 5);
+            UNIT_ASSERT(Count(groups, "group1") == 1);
+            UNIT_ASSERT(Count(groups, "group2") == 1);
+            UNIT_ASSERT(Count(groups, "group33") == 1);
+            UNIT_ASSERT(Count(groups, "group4") == 1);
+            UNIT_ASSERT(Count(groups, "group5") == 1);
+
+            groups = provider.GetGroupsMembership("group33");
+            UNIT_ASSERT(groups.size() == 1);
+            UNIT_ASSERT(Count(groups, "group1") == 1);
+
+            groups = provider.GetGroupsMembership("group5");
+            UNIT_ASSERT(groups.size() == 2);
+            UNIT_ASSERT(Count(groups, "group33") == 1);
+            UNIT_ASSERT(Count(groups, "group1") == 1);
+
+            groups = provider.GetGroupsMembership("group4");
+            UNIT_ASSERT(groups.size() == 2);
+            UNIT_ASSERT(Count(groups, "group2") == 1);
+            UNIT_ASSERT(Count(groups, "group1") == 1);
+        }
+        {
+            auto response1 = provider.AddGroupMembership({.Group = "group2", .Member = {"group4"}});
+            UNIT_ASSERT(!response1.Error);
+            UNIT_ASSERT(response1.Notice == "Role \"group4\" is already a member of role \"group2\"");
+        }
+        {
+            auto response1 = provider.RemoveGroupMembership({.Group = "group2", .Member = {"group4"}});
+            UNIT_ASSERT(!response1.Error);
+            UNIT_ASSERT(!response1.Warning);
+        }
+        {
+            auto response1 = provider.RemoveGroupMembership({.Group = "group2", .Member = {"group4"}});
+            UNIT_ASSERT(!response1.Error);
+            UNIT_ASSERT(response1.Warning == "Role \"group4\" is not a member of role \"group2\"");
         }
         {
             auto groups = provider.GetGroupsMembership("user1");
             UNIT_ASSERT(groups.size() == 4);
             UNIT_ASSERT(Count(groups, "group1") == 1);
-            UNIT_ASSERT(Count(groups, "group3") == 1);
+            UNIT_ASSERT(Count(groups, "group33") == 1);
             UNIT_ASSERT(Count(groups, "group4") == 1);
             UNIT_ASSERT(Count(groups, "group5") == 1);
         }

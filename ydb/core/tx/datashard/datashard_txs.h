@@ -67,7 +67,7 @@ private:
 
 class TDataShard::TTxProgressTransaction : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    explicit TTxProgressTransaction(TDataShard *self, TOperation::TPtr op = nullptr);
+    explicit TTxProgressTransaction(TDataShard *self, TOperation::TPtr op, NWilson::TTraceId &&traceId);
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
     void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_PROGRESS_START; }
@@ -91,6 +91,10 @@ public:
                  const TActorContext &ctx) override;
     void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_PROPOSE; }
+
+    NWilson::TTraceId GetTraceId() const noexcept {
+        return ProposeTransactionSpan.GetTraceId();
+    }
 
 private:
     bool SyncSchemeOnFollower(TOutputOpData::TResultPtr &result,
@@ -117,6 +121,10 @@ public:
     TTxWrite(TDataShard* ds, NEvents::TDataEvents::TEvWrite::TPtr ev, TInstant receivedAt, ui64 tieBreakerIndex, bool delayed);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
+    
+    NWilson::TTraceId GetTraceId() const noexcept {
+        return ProposeTransactionSpan.GetTraceId();
+    }
 protected:
     TOperation::TPtr Op;
     NEvents::TDataEvents::TEvWrite::TPtr Ev;

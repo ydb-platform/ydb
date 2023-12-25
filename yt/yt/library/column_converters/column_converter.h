@@ -45,9 +45,17 @@ using IColumnConverterPtr = std::unique_ptr<IColumnConverter>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TConvertedColumnRange ConvertRowsToColumns(
-    TRange<NTableClient::TUnversionedRow> rows,
-    const std::vector<NTableClient::TColumnSchema>& columnSchema);
+class TColumnConverters
+{
+public:
+    TConvertedColumnRange ConvertRowsToColumns(
+        TRange<NTableClient::TUnversionedRow> rows,
+        const std::vector<NTableClient::TColumnSchema>& columnSchema);
+private:
+    THashMap<int, int> IdsToIndexes_;
+    std::vector<int> ColumnIds_;
+    bool IsFirstBatch_ = true;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

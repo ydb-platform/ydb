@@ -1,12 +1,11 @@
 import typing
 
-# Workaround for good IDE and universal for runtime
-if typing.TYPE_CHECKING:
-    from ._grpc.v4.protos import ydb_scripting_pb2
-    from ._grpc.v4 import ydb_scripting_v1_pb2_grpc
-else:
-    from ._grpc.common.protos import ydb_scripting_pb2
-    from ._grpc.common import ydb_scripting_v1_pb2_grpc
+try:
+    from ydb.public.api.protos import ydb_scripting_pb2
+    from ydb.public.api.grpc import ydb_scripting_v1_pb2_grpc
+except ImportError:
+    from contrib.ydb.public.api.protos import ydb_scripting_pb2
+    from contrib.ydb.public.api.grpc import ydb_scripting_v1_pb2_grpc
 
 
 from . import issues, convert, settings

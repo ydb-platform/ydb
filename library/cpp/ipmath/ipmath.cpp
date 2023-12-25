@@ -50,7 +50,7 @@ namespace {
     auto UpperBoundForPrefix4 = UpperBoundForPrefix<IPV4_BITS>;
     auto UpperBoundForPrefix6 = UpperBoundForPrefix<IPV6_BITS>;
 
-    TIpv6Address IpFromStringSafe(const TString& s) {
+    TIpv6Address IpFromStringSafe(const TStringBuf s) {
         bool ok{};
         auto addr = TIpv6Address::FromString(s, ok);
         Y_ENSURE(ok, "Failed to parse an IP address from " << s);
@@ -117,7 +117,7 @@ TIpAddressRange TIpAddressRange::TIpAddressRangeBuilder::Build() {
     return TIpAddressRange{Start_, End_};
 }
 
-TIpAddressRange::TIpAddressRangeBuilder::TIpAddressRangeBuilder(const TString& from)
+TIpAddressRange::TIpAddressRangeBuilder::TIpAddressRangeBuilder(const TStringBuf from)
     : TIpAddressRangeBuilder{IpFromStringSafe(from)}
 {
 }
@@ -128,7 +128,7 @@ TIpAddressRange::TIpAddressRangeBuilder::TIpAddressRangeBuilder(TIpv6Address fro
     End_ = Start_;
 }
 
-TIpAddressRange::TIpAddressRangeBuilder& TIpAddressRange::TIpAddressRangeBuilder::To(const TString& to) {
+TIpAddressRange::TIpAddressRangeBuilder& TIpAddressRange::TIpAddressRangeBuilder::To(const TStringBuf to) {
     End_ = IpFromStringSafe(to);
     return *this;
 }
@@ -171,7 +171,7 @@ TIpAddressRange::TIpAddressRange(TIpv6Address start, TIpv6Address end) {
     Init(start, end);
 }
 
-TIpAddressRange::TIpAddressRange(const TString& start, const TString& end) {
+TIpAddressRange::TIpAddressRange(const TStringBuf start, const TStringBuf end) {
     auto startAddr = IpFromStringSafe(start);
     auto endAddr = IpFromStringSafe(end);
     Init(startAddr, endAddr);
@@ -222,7 +222,7 @@ TIpAddressRange TIpAddressRange::Union(const TIpAddressRange& other) const {
     return {s, e};
 }
 
-TIpAddressRange TIpAddressRange::FromCidrString(const TString& str) {
+TIpAddressRange TIpAddressRange::FromCidrString(const TStringBuf str) {
     if (auto result = TryFromCidrString(str)) {
         return *result;
     }
@@ -230,9 +230,9 @@ TIpAddressRange TIpAddressRange::FromCidrString(const TString& str) {
     ythrow TInvalidIpRangeException() << "Cannot parse " << str << " as a CIDR string";
 }
 
-TMaybe<TIpAddressRange> TIpAddressRange::TryFromCidrString(const TString& str) {
+TMaybe<TIpAddressRange> TIpAddressRange::TryFromCidrString(const TStringBuf str) {
     auto idx = str.rfind('/');
-    if (idx == TString::npos) {
+    if (idx == TStringBuf::npos) {
         return Nothing();
     }
 
@@ -246,11 +246,11 @@ TMaybe<TIpAddressRange> TIpAddressRange::TryFromCidrString(const TString& str) {
         return Nothing();
     }
 
-    return TIpAddressRange::From(TString{address})
+    return TIpAddressRange::From(address)
         .WithPrefix(prefixLen);
 }
 
-TIpAddressRange TIpAddressRange::FromRangeString(const TString& str) {
+TIpAddressRange TIpAddressRange::FromRangeString(const TStringBuf str) {
     if (auto result = TryFromRangeString(str)) {
         return *result;
     }
@@ -258,9 +258,9 @@ TIpAddressRange TIpAddressRange::FromRangeString(const TString& str) {
     ythrow TInvalidIpRangeException() << "Cannot parse " << str << " as a range string";
 }
 
-TMaybe<TIpAddressRange> TIpAddressRange::TryFromRangeString(const TString& str) {
+TMaybe<TIpAddressRange> TIpAddressRange::TryFromRangeString(const TStringBuf str) {
     auto idx = str.find('-');
-    if (idx == TString::npos) {
+    if (idx == TStringBuf::npos) {
         return Nothing();
     }
 
@@ -269,10 +269,10 @@ TMaybe<TIpAddressRange> TIpAddressRange::TryFromRangeString(const TString& str) 
     sb.SplitAt(idx, start, end);
     end.Skip(1);
 
-    return TIpAddressRange::From(TString{start}).To(TString{end});
+    return TIpAddressRange::From(start).To(end);
 }
 
-TIpAddressRange TIpAddressRange::FromString(const TString& str) {
+TIpAddressRange TIpAddressRange::FromString(const TStringBuf str) {
     if (auto result = TryFromString(str)) {
         return *result;
     }
@@ -280,10 +280,10 @@ TIpAddressRange TIpAddressRange::FromString(const TString& str) {
     ythrow TInvalidIpRangeException() << "Cannot parse an IP address from " << str;
 }
 
-TMaybe<TIpAddressRange> TIpAddressRange::TryFromString(const TString& str) {
-    if (auto idx = str.find('/'); idx != TString::npos) {
+TMaybe<TIpAddressRange> TIpAddressRange::TryFromString(const TStringBuf str) {
+    if (auto idx = str.find('/'); idx != TStringBuf::npos) {
         return TryFromCidrString(str);
-    } else if (idx = str.find('-'); idx != TString::npos) {
+    } else if (idx = str.find('-'); idx != TStringBuf::npos) {
         return TryFromRangeString(str);
     } else {
         bool ok{};
@@ -321,7 +321,7 @@ TIpAddressRange::TIpAddressRangeBuilder TIpAddressRange::From(TIpv6Address from)
     return TIpAddressRangeBuilder{from};
 }
 
-TIpAddressRange::TIpAddressRangeBuilder TIpAddressRange::From(const TString& from) {
+TIpAddressRange::TIpAddressRangeBuilder TIpAddressRange::From(const TStringBuf from) {
     return TIpAddressRangeBuilder{from};
 }
 

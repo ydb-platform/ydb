@@ -14,6 +14,7 @@ PY_SRCS(
     runner.py
     schema.py
     settings.py
+    sql.py
 )
 
 PEERDIR(

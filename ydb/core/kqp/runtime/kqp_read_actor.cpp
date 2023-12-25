@@ -895,8 +895,11 @@ public:
 
         Counters->CreatedIterators->Inc();
         ReadIdByTabletId[state->TabletId].push_back(id);
+
+        NWilson::TTraceId traceId; // TODO: get traceId from kqp.        
+
         Send(PipeCacheId, new TEvPipeCache::TEvForward(ev.Release(), state->TabletId, true),
-            IEventHandle::FlagTrackDelivery);
+            IEventHandle::FlagTrackDelivery, 0, std::move(traceId));
 
         if (!FirstShardStarted) {
             state->IsFirst = true;

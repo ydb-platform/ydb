@@ -7,6 +7,8 @@
 #include <yt/yt/core/misc/ref_counted_tracker.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 
+#include <yt/yt/core/ytree/attributes.h>
+
 #include <util/system/thread.h>
 
 #include <thread>

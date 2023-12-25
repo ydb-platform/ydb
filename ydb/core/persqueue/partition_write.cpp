@@ -910,13 +910,7 @@ TPartition::ProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParame
                         << " version " << *hbVersion
             );
 
-            auto heartbeat = THeartbeat{
-                .Version = *hbVersion,
-                .Data = p.Msg.Data,
-            };
-
-            sourceId.Update(p.Msg.SeqNo, curOffset, CurrentTimestamp, std::move(heartbeat));
-
+            sourceId.Update(THeartbeat{*hbVersion, p.Msg.Data});
             return ProcessResult::Continue;
         }
 
@@ -1188,6 +1182,41 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
         }
     }
 
+    if (const auto heartbeat = sourceIdBatch.CanEmitHeartbeat()) {
+        if (heartbeat->Version > LastEmittedHeartbeat) {
+            LOG_INFO_S(
+                    ctx, NKikimrServices::PERSQUEUE,
+                    "Topic '" << TopicName() << "' partition " << Partition
+                        << " emit heartbeat " << heartbeat->Version
+            );
+
+            auto hbMsg = TWriteMsg{Max<ui64>() /* cookie */, Nothing(), TEvPQ::TEvWrite::TMsg{
+                .SourceId = NSourceIdEncoding::EncodeSimple(ToString(TabletID)),
+                .SeqNo = 0, // we don't use SeqNo because we disable deduplication
+                .PartNo = 0,
+                .TotalParts = 1,
+                .TotalSize = static_cast<ui32>(heartbeat->Data.size()),
+                .CreateTimestamp = CurrentTimestamp.MilliSeconds(),
+                .ReceiveTimestamp = CurrentTimestamp.MilliSeconds(),
+                .DisableDeduplication = true,
+                .WriteTimestamp = CurrentTimestamp.MilliSeconds(),
+                .Data = heartbeat->Data,
+                .UncompressedSize = 0,
+                .PartitionKey = {},
+                .ExplicitHashKey = {},
+                .External = false,
+                .IgnoreQuotaDeadline = true,
+                .HeartbeatVersion = std::nullopt,
+            }};
+
+            WriteInflightSize += heartbeat->Data.size();
+            auto result = ProcessRequest(hbMsg, parameters, request, ctx);
+            Y_ABORT_UNLESS(result == ProcessResult::Continue);
+
+            LastEmittedHeartbeat = heartbeat->Version;
+        }
+    }
+
     UpdateWriteBufferIsFullState(ctx.Now());
 
     if (!NewHead.Batches.empty() && !NewHead.Batches.back().Packed) {
@@ -1383,34 +1412,6 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant now, c
         for (ui32 i = 0; i < TotalLevels; ++i) {
             DataKeysHead[i].Clear();
         }
-    }
-
-    if (const auto heartbeat = sourceIdBatch.CanEmit()) {
-        LOG_INFO_S(
-                ctx, NKikimrServices::PERSQUEUE,
-                "Topic '" << TopicName() << "' partition " << Partition
-                    << " emit heartbeat " << heartbeat->Version
-        );
-
-        EmplaceRequest(TWriteMsg{Max<ui64>() /* cookie */, Nothing(), TEvPQ::TEvWrite::TMsg{
-            .SourceId = NSourceIdEncoding::EncodeSimple(ToString(TabletID)),
-            .SeqNo = 0, // we don't use SeqNo because we disable deduplication
-            .PartNo = 0,
-            .TotalParts = 1,
-            .TotalSize = static_cast<ui32>(heartbeat->Data.size()),
-            .CreateTimestamp = CurrentTimestamp.MilliSeconds(),
-            .ReceiveTimestamp = CurrentTimestamp.MilliSeconds(),
-            .DisableDeduplication = true,
-            .WriteTimestamp = CurrentTimestamp.MilliSeconds(),
-            .Data = heartbeat->Data,
-            .UncompressedSize = 0,
-            .PartitionKey = {},
-            .ExplicitHashKey = {},
-            .External = false,
-            .IgnoreQuotaDeadline = true,
-            .HeartbeatVersion = std::nullopt,
-        }}, ctx);
-        WriteInflightSize += heartbeat->Data.size();
     }
 
     if (NewHead.PackedSize == 0) { //nothing added to head - just compaction or tmp part blobs writed

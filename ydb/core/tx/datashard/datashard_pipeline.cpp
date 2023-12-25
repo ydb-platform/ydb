@@ -1568,12 +1568,12 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
     op->OperationSpan = NWilson::TSpan(TWilsonTablet::Tablet, std::move(traceId), "WriteOperation", NWilson::EFlags::AUTO_END);
 
     auto badRequest = [&](const TString& error) {
-        op->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, error);
+        op->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, error, Self->TabletID());
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
     };
 
-    if (!op->WriteTx()->Ready()) {
-        badRequest(TStringBuilder() << "Shard " << Self->TabletID() << " cannot parse tx " << op->GetTxId() << ": " << op->WriteTx()->GetError());
+    if (!op->GetWriteTx()->Ready()) {
+        badRequest(TStringBuilder() << "Shard " << Self->TabletID() << " cannot parse tx " << op->GetTxId() << ": " << op->GetWriteTx()->GetError());
         return op;
     }
 

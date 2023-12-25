@@ -368,8 +368,7 @@ private:
         ADD_COUNTER(CpuTimeUs)
         ADD_COUNTER(ComputeCpuTimeUs)
         ADD_COUNTER(SourceCpuTimeUs)
-        // ADD_COUNTER(FirstRowTimeMs)
-        // ADD_COUNTER(FinishTimeMs)
+
         ADD_COUNTER(IngressRows)
         ADD_COUNTER(IngressBytes)
         ADD_COUNTER(EgressRows)
@@ -380,8 +379,9 @@ private:
         ADD_COUNTER(OutputBytes)
         ADD_COUNTER(ResultRows)
         ADD_COUNTER(ResultBytes)
-        // ADD_COUNTER(StartTimeMs)
 
+        ADD_COUNTER(StartTimeMs)
+        ADD_COUNTER(FinishTimeMs)
         ADD_COUNTER(WaitInputTimeUs)
         ADD_COUNTER(WaitOutputTimeUs)
 
@@ -390,6 +390,10 @@ private:
 
         if (auto v = x.GetMkqlMaxMemoryUsage()) {
             TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "MkqlMaxMemoryUsage"), v);
+        }
+
+        if (auto v = x.GetDurationUs()) {
+            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "DurationUs"), v);
         }
 
         for (const auto& stat : s.GetMkqlStats()) {

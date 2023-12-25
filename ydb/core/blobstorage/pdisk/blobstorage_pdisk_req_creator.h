@@ -227,7 +227,7 @@ public:
     }
 
     [[nodiscard]] TLogWrite* CreateLogWrite(NPDisk::TEvLog &ev, const TActorId &sender, double& burstMs, NWilson::TTraceId traceId) {
-        NWilson::TSpan span(TWilson::PDisk, std::move(traceId), "PDisk.LogWrite", NWilson::EFlags::AUTO_END);
+        NWilson::TSpan span(TWilson::PDisk, std::move(traceId), "PDisk.LogWrite", NWilson::EFlags::AUTO_END, ActorSystem);
 
         TReqId reqId(TReqId::LogWrite, AtomicIncrement(LastReqId));
         LOG_DEBUG(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " %s Sender# %" PRIu64 " ReqId# %" PRIu64,
@@ -243,7 +243,7 @@ public:
 
     [[nodiscard]] TChunkRead* CreateChunkRead(const NPDisk::TEvChunkRead &ev, const TActorId &sender, double& burstMs,
             NWilson::TTraceId traceId) {
-        NWilson::TSpan span(TWilson::PDisk, std::move(traceId), "PDisk.ChunkRead", NWilson::EFlags::AUTO_END);
+        NWilson::TSpan span(TWilson::PDisk, std::move(traceId), "PDisk.ChunkRead", NWilson::EFlags::AUTO_END, ActorSystem);
 
         TReqId reqId(TReqId::ChunkRead, AtomicIncrement(LastReqId));
         LOG_DEBUG(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " %s Sender# %" PRIu64 " ReqId# %" PRIu64,
@@ -258,7 +258,7 @@ public:
 
     [[nodiscard]] TChunkWrite* CreateChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender, double& burstMs,
             NWilson::TTraceId traceId) {
-        NWilson::TSpan span(TWilson::PDisk, std::move(traceId), "PDisk.ChunkWrite", NWilson::EFlags::AUTO_END);
+        NWilson::TSpan span(TWilson::PDisk, std::move(traceId), "PDisk.ChunkWrite", NWilson::EFlags::AUTO_END, ActorSystem);
 
         TReqId reqId(TReqId::ChunkWrite, AtomicIncrement(LastReqId));
         LOG_DEBUG(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " %s Sender# %" PRIu64 " ReqId# %" PRIu64,

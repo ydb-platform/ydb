@@ -2354,7 +2354,7 @@ bool EnsureDataOrPgType(TPositionHandle position, const TTypeAnnotationNode& typ
         return false;
     }
 
-    if (type.GetKind() != ETypeAnnotationKind::Pg && type.GetKind() != ETypeAnnotationKind::Pg) {
+    if (type.GetKind() != ETypeAnnotationKind::Data && type.GetKind() != ETypeAnnotationKind::Pg) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected data or pg type, but got: " << type));
         return false;
     }

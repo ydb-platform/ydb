@@ -39,8 +39,9 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     void Init() {
         auto opts = TPartitionWriterOpts()
             .WithCheckState(true)
-            .WithAutoRegister(true);
-        Writer = RegisterWithSameMailbox(CreatePartitionWriter(SelfId(), {}, ShardId, PartitionId, {}, SourceId, opts));
+            .WithAutoRegister(true)
+            .WithSourceId(SourceId);
+        Writer = RegisterWithSameMailbox(CreatePartitionWriter(SelfId(), ShardId, PartitionId, opts));
         Become(&TThis::StateInit);
     }
 

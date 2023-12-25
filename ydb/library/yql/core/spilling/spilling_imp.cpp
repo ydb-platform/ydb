@@ -142,10 +142,10 @@ TTempStorageProxyImp::~TTempStorageProxyImp(){
 
 
 
-NThreading::TFuture<TOperationResults> TSessionImp::Save(const TString & objNamespace, const TString & name,  TBuffer && buf){
+NThreading::TFuture<TOperationResults> TSessionImp::Save(const TString & objNamespace, const TString & name,  TRope && rope){
     TAtomicSharedPtr<TNamespaceCache> nsc = NsList_->GetNamespaceCache(objNamespace);
     NsList_->PushNamespaceToProcess(objNamespace, SessionId_);
-    return nsc->Save(name, std::move(buf), SessionId_);
+    return nsc->Save(name, std::move(rope), SessionId_);
 }
 
 NThreading::TFuture<TLoadOperationResults> TSessionImp::Load(const TString & objNamespace, const TString & name, EObjectsLifetime objLifetime ){
@@ -204,10 +204,10 @@ TStorageIteratorImp::TStorageIteratorImp(const TMaybe<TString>& objNamespace, co
 }
 
 
-NThreading::TFuture<TOperationResults> TStreamImp::Save(TBuffer&& buf){
+NThreading::TFuture<TOperationResults> TStreamImp::Save(TRope&& rope){
     TAtomicSharedPtr<TNamespaceCache> nsc = NsList_->GetNamespaceCache(Namespace_);
     NsList_->PushNamespaceToProcess(Namespace_, SessionId_);
-    return nsc->Save(Name_, std::move(buf), SessionId_, true);
+    return nsc->Save(Name_, std::move(rope), SessionId_, true);
 }
 
 ui64 TStreamImp::Size() {

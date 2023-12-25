@@ -184,7 +184,7 @@ struct TOperationResults {
 
 // Results of load operation
 struct TLoadOperationResults: public TOperationResults {
-   TAtomicSharedPtr<TRope> Buf; //  Buffer with data after load operation.
+   TAtomicSharedPtr<TRope> Rope; //  Rope with data after load operation.
 };
 
 struct TFileStorageConfig {

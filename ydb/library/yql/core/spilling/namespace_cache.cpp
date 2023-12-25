@@ -29,25 +29,25 @@ std::optional<XXH32_hash_t> saveRopeToFile(TRope& rope, TAtomicSharedPtr<ISpillF
 
     XXH32_reset(state, 0);
 
-    ui32 blob_size;
+    ui32 blobSize;
     for (const auto& blob: rope) {
         YQL_ENSURE(blob.second <= std::numeric_limits<ui32>::max());
-        blob_size = blob.second;
-        XXH32_update(state, &blob_size, sizeof(blob_size));
-        XXH32_update(state, blob.first, blob_size);
+        blobSize = blob.second;
+        XXH32_update(state, &blobSize, sizeof(blobSize));
+        XXH32_update(state, blob.first, blobSize);
 
-        spillDataFile->Write(offset, &blob_size, sizeof(blob_size));
-        offset += sizeof(blob_size);
+        spillDataFile->Write(offset, &blobSize, sizeof(blobSize));
+        offset += sizeof(blobSize);
 
-        spillDataFile->Write(offset, blob.first, blob_size);
-        offset += blob_size;
+        spillDataFile->Write(offset, blob.first, blobSize);
+        offset += blobSize;
     }
     XXH32_hash_t hash = XXH32_digest(state);
     XXH32_freeState(state);
     return hash;
 }
 
-std::optional<XXH32_hash_t> readRopeFromFile(TRope& rope, TAtomicSharedPtr<ISpillFile> spillDataFile, ui32 offset) {
+std::optional<XXH32_hash_t> readRopeFromFile(TRope& rope, TAtomicSharedPtr<ISpillFile> spillDataFile, ui32 offset, ui32 size) {
     XXH32_state_t* state = XXH32_createState();
     if (state == nullptr) {
         YQL_LOG(ERROR) << "Not enough memory" << Endl;
@@ -56,18 +56,38 @@ std::optional<XXH32_hash_t> readRopeFromFile(TRope& rope, TAtomicSharedPtr<ISpil
 
     XXH32_reset(state, 0);
 
-    ui32 blob_size;
+    ui32 bytesRead = 0;
+    
+    ui32 blobSize = 0;
+    i32 readRes;
+    while (bytesRead < size) {
+        readRes = spillDataFile->Read(offset, &blobSize, sizeof(blobSize));
+        if (readRes < 0) {
+            YQL_LOG(ERROR) << "Read failed" << Endl;
+            return std::nullopt;
+        }
+
+        readRes = spillDataFile->Read(offset, &blobSize, blobSize);
+        if (readRes < 0) {
+            YQL_LOG(ERROR) << "Read failed" << Endl;
+            return std::nullopt;
+        }
+
+
+    }
+
+    ui32 blobSize;
     for (const auto& blob: rope) {
         YQL_ENSURE(blob.second <= std::numeric_limits<ui32>::max());
-        blob_size = blob.second;
-        XXH32_update(state, &blob_size, sizeof(blob_size));
-        XXH32_update(state, blob.first, blob_size);
+        blobSize = blob.second;
+        XXH32_update(state, &blobSize, sizeof(blobSize));
+        XXH32_update(state, blob.first, blobSize);
 
-        spillDataFile->Write(offset, &blob_size, sizeof(blob_size));
-        offset += sizeof(blob_size);
+        spillDataFile->Read(offset, &blobSize, sizeof(blobSize));
+        offset += sizeof(blobSize);
 
-        spillDataFile->Write(offset, blob.first, blob_size);
-        offset += blob_size;
+        spillDataFile->Write(offset, blob.first, blobSize);
+        offset += blobSize;
     }
     XXH32_hash_t hash = XXH32_digest(state);
     XXH32_freeState(state);
@@ -186,7 +206,7 @@ NThreading::TFuture<TLoadOperationResults> TNamespaceCache::Load(const TString& 
     lt.Promise = NThreading::NewPromise<TLoadOperationResults>(); 
     lt.Name = name;
     lt.SessionId = sessionId;
-    lt.StreamBufId = streamId;
+    lt.StreamRopeId = streamId;
     bool foundInLastObjs = false;
     bool foundInSaveQueue = false;
     with_lock(ToSaveLock_) {
@@ -212,19 +232,19 @@ NThreading::TFuture<TLoadOperationResults> TNamespaceCache::Load(const TString& 
                 if ( st.ProcessingStatus != EProcessingStatus::Deleted ) {
                     lr.Status = EOperationStatus::Success;
                     if ( st.ProcessingStatus == EProcessingStatus::Processing ) {
-                       lr.Buf = st.Buf; 
+                       lr.Rope = st.Rope; 
                     } else {
                         if (objLifetime == EObjectsLifetime::DeleteAfterLoad ) {
-                            lr.Buf = st.Buf;
-                            st.Buf = nullptr;
-                            SessionDataSpilled_[st.SessionId] += lr.Buf->Size(); 
+                            lr.Rope = st.Rope;
+                            st.Rope = nullptr;
+                            SessionDataSpilled_[st.SessionId] += lr.Rope->GetSize(); 
                             st.ProcessingStatus = EProcessingStatus::Deleted;
                         } else {
-                            lr.Buf = st.Buf; 
+                            lr.Rope = st.Rope; 
                         }
                         
                     }
-                    SessionDataLoadedFromMemory_[st.SessionId] += lr.Buf->Size();
+                    SessionDataLoadedFromMemory_[st.SessionId] += lr.Rope->GetSize();
                     lt.Promise.SetValue(std::move(lr));
                 } else {
                     lr.Status = EOperationStatus::NoObjectName;
@@ -729,13 +749,16 @@ void TNamespaceCache::ProcessLoadQueue() {
     if (!found)
         return;
 
-    TBuffer buf(mr.DataSize());
-    fileMet->DataFile->Read(mr.Offset(), buf.Data(), mr.DataSize());
-    XXH32_hash_t hash = XXH32( buf.Data(), mr.DataSize(), 0);
-    lr.Buf = MakeAtomicShared<TBuffer>(std::move(buf));
-    lr.Status = EOperationStatus::Success;
+    TRope rope;
+    const auto hash = readRopeFromFile(rope, fileMet->DataFile, mr.Offset(), mr.Size());
+    if (!hash.has_value()) {
+        lr.Status = EOperationStatus::Failure;
+    } else {
+        lr.Rope = MakeAtomicShared<TRope>(std::move(rope));
+        lr.Status = EOperationStatus::Success;
+    }
 
-    if ( hash != mr.DataHash() ) {
+    if (hash != mr.DataHash()) {
         lr.Status = EOperationStatus::ChecksumInvalid;
         YQL_LOG(ERROR) << "Wrong hash!!!:  " << "Buf hash: " << hash << " Meta hash: " << mr.DataHash() << Endl;
     }
@@ -744,10 +767,7 @@ void TNamespaceCache::ProcessLoadQueue() {
         SessionDataLoadedFromStorage_[loadTask.SessionId] += mr.DataSize();
     }
 
-
     loadTask.Promise.SetValue(std::move(lr)); 
-
-
 }
 
 void TNamespaceCache::ProcessDeleteQueue() {

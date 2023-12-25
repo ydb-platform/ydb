@@ -34,7 +34,7 @@ struct TBaseTask {
     ui32 ObjId; // Identifier of the object
     ui32 SessionId; // Identifier of the session for this task
     TString Name; // Name of the object or stream
-    ui32 StreamBufId; // Id of the object inside the stream (0, 1, 2, ...)
+    ui32 StreamRopeId; // Id of the object inside the stream (0, 1, 2, ...)
     TAtomicSharedPtr<TRope> Rope; // Data to save or load
     EProcessingStatus ProcessingStatus = EProcessingStatus::Added; // Contains current status of task processing stage
 };

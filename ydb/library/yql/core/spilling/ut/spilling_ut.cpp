@@ -358,9 +358,6 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
         UNIT_ASSERT(ftrl.Initialized());
 
     }
-
-
-
 }
 
 }

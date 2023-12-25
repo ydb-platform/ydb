@@ -520,7 +520,7 @@ TWriteRoleSettings ParseWriteRoleSettings(TExprList node, TExprContext& ctx) {
 
 TWritePermissionSettings ParseWritePermissionsSettings(NNodes::TExprList node, TExprContext&) {
     TMaybeNode<TCoAtomList> permissions;
-    TMaybeNode<TCoAtomList> pathes;
+    TMaybeNode<TCoAtomList> paths;
     TMaybeNode<TCoAtomList> roleNames;
     for (auto child : node) {
         if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
@@ -533,14 +533,14 @@ TWritePermissionSettings ParseWritePermissionsSettings(NNodes::TExprList node, T
             } else if (name == "roles") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
                 roleNames = tuple.Value().Cast<TCoAtomList>();
-            } else if (name == "pathes") {
+            } else if (name == "paths") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
-                pathes = tuple.Value().Cast<TCoAtomList>();
+                paths = tuple.Value().Cast<TCoAtomList>();
             }
         }
     }
 
-    TWritePermissionSettings ret(std::move(permissions), std::move(pathes), std::move(roleNames));
+    TWritePermissionSettings ret(std::move(permissions), std::move(paths), std::move(roleNames));
     return ret;
 }
 
@@ -1264,14 +1264,16 @@ void WriteStatistics(NYson::TYsonWriter& writer, const TOperationStatistics& sta
     writer.OnEndMap();
 }
 
-void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics) {
+void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics, bool addExternalMap) {
     if (statistics.empty()) {
         return;
     }
 
     THashMap<TString, std::tuple<i64, i64, i64, TMaybe<i64>>> total; // sum, count, max, min
 
-    writer.OnBeginMap();
+    if (addExternalMap) {
+        writer.OnBeginMap();
+    }
 
     for (const auto& opStatistics : statistics) {
         for (auto& el : opStatistics.second.Entries) {
@@ -1331,8 +1333,9 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
         writer.OnEndMap();
     }
     writer.OnEndMap(); // total
-
-    writer.OnEndMap();
+    if (addExternalMap) {
+        writer.OnEndMap();
+    }
 }
 
 bool ValidateCompressionForInput(std::string_view format, std::string_view compression, TExprContext& ctx) {

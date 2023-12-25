@@ -965,6 +965,27 @@
             "uri": "https://{canondata_backend}/1923547/61458c9c64b8429a1ff4c80acb29f295ac160173/resource.tar.gz#test.test_hor_join-fuse_multi_usage-outlimit-Results_/results.txt"
         }
     ],
+    "test.test[hor_join-yql-12610_old_table_props--Debug]": [
+        {
+            "checksum": "ce0562331c9caabbb8a788b7022306f5",
+            "size": 2199,
+            "uri": "https://{canondata_backend}/1777230/cddb0672ed15cbfbebe5f4b7e7a9360e9ecaa9c9/resource.tar.gz#test.test_hor_join-yql-12610_old_table_props--Debug_/opt.yql"
+        }
+    ],
+    "test.test[hor_join-yql-12610_old_table_props--Plan]": [
+        {
+            "checksum": "bcc3183d43227514a3307ada3e4c43ba",
+            "size": 4171,
+            "uri": "https://{canondata_backend}/1777230/cddb0672ed15cbfbebe5f4b7e7a9360e9ecaa9c9/resource.tar.gz#test.test_hor_join-yql-12610_old_table_props--Plan_/plan.txt"
+        }
+    ],
+    "test.test[hor_join-yql-12610_old_table_props--Results]": [
+        {
+            "checksum": "05078f7be1fe3a44d3df7ba9c075671c",
+            "size": 2195,
+            "uri": "https://{canondata_backend}/1777230/cddb0672ed15cbfbebe5f4b7e7a9360e9ecaa9c9/resource.tar.gz#test.test_hor_join-yql-12610_old_table_props--Results_/results.txt"
+        }
+    ],
     "test.test[insert-append-proto_fail-Debug]": [],
     "test.test[insert-append-proto_fail-Plan]": [],
     "test.test[insert-append-proto_fail-Results]": [

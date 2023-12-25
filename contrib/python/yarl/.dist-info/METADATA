@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: yarl
-Version: 1.9.3
+Version: 1.9.4
 Summary: Yet another URL library
 Home-page: https://github.com/aio-libs/yarl
 Author: Andrew Svetlov
@@ -116,9 +116,9 @@ automatically encoded giving canonical representation as result:
 
 .. code-block:: pycon
 
-   >>> url = URL('https://www.python.org/путь')
+   >>> url = URL('https://www.python.org/шлях')
    >>> url
-   URL('https://www.python.org/%D0%BF%D1%83%D1%82%D1%8C')
+   URL('https://www.python.org/%D1%88%D0%BB%D1%8F%D1%85')
 
 Regular properties are *percent-decoded*, use ``raw_`` versions for
 getting *encoded* strings:
@@ -126,17 +126,17 @@ getting *encoded* strings:
 .. code-block:: pycon
 
    >>> url.path
-   '/путь'
+   '/шлях'
 
    >>> url.raw_path
-   '/%D0%BF%D1%83%D1%82%D1%8C'
+   '/%D1%88%D0%BB%D1%8F%D1%85'
 
 Human readable representation of URL is available as ``.human_repr()``:
 
 .. code-block:: pycon
 
    >>> url.human_repr()
-   'https://www.python.org/путь'
+   'https://www.python.org/шлях'
 
 For full documentation please read https://yarl.aio-libs.org.
 
@@ -157,12 +157,12 @@ used with our wheels) the the tarball will be used to compile the library from
 the source code. It requires a C compiler and and Python headers installed.
 
 To skip the compilation you must explicitly opt-in by using a PEP 517
-configuration setting ``--pure-python``, or setting the ``YARL_NO_EXTENSIONS``
+configuration setting ``pure-python``, or setting the ``YARL_NO_EXTENSIONS``
 environment variable to a non-empty value, e.g.:
 
 .. code-block:: console
 
-   $ pip install yarl --config-settings=--pure-python=
+   $ pip install yarl --config-settings=pure-python=false
 
 Please note that the pure-Python (uncompiled) version is much slower. However,
 PyPy always uses a pure-Python implementation, and, as such, it is unaffected
@@ -262,13 +262,83 @@ It's *Apache 2* licensed and freely available.
 
 .. towncrier release notes start
 
+1.9.4 (2023-12-06)
+==================
+
+Bug fixes
+---------
+
+- Started raising ``TypeError`` when a string value is passed into
+  ``yarl.URL.build()`` as the ``port`` argument  -- by `@commonism <https://github.com/sponsors/commonism>`__.
+
+  Previously the empty string as port would create malformed URLs when rendered as string representations. (`#883 <https://github.com/aio-libs/yarl/issues/883>`__)
+
+
+Packaging updates and notes for downstreams
+-------------------------------------------
+
+- The leading ``--`` has been dropped from the `PEP 517 <https://peps.python.org/pep-517>`__ in-tree build
+  backend config setting names. ``--pure-python`` is now just ``pure-python``
+  -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__.
+
+  The usage now looks as follows:
+
+  .. code-block:: console
+
+      $ python -m build \
+          --config-setting=pure-python=true \
+          --config-setting=with-cython-tracing=true
+
+  (`#963 <https://github.com/aio-libs/yarl/issues/963>`__)
+
+
+Contributor-facing changes
+--------------------------
+
+- A step-by-step ``Release Guide`` guide has
+  been added, describing how to release *yarl* -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__.
+
+  This is primarily targeting maintainers. (`#960 <https://github.com/aio-libs/yarl/issues/960>`__)
+- Coverage collection has been implemented for the Cython modules
+  -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__.
+
+  It will also be reported to Codecov from any non-release CI jobs.
+
+  To measure coverage in a development environment, *yarl* can be
+  installed in editable mode, which requires an environment variable
+  ``YARL_CYTHON_TRACING=1`` to be set:
+
+  .. code-block:: console
+
+      $ YARL_CYTHON_TRACING=1 python -Im pip install -e .
+
+  Editable install produces C-files required for the Cython coverage
+  plugin to map the measurements back to the PYX-files. (`#961 <https://github.com/aio-libs/yarl/issues/961>`__)
+- It is now possible to request line tracing in Cython builds using the
+  ``with-cython-tracing`` `PEP 517 <https://peps.python.org/pep-517>`__ config setting
+  -- `@webknjaz <https://github.com/sponsors/webknjaz>`__.
+
+  This can be used in CI and development environment to measure coverage
+  on Cython modules, but is not normally useful to the end-users or
+  downstream packagers.
+
+  Here's a usage example:
+
+  .. code-block:: console
+
+      $ python -Im pip install . --config-settings=with-cython-tracing=true
+
+  For editable installs, this setting is on by default. Otherwise, it's
+  off unless requested explicitly. (`#962 <https://github.com/aio-libs/yarl/issues/962>`__)
+
+
 1.9.3 (2023-11-20)
 ==================
 
 Bug fixes
 ---------
 
-- Stopped dropping trailing slashes in ``yarl.URL.joinpath()`` -- by `@mjpieters <https://github.com/sponsors/mjpieters>`__. (`#862 <https://github.com/aio-libs/yarl/issues/862>`__, `#866 <https://github.com/aio-libs/yarl/issues/866>`__)
+- Stopped dropping trailing slashes in ``yarl.URL.joinpath()`` -- by `@gmacon <https://github.com/sponsors/gmacon>`__. (`#862 <https://github.com/aio-libs/yarl/issues/862>`__, `#866 <https://github.com/aio-libs/yarl/issues/866>`__)
 - Started accepting string subclasses in ``__truediv__()`` operations (``URL / segment``) -- by `@mjpieters <https://github.com/sponsors/mjpieters>`__. (`#871 <https://github.com/aio-libs/yarl/issues/871>`__, `#884 <https://github.com/aio-libs/yarl/issues/884>`__)
 - Fixed the human representation of URLs with square brackets in usernames and passwords -- by `@mjpieters <https://github.com/sponsors/mjpieters>`__. (`#876 <https://github.com/aio-libs/yarl/issues/876>`__, `#882 <https://github.com/aio-libs/yarl/issues/882>`__)
 - Updated type hints to include ``URL.missing_port()``, ``URL.__bytes__()``
@@ -280,12 +350,12 @@ Packaging updates and notes for downstreams
 -------------------------------------------
 
 - Integrated Cython 3 to enable building *yarl* under Python 3.12 -- by `@mjpieters <https://github.com/sponsors/mjpieters>`__. (`#829 <https://github.com/aio-libs/yarl/issues/829>`__, `#881 <https://github.com/aio-libs/yarl/issues/881>`__)
-- Declared modern ``setuptools.build_meta`` as the ``517`` build
+- Declared modern ``setuptools.build_meta`` as the `PEP 517 <https://peps.python.org/pep-517>`__ build
   backend in ``pyproject.toml`` explicitly -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__. (`#886 <https://github.com/aio-libs/yarl/issues/886>`__)
 - Converted most of the packaging setup into a declarative ``setup.cfg``
   config -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__. (`#890 <https://github.com/aio-libs/yarl/issues/890>`__)
-- Replaced the packaging is replaced from an old-fashioned ``setup.py`` to an
-  in-tree ``517`` build backend -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__.
+- The packaging is replaced from an old-fashioned ``setup.py`` to an
+  in-tree `PEP 517 <https://peps.python.org/pep-517>`__ build backend -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__.
 
   Whenever the end-users or downstream packagers need to build ``yarl`` from
   source (a Git checkout or an sdist), they may pass a ``config_settings``
@@ -296,7 +366,7 @@ Packaging updates and notes for downstreams
 
   .. code-block:: console
 
-      $ python -m pip install . --config-settings=--pure-python=
+      $ python -m pip install . --config-settings=--pure-python=false
 
   This will also work with ``-e | --editable``.
 
@@ -304,10 +374,16 @@ Packaging updates and notes for downstreams
 
   .. code-block:: console
 
-      $ python -m build --config-setting=--pure-python=
+      $ python -m build --config-setting=--pure-python=false
 
   Adding ``-w | --wheel`` can force ``pypa/build`` produce a wheel from source
   directly, as opposed to building an ``sdist`` and then building from it. (`#893 <https://github.com/aio-libs/yarl/issues/893>`__)
+
+  .. attention::
+
+     v1.9.3 was the only version using the ``--pure-python`` setting name.
+     Later versions dropped the ``--`` prefix, making it just ``pure-python``.
+
 - Declared Python 3.12 supported officially in the distribution package metadata
   -- by `@edgarrmondragon <https://github.com/sponsors/edgarrmondragon>`__. (`#942 <https://github.com/aio-libs/yarl/issues/942>`__)
 

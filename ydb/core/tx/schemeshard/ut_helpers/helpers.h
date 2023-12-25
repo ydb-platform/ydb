@@ -546,8 +546,9 @@ namespace NSchemeShardUT_Private {
 
     void SendTEvPeriodicTopicStats(TTestActorRuntime& runtime, ui64 topicId, ui64 generation, ui64 round, ui64 dataSize, ui64 usedReserveSize);
     void WriteToTopic(TTestActorRuntime& runtime, const TString& path, ui32& msgSeqNo, const TString& message);
-    void WriteRow(TTestActorRuntime& runtime, const TString& key, const TString& value, ui64 tabletId = TTestTxConfig::FakeHiveTablets);
-    void WriteRowPg(TTestActorRuntime& runtime, const TString& key, ui32 value, ui64 tabletId = TTestTxConfig::FakeHiveTablets);
+    void UpdateRow(TTestActorRuntime& runtime, const TString& table, const ui32 key, const TString& value, ui64 tabletId = TTestTxConfig::FakeHiveTablets);
+    void UpdateRowPg(TTestActorRuntime& runtime, const TString& table, const ui32 key, ui32 value, ui64 tabletId = TTestTxConfig::FakeHiveTablets);
     void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, int partitionIdx, const TVector<ui32>& keyTags, const TVector<ui32>& valueTags, const TVector<ui32>& recordIds);
+    void WriteRow(TTestActorRuntime& runtime, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected = true);
 
 } //NSchemeShardUT_Private

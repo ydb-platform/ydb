@@ -838,10 +838,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            TVector<TDeferredAtom> schemaPathes;
-            schemaPathes.emplace_back(Ctx.Pos(), Id(node.GetRule_an_id_schema4(), *this));
+            TVector<TDeferredAtom> schemaPaths;
+            schemaPaths.emplace_back(Ctx.Pos(), Id(node.GetRule_an_id_schema4(), *this));
             for (const auto& item : node.GetBlock5()) {
-                schemaPathes.emplace_back(Ctx.Pos(), Id(item.GetRule_an_id_schema2(), *this));
+                schemaPaths.emplace_back(Ctx.Pos(), Id(item.GetRule_an_id_schema2(), *this));
             }
 
             TVector<TDeferredAtom> roleNames;
@@ -857,7 +857,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildGrantPermissions(pos, service, cluster, permissions, schemaPathes, roleNames, Ctx.Scoped));
+            AddStatementToBlocks(blocks, BuildGrantPermissions(pos, service, cluster, permissions, schemaPaths, roleNames, Ctx.Scoped));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore37:
@@ -881,10 +881,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            TVector<TDeferredAtom> schemaPathes;
-            schemaPathes.emplace_back(Ctx.Pos(), Id(node.GetRule_an_id_schema5(), *this));
+            TVector<TDeferredAtom> schemaPaths;
+            schemaPaths.emplace_back(Ctx.Pos(), Id(node.GetRule_an_id_schema5(), *this));
             for (const auto& item : node.GetBlock6()) {
-                schemaPathes.emplace_back(Ctx.Pos(), Id(item.GetRule_an_id_schema2(), *this));
+                schemaPaths.emplace_back(Ctx.Pos(), Id(item.GetRule_an_id_schema2(), *this));
             }
 
             TVector<TDeferredAtom> roleNames;
@@ -900,7 +900,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildRevokePermissions(pos, service, cluster, permissions, schemaPathes, roleNames, Ctx.Scoped));
+            AddStatementToBlocks(blocks, BuildRevokePermissions(pos, service, cluster, permissions, schemaPaths, roleNames, Ctx.Scoped));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore38:
@@ -1847,7 +1847,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableansiinforemptyornullableitemscollections") {
             Ctx.AnsiInForEmptyOrNullableItemsCollections = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiInForEmptyOrNullableItemsCollections");
-        } else if (normalizedPragma == "dqengine") {
+        } else if (normalizedPragma == "dqengine" || normalizedPragma == "blockengine") {
             Ctx.IncrementMonCounter("sql_pragma", "DqEngine");
             if (values.size() != 1 || !values[0].GetLiteral()
                 || ! (*values[0].GetLiteral() == "disable" || *values[0].GetLiteral() == "auto" || *values[0].GetLiteral() == "force"))
@@ -1856,15 +1856,18 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
             }
+            const bool isDqEngine = normalizedPragma == "dqengine";
+            auto& enable = isDqEngine ? Ctx.DqEngineEnable : Ctx.BlockEngineEnable;
+            auto& force =  isDqEngine ? Ctx.DqEngineForce  : Ctx.BlockEngineForce;
             if (*values[0].GetLiteral() == "disable") {
-                Ctx.DqEngineEnable = false;
-                Ctx.DqEngineForce = false;
+                enable = false;
+                force = false;
             } else if (*values[0].GetLiteral() == "force") {
-                Ctx.DqEngineEnable = true;
-                Ctx.DqEngineForce = true;
+                enable = true;
+                force = true;
             } else if (*values[0].GetLiteral() == "auto") {
-                Ctx.DqEngineEnable = true;
-                Ctx.DqEngineForce = false;
+                enable = true;
+                force = false;
             }
         } else if (normalizedPragma == "ansirankfornullablekeys") {
             Ctx.AnsiRankForNullableKeys = true;

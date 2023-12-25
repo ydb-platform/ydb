@@ -1,4 +1,4 @@
-#include "mkql_computation_node_codegen.h"
+#include "mkql_computation_node_codegen.h" // Y_IGNORE
 #include "mkql_computation_node_holders.h"
 
 #include <ydb/library/yql/minikql/codegen/codegen.h>

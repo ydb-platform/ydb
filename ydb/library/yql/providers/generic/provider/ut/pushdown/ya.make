@@ -17,6 +17,7 @@ PEERDIR(
     ydb/library/yql/providers/result/provider
     ydb/library/yql/public/udf/service/stub
     ydb/library/yql/sql
+    ydb/library/yql/minikql/invoke_builtins/llvm
     ydb/library/yql/sql/pg_dummy
 )
 

@@ -1,7 +1,7 @@
 LIBRARY()
 
 PEERDIR(
-    ydb/library/yql/minikql/computation/llvm
+    ydb/library/yql/minikql/computation
     ydb/library/yql/providers/yt/comp_nodes
     ydb/library/yql/providers/yt/codec
     ydb/library/yql/providers/common/codec
@@ -42,6 +42,8 @@ SRCS(
     dq_yt_factory.cpp
     dq_yt_writer.cpp
 )
+
+INCLUDE(../../../../minikql/computation/header.ya.make.inc)
 
 YQL_LAST_ABI_VERSION()
 

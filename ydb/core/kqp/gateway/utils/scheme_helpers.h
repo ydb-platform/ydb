@@ -31,4 +31,6 @@ void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescriptio
                                        const TString& name,
                                        const NYql::TCreateExternalTableSettings& settings);
 
+std::pair<TString, TString> SplitPathByDirAndBaseNames(const TString& path);
+
 } // namespace NKikimr::NKqp::NSchemeHelpers

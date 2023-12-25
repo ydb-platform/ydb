@@ -33,7 +33,7 @@
 namespace NYT::NNet {
 
 using namespace NConcurrency;
-using namespace NProfiling;
+// using namespace NProfiling;
 
 #ifdef _unix_
     using TIOVecBasePtr = void*;

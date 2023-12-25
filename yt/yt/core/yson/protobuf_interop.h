@@ -280,9 +280,11 @@ void SetProtobufInteropConfig(TProtobufInteropDynamicConfigPtr config);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Return type v3 schema for protobuf message type.
+//! Returns type v3 schema for protobuf message type.
 //! Note: Recursive types (message has field with self type) are not supported.
-void GetSchema(const TProtobufMessageType* type, IYsonConsumer* consumer);
+void WriteSchema(const TProtobufMessageType* type, IYsonConsumer* consumer);
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYson
 

@@ -406,6 +406,9 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme AlterExternalTable = 17;
         NKikimrSchemeOp.TModifyScheme DropExternalTable = 18;
         NKikimrSchemeOp.TModifyScheme ModifyPermissions = 19;
+        NKikimrSchemeOp.TModifyScheme CreateView = 20;
+        NKikimrSchemeOp.TModifyScheme AlterView = 21;
+        NKikimrSchemeOp.TModifyScheme DropView = 22;
     }
 }
 

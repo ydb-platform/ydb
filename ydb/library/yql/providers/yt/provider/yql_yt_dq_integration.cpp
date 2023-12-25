@@ -11,7 +11,6 @@
 #include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
 #include <ydb/library/yql/providers/common/config/yql_dispatch.h>
-#include <ydb/library/yql/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>

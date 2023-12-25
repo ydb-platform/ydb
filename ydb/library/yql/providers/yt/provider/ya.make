@@ -73,7 +73,6 @@ PEERDIR(
     ydb/library/yql/providers/common/mkql
     ydb/library/yql/providers/common/proto
     ydb/library/yql/providers/common/activation
-    ydb/library/yql/providers/common/arrow_resolve
     ydb/library/yql/providers/common/provider
     ydb/library/yql/providers/common/schema/expr
     ydb/library/yql/providers/common/transform

@@ -126,14 +126,25 @@ TRangeBoundary BuildMinusInf(TPositionHandle pos, const TTypeAnnotationNode* key
     // start from first non-null value
     auto optKeyTypeNode = ExpandType(pos, *ctx.MakeType<TOptionalExprType>(keyType), ctx);
     auto optBaseKeyTypeNode = ExpandType(pos, *ctx.MakeType<TOptionalExprType>(RemoveAllOptionals(keyType)), ctx);
-    auto largestNull = ctx.Builder(pos)
-        .Callable("SafeCast")
-            .Callable(0, "Nothing")
-                .Add(0, optBaseKeyTypeNode)
+    TExprNode::TPtr largestNull;
+    if (keyType->GetKind() == ETypeAnnotationKind::Pg) {
+        largestNull = ctx.Builder(pos)
+            .Callable("Just")
+                .Callable(0, "Nothing")
+                    .Add(0, ExpandType(pos, *keyType, ctx))
+                .Seal()
             .Seal()
-            .Add(1, optKeyTypeNode)
-        .Seal()
-        .Build();
+            .Build();
+    } else {
+        largestNull = ctx.Builder(pos)
+            .Callable("SafeCast")
+                .Callable(0, "Nothing")
+                    .Add(0, optBaseKeyTypeNode)
+                .Seal()
+                .Add(1, optKeyTypeNode)
+            .Seal()
+            .Build();
+    }
 
     TRangeBoundary result;
     result.Value = largestNull;

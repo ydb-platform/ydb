@@ -1098,11 +1098,7 @@ static ui64 RunSchemeTx(
     runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()), 0, viaActorSystem);
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
 
-    for (auto i : ev->Get()->Record.GetIssues()) {
-        Cerr << "Issue: " << i.AsJSON() << Endl;
-    }
-
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), expectedStatus);
+    UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Record.GetStatus(), expectedStatus, "Status: " << ev->Get()->Record.GetStatus() << " Issues: " << ev->Get()->Record.GetIssues());
 
     return ev->Get()->Record.GetTxId();
 }
@@ -1836,7 +1832,7 @@ std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(ui64 txId, NKik
     }
 
     TSerializedCellMatrix matrix(cells, rowCount, columns.size());
-    TString blobData = matrix.GetBuffer();
+    TString blobData = matrix.ReleaseBuffer();
 
     UNIT_ASSERT(blobData.size() < 8_MB);
 
@@ -1847,28 +1843,28 @@ std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(ui64 txId, NKik
     return evWrite;
 }
 
-NKikimrDataEvents::TEvWriteResult Write(Tests::TServer::TPtr server, ui64 shardId, ui64 tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, TActorId sender, ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode)
+NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, ui64 shardId, ui64 tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, TActorId sender, ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
 {
-    auto& runtime = *server->GetRuntime();
     auto request = MakeWriteRequest(txId, txMode, tableId, columns, rowCount);
     runtime.SendToPipe(shardId, sender, request.release(), 0, GetPipeConfigWithRetries());
 
     auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
     auto status = ev->Get()->Record.GetStatus();
     
-    NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus;
-    switch (txMode) {
-        case NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE:
-            expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED;
-            break;
-        case NKikimrDataEvents::TEvWrite::MODE_PREPARE:
-        case NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE:
-            expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED;
-            break;
-        default:
-            expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED;
-            UNIT_ASSERT_C(false, "Unexpected txMode: " << txMode);
-            break;
+    if (expectedStatus == NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED) {
+        switch (txMode) {
+            case NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE:
+                expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED;
+                break;
+            case NKikimrDataEvents::TEvWrite::MODE_PREPARE:
+            case NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE:
+                expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED;
+                break;
+            default:
+                expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED;
+                UNIT_ASSERT_C(false, "Unexpected txMode: " << txMode);
+                break;
+        }
     }
     UNIT_ASSERT_C(status == expectedStatus, "Status: " << ev->Get()->Record.GetStatus() << " Issues: " << ev->Get()->Record.GetIssues());
 
@@ -1895,7 +1891,7 @@ void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, const TVec
     runtime.Register(actor);
 
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvUploadRowsResponse>(uploadSender);
-    UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, Ydb::StatusIds::SUCCESS, "Status: " << ev->Get()->Status << " Issues: " << ev->Get()->Issues.ToOneLineString());
+    UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, Ydb::StatusIds::SUCCESS, "Status: " << ev->Get()->Status << " Issues: " << ev->Get()->Issues);
 }
 
 void WaitTabletBecomesOffline(TServer::TPtr server, ui64 tabletId)

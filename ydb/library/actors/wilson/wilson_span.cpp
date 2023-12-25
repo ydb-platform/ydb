@@ -52,6 +52,10 @@ namespace NWilson {
         SerializeValue(std::move(value), pb->mutable_value());
     }
 
+    TSpan& TSpan::Link(const TTraceId& traceId) {
+        return Link(traceId, {});
+    }
+
     void TSpan::Send() {
         Data->ActorSystem->Send(new IEventHandle(MakeWilsonUploaderId(), {}, new TEvWilson(&Data->Span)));
         Data->Sent = true;

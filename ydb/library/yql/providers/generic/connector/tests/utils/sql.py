@@ -1,6 +1,7 @@
 import datetime
 from typing import Sequence
 
+
 def format_values_for_sql_insert(row: Sequence) -> str:
     row_values_dump = []
     for val in row:
@@ -16,6 +17,7 @@ def format_values_for_sql_insert(row: Sequence) -> str:
             row_values_dump.append(str(val))
     values = "(" + ", ".join(row_values_dump) + ")"
     return values
+
 
 def format_values_for_bulk_sql_insert(data_in: Sequence) -> str:
     """

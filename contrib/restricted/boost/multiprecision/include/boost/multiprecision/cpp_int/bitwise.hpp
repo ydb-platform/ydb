@@ -436,12 +436,12 @@ inline BOOST_MP_CXX14_CONSTEXPR void left_shift_generic(Int& result, double_limb
          ++i;
       }
    }
-   for (; rs - i >= 2 + offset; ++i)
+   for (; rs - i >= static_cast<std::size_t>(static_cast<std::size_t>(2u) + offset); ++i)
    {
       pr[rs - 1 - i] = pr[rs - 1 - i - offset] << shift;
       pr[rs - 1 - i] |= pr[rs - 2 - i - offset] >> (Int::limb_bits - shift);
    }
-   if (rs - i >= 1 + offset)
+   if (rs - i >= static_cast<std::size_t>(static_cast<std::size_t>(1u) + offset))
    {
       pr[rs - 1 - i] = pr[rs - 1 - i - offset] << shift;
       ++i;

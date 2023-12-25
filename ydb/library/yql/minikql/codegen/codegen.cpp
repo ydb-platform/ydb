@@ -224,14 +224,6 @@ namespace {
         }
     };
 
-    struct TCodegenCleanup {
-        ~TCodegenCleanup() {
-            llvm::llvm_shutdown();
-        }
-    };
-
-    TCodegenCleanup Cleanup;
-
     bool CompareFuncOffsets(const std::pair<ui64, llvm::Function*>& lhs,
         const std::pair<ui64, llvm::Function*>& rhs) {
         return lhs.first < rhs.first;

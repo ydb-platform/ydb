@@ -39,6 +39,10 @@ struct TPullRowsResult
     bool Versioned = true;
 };
 
+struct TAdvanceConsumerOptions
+    : public TTimeoutOptions
+{ };
+
 struct TPullQueueOptions
     : public TSelectRowsOptions
     , public TFallbackReplicaOptions

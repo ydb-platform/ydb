@@ -56,6 +56,11 @@ def onresource_files(unit, *args):
             key = 'resfs/file/' + (
                 dest or (prefix + (path if not prefix_to_strip else remove_prefix(path, prefix_to_strip)))
             )
+            if key in res:
+                unit.message(
+                    ['warn', "Dublicated resource file {} in RESOURCE_FILES() macro. Skipped it.".format(path)]
+                )
+                continue
             src = 'resfs/src/{}={}'.format(key, rootrel_arc_src(path, unit))
             res += ['-', src, path, key]
 

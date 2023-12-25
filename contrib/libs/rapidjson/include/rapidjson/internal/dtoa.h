@@ -36,6 +36,7 @@ inline void GrisuRound(char* buffer, int len, uint64_t delta, uint64_t rest, uin
     while (rest < wp_w && delta - rest >= ten_kappa &&
            (rest + ten_kappa < wp_w ||  /// closer
             wp_w - rest > rest + ten_kappa - wp_w)) {
+        // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.Assign)
         buffer[len - 1]--;
         rest += ten_kappa;
     }

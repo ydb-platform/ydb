@@ -869,10 +869,10 @@ IMapNodePtr TYsonStructParameter<TValue>::GetRecursiveUnrecognized(const TYsonSt
 }
 
 template <class TValue>
-void TYsonStructParameter<TValue>::GetSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const
+void TYsonStructParameter<TValue>::WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const
 {
     // TODO(bulatman) What about constraints: minimum, maximum, default and etc?
-    NPrivate::GetSchema(FieldAccessor_->GetValue(self), consumer);
+    NPrivate::WriteSchema(FieldAccessor_->GetValue(self), consumer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

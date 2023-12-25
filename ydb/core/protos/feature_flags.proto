@@ -123,4 +123,5 @@ message TFeatureFlags {
     optional bool EnableTablePgTypes = 108 [default = false];
     optional bool EnableLocalDBBtreeIndex = 109 [default = false];
     optional bool EnablePDiskHighHDDInFlight = 110 [default = false];
+    optional bool UseVDisksBalancing = 111 [default = false];
 }

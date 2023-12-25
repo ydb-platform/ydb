@@ -22,13 +22,17 @@ namespace {
 
 class TDqChannelStorage : public IDqChannelStorage {
 public:
-    TDqChannelStorage(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUp, TActorSystem* actorSystem) {
-        SelfActor_ = CreateDqChannelStorageActor(txId, channelId, std::move(wakeUp), actorSystem);
-        TlsActivationContext->AsActorContext().RegisterWithSameMailbox(SelfActor_->GetActor());
+    TDqChannelStorage(TTxId txId, ui64 channelId, TWakeUpCallback&& wakeUp, TActorSystem* actorSystem, bool isConcurrent) {
+        if (isConcurrent) {
+            SelfActor_ = CreateConcurrentDqChannelStorageActor(txId, channelId, std::move(wakeUp), actorSystem);
+        } else {
+            SelfActor_ = CreateDqChannelStorageActor(txId, channelId, std::move(wakeUp), actorSystem);
+        }
+        SelfActorId_ = TlsActivationContext->AsActorContext().RegisterWithSameMailbox(SelfActor_->GetActor());
     }
 
     ~TDqChannelStorage() {
-        SelfActor_->Terminate();
+        TlsActivationContext->AsActorContext().Send(SelfActorId_, new TEvents::TEvPoison);
     }
 
     bool IsEmpty() const override {
@@ -49,13 +53,14 @@ public:
 
 private:
     IDqChannelStorageActor* SelfActor_;
+    TActorId SelfActorId_;
 };
 
 } // anonymous namespace
 
-IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId, IDqChannelStorage::TWakeUpCallback wakeUp, TActorSystem* actorSystem)
+IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId, IDqChannelStorage::TWakeUpCallback wakeUp, TActorSystem* actorSystem, bool isConcurrent)
 {
-    return new TDqChannelStorage(txId, channelId, std::move(wakeUp), actorSystem);
+    return new TDqChannelStorage(txId, channelId, std::move(wakeUp), actorSystem, isConcurrent);
 }
 
 } // namespace NYql::NDq

@@ -151,7 +151,7 @@ private:
         }
 
 
-        //StartTracing(*requestBaseCtx);
+        StartTracing(*requestBaseCtx);
 
         if (IsAuthStateOK(*requestBaseCtx)) {
             Handle(event, ctx);
@@ -410,9 +410,12 @@ bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
 }
 
 void TGRpcRequestProxyImpl::StartTracing(IRequestProxyCtx& ctx) {
-    auto traceId = NWilson::TTraceId::NewTraceId(15, Max<ui32>());
-    NWilson::TSpan grpcRequestProxySpan(TWilsonGrpc::RequestProxy, std::move(traceId), "GrpcRequestProxy");
-    ctx.StartTracing(std::move(grpcRequestProxySpan));
+    if (const auto otelHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER)) {
+        if (auto traceId = NWilson::TTraceId::FromTraceparentHeader(otelHeader.GetRef())) {
+            NWilson::TSpan grpcRequestProxySpan(TWilsonGrpc::RequestProxy, std::move(traceId), "GrpcRequestProxy");
+            ctx.StartTracing(std::move(grpcRequestProxySpan));
+        }
+    }
 }
 
 void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev, const TActorContext& ctx) {

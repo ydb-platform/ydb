@@ -9,16 +9,19 @@ namespace NYT::NColumnConverters {
 ////////////////////////////////////////////////////////////////////////////////
 
 IColumnConverterPtr CreateStringConverter(
-    int columnIndex,
-    const NTableClient::TColumnSchema& columnSchema);
+    int columnId,
+    const NTableClient::TColumnSchema& columnSchema,
+    int columnOffset);
 
 IColumnConverterPtr CreateAnyConverter(
-    int columnIndex,
-    const NTableClient::TColumnSchema& columnSchema);
+    int columnId,
+    const NTableClient::TColumnSchema& columnSchema,
+    int columnOffset);
 
 IColumnConverterPtr CreateCompositeConverter(
-    int columnIndex,
-    const NTableClient::TColumnSchema& columnSchema);
+    int columnId,
+    const NTableClient::TColumnSchema& columnSchema,
+    int columnOffset);
 
 ////////////////////////////////////////////////////////////////////////////////
 

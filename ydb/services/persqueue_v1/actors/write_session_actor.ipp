@@ -679,7 +679,12 @@ void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const 
     NPQ::TPartitionWriterOpts opts;
 
     opts.WithDeduplication(UseDeduplication);
-    if constexpr (!UseMigrationProtocol) {
+    opts.WithSourceId(SourceId);
+    opts.WithExpectedGeneration(ExpectedGeneration);
+
+    if constexpr (UseMigrationProtocol) {
+        opts.WithTopicPath(InitRequest.topic());
+    } else {
         if (Request->GetDatabaseName()) {
             opts.WithDatabase(*Request->GetDatabaseName());
         }
@@ -699,8 +704,6 @@ void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const 
         std::make_unique<TPartitionWriterCacheActor>(ctx.SelfID,
                                                      Partition,
                                                      PartitionTabletId,
-                                                     ExpectedGeneration,
-                                                     SourceId,
                                                      opts);
 
     PartitionWriterCache = ctx.RegisterWithSameMailbox(actor.release());

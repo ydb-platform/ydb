@@ -641,12 +641,11 @@ struct TEvDataShard {
         TString GetError() const {
             if (Record.ErrorSize() > 0) {
                 TString result;
+                TStringOutput out(result);
                 for (ui32 i = 0; i < Record.ErrorSize(); ++i) {
-                    if (Record.GetError(i).HasReason()) {
-                        result += Record.GetError(i).GetReason() + "|";
-                    } else {
-                        result += "no reason|";
-                    }
+                    out << Record.GetError(i).GetKind() << " (" 
+                        << (Record.GetError(i).HasReason() ? Record.GetError(i).GetReason() : "no reason")
+                        << ") |";
                 }
                 return result;
             } else {
@@ -665,7 +664,6 @@ struct TEvDataShard {
                 error->SetKey(keyBuffer.data(), keyBuffer.size());
             }
         }
-
     private:
         bool ForceOnline = false;
         bool ForceDirty = false;

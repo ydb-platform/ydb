@@ -6,7 +6,6 @@
 
 #include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
-#include <yt/yt/core/misc/ref_counted.h>
 #include <yt/yt/core/misc/ref_counted_tracker.h>
 
 #include <yt/yt/core/actions/future.h>
@@ -15,6 +14,7 @@
 
 #include <library/cpp/yt/memory/new.h>
 #include <library/cpp/yt/memory/ref_tracked.h>
+#include <library/cpp/yt/memory/ref_counted.h>
 
 namespace NYT {
 namespace {

@@ -182,10 +182,7 @@ class Credentials(
         self._quota_project_id = quota_project_id
         self._token_uri = token_uri
         self._always_use_jwt_access = always_use_jwt_access
-        if not universe_domain:
-            self._universe_domain = _DEFAULT_UNIVERSE_DOMAIN
-        else:
-            self._universe_domain = universe_domain
+        self._universe_domain = universe_domain or _DEFAULT_UNIVERSE_DOMAIN
 
         if universe_domain != _DEFAULT_UNIVERSE_DOMAIN:
             self._always_use_jwt_access = True
@@ -328,6 +325,22 @@ class Credentials(
         cred._always_use_jwt_access = always_use_jwt_access
         return cred
 
+    def with_universe_domain(self, universe_domain):
+        """Create a copy of these credentials with the given universe domain.
+
+        Args:
+            universe_domain (str): The universe domain value.
+
+        Returns:
+            google.auth.service_account.Credentials: A new credentials
+                instance.
+        """
+        cred = self._make_copy()
+        cred._universe_domain = universe_domain
+        if universe_domain != _DEFAULT_UNIVERSE_DOMAIN:
+            cred._always_use_jwt_access = True
+        return cred
+
     def with_subject(self, subject):
         """Create a copy of these credentials with the specified subject.
 
@@ -417,13 +430,11 @@ class Credentials(
 
     @_helpers.copy_docstring(credentials.Credentials)
     def refresh(self, request):
-        if (
-            self._universe_domain != _DEFAULT_UNIVERSE_DOMAIN
-            and not self._jwt_credentials
-        ):
-            raise exceptions.RefreshError(
-                "self._jwt_credentials is missing for non-default universe domain"
-            )
+        if self._always_use_jwt_access and not self._jwt_credentials:
+            # If self signed jwt should be used but jwt credential is not
+            # created, try to create one with scopes
+            self._create_self_signed_jwt(None)
+
         if self._universe_domain != _DEFAULT_UNIVERSE_DOMAIN and self._subject:
             raise exceptions.RefreshError(
                 "domain wide delegation is not supported for non-default universe domain"

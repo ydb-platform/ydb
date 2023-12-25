@@ -1,8 +1,8 @@
 #pragma once
 
-#include <yt/yt/core/misc/ref_counted.h>
-
 #include <yt/yt/library/profiling/sensor.h>
+
+#include <library/cpp/yt/memory/ref_counted.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/string.h>

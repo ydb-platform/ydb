@@ -23,11 +23,9 @@ import urllib
 
 from google.auth import exceptions
 
-# Token server doesn't provide a new a token when doing refresh unless the
-# token is expiring within 30 seconds, so refresh threshold should not be
-# more than 30 seconds. Otherwise auth lib will send tons of refresh requests
-# until 30 seconds before the expiration, and cause a spike of CPU usage.
-REFRESH_THRESHOLD = datetime.timedelta(seconds=20)
+# The smallest MDS cache used by this library stores tokens until 4 minutes from
+# expiry.
+REFRESH_THRESHOLD = datetime.timedelta(minutes=3, seconds=45)
 
 
 def copy_docstring(source_class):
@@ -92,7 +90,14 @@ def utcnow():
     Returns:
         datetime: The current time in UTC.
     """
-    return datetime.datetime.utcnow()
+    # We used datetime.utcnow() before, since it's deprecated from python 3.12,
+    # we are using datetime.now(timezone.utc) now. "utcnow()" is offset-native
+    # (no timezone info), but "now()" is offset-aware (with timezone info).
+    # This will cause datetime comparison problem. For backward compatibility,
+    # we need to remove the timezone info.
+    now = datetime.datetime.now(datetime.timezone.utc)
+    now = now.replace(tzinfo=None)
+    return now
 
 
 def datetime_to_secs(value):

@@ -625,6 +625,48 @@
             "uri": "https://{canondata_backend}/1817427/8d62e373dfcce3f3532a7604f8c7878757c8454e/resource.tar.gz#test.test_compute_range-in3-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[compute_range-pg_exists-default.txt-Debug]": [
+        {
+            "checksum": "a314c73b6e455bfe46176e36f8be37b2",
+            "size": 756,
+            "uri": "https://{canondata_backend}/1784826/40d971cfcd3bb4011b0c7e687dc3c3a048d4efdd/resource.tar.gz#test.test_compute_range-pg_exists-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[compute_range-pg_exists-default.txt-Plan]": [
+        {
+            "checksum": "a3b64a2cf9903b3868a2dd88a18fc46e",
+            "size": 922,
+            "uri": "https://{canondata_backend}/1784826/40d971cfcd3bb4011b0c7e687dc3c3a048d4efdd/resource.tar.gz#test.test_compute_range-pg_exists-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[compute_range-pg_exists-default.txt-Results]": [
+        {
+            "checksum": "09f2618ce79fdb6c44bfca7487a22bbc",
+            "size": 9518,
+            "uri": "https://{canondata_backend}/1784826/40d971cfcd3bb4011b0c7e687dc3c3a048d4efdd/resource.tar.gz#test.test_compute_range-pg_exists-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[compute_range-pg_sqlin-default.txt-Debug]": [
+        {
+            "checksum": "80566cda1551723a16a66b658dfd1cdb",
+            "size": 1422,
+            "uri": "https://{canondata_backend}/1880306/34b96c051c70c74d8f6370ac7103e8284f8cadd4/resource.tar.gz#test.test_compute_range-pg_sqlin-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[compute_range-pg_sqlin-default.txt-Plan]": [
+        {
+            "checksum": "a3b64a2cf9903b3868a2dd88a18fc46e",
+            "size": 922,
+            "uri": "https://{canondata_backend}/1880306/34b96c051c70c74d8f6370ac7103e8284f8cadd4/resource.tar.gz#test.test_compute_range-pg_sqlin-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[compute_range-pg_sqlin-default.txt-Results]": [
+        {
+            "checksum": "c624bf0ee1366ab6eb41de5c77fd4a60",
+            "size": 12158,
+            "uri": "https://{canondata_backend}/1880306/34b96c051c70c74d8f6370ac7103e8284f8cadd4/resource.tar.gz#test.test_compute_range-pg_sqlin-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[compute_range-tuples_compare-default.txt-Debug]": [
         {
             "checksum": "962da2716dd68cffc53234286a48d7c7",

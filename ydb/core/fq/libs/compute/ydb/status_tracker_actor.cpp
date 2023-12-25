@@ -155,42 +155,46 @@ public:
     }
 
     void ReportPublicCounters(const Ydb::TableStats::QueryStats& stats) {
-        auto stat = GetPublicStat(GetV1StatFromV2Plan(stats.query_plan()));
-        auto publicCounters = GetPublicCounters();
+        try {
+            auto stat = GetPublicStat(GetV1StatFromV2Plan(stats.query_plan()));
+            auto publicCounters = GetPublicCounters();
 
-        if (stat.MemoryUsageBytes) {
-            auto& counter = *publicCounters->GetNamedCounter("name", "query.memory_usage_bytes");
-            counter = *stat.MemoryUsageBytes;
-        }
+            if (stat.MemoryUsageBytes) {
+                auto& counter = *publicCounters->GetNamedCounter("name", "query.memory_usage_bytes");
+                counter = *stat.MemoryUsageBytes;
+            }
 
-        if (stat.CpuUsageUs) {
-            auto& counter = *publicCounters->GetNamedCounter("name", "query.cpu_usage_us", true);
-            counter = *stat.CpuUsageUs;
-        }
+            if (stat.CpuUsageUs) {
+                auto& counter = *publicCounters->GetNamedCounter("name", "query.cpu_usage_us", true);
+                counter = *stat.CpuUsageUs;
+            }
 
-        if (stat.InputBytes) {
-            auto& counter = *publicCounters->GetNamedCounter("name", "query.input_bytes", true);
-            counter = *stat.InputBytes;
-        }
+            if (stat.InputBytes) {
+                auto& counter = *publicCounters->GetNamedCounter("name", "query.input_bytes", true);
+                counter = *stat.InputBytes;
+            }
 
-        if (stat.OutputBytes) {
-            auto& counter = *publicCounters->GetNamedCounter("name", "query.output_bytes", true);
-            counter = *stat.OutputBytes;
-        }
+            if (stat.OutputBytes) {
+                auto& counter = *publicCounters->GetNamedCounter("name", "query.output_bytes", true);
+                counter = *stat.OutputBytes;
+            }
 
-        if (stat.SourceInputRecords) {
-            auto& counter = *publicCounters->GetNamedCounter("name", "query.source_input_records", true);
-            counter = *stat.SourceInputRecords;
-        }
+            if (stat.SourceInputRecords) {
+                auto& counter = *publicCounters->GetNamedCounter("name", "query.source_input_records", true);
+                counter = *stat.SourceInputRecords;
+            }
 
-        if (stat.SinkOutputRecords) {
-            auto& counter = *publicCounters->GetNamedCounter("name", "query.sink_output_records", true);
-            counter = *stat.SinkOutputRecords;
-        }
+            if (stat.SinkOutputRecords) {
+                auto& counter = *publicCounters->GetNamedCounter("name", "query.sink_output_records", true);
+                counter = *stat.SinkOutputRecords;
+            }
 
-        if (stat.RunningTasks) {
-            auto& counter = *publicCounters->GetNamedCounter("name", "query.running_tasks");
-            counter = *stat.RunningTasks;
+            if (stat.RunningTasks) {
+                auto& counter = *publicCounters->GetNamedCounter("name", "query.running_tasks");
+                counter = *stat.RunningTasks;
+            }
+        } catch(const NJson::TJsonException& ex) {
+            LOG_E("Error statistics conversion: " << ex.what());
         }
     }
 

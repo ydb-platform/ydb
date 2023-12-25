@@ -26,6 +26,7 @@ PEERDIR(
     ydb/library/yql/providers/result/provider
     ydb/library/yql/sql/v1
     ydb/library/yql/minikql/invoke_builtins/llvm
+    ydb/library/yql/minikql/comp_nodes/llvm
     ydb/library/yql/sql/pg
 )
 

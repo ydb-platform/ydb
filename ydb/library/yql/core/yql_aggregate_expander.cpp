@@ -56,7 +56,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregate()
         return GeneratePhases();
     }
 
-    if (TypesCtx.IsBlockEngineEnabled()) {
+    if (TypesCtx.IsBlockEngineEnabled() !TypesCtx.ContinuousBlocksComputation) {
         if (Suffix == "Combine") {
             auto ret = TryGenerateBlockCombine();
             if (ret) {

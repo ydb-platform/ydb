@@ -258,6 +258,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 FolderSubDirsLimit = 1000;
     bool UseBlocks = false;
     EBlockEngineMode BlockEngineMode = EBlockEngineMode::Disable;
+    bool ContinuousBlocksComputation = false;
     bool PgEmitAggApply = false;
     IArrowResolver::TPtr ArrowResolver;
     ECostBasedOptimizerType CostBasedOptimizer = ECostBasedOptimizerType::Disable;

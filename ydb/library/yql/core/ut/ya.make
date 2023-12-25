@@ -28,6 +28,8 @@ PEERDIR(
     ydb/library/yql/providers/result/provider
     ydb/library/yql/providers/yt/gateway/file
     ydb/library/yql/providers/yt/provider
+    ydb/library/yql/minikql/comp_nodes/llvm
+    ydb/library/yql/minikql/invoke_builtins/llvm
     ydb/library/yql/sql/pg
 )
 

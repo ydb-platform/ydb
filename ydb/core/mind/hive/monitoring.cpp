@@ -456,10 +456,49 @@ public:
     }
 
     void RenderHTMLPage(IOutputStream &out) {
+        THashMap<TSubDomainKey, size_t> tabletsRunningInObjectDomain;
+        THashMap<TSubDomainKey, size_t> tabletsRunningInOtherDomains;
+        THashMap<TSubDomainKey, size_t> tabletsTotal;
+
+        for (const auto& [_, tablet] : Self->Tablets) {
+            const TSubDomainKey objectDomain = tablet.ObjectDomain;
+            ++tabletsTotal[objectDomain];
+
+            const TNodeInfo* node = tablet.GetNode();
+            if (node) {
+                if (node->GetServicedDomain() == objectDomain) {
+                    ++tabletsRunningInObjectDomain[objectDomain];
+                } else {
+                    ++tabletsRunningInOtherDomains[objectDomain];
+                }
+            }
+
+            for (const auto& follower : tablet.Followers) {
+                ++tabletsTotal[objectDomain];
+                
+                const TNodeInfo* followerNode = follower.GetNode();
+                if (followerNode) {
+                    if (followerNode->GetServicedDomain() == objectDomain) {
+                        ++tabletsRunningInObjectDomain[objectDomain];
+                    } else {
+                        ++tabletsRunningInOtherDomains[objectDomain];
+                    }
+                }
+            }
+        }
+        
         // out << "<script>$('.container').css('width', 'auto');</script>";
         out << "<table class='table table-sortable'>";
         out << "<thead>";
-        out << "<tr><th>TenantId</th><th>Name</th><th>Hive</th><th>Status</th></tr>";
+        out << "<tr>";
+        out << "<th>TenantId</th>";
+        out << "<th>Name</th>";
+        out << "<th>Hive</th>";
+        out << "<th>Status</th>";
+        out << "<th>TabletsRunningInTenantDomain</th>";
+        out << "<th>TabletsRunningInOtherDomains</th>";
+        out << "<th>TabletsTotal</th>";
+        out << "</tr>";
         out << "</thead>";
         out << "<tbody>";
         for (const auto& [domainKey, domainInfo] : Self->Domains) {
@@ -482,6 +521,16 @@ public:
                 out << "<td>-</td>";
                 out << "<td>-</td>";
             }
+            if (tabletsTotal[domainKey] > 0) {
+                out << "<td>" << std::round(tabletsRunningInObjectDomain[domainKey] * 100.0 / tabletsTotal[domainKey]) << "%"
+                    << " (" << tabletsRunningInObjectDomain[domainKey] << " of " << tabletsTotal[domainKey] << ")" << "</td>";
+                out << "<td>" << std::round(tabletsRunningInOtherDomains[domainKey] * 100.0 / tabletsTotal[domainKey]) << "%"
+                    << " (" << tabletsRunningInOtherDomains[domainKey] << " of " << tabletsTotal[domainKey] << ")" << "</td>";
+            } else {
+                out << "<td>-</td>";
+                out << "<td>-</td>";
+            }
+            out << "<td>" << tabletsTotal[domainKey] << "</td>";
             out << "</tr>";
         }
         out << "</tbody>";

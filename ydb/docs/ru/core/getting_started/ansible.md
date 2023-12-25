@@ -123,43 +123,45 @@
   gather_facts: yes #Разрешение на сбор фактов о ВМ. 
 ```
 
-Далее следует секция `tasks`, где и происходит основная работа. Мы разбили `tasks` на логические группы задач, чтобы было легче ориентироваться:
-1. Сбор информации о ВМ:
-    * Формирование списка доступных для использования YDB блочных устройств, исключая стартовый диск. Полученный список дисков сохраняется в переменной `disk_info`. Далее при копировании конфигурационного файла для статической ноды Ansible сформирует секцию `drive` из данных переменной `disk_info`.
-        ```yaml
-        - name: List disk IDs matching 'virtio-ydb-disk-'
+Далее следует секция `tasks`, где и происходит основная работа. Мы разбили `tasks` на логические группы задач, чтобы было легче ориентироваться.
+
+### Сбор информации о ВМ { #collect-vm-info }
+
+1. Формирование списка доступных для использования YDB блочных устройств, исключая стартовый диск. Полученный список дисков сохраняется в переменной `disk_info`. Далее при копировании конфигурационного файла для статической ноды Ansible сформирует секцию `drive` из данных переменной `disk_info`.
+    ```yaml
+    - name: List disk IDs matching 'virtio-ydb-disk-'
         ansible.builtin.shell: ls -l /dev/disk/by-id/ | grep 'virtio-ydb-disk-' | awk '{print $9}'
         register: disk_info
-        ```
-    * Подсчитывание количества доступных для использования YDB дисков. Эта информация используется далее при создании базы данных.
-        ```yaml
-        - name: Count disks matching 'virtio-ydb-disk-'
+    ```
+2. Подсчитывание количества доступных для использования YDB дисков. Эта информация используется далее при создании базы данных.
+    ```yaml
+    - name: Count disks matching 'virtio-ydb-disk-'
         ansible.builtin.shell: ls -l /dev/disk/by-id/ | grep 'virtio-ydb-disk-' | awk '{print $9}' | wc -l
         register: disk_value  
-        ```
-    * Подсчитывание количества ядер процессора для их дальнейшего распределения между статической и динамической нодой.
-        ```yaml
-        - name: Get number of CPU cores
+    ```
+3. Подсчитывание количества ядер процессора для их дальнейшего распределения между статической и динамической нодой.
+    ```yaml
+    - name: Get number of CPU cores
         ansible.builtin.shell: lscpu | grep '^CPU(s):' | awk '{print $2}'
         register: cpu_cores_info
-        ```
-    * Запрос значение переменной окружения `host`. Оно используется в блоке `host` конфигурационных файлов нод.
-        ```yaml
-        - name: Get the hostname
+    ```
+4. Запрос значение переменной окружения `host`. Оно используется в блоке `host` конфигурационных файлов нод.
+    ```yaml
+    - name: Get the hostname
         ansible.builtin.command: hostname
         register: hostname
-        ```  
+    ```  
     
 
-2.  Создание структуры директорий, скачивание и установка исполняемого файла YDB:
-    * Создание группы `ydb`
-        ```yaml
-        - name: Create the ydb group
+### Создание структуры директорий, скачивание и установка исполняемого файла YDB { #ydb-install }
+1. Создание группы `ydb`
+    ```yaml
+    - name: Create the ydb group
         group: name=ydb system=true  
-        ```
-    * Создание пользователя `ydb`, включенного в группы `ydb` и `disks`
-        ```yaml
-        - name: Create the ydb user with disk group access
+    ```
+2. Создание пользователя `ydb`, включенного в группы `ydb` и `disks`
+    ```yaml
+    - name: Create the ydb user with disk group access
         user: 
         name: ydb
         group: ydb 
@@ -168,78 +170,211 @@
         create_home: true 
         home: "{{ ydb_dir }}/home"
         comment: "YDB Service Account"
-        ```
-    * Создание директории для временных файлов пользователя `ydb`
-        ```yaml
-        - name: Create the Ansible remote_tmp for the ydb user
+    ```
+3. Создание директории для временных файлов пользователя `ydb`
+    ```yaml
+    - name: Create the Ansible remote_tmp for the ydb user
         file:
             path: "{{ ydb_dir }}/home/.ansible/tmp"
             state: directory
             recurse: true
             group: ydb
             owner: ydb
-        ```
-    * Создание директорий и присваивание им владельцев и прав доступа
-        ```yaml
-        - name: Create the YDB release directory
+    ```
+4. Создание директорий и присваивание им владельцев и прав доступа
+    ```yaml
+    - name: Create the YDB release directory
         file: state=directory path={{ ydb_dir }}/release group=bin owner=root mode=755
 
-        - name: Create the YDB configuration directory
+    - name: Create the YDB configuration directory
         file: state=directory path={{ ydb_dir }}/cfg group=ydb owner=ydb mode=755
 
-        - name: Create the YDB audit directory
+    - name: Create the YDB audit directory
         file: state=directory path={{ ydb_dir }}/audit group=ydb owner=ydb mode=700
 
-        - name: Create the YDB certs directory
+    - name: Create the YDB certs directory
         file: state=directory path={{ ydb_dir }}/certs group=ydb owner=ydb mode=700
 
-        - name: Create the YDB configuration backup directory
+    - name: Create the YDB configuration backup directory
         file: state=directory path={{ ydb_dir }}/reserve group=ydb owner=ydb mode=700
 
-        - name: Create the YDB server binary directory for the specified version
+    - name: Create the YDB server binary directory for the specified version
         file: state=directory
-                path="{{ ydb_dir }}/release/{{ ydb_version }}"
-                recurse=true
-                group=bin
-                owner=root
-        ```
-    * Скачивание архива YDB и назначение пользователя, группы и прав
-        ```yaml
-        - name: Download the YDB sources archive
-            get_url: url={{ ydb_download_url }} dest={{ ydb_dir }}/release/{{ ydb_version }}/{{ ydb_archive }} 
-        - name: Set owner and group for the YDB sources archive
-            file: 
-                path="{{ ydb_dir }}/release/{{ ydb_version }}/{{ ydb_archive }}"
-                group=bin
-                owner=root    
-        ```
-    * Распаковка архива YDB и присваивание пользователя, группы и прав
-        ```yaml
-        - name: Install the YDB server binary package
-            ansible.builtin.unarchive:
-            remote_src: yes
-            creates: "{{ ydb_dir }}/release/{{ ydb_version }}/bin/ydbd"
-            dest: "{{ ydb_dir }}/release/{{ ydb_version }}"
-            group: bin
-            owner: root
-            src: "{{ ydb_dir }}/release/{{ ydb_version }}/{{ ydb_archive }}"
-            extra_opts: "{{ ydb_unpack_options }}"
+            path="{{ ydb_dir }}/release/{{ ydb_version }}"
+            recurse=true
+            group=bin
+            owner=root
+    ```
+5. Скачивание архива YDB и назначение пользователя, группы и прав
+    ```yaml
+    - name: Download the YDB sources archive
+        get_url: url={{ ydb_download_url }} dest={{ ydb_dir }}/release/{{ ydb_version }}/{{ ydb_archive }} 
+    - name: Set owner and group for the YDB sources archive
+        file: 
+            path="{{ ydb_dir }}/release/{{ ydb_version }}/{{ ydb_archive }}"
+            group=bin
+            owner=root    
+    ```
+6. Создание директории и распаковка архива YDB с присваиванием пользователя, группы и прав. Параметры модуля `ansible.builtin.unarchive`:
+    + `remote_src` – опция работы с файлами на удаленном сервере;
+    + `creates` – создаваемая директория;
+    + `dest` – путь, где будет создана директория;
+    + `src` –     
+    ```yaml
+    - name: Install the YDB server binary package
+        ansible.builtin.unarchive:
+        remote_src: yes
+        creates: "{{ ydb_dir }}/release/{{ ydb_version }}/bin/ydbd"
+        dest: "{{ ydb_dir }}/release/{{ ydb_version }}"
+        group: bin
+        owner: root
+        src: "{{ ydb_dir }}/release/{{ ydb_version }}/{{ ydb_archive }}"
+        extra_opts: "{{ ydb_unpack_options }}"
 
-        - name: Create the YDB CLI default binary directory
-            file: state=directory path={{ ydb_dir }}/home/ydb/bin recurse=true group=ydb owner=ydb mode=700      
+    - name: Create the YDB CLI default binary directory
+        file: state=directory path={{ ydb_dir }}/home/ydb/bin recurse=true group=ydb owner=ydb mode=700      
         ```  
-3. Генерирование конфигурационных файлов для нод:
-    * Генерирование конфигурационного файла для статической ноды. В задачи задаются следующие параметры: 
-        + `src` – ссылка на шаблон конфигурационного файла;
-        + `dest` – путь расположения сгенерированного конфигурационного файла;   
-        + `vars` – переменная, из которой будет браться информация для генерации файла. 
-        ```yaml
-        - name: Generate YDB static configuration file from template
-          ansible.builtin.template:
-            src: ./files/static_config.j2 
-            dest: "{{ ydb_dir }}/cfg/static_config.yaml"
-        vars:
-            disk_info: "{{ disk_info }}"
-        ```      
-        
-       
+### Генерирование конфигурационных файлов для нод и запуск сервиса YDB { #ydb-gen-config }
+1. Генерирование конфигурационного файла для нод. В задачи задаются следующие параметры: 
+    + `src` – ссылка на шаблон конфигурационного файла;
+    + `dest` – путь расположения сгенерированного конфигурационного файла;   
+    + `vars` – переменная, из которой будет браться информация для генерации файла. 
+    ```yaml
+    - name: Generate YDB static configuration file from template
+        ansible.builtin.template:
+        src: ./files/static_config.j2 
+        dest: "{{ ydb_dir }}/cfg/static_config.yaml"
+    vars:
+        disk_info: "{{ disk_info }}"
+    
+    - name: Generate the YDB dynamic node service file from template
+        template:
+        src: ./files/dynnode-service.j2
+        dest: "/etc/systemd/system/ydbd-dynnode.service" 
+    ```      
+2. Перезапуск systemd. Применяется модуль `ansible.builtin.systemd` с параметром `daemon_reload` для перезагрузки `systemd`.
+    ```yaml
+    - name: Refresh systemd configuration to recognize new services
+        ansible.builtin.systemd:
+        daemon_reload: true
+    ```    
+3. Запуск статической ноды с помощью systemd. Указываются следующие параметры запуска статической ноды:
+    + `become` – запуск от имени суперпользователя;
+    + `ansible.builtin.systemd.name` – имя сервиса. Нужно для управления сервисом YDB: остановка – `sudo systemctl stop ydbd-storage`, перезапуск – `sudo systemctl restart ydbd-storage`, запуск – `sudo systemctl start ydbd-storage`.
+    + `any_errors_fatal` – остановка запуска сервиса при возникновении любых ошибок. 
+    ```yaml
+    - name: Start the YDB storage node service
+        become: true
+        ansible.builtin.systemd:
+        state: started
+        name: ydbd-storage
+        any_errors_fatal: true 
+    ```    
+4. Проверка, что статическая нода запустилась. Проверка осуществляется командой `systemctl is-active ydbd-storage || true`. Если команда возвращается `active`, то значение записывается в переменную `ydbd_storage_status` и выполняются следующие задачи, если возвращается любой другой статус – выполнение плейбука прекращается. Предпринимаются 5 попыток опроса статуса сервиса с интервалом в 10 секунд. Параметры выполнения задачи:
+    + `shell` – shell-команда, которая будет выполнена;
+    + `register` – переменная, в которую записывается статус ноды;
+    + `any_errors_fatal` – остановка задачи при возникновении любых ошибок в логе процесса `ydbd-storage`;
+    + `retries` – количество попыток запроса статуса процесса;
+    + `delay` – время ожидания между попытками запроса статуса процесса; 
+    + `until` – условие успешного завершения задачи. Если в течение 5 попыток значение переменной `ydbd_storage_status` станет `active` – задача будет выполнена, если значение будет иным – задача завершится с ошибкой и выполнение плейбука прервётся.
+
+    ```yaml
+    - name: Verify that the YDB storage node service is active
+        shell: systemctl is-active ydbd-storage || true
+        register: ydbd_storage_status
+        any_errors_fatal: true
+        retries: 5
+        delay: 10
+        until: ydbd_storage_status.stdout == "active"
+    ```  
+5. Создание базы данных и её регистрация. Базу данных можно создать, используя API, CLI и SDK. В приведенном блоке задач база данных создаётся и регистрируется с помощью API в блоке `else` условного оператора `if` (предотвращает ошибки при повторном запуске плейбука) – `... ydbd -s grpc://... admin blobstorage config init --yaml-file ...`. Для каждой задачи передается переменная окружения `LD_LIBRARY_PATH`, которая нужна для корректного запуска YDB. Задачи данного блока выполняются, только если статус статической ноды `active`. Параметры исполняемых задач:
+    + `shell` – shell-команда для исполнения;
+    + `environment` – переменная окружения, которая будет активирована при выполнении задачи;
+    + `when` – условие старта выполнения задачи. Задача будет начата только если значение переменной `ydbd_storage_status` – `active`.
+    ```yaml
+    - name: Initialize storage if YDB storage node is active and not already done
+        shell: >
+        if grep -q 'initialize_storage_done' {{ ydb_dir }}/ydb_init_status; then
+            echo 'Initialize storage already done';
+        else
+            {{ ydb_dir }}/release/{{ ydb_version }}/bin/ydbd -s grpc://{{ inner_net }}:{{ grpc_port }} admin blobstorage config init --yaml-file {{ ydb_dir }}/cfg/static_config.yaml && echo 'initialize_storage_done' >> {{ ydb_dir }}/ydb_init_status;
+        fi
+        environment:
+        LD_LIBRARY_PATH: "{{ ydb_dir }}/release/{{ ydb_version }}/lib"
+        when: ydbd_storage_status.stdout == "active"
+
+    - name: Register database if YDB storage node is active and not already done
+        shell: >
+        if grep -q 'register_database_done' {{ ydb_dir }}/ydb_init_status; then
+            echo 'Register database already done';
+        else
+            {{ ydb_dir }}/release/{{ ydb_version }}/bin/ydbd -s grpc://{{ inner_net }}:{{ grpc_port }} admin database /{{ ydb_domain }}/{{ ydb_dbname }} create ssd:{{ disk_value.stdout }} && echo 'register_database_done' >> {{ ydb_dir }}/ydb_init_status;
+        fi
+    environment:
+        LD_LIBRARY_PATH: "{{ ydb_dir }}/release/{{ ydb_version }}/lib"
+    when: ydbd_storage_status.stdout == "active"
+    ```
+6. Запуск динамической ноды. Логика и условия выполнения задачи запуска динамической ноды идентичны условиям выполнения задачи запуска статической ноды: 
+    ```yaml
+    - name: Start database processes if YDB storage node is active
+        become: true
+        ansible.builtin.systemd:
+        state: started
+        name: "ydbd-dynnode"    
+        any_errors_fatal: true 
+        retries: 5
+        delay: 10
+        when: ydbd_storage_status.stdout == "active"
+    ```
+
+### Создание SSH-туннеля и настройка доступа к web-консоли YDB
+Работа по созданию SSH-туннеля ведется на локальной машине без использования прав суперпользователя. SSH-туннель нужен для проброса порта мониторинга YDB на локальную машину. Это делает доступ к БД безопасным и простым, так как не надо настраивать сертификаты безопасности, firewall и порты.
+
+1. Получение списка доступных оболочек командной строки локальной ОС и сохранение списка оболочек в переменную `shell_output`. Опции выполняемой команды:
+    * `delegate_to` – указание на машину, на которой будет выполнена задача. По умолчанию все задачи плейбука выполняются на хостах, указанных в инвентаризационном файле (host), но такое поведение можно изменить. Например, мы можем выполнить задачу на локальной машине, указав значение `localhost`; 
+    * `become` – выполнение задачи с правами суперпользователя;
+    * `ansible.builtin.command` – модуль выполнения команд в терминале (может быть заменён на модуль `shell`);
+    * `register` – создание переменной и сохранение в неё результатов выполнения задачи.      
+    ```yaml
+    - name: Get list of available shells from /etc/shells
+      delegate_to: localhost
+      become: false
+      ansible.builtin.command: cat /etc/shells
+      register: shell_output
+    ```
+2. Выбор активной оболочки командной строки. Часто бывает, что в ОС установлено несколько командных оболочек, чтобы гарантировать большую совместимость выполняемых команд с командной оболочкой, текущая задача проверяет список доступных оболочек, и если среди них есть `bash` или `zsh`, то выбирается одна из них, если нет – используется любая доуступная оболочка:
+    ```yaml
+    - name: Set active shell to bash or zsh if available
+      set_fact:
+        active_shell: "{{ '/bin/bash' if '/bin/bash' in shell_output.stdout else '/bin/zsh' if '/bin/zsh' in shell_output.stdout else omit }}"
+    ```
+3. Создание SSH-туннеля. Процедура создания SSH-туннеля может занимать длительное время, поэтому текущая задача выполняется асинхронно, чтобы не блокировать терминал. Опции выполняемой задачи:
+    * `delegate_to` – указание на машину, на которой будет выполнена задача. 
+    * `become` – выполнение задачи с правами суперпользователя;
+    * `ansible.builtin.shell.cmd` – команда, которая будет выполнена в командной строке;
+    * `ansible.builtin.shell.executable` – выбор активной оболочки командной строки; Значение будет взято из переменной `active_shell`;
+    * `async` – опция запуска задачи асинхронно и время ожидания завершения задачи;
+    * `poll` – время в секундах, через которое Ansible проверит статус выполнения задачи. Если `poll` равен нулю – Ansible завершит задачу по истечению времени, указанном в опции `async`.
+    ```yaml
+    - name: Establish an SSH tunnel to the YDB monitoring port
+      delegate_to: localhost
+      become: false
+      ansible.builtin.shell: 
+        cmd: "ssh  -f -L {{ mon_port }}:localhost:{{ mon_port }} -N -i {{ ansible_ssh_private_key_file }} -vvv {{ ansible_ssh_user }}@{{ inventory_hostname }}"
+        executable: "{{ active_shell }}"
+      async: 15
+      poll: 0
+    ```
+4. Вывод в терминал сообщения с URL для подключения к web-консоли YDB. Описание опций выполняемой задачи:
+    + `ansible.builtin.debug.msg` – текст сообщения, которое будет выведено в терминал.
+    ```yaml
+    - name: Display the YDB monitoring connection URL
+      ansible.builtin.debug:
+        msg: "Now you can connect to YDB monitoring via this URL: http://localhost:{{ mon_port }}"
+    ```
+
+## Troubleshooting { #troubleshooting }
+Ansible – это мощный инструмент автоматической установки и настройки окружений на ВМ. Однако стабильность работы плейбуков зависит от многих факторов: версии Python, настроек Ansible, версии оболочки командной строке, настроек безопасности на хостах, правильности указания значений переменных в плейбуках. Приведём некоторые ошибки, с которыми можно столкнуться при использовании данного плейбука и сценарии их решения.
+
+| Ошибка | Причина | Решение | 
+|---|---|---|

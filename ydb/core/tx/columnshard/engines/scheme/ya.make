@@ -1,5 +1,9 @@
 LIBRARY()
 
+OWNER(
+    g:kikimr
+)
+
 SRCS(
     abstract_scheme.cpp
     snapshot_scheme.cpp

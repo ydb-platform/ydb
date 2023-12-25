@@ -1,5 +1,10 @@
 UNITTEST_FOR(ydb/core/tx/columnshard/engines)
 
+OWNER(
+    chertus
+    g:kikimr
+)
+
 FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)

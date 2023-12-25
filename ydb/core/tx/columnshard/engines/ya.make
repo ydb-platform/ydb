@@ -4,6 +4,11 @@ RECURSE_FOR_TESTS(
 
 LIBRARY()
 
+OWNER(
+    chertus
+    g:kikimr
+)
+
 SRCS(
     column_engine_logs.cpp
     column_engine.cpp

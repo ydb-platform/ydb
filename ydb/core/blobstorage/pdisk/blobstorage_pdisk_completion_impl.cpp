@@ -15,7 +15,7 @@ namespace NPDisk {
 void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
     // bool isNewChunksCommited = false;
     if (CommitedLogChunks) {
-        NWilson::TSpan span(TWilson::PDisk, TraceId.Clone(), "PDisk.TCommitLogChunks");
+        NWilson::TSpan span(TWilson::PDisk, TraceId.Clone(), "PDisk.CommitLogChunks");
         auto* req = PDisk->ReqCreator.CreateFromArgs<TCommitLogChunks>(std::move(CommitedLogChunks), std::move(span));
         PDisk->InputRequest(req);
         //isNewChunksCommited = true;

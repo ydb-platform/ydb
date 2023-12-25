@@ -756,7 +756,7 @@ void TPDisk::ProcessLogWriteQueueAndCommits() {
     JointLogWrites.clear();
 
     // Check if we can TRIM some chunks that were deleted
-    TryTrimChunk(false, 0, nullptr);
+    TryTrimChunk(false, 0, NWilson::TSpan{});
 
     Mon.LogOperationSizeBytes.Increment(logOperationSizeBytes);
 }
@@ -1264,7 +1264,7 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
             WriteSysLogRestorePoint(completion.Release(), req.ReqId, {}); // FIXME: wilson
         }
     }
-    TryTrimChunk(false, 0, &req.Span);
+    TryTrimChunk(false, 0, req.Span);
 }
 
 void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
@@ -1304,7 +1304,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
         }
         IsLogChunksReleaseInflight = false;
 
-        TryTrimChunk(false, 0, &req.Span);
+        TryTrimChunk(false, 0, req.Span);
     }
 }
 

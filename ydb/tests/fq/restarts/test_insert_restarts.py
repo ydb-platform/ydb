@@ -104,12 +104,12 @@ class TestS3(object):
         elif final_status == fq.QueryMeta.ABORTED_BY_SYSTEM:
             assert self.get_issues_depth(query.issue) <= 3, str(query.issue)
             assert self.get_issues_depth(query.transient_issue) <= 3, str(query.transient_issue)
-            assert "Query failed with code UNAVAILABLE at" in query.issue[0].message, query.issue[0].message
+            assert "Lease expired" in str(query.issue), str(query.issue)
             assert final_number_rows == 0, "Incomplete final result in bucket"
         else:
             assert self.get_issues_depth(query.issue) <= 3, str(query.issue)
             assert self.get_issues_depth(query.transient_issue) <= 3, str(query.transient_issue)
-            assert "Query failed with code UNAVAILABLE at" in query.issue[0].message, query.issue[0].message
+            assert "Lease expired" in str(query.issue), str(query.issue)
             assert final_number_rows == 0 or final_number_rows == number_rows
 
         assert len(list(bucket.multipart_uploads.all())) == 0, "Unexpected uncommited upload in bucket"

@@ -208,9 +208,6 @@ public:
             Config_->Addresses &&
             Config_->Addresses->size() == 1)
         {
-            // Disable discovery and balancing when just one address is given.
-            // This is vital for jobs since node's redirector is incapable of handling
-            // Discover requests properly.
             return MakeFuture(ChannelFactory_->CreateChannel((*Config_->Addresses)[0]));
         } else {
             return GetSubprovider(request->GetService())->GetChannel(request);
@@ -314,6 +311,7 @@ IRoamingChannelProviderPtr CreateBalancingChannelProvider(
 {
     YT_VERIFY(config);
     YT_VERIFY(channelFactory);
+    YT_VERIFY(peerDiscovery);
 
     return New<TBalancingChannelProvider>(
         std::move(config),

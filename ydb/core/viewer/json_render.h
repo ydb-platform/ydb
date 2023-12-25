@@ -28,7 +28,6 @@ public:
     {}
 
     void Bootstrap() {
-        //const auto& params(Event->Get()->Request.GetParams());
         auto postData = Event->Get()->Request.GetPostContent();
         BLOG_D("PostData=" << postData);
         NKikimrGraph::TEvGetMetrics getRequest;
@@ -56,6 +55,9 @@ public:
             if (params.Has("maxDataPoints")) {
                 getRequest.SetMaxPoints(FromStringWithDefault<ui32>(params.Get("maxDataPoints"), 1000));
             }
+        } else {
+            Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPBADREQUEST(Event->Get(), {}, "Bad Request"), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            return PassAway();
         }
         Send(NGraph::MakeGraphServiceId(), new NGraph::TEvGraph::TEvGetMetrics(std::move(getRequest)));
         Schedule(TDuration::Seconds(30), new TEvents::TEvWakeup());
@@ -70,7 +72,6 @@ public:
     }
 
     void Handle(NGraph::TEvGraph::TEvMetricsResult::TPtr& ev) {
-        //const auto& params(Event->Get()->Request.GetParams());
         const auto& response(ev->Get()->Record);
         NJson::TJsonValue json;
 

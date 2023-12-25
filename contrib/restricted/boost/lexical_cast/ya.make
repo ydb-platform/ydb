@@ -6,20 +6,16 @@ LICENSE(BSL-1.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.83.0)
+VERSION(1.84.0)
 
-ORIGINAL_SOURCE(https://github.com/boostorg/lexical_cast/archive/boost-1.83.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/boostorg/lexical_cast/archive/boost-1.84.0.tar.gz)
 
 PEERDIR(
-    contrib/restricted/boost/array
-    contrib/restricted/boost/assert
     contrib/restricted/boost/config
     contrib/restricted/boost/container
     contrib/restricted/boost/core
     contrib/restricted/boost/integer
     contrib/restricted/boost/numeric_conversion
-    contrib/restricted/boost/range
-    contrib/restricted/boost/static_assert
     contrib/restricted/boost/throw_exception
     contrib/restricted/boost/type_traits
 )

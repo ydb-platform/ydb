@@ -14,8 +14,27 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Name, ValueUI64, ValueText>;
     };
 
+    struct MetricsIndex : Table<2> {
+        struct Name : Column<1, NScheme::NTypeIds::Text> {};
+        struct Id : Column<2, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<Name>;
+        using TColumns = TableColumns<Name, Id>;
+    };
+
+    struct MetricsValues : Table<3> {
+        struct Timestamp : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Id : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Value : Column<3, NScheme::NTypeIds::Double> {};
+
+        using TKey = TableKey<Timestamp, Id>;
+        using TColumns = TableColumns<Timestamp, Id, Value>;
+    };
+
     using TTables = SchemaTables<
-                            State
+                            State,
+                            MetricsIndex,
+                            MetricsValues
                             >;
 
     using TSettings = SchemaSettings<

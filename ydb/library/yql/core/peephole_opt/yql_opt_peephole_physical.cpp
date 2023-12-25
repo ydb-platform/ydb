@@ -7774,7 +7774,7 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
     pipeline.Add(
         CreateFunctorTransformer(
             [&types](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
-                if (types.UseBlocks) {
+                if (types.IsBlockEngineEnabled()) {
                     const auto& extStageRules = TPeepHoleRules::Instance().BlockStageExtRules;
                     return PeepHoleBlockStage(input, output, ctx, types, extStageRules);
                 } else {
@@ -7789,7 +7789,7 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
     pipeline.Add(
         CreateFunctorTransformer(
             [&types](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
-                if (types.UseBlocks) {
+                if (types.IsBlockEngineEnabled()) {
                     const auto& extStageRules = TPeepHoleRules::Instance().BlockStageExtFinalRules;
                     return PeepHoleBlockStage(input, output, ctx, types, extStageRules);
                 } else {

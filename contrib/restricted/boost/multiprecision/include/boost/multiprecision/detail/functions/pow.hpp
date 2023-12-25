@@ -116,7 +116,7 @@ void hyp0F0(T& H0F0, const T& x)
    eval_add(H0F0, x_pow_n_div_n_fact, ui_type(1));
 
    T lim;
-   eval_ldexp(lim, H0F0, 1 - tol);
+   eval_ldexp(lim, H0F0, static_cast<int>(1L - tol));
    if (eval_get_sign(lim) < 0)
       lim.negate();
 

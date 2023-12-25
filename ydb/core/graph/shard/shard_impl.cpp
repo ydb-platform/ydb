@@ -21,7 +21,6 @@ TString TGraphShard::GetLogPrefix() const {
 void TGraphShard::OnActivateExecutor(const TActorContext&) {
     BLOG_D("OnActivateExecutor");
     ExecuteTxInitSchema();
-    SignalTabletActive(ActorContext());
 }
 
 void TGraphShard::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext&) {
@@ -43,6 +42,10 @@ bool TGraphShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TA
 
     ExecuteTxMonitoring(std::move(ev));
     return true;
+}
+
+void TGraphShard::OnReadyToWork() {
+    SignalTabletActive(ActorContext());
 }
 
 STFUNC(TGraphShard::StateWork) {
@@ -76,12 +79,19 @@ void TGraphShard::Handle(TEvSubDomain::TEvConfigure::TPtr& ev) {
 void TGraphShard::Handle(TEvGraph::TEvSendMetrics::TPtr& ev) {
     BLOG_TRACE("Handle TEvGraph::TEvSendMetrics from " << ev->Sender);
     TInstant now = TInstant::Seconds(TActivationContext::Now().Seconds()); // 1 second resolution
-    if (now != MetricsTimestamp) {
-        if (MetricsTimestamp != TInstant()) {
-            MemoryBackend.StoreMetrics(MetricsTimestamp, MetricsData);
+    if (StartTimestamp == TInstant()) {
+        StartTimestamp = now;
+    }
+    if (now != MetricsData.Timestamp) {
+        if (MetricsData.Timestamp != TInstant()) {
+            ExecuteTxStoreMetrics(std::move(MetricsData));
         }
-        MetricsTimestamp = now;
+        MetricsData.Timestamp = now;
         MetricsData.Values.clear();
+    }
+    if ((now - StartTimestamp) > DURATION_CLEAR_TRIGGER && (now - ClearTimestamp) < DURATION_CLEAR_PERIOD) {
+        ClearTimestamp = now;
+        ExecuteTxClearData();
     }
     for (const auto& metric : ev->Get()->Record.GetMetrics()) {
         MetricsData.Values[metric.GetName()] += metric.GetValue(); // simple accumulation by name of metric
@@ -90,8 +100,7 @@ void TGraphShard::Handle(TEvGraph::TEvSendMetrics::TPtr& ev) {
 
 void TGraphShard::Handle(TEvGraph::TEvGetMetrics::TPtr& ev) {
     BLOG_TRACE("Handle TEvGraph::TEvGetMetrics from " << ev->Sender);
-    NKikimrGraph::TEvMetricsResult result = MemoryBackend.GetMetrics(ev->Get()->Record);
-    Send(ev->Sender, new TEvGraph::TEvMetricsResult(std::move(result)), 0, ev->Cookie);
+    ExecuteTxGetMetrics(ev);
 }
 
 IActor* CreateGraphShard(const TActorId& tablet, TTabletStorageInfo* info) {

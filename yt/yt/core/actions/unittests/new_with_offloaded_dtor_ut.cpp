@@ -7,6 +7,8 @@
 #include <yt/yt/core/misc/ref_counted_tracker.h>
 #include <yt/yt/core/misc/proc.h>
 
+#include <yt/yt/core/logging/log.h>
+
 namespace NYT {
 namespace {
 

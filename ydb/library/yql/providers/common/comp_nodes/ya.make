@@ -34,7 +34,7 @@ SRCS(
 PEERDIR(
     ydb/library/yql/ast
     ydb/library/yql/ast/serialize
-    ydb/library/yql/minikql/computation/llvm
+    ydb/library/yql/minikql/computation
     ydb/library/yql/core
     ydb/library/yql/core/type_ann
     ydb/library/yql/providers/common/codec
@@ -43,7 +43,7 @@ PEERDIR(
 
 IF (NOT MKQL_DISABLE_CODEGEN)
     PEERDIR(
-        ydb/library/yql/minikql/codegen
+        ydb/library/yql/minikql/codegen/llvm
         contrib/libs/llvm12/lib/IR
         contrib/libs/llvm12/lib/ExecutionEngine/MCJIT
         contrib/libs/llvm12/lib/Linker

@@ -265,11 +265,11 @@ public:
     TOperation::TPtr BuildOperation(TEvDataShard::TEvProposeTransaction::TPtr &ev,
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
-                                    const TActorContext &ctx);
+                                    const TActorContext &ctx, NWilson::TTraceId traceId);
     TOperation::TPtr BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr &ev,
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
-                                    const TActorContext &ctx);
+                                    const TActorContext &ctx, NWilson::TTraceId traceId);
     void BuildDataTx(TActiveTransaction *tx,
                      TTransactionContext &txc,
                      const TActorContext &ctx);

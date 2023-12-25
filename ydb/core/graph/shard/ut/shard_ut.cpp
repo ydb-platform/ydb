@@ -12,13 +12,13 @@
 #define Ctest Cerr
 #endif
 
-Y_DECLARE_OUT_SPEC(, std::vector<uint32_t>, stream, value) {
+Y_DECLARE_OUT_SPEC(, std::vector<TInstant>, stream, value) {
     stream << '[';
     for (auto it = value.begin(); it != value.end(); ++it) {
         if (it != value.begin()) {
             stream << ',';
         }
-        stream << *it;
+        stream << it->GetValue();
     }
     stream << ']';
 }
@@ -41,23 +41,51 @@ using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(GraphShard) {
     Y_UNIT_TEST(DownsampleFixed) {
-        std::vector<uint32_t> sourceData = {1,2,3,4,5, 6, 7, 8, 9, 10};
+        std::vector<TInstant> sourceData = {
+            TInstant::FromValue( 1 ),
+            TInstant::FromValue( 2 ),
+            TInstant::FromValue( 3 ),
+            TInstant::FromValue( 4 ),
+            TInstant::FromValue( 5 ),
+            TInstant::FromValue( 6 ),
+            TInstant::FromValue( 7 ),
+            TInstant::FromValue( 8 ),
+            TInstant::FromValue( 9 ),
+            TInstant::FromValue( 10 )
+        };
         {
-            std::vector<uint32_t> targetData = NGraph::TMemoryBackend::Downsample(sourceData, 10);
+            std::vector<TInstant> targetData = NGraph::TMemoryBackend::Downsample(sourceData, 10);
             Ctest << targetData << Endl;
-            std::vector<uint32_t> canonData = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+            std::vector<TInstant> canonData = {
+                TInstant::FromValue( 1 ),
+                TInstant::FromValue( 2 ),
+                TInstant::FromValue( 3 ),
+                TInstant::FromValue( 4 ),
+                TInstant::FromValue( 5 ),
+                TInstant::FromValue( 6 ),
+                TInstant::FromValue( 7 ),
+                TInstant::FromValue( 8 ),
+                TInstant::FromValue( 9 ),
+                TInstant::FromValue( 10 )
+            };
             UNIT_ASSERT(targetData == canonData);
         }
         {
-            std::vector<uint32_t> targetData = NGraph::TMemoryBackend::Downsample(sourceData, 5);
+            std::vector<TInstant> targetData = NGraph::TMemoryBackend::Downsample(sourceData, 5);
             Ctest << targetData << Endl;
-            std::vector<uint32_t> canonData = {1, 3, 5, 7, 9};
+            std::vector<TInstant> canonData = {
+                TInstant::FromValue( 1 ),
+                TInstant::FromValue( 3 ),
+                TInstant::FromValue( 5 ),
+                TInstant::FromValue( 7 ),
+                TInstant::FromValue( 9 )
+            };
             UNIT_ASSERT(targetData == canonData);
         }
         {
-            std::vector<uint32_t> targetData = NGraph::TMemoryBackend::Downsample(sourceData, 1);
+            std::vector<TInstant> targetData = NGraph::TMemoryBackend::Downsample(sourceData, 1);
             Ctest << targetData << Endl;
-            std::vector<uint32_t> canonData = {5};
+            std::vector<TInstant> canonData = { TInstant::FromValue( 1 ) };
             UNIT_ASSERT(targetData == canonData);
         }
     }

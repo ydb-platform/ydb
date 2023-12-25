@@ -11,7 +11,6 @@
 #include <type_traits>
 #include <limits>
 #include <boost/multiprecision/detail/standalone_config.hpp>
-#include <boost/multiprecision/detail/number_base.hpp>
 #include <boost/multiprecision/detail/assert.hpp>
 
 namespace boost {
@@ -155,20 +154,6 @@ inline BOOST_MP_CXX14_CONSTEXPR void minmax(const T& a, const T& b, T& aa, T& bb
       bb = a;
    }
 }
-
-enum cpp_integer_type
-{
-   signed_magnitude   = 1,
-   unsigned_magnitude = 0,
-   signed_packed      = 3,
-   unsigned_packed    = 2
-};
-
-enum cpp_int_check_type
-{
-   checked   = 1,
-   unchecked = 0
-};
 
 } // namespace multiprecision
 } // namespace boost

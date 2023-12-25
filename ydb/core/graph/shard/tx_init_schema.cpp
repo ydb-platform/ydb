@@ -23,6 +23,7 @@ public:
 
     void Complete(const TActorContext&) override {
         BLOG_D("TTxInitScheme::Complete");
+        Self->ExecuteTxStartup();
     }
 };
 

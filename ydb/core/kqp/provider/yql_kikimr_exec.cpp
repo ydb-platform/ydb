@@ -88,9 +88,8 @@ namespace {
             permissionsSettings.Permissions.insert(NKikimr::ConvertShortYdbPermissionNameToFullYdbPermissionName(permission));
         }
 
-        THashSet<TString> pathesMap;
-        for (auto atom : modifyPermissions.Pathes()) {
-            permissionsSettings.Pathes.insert(atom.Cast<TCoAtom>().StringValue());
+        for (auto atom : modifyPermissions.Paths()) {
+            permissionsSettings.Paths.insert(atom.Cast<TCoAtom>().StringValue());
         }
 
         for (auto atom : modifyPermissions.Roles()) {
@@ -1676,10 +1675,6 @@ public:
         }
 
         if (auto maybeGrantPermissions = TMaybeNode<TKiModifyPermissions>(input)) {
-            if (!EnsureNotPrepare("MODIFY PERMISSIONS", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
@@ -1688,8 +1683,7 @@ public:
             auto cluster = TString(maybeGrantPermissions.Cast().DataSink().Cluster());
             TModifyPermissionsSettings settings = ParsePermissionsSettings(maybeGrantPermissions.Cast());
 
-            bool prepareOnly = SessionCtx->Query().PrepareOnly;
-            auto future = prepareOnly ? CreateDummySuccess() : Gateway->ModifyPermissions(cluster, settings);
+            auto future = Gateway->ModifyPermissions(cluster, settings);
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {

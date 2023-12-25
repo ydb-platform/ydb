@@ -272,6 +272,7 @@ public:
         : AstParseResult(astParseResult)
         , Settings(settings)
         , DqEngineEnabled(Settings.DqDefaultAuto->Allow())
+        , BlockEngineEnabled(Settings.BlockDefaultAuto->Allow())
     {
         Positions.push_back({});
         ScanRows(query);
@@ -281,6 +282,10 @@ public:
                 DqEngineEnabled = true;
             } else if (flag == "DqEngineForce") {
                 DqEngineForce = true;
+            } else if (flag == "BlockEngineEnable") {
+                BlockEngineEnabled = true;
+            } else if (flag == "BlockEngineForce") {
+                BlockEngineForce = true;
             }
         }
 
@@ -320,6 +325,8 @@ public:
         Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
             QA("OrderedColumns"))));
 
+        ui32 blockEnginePgmPos = Statements.size();
+        Statements.push_back(configSource);
         ui32 costBasedOptimizerPos = Statements.size();
         Statements.push_back(configSource);
         ui32 dqEnginePgmPos = Statements.size();
@@ -357,6 +364,13 @@ public:
                 QA("CostBasedOptimizer"), QA(CostBasedOptimizer)));
         } else {
             Statements.erase(Statements.begin() + costBasedOptimizerPos);
+        }
+
+        if (BlockEngineEnabled) {
+            Statements[blockEnginePgmPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+                QA("BlockEngine"), QA(BlockEngineForce ? "force" : "auto")));
+        } else {
+            Statements.erase(Statements.begin() + blockEnginePgmPos);
         }
 
         return VL(Statements.data(), Statements.size());
@@ -2001,7 +2015,7 @@ public:
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
-        } else if (name == "dqengine") {
+        } else if (name == "dqengine" || name == "blockengine") {
             if (ListLength(value->args) != 1) {
                 AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
                 return nullptr;
@@ -2011,17 +2025,20 @@ public:
             if (NodeTag(arg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String)) {
                 auto rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
                 auto str = to_lower(TString(rawStr));
+                const bool isDqEngine = name == "dqengine";
+                auto& enable = isDqEngine ? DqEngineEnabled : BlockEngineEnabled;
+                auto& force =  isDqEngine ? DqEngineForce   : BlockEngineForce;
                 if (str == "auto") {
-                    DqEngineEnabled = true;
-                    DqEngineForce = false;
+                    enable = true;
+                    force = false;
                 } else if (str == "force") {
-                    DqEngineEnabled = true;
-                    DqEngineForce = true;
+                    enable = true;
+                    force = true;
                 } else if (str == "disable") {
-                    DqEngineEnabled = false;
-                    DqEngineForce = false;
+                    enable = false;
+                    force = false;
                 } else {
-                    AddError(TStringBuilder() << "VariableSetStmt, not supported DqEngine option value: " << rawStr);
+                    AddError(TStringBuilder() << "VariableSetStmt, not supported " << value->name << " option value: " << rawStr);
                     return nullptr;
                 }
             } else {
@@ -4247,6 +4264,8 @@ private:
     bool DqEngineEnabled = false;
     bool DqEngineForce = false;
     TString CostBasedOptimizer;
+    bool BlockEngineEnabled = false;
+    bool BlockEngineForce = false;
     TVector<TAstNode*> Statements;
     ui32 ReadIndex = 0;
     TViews Views;

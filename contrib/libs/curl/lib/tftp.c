@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -48,7 +48,6 @@
 
 #include "urldata.h"
 #include <curl/curl.h>
-#include "cf-socket.h"
 #include "transfer.h"
 #include "sendf.h"
 #include "tftp.h"
@@ -370,7 +369,7 @@ static CURLcode tftp_parse_option_ack(struct tftp_state_data *state,
 
       /* tsize should be ignored on upload: Who cares about the size of the
          remote file? */
-      if(!data->state.upload) {
+      if(!data->set.upload) {
         if(!tsize) {
           failf(data, "invalid tsize -:%s:- value in OACK packet", value);
           return CURLE_TFTP_ILLEGAL;
@@ -451,7 +450,7 @@ static CURLcode tftp_send_first(struct tftp_state_data *state,
       return result;
     }
 
-    if(data->state.upload) {
+    if(data->set.upload) {
       /* If we are uploading, send an WRQ */
       setpacketevent(&state->spacket, TFTP_EVENT_WRQ);
       state->data->req.upload_fromhere =
@@ -486,7 +485,7 @@ static CURLcode tftp_send_first(struct tftp_state_data *state,
     if(!data->set.tftp_no_options) {
       char buf[64];
       /* add tsize option */
-      if(data->state.upload && (data->state.infilesize != -1))
+      if(data->set.upload && (data->state.infilesize != -1))
         msnprintf(buf, sizeof(buf), "%" CURL_FORMAT_CURL_OFF_T,
                   data->state.infilesize);
       else
@@ -530,8 +529,8 @@ static CURLcode tftp_send_first(struct tftp_state_data *state,
        not have a size_t argument, like older unixes that want an 'int' */
     senddata = sendto(state->sockfd, (void *)state->spacket.data,
                       (SEND_TYPE_ARG3)sbytes, 0,
-                      &data->conn->remote_addr->sa_addr,
-                      data->conn->remote_addr->addrlen);
+                      data->conn->ip_addr->ai_addr,
+                      data->conn->ip_addr->ai_addrlen);
     if(senddata != (ssize_t)sbytes) {
       char buffer[STRERROR_LEN];
       failf(data, "%s", Curl_strerror(SOCKERRNO, buffer, sizeof(buffer)));
@@ -540,7 +539,7 @@ static CURLcode tftp_send_first(struct tftp_state_data *state,
     break;
 
   case TFTP_EVENT_OACK:
-    if(data->state.upload) {
+    if(data->set.upload) {
       result = tftp_connect_for_tx(state, event);
     }
     else {
@@ -1015,7 +1014,7 @@ static CURLcode tftp_connect(struct Curl_easy *data, bool *done)
   state->requested_blksize = blksize;
 
   ((struct sockaddr *)&state->local_addr)->sa_family =
-    (CURL_SA_FAMILY_T)(conn->remote_addr->family);
+    (CURL_SA_FAMILY_T)(conn->ip_addr->ai_family);
 
   tftp_set_timeouts(state);
 
@@ -1034,7 +1033,7 @@ static CURLcode tftp_connect(struct Curl_easy *data, bool *done)
      * IPv4 and IPv6...
      */
     int rc = bind(state->sockfd, (struct sockaddr *)&state->local_addr,
-                  conn->remote_addr->addrlen);
+                  conn->ip_addr->ai_addrlen);
     if(rc) {
       char buffer[STRERROR_LEN];
       failf(data, "bind() failed; %s",

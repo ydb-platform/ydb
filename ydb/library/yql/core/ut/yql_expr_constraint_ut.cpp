@@ -687,6 +687,32 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TDistinctConstraintNode>(exprRoot, "OrderedMap", "Distinct((v))");
     }
 
+    Y_UNIT_TEST(NestedFlatMapByOptional) {
+        const auto s = R"((
+            (let mr_sink (DataSink 'yt (quote plato)))
+            (let list (AsList
+                (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
+                (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'w)))
+                (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'u)))
+            ))
+            (let list (AssumeUnique list '('key 'subkey) '('value)))
+            (let list (AssumeDistinct list '('key) '('subkey 'value)))
+            (let sorted (Sort list '((Bool 'False) (Bool 'True)) (lambda '(item) '((Member item 'value) (Member item 'subkey)))))
+            (let mapped (OrderedFlatMap sorted (lambda '(item) (FlatMap (StrictCast (Member item 'key) (OptionalType (DataType 'Uint8)))
+                (lambda '(key) (Just (AsStruct '('k key) '('s (Member item 'subkey)) '('v (Member item 'value)))))
+            ))))
+            (let world (Write! world mr_sink (Key '('table (String 'Output))) mapped '('('mode 'renew))))
+            (let world (Commit! world mr_sink))
+            (return world)
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "Sorted(v[desc];s[asc])");
+        CheckConstraint<TUniqueConstraintNode>(exprRoot, "OrderedFlatMap", "Unique((k,s)(v))");
+        CheckConstraint<TDistinctConstraintNode>(exprRoot, "OrderedFlatMap", "Distinct((s,v))");
+    }
+
     Y_UNIT_TEST(FlattenMembers) {
         const auto s = R"((
             (let mr_sink (DataSink 'yt (quote plato)))

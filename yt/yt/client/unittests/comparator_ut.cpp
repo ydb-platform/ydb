@@ -335,8 +335,8 @@ TEST_F(TComparatorTest, CompareWithWidening)
     EXPECT_TRUE(TestKeyWithWidening({int1}, TKeyBoundRef({int1, null}, true)));
 
     // Upper bound with null and widening.
-    EXPECT_FALSE(TestKeyWithWidening({int1}, TKeyBoundRef({int1, null}, false ,true)));
-    EXPECT_TRUE(TestKeyWithWidening({int1}, TKeyBoundRef({int1, null}, true ,true)));
+    EXPECT_FALSE(TestKeyWithWidening({int1}, TKeyBoundRef({int1, null}, false, true)));
+    EXPECT_TRUE(TestKeyWithWidening({int1}, TKeyBoundRef({int1, null}, true, true)));
 
     // Lower bound longer bound.
     EXPECT_FALSE(TestKeyWithWidening({int1}, TKeyBoundRef({int1, int2}, false)));
@@ -346,11 +346,11 @@ TEST_F(TComparatorTest, CompareWithWidening)
     EXPECT_TRUE(TestKeyWithWidening({int2}, TKeyBoundRef({int1, int2}, true)));
 
     // Upper bound longer bound.
-    EXPECT_TRUE(TestKeyWithWidening({int1}, TKeyBoundRef({int1, int2}, false ,true)));
-    EXPECT_TRUE(TestKeyWithWidening({int1}, TKeyBoundRef({int1, int2}, true ,true)));
+    EXPECT_TRUE(TestKeyWithWidening({int1}, TKeyBoundRef({int1, int2}, false, true)));
+    EXPECT_TRUE(TestKeyWithWidening({int1}, TKeyBoundRef({int1, int2}, true, true)));
 
-    EXPECT_FALSE(TestKeyWithWidening({int2}, TKeyBoundRef({int1, int2}, false ,true)));
-    EXPECT_FALSE(TestKeyWithWidening({int2}, TKeyBoundRef({int1, int2}, true ,true)));
+    EXPECT_FALSE(TestKeyWithWidening({int2}, TKeyBoundRef({int1, int2}, false, true)));
+    EXPECT_FALSE(TestKeyWithWidening({int2}, TKeyBoundRef({int1, int2}, true, true)));
 
     auto sortOrdersAAD = {ESortOrder::Ascending, ESortOrder::Ascending, ESortOrder::Descending};
 

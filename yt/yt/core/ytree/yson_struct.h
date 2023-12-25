@@ -93,7 +93,7 @@ public:
 
     std::vector<TString> GetAllParameterAliases(const TString& key) const;
 
-    void GetSchema(NYson::IYsonConsumer* consumer) const;
+    void WriteSchema(NYson::IYsonConsumer* consumer) const;
 
 private:
     template <class TValue>

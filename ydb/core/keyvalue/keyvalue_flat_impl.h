@@ -122,8 +122,9 @@ protected:
         TKeyValueFlat *Self;
         TVector<TLogoBlobID> TrashBeingCommitted;
 
-        TTxRequest(THolder<TIntermediate> intermediate, TKeyValueFlat *keyValueFlat)
-            : Intermediate(std::move(intermediate))
+        TTxRequest(THolder<TIntermediate> intermediate, TKeyValueFlat *keyValueFlat, NWilson::TTraceId &&traceId)
+            : NTabletFlatExecutor::ITransaction(std::move(traceId))
+            , Intermediate(std::move(intermediate))
             , Self(keyValueFlat)
         {
             Intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_UNKNOWN);
@@ -390,7 +391,7 @@ protected:
 
         State.OnEvIntermediate(*(ev->Get()->Intermediate), ctx);
         auto traceId = ev->Get()->Intermediate->Span.GetTraceId();
-        Execute(new TTxRequest(std::move(ev->Get()->Intermediate), this), ctx, std::move(traceId));
+        Execute(new TTxRequest(std::move(ev->Get()->Intermediate), this, std::move(traceId)), ctx);
     }
 
     void Handle(TEvKeyValue::TEvNotify::TPtr &ev, const TActorContext &ctx) {

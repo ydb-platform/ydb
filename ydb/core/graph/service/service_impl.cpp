@@ -66,6 +66,12 @@ public:
         ResolveTimestamp = TActivationContext::Now();
     }
 
+    NTabletPipe::TClientConfig GetPipeClientConfig() {
+        NTabletPipe::TClientConfig clientConfig;
+        clientConfig.RetryPolicy = {.RetryLimitCount = 3};
+        return clientConfig;
+    }
+
     void ConnectShard() {
         if (GraphShardId) {
             if (ConnectTimestamp && (ConnectTimestamp + CONNECT_TIMEOUT > TActivationContext::Now())) {
@@ -73,7 +79,7 @@ public:
                 return; // too soon
             }
             BLOG_D("ConnectToShard " << GraphShardId);
-            IActor* pipeActor = NTabletPipe::CreateClient(TBase::SelfId(), GraphShardId, {});
+            IActor* pipeActor = NTabletPipe::CreateClient(TBase::SelfId(), GraphShardId, GetPipeClientConfig());
             GraphShardPipe = TBase::RegisterWithSameMailbox(pipeActor);
             ConnectTimestamp = TActivationContext::Now();
         } else {
@@ -155,8 +161,10 @@ public:
                     GraphShardId = response.DomainDescription->Description.GetProcessingParams().GetGraphShard();
                     BLOG_D("Database " << Database << " resolved to shard " << GraphShardId);
                     ConnectShard();
+                    return;
                 }
             }
+            BLOG_W("Error resolving database " << Database << " incomplete response / no graph shard");
         } else {
             if (!request->ResultSet.empty()) {
                 BLOG_W("Error resolving database " << Database << " error " << request->ResultSet.front().Status);

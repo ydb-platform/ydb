@@ -23,6 +23,7 @@ public:
     void OnDetach(const TActorContext&) override;
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext&) override;
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
+    void OnReadyToWork();
 
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);
@@ -30,15 +31,30 @@ public:
     void Handle(TEvGraph::TEvSendMetrics::TPtr& ev);
     void Handle(TEvGraph::TEvGetMetrics::TPtr& ev);
 
-protected:
+//protected:
     void ExecuteTxInitSchema();
+    void ExecuteTxStartup();
     void ExecuteTxMonitoring(NMon::TEvRemoteHttpInfo::TPtr ev);
+    void ExecuteTxStoreMetrics(TMetricsData&& data);
+    void ExecuteTxClearData();
+    void ExecuteTxGetMetrics(TEvGraph::TEvGetMetrics::TPtr ev);
+    void ExecuteTxChangeBackend(EBackendType backend);
 
     STATEFN(StateWork);
 
-    TInstant MetricsTimestamp;
-    TMetricsData MetricsData;
+    // how often we could issue a clear operation
+    static constexpr TDuration DURATION_CLEAR_PERIOD = TDuration::Minutes(10);
+    // after what size of metrics data we issue a clear operation
+    static constexpr TDuration DURATION_CLEAR_TRIGGER = TDuration::Hours(25);
+    // the maximum size of metrics data to keep
+    static constexpr TDuration DURATION_TO_KEEP = TDuration::Hours(24);
+
+    TMetricsData MetricsData; // current accumulated metrics, ready to be stored
+    TInstant StartTimestamp; // the earliest point of metrics
+    TInstant ClearTimestamp; // last time of clear operation
+    EBackendType BackendType = EBackendType::Memory;
     TMemoryBackend MemoryBackend;
+    TLocalBackend LocalBackend;
 };
 
 } // NGraph

@@ -166,31 +166,37 @@ public:
             }
 
             case NKqpProto::TKqpSchemeOperation::kCreateGroup: {
-                auto modifyScheme = schemeOp.GetCreateGroup();
+                const auto& modifyScheme = schemeOp.GetCreateGroup();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kAddGroupMembership: {
-                auto modifyScheme = schemeOp.GetAddGroupMembership();
+                const auto& modifyScheme = schemeOp.GetAddGroupMembership();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kRemoveGroupMembership: {
-                auto modifyScheme = schemeOp.GetRemoveGroupMembership();
+                const auto& modifyScheme = schemeOp.GetRemoveGroupMembership();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kRenameGroup: {
-                auto modifyScheme = schemeOp.GetRenameGroup();
+                const auto& modifyScheme = schemeOp.GetRenameGroup();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kDropGroup: {
-                auto modifyScheme = schemeOp.GetDropGroup();
+                const auto& modifyScheme = schemeOp.GetDropGroup();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kModifyPermissions: {
+                const auto& modifyScheme = schemeOp.GetModifyPermissions();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }

@@ -77,7 +77,7 @@ public:
             ServerSettings->AddStoragePoolType("hdd1");
             ServerSettings->AddStoragePoolType("hdd2");
         }
-        ServerSettings->AppConfig.MergeFrom(appConfig);
+        ServerSettings->AppConfig->MergeFrom(appConfig);
         ServerSettings->AuthConfig = appConfig.GetAuthConfig();
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
         ServerSettings->SetKqpSettings(kqpSettings);
@@ -131,7 +131,7 @@ public:
         Server_->EnableGRpc(grpcOption);
 
         TClient annoyingClient(*ServerSettings);
-        if (ServerSettings->AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
+        if (ServerSettings->AppConfig->GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
             annoyingClient.SetSecurityToken("root@builtin");
         }
         annoyingClient.InitRootScheme("Root");

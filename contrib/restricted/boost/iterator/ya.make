@@ -6,15 +6,14 @@ LICENSE(BSL-1.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.83.0)
+VERSION(1.84.0)
 
-ORIGINAL_SOURCE(https://github.com/boostorg/iterator/archive/boost-1.83.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/boostorg/iterator/archive/boost-1.84.0.tar.gz)
 
 PEERDIR(
     contrib/restricted/boost/assert
     contrib/restricted/boost/concept_check
     contrib/restricted/boost/config
-    contrib/restricted/boost/conversion
     contrib/restricted/boost/core
     contrib/restricted/boost/detail
     contrib/restricted/boost/function_types

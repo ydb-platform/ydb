@@ -25,6 +25,8 @@
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/base/events.h>
 
+#include <ydb/library/actors/wilson/wilson_span.h>
+
 #include <util/stream/str.h>
 
 namespace NKikimr {
@@ -361,6 +363,10 @@ public:
     virtual void ReplyUnauthenticated(const TString& msg = "") = 0;
     virtual void ReplyUnavaliable() = 0;
 
+    //tracing
+    virtual void StartTracing(NWilson::TSpan&& span) = 0;
+    virtual void LegacyFinishSpan() = 0;
+
     // validation
     virtual bool Validate(TString& error) = 0;
 
@@ -477,6 +483,9 @@ public:
         return Token_;
     }
 
+    void StartTracing(NWilson::TSpan&& /*span*/) override {}
+    void LegacyFinishSpan() override {}
+
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
         State_.State = state;
     }
@@ -525,8 +534,7 @@ public:
     }
 
     const TMaybe<TString> GetPeerMetaValues(const TString&) const override {
-        Y_ABORT("Unimplemented");
-        return TMaybe<TString>{};
+        return {};
     }
 
     TVector<TStringBuf> FindClientCert() const override {
@@ -598,7 +606,7 @@ public:
         return {};
     }
 
-    TMaybe<TString> GetOpenTelemetryTraceParent() const override {
+    NWilson::TTraceId GetWilsonTraceId() const override {
         return {};
     }
 
@@ -821,8 +829,8 @@ public:
         return GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER);
     }
 
-    TMaybe<TString> GetOpenTelemetryTraceParent() const override {
-        return GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER);
+    NWilson::TTraceId GetWilsonTraceId() const override {
+        return Span_.GetTraceId();
     }
 
     const TMaybe<TString> GetSdkBuildInfo() const {
@@ -872,6 +880,16 @@ public:
         Y_ABORT("unimplemented for TGRpcRequestBiStreamWrapper");
     }
 
+    // IRequestProxyCtx
+    //
+    void StartTracing(NWilson::TSpan&& span) override {
+        Span_ = std::move(span);
+    }
+
+    void LegacyFinishSpan() override {
+        Span_.End();
+    }
+
     // IRequestCtxBase
     //
     void AddAuditLogPart(const TStringBuf&, const TString&) override {
@@ -889,6 +907,7 @@ private:
     TMaybe<NRpcService::TRlPath> RlPath_;
     bool RlAllowed_;
     IGRpcProxyCounters::TPtr Counters_;
+    NWilson::TSpan Span_;
 };
 
 template <typename TDerived>
@@ -1147,8 +1166,8 @@ public:
         return GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER);
     }
 
-    TMaybe<TString> GetOpenTelemetryTraceParent() const override {
-        return GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER);
+    NWilson::TTraceId GetWilsonTraceId() const override {
+        return Span_.GetTraceId();
     }
 
     const TMaybe<TString> GetSdkBuildInfo() const {
@@ -1277,6 +1296,12 @@ public:
         return AuditLogParts;
     }
 
+    void StartTracing(NWilson::TSpan&& span) override {
+        Span_ = std::move(span);
+    }
+
+    void LegacyFinishSpan() override {}
+
     void ReplyGrpcError(grpc::StatusCode code, const TString& msg, const TString& details = "") {
         Ctx_->ReplyError(code, msg, details);
     }
@@ -1316,6 +1341,8 @@ private:
         };
     }
 
+protected:
+    NWilson::TSpan Span_;
 private:
     TIntrusivePtr<NYdbGrpc::IRequestContextBase> Ctx_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
@@ -1393,6 +1420,8 @@ public:
     { }
 
     void Pass(const IFacilityProvider& facility) override {
+        this->Span_.End();
+
         PassMethod(std::move(std::unique_ptr<TRequestIface>(this)), facility);
     }
 

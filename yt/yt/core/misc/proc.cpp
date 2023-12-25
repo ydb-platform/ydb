@@ -314,6 +314,24 @@ std::vector<size_t> GetCurrentProcessThreadIds()
 #endif
 }
 
+bool IsUserspaceThread(size_t tid)
+{
+#ifdef __linux__
+    TFileInput file(Format("/proc/%v/stat", tid));
+    auto statFields = SplitString(file.ReadLine(), " ");
+    constexpr int StartStackIndex = 27;
+    if (statFields.size() < StartStackIndex) {
+        return false;
+    }
+    // This is just a heuristic.
+    auto startStack = FromString<ui64>(statFields[StartStackIndex]);
+    return startStack != 0;
+#else
+    Y_UNUSED(tid);
+    return false;
+#endif
+}
+
 void ChownChmodDirectory(const TString& path, const std::optional<uid_t>& userId, const std::optional<int>& permissions)
 {
 #ifdef _unix_

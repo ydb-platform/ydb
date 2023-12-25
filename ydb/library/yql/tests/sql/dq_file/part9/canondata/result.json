@@ -976,35 +976,6 @@
         }
     ],
     "test.test[flatten_by-flatten_columns_non_struct-default.txt-Results]": [],
-    "test.test[hor_join-yql-12610_old_table_props-default.txt-Analyze]": [
-        {
-            "checksum": "4c3e60b81eebec9cef6181a11c3b5b95",
-            "size": 5047,
-            "uri": "https://{canondata_backend}/1936947/4e75efdf8bb6c4502b7bcfedc52bbdf182bdb39c/resource.tar.gz#test.test_hor_join-yql-12610_old_table_props-default.txt-Analyze_/plan.txt"
-        },
-        {
-            "uri": "file://test.test_hor_join-yql-12610_old_table_props-default.txt-Analyze_/extracted"
-        }
-    ],
-    "test.test[hor_join-yql-12610_old_table_props-default.txt-Debug]": [
-        {
-            "checksum": "93e53f7287e451e31d0820e71f80c62b",
-            "size": 2195,
-            "uri": "https://{canondata_backend}/1936947/4e75efdf8bb6c4502b7bcfedc52bbdf182bdb39c/resource.tar.gz#test.test_hor_join-yql-12610_old_table_props-default.txt-Debug_/opt.yql_patched"
-        }
-    ],
-    "test.test[hor_join-yql-12610_old_table_props-default.txt-Plan]": [
-        {
-            "checksum": "4c3e60b81eebec9cef6181a11c3b5b95",
-            "size": 5047,
-            "uri": "https://{canondata_backend}/1936947/4e75efdf8bb6c4502b7bcfedc52bbdf182bdb39c/resource.tar.gz#test.test_hor_join-yql-12610_old_table_props-default.txt-Plan_/plan.txt"
-        }
-    ],
-    "test.test[hor_join-yql-12610_old_table_props-default.txt-Results]": [
-        {
-            "uri": "file://test.test_hor_join-yql-12610_old_table_props-default.txt-Results_/extracted"
-        }
-    ],
     "test.test[in-in_immediate_subquery-default.txt-Analyze]": [
         {
             "checksum": "ea302e583757db140046cc7ae0a64e41",
@@ -1224,9 +1195,9 @@
     ],
     "test.test[join-mergejoin_force_align2-off-Results]": [
         {
-            "checksum": "6a1f85c59016769b85dd5ce2d5b686c9",
-            "size": 300,
-            "uri": "https://{canondata_backend}/1936273/1ba42e2c47cd3429011228159c1fdf43dd1881b7/resource.tar.gz#test.test_join-mergejoin_force_align2-off-Results_/results.txt"
+            "checksum": "360d932ebffae959c40b57a204bb60a5",
+            "size": 339,
+            "uri": "https://{canondata_backend}/1599023/753be0e0c576efbfbb51452c05363488f2aa1c64/resource.tar.gz#test.test_join-mergejoin_force_align2-off-Results_/results.txt"
         }
     ],
     "test.test[join-nopushdown_filter_with_depends_on-off-Analyze]": [

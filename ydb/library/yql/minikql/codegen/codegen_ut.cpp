@@ -1,10 +1,6 @@
-#include "codegen.h"
+#include <ydb/library/yql/minikql/codegen/codegen.h>
 
-#include <llvm/IR/Constants.h>
-#include <llvm/IR/DerivedTypes.h>
-#include <llvm/IR/Instructions.h>
-#include <llvm/IR/LLVMContext.h>
-#include <llvm/IR/Module.h>
+#include <codegen_ut_llvm_deps.h> // Y_IGNORE
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/resource/resource.h>

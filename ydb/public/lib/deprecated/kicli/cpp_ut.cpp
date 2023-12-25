@@ -39,7 +39,7 @@ Tests::TServer StartupKikimr(NGRpcProxy::TGRpcClientConfig& clientConfig,
 
     auto settings = Tests::TServerSettings(msgbusPort);
     settings.SetLogBackend(logBackend);
-    settings.AppConfig.CopyFrom(config);
+    settings.AppConfig->CopyFrom(config);
     settings.SetEnableSystemViews(false);
 
     Tests::TServer Server(settings);

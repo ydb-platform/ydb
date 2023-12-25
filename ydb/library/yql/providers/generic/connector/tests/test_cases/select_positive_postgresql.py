@@ -429,7 +429,7 @@ class Factory:
 
         return [
             TestCase(
-                name=f'pushdown_{data_source_kind}',
+                name=f'pushdown_{EDataSourceKind.Name(data_source_kind)}',
                 data_in=data_in,
                 data_out_=data_out_1,
                 pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
@@ -440,7 +440,7 @@ class Factory:
                 database=Database.make_for_data_source_kind(data_source_kind),
             ),
             TestCase(
-                name=f'pushdown_{data_source_kind}',
+                name=f'pushdown_{EDataSourceKind.Name(data_source_kind)}',
                 data_in=data_in,
                 data_out_=data_out_2,
                 pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
@@ -469,7 +469,7 @@ class Factory:
         for base_tc in base_test_cases:
             for protocol in protocols:
                 tc = replace(base_tc)
-                tc.name += f'_{protocol}'
+                tc.name += f'_{EProtocol.Name(protocol)}'
                 tc.protocol = protocol
                 test_cases.append(tc)
         return test_cases

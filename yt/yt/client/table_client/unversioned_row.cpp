@@ -16,7 +16,7 @@
 
 #include <yt/yt/core/yson/consumer.h>
 
-#include <yt/yt/core/ytree/helpers.h>
+#include <yt/yt/core/ytree/attributes.h>
 #include <yt/yt/core/ytree/node.h>
 #include <yt/yt/core/ytree/convert.h>
 

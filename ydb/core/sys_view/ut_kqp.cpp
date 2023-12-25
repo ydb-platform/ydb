@@ -602,7 +602,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         TYsonFieldChecker check(ysonString, 29);
 
-        bool iterators = env.GetSettings()->AppConfig.GetTableServiceConfig().GetEnableKqpDataQuerySourceRead();
+        bool iterators = env.GetSettings()->AppConfig->GetTableServiceConfig().GetEnableKqpDataQuerySourceRead();
 
         check.Uint64GreaterOrEquals(0); // CPUTime
         check.Uint64GreaterOrEquals(0); // CompileCPUTime

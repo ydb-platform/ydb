@@ -156,6 +156,7 @@ SRCS(
     export_scan.cpp
     finalize_build_index_unit.cpp
     finish_propose_unit.cpp
+    finish_propose_write_unit.cpp
     follower_edge.cpp
     initiate_build_index_unit.cpp
     key_conflicts.cpp

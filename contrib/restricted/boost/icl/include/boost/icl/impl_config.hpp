@@ -9,6 +9,7 @@ Copyright (c) 2009-2011: Joachim Faulhaber
 #ifndef  BOOST_ICL_IMPL_CONFIG_HPP_JOFA_091225
 #define  BOOST_ICL_IMPL_CONFIG_HPP_JOFA_091225
 
+#include <boost/icl/detail/requires_cxx11.hpp>
 #include <boost/icl/detail/boost_config.hpp>
 
 /*-----------------------------------------------------------------------------+

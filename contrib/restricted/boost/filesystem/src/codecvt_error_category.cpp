@@ -15,7 +15,7 @@
 #include <boost/config/warning_disable.hpp>
 
 #include <boost/filesystem/config.hpp>
-#include <boost/filesystem/path_traits.hpp>
+#include <boost/filesystem/detail/path_traits.hpp>
 #include <boost/system/error_category.hpp>
 #include <locale>
 #include <string>

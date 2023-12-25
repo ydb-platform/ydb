@@ -386,7 +386,8 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     return IGraphTransformer::TStatus::Error;
                 }
 
-                if (*castResult != NKikimr::NUdf::ECastOptions::Complete) {
+                if (*castResult != NKikimr::NUdf::ECastOptions::Complete
+                    && !(IsDataTypeIntegral(from) && IsDataTypeFloat(to))) {
                     auto issue = TIssue(node->Pos(ctx), TStringBuilder() <<
                         "Consider using explicit CAST or BITCAST to convert from " <<
                         NKikimr::NUdf::GetDataTypeInfo(from).Name << " to " << NKikimr::NUdf::GetDataTypeInfo(to).Name);

@@ -343,6 +343,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 << " CurrentEpochEnd# " << CurrentEpochEnd
                 << " CurrentDelay# " << CurrentDelay
                 << " PlannedForCurrentEpoch# " << PlannedForCurrentEpoch
+                << " ResponsesAwaiting# " << ResponsesAwaiting
                 << " LoadStart# " << LoadStart
                 << " Now# " << Now;
 

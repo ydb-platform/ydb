@@ -284,6 +284,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         );
         env.TestWaitNotification(runtime, txId);
 
+        ui64 sharedHive = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/SharedDB"),
+                           {NLs::PathExist,
+                            NLs::IsExternalSubDomain("SharedDB"),
+                            NLs::ExtractDomainHive(&sharedHive)});
+
         TString createData = Sprintf(
             R"(
                 ResourcesDomainKey {
@@ -344,6 +350,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                                {NLs::ServerlessComputeResourcesMode(serverlessComputeResourcesMode)});
             TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLess0"),
                                {NLs::ServerlessComputeResourcesMode(serverlessComputeResourcesMode)});
+            env.TestServerlessComputeResourcesModeInHive(runtime, "/MyRoot/ServerLess0", serverlessComputeResourcesMode, sharedHive);
         };
 
         checkServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED);

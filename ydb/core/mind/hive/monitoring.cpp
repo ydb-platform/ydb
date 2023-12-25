@@ -3261,6 +3261,16 @@ public:
         return result;
     }
 
+    template<typename Type>
+    static NJson::TJsonValue MakeFrom(const TArrayRef<Type>& arrayRef) {
+        NJson::TJsonValue result;
+        result.SetType(NJson::JSON_ARRAY);
+        for (const auto& item : arrayRef) {
+            result.AppendValue(MakeFrom(item));
+        }
+        return result;
+    }
+
     static NJson::TJsonValue MakeFrom(const TIntrusivePtr<TTabletStorageInfo>& info) {
         NJson::TJsonValue result;
         if (info == nullptr) {
@@ -3369,7 +3379,8 @@ public:
         result["KnownGeneration"] = tablet.KnownGeneration;
         result["BootMode"] = NKikimrHive::ETabletBootMode_Name(tablet.BootMode);
         result["Owner"] = TStringBuilder() << tablet.Owner;
-        result["EffectiveAllowedDomain"] = MakeFrom(tablet.NodeFilter.AllowedDomains);
+        result["AllowedDomains"] = MakeFrom(tablet.NodeFilter.AllowedDomains);
+        result["EffectiveAllowedDomains"] = MakeFrom(tablet.NodeFilter.GetEffectiveAllowedDomains());
         result["StorageInfoSubscribers"] = MakeFrom(tablet.StorageInfoSubscribers);
         result["LockedToActor"] = MakeFrom(tablet.LockedToActor);
         result["LockedReconnectTimeout"] = tablet.LockedReconnectTimeout.ToString();

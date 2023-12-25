@@ -192,6 +192,7 @@ struct TTxState {
         item(DeletePrivateShards, 135, "") \
         item(WaitShadowPathPublication, 136, "") \
         item(DeletePathBarrier, 137, "") \
+        item(SyncHive, 138, "") \
         item(Done, 240, "") \
         item(Aborted, 250, "")
 
@@ -259,6 +260,7 @@ struct TTxState {
     // persist - TxShards:
     TVector<TShardOperation> Shards; // shards + operations on them
     bool NeedUpdateObject = false;
+    bool NeedSyncHive = false;
     // not persist:
     THashSet<TShardIdx> ShardsInProgress; // indexes of datashards or pqs that operation waits for
     THashMap<TShardIdx, std::pair<TActorId, ui32>> SchemeChangeNotificationReceived;

@@ -270,8 +270,8 @@ public:
 
 class TPropose: public TSubOperationState {
 private:
-    TOperationId OperationId;
-    TTxState::ETxState NextState;
+    const TOperationId OperationId;
+    const TTxState::ETxState NextState;
 
     TString DebugHint() const override {
         return TStringBuilder()

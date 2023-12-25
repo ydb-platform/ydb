@@ -22,11 +22,7 @@ Y_DECLARE_OUT_SPEC(inline, TArrayRef<const NKikimrHive::TDataCentersGroup*>, out
 
 Y_DECLARE_OUT_SPEC(inline, TArrayRef<const NKikimr::TSubDomainKey>, out, vec) {
     out << '[';
-    for (auto it = vec.begin(); it != vec.end(); ++it) {
-        if (it != vec.begin())
-            out << ',';
-        out << *it;
-    }
+    out << JoinSeq(',', vec);
     out << ']';
 }
 

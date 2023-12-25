@@ -712,7 +712,7 @@ public:
 
 class TSyncHive: public TSubOperationState {
 private:
-    TOperationId OperationId;
+    const TOperationId OperationId;
 
     TString DebugHint() const override {
         return TStringBuilder() << "TSyncHive, operationId " << OperationId << ", ";
@@ -728,7 +728,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTxState* txState = context.SS->FindTx(OperationId);
+        const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
         LOG_I(DebugHint() << "ProgressState, NeedSyncHive: " << txState->NeedSyncHive);

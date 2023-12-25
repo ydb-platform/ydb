@@ -382,6 +382,7 @@ private:
             if (NeedReportStats(*Request_->GetProtoRequest())) {
                 hasTrailingMessage = true;
                 FillQueryStats(*response.mutable_exec_stats(), kqpResponse);
+                response.mutable_exec_stats()->set_query_ast(kqpResponse.GetQueryAst());
             }
 
             if (hasTrailingMessage) {

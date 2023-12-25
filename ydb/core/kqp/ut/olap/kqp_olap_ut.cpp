@@ -690,12 +690,27 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         };
     }
 
-    void CheckPlanForAggregatePushdown(const TString& query, NYdb::NTable::TTableClient& tableClient, const std::vector<std::string>& planNodes,
+    template <typename TClient>
+    auto StreamExplainQuery(const TString& query, TClient& client) {
+        if constexpr (std::is_same_v<NYdb::NTable::TTableClient, TClient>) {
+            TStreamExecScanQuerySettings scanSettings;
+            scanSettings.Explain(true);
+            return client.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+        } else {
+            NYdb::NQuery::TExecuteQuerySettings scanSettings;
+            scanSettings.ExecMode(NYdb::NQuery::EExecMode::Explain);
+            return client.StreamExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), scanSettings).GetValueSync();
+        }
+    }
+
+    template <typename TClient>
+    void CheckPlanForAggregatePushdown(
+        const TString& query,
+        TClient& client,
+        const std::vector<std::string>& expectedPlanNodes,
         const std::string& readNodeType)
     {
-        TStreamExecScanQuerySettings scanSettings;
-        scanSettings.Explain(true);
-        auto res = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+        auto res = StreamExplainQuery(query, client);
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
         auto planRes = CollectStreamResult(res);
@@ -704,7 +719,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Cerr << planRes.PlanJson.GetOrElse("NO_PLAN") << Endl;
         Cerr << "AST:" << Endl;
         Cerr << ast << Endl;
-        for (auto planNode : planNodes) {
+        for (auto planNode : expectedPlanNodes) {
             UNIT_ASSERT_C(ast.find(planNode) != std::string::npos,
                 TStringBuilder() << planNode << " was not found. Query: " << query);
         }
@@ -2267,10 +2282,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             ExpectedReply = value;
             return *this;
         }
+
         TAggregationTestCase& AddExpectedPlanOptions(const std::string& value) {
             ExpectedPlanOptions.emplace_back(value);
             return *this;
         }
+
         const std::vector<std::string>& GetExpectedPlanOptions() const {
             return ExpectedPlanOptions;
         }
@@ -2379,7 +2396,28 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TestAggregationsInternal(cases);
     }
 
-    void TestClickBenchBase(const std::vector<TAggregationTestCase>& cases) {
+    template <typename TClient>
+    auto StreamExecuteQuery(const TAggregationTestCase& testCase, TClient& client) {
+        if constexpr (std::is_same_v<NYdb::NTable::TTableClient, TClient>) {
+            return client.StreamExecuteScanQuery(testCase.GetFixedQuery()).GetValueSync();
+        } else {
+            return client.StreamExecuteQuery(
+                testCase.GetFixedQuery(),
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        }
+    }
+
+    template <typename TClient>
+    void RunTestCaseWithClient(const TAggregationTestCase& testCase, TClient& client) {
+        auto it = StreamExecuteQuery(testCase, client);
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        TString result = StreamResultToYson(it);
+        if (!testCase.GetExpectedReply().empty()) {
+            CompareYson(result, testCase.GetExpectedReply());
+        }
+    }
+
+    void TestClickBenchBase(const std::vector<TAggregationTestCase>& cases, const bool genericQuery) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetForceColumnTablesCompositeMarks(true);
@@ -2396,17 +2434,20 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             WriteTestDataForClickBench(kikimr, "/Root/benchTable", 0, 1000000 + i * 1000000, iterationPackSize);
         }
 
-        for (auto&& i : cases) {
-            const TString queryFixed = i.GetFixedQuery();
-            {
-                auto it = tableClient.StreamExecuteScanQuery(queryFixed).GetValueSync();
-                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-                TString result = StreamResultToYson(it);
-                if (!i.GetExpectedReply().empty()) {
-                    CompareYson(result, i.GetExpectedReply());
-                }
+        if (!genericQuery) {
+            auto tableClient = kikimr.GetTableClient();
+            for (auto&& i : cases) {
+                const TString queryFixed = i.GetFixedQuery();
+                RunTestCaseWithClient(i, tableClient);
+                CheckPlanForAggregatePushdown(queryFixed, tableClient, i.GetExpectedPlanOptions(), i.GetExpectedReadNodeType());
             }
-            CheckPlanForAggregatePushdown(queryFixed, tableClient, i.GetExpectedPlanOptions(), i.GetExpectedReadNodeType());
+        } else {
+            auto queryClient = kikimr.GetQueryClient();
+            for (auto&& i : cases) {
+                const TString queryFixed = i.GetFixedQuery();
+                RunTestCaseWithClient(i, queryClient);
+                CheckPlanForAggregatePushdown(queryFixed, queryClient, i.GetExpectedPlanOptions(), i.GetExpectedReadNodeType());
+            }
         }
     }
 
@@ -2470,12 +2511,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    void TestClickBench(const std::vector<TAggregationTestCase>& cases) {
-        TestClickBenchBase(cases);
-        TestClickBenchInternal(cases);
+    void TestClickBench(const std::vector<TAggregationTestCase>& cases, const bool genericQuery = false) {
+        TestClickBenchBase(cases, genericQuery);
+        if (!genericQuery) {
+            TestClickBenchInternal(cases);
+        }
     }
 
-    void TestTableWithNulls(const std::vector<TAggregationTestCase>& cases) {
+    void TestTableWithNulls(const std::vector<TAggregationTestCase>& cases, const bool genericQuery = false) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetForceColumnTablesCompositeMarks(true);
@@ -2489,17 +2532,20 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
         }
 
-        for (auto&& i : cases) {
-            const TString queryFixed = i.GetFixedQuery();
-            {
-                auto it = tableClient.StreamExecuteScanQuery(queryFixed).GetValueSync();
-                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-                TString result = StreamResultToYson(it);
-                if (!i.GetExpectedReply().empty()) {
-                    CompareYson(result, i.GetExpectedReply());
-                }
+        if (!genericQuery) {
+            auto tableClient = kikimr.GetTableClient();
+            for (auto&& i : cases) {
+                RunTestCaseWithClient(i, tableClient);
+                CheckPlanForAggregatePushdown(i.GetFixedQuery(), tableClient,
+                    i.GetExpectedPlanOptions(), i.GetExpectedReadNodeType());
             }
-            CheckPlanForAggregatePushdown(queryFixed, tableClient, i.GetExpectedPlanOptions(), i.GetExpectedReadNodeType());
+        } else {
+            auto queryClient = kikimr.GetQueryClient();
+            for (auto&& i : cases) {
+                RunTestCaseWithClient(i, queryClient);
+                CheckPlanForAggregatePushdown(i.GetFixedQuery(), queryClient,
+                i.GetExpectedPlanOptions(), i.GetExpectedReadNodeType());
+            }
         }
     }
 
@@ -5561,6 +5607,53 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString output = StreamResultToYson(it);
             CompareYson(output, R"([])");
         }
+    }
+
+    Y_UNIT_TEST(BlockGenericWithDistinct) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    COUNT(DISTINCT id)
+                FROM `/Root/tableWithNulls`
+                WHERE level = 5 AND Cast(id AS String) = "5";
+            )")
+            .AddExpectedPlanOptions("KqpBlockReadOlapTableRanges")
+            .AddExpectedPlanOptions("WideFromBlocks")
+            .SetExpectedReply("[[1u]]");
+        TestTableWithNulls({ testCase }, /* generic */ true);
+    }
+
+    Y_UNIT_TEST(BlockGenericSimpleAggregation) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    level, COUNT(*), SUM(id)
+                FROM `/Root/tableWithNulls`
+                WHERE level = 5
+                GROUP BY level
+                ORDER BY level;
+            )")
+            .AddExpectedPlanOptions("KqpBlockReadOlapTableRanges")
+            .AddExpectedPlanOptions("WideFromBlocks")
+            .SetExpectedReply(R"([[[5];1u;5]])");
+
+        TestTableWithNulls({ testCase }, /* generic */ true);
+    }
+
+    Y_UNIT_TEST(BlockGenericSelectAll) {
+        TAggregationTestCase testCase;
+        testCase.SetQuery(R"(
+                SELECT
+                    id, resource_id, level
+                FROM `/Root/tableWithNulls`
+                WHERE level != 5
+                ORDER BY id, resource_id, level;
+            )")
+            .AddExpectedPlanOptions("KqpBlockReadOlapTableRanges")
+            .AddExpectedPlanOptions("WideFromBlocks")
+            .SetExpectedReply(R"([[1;#;[1]];[2;#;[2]];[3;#;[3]];[4;#;[4]];[6;["6"];#];[7;["7"];#];[8;["8"];#];[9;["9"];#];[10;["10"];#]])");
+
+        TestTableWithNulls({ testCase }, /* generic */ true);
     }
 }
 

@@ -443,7 +443,7 @@ void TKikimrRunner::CreateSampleTables() {
 void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_INFO);
+    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::TX_COORDINATOR, NActors::NLog::PRI_DEBUG);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
@@ -864,7 +864,16 @@ static void FillPlan(const NYdb::NScripting::TYqlResultPart& streamPart, TCollec
     }
 }
 
-static void FillPlan(const NYdb::NQuery::TExecuteQueryPart& /*streamPart*/, TCollectedStreamResult& /*res*/) {}
+static void FillPlan(const NYdb::NQuery::TExecuteQueryPart& streamPart, TCollectedStreamResult& res) {
+    if (streamPart.GetStats() ) {
+        res.QueryStats = NYdb::TProtoAccessor::GetProto(*streamPart.GetStats());
+
+        auto plan = res.QueryStats->query_plan();
+        if (!plan.empty()) {
+            res.PlanJson = plan;
+        }
+    }
+}
 
 template<typename TIterator>
 TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {

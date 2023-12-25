@@ -21,9 +21,7 @@ Y_DECLARE_OUT_SPEC(inline, TArrayRef<const NKikimrHive::TDataCentersGroup*>, out
 }
 
 Y_DECLARE_OUT_SPEC(inline, TArrayRef<const NKikimr::TSubDomainKey>, out, vec) {
-    out << '[';
-    out << JoinSeq(',', vec);
-    out << ']';
+    out << '[' << JoinSeq(',', vec) << ']';
 }
 
 namespace NKikimr {

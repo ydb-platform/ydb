@@ -1,9 +1,5 @@
 LIBRARY()
 
-OWNER(
-    g:kikimr
-)
-
 SRCS(
     insert_table.cpp
     rt_insertion.cpp

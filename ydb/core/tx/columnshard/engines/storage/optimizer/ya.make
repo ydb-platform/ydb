@@ -1,9 +1,5 @@
 LIBRARY()
 
-OWNER(
-    g:kikimr
-)
-
 PEERDIR(
     ydb/core/tx/columnshard/engines/storage/optimizer/abstract
     ydb/core/tx/columnshard/engines/storage/optimizer/intervals

@@ -1,9 +1,5 @@
 UNITTEST_FOR(ydb/core/tx/columnshard/engines/storage/optimizer)
 
-OWNER(
-    g:kikimr
-)
-
 SIZE(SMALL)
 
 PEERDIR(

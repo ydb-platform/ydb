@@ -1,9 +1,5 @@
 LIBRARY()
 
-OWNER(
-    g:kikimr
-)
-
 SRCS(
     tx_draft.cpp
     tx_write.cpp

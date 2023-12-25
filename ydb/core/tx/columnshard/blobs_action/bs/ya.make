@@ -1,9 +1,5 @@
 LIBRARY()
 
-OWNER(
-    g:kikimr
-)
-
 SRCS(
     gc.cpp
     gc_actor.cpp

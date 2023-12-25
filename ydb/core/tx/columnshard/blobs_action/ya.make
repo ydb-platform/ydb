@@ -1,9 +1,5 @@
 LIBRARY()
 
-OWNER(
-    g:kikimr
-)
-
 SRCS(
     blob_manager_db.cpp
     memory.cpp

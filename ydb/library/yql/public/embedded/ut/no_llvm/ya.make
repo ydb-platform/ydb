@@ -6,15 +6,18 @@ TIMEOUT(300)
 
 PEERDIR(
     ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/public/purecalc
-    ydb/library/yql/public/purecalc/io_specs/mkql
-    ydb/library/yql/public/purecalc/ut/lib
+    ydb/library/yql/public/embedded/no_llvm
 )
 
 YQL_LAST_ABI_VERSION()
 
+SRCDIR(
+    ydb/library/yql/public/embedded/ut
+)
+
 SRCS(
-    test_spec.cpp
+    yql_embedded_ut.cpp
 )
 
 END()
+

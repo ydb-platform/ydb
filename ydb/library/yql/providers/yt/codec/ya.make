@@ -26,11 +26,7 @@ PEERDIR(
     ydb/library/yql/providers/yt/lib/skiff
 )
 
-IF (NOT MKQL_DISABLE_CODEGEN)
-    PEERDIR(
-        ydb/library/yql/providers/yt/codec/codegen
-    )
-ELSE()
+IF (MKQL_DISABLE_CODEGEN)
     CFLAGS(
         -DMKQL_DISABLE_CODEGEN
     )
@@ -46,4 +42,5 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
+    ut/no_llvm
 )

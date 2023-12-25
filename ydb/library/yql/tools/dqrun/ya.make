@@ -71,6 +71,7 @@ ENDIF()
         ydb/library/yql/providers/yt/dq_task_preprocessor
         ydb/library/yql/providers/yt/gateway/file
         ydb/library/yql/providers/yt/gateway/native
+        ydb/library/yql/providers/yt/codec/codegen
         ydb/library/yql/providers/yt/mkql_dq
         ydb/library/yql/providers/yt/provider
         ydb/library/yql/providers/yt/lib/yt_download

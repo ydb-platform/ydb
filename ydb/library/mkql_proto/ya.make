@@ -2,7 +2,7 @@ LIBRARY()
 
 PEERDIR(
     ydb/library/mkql_proto/protos
-    ydb/library/yql/minikql/computation/llvm
+    ydb/library/yql/minikql/computation
     ydb/library/yql/parser/pg_catalog
     ydb/library/yql/providers/common/codec
     ydb/public/api/protos

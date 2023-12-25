@@ -36,7 +36,7 @@ PEERDIR(
     ydb/library/yql/core/type_ann
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/dq/integration
-    ydb/library/yql/minikql/comp_nodes/llvm
+    ydb/library/yql/minikql/comp_nodes
     ydb/library/yql/providers/common/config
     ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/providers/common/dq

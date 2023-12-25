@@ -74,6 +74,8 @@ ENDIF()
         ydb/library/yql/providers/yt/codec/codegen
         ydb/library/yql/providers/yt/mkql_dq
         ydb/library/yql/providers/yt/provider
+        ydb/library/yql/providers/yt/codec/codegen
+        ydb/library/yql/providers/yt/comp_nodes/llvm
         ydb/library/yql/providers/yt/lib/yt_download
         ydb/library/yql/providers/yt/lib/yt_url_lister
         ydb/library/yql/providers/yt/lib/config_clusters

@@ -36,14 +36,26 @@ TExprNode::TPtr BuildRangeSingle(TPositionHandle pos, const TRangeBoundary& left
     return ctx.NewCallable(pos, "AsRange", { BuildRange(pos, left, right, ctx) });
 }
 
-bool HasNaNs(EDataSlot slot) {
-    return NUdf::GetDataTypeInfo(slot).Features & (NUdf::EDataTypeFeatures::FloatType | NUdf::EDataTypeFeatures::DecimalType);
+TMaybe<EDataSlot> GetBaseDataSlot(const TTypeAnnotationNode* keyType) {
+    auto baseType = RemoveAllOptionals(keyType);
+    TMaybe<EDataSlot> result;
+    if (baseType->GetKind() == ETypeAnnotationKind::Data) {
+        result = baseType->Cast<TDataExprType>()->GetSlot();
+    }
+    return result;
+}
+
+bool HasUncomparableNaNs(const TTypeAnnotationNode* keyType) {
+    // PostgreSQL comparison operators treat NaNs as biggest flating values
+    // this behavior matches ordering in ORDER BY, so we don't need special NaN handling for Pg types
+    auto slot = GetBaseDataSlot(keyType);
+    return slot && (NUdf::GetDataTypeInfo(*slot).Features & (NUdf::EDataTypeFeatures::FloatType | NUdf::EDataTypeFeatures::DecimalType));
 }
 
 TExprNode::TPtr MakeNaNBoundary(TPositionHandle pos, const TTypeAnnotationNode* keyType, TExprContext& ctx) {
+    YQL_ENSURE(HasUncomparableNaNs(keyType));
     auto baseType = RemoveAllOptionals(keyType);
     auto keySlot = baseType->Cast<TDataExprType>()->GetSlot();
-    YQL_ENSURE(HasNaNs(keySlot));
 
     return ctx.Builder(pos)
         .Callable("SafeCast")
@@ -98,14 +110,11 @@ TExprNode::TPtr TzRound(const TExprNode::TPtr& key, const TTypeAnnotationNode* k
 TRangeBoundary BuildPlusInf(TPositionHandle pos, const TTypeAnnotationNode* keyType, TExprContext& ctx, bool excludeNaN = true) {
     TRangeBoundary result;
 
-    auto optKeyTypeNode = ExpandType(pos, *ctx.MakeType<TOptionalExprType>(keyType), ctx);
-
-    auto baseType = RemoveAllOptionals(keyType);
-    auto keySlot = baseType->Cast<TDataExprType>()->GetSlot();
-    if (excludeNaN && HasNaNs(keySlot)) {
+    if (excludeNaN && HasUncomparableNaNs(keyType)) {
         // exclude NaN value (NaN is ordered as largest floating point value)
         result.Value = MakeNaNBoundary(pos, keyType, ctx);
     } else {
+        auto optKeyTypeNode = ExpandType(pos, *ctx.MakeType<TOptionalExprType>(keyType), ctx);
         result.Value = ctx.NewCallable(pos, "Nothing", { optKeyTypeNode });
     }
 
@@ -224,10 +233,10 @@ TExprNode::TPtr BuildNormalRangeLambdaRaw(TPositionHandle pos, const TTypeAnnota
 {
     // key is argument of Optional<keyType> type
     const auto key = ctx.NewArgument(pos, "key");
-    const auto keySlot = RemoveAllOptionals(keyType)->Cast<TDataExprType>()->GetSlot();
-    const bool isTzKey = NUdf::GetDataTypeInfo(keySlot).Features & NUdf::EDataTypeFeatures::TzDateType;
-    const bool isIntegralOrDateKey = NUdf::GetDataTypeInfo(keySlot).Features &
-        (NUdf::EDataTypeFeatures::IntegralType | NUdf::EDataTypeFeatures::DateType);
+    const auto keySlot = GetBaseDataSlot(keyType);
+    const bool isTzKey = keySlot && (NUdf::GetDataTypeInfo(*keySlot).Features & NUdf::EDataTypeFeatures::TzDateType);
+    const bool isIntegralOrDateKey = keySlot && (NUdf::GetDataTypeInfo(*keySlot).Features &
+        (NUdf::EDataTypeFeatures::IntegralType | NUdf::EDataTypeFeatures::DateType));
     const auto downKey = isTzKey ? TzRound(key, keyType, true, ctx) : key;
     const auto upKey = isTzKey ? TzRound(key, keyType, false, ctx) : key;
     if (op == "!=") {
@@ -244,7 +253,7 @@ TExprNode::TPtr BuildNormalRangeLambdaRaw(TPositionHandle pos, const TTypeAnnota
         auto rightRange = BuildRange(pos, left, right, ctx);
 
         auto body = ctx.NewCallable(pos, "AsRange", { leftRange, rightRange });
-        if (HasNaNs(keySlot)) {
+        if (HasUncomparableNaNs(keyType)) {
             // NaN is not equal to any value (including NaN itself), so we must include it
             left.Included = true;
             left.Value = MakeNaNBoundary(pos, keyType, ctx);
@@ -276,7 +285,7 @@ TExprNode::TPtr BuildNormalRangeLambdaRaw(TPositionHandle pos, const TTypeAnnota
         left.Value = (op == ">=") ? downKey : upKey;
         left.Included = (op == ">=");
     } else if (op == "Exists" || op == "NotExists" ) {
-        YQL_ENSURE(keyType->GetKind() == ETypeAnnotationKind::Optional);
+        YQL_ENSURE(keyType->GetKind() == ETypeAnnotationKind::Optional || keyType->GetKind() == ETypeAnnotationKind::Pg);
         auto nullKey = ctx.Builder(pos)
             .Callable("Just")
                 .Callable(0, "Nothing")
@@ -300,7 +309,7 @@ TExprNode::TPtr BuildNormalRangeLambdaRaw(TPositionHandle pos, const TTypeAnnota
     }
 
     TExprNode::TPtr body = BuildRangeSingle(pos, left, right, ctx);
-    if (op == "==" && HasNaNs(keySlot)) {
+    if (op == "==" && HasUncomparableNaNs(keyType)) {
         auto fullRangeWithoutNaNs = BuildRangeSingle(pos,
             BuildMinusInf(pos, keyType, ctx),
             BuildPlusInf(pos, keyType, ctx), ctx);

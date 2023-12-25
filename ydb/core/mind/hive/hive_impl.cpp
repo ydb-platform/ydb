@@ -183,8 +183,9 @@ TInstant THive::GetAllowedBootingTime() {
     }
     TInstant result = LastConnect + MaxTimeBetweenConnects * std::max<i64>(static_cast<i64>(ExpectedNodes) - static_cast<i64>(connectedNodes), 1);
     if (connectedNodes < ExpectedNodes) {
-        result = std::max(result, StartTime() + GetMaxWarmUpPeriod());
+        result = std::max(result, StartTime() + GetWarmUpBootWaitingPeriod());
     }
+    result = std::min(result, StartTime() + GetMaxWarmUpPeriod());
     return result;
 }
 

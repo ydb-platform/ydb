@@ -28,14 +28,14 @@ protected:
 
     // Estimated Coefficients
     // cost = A + B * size
-    double WriteA = 2520;
-    double WriteB = 5.7668;
+    double WriteA = 6500;
+    double WriteB = 11.1;
 
     double ReadA = WriteA;
     double ReadB = WriteB;
 
-    double HugeWriteA = 1.26748409e+06;
-    double HugeWriteB = 2.69514462e+01;
+    double HugeWriteA = 6.089e+06;
+    double HugeWriteB = 8.1;
 
 private:
     enum class EMemoryOperationType {
@@ -206,9 +206,9 @@ public:
     // WRITES
     ui64 GetCost(const NPDisk::TEvChunkWrite& ev) const {
         if (ev.PriorityClass == NPriPut::Log) {
-            return EstimatedWriteCost(ev.PartsPtr->Size());
+            return EstimatedWriteCost(ev.PartsPtr->ByteSize());
         } else {
-            return EstimatedHugeWriteCost(ev.PartsPtr->Size());
+            return EstimatedHugeWriteCost(ev.PartsPtr->ByteSize());
         }
     }
 };

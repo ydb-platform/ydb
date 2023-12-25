@@ -117,9 +117,17 @@ public:
 
     void Handle(const TEvYdbCompute::TEvGetOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
+
+        if (response.Status == NYdb::EStatus::NOT_FOUND) { // FAILING / ABORTING_BY_USER / ABORTING_BY_SYSTEM
+            LOG_I("Operation has been already removed");
+            Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(response.Issues, response.Status, ExecStatus, ComputeStatus));
+            CompleteAndPassAway();
+            return;
+        }
+
         if (response.Status != NYdb::EStatus::SUCCESS) {
-            LOG_E("Can't get operation: " << ev->Get()->Issues.ToOneLineString());
-            Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(ev->Get()->Issues, ev->Get()->Status, ExecStatus, ComputeStatus));
+            LOG_E("Can't get operation: " << response.Issues.ToOneLineString());
+            Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(response.Issues, response.Status, ExecStatus, ComputeStatus));
             FailedAndPassAway();
             return;
         }

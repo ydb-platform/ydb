@@ -68,7 +68,7 @@ EExecutionStatus TBuildDataTxOutRSUnit::Execute(TOperation::TPtr op,
     try {
         auto &outReadSets = op->OutReadSets();
 
-        if (tx->GetDataTx()->CheckCancelled())
+        if (tx->GetDataTx()->CheckCancelled(DataShard.TabletID()))
             engine->Cancel();
         else
             engine->SetMemoryLimit(txc.GetMemoryLimit() - tx->GetDataTx()->GetTxSize());

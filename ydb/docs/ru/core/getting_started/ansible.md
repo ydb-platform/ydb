@@ -14,64 +14,39 @@
 
 ## Установка Ansible { #ansible-install }
 
-Для работы Ansible требует Python 3+. Перед установкой Ansible убедитесь, что у вас установлен Python версии 3 и пакетный менеджер pip:
+Для работы Ansible на локальной машине потребуется Python 3+. Перед установкой Ansible убедитесь, что у вас установлен Python версии 3 и пакетный менеджер pip:
 
 {% list tabs %}
 
 - Windows
-    * Проверка версии Python:
-        + Откройте командную строку (Cmd) или PowerShell и введите:
-            ```cmd
-            python --version
-            ```
-            Если Python не установлен или его версия ниже 3, установите Python версии 3+ с официального сайта [Python.org](https://www.python.org/downloads/).
-    * Установка и обновление пакетного менеджера `pip`:
-        + Если Python установлен, то `pip` обычно устанавливается автоматически. Проверить, что он установлен можно следующей командой:
-            ```cmd
-            pip --version
-            ```
-        + Обновить pip до последней версии можно командой:
-            ```cmd
-            python -m pip install --upgrade pip
-            ``` 
-    * Установка Ansible:
-        + Устанавливается Ansible командой:
-            ```cmd
-            pip install ansible
-            ```    
+  * Проверить версию Python можно командой `python --version` в командной строке (CMD) или в PowerShell. Если Python не установлен – установите его с официального сайта [Python.org](https://www.python.org/downloads/).
+  * Проверить версию пакетного менеджера `pip` можно командой `pip --version` или `pip3 --version`. Если Python установлен, то `pip` обычно устанавливается автоматически. 
+  * Обновить pip до последней версии можно командой `python -m pip install --upgrade pip`.
+  * Ansible устанавливается командой `pip install ansible`.   
+  * Проверьте версию Ansible командой `ansible --version`.
 
 - Linux
-    * В дистрибутивах Ubuntu 20-22 идёт предустановленный Python версий 3.6-3.9 и pip3. Их обновлять не надо, можно сразу переходить к шагу установки Ansible. Если у вас Ubuntu 18 или иной дистрибутив, то проверка версию Python можно так:
-        + Откройте терминал и введите:
-            ```bash
-            python3 --version
-            ```
-        + Если Python не установлен или версии ниже 3.6 – установите более актуальную версию:
-            ```bash
-            sudo apt-get install software-properties-common
-            sudo add-apt-repository ppa:deadsnakes/ppa
-            udo apt-get update
-            sudo apt-get install python3
-            ```
-    * Проверка версии pip3:
-        + Проверить версию pip3 можно командой:
-            ```bash
-            pip3 --version
-            ```
-        + Обновить pip3 до последней актуальной версии можно командой:
-            ```bash
-            pip3 install --upgrade pip
-            ```   
-    * Установка Ansible:
-        + Ansible устанавливается командой:
-            ```bash
-            pip3 install ansible
-            ```     
+  * В дистрибутивах Ubuntu 20-22 идёт предустановленный Python версий 3.6-3.9 и pip3. Их обновлять не надо, можно сразу переходить к шагу установки Ansible. Если у вас Ubuntu 18 или иной дистрибутив, то проверить версию Python можно командой `python3 --version`.
+  * Если Python не установлен или его версии ниже 3.6 – установите более актуальную версию:
+    ```bash
+    sudo apt-get install software-properties-common
+    sudo add-apt-repository ppa:deadsnakes/ppa
+    udo apt-get update
+    sudo apt-get install python3
+    ```
+  * Проверить версию pip3 можно командой `pip3 --version`, а обновляется pip3 до актуальной версии командой `pip3 install --upgrade pip`.
+  * Устанавливается Ansible командой `pip3 install ansible`.   
+  * Проверьте версию Ansible командой `ansible --version`.
 
 - macOS
-    * Откройте Lauchpad и введите в поисковую строку terminal.   
+    * Откройте Lauchpad и введите в поисковую строку `terminal`. В терминал введите `python --version`. 
+    * Если Python ниже версии 3.6 – перейдите на официальный [сайт Python](https://www.python.org/downloads/macos/), скачайте Python последней версии и установите его.
+    * После установке проверьте еще раз версию Python – `python --version`.
+    * Установите Ansible с помощью пакетного менеджера brew – `brew install ansible`. Если у вас не установлен brew, его можно установить командой `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`.
+    * Проверьте версию Ansible командой `ansible --version`.
 
 {% endlist %}
+
 
 ## Настройка Ansible { #ansible-install }
 

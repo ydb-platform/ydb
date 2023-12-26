@@ -313,12 +313,6 @@ void TValidatedDataTx::ComputeDeadline() {
     }
 }
 
-TActiveTransaction::~TActiveTransaction()
-{
-    UntrackMemory();
-    NActors::NMemory::TLabel<MemoryLabelActiveTransactionCount>::Sub(1);
-}
-
 void TActiveTransaction::FillTxData(TValidatedDataTx::TPtr dataTx)
 {
     Y_ABORT_UNLESS(!DataTx);

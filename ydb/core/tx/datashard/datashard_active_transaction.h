@@ -389,7 +389,11 @@ public:
         TrackMemory();
     }
 
-    ~TActiveTransaction();
+    ~TActiveTransaction()
+    {
+        UntrackMemory();
+        NActors::NMemory::TLabel<MemoryLabelActiveTransactionCount>::Sub(1);
+    }
 
     void FillTxData(TValidatedDataTx::TPtr dataTx);
     void FillTxData(TDataShard *self,

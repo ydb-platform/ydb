@@ -100,19 +100,19 @@
 
 Переменные из файла `/group_vars/all.yaml` используются в задачах плейбука и в шаблонах файлов, которые копируются на хост:
 {% list tabs %}
-- Service-файл статической ноды для systemd
+- Service-файл статической ноды
 
   {% include [static-service](./_includes/ansible/static-service.md) %}
 
-- Service-файл динамической ноды для systemd
+- Service-файл динамической ноды
 
   {% include [dynnode-service](./_includes/ansible/dynnode-service.md) %}
 
-- Конфигурационный файл статической ноды  
+- Конфиг. файл статической ноды
 
   {% include [static-config](./_includes/ansible/static-config.md) %}
 
-- Конфигурационный файл динамической ноды  
+- Конфиг.файл динамической ноды
 
   {% include [dynnode-config](./_includes/ansible/dynnode-config.md) %}  
 

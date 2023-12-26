@@ -39,9 +39,9 @@ namespace NTestUtils {
             attempt += 1;
             try {
                 return NClickHouse::TClient(opt);
-            } catch (const yexception& e) {
+            } catch (const TSystemError& e) {
                 Cerr << "Attempt " << attempt << ": " << e.what() << Endl;
-                Sleep(TDuration::Seconds(5));
+                Sleep(TDuration::MilliSeconds(100));
             }
         }
 

@@ -46,7 +46,7 @@ namespace NTestUtils {
                 return pqxx::connection{connectionString};
             } catch (const pqxx::broken_connection& e) {
                 Cerr << "Attempt " << attempt << ": " << e.what() << Endl;
-                Sleep(TDuration::Seconds(5));
+                Sleep(TDuration::MilliSeconds(100));
             }
         }
 

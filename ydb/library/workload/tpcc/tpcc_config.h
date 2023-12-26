@@ -50,6 +50,9 @@ enum ETPCCWorkloadConstants : i32 {
 };
 
 struct TTPCCWorkloadParams : public TWorkloadParams {
+    THolder<IWorkloadQueryGenerator> CreateGenerator() const override {
+        return {};
+    };
     i32 Warehouses = ETPCCWorkloadConstants::TPCC_WAREHOUSES;
     i32 Threads = ETPCCWorkloadConstants::TPCC_THREADS;
     i32 MinPartitions = ETPCCWorkloadConstants::TPCC_MIN_PARTITIONS;

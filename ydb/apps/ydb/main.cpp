@@ -1,13 +1,5 @@
-#include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
 #include <ydb/apps/ydb/commands/ydb_cloud_root.h>
-
-TVector<NYdb::NTopic::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
-    return TVector<NYdb::NTopic::ECodec>{
-            NYdb::NTopic::ECodec::RAW,
-            NYdb::NTopic::ECodec::ZSTD,
-            NYdb::NTopic::ECodec::GZIP,
-    };
-}
+#include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 
 int main(int argc, char **argv) {
     try {

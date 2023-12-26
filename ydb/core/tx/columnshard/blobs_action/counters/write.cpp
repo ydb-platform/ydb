@@ -13,6 +13,8 @@ TWriteCounters::TWriteCounters(const TConsumerCounters& owner)
     ReplyBytes = TBase::GetDeriviative("Replies/Bytes");
     ReplyDurationBySize = TBase::GetHistogram("Replies/Duration/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1));
     ReplyDurationByCount = TBase::GetHistogram("Replies/Duration/Count", NMonitoring::ExponentialHistogram(15, 2, 1));
+    WritesBySize = TBase::GetHistogram("Writes/Bytes", NMonitoring::ExponentialHistogram(25, 2, 1));
+    VolumeByChunkSize = TBase::GetHistogram("Volume/Bytes", NMonitoring::ExponentialHistogram(25, 2, 1));
 
     FailsCount = TBase::GetDeriviative("Fails/Count");
     FailBytes = TBase::GetDeriviative("Fails/Bytes");

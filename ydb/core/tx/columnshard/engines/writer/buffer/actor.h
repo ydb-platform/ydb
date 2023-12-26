@@ -19,10 +19,7 @@ public:
 
     void Handle(TEvAddInsertedDataToBuffer::TPtr& ev);
     void Handle(TEvFlushBuffer::TPtr& ev);
-    void Bootstrap() {
-        Become(&TThis::StateWait);
-        Schedule(FlushDuration, new TEvFlushBuffer);
-    }
+    void Bootstrap();
 
     STFUNC(StateWait) {
         TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent", ParentActorId));

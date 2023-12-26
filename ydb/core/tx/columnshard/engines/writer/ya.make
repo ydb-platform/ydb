@@ -1,9 +1,5 @@
 LIBRARY()
 
-OWNER(
-    g:kikimr
-)
-
 SRCS(
     compacted_blob_constructor.cpp
     indexed_blob_constructor.cpp

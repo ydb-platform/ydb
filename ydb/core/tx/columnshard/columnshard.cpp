@@ -2,6 +2,7 @@
 #include "blobs_reader/actor.h"
 #include "hooks/abstract/abstract.h"
 #include "resource_subscriber/actor.h"
+#include "engines/writer/buffer/actor.h"
 
 namespace NKikimr {
 
@@ -15,6 +16,8 @@ namespace NKikimr::NColumnShard {
 
 void TColumnShard::CleanupActors(const TActorContext& ctx) {
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
+    ctx.Send(BufferizationWriteActorId, new TEvents::TEvPoisonPill);
+    
     StoragesManager->Stop();
     if (Tiers) {
         Tiers->Stop();
@@ -69,6 +72,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     CompactionLimits.RegisterControls(icb);
     Settings.RegisterControls(icb);
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
+    BufferizationWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
     Execute(CreateTxInitSchema(), ctx);
 }
 

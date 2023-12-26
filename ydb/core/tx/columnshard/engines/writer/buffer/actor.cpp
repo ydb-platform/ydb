@@ -10,6 +10,12 @@ TActor::TActor(ui64 tabletId, const TActorId& parent)
 
 }
 
+void TActor::Bootstrap() {
+    Become(&TThis::StateWait);
+    Schedule(FlushDuration, new TEvFlushBuffer);
+    FlushDuration = TDuration::MilliSeconds(AppDataVerified().ColumnShardConfig.GetWritingBufferDurationMs());
+}
+
 void TActor::Flush() {
     if (Aggregations.size()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "flush_writing")("size", SumSize)("count", Aggregations.size());

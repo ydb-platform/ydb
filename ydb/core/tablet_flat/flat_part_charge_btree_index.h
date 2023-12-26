@@ -24,7 +24,6 @@ public:
     TResult Do(const TCells key1, const TCells key2, const TRowId row1,
             const TRowId row2, const TKeyCellDefaults &keyDefaults, ui64 itemsLimit,
             ui64 bytesLimit) const noexcept override {
-        // TODO: implement
         Y_UNUSED(key1);
         Y_UNUSED(key2);
         Y_UNUSED(row1);

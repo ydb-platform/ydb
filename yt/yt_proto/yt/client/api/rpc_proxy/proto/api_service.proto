@@ -1930,6 +1930,7 @@ message TReqDestroyChunkLocations
 {
     required string node_address = 1;
     repeated NYT.NProto.TGuid location_uuids = 2;
+    optional bool recover_unlinked_disks = 3 [default = false];
 }
 
 message TRspDestroyChunkLocations

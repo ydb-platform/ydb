@@ -280,7 +280,7 @@ TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& 
     case FLOAT8OID: {
         return BuildPgFixedColumnConverter<double>(originalType, [](auto value){ return Float8GetDatum(value); });
     }
-	case NUMERICOID: {
+    case NUMERICOID: {
         return BuildPgNumericColumnConverter(originalType);
     }
     case BYTEAOID:

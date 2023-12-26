@@ -291,6 +291,7 @@ public:
 
 struct TTxId {
     TULID Id;
+    TString HumanStr;
 
     TTxId()
         : Id(TULID::Min())
@@ -298,11 +299,14 @@ struct TTxId {
 
     TTxId(const TULID& other)
         : Id(other)
+        , HumanStr(Id.ToString())
     {}
 
     static TTxId FromString(const TString& str) {
         TTxId res;
-        YQL_ENSURE(res.Id.ParseString(str));
+        if (res.Id.ParseString(str)) {
+            res.HumanStr = str;
+        }
         return res;
     }
 
@@ -311,7 +315,7 @@ struct TTxId {
     }
 
     TString GetHumanStr() {
-        return Id.ToString();
+        return HumanStr;
     }
 };
 
@@ -325,13 +329,16 @@ struct THash<NKikimr::NKqp::TTxId> {
 };
 
 namespace NKikimr::NKqp {
-
+    
 class TTransactionsCache {
     size_t MaxActiveSize;
     THashMap<TTxId, TIntrusivePtr<TKqpTransactionContext>, THash<NKikimr::NKqp::TTxId>> Active;
     std::deque<TIntrusivePtr<TKqpTransactionContext>> ToBeAborted;
 
     auto FindOldestTransaction() {
+        if (Active.empty()) {
+            return std::end(Active);
+        }
         auto oldest = std::begin(Active);
         for (auto it = std::next(oldest); it != std::end(Active); ++it) {
             if (oldest->second->LastAccessTime < it->second->LastAccessTime) {

@@ -84,28 +84,83 @@ class TChangeRecordBuilder {
     using ESource = TChangeRecord::ESource;
 
 public:
-    explicit TChangeRecordBuilder(EKind kind);
-    explicit TChangeRecordBuilder(TChangeRecord&& record);
+    explicit TChangeRecordBuilder(EKind kind) {
+        Record.Kind = kind;
+    }
 
-    TChangeRecordBuilder& WithLockId(ui64 lockId);
-    TChangeRecordBuilder& WithLockOffset(ui64 lockOffset);
+    explicit TChangeRecordBuilder(TChangeRecord&& record)
+        : Record(std::move(record))
+    {
+    }
 
-    TChangeRecordBuilder& WithOrder(ui64 order);
-    TChangeRecordBuilder& WithGroup(ui64 group);
-    TChangeRecordBuilder& WithStep(ui64 step);
-    TChangeRecordBuilder& WithTxId(ui64 txId);
-    TChangeRecordBuilder& WithPathId(const TPathId& pathId);
+    TChangeRecordBuilder& WithLockId(ui64 lockId) {
+        Record.LockId = lockId;
+        return *this;
+    }
 
-    TChangeRecordBuilder& WithTableId(const TPathId& tableId);
-    TChangeRecordBuilder& WithSchemaVersion(ui64 version);
-    TChangeRecordBuilder& WithSchema(TUserTable::TCPtr schema);
+    TChangeRecordBuilder& WithLockOffset(ui64 lockOffset) {
+        Record.LockOffset = lockOffset;
+        return *this;
+    }
 
-    TChangeRecordBuilder& WithBody(const TString& body);
-    TChangeRecordBuilder& WithBody(TString&& body);
+    TChangeRecordBuilder& WithOrder(ui64 order) {
+        Record.Order = order;
+        return *this;
+    }
 
-    TChangeRecordBuilder& WithSource(ESource source);
+    TChangeRecordBuilder& WithGroup(ui64 group) {
+        Record.Group = group;
+        return *this;
+    }
 
-    TChangeRecord&& Build();
+    TChangeRecordBuilder& WithStep(ui64 step) {
+        Record.Step = step;
+        return *this;
+    }
+
+    TChangeRecordBuilder& WithTxId(ui64 txId) {
+        Record.TxId = txId;
+        return *this;
+    }
+
+    TChangeRecordBuilder& WithPathId(const TPathId& pathId) {
+        Record.PathId = pathId;
+        return *this;
+    }
+
+    TChangeRecordBuilder& WithTableId(const TPathId& tableId) {
+        Record.TableId = tableId;
+        return *this;
+    }
+
+    TChangeRecordBuilder& WithSchemaVersion(ui64 version) {
+        Record.SchemaVersion = version;
+        return *this;
+    }
+
+    TChangeRecordBuilder& WithSchema(TUserTable::TCPtr schema) {
+        Record.Schema = schema;
+        return *this;
+    }
+
+    TChangeRecordBuilder& WithBody(const TString& body) {
+        Record.Body = body;
+        return *this;
+    }
+
+    TChangeRecordBuilder& WithBody(TString&& body) {
+        Record.Body = std::move(body);
+        return *this;
+    }
+
+    TChangeRecordBuilder& WithSource(ESource source) {
+        Record.Source = source;
+        return *this;
+    }
+
+    TChangeRecord&& Build() {
+        return std::move(Record);
+    }
 
 private:
     TChangeRecord Record;

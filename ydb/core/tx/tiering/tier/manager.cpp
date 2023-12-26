@@ -74,7 +74,7 @@ NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus TTiersManage
 }
 
 NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus> TTiersManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& /*schemeOperation*/,
-        const NMetadata::IClassBehaviour::TPtr& /*manager*/, const IOperationsManager::TExternalModificationContext& /*context*/) const {
+        const ui32 /*nodeId*/, const NMetadata::IClassBehaviour::TPtr& /*manager*/, const IOperationsManager::TExternalModificationContext& /*context*/) const {
     return NThreading::MakeFuture(NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus::Fail(
         "Execution of prepare operations for TIER objects is not supported"));
 }

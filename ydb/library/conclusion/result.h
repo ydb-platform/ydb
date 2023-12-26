@@ -76,6 +76,15 @@ public:
             return status->GetErrorMessage();
         }
     }
+
+    Ydb::StatusIds::StatusCode GetStatus() const {
+        auto* status = std::get_if<TConclusionStatus>(&Result);
+        if (!status) {
+            return Ydb::StatusIds::SUCCESS;
+        } else {
+            return status->GetStatus();
+        }
+    }
 };
 
 }

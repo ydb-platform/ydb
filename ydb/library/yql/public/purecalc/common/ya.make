@@ -26,9 +26,6 @@ PEERDIR(
     ydb/library/yql/core/services
     ydb/library/yql/core/services/mounts
     ydb/library/yql/core/user_data
-    ydb/library/yql/minikql/computation/llvm
-    ydb/library/yql/minikql/invoke_builtins/llvm
-    ydb/library/yql/minikql/comp_nodes/llvm
     ydb/library/yql/utils/backtrace
     ydb/library/yql/utils/log
     ydb/library/yql/core

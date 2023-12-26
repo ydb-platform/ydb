@@ -13,6 +13,7 @@
 extern "C" {
 #include "utils/date.h"
 #include "utils/timestamp.h"
+#include "utils/numeric.h"
 }
 
 namespace NYql {
@@ -151,6 +152,85 @@ std::shared_ptr<arrow::Array> PgConvertString(const std::shared_ptr<arrow::Array
     return ret;
 }
 
+Numeric PgFloatToNumeric(double item, ui64 scale, int digits) {
+    double int_part, frac_part;
+    bool error;
+    frac_part = modf(item, &int_part);
+    i64 frac_int = round(frac_part * scale);
+
+    // scale compaction: represent 711.56000 as 711.56
+    while (frac_int && frac_int % 10 == 0) {
+        frac_int /= 10;
+        digits -= 1;
+    }
+
+    return numeric_add_opt_error(
+        int64_to_numeric(int_part),
+        int64_div_fast_to_numeric(frac_int, digits),
+        &error);
+}
+
+template<typename T>
+std::shared_ptr<arrow::Array> PgConvertNumeric(const std::shared_ptr<arrow::Array>& value) {
+    TArenaMemoryContext arena;
+    const auto& data = value->data();
+    size_t length = data->length;
+    arrow::BinaryBuilder builder;
+    std::vector<char> tmp;
+    auto input = data->GetValues<T>(1);
+    for (size_t i = 0; i < length; ++i) {
+        if (value->IsNull(i)) {
+            builder.AppendNull();
+            continue;
+        }
+        T item = input[i];
+        Numeric v;
+        if constexpr(std::is_same_v<T,double>) {
+            v = PgFloatToNumeric(item, 1000000000000LL, 12);
+        } else if constexpr(std::is_same_v<T,float>) {
+            v = PgFloatToNumeric(item, 1000000LL, 6);
+        } else {
+            v = int64_to_numeric(item);
+        }
+        auto datum = NumericGetDatum(v);
+        auto ptr = (char*)datum;
+        auto len = GetFullVarSize((const text*)datum);
+        NUdf::ZeroMemoryContext(ptr);
+        ARROW_OK(builder.Append(ptr - sizeof(void*), len + sizeof(void*)));
+    }
+
+    std::shared_ptr<arrow::BinaryArray> ret;
+    ARROW_OK(builder.Finish(&ret));
+    return ret;
+}
+
+TColumnConverter BuildPgNumericColumnConverter(const std::shared_ptr<arrow::DataType>& originalType) {
+    switch (originalType->id()) {
+    case arrow::Type::INT16:
+        return [](const std::shared_ptr<arrow::Array>& value) {
+            return PgConvertNumeric<i16>(value);
+        };
+    case arrow::Type::INT32:
+        return [](const std::shared_ptr<arrow::Array>& value) {
+            return PgConvertNumeric<i32>(value);
+        };
+    case arrow::Type::INT64:
+        return [](const std::shared_ptr<arrow::Array>& value) {
+            return PgConvertNumeric<i64>(value);
+        };
+    case arrow::Type::FLOAT:
+        return [](const std::shared_ptr<arrow::Array>& value) {
+            return PgConvertNumeric<float>(value);
+        };
+    case arrow::Type::DOUBLE:
+        return [](const std::shared_ptr<arrow::Array>& value) {
+            return PgConvertNumeric<double>(value);
+        };
+    default:
+        return {};
+    }
+}
+
 template <typename T, typename F>
 TColumnConverter BuildPgFixedColumnConverter(const std::shared_ptr<arrow::DataType>& originalType, const F& f) {
     auto primaryType = NKikimr::NMiniKQL::GetPrimitiveDataType<T>();
@@ -199,6 +279,9 @@ TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& 
     }
     case FLOAT8OID: {
         return BuildPgFixedColumnConverter<double>(originalType, [](auto value){ return Float8GetDatum(value); });
+    }
+	case NUMERICOID: {
+        return BuildPgNumericColumnConverter(originalType);
     }
     case BYTEAOID:
     case VARCHAROID:

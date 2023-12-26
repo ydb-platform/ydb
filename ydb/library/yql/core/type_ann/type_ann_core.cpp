@@ -10917,12 +10917,18 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
     bool IsValidTypeForRanges(const TTypeAnnotationNode* type) {
         YQL_ENSURE(type);
+        // top level optional is always present and used for +- infinity value
         if (type->GetKind() != ETypeAnnotationKind::Optional) {
             return false;
         }
+        type = type->Cast<TOptionalExprType>()->GetItemType();
+        bool hasOptionals = type->GetKind() == ETypeAnnotationKind::Optional;
         type = RemoveAllOptionals(type);
         YQL_ENSURE(type);
-        return type->GetKind() == ETypeAnnotationKind::Data && type->IsComparable() && type->IsEquatable();
+        if (!type->IsComparable() || !type->IsEquatable()) {
+            return false;
+        }
+        return type->GetKind() == ETypeAnnotationKind::Data || (type->GetKind() == ETypeAnnotationKind::Pg && !hasOptionals);
     }
 
     bool EnsureValidRangeBoundary(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext& ctx) {
@@ -10957,7 +10963,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 ctx.AddError(TIssue(ctx.GetPosition(pos),
                     TStringBuilder() << "Expected " << i <<
                         "th component of range boundary tuple to be (multi) optional of "
-                        "comparable and equatable Data type, but got: " << *itemType));
+                        "comparable and equatable Data or Pg type, but got: " << *itemType));
                 return false;
             }
         }
@@ -11043,7 +11049,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             if (!IsValidTypeForRanges(items[i])) {
                 ctx.AddError(TIssue(ctx.GetPosition(pos),
                     TStringBuilder() << "Expected " << i << "th component of range boundary tuple to be (multi) optional of "
-                                                            "comparable and equatable Data type, but got: " << *items[i]));
+                                                            "comparable and equatable Data or Pg type, but got: " << *items[i]));
                 return false;
             }
             resultBoundaryItems.push_back(int32Type);
@@ -11152,7 +11158,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         for (auto& optKeyType : optKeys) {
             if (!IsValidTypeForRanges(optKeyType)) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()),
-                    TStringBuilder() << "Expected (multi) optional of comparable and equatable Data type, but got: " << *optKeyType));
+                    TStringBuilder() << "Expected (multi) optional of comparable and equatable Data or Pg type, but got: " << *optKeyType));
                 return IGraphTransformer::TStatus::Error;
             }
             resultBoundaryItems.push_back(int32Type);
@@ -11198,8 +11204,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         if (op != "Exists" && op != "NotExists") {
             valueBaseType = RemoveAllOptionals(valueType);
             YQL_ENSURE(valueBaseType);
-            if (valueBaseType->GetKind() != ETypeAnnotationKind::Data &&
-                valueBaseType->GetKind() != ETypeAnnotationKind::Null)
+            const auto valueKind = valueBaseType->GetKind();
+            if (valueKind != ETypeAnnotationKind::Pg) {
+                valueBaseType = RemoveAllOptionals(valueType);
+            }
+            if (valueKind != ETypeAnnotationKind::Data &&
+                valueKind != ETypeAnnotationKind::Null &&
+                valueKind != ETypeAnnotationKind::Pg)
             {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()),
                                          TStringBuilder() << "Expecting (optional) Data as second argument, but got: " << *valueType));
@@ -11218,14 +11229,29 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         auto optKeyType = ctx.Expr.MakeType<TOptionalExprType>(keyType);
         if (!IsValidTypeForRanges(optKeyType)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()),
-                TStringBuilder() << "Expected (optional) of comparable and equatable Data type, but got: " << *keyType));
+                TStringBuilder() << "Expected (optional) of comparable and equatable Data or Pg type, but got: " << *keyType));
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (valueBaseType && CanCompare<false>(RemoveAllOptionals(keyType), valueBaseType) == ECompareOptions::Uncomparable) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                TStringBuilder() << "Uncompatible key and value types: " << *keyType << " and " << *valueType));
-            return IGraphTransformer::TStatus::Error;
+        if (valueBaseType) {
+            if (keyType->GetKind() == ETypeAnnotationKind::Pg) {
+                if (!IsSameAnnotation(*keyType, *valueBaseType)) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                        TStringBuilder() << "Unequal key/value types are not supported: " << *keyType << " and " << *valueType));
+                    return IGraphTransformer::TStatus::Error;
+                }
+                if (op ==  "StartsWith" || op ==  "NotStartsWith") {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                        TStringBuilder() << "Operation " << op << "is unsupported for pg type " << *keyType));
+                    return IGraphTransformer::TStatus::Error;
+
+                }
+            }
+            if (CanCompare<false>(RemoveAllOptionals(keyType), valueBaseType) == ECompareOptions::Uncomparable) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                    TStringBuilder() << "Uncompatible key and value types: " << *keyType << " and " << *valueType));
+                return IGraphTransformer::TStatus::Error;
+            }
         }
 
         auto int32Type = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int32);
@@ -11412,7 +11438,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             auto optKeyType = ctx.Expr.MakeType<TOptionalExprType>(keyType);
             if (!IsValidTypeForRanges(optKeyType)) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyNode->Pos()),
-                    TStringBuilder() << "Unsupported index column type: expecting Data or (multi) optional of Data, "
+                    TStringBuilder() << "Unsupported index column type: expecting Data or (multi) optional of Data (or Pg), "
                                      << "got: " << *keyType << " for column '" << key << "'"));
                 return IGraphTransformer::TStatus::Error;
             }
@@ -11438,7 +11464,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureDataType(input->Head(), ctx.Expr)) {
+        if (!EnsureDataOrPgType(input->Head(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -11447,12 +11473,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         auto dstType = input->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        if (!EnsureDataType(input->Tail().Pos(), *dstType, ctx.Expr)) {
+        if (!EnsureDataOrPgType(input->Tail().Pos(), *dstType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         auto srcType = input->Head().GetTypeAnn();
-        if (CanCompare<false>(srcType, dstType) != ECompareOptions::Comparable) {
+        if (CanCompare<false>(srcType, dstType) == ECompareOptions::Uncomparable) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Uncompatible types in rounding: " << *srcType << " " << input->Content() << " to " << *dstType));
             return IGraphTransformer::TStatus::Error;
@@ -11461,6 +11487,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         if (IsSameAnnotation(*srcType, *dstType)) {
             output = ctx.Expr.NewCallable(input->Pos(), "Just", { input->HeadPtr() });
             return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (dstType->GetKind() == ETypeAnnotationKind::Pg) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Pg types in rounding are not supported: " << *srcType << " " << input->Content() << " to " << *dstType));
+            return IGraphTransformer::TStatus::Error;
         }
 
         auto sSlot = srcType->Cast<TDataExprType>()->GetSlot();

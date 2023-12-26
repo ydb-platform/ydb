@@ -32,13 +32,16 @@ TExprNode::TPtr BuildMultiplyLimit(TMaybe<size_t> limit, TExprContext& ctx, TPos
     }
 }
 
-const TTypeAnnotationNode* GetBaseDataType(const TTypeAnnotationNode *type) {
+const TTypeAnnotationNode* GetBasePgOrDataType(const TTypeAnnotationNode* type) {
+    if (type && type->GetKind() == ETypeAnnotationKind::Pg) {
+        return type;
+    }
     type = RemoveAllOptionals(type);
     return (type && type->GetKind() == ETypeAnnotationKind::Data) ? type : nullptr;
 }
 
-bool IsDataOrMultiOptionalOfData(const TTypeAnnotationNode* type) {
-    return GetBaseDataType(type) != nullptr;
+bool IsPgOrDataOrMultiOptionalOfData(const TTypeAnnotationNode* type) {
+    return GetBasePgOrDataType(type) != nullptr;
 }
 
 TMaybe<size_t> GetSqlInCollectionSize(const TExprNode::TPtr& collection) {
@@ -171,13 +174,13 @@ bool IsRoundingSupported(const TExprNode& op, bool negated) {
 
                 for (size_t i = 0; i < keyTypes.size(); ++i) {
                     result.emplace_back();
-                    result.back().KeyBaseType = GetBaseDataType(keyTypes[i]);
-                    result.back().ValueBaseType = GetBaseDataType(valueTypes[i]);
+                    result.back().KeyBaseType = GetBasePgOrDataType(keyTypes[i]);
+                    result.back().ValueBaseType = GetBasePgOrDataType(valueTypes[i]);
                 }
             } else {
                 result.emplace_back();
-                result.back().KeyBaseType = GetBaseDataType(keyType);
-                result.back().ValueBaseType = GetBaseDataType(valueType);
+                result.back().KeyBaseType = GetBasePgOrDataType(keyType);
+                result.back().ValueBaseType = GetBasePgOrDataType(valueType);
             }
 
             return result;
@@ -204,6 +207,16 @@ bool IsRoundingSupported(const TExprNode& op, bool negated) {
     for (auto& item : types) {
         YQL_ENSURE(item.KeyBaseType);
         YQL_ENSURE(item.ValueBaseType);
+        const auto keyKind = item.KeyBaseType->GetKind();
+        const auto valueKind = item.ValueBaseType->GetKind();
+        if (keyKind != ETypeAnnotationKind::Data || valueKind != ETypeAnnotationKind::Data) {
+            YQL_ENSURE(keyKind == valueKind);
+            YQL_ENSURE(keyKind == ETypeAnnotationKind::Pg);
+            if (!IsSameAnnotation(*item.KeyBaseType, *item.ValueBaseType)) {
+                return false;
+            }
+            continue;
+        }
 
         EDataSlot valueSlot = item.ValueBaseType->Cast<TDataExprType>()->GetSlot();
         EDataSlot keySlot = item.KeyBaseType->Cast<TDataExprType>()->GetSlot();
@@ -225,7 +238,7 @@ bool IsRoundingSupported(const TExprNode& op, bool negated) {
 }
 
 bool IsSupportedMemberNode(const TExprNode& node, const TExprNode& row) {
-    return node.IsCallable("Member") && node.Child(0) == &row && IsDataOrMultiOptionalOfData(node.GetTypeAnn());
+    return node.IsCallable("Member") && node.Child(0) == &row && IsPgOrDataOrMultiOptionalOfData(node.GetTypeAnn());
 }
 
 bool IsValidForRange(const TExprNode& node, const TExprNode* otherNode, const TExprNode& row) {
@@ -572,14 +585,14 @@ bool IsListOfMembers(const TExprNode& node) {
     }
 
     return AllOf(node.ChildrenList(), [](const auto& child) {
-        return child->IsCallable("Member") && IsDataOrMultiOptionalOfData(child->GetTypeAnn());
+        return child->IsCallable("Member") && IsPgOrDataOrMultiOptionalOfData(child->GetTypeAnn());
     });
 }
 
 bool IsMemberBinOpNode(const TExprNode& node) {
     YQL_ENSURE(node.ChildrenSize() == 2);
-    return node.Head().IsCallable("Member") && IsDataOrMultiOptionalOfData(node.Head().GetTypeAnn()) ||
-           node.Tail().IsCallable("Member") && IsDataOrMultiOptionalOfData(node.Tail().GetTypeAnn());
+    return node.Head().IsCallable("Member") && IsPgOrDataOrMultiOptionalOfData(node.Head().GetTypeAnn()) ||
+           node.Tail().IsCallable("Member") && IsPgOrDataOrMultiOptionalOfData(node.Tail().GetTypeAnn());
 }
 
 bool IsMemberListBinOpNode(const TExprNode& node) {
@@ -738,6 +751,33 @@ TExprNode::TPtr OptimizeNodeForRangeExtraction(const TExprNode::TPtr& node, cons
                     .Add(1, MakeBool(node->Pos(), true, ctx))
                 .Seal()
                 .Build();
+        }
+    }
+
+    if (node->IsCallable("FromPg") && node->Head().IsCallable("PgResolvedOp")) {
+        auto opNode = node->HeadPtr();
+        TStringBuf op = opNode->Head().Content();
+        if (SupportedBinOps.contains(op) || op == "<>" || op == "=") {
+            auto left = opNode->ChildPtr(2);
+            auto right = opNode->ChildPtr(3);
+            if (IsSameAnnotation(*left->GetTypeAnn(), *right->GetTypeAnn())) {
+                TStringBuf newOp;
+                if (op == "=") {
+                    newOp = "==";
+                } else if (op == "<>") {
+                    newOp = "!=";
+                } else {
+                    newOp = op;
+                }
+                YQL_ENSURE(opNode->ChildrenSize() == 4);
+                YQL_CLOG(DEBUG, Core) << "Replace PgResolvedOp(" << op << ") with corresponding plain binary operation";
+                return ctx.Builder(node->Pos())
+                    .Callable(newOp)
+                        .Add(0, opNode->ChildPtr(2))
+                        .Add(1, opNode->ChildPtr(3))
+                    .Seal()
+                    .Build();
+            }
         }
     }
 
@@ -2177,8 +2217,8 @@ TPredicateRangeExtractor::TBuildResult TPredicateRangeExtractor::BuildComputeNod
     for (size_t i = 0; i < effectiveIndexKeys.size(); ++i) {
         TMaybe<ui32> idx = RowType->FindItem(effectiveIndexKeys[i]);
         if (idx) {
-            auto keyBaseType = RemoveAllOptionals(RowType->GetItems()[*idx]->GetItemType());
-            if (!(keyBaseType->GetKind() == ETypeAnnotationKind::Data && keyBaseType->IsComparable() && keyBaseType->IsEquatable())) {
+            auto keyBaseType = GetBasePgOrDataType(RowType->GetItems()[*idx]->GetItemType());
+            if (!(keyBaseType && keyBaseType->IsComparable() && keyBaseType->IsEquatable())) {
                 idx = {};
             }
         }

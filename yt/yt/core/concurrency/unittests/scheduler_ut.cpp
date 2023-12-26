@@ -848,9 +848,9 @@ TEST_W(TSchedulerTest, FiberTiming)
 
     CheckCurrentFiberRunDuration(timer.GetElapsedTime(), TDuration::MilliSeconds(0), TDuration::MilliSeconds(100));
     Sleep(TDuration::Seconds(1));
-    CheckCurrentFiberRunDuration(timer.GetElapsedTime(),TDuration::MilliSeconds(900), TDuration::MilliSeconds(1100));
+    CheckCurrentFiberRunDuration(timer.GetElapsedTime(), TDuration::MilliSeconds(900), TDuration::MilliSeconds(1100));
     TDelayedExecutor::WaitForDuration(TDuration::Seconds(1));
-    CheckCurrentFiberRunDuration(timer.GetElapsedTime(),TDuration::MilliSeconds(900), TDuration::MilliSeconds(1100));
+    CheckCurrentFiberRunDuration(timer.GetElapsedTime(), TDuration::MilliSeconds(900), TDuration::MilliSeconds(1100));
 }
 
 TEST_W(TSchedulerTest, CancelDelayedFuture)

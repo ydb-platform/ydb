@@ -64,9 +64,14 @@ bool TInstanceResources::operator==(const TInstanceResources& other) const
 
 namespace NProto {
 
-// TODO(alexmipt): make ToProto for TCpuLimits, TMemoryLimits, TInstanceResources
-
 ////////////////////////////////////////////////////////////////////////////////
+
+void ToProto(NBundleController::NProto::TCpuLimits* protoCpuLimits, const NBundleControllerClient::TCpuLimitsPtr cpuLimits)
+{
+    protoCpuLimits->set_lookup_thread_pool_size(cpuLimits->LookupThreadPoolSize);
+    protoCpuLimits->set_query_thread_pool_size(cpuLimits->QueryThreadPoolSize);
+    protoCpuLimits->set_write_thread_pool_size(cpuLimits->WriteThreadPoolSize);
+}
 
 void FromProto(NBundleControllerClient::TCpuLimitsPtr cpuLimits, const NBundleController::NProto::TCpuLimits* protoCpuLimits)
 {
@@ -76,6 +81,20 @@ void FromProto(NBundleControllerClient::TCpuLimitsPtr cpuLimits, const NBundleCo
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+void ToProto(NBundleController::NProto::TMemoryLimits* protoMemoryLimits, const NBundleControllerClient::TMemoryLimitsPtr memoryLimits)
+{
+    protoMemoryLimits->set_compressed_block_cache(memoryLimits->CompressedBlockCache.value_or(0));
+    protoMemoryLimits->set_key_filter_block_cache(memoryLimits->KeyFilterBlockCache.value_or(0));
+    protoMemoryLimits->set_lookup_row_cache(memoryLimits->LookupRowCache.value_or(0));
+
+    protoMemoryLimits->set_tablet_dynamic(memoryLimits->TabletDynamic.value_or(0));
+    protoMemoryLimits->set_tablet_static(memoryLimits->TabletStatic.value_or(0));
+
+    protoMemoryLimits->set_uncompressed_block_cache(memoryLimits->UncompressedBlockCache.value_or(0));
+
+    protoMemoryLimits->set_versioned_chunk_meta(memoryLimits->VersionedChunkMeta.value_or(0));
+}
 
 void FromProto(NBundleControllerClient::TMemoryLimitsPtr memoryLimits, const NBundleController::NProto::TMemoryLimits* protoMemoryLimits)
 {
@@ -92,6 +111,14 @@ void FromProto(NBundleControllerClient::TMemoryLimitsPtr memoryLimits, const NBu
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+void ToProto(NBundleController::NProto::TInstanceResources* protoInstanceResources, const NBundleControllerClient::TInstanceResourcesPtr instanceResources)
+{
+    protoInstanceResources->set_memory(instanceResources->Memory);
+    protoInstanceResources->set_net(instanceResources->Net.value_or(0));
+    protoInstanceResources->set_type(instanceResources->Type);
+    protoInstanceResources->set_vcpu(instanceResources->Vcpu);
+}
 
 void FromProto(NBundleControllerClient::TInstanceResourcesPtr instanceResources, const NBundleController::NProto::TInstanceResources* protoInstanceResources)
 {

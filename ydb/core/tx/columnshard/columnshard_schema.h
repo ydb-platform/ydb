@@ -206,14 +206,17 @@ struct Schema : NIceDb::Schema {
         struct WriteTxId : Column<3, NScheme::NTypeIds::Uint64> {};
         struct PathId : Column<4, NScheme::NTypeIds::Uint64> {};
         struct DedupId : Column<5, NScheme::NTypeIds::String> {};
-        struct BlobId : Column<6, NScheme::NTypeIds::String> {};
+        struct BlobId: Column<6, NScheme::NTypeIds::String> {};
         struct Meta : Column<7, NScheme::NTypeIds::String> {};
         struct IndexPlanStep : Column<8, NScheme::NTypeIds::Uint64> {};
         struct IndexTxId : Column<9, NScheme::NTypeIds::Uint64> {};
         struct SchemaVersion : Column<10, NScheme::NTypeIds::Uint64> {};
 
+        struct BlobRangeOffset: Column<11, NScheme::NTypeIds::Uint64> {};
+        struct BlobRangeSize: Column<12, NScheme::NTypeIds::Uint64> {};
+
         using TKey = TableKey<Committed, PlanStep, WriteTxId, PathId, DedupId>;
-        using TColumns = TableColumns<Committed, PlanStep, WriteTxId, PathId, DedupId, BlobId, Meta, IndexPlanStep, IndexTxId, SchemaVersion>;
+        using TColumns = TableColumns<Committed, PlanStep, WriteTxId, PathId, DedupId, BlobId, Meta, IndexPlanStep, IndexTxId, SchemaVersion, BlobRangeOffset, BlobRangeSize>;
     };
 
     struct IndexGranules : NIceDb::Schema::Table<GranulesTableId> {
@@ -465,6 +468,8 @@ struct Schema : NIceDb::Schema {
     static void InsertTable_Upsert(NIceDb::TNiceDb& db, EInsertTableIds recType, const TInsertedData& data) {
         db.Table<InsertTable>().Key((ui8)recType, data.PlanStep, data.WriteTxId, data.PathId, data.DedupId).Update(
             NIceDb::TUpdate<InsertTable::BlobId>(data.GetBlobRange().GetBlobId().ToStringLegacy()),
+            NIceDb::TUpdate<InsertTable::BlobRangeOffset>(data.GetBlobRange().Offset),
+            NIceDb::TUpdate<InsertTable::BlobRangeSize>(data.GetBlobRange().Size),
             NIceDb::TUpdate<InsertTable::Meta>(data.GetMeta().SerializeToProto().SerializeAsString()),
             NIceDb::TUpdate<InsertTable::SchemaVersion>(data.GetSchemaVersion())
         );

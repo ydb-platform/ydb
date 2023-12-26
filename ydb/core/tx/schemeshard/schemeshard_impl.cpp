@@ -332,7 +332,47 @@ TMessageSeqNo TSchemeShard::NextRound() {
 
 void TSchemeShard::Clear() {
     PathsById.clear();
+
     Tables.clear();
+    TTLEnabledTables.clear();
+
+    Indexes.clear();
+    CdcStreams.clear();
+    Sequences.clear();
+    Replications.clear();
+    BlobDepots.clear();
+
+    TablesWithSnapshots.clear();
+    SnapshotTables.clear();
+    SnapshotsStepIds.clear();
+
+    LockedPaths.clear();
+
+    Topics.clear();
+    RtmrVolumes.clear();
+    SolomonVolumes.clear();
+    SubDomains.clear();
+    BlockStoreVolumes.clear();
+    FileStoreInfos.clear();
+    KesusInfos.clear();
+    OlapStores.clear();
+    ExternalTables.clear();
+    ExternalDataSources.clear();
+    Views.clear();
+
+    ColumnTables = { };
+
+    RevertedMigrations.clear();
+
+    Operations.clear();
+    Publications.clear();
+    TxInFlight.clear();
+
+    ShardInfos.clear();
+    AdoptedShards.clear();
+    TabletIdToShardIdx.clear();
+
+    PartitionMetricsMap.clear();
 
     if (CompactionQueue) {
         CompactionQueue->Clear();
@@ -346,18 +386,6 @@ void TSchemeShard::Clear() {
 
     ShardsWithBorrowed.clear();
     ShardsWithLoaned.clear();
-    Topics.clear();
-    RtmrVolumes.clear();
-    SubDomains.clear();
-    BlockStoreVolumes.clear();
-    KesusInfos.clear();
-    TxInFlight.clear();
-    ShardInfos.clear();
-    Indexes.clear();
-    CdcStreams.clear();
-    RevertedMigrations.clear();
-    Sequences.clear();
-    Replications.clear();
 
     for(ui32 idx = 0; idx < TabletCounters->Simple().Size(); ++idx) {
         TabletCounters->Simple()[idx].Set(0);
@@ -366,8 +394,6 @@ void TSchemeShard::Clear() {
     TabletCounters->Percentile()[COUNTER_SHARDS_WITH_SEARCH_HEIGHT].Clear();
     TabletCounters->Percentile()[COUNTER_SHARDS_WITH_FULL_COMPACTION].Clear();
     TabletCounters->Percentile()[COUNTER_SHARDS_WITH_ROW_DELETES].Clear();
-
-    PartitionMetricsMap.clear();
 }
 
 void TSchemeShard::IncrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug) {

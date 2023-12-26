@@ -84,6 +84,26 @@
             },
             "formula": "build/external_resources/gdb/resources.json"
         },
+        "gdbnew": {
+            "executable": {
+                "gcore": [
+                    "gdb",
+                    "bin",
+                    "gcore"
+                ],
+                "gdb": [
+                    "gdb",
+                    "bin",
+                    "gdb"
+                ],
+                "gdbserver": [
+                    "gdb",
+                    "bin",
+                    "gdbserver"
+                ]
+            },
+            "formula": "build/external_resources/gdb/resources.json"
+        },
         "golang": {
             "executable": {
                 "go": [
@@ -740,7 +760,7 @@
             },
             "platforms": [
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -750,7 +770,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -760,7 +780,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "WIN"
                     },
@@ -770,7 +790,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "WIN"
                     },
@@ -873,6 +893,40 @@
             "tools": {
                 "gdb": {
                     "bottle": "gdb",
+                    "executable": "gdb"
+                }
+            }
+        },
+        "gdbnew": {
+            "env": {
+                "TERMINFO": [
+                    "$(ROOT)/gdb/lib/terminfo"
+                ]
+            },
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                }
+            ],
+            "tools": {
+                "gdbnew": {
+                    "bottle": "gdbnew",
                     "executable": "gdb"
                 }
             }
@@ -1132,12 +1186,54 @@
         "atop": {
             "description": "Advanced System & Process Monitor"
         },
+        "c++": {
+            "description": "Run C++ compiler"
+        },
+        "c++filt": {
+            "description": "Run c++filt"
+        },
+        "cc": {
+            "description": "Run C compiler"
+        },
+        "clang-rename": {
+            "description": "Run Clang-Rename refactoring tool"
+        },
+        "gcov": {
+            "description": "Run gcov"
+        },
         "gdb": {
             "description": "Run gdb"
+        },
+        "gdbnew": {
+            "description": "Run gdb for Ubuntu 16.04 or later"
+        },
+        "go": {
+            "description": "Run go tool"
+        },
+        "gofmt": {
+            "description": "Run gofmt tool"
+        },
+        "llvm-cov": {
+            "description": "Run llvm-cov Clang utility"
+        },
+        "llvm-profdata": {
+            "description": "Run llvm-profdata Clang utility"
+        },
+        "llvm-symbolizer": {
+            "description": "Run llvm-symbolizer Clang utility"
+        },
+        "nm": {
+            "description": "Run nm"
+        },
+        "objcopy": {
+            "description": "Run objcopy"
         },
         "python": {
             "description": "Run pseudo-python",
             "visible": false
+        },
+        "strip": {
+            "description": "Run strip utility"
         },
         "ya-tc": {
             "description": "Run ya-tc tool",

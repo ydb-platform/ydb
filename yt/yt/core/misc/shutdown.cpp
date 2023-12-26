@@ -4,6 +4,8 @@
 #include <yt/yt/core/misc/proc.h>
 #include <yt/yt/core/misc/singleton.h>
 
+#include <library/cpp/yt/cpu_clock/clock.h>
+
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 #include <library/cpp/yt/threading/event_count.h>
 

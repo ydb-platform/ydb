@@ -38,7 +38,7 @@ struct TClusterMeta
 struct TCheckClusterLivenessOptions
     : public TTimeoutOptions
 {
-    //! Checks cypress root availability.
+    //! Checks Cypress root availability.
     bool CheckCypressRoot = false;
     //! Checks secondary master cells generic availability.
     bool CheckSecondaryMasterCells = false;

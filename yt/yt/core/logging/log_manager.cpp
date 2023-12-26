@@ -16,6 +16,7 @@
 #include <yt/yt/core/concurrency/invoker_queue.h>
 #include <yt/yt/core/concurrency/thread_pool.h>
 
+#include <yt/yt/core/misc/collection_helpers.h>
 #include <yt/yt/core/misc/fs.h>
 #include <yt/yt/core/misc/spsc_queue.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
@@ -32,7 +33,7 @@
 
 #include <yt/yt/core/ytree/ypath_client.h>
 #include <yt/yt/core/ytree/ypath_service.h>
-#include <yt/yt/core/ytree/yson_serializable.h>
+#include <yt/yt/core/ytree/yson_struct.h>
 #include <yt/yt/core/ytree/convert.h>
 
 #include <yt/yt/library/profiling/producer.h>

@@ -76,7 +76,7 @@ EExecutionStatus TFinishProposeWriteUnit::Execute(TOperation::TPtr op,
                                              const TActorContext &ctx)
 {
     TWriteOperation* writeOp = CastWriteOperation(op);
-    if (writeOp->WriteResult())
+    if (writeOp->GetWriteResult())
         UpdateCounters(writeOp, ctx);
 
     bool hadWrites = false;
@@ -137,7 +137,7 @@ void TFinishProposeWriteUnit::Complete(TOperation::TPtr op, const TActorContext 
     if (!op->HasResultSentFlag()) {
         DataShard.IncCounter(COUNTER_PREPARE_COMPLETE);
 
-        if (writeOp->WriteResult())
+        if (writeOp->GetWriteResult())
             CompleteRequest(op, ctx);
     }
 
@@ -156,7 +156,7 @@ void TFinishProposeWriteUnit::Complete(TOperation::TPtr op, const TActorContext 
 void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorContext &ctx)
 {
     TWriteOperation* writeOp = CastWriteOperation(op);
-    auto res = writeOp->WriteResult();
+    auto res = writeOp->ReleaseWriteResult();
 
     TDuration duration = TAppData::TimeProvider->Now() - op->GetReceivedAt();
 
@@ -208,7 +208,7 @@ void TFinishProposeWriteUnit::AddDiagnosticsResult(NEvents::TDataEvents::TEvWrit
 
 void TFinishProposeWriteUnit::UpdateCounters(const TWriteOperation* writeOp, const TActorContext& ctx)
 {
-    const auto& res = writeOp->WriteResult();
+    const auto& res = writeOp->GetWriteResult();
     auto execLatency = TAppData::TimeProvider->Now() - writeOp->GetReceivedAt();
     DataShard.IncCounter(COUNTER_PREPARE_EXEC_LATENCY, execLatency);
     if (res->IsPrepared()) {

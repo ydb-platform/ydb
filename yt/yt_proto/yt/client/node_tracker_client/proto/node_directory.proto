@@ -10,7 +10,7 @@ message TNodeDirectory
 {
     message TItem
     {
-        required int32 node_id = 1;
+        required uint32 node_id = 1;
         required TNodeDescriptor node_descriptor = 2;
     }
 

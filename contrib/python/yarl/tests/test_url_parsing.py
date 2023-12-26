@@ -214,15 +214,19 @@ class TestPort:
         assert u.query_string == ""
         assert u.fragment == ""
 
-    @pytest.mark.xfail(reason="https://github.com/aio-libs/yarl/issues/821")
+    @pytest.mark.xfail(
+        # FIXME: remove "no cover" pragmas upon xfail marker deletion
+        reason="https://github.com/aio-libs/yarl/issues/821",
+        raises=ValueError,
+    )
     def test_no_host(self):
         u = URL("//:80")
-        assert u.scheme == ""
-        assert u.host == ""
-        assert u.port == 80
-        assert u.path == "/"
-        assert u.query_string == ""
-        assert u.fragment == ""
+        assert u.scheme == ""  # pragma: no cover
+        assert u.host == ""  # pragma: no cover
+        assert u.port == 80  # pragma: no cover
+        assert u.path == "/"  # pragma: no cover
+        assert u.query_string == ""  # pragma: no cover
+        assert u.fragment == ""  # pragma: no cover
 
     def test_double_port(self):
         with pytest.raises(ValueError):

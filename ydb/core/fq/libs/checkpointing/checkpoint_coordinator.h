@@ -189,6 +189,7 @@ private:
     bool GraphIsRunning = false;
     bool InitingZeroCheckpoint = false;
     bool RestoringFromForeignCheckpoint = false;
+    bool NextCheckpointIsSnapshot = false;
 
     TCheckpointCoordinatorMetrics Metrics;
 

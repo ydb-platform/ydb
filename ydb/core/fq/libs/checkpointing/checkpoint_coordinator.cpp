@@ -403,7 +403,13 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCreateCheckpo
 void TCheckpointCoordinator::InjectCheckpoint(const TCheckpointId& checkpointId) {
     CC_LOG_I("[" << checkpointId << "] Checkpoint successfully created, going to inject barriers to " << ActorsToTrigger.size() << " actor(s)");
     for (const auto& [toTrigger, transport] : ActorsToTrigger) {
-        transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvInjectCheckpoint(checkpointId.SeqNo, checkpointId.CoordinatorGeneration));
+        auto checkpointType = NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_INCREMENT_OR_SNAPSHOT;
+
+        if (NextCheckpointIsSnapshot) {
+            checkpointType = NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT;
+            NextCheckpointIsSnapshot = false;
+        }
+        transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvInjectCheckpoint(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, checkpointType));
     }
 
     if (!GraphIsRunning) {
@@ -448,6 +454,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvSaveTaskSt
         }
     } else {
         CC_LOG_E("[" << checkpointId << "] Can't save node state, aborting checkpoint");
+        NextCheckpointIsSnapshot = true;
         Send(StorageProxy, new TEvCheckpointStorage::TEvAbortCheckpointRequest(CoordinatorId, checkpointId, "Can't save node state"), IEventHandle::FlagTrackDelivery);
     }
 }

@@ -17,6 +17,6 @@ public:
 
     void Reset();
 private:
-    TAtomic ReturnCode = 0;
-    TAtomic State = Continue;
+    std::atomic<int> ReturnCode = 0;
+    std::atomic<EState> State = Continue;
 };

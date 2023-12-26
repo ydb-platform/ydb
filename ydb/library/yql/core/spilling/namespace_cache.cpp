@@ -2,6 +2,7 @@
 #include "interface/spilling.h"
 #include "storage/storage.h"
 #include "util/generic/buffer.h"
+#include "ydb/library/actors/util/rc_buf.h"
 
 #include <limits>
 #include <optional>
@@ -60,35 +61,37 @@ std::optional<XXH32_hash_t> readRopeFromFile(TRope& rope, TAtomicSharedPtr<ISpil
     
     ui32 blobSize = 0;
     i32 readRes;
+    bool isFailed = false;
     while (bytesRead < size) {
         readRes = spillDataFile->Read(offset, &blobSize, sizeof(blobSize));
         if (readRes < 0) {
             YQL_LOG(ERROR) << "Read failed" << Endl;
-            return std::nullopt;
+            isFailed = true;
+            break;
         }
+        bytesRead += sizeof(blobSize);
 
-        readRes = spillDataFile->Read(offset, &blobSize, blobSize);
+        TRcBuf blob;
+        blob.reserve(blobSize);
+        readRes = spillDataFile->Read(offset, blob.UnsafeGetDataMut(), blobSize);
         if (readRes < 0) {
             YQL_LOG(ERROR) << "Read failed" << Endl;
-            return std::nullopt;
+            isFailed = true;
+            break;
         }
 
-
-    }
-
-    ui32 blobSize;
-    for (const auto& blob: rope) {
-        YQL_ENSURE(blob.second <= std::numeric_limits<ui32>::max());
-        blobSize = blob.second;
         XXH32_update(state, &blobSize, sizeof(blobSize));
-        XXH32_update(state, blob.first, blobSize);
+        XXH32_update(state, blob.GetData(), blobSize);
 
-        spillDataFile->Read(offset, &blobSize, sizeof(blobSize));
-        offset += sizeof(blobSize);
-
-        spillDataFile->Write(offset, blob.first, blobSize);
-        offset += blobSize;
+        rope.Insert(rope.End(), TRope(std::move(blob)));
+        bytesRead += blobSize;
     }
+    
+    if (isFailed) {
+        XXH32_freeState(state);
+        return std::nullopt;
+    }
+
     XXH32_hash_t hash = XXH32_digest(state);
     XXH32_freeState(state);
     return hash;
@@ -540,8 +543,8 @@ ui32 TNamespaceCache::DeleteTaskFromSaveQueue(ui32 objId, EProcessingStatus reas
     bool found = FindObjInSaveQueue(objId, pos);
     if ( found && ToSave_[pos].ProcessingStatus != EProcessingStatus::Processing) {
         ToSave_[pos].ProcessingStatus = reason;
-        bytesDeleted = ToSave_[pos].Buf->Size();
-        ToSave_[pos].Buf = nullptr;
+        bytesDeleted = ToSave_[pos].Rope->GetSize();
+        ToSave_[pos].Rope = nullptr;
     }
     return bytesDeleted;
 
@@ -792,7 +795,7 @@ void TNamespaceCache::ProcessDeleteQueue() {
             for (auto& t : ToSave_ ) {
                 if ( t.SessionId == sessionId ) {
                     t.ProcessingStatus = EProcessingStatus::Deleted;
-                    t.Buf = nullptr;
+                    t.Rope = nullptr;
                 }
             }
         }
@@ -801,7 +804,7 @@ void TNamespaceCache::ProcessDeleteQueue() {
             for (auto& t : ToLoad_ ) {
                 if ( t.SessionId == sessionId ) {
                     t.ProcessingStatus = EProcessingStatus::Deleted;
-                    t.Buf = nullptr;
+                    t.Rope = nullptr;
                 }
             }
         }

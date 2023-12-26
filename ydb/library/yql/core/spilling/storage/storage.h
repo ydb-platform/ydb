@@ -3,6 +3,7 @@
 #include <library/cpp/threading/future/async.h>
 #include <ydb/library/yql/core/spilling/interface/spilling.h>
 #include <util/system/datetime.h>
+#include <util/generic/buffer.h>
 
 namespace NYql {
 namespace NSpilling {

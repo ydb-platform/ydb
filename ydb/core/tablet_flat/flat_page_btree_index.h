@@ -464,7 +464,7 @@ namespace NKikimr::NTable::NPage {
     };
 
     struct TBtreeIndexMeta : public TBtreeIndexNode::TChild {
-        size_t LevelsCount;
+        ui32 LevelsCount;
         ui64 IndexSize;
 
         auto operator<=>(const TBtreeIndexMeta&) const = default;

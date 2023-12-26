@@ -388,7 +388,8 @@ namespace NKikimr::NTable::NPage {
         }
 
         std::optional<TBtreeIndexMeta> Flush(IPageWriter &pager, bool last) {
-            for (size_t levelIndex = 0; levelIndex < Levels.size(); levelIndex++) {
+            Y_ABORT_UNLESS(Levels.size() < Max<ui32>(), "Levels size is out of bounds");
+            for (ui32 levelIndex = 0; levelIndex < Levels.size(); levelIndex++) {
                 if (last && !Levels[levelIndex].GetKeysCount()) {
                     Y_ABORT_UNLESS(Levels[levelIndex].GetChildrenCount() == 1, "Should be root");
                     return TBtreeIndexMeta{ Levels[levelIndex].PopChild(), levelIndex, IndexSize };
@@ -414,7 +415,7 @@ namespace NKikimr::NTable::NPage {
         }
 
     private:
-        bool TryFlush(size_t levelIndex, IPageWriter &pager, bool last) {
+        bool TryFlush(ui32 levelIndex, IPageWriter &pager, bool last) {
             if (!last && Levels[levelIndex].GetKeysCount() <= 2 * NodeKeysMax) {
                 // Note: node should meet both NodeKeysMin and NodeSize restrictions for split
 

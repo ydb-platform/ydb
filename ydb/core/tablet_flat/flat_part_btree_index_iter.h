@@ -1,7 +1,6 @@
 #pragma once
 
 #include "flat_part_iface.h"
-#include "flat_page_index.h"
 #include "flat_table_part.h"
 #include "flat_part_index_iter_iface.h"
 
@@ -195,7 +194,7 @@ public:
             PushNextState(*State.back().Pos + 1);
         }
 
-        for (size_t level : xrange(State.size() - 1, Meta.LevelsCount)) {
+        for (ui32 level : xrange<ui32>(State.size() - 1, Meta.LevelsCount)) {
             if (!TryLoad(State[level])) {
                 // exiting with an intermediate state
                 Y_DEBUG_ABORT_UNLESS(!IsLeaf() && !IsExhausted());
@@ -226,7 +225,7 @@ public:
             PushNextState(*State.back().Pos - 1);
         }
 
-        for (size_t level : xrange(State.size() - 1, Meta.LevelsCount)) {
+        for (ui32 level : xrange<ui32>(State.size() - 1, Meta.LevelsCount)) {
             if (!TryLoad(State[level])) {
                 // exiting with an intermediate state
                 Y_DEBUG_ABORT_UNLESS(!IsLeaf() && !IsExhausted());
@@ -287,7 +286,7 @@ private:
             State[0].Pos = { };
         }
 
-        for (size_t level : xrange(State.size() - 1, Meta.LevelsCount)) {
+        for (ui32 level : xrange<ui32>(State.size() - 1, Meta.LevelsCount)) {
             auto &state = State[level];
             Y_DEBUG_ABORT_UNLESS(seek.BelongsTo(state));
             if (!TryLoad(state)) {

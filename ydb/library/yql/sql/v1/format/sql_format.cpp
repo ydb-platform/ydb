@@ -2236,10 +2236,12 @@ private:
             NewLine();
         }
 
-        Y_ENSURE(msg.HasBlock4());
-        const auto& block = msg.GetBlock4();
-        VisitKeyword(block.GetToken1());
-        Visit(block.GetRule_expr2());
+        if (msg.HasBlock4()) {
+            const auto& block = msg.GetBlock4();
+            VisitKeyword(block.GetToken1());
+            Visit(block.GetRule_expr2());
+        }
+
         PopCurrentIndent();
         NewLine();
         Visit(msg.GetToken5());

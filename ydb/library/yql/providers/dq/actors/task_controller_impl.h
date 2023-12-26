@@ -442,8 +442,7 @@ private:
 
         for (const auto& stats : s.GetSources()) {
             auto labels = commonLabels;
-            labels["Source"] = ToString(stats.GetInputIndex());
-            labels["Name"] = stats.GetIngressName();
+            labels["Source"] = stats.GetIngressName();
             TaskStat.AddAsyncStats(stats.GetIngress(), labels, "Ingress");
             TaskStat.AddAsyncStats(stats.GetPush(),  labels, "Push");
             TaskStat.AddAsyncStats(stats.GetPop(), labels, "Pop");

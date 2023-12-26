@@ -161,7 +161,7 @@ class TTestActorSystem {
         }
 
         void StateFunc(TAutoPtr<IEventHandle>& ev) {
-            Y_ABORT_UNLESS(HandlePtr, "event %s is not being captured by this actor Tag# %s", ev->GetTypeName().data(), Tag.data());
+            Y_ABORT_UNLESS(HandlePtr, "event is not being captured by this actor Tag# %s", Tag.data());
             Y_ABORT_UNLESS(!*HandlePtr);
             HandlePtr->reset(ev.Release());
         }

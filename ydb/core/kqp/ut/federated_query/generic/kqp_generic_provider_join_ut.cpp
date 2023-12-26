@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(FederatedQueryJoin) {
         {
             const TString sql = fmt::format(
                 R"sql(
-                CREATE OBJECT pg_password_obj (TYPE SECRET) WITH (value="");
+                CREATE OBJECT pg_password_obj (TYPE SECRET) WITH (value="{pg_password}");
                 CREATE EXTERNAL DATA SOURCE pg_data_source WITH (
                     SOURCE_TYPE="PostgreSQL",
                     LOCATION="{pg_host}:{pg_port}",
@@ -97,6 +97,7 @@ Y_UNIT_TEST_SUITE(FederatedQueryJoin) {
                 "pg_host"_a = GetPgHost(),
                 "pg_port"_a = GetPgPort(),
                 "pg_user"_a = GetPgUser(),
+                "pg_password"_a = GetPgPassword(),
                 "pg_database"_a = GetPgDatabase(),
                 "ch_host"_a = GetChHost(),
                 "ch_port"_a = GetChPort(),

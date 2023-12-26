@@ -176,7 +176,6 @@ std::shared_ptr<arrow::Array> PgConvertNumeric(const std::shared_ptr<arrow::Arra
     const auto& data = value->data();
     size_t length = data->length;
     arrow::BinaryBuilder builder;
-    std::vector<char> tmp;
     auto input = data->GetValues<T>(1);
     for (size_t i = 0; i < length; ++i) {
         if (value->IsNull(i)) {

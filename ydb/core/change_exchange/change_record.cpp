@@ -2,15 +2,13 @@
 
 #include <ydb/core/protos/change_exchange.pb.h>
 
-namespace NKikimr::NDataShard {
+namespace NKikimr::NChangeExchange {
 
 void TChangeRecord::Serialize(NKikimrChangeExchange::TChangeRecord& record) const {
     record.SetOrder(Order);
     record.SetGroup(Group);
     record.SetStep(Step);
     record.SetTxId(TxId);
-    record.SetPathOwnerId(PathId.OwnerId);
-    record.SetLocalPathId(PathId.LocalPathId);
 
     switch (Kind) {
         case EKind::AsyncIndex: {
@@ -70,15 +68,6 @@ TInstant TChangeRecord::GetApproximateCreationDateTime() const {
         : TInstant::MilliSeconds(GetStep());
 }
 
-bool TChangeRecord::IsBroadcast() const {
-    switch (Kind) {
-        case EKind::CdcHeartbeat:
-            return true;
-        default:
-            return false;
-    }
-}
-
 TString TChangeRecord::ToString() const {
     TString result;
     TStringOutput out(result);
@@ -92,14 +81,9 @@ void TChangeRecord::Out(IOutputStream& out) const {
         << " Group: " << Group
         << " Step: " << Step
         << " TxId: " << TxId
-        << " PathId: " << PathId
         << " Kind: " << Kind
         << " Source: " << Source
         << " Body: " << Body.size() << "b"
-        << " TableId: " << TableId
-        << " SchemaVersion: " << SchemaVersion
-        << " LockId: " << LockId
-        << " LockOffset: " << LockOffset
     << " }";
 }
 

@@ -4,6 +4,7 @@ RECURSE(
     blobstorage
     blob_depot
     blockstore
+    change_exchange
     client
     cms
     control

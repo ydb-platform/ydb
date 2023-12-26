@@ -6903,7 +6903,7 @@ private:
                         continue;
                     }
 
-                    if (NYql::HasSettingsExcept(innerMerge.Settings().Ref(), EYtSettingType::KeepSorted | EYtSettingType::Limit)) {
+                    if (NYql::HasSettingsExcept(innerMerge.Settings().Ref(), EYtSettingType::Limit)) {
                         continue;
                     }
 
@@ -7430,7 +7430,7 @@ private:
             return node;
         }
 
-        if (NYql::HasAnySetting(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::CombineChunks)) {
+        if (NYql::HasAnySetting(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::CombineChunks | EYtSettingType::KeepSorted)) {
             return node;
         }
 

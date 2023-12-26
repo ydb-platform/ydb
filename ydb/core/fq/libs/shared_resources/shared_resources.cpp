@@ -88,7 +88,7 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
     void AddUnderlayDiscoveryMutator() {
 
         auto mutator = [](Ydb::Discovery::ListEndpointsResult* proto, NYdb::TStatus status, const NYdb::IDiscoveryMutatorApi::TAuxInfo& aux) {
-            TString underlayPrefix{"u-"};
+            TStringBuf underlayPrefix{"u-"};
             if (!aux.DiscoveryEndpoint.starts_with(underlayPrefix) || !proto) {
                 return status;
             }

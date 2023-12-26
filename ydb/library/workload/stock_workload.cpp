@@ -1,6 +1,8 @@
 #include "stock_workload.h"
+#include "workload_factory.h"
 
 #include <util/datetime/base.h>
+#include <util/generic/serialized_enum.h>
 
 #include <cmath>
 #include <format>
@@ -20,9 +22,11 @@ uint64_t getOrderId() {
 
 namespace NYdbWorkload {
 
+TWorkloadFactory::TRegistrator<TStockWorkloadParams> StockRegistrar("stock");
+
 TStockWorkloadGenerator::TStockWorkloadGenerator(const TStockWorkloadParams* params)
-    : DbPath(params->DbPath)
-    , Params(*params)
+    : TBase(params)
+    , DbPath(params->DbPath)
     , Rd()
     , Gen(Rd())
     , RandExpDistrib(1.6)
@@ -30,10 +34,6 @@ TStockWorkloadGenerator::TStockWorkloadGenerator(const TStockWorkloadParams* par
     , ProductIdGenerator(1, params->ProductCount)
 {
     Gen.seed(Now().MicroSeconds());
-}
-
-TStockWorkloadParams* TStockWorkloadGenerator::GetParams() {
-    return &Params;
 }
 
 std::string TStockWorkloadGenerator::GetDDLQueries() const {
@@ -86,14 +86,8 @@ TQueryInfoList TStockWorkloadGenerator::GetInitialData() {
     return res;
 }
 
-std::string TStockWorkloadGenerator::GetCleanDDLQueries() const {
-    std::string clean_query = R"(
-        DROP TABLE `stock`;
-        DROP TABLE `orders`;
-        DROP TABLE `orderLines`;
-    )";
-
-    return clean_query;
+TVector<std::string> TStockWorkloadGenerator::GetCleanPaths() const {
+    return {"stock", "orders", "orderLines"};
 }
 
 TQueryInfo TStockWorkloadGenerator::FillStockData() const {
@@ -136,6 +130,16 @@ TQueryInfoList TStockWorkloadGenerator::GetWorkload(int type) {
         default:
             return TQueryInfoList();
     }
+}
+
+
+TVector<std::string> TStockWorkloadGenerator::GetSupportedWorkloadTypes() const {
+    auto names = GetEnumNames<EType>();
+    TVector<std::string> result;
+    for (const auto& [value, name]: names) {
+        result.emplace_back(name.c_str());
+    }
+    return result;
 }
 
 TQueryInfo TStockWorkloadGenerator::InsertOrder(const uint64_t orderID, const std::string& customer, const TProductsQuantity& products) {
@@ -299,6 +303,36 @@ TQueryInfoList TStockWorkloadGenerator::GetCustomerHistory() {
     auto customer = "Name" + std::to_string(MAX_CUSTOMERS);
     res.push_back(SelectCustomerHistory(customer, Params.Limit));
     return res;
+}
+
+void TStockWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType) {
+    opts.SetFreeArgsNum(0);
+    switch (commandType) {
+    case TWorkloadParams::ECommandType::Init:
+        opts.AddLongOption('p', "products", "Product count. Value in 1..500 000.")
+            .DefaultValue(100).StoreResult(&ProductCount);
+        opts.AddLongOption('q', "quantity", "Quantity of each product in stock.")
+            .DefaultValue(1000).StoreResult(&Quantity);
+        opts.AddLongOption('o', "orders", "Initial orders count.")
+            .DefaultValue(100).StoreResult(&OrderCount);
+        opts.AddLongOption("min-partitions", "Minimum partitions for tables.")
+            .DefaultValue(40).StoreResult(&MinPartitions);
+        opts.AddLongOption("auto-partition", "Enable auto partitioning by load.")
+            .DefaultValue(true).StoreResult(&PartitionsByLoad);
+        opts.AddLongOption("enable-cdc", "Create changefeeds on tables.")
+            .DefaultValue(false).StoreTrue(&EnableCdc).Hidden();
+        break;
+    case TWorkloadParams::ECommandType::Run:
+        opts.AddLongOption('p', "products", "Products count to use in workload.")
+            .DefaultValue(100).StoreResult(&ProductCount);
+        break;
+    case TWorkloadParams::ECommandType::Clean:
+        break;
+    }
+}
+
+THolder<IWorkloadQueryGenerator> TStockWorkloadParams::CreateGenerator() const {
+    return MakeHolder<TStockWorkloadGenerator>(this);
 }
 
 }

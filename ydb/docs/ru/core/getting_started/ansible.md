@@ -387,25 +387,33 @@ ssh: connect to host ...
 port 22: Connection refused
 ``` | SSH-сервер не успел запуститься на удаленном хосте. | Повторить попытку подключения позже. ||  
 || Установка SSH-соединения | 
-```Failed to connect to the host via ssh: 
+```
+Failed to connect to the host via ssh: 
 Warning: Permanently added '...' 
 (ED25519) to the list of known hosts.\r\nno such identity: ...: 
-No such file or directory\r\...: Permission denied (publickey).``` | Не правильно указан путь к SSH-ключу или его название в опции `ansible_ssh_private_key_file` инвентаризационного файла | Проверить правильность пути и название SSH-ключа. Скорректировать их, если они не верны. ||
+No such file or directory\r\...: Permission denied (publickey).
+``` | Не правильно указан путь к SSH-ключу или его название в опции `ansible_ssh_private_key_file` инвентаризационного файла | Проверить правильность пути и название SSH-ключа. Скорректировать их, если они не верны. ||
 || Установка SSH-соединения | 
-```Failed to connect to the host via ssh: ...: 
-Permission denied (publickey).``` | Не правильно указан пользователь для подключения в опции `ansible_ssh_user` инвентаризационного файла. | Если вы использовали Terraform-провайдер Yandex Cloud – проверьте данные для подключения по SSH в блоке `metadata` ресурса `yandex_compute_instance`. Если ВМ в Yandex Cloud была создана вручную – параметры подключения по SSH находятся в **Облачная консоль Yandex CLoud** → **Виртуальные машины** → *<Ваша виртуальная машина>* → **Обзор** → **Метаданные**.
+```
+Failed to connect to the host via ssh: ...: 
+Permission denied (publickey).
+``` | Не правильно указан пользователь для подключения в опции `ansible_ssh_user` инвентаризационного файла. | Если вы использовали Terraform-провайдер Yandex Cloud – проверьте данные для подключения по SSH в блоке `metadata` ресурса `yandex_compute_instance`. Если ВМ в Yandex Cloud была создана вручную – параметры подключения по SSH находятся в **Облачная консоль Yandex CLoud** → **Виртуальные машины** → *<Ваша виртуальная машина>* → **Обзор** → **Метаданные**.
 Если для создания ВМ вы использовали иного облачного провайдера – обратитесь к документации провайдера. ||
 || Download the YDB sources archive | 
-```Request failed", "response": "HTTP Error 404: Not Found", 
-"status_code": 404``` | Не правильно указана версия YDB для скачивания в переменной `ydb_version` или ошибка в URL для скачивания YDB в переменной `ydb_download_url`. | Перейдите [по ссылке](../downloads/index.md#ydb-server), скопируйте тег последней доступной версии YDB (например, 23.3.13) и вставьте его в переменную `ydb_version`. ||
+```
+Request failed", "response": "HTTP Error 404: Not Found", 
+"status_code": 404
+``` | Не правильно указана версия YDB для скачивания в переменной `ydb_version` или ошибка в URL для скачивания YDB в переменной `ydb_download_url`. | Перейдите [по ссылке](../downloads/index.md#ydb-server), скопируйте тег последней доступной версии YDB (например, 23.3.13) и вставьте его в переменную `ydb_version`. ||
 || Generate YDB static configuration file from template | ```Could not find or access './files/...'``` |
 1. Директория `files`, содержащая шаблоны файлов в формате `.j2` имеет ошибку в названии или имеет не правильное расположение относительно плейбука.
 2. Названия шаблонов файлов в директории `files` не соответствуют путям их вызова в опциях `src` задач генерации конфигурационных файлов. |     
 1. Убедитесь, что директория `files` располагается на одном уровне с плейбуком.
 2. Убедитесь, что пути к шаблонам файлов, указанные в опциях `src` задач по генерации конфигурационных файлов соответствуют реальному их расположению в файловой системе. ||
 || Verify that the YDB storage node service is active | 
-```FAILED - RETRYING: [...]: 
-Verify that the YDB storage node service is active (5 retries left).``` | Сервис `ydbd-storage` не был успешно запущен через systemd из-за ошибки в конфигурационном файле статической ноды. | Подключитесь по SSH к ВМ и выполните команду `journalctl -u ydbd-storage` – будет выведен лог запуска статической ноды. Найдите строку `Caught exception` или блок `uncaught exception`:
+```
+FAILED - RETRYING: [...]: 
+Verify that the YDB storage node service is active (5 retries left).
+``` | Сервис `ydbd-storage` не был успешно запущен через systemd из-за ошибки в конфигурационном файле статической ноды. | Подключитесь по SSH к ВМ и выполните команду `journalctl -u ydbd-storage` – будет выведен лог запуска статической ноды. Найдите строку `Caught exception` или блок `uncaught exception`:
 ```
 uncaught exception:
     address -> 0x46e97ed01810
@@ -414,7 +422,9 @@ uncaught exception:
 ```
 Строка `what() -> "yaml-cpp: error at line 82, column 32: illegal EOF in scalar"` будет содержать информацию об ошибки в конфигурационном файле статической ноды. Внесите правки в исходных шаблон файла и перезапустите плейбук. ||
 || Start database processes if YDB storage node is active | 
-```FAILED - RETRYING: [...]: 
-Start database processes if YDB storage node is active (5 retries left).``` | Сервис `ydbd-dynnode` не был успешно запущен через systemd из-за ошибки в конфигурационном файле динамической ноды. | Подключитесь по SSH к ВМ и выполните команду `journalctl -u ydbd-dynnode` – будет выведен лог запуска статической ноды. Найдите блок `uncaught exception` или строку `Caught exception`: ```Caught exception: /opt/buildagent/work/3e574e3efc81dc20/tag/ydb/library/yaml_config/yaml_config_parser.cpp:36: Array field `fail_domains` must be specified.``` В конце сообщения будет указана причина ошибки. В данном случае ошибка в том, что блок настройки `fail_domains` в конфигурационном файле динамической ноды оформлен не верно. ||
+```
+FAILED - RETRYING: [...]: 
+Start database processes if YDB storage node is active (5 retries left).
+``` | Сервис `ydbd-dynnode` не был успешно запущен через systemd из-за ошибки в конфигурационном файле динамической ноды. | Подключитесь по SSH к ВМ и выполните команду `journalctl -u ydbd-dynnode` – будет выведен лог запуска статической ноды. Найдите блок `uncaught exception` или строку `Caught exception`: ```Caught exception: /opt/buildagent/work/3e574e3efc81dc20/tag/ydb/library/yaml_config/yaml_config_parser.cpp:36: Array field `fail_domains` must be specified.``` В конце сообщения будет указана причина ошибки. В данном случае ошибка в том, что блок настройки `fail_domains` в конфигурационном файле динамической ноды оформлен не верно. ||
 || Display the YDB monitoring connection URL | Ссылка для подключения к мониторингу YDB выдаёт 404 ошибку | SSH-туннель не был настроен или проброс порта мониторинга на локальную машину не был выполнен. | Выполните ручной проброс порта командой ```ssh -L <mon_port>:localhost:<mon_port> -i <path to private SSH key> <user>@<IP VM>```. Порт мониторинга устанавливается переменной `mon_port` в файле `files/all.yml`. ||
 |#

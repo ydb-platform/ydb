@@ -74,6 +74,7 @@
 {% include [vars](./_includes/ansible/vars.md) %}
 
 Переменные из файла `/group_vars/all.yaml` используются в задачах плейбука и в шаблонах файлов, которые копируются на хост:
+
 {% list tabs %}
 - Service статической ноды
 
@@ -92,6 +93,8 @@
   {% include [dynnode-config](./_includes/ansible/dynnode-config.md) %}  
 
 {% endlist %}
+
+Шаблоны файлов имеют расширение `.j2` и находятся в директории `files`. При выполнение задач плейбука с вызовом модуля `ansible.builtin.template` – переменные в шаблоне подменяются реальными значениями, а файлы переносятся на хост с изменением имени и расширения.
 
 ## Задачи Ansible playbook { #playbook }
 

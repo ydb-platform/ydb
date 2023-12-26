@@ -22,7 +22,7 @@ using namespace NKikimr;
             const auto& subdomain = pathDescr.GetDomainDescription();                                                 \
             const auto& value = expression;                                                                           \
                                                                                                                       \
-            UNIT_ASSERT_##op(value, expected,                                                                           \
+            UNIT_ASSERT_##op(value, expected,                                                                         \
                             description << " mismatch, subdomain with id " << subdomain.GetDomainKey().GetPathId() << \
                                 " has value " << value <<                                                             \
                                 " but expected " << expected);                                                        \

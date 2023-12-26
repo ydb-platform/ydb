@@ -104,7 +104,6 @@ public:
         WriteUi32(out, static_cast<ui32>(EType::SIMPLE_BLOB));
         WriteString(out, blob);
         auto strRef = NUdf::TStringRef(out);
-        std::cout << " size " << out.size() << std::endl;
         return NMiniKQL::MakeString(strRef);
     }
 
@@ -117,7 +116,6 @@ public:
             WriteString(out, key);
             WriteString(out, value);
         }
-        std::cout << " size " << out.size() << std::endl;
         auto strRef = NUdf::TStringRef(out);
         return NMiniKQL::MakeString(strRef);
     }
@@ -136,7 +134,6 @@ public:
             WriteString(out, key);
         }
         auto strRef = NUdf::TStringRef(out);
-        std::cout << " size " << out.size() << std::endl;
         return NMiniKQL::MakeString(strRef);
     }
 
@@ -182,10 +179,6 @@ public:
         TStringBuf& Buf;
         TMaybe<EType> Type;
     };
-
-private:
-  //  TString out;
-   // EType Type;
 };
 
 } // namespace NMiniKQL

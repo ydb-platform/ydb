@@ -62,7 +62,6 @@ NYql::NDqProto::TComputeActorState MakeState(NYql::NUdf::TUnboxedValuePod&& valu
     NKikimr::NMiniKQL::WriteUi32(result, savedBuf.Size());
     result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
 
-    std::cout << "savedBuf.Size() " << savedBuf.Size() << std::endl;
     NYql::NDqProto::TComputeActorState state;
     state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
     return state;
@@ -70,7 +69,6 @@ NYql::NDqProto::TComputeActorState MakeState(NYql::NUdf::TUnboxedValuePod&& valu
 
 NYql::NDqProto::TComputeActorState MakeStateFromBlob(size_t blobSize) {
     TString blob;
-    std::cout << "MakeStateFromBlob" << std::endl;
     for (size_t i = 0; i < blobSize; ++i) {
         blob += static_cast<TString::value_type>(std::rand() % 100);
     }
@@ -79,7 +77,6 @@ NYql::NDqProto::TComputeActorState MakeStateFromBlob(size_t blobSize) {
 
 NYql::NDqProto::TComputeActorState MakeIncrementState(size_t miniKqlPStateSize) {
     std::map<TString, TString> map;
-    std::cout << "MakeIncrementState2" << std::endl;
     size_t itemCount = 4;
     for (size_t i = 0; i < itemCount; ++i) {
         map[ToString((777 + i))] = TString(miniKqlPStateSize / itemCount, 'a');
@@ -92,8 +89,6 @@ NYql::NDqProto::TComputeActorState MakeIncrementState(
     const std::map<TString, TString>& increment,
     const std::set<TString>& deleted)
 {
-    //NYql::NDqProto::TComputeActorState state;
-    std::cout << "MakeIncrementState" << std::endl;
     if (!snapshot.empty()) {
         return MakeState(NKikimr::NMiniKQL::TStateCreator::MakeSnapshotState(snapshot));
     }
@@ -160,7 +155,7 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
 
     Y_UNIT_TEST_F(ShouldSaveGetIncrementBigState, TFixture)
     {
-        ShouldSaveGetStateImpl("ShouldSaveGetIncrementState", MakeIncrementState(YdbRowSizeLimit * 5));
+        ShouldSaveGetStateImpl("ShouldSaveGetIncrementState", MakeIncrementState(YdbRowSizeLimit * 5));    
     }
 
     Y_UNIT_TEST_F(ShouldNotGetNonExistendState, TFixture)

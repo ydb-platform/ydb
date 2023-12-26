@@ -18,6 +18,7 @@ namespace NDataShard {
 
 static constexpr char MemoryLabelValidatedDataTx[] = "Datashard/TValidatedDataTx";
 static constexpr char MemoryLabelActiveTransactionBody[] = "Datashard/TActiveTransaction/TxBody";
+static constexpr char MemoryLabelActiveTransactionCount[] = "Datashard/TActiveTransaction/TxCount";
 
 using NTabletFlatExecutor::TTransactionContext;
 using NTabletFlatExecutor::TTableSnapshotContext;
@@ -384,6 +385,7 @@ public:
         , ScanSnapshotId(0)
         , ScanTask(0)
     {
+        NActors::NMemory::TLabel<MemoryLabelActiveTransactionCount>::Add(1);
         TrackMemory();
     }
 

@@ -153,20 +153,20 @@ std::shared_ptr<arrow::Array> PgConvertString(const std::shared_ptr<arrow::Array
 }
 
 Numeric PgFloatToNumeric(double item, ui64 scale, int digits) {
-    double int_part, frac_part;
+    double intPart, fracPart;
     bool error;
-    frac_part = modf(item, &int_part);
-    i64 frac_int = round(frac_part * scale);
+    fracPart = modf(item, &intPart);
+    i64 fracInt = round(fracPart * scale);
 
     // scale compaction: represent 711.56000 as 711.56
-    while (frac_int && frac_int % 10 == 0) {
-        frac_int /= 10;
+    while (fracInt && fracInt % 10 == 0) {
+        fracInt /= 10;
         digits -= 1;
     }
 
     return numeric_add_opt_error(
-        int64_to_numeric(int_part),
-        int64_div_fast_to_numeric(frac_int, digits),
+        int64_to_numeric(intPart),
+        int64_div_fast_to_numeric(fracInt, digits),
         &error);
 }
 

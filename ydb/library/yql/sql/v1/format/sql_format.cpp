@@ -269,6 +269,10 @@ private:
             First = false;
         }
 
+        if (str == "$" && FuncCall) {
+            FuncCall = false;
+        }
+
         if (Scopes.back() == EScope::Identifier && !FuncCall) {
             if (str != "$" && !NYql::LookupSimpleTypeBySqlAlias(str, true)) {
                 SB << "id";
@@ -281,6 +285,25 @@ private:
         } else {
             SB << str;
         }
+    }
+
+    void VisitPragmaValue(const TRule_pragma_value& msg) {
+        switch (msg.Alt_case()) {
+        case TRule_pragma_value::kAltPragmaValue1: {
+            NextToken = "0";
+            break;
+        }
+        case TRule_pragma_value::kAltPragmaValue3: {
+            NextToken = "'str'";
+            break;
+        }
+        case TRule_pragma_value::kAltPragmaValue4: {
+            NextToken = "false";
+            break;
+        }
+        default:;
+        }
+        VisitAllFields(TRule_pragma_value::GetDescriptor(), msg);
     }
 
     void VisitLiteralValue(const TRule_literal_value& msg) {
@@ -2602,6 +2625,7 @@ TStaticData::TStaticData()
     , ObfuscatingVisitDispatch({
         {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},
         {TRule_literal_value::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitLiteralValue)},
+        {TRule_pragma_value::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitPragmaValue)},
         {TRule_atom_expr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitAtomExpr)},
         {TRule_in_atom_expr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitInAtomExpr)},
         {TRule_unary_casual_subexpr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitUnaryCasualSubexpr)},

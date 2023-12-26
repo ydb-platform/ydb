@@ -25,8 +25,6 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
             return true;
         }
 
-        NWilson::TSpan auxExecuteSpan;
-
         if (!ActiveOp) {
             const bool expireSnapshotsAllowed = (
                     Self->State == TShardState::Ready ||
@@ -66,7 +64,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
                     // it won't have a span, because we choose what operation to run in the transaction itself.
                     // We create transaction span and transaction execution spans here instead.
                     SetupTxSpan(ActiveOp->GetTraceId());
-                    auxExecuteSpan = txc.Seat.CreateExecutionSpan();
+                    txc.StartExecutionSpan();
                 }
             }
         }
@@ -81,7 +79,6 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
             case EExecutionStatus::Restart:
                 // Restart even if current CompleteList is not empty
                 // It will be extended in subsequent iterations
-                auxExecuteSpan.EndOk();
                 return false;
 
             case EExecutionStatus::Reschedule:
@@ -117,7 +114,6 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
         }
 
         // Commit all side effects
-        auxExecuteSpan.EndOk();
         return true;
     } catch (...) {
         Y_ABORT("there must be no leaked exceptions");

@@ -1611,9 +1611,9 @@
     ],
     "test.test[optimizers-yson_dup_serialize--Debug]": [
         {
-            "checksum": "e10a54807101e45ba3af71268a2d5ed3",
-            "size": 1872,
-            "uri": "https://{canondata_backend}/1936997/93899b3de50fae3f9677baacc98094a7a629590a/resource.tar.gz#test.test_optimizers-yson_dup_serialize--Debug_/opt.yql_patched"
+            "checksum": "89c2555f3b394bc0e75d0238f9714061",
+            "size": 1925,
+            "uri": "https://{canondata_backend}/1784826/622e82c1e9ba6061cf75850baedc802cefade6ad/resource.tar.gz#test.test_optimizers-yson_dup_serialize--Debug_/opt.yql_patched"
         }
     ],
     "test.test[optimizers-yson_dup_serialize--Plan]": [

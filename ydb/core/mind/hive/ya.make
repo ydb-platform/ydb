@@ -5,6 +5,7 @@ SRCS(
     balancer.h
     boot_queue.cpp
     boot_queue.h
+    domain_info.cpp
     domain_info.h
     drain.cpp
     fill.cpp

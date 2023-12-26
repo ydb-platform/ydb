@@ -10,8 +10,7 @@
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/generic/array_ref.h>
 
-template <>
-inline IOutputStream& operator <<(IOutputStream& out, const TArrayRef<const NKikimrHive::TDataCentersGroup*>& vec) {
+Y_DECLARE_OUT_SPEC(inline, TArrayRef<const NKikimrHive::TDataCentersGroup*>, out, vec) {
     out << '[';
     for (auto it = vec.begin(); it != vec.end(); ++it) {
         if (it != vec.begin())
@@ -19,7 +18,10 @@ inline IOutputStream& operator <<(IOutputStream& out, const TArrayRef<const NKik
         out << (*it)->ShortDebugString();
     }
     out << ']';
-    return out;
+}
+
+Y_DECLARE_OUT_SPEC(inline, TArrayRef<const NKikimr::TSubDomainKey>, out, vec) {
+    out << '[' << JoinSeq(',', vec) << ']';
 }
 
 namespace NKikimr {
@@ -1268,7 +1270,8 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
                             << " to run the tablet " << tablet.ToString()
                             << " node domains " << nodeInfo.ServicedDomains
                             << " tablet object domain " << tablet.GetLeader().ObjectDomain
-                            << " tablet allowed domains " << tablet.GetNodeFilter().AllowedDomains);
+                            << " tablet allowed domains " << tablet.GetNodeFilter().AllowedDomains
+                            << " tablet effective allowed domains " << tablet.GetNodeFilter().GetEffectiveAllowedDomains());
             }
         }
         if (!selectedNodes.empty()) {
@@ -1284,6 +1287,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
     TNodeInfo* selectedNode = nullptr;
     if (!selectedNodes.empty()) {
         selectedNodes = SelectMaxPriorityNodes(std::move(selectedNodes), tablet);
+        BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " selected max priority nodes count " << selectedNodes.size());
 
         switch (GetNodeSelectStrategy()) {
             case NKikimrConfig::THiveConfig::HIVE_NODE_SELECT_STRATEGY_WEIGHTED_RANDOM:
@@ -1336,7 +1340,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
         }
         nodesLeft -= debugState.NodesWithSomeoneFromOurFamily;
         if (debugState.NodesWithoutDomain == nodesLeft) {
-            tablet.BootState = TStringBuilder() << "Can't find domain " << tablet.GetNodeFilter().AllowedDomains;
+            tablet.BootState = TStringBuilder() << "Can't find domain " << tablet.GetNodeFilter().GetEffectiveAllowedDomains();
             return TBestNodeResult(true);
         }
         nodesLeft -= debugState.NodesWithoutDomain;
@@ -1479,6 +1483,14 @@ TStoragePoolInfo* THive::FindStoragePool(const TString& name) {
 }
 
 TDomainInfo* THive::FindDomain(TSubDomainKey key) {
+    auto it = Domains.find(key);
+    if (it == Domains.end()) {
+        return nullptr;
+    }
+    return &it->second;
+}
+
+const TDomainInfo* THive::FindDomain(TSubDomainKey key) const {
     auto it = Domains.find(key);
     if (it == Domains.end()) {
         return nullptr;
@@ -2813,6 +2825,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvHive::TEvUpdateTabletsObject, Handle);
         hFunc(TEvPrivate::TEvRefreshStorageInfo, Handle);
         hFunc(TEvPrivate::TEvLogTabletMoves, Handle);
+        hFunc(TEvHive::TEvUpdateDomain, Handle);
     }
 }
 
@@ -2910,6 +2923,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvHive::TEvUpdateTabletsObject::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvRefreshStorageInfo::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvLogTabletMoves::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvUpdateDomain::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {

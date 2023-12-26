@@ -112,6 +112,10 @@ namespace NSchemeShardUT_Private {
 
         void SimulateSleep(TTestActorRuntime& runtime, TDuration duration);
 
+        void TestServerlessComputeResourcesModeInHive(TTestActorRuntime& runtime, const TString& path, 
+                                                      NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode,
+                                                      ui64 hive = TTestTxConfig::Hive);
+
         TEvSchemeShard::TEvInitRootShardResult::EStatus InitRoot(TTestActorRuntime& runtime, ui64 schemeRoot, const TActorId& sender, const TString& domainName, const TDomainsInfo::TDomain::TStoragePoolKinds& StoragePoolTypes = {}, const TString& owner = {});
         void InitRootStoragePools(TTestActorRuntime& runtime, ui64 schemeRoot, const TActorId& sender, ui64 domainUid);
 

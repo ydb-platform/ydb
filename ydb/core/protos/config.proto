@@ -1422,6 +1422,8 @@ message TColumnShardConfig {
     optional bool IndexationEnabled = 4 [default = true];
     optional bool CompactionEnabled = 5 [default = true];
     optional bool TTLEnabled = 6 [default = true];
+    optional bool WritingEnabled = 7 [default = true];
+    optional uint32 WritingBufferDurationMs = 8 [default = 0];
 }
 
 message TSchemeShardConfig {

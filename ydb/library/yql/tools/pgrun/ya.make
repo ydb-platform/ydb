@@ -32,6 +32,7 @@ PEERDIR(
     ydb/library/yql/providers/yt/gateway/file
     ydb/library/yql/providers/yt/comp_nodes/llvm
     ydb/library/yql/providers/yt/codec/codegen
+    ydb/library/yql/providers/pg/provider
     ydb/library/yql/core/url_preprocessing
     ydb/library/yql/parser/pg_wrapper
 )

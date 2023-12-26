@@ -270,6 +270,10 @@ public:
                 if (domainRowset.GetValueOrDefault<Schema::SubDomain::Primary>()) {
                     Self->PrimaryDomainKey = key;
                 }
+                if (domainRowset.HaveValue<Schema::SubDomain::ServerlessComputeResourcesMode>()) {
+                    domain.ServerlessComputeResourcesMode = domainRowset.GetValue<Schema::SubDomain::ServerlessComputeResourcesMode>();
+                }
+                
                 if (!domainRowset.Next())
                     return false;
             }

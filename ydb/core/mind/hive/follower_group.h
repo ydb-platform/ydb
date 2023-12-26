@@ -17,7 +17,10 @@ struct TFollowerGroup {
     bool RequireDifferentNodes = false; // do not run followers on same nodes as another followers of the same leader
     bool FollowerCountPerDataCenter = false; // PER_AZ KIKIMR-10443
 
-    TFollowerGroup() = default;
+    explicit TFollowerGroup(const THive& hive) 
+        : NodeFilter(hive)
+    {}
+
     TFollowerGroup(const TFollowerGroup&) = delete;
     TFollowerGroup(TFollowerGroup&&) = delete;
     TFollowerGroup& operator =(const TFollowerGroup&) = delete;

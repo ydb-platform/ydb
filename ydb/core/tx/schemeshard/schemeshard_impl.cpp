@@ -2099,7 +2099,7 @@ void TSchemeShard::PersistSubDomainAuditSettingsAlter(NIceDb::TNiceDb& db, const
 
 template <class Table>
 void PersistSubDomainServerlessComputeResourcesModeImpl(NIceDb::TNiceDb& db, const TPathId& pathId,
-                                                        const TSubDomainInfo::TMaybeServerlessComputeResourcesMode& value) {
+                                                        const TMaybeServerlessComputeResourcesMode& value) {
     using Field = typename Table::ServerlessComputeResourcesMode;
     if (value) {
         db.Table<Table>().Key(pathId.LocalPathId).Update(NIceDb::TUpdate<Field>(*value));
@@ -2228,7 +2228,8 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
                 NIceDb::TUpdate<Schema::TxInFlightV2::BuildIndexId>(txState.BuildIndexId),
                 NIceDb::TUpdate<Schema::TxInFlightV2::SourceLocalPathId>(txState.SourcePathId.LocalPathId),
                 NIceDb::TUpdate<Schema::TxInFlightV2::SourceOwnerId>(txState.SourcePathId.OwnerId),
-                NIceDb::TUpdate<Schema::TxInFlightV2::NeedUpdateObject>(txState.NeedUpdateObject)
+                NIceDb::TUpdate<Schema::TxInFlightV2::NeedUpdateObject>(txState.NeedUpdateObject),
+                NIceDb::TUpdate<Schema::TxInFlightV2::NeedSyncHive>(txState.NeedSyncHive)
                 );
 
     for (const auto& shardOp : txState.Shards) {
@@ -4404,6 +4405,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvHive::TEvDeleteTabletReply, Handle);
         HFuncTraced(TEvHive::TEvDeleteOwnerTabletsReply, Handle);
         HFuncTraced(TEvHive::TEvUpdateTabletsObjectReply, Handle);
+        HFuncTraced(TEvHive::TEvUpdateDomainReply, Handle);
 
         HFuncTraced(TEvDataShard::TEvProposeTransactionResult, Handle);
         HFuncTraced(TEvDataShard::TEvSchemaChanged, Handle);
@@ -5433,6 +5435,37 @@ void TSchemeShard::Handle(TEvHive::TEvUpdateTabletsObjectReply::TPtr &ev, const 
         return;
     }
 
+    Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvHive::TEvUpdateDomainReply::TPtr &ev, const TActorContext &ctx) {
+    const auto& record = ev->Get()->Record;
+
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Update domain reply"
+                    << ", message: " << record.ShortDebugString()
+                    << ", at schemeshard: " << TabletID());
+
+    const auto txId = TTxId(record.GetTxId());
+    if (!Operations.contains(txId)) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "Got TEvUpdateDomainReply"
+                       << " for unknown txId " << txId
+                       << " at schemeshard " << TabletID());
+        return;
+    }
+
+    const auto tabletId = TTabletId(record.GetOrigin());
+    const auto partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
+    if (partId == InvalidSubTxId) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "Got TEvHive::TEvUpdateDomainReply but partId is unknown"
+                       << ", for txId: " << txId
+                       << ", tabletId: " << tabletId
+                       << ", at schemeshard: " << TabletID());
+        return;
+    }
+    
     Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
 }
 

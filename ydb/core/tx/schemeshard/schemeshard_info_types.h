@@ -2134,8 +2134,6 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
     void ApplyAuditSettings(const TMaybeAuditSettings& diff);
 
-    using TMaybeServerlessComputeResourcesMode = TMaybe<EServerlessComputeResourcesMode, NMaybe::TPolicyUndefinedFail>;
-
     const TMaybeServerlessComputeResourcesMode& GetServerlessComputeResourcesMode() const {
         return ServerlessComputeResourcesMode;
     }

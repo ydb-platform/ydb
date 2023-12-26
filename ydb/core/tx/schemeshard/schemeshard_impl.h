@@ -956,6 +956,7 @@ public:
     void Handle(TEvPrivate::TEvSubscribeToShardDeletion::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvHive::TEvDeleteOwnerTabletsReply::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvHive::TEvUpdateTabletsObjectReply::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvHive::TEvUpdateDomainReply::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPersQueue::TEvDropTabletReply::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx);
     void Handle(NBackgroundTasks::TEvAddTaskResult::TPtr& ev, const TActorContext& ctx);

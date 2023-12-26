@@ -49,7 +49,7 @@ TCommandWorkload::TCommandWorkload()
     AddCommand(std::make_unique<TCommandWorkloadTransfer>());
     AddCommand(std::make_unique<TCommandTpch>());
     AddCommand(std::make_unique<TCommandQueryWorkload>());
-    for (const auto& key: TWorkloadFactory::GetRegisteredKeys()) {
+    for (const auto& key: NYdbWorkload::TWorkloadFactory::GetRegisteredKeys()) {
         AddCommand(std::make_unique<TWorkloadCommandRoot>(key.c_str()));
     }
 }
@@ -365,7 +365,7 @@ TWorkloadCommandBase::TWorkloadCommandBase(const TString& name, const TString& k
     : TWorkloadCommand(name, std::initializer_list<TString>(), description)
     , Key(key)
     , CommandType(commandType)
-    , Params(TWorkloadFactory::MakeHolder(key))
+    , Params(NYdbWorkload::TWorkloadFactory::MakeHolder(key))
 {}
 
 void TWorkloadCommandBase::Config(TConfig& config) {
@@ -378,7 +378,7 @@ TWorkloadCommandRoot::TWorkloadCommandRoot(const TString& key)
     : TClientCommandTree(key, {}, "YDB " + key + " workload")
 {
     AddCommand(std::make_unique<TWorkloadCommandInit>(key));
-    auto supportedWorkloads = TWorkloadFactory::MakeHolder(key)->CreateGenerator()->GetSupportedWorkloadTypes();
+    auto supportedWorkloads = NYdbWorkload::TWorkloadFactory::MakeHolder(key)->CreateGenerator()->GetSupportedWorkloadTypes();
     switch (supportedWorkloads.size()) {
     case 0:
         break;

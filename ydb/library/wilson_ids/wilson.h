@@ -8,6 +8,7 @@ namespace NKikimr {
             DsProxyInternals = 9,
             VDiskTopLevel = 12,
             VDiskInternals = 13,
+            PDisk = 14,
         };
     };
 

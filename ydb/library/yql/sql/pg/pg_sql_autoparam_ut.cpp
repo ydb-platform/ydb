@@ -18,6 +18,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
         TTranslationSettings settings;
         settings.AutoParametrizeEnabled = true;
         settings.AutoParametrizeValuesStmt = true;
+        settings.AutoParametrizeExprDisabledScopes = {"VALUES"};
         auto res = SqlToYqlWithMode(
             R"(insert into plato.Output values (1,2,3), (1,2.0,3))",
             NSQLTranslation::ESqlMode::QUERY,

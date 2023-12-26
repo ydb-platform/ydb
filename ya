@@ -8,7 +8,7 @@
 
 # Find a suitable python interpreter
 for cmd in python3 python; do
-    command -v > /dev/null $cmd && exec `command -v $cmd` $0 "$@"
+    command -v > /dev/null $cmd && exec "$(command -v $cmd)" "$0" "$@"
 done
 
 echo "Python interpreter is not found in this system, please, install python" >&2

@@ -429,6 +429,16 @@ uncaught exception:
 FAILED - RETRYING: [...]: 
 Start database processes if 
 YDB storage node is active (5 retries left).
-``` | Сервис `ydbd-dynnode` не был успешно запущен через systemd из-за ошибки в конфигурационном файле динамической ноды. | Подключитесь по SSH к ВМ и выполните команду `journalctl -u ydbd-dynnode` – будет выведен лог запуска статической ноды. Найдите блок `uncaught exception` или строку `Caught exception`: ```Caught exception: /opt/buildagent/work/3e574e3efc81dc20/tag/ydb/library/yaml_config/yaml_config_parser.cpp:36: Array field `fail_domains` must be specified.``` В конце сообщения будет указана причина ошибки. В данном случае ошибка в том, что блок настройки `fail_domains` в конфигурационном файле динамической ноды оформлен не верно. ||
-|| Display the YDB monitoring connection URL | `Ссылка для подключения к мониторингу YDB выдаёт 404 ошибку` | SSH-туннель не был настроен или проброс порта мониторинга на локальную машину не был выполнен. | Выполните ручной проброс порта командой ```ssh -L <mon_port>:localhost:<mon_port> -i <path to private SSH key> <user>@<IP VM>```. Порт мониторинга устанавливается переменной `mon_port` в файле `files/all.yml`. ||
+``` | Сервис `ydbd-dynnode` не был успешно запущен через systemd из-за ошибки в конфигурационном файле динамической ноды. | Подключитесь по SSH к ВМ и выполните команду `journalctl -u ydbd-dynnode` – будет выведен лог запуска статической ноды. Найдите блок `uncaught exception` или строку `Caught exception`: 
+```
+Caught exception: 
+.../yaml_config/yaml_config_parser.cpp:36: 
+Array field `fail_domains` must be specified.
+``` В конце сообщения будет указана причина ошибки. В данном случае ошибка в том, что блок настройки `fail_domains` в конфигурационном файле динамической ноды оформлен не верно. ||
+|| Display the YDB monitoring connection URL | `Ссылка для подключения к мониторингу YDB выдаёт 404 ошибку` | SSH-туннель не был настроен или проброс порта мониторинга на локальную машину не был выполнен. | Выполните ручной проброс порта командой: 
+```
+ssh -L <mon_port>:localhost:<mon_port> \ 
+-i <path to private SSH key> <user>@<IP VM>
+```
+Порт мониторинга устанавливается переменной `mon_port` в файле `files/all.yml`. ||
 |#

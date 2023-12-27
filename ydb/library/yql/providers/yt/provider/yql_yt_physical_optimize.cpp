@@ -6903,7 +6903,7 @@ private:
                         continue;
                     }
 
-                    if (NYql::HasSettingsExcept(innerMerge.Settings().Ref(), EYtSettingType::Limit)) {
+                    if (NYql::HasSettingsExcept(innerMerge.Settings().Ref(), EYtSettingType::KeepSorted | EYtSettingType::Limit)) {
                         continue;
                     }
 
@@ -6931,6 +6931,18 @@ private:
                         continue;
                     }
                     if (AnyOf(innerMergeKeyFiltersValues, [](const TExprNode::TPtr& keyFilter) { return keyFilter->ChildrenSize() > 0; })) {
+                        continue;
+                    }
+
+                    if (NYql::HasSetting(innerMerge.Settings().Ref(), EYtSettingType::KeepSorted)) {
+                        if (!AllOf(innerMergeSection.Paths(), [](const auto& path) {
+                            auto op = path.Table().template Maybe<TYtOutput>().Operation();
+                            return op && (op.template Maybe<TYtTouch>() || (op.Raw()->HasResult() && op.Raw()->GetResult().IsWorld()));
+                        })) {
+                            continue;
+                        }
+                    }
+                    if (hasTakeSkip && AnyOf(innerMergeSection.Paths(), [](const auto& path) { return !path.Ranges().template Maybe<TCoVoid>(); })) {
                         continue;
                     }
 
@@ -7430,7 +7442,7 @@ private:
             return node;
         }
 
-        if (NYql::HasAnySetting(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::CombineChunks | EYtSettingType::KeepSorted)) {
+        if (NYql::HasAnySetting(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::CombineChunks)) {
             return node;
         }
 
@@ -7460,6 +7472,12 @@ private:
         }
         if (NYql::HasNonEmptyKeyFilter(section)) {
             return node;
+        }
+        if (NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::KeepSorted)) {
+            auto op = path.Table().Maybe<TYtOutput>().Operation().Cast();
+            if (!(op.Ref().HasResult() && op.Ref().GetResult().Type() == TExprNode::World || op.Maybe<TYtTouch>())) {
+                return node;
+            }
         }
         TYtOutTableInfo outTableInfo(merge.Output().Item(0));
         if (!tableInfo->RowSpec->CompareSortness(*outTableInfo.RowSpec)) {

@@ -4,6 +4,7 @@ RECURSE(
     aclib
     arrow_clickhouse
     arrow_kernels
+    arrow_parquet
     backup
     binary_json
     chunks_limiter

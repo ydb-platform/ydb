@@ -22,4 +22,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    ut/no_llvm
 )

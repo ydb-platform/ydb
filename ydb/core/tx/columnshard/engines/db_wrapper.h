@@ -51,8 +51,7 @@ public:
     void EraseCommitted(const TInsertedData& data) override;
     void EraseAborted(const TInsertedData& data) override;
 
-    bool Load(TInsertTableAccessor& insertTable,
-              const TInstant& loadTime) override;
+    bool Load(TInsertTableAccessor& insertTable, const TInstant& loadTime) override;
 
     void WriteColumn(ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) override;
     void EraseColumn(ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) override;

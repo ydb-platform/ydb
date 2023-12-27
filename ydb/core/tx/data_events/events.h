@@ -106,6 +106,16 @@ struct TDataEvents {
             return result;
         }
 
+        TString GetError() const {
+            return TStringBuilder() << "Status: " << Record.GetStatus() << " Issues: " << Record.GetIssues();
+        }
+
+        NKikimrDataEvents::TEvWriteResult::EStatus GetStatus() const { return Record.GetStatus(); }
+
+        bool IsPrepared() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED; }
+        bool IsComplete() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED; }
+        bool IsError() const { return !IsPrepared() && !IsComplete(); }
+
         void SetOrbit(NLWTrace::TOrbit&& orbit) { Orbit = std::move(orbit); }
         NLWTrace::TOrbit& GetOrbit() { return Orbit; }
         NLWTrace::TOrbit&& MoveOrbit() { return std::move(Orbit); }

@@ -57,6 +57,7 @@ public:
         , State(ETabletState::Unknown)
         , Type(TTabletTypes::TypeInvalid)
         , ObjectId(0, 0)
+        , NodeFilter(hive)
         , ChannelProfileReassignReason(NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO)
         , KnownGeneration(0)
         , Category(nullptr)

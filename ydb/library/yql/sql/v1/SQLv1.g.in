@@ -58,6 +58,8 @@ sql_stmt_core:
   | revoke_permissions_stmt
   | alter_table_store_stmt
   | upsert_object_stmt
+  | create_view_stmt
+  | drop_view_stmt
 ;
 
 expr:
@@ -572,6 +574,13 @@ create_external_data_source_stmt: CREATE EXTERNAL DATA SOURCE object_ref
 
 drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE object_ref;
 
+create_view_stmt: CREATE VIEW object_ref
+    with_table_settings
+    AS select_stmt
+;
+
+drop_view_stmt: DROP VIEW object_ref;
+
 upsert_object_stmt: UPSERT OBJECT object_ref
     LPAREN TYPE object_type_ref RPAREN
     create_object_features?
@@ -703,6 +712,7 @@ table_setting_value:
     | integer
     | split_boundaries
     | expr ON an_id (AS (SECONDS | MILLISECONDS | MICROSECONDS | NANOSECONDS))?
+    | bool_value
 ;
 
 family_entry: FAMILY an_id family_settings;

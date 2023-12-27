@@ -22,20 +22,6 @@ TMaybe<ui64> TDqIntegrationBase::EstimateReadSize(ui64, ui32, const TVector<cons
     return Nothing();
 }
 
-bool TDqIntegrationBase::CanBlockReadTypes(const TStructExprType* node) {
-    for (const auto& e: node->GetItems()) {
-        // Check type
-        auto type = e->GetItemType();
-        while (ETypeAnnotationKind::Optional == type->GetKind()) {
-            type = type->Cast<TOptionalExprType>()->GetItemType();
-        }
-        if (ETypeAnnotationKind::Data != type->GetKind()) {
-            return false;
-        }
-    }
-    return true;
-}
-
 TExprNode::TPtr TDqIntegrationBase::WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext&) {
     return read;
 }
@@ -90,6 +76,9 @@ bool TDqIntegrationBase::FillSourcePlanProperties(const NNodes::TExprBase&, TMap
 
 bool TDqIntegrationBase::FillSinkPlanProperties(const NNodes::TExprBase&, TMap<TString, NJson::TJsonValue>&) {
     return false;
+}
+
+void TDqIntegrationBase::ConfigurePeepholePipeline(bool, const THashMap<TString, TString>&, TTransformationPipeline*) {
 }
 
 } // namespace NYql

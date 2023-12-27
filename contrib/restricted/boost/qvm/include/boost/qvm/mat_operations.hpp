@@ -16,7 +16,7 @@
 #include <boost/qvm/detail/cofactor_impl.hpp>
 #include <boost/qvm/detail/transp_impl.hpp>
 #include <boost/qvm/scalar_traits.hpp>
-#include <string>
+#include <boost/qvm/to_string.hpp>
 
 namespace boost { namespace qvm {
 
@@ -34,12 +34,6 @@ qvm_detail
 
 ////////////////////////////////////////////////
 
-namespace
-qvm_to_string_detail
-    {
-    template <class T>
-    std::string to_string( T const & x );
-    }
 
 namespace
 qvm_detail

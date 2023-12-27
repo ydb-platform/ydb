@@ -9,7 +9,6 @@ namespace NYdbWorkload {
 enum class EWorkload {
     STOCK,
     KV,
-    TPCC,
 };
 
 class TWorkloadFactory {

@@ -45,7 +45,7 @@ EExecutionStatus TPrepareKqpDataTxInRSUnit::Execute(TOperation::TPtr op, TTransa
         }
     }
 
-    if (tx->GetDataTx()->CheckCancelled()) {
+    if (tx->GetDataTx()->CheckCancelled(DataShard.TabletID())) {
         tx->ReleaseTxData(txc, ctx);
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED)
             ->AddError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Tx was cancelled");

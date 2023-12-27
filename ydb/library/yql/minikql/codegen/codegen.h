@@ -67,6 +67,8 @@ public:
 
     using TSharedPtr = std::shared_ptr<ICodegen>;
     static TSharedPtr MakeShared(ETarget target, ESanitize sanitize = ESanitize::Auto);
+
+    static bool IsCodegenAvailable();
 };
 
 }

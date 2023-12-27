@@ -8,6 +8,7 @@ namespace NKikimr {
             DsProxyInternals = 9,
             VDiskTopLevel = 12,
             VDiskInternals = 13,
+            PDisk = 14,
         };
     };
 
@@ -41,6 +42,13 @@ namespace NKikimr {
     struct TWilsonTablet {
         enum {
             Tablet = 15
+        };
+    };
+
+    struct TWilsonGrpc {
+        enum {
+            RequestProxy = 9,
+            RequestActor = 9,
         };
     };
 

@@ -888,6 +888,18 @@ namespace {
                     return false;
                 }
             }
+            else if (name == "BlockEngine") {
+                if (args.size() != 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
+                    return false;
+                }
+
+                auto arg = TString{args[0]};
+                if (!TryFromString(arg, Types.BlockEngineMode)) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|auto|force', but got: " << args[0]));
+                    return false;
+                }
+            }
             else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;

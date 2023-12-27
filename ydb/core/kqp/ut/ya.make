@@ -18,5 +18,6 @@ RECURSE_FOR_TESTS(
     spilling
     sysview
     tx
+    view
     yql
 )

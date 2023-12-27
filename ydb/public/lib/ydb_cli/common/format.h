@@ -9,6 +9,12 @@
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
 namespace NYdb {
+
+    class TResultSetParquetPrinter;
+
+}
+
+namespace NYdb {
 namespace NConsoleClient {
 
 class TCommandWithResponseHeaders {
@@ -81,6 +87,7 @@ private:
     bool PrintedSomething = false;
     EOutputFormat Format;
     std::function<bool()> IsInterrupted;
+    std::unique_ptr<TResultSetParquetPrinter> ParquetPrinter;
 };
 
 class TQueryPlanPrinter {

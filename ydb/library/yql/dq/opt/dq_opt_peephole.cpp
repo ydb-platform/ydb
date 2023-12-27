@@ -681,7 +681,7 @@ NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprCo
     }
 
     auto dqPhyLength = node.Cast<TDqPhyLength>();
-    if (typesCtx.UseBlocks) {
+    if (typesCtx.IsBlockEngineEnabled()) {
         return NNodes::TExprBase(ctx.Builder(node.Pos())
             .Callable("NarrowMap")
                 .Callable(0, "BlockCombineAll")

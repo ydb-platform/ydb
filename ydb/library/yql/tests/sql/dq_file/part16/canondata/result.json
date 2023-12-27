@@ -1848,23 +1848,23 @@
     "test.test[optimizers-wide_if_present_over_double_just-default.txt-Results]": [],
     "test.test[optimizers-yql-8041-fuse_with_desc_map--Analyze]": [
         {
-            "checksum": "53cb9bd17c4438fd7121b6cd92a0ef37",
-            "size": 5463,
-            "uri": "https://{canondata_backend}/1599023/6ea95a71ae6e3995d639ef495d263a106e521882/resource.tar.gz#test.test_optimizers-yql-8041-fuse_with_desc_map--Analyze_/plan.txt"
+            "checksum": "4bcb902c7f618647110ca5774a21861e",
+            "size": 6060,
+            "uri": "https://{canondata_backend}/1784826/8a1791d883c330f1ed18937b9d7a33af5031d735/resource.tar.gz#test.test_optimizers-yql-8041-fuse_with_desc_map--Analyze_/plan.txt"
         }
     ],
     "test.test[optimizers-yql-8041-fuse_with_desc_map--Debug]": [
         {
-            "checksum": "3a1be63b7e2c7061fb02957674de5b85",
-            "size": 2338,
-            "uri": "https://{canondata_backend}/1599023/6ea95a71ae6e3995d639ef495d263a106e521882/resource.tar.gz#test.test_optimizers-yql-8041-fuse_with_desc_map--Debug_/opt.yql_patched"
+            "checksum": "54ab3d385eead597eec37f758eeabd25",
+            "size": 2460,
+            "uri": "https://{canondata_backend}/1784826/8a1791d883c330f1ed18937b9d7a33af5031d735/resource.tar.gz#test.test_optimizers-yql-8041-fuse_with_desc_map--Debug_/opt.yql_patched"
         }
     ],
     "test.test[optimizers-yql-8041-fuse_with_desc_map--Plan]": [
         {
-            "checksum": "53cb9bd17c4438fd7121b6cd92a0ef37",
-            "size": 5463,
-            "uri": "https://{canondata_backend}/1599023/6ea95a71ae6e3995d639ef495d263a106e521882/resource.tar.gz#test.test_optimizers-yql-8041-fuse_with_desc_map--Plan_/plan.txt"
+            "checksum": "4bcb902c7f618647110ca5774a21861e",
+            "size": 6060,
+            "uri": "https://{canondata_backend}/1784826/8a1791d883c330f1ed18937b9d7a33af5031d735/resource.tar.gz#test.test_optimizers-yql-8041-fuse_with_desc_map--Plan_/plan.txt"
         }
     ],
     "test.test[optimizers-yql-8041-fuse_with_desc_map--Results]": [],

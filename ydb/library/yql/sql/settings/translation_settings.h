@@ -101,6 +101,7 @@ namespace NSQLTranslation {
         bool WarnOnV0;
         ISqlFeaturePolicy::TPtr V0WarnAsError;
         ISqlFeaturePolicy::TPtr DqDefaultAuto;
+        ISqlFeaturePolicy::TPtr BlockDefaultAuto;
         bool AssumeYdbOnClusterWithSlash;
         TString DynamicClusterProvider;
         TString FileAliasPrefix;

@@ -1004,7 +1004,7 @@ TFuture<void> TDelegatingClient::AlterQuery(
     return Underlying_->AlterQuery(queryId, options);
 }
 
-TFuture<TBundleConfigDescriptor> TDelegatingClient::GetBundleConfig(
+TFuture<TBundleConfigDescriptorPtr> TDelegatingClient::GetBundleConfig(
     const TString& bundleName,
     const TGetBundleConfigOptions& options)
 {

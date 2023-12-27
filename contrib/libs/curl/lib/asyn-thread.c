@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -44,8 +44,19 @@
 #include <inet.h>
 #endif
 
-#if defined(USE_THREADS_POSIX) && defined(HAVE_PTHREAD_H)
-#  include <pthread.h>
+#if defined(USE_THREADS_POSIX)
+#  ifdef HAVE_PTHREAD_H
+#    include <pthread.h>
+#  endif
+#elif defined(USE_THREADS_WIN32)
+#  ifdef HAVE_PROCESS_H
+#    include <process.h>
+#  endif
+#endif
+
+#if (defined(NETWARE) && defined(__NOVELL_LIBC__))
+#undef in_addr_t
+#define in_addr_t unsigned long
 #endif
 
 #ifdef HAVE_GETADDRINFO
@@ -64,6 +75,7 @@
 #include "inet_ntop.h"
 #include "curl_threads.h"
 #include "connect.h"
+#include "socketpair.h"
 /* The last 3 #include files should be in this order */
 #include "curl_printf.h"
 #include "curl_memory.h"
@@ -308,7 +320,7 @@ int init_thread_sync_data(struct thread_data *td,
 
   return 1;
 
-err_exit:
+ err_exit:
 #ifndef CURL_DISABLE_SOCKETPAIR
   if(tsd->sock_pair[0] != CURL_SOCKET_BAD) {
     sclose(tsd->sock_pair[0]);
@@ -573,10 +585,10 @@ static bool init_resolve_thread(struct Curl_easy *data,
 
   return TRUE;
 
-err_exit:
+ err_exit:
   destroy_async_data(asp);
 
-errno_exit:
+ errno_exit:
   errno = err;
   return FALSE;
 }
@@ -633,8 +645,7 @@ void Curl_resolver_kill(struct Curl_easy *data)
   /* If we're still resolving, we must wait for the threads to fully clean up,
      unfortunately.  Otherwise, we can simply cancel to clean up any resolver
      data. */
-  if(td && td->thread_hnd != curl_thread_t_null
-     && (data->set.quick_exit != 1L))
+  if(td && td->thread_hnd != curl_thread_t_null)
     (void)thread_wait_resolv(data, NULL, FALSE);
   else
     Curl_resolver_cancel(data);

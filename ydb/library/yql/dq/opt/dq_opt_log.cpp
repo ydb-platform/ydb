@@ -21,7 +21,7 @@ TExprBase DqRewriteAggregate(TExprBase node, TExprContext& ctx, TTypeAnnotationC
     if (!node.Maybe<TCoAggregateBase>()) {
         return node;
     }
-    TAggregateExpander aggExpander(true, !typesCtx.UseBlocks && !useFinalizeByKey, useFinalizeByKey, node.Ptr(), ctx, typesCtx, false, compactForDistinct, usePhases);
+    TAggregateExpander aggExpander(true, !typesCtx.IsBlockEngineEnabled() && !useFinalizeByKey, useFinalizeByKey, node.Ptr(), ctx, typesCtx, false, compactForDistinct, usePhases);
     auto result = aggExpander.ExpandAggregate();
     YQL_ENSURE(result);
 

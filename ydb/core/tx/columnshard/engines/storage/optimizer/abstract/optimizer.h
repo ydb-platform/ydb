@@ -54,7 +54,7 @@ private:
     const ui64 PathId;
     YDB_READONLY(TInstant, ActualizationInstant, TInstant::Zero());
 protected:
-    virtual void DoModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) = 0;
+    virtual void DoModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const = 0;
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
     virtual void DoActualize(const TInstant currentInstant) = 0;
@@ -76,15 +76,15 @@ public:
     class TModificationGuard: TNonCopyable {
     private:
         IOptimizerPlanner& Owner;
-        std::vector<std::shared_ptr<TPortionInfo>> AddPortions;
-        std::vector<std::shared_ptr<TPortionInfo>> RemovePortions;
+        THashMap<ui64, std::shared_ptr<TPortionInfo>> AddPortions;
+        THashMap<ui64, std::shared_ptr<TPortionInfo>> RemovePortions;
     public:
         TModificationGuard& AddPortion(const std::shared_ptr<TPortionInfo>& portion) {
             if (HasAppData() && AppDataVerified().ColumnShardConfig.GetSkipOldGranules() && portion->GetDeprecatedGranuleId() > 0) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_granule")("granule_id", portion->GetDeprecatedGranuleId());
                 return *this;
             }
-            AddPortions.emplace_back(portion);
+            AFL_VERIFY(AddPortions.emplace(portion->GetPortionId(), portion).second);
             return*this;
         }
 
@@ -93,7 +93,7 @@ public:
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_granule")("granule_id", portion->GetDeprecatedGranuleId());
                 return *this;
             }
-            RemovePortions.emplace_back(portion);
+            AFL_VERIFY(RemovePortions.emplace(portion->GetPortionId(), portion).second);
             return*this;
         }
 
@@ -121,7 +121,7 @@ public:
         return DoSerializeToJsonVisual();
     }
 
-    void ModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) {
+    void ModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) {
         NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
         DoModifyPortions(add, remove);
     }

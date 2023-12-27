@@ -428,6 +428,7 @@ private:
 
     template <typename T>
     void HandleAndDie(T& event) {
+        GrpcRequestBaseCtx_->LegacyFinishSpan();
         TGRpcRequestProxyHandleMethods::Handle(event, TlsActivationContext->AsActorContext());
         TBase::PassAway();
     }

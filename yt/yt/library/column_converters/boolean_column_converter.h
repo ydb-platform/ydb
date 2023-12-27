@@ -8,7 +8,7 @@ namespace NYT::NColumnConverters {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IColumnConverterPtr CreateBooleanColumnConverter(int columnIndex, const NTableClient::TColumnSchema& columnSchema);
+IColumnConverterPtr CreateBooleanColumnConverter(int columnId, const NTableClient::TColumnSchema& columnSchema, int columnOffset);
 
 ////////////////////////////////////////////////////////////////////////////////
 

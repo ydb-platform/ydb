@@ -13,7 +13,7 @@ i64 DiffMS(T a, T b)
 {
     return a >= b
         ? static_cast<i64>(a.MilliSeconds()) - static_cast<i64>(b.MilliSeconds())
-        : DiffMS(b ,a);
+        : DiffMS(b, a);
 }
 
 TEST(TTimingTest, GetInstant)

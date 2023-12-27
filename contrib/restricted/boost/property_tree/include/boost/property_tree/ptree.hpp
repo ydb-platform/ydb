@@ -23,9 +23,9 @@
 #include <boost/multi_index/sequenced_index.hpp>
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index/member.hpp>
-#include <boost/utility/enable_if.hpp>
+#include <boost/core/enable_if.hpp>
 #include <boost/throw_exception.hpp>
-#include <boost/optional.hpp>
+#include <boost/optional/optional.hpp>
 #include <utility>                  // for std::pair
 
 namespace boost { namespace property_tree

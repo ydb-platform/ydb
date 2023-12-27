@@ -590,7 +590,7 @@ namespace NYql::NDqs {
                 BUILD_CONNECTION(TDqCnMerge, BuildMergeChannels);
                 YQL_ENSURE(false, "Unknown stage connection type: " << input.Cast<NNodes::TCallable>().CallableName());
             } else {
-                YQL_ENSURE(input.Maybe<TDqSource>());
+                YQL_ENSURE(input.Maybe<TDqSource>(), "Unknown stage input: " << input.Cast<NNodes::TCallable>().CallableName());
             }
         }
     }

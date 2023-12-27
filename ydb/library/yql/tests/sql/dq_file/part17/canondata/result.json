@@ -1125,9 +1125,9 @@
     ],
     "test.test[join-mapjoin_opt_vs_2xopt-off-Results]": [
         {
-            "checksum": "1856c162083394044ab481baa6091e01",
-            "size": 125,
-            "uri": "https://{canondata_backend}/1936273/7c78e1e45ae282daee686c006624daa21a7c6ca6/resource.tar.gz#test.test_join-mapjoin_opt_vs_2xopt-off-Results_/results.txt"
+            "checksum": "5e4a32e9e65c7d5a5f4b7022f1c7404b",
+            "size": 144,
+            "uri": "https://{canondata_backend}/937458/15884872d0218004c3baba7fcce722819604019c/resource.tar.gz#test.test_join-mapjoin_opt_vs_2xopt-off-Results_/results.txt"
         }
     ],
     "test.test[join-mapjoin_partial_uniq_keys--Analyze]": [

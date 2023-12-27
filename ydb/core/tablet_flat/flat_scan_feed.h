@@ -359,12 +359,16 @@ namespace NTable {
         bool LoadIndexes() noexcept
         {
             bool ready = true;
-            for (const auto& partView : Subset.Flatten) {
-                for (auto indexPageId : partView->IndexPages.Groups) {
-                    ready &= bool(CurrentEnv->TryGetPage(partView.Part.Get(), indexPageId));
-                }
-                for (auto indexPageId : partView->IndexPages.Historic) {
-                    ready &= bool(CurrentEnv->TryGetPage(partView.Part.Get(), indexPageId));
+            if (Levels) {
+                for (const auto &run: *Levels) {
+                    for (const auto &item : run) {
+                        for (auto indexPageId : item.Part->IndexPages.Groups) {
+                            ready &= bool(CurrentEnv->TryGetPage(item.Part.Get(), indexPageId));
+                        }
+                        for (auto indexPageId : item.Part->IndexPages.Historic) {
+                            ready &= bool(CurrentEnv->TryGetPage(item.Part.Get(), indexPageId));
+                        }
+                    }
                 }
             }
             return ready;

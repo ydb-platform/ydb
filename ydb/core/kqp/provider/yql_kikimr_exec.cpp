@@ -88,9 +88,8 @@ namespace {
             permissionsSettings.Permissions.insert(NKikimr::ConvertShortYdbPermissionNameToFullYdbPermissionName(permission));
         }
 
-        THashSet<TString> pathesMap;
-        for (auto atom : modifyPermissions.Pathes()) {
-            permissionsSettings.Pathes.insert(atom.Cast<TCoAtom>().StringValue());
+        for (auto atom : modifyPermissions.Paths()) {
+            permissionsSettings.Paths.insert(atom.Cast<TCoAtom>().StringValue());
         }
 
         for (auto atom : modifyPermissions.Roles()) {
@@ -807,14 +806,9 @@ public:
         , ActionInfo(actionInfo)
         , SessionCtx(sessionCtx)
     {
-
     }
 
-    std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> Execute(const TKiObject& kiObject, const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureNotPrepare(ActionInfo + " " + kiObject.TypeId(), input->Pos(), SessionCtx->Query(), ctx)) {
-            return SyncError();
-        }
-
+    std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> Execute(const TKiObject& kiObject, const TExprNode::TPtr& input, TExprContext& /*ctx*/) {
         auto requireStatus = RequireChild(*input, 0);
         if (requireStatus.Level != IGraphTransformer::TStatus::Ok) {
             return SyncStatus(requireStatus);
@@ -825,9 +819,8 @@ public:
         if (!settings.DeserializeFromKi(kiObject)) {
             return SyncError();
         }
-        bool prepareOnly = SessionCtx->Query().PrepareOnly;
-        auto future = prepareOnly ? CreateDummySuccess() : DoExecute(cluster, settings);
 
+        auto future = DoExecute(cluster, settings);
         return WrapFuture(future,
             [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
                 Y_UNUSED(res);
@@ -1109,7 +1102,7 @@ public:
                             auto columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                             for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                                 if (constraint.Name().Value() == "serial") {
-                                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), 
+                                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
                                         "Column addition with serial data type is unsupported"));
                                     return SyncError();
                                 } else if (constraint.Name().Value() == "default") {
@@ -1682,10 +1675,6 @@ public:
         }
 
         if (auto maybeGrantPermissions = TMaybeNode<TKiModifyPermissions>(input)) {
-            if (!EnsureNotPrepare("MODIFY PERMISSIONS", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
@@ -1694,8 +1683,7 @@ public:
             auto cluster = TString(maybeGrantPermissions.Cast().DataSink().Cluster());
             TModifyPermissionsSettings settings = ParsePermissionsSettings(maybeGrantPermissions.Cast());
 
-            bool prepareOnly = SessionCtx->Query().PrepareOnly;
-            auto future = prepareOnly ? CreateDummySuccess() : Gateway->ModifyPermissions(cluster, settings);
+            auto future = Gateway->ModifyPermissions(cluster, settings);
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {

@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto& tableSettings = kikimr.GetTestServer().GetSettings().AppConfig.GetTableServiceConfig();
+        auto& tableSettings = kikimr.GetTestServer().GetSettings().AppConfig->GetTableServiceConfig();
         bool useSchemeCacheMeta = tableSettings.GetUseSchemeCacheMetadata();
 
         auto result = session.ExecuteDataQuery(R"(
@@ -3048,7 +3048,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(ModifyPermissionsByIncorrectPathes) {
+    Y_UNIT_TEST(ModifyPermissionsByIncorrectPaths) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -5831,7 +5831,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(TenThousandColumns) {
         using namespace NArrow;
-    
+
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);

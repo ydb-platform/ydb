@@ -184,7 +184,7 @@ struct TConverterTraits {
     using TTuple = TTupleBlockItemConverter<Nullable>;
     template <typename T, bool Nullable>
     using TFixedSize = TFixedSizeBlockItemConverter<T, Nullable>;
-    template <typename TStringType, bool Nullable, NUdf::EPgStringType PgString = NUdf::EPgStringType::None>
+    template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String, NUdf::EPgStringType PgString = NUdf::EPgStringType::None>
     using TStrings = TStringBlockItemConverter<TStringType, Nullable, PgString>;
     using TExtOptional = TExternalOptionalBlockItemConverter;
 
@@ -193,15 +193,15 @@ struct TConverterTraits {
             return std::make_unique<TFixedSize<ui64, true>>();
         } else {
             if (desc.Typelen == -1) {
-                auto ret = std::make_unique<TStrings<arrow::BinaryType, true, NUdf::EPgStringType::Text>>();
+                auto ret = std::make_unique<TStrings<arrow::BinaryType, true, NUdf::EDataSlot::String, NUdf::EPgStringType::Text>>();
                 ret->SetPgBuilder(pgBuilder, desc.TypeId, desc.Typelen);
                 return ret;
             } else if (desc.Typelen == -2) {
-                auto ret = std::make_unique<TStrings<arrow::BinaryType, true, NUdf::EPgStringType::CString>>();
+                auto ret = std::make_unique<TStrings<arrow::BinaryType, true, NUdf::EDataSlot::String, NUdf::EPgStringType::CString>>();
                 ret->SetPgBuilder(pgBuilder, desc.TypeId, desc.Typelen);
                 return ret;
             } else {
-                auto ret = std::make_unique<TStrings<arrow::BinaryType, true, NUdf::EPgStringType::Fixed>>();
+                auto ret = std::make_unique<TStrings<arrow::BinaryType, true, NUdf::EDataSlot::String, NUdf::EPgStringType::Fixed>>();
                 ret->SetPgBuilder(pgBuilder, desc.TypeId, desc.Typelen);
                 return ret;
             }

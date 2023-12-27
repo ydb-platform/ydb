@@ -8,11 +8,10 @@ import typing
 
 from . import _apis
 
-# Workaround for good IDE and universal for runtime
-if typing.TYPE_CHECKING:
-    from _grpc.v4.protos import ydb_issue_message_pb2, ydb_operation_pb2
-else:
-    from ._grpc.common.protos import ydb_issue_message_pb2, ydb_operation_pb2
+try:
+    from ydb.public.api.protos import ydb_issue_message_pb2, ydb_operation_pb2
+except ImportError:
+    from contrib.ydb.public.api.protos import ydb_issue_message_pb2, ydb_operation_pb2
 
 
 _TRANSPORT_STATUSES_FIRST = 401000

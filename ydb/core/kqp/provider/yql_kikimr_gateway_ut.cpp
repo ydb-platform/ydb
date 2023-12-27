@@ -75,7 +75,7 @@ TIntrusivePtr<IKqpGateway> GetIcGateway(Tests::TServer& server) {
 
     std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(server.GetRuntime()->GetAnyNodeActorSystem(),TIntrusivePtr<NYql::TKikimrConfiguration>(nullptr), false);
     return CreateKikimrIcGateway(TestCluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, "/Root", std::move(loader), server.GetRuntime()->GetAnyNodeActorSystem(),
-        server.GetRuntime()->GetNodeId(0), counters, server.GetSettings().AppConfig.GetQueryServiceConfig());
+        server.GetRuntime()->GetNodeId(0), counters, server.GetSettings().AppConfig->GetQueryServiceConfig());
 }
 
 void TestListPathCommon(TIntrusivePtr<IKikimrGateway> gateway) {
@@ -307,7 +307,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto createSecretQueryResult = session.ExecuteSchemeQuery(createSecretQuery).GetValueSync();
         UNIT_ASSERT_C(createSecretQueryResult.GetStatus() == NYdb::EStatus::SUCCESS, createSecretQueryResult.GetIssues().ToString());
     }
-    
+
     Y_UNIT_TEST(TestLoadServiceAccountSecretValueFromExternalDataSourceMetadata) {
         TKikimrRunner kikimr;
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);

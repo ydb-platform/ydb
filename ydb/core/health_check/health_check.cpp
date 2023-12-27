@@ -2071,7 +2071,7 @@ public:
         }
 
         TSelfCheckResult syncContext;
-        syncContext.Type = "TIME_DIFFERENCE";
+        syncContext.Type = "NODES_TIME_DIFFERENCE";
         FillNodeInfo(maxClockSkewNodeId, syncContext.Location.mutable_node());
         FillNodeInfo(maxClockSkewPeerId, syncContext.Location.mutable_peer());
 

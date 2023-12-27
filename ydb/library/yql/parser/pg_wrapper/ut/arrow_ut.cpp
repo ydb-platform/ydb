@@ -61,6 +61,7 @@ Y_UNIT_TEST(PgConvertNumericDouble) {
             UNIT_ASSERT(expected[i] == nullptr);
         } else {
             const char* addr = item.AsStringRef().Data() + sizeof(void*);
+            UNIT_ASSERT(expected[i] != nullptr);
             UNIT_ASSERT_VALUES_EQUAL(
                 TString(DatumGetCString(DirectFunctionCall1(numeric_out, (Datum)addr))),
                 expected[i]
@@ -96,6 +97,7 @@ Y_UNIT_TEST(PgConvertNumericInt) {
             UNIT_ASSERT(expected[i] == nullptr);
         } else {
             const char* addr = item.AsStringRef().Data() + sizeof(void*);
+            UNIT_ASSERT(expected[i] != nullptr);
             UNIT_ASSERT_VALUES_EQUAL(
                 TString(DatumGetCString(DirectFunctionCall1(numeric_out, (Datum)addr))),
                 expected[i]

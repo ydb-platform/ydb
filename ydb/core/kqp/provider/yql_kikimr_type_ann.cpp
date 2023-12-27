@@ -761,7 +761,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         if (defaultType->GetKind() != actualType->GetKind()) {
                             ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
                                 << " type mismatch, expected: " << (*actualType) << ", actual: " << *(defaultType)));
-                            
+
                             return TStatus::Error;
                         }
 
@@ -812,7 +812,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
                             columnMeta.DefaultFromLiteral.mutable_value()->set_bytes_value(parseResult.Str);
                             auto* pg = columnMeta.DefaultFromLiteral.mutable_type()->mutable_pg_type();
-                            
+
                             pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
                             pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
                         } else if (auto literal = constraint.Value().Maybe<TCoDataCtor>()) {
@@ -822,7 +822,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                                 TStringBuilder() << "Unsupported type of default value " << constraint.Value().Cast().Ptr()->Content()));
                             return TStatus::Error;
                         }
-                        
+
                     } else if (constraint.Name().Value() == "serial") {
 
                         if (columnMeta.IsDefaultKindDefined()) {
@@ -1263,7 +1263,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                             }
                         }
                     }
-    
+
                     if (columnTuple.Size() > 3) {
                         auto families = columnTuple.Item(3);
                         if (families.Cast<TCoAtomList>().Size() > 1) {
@@ -1564,16 +1564,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     virtual TStatus HandleDropUser(TKiDropUser node, TExprContext& ctx) override {
         for (const auto& setting : node.Settings()) {
             auto name = setting.Name().Value();
-            if (name == "force") {
-                if (setting.Value()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
-                        TStringBuilder() << "force node shouldn't have value" << name));
-                }
-            } else {
-                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                    TStringBuilder() << "Unknown drop user setting: " << name));
-                return TStatus::Error;
-            }
+            ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                TStringBuilder() << "Unknown drop user setting: " << name));
+            return TStatus::Error;
         }
 
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
@@ -1621,16 +1614,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     virtual TStatus HandleDropGroup(TKiDropGroup node, TExprContext& ctx) override {
         for (const auto& setting : node.Settings()) {
             auto name = setting.Name().Value();
-            if (name == "force") {
-                if (setting.Value()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
-                        TStringBuilder() << "force node shouldn't have value" << name));
-                }
-            } else {
-                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                    TStringBuilder() << "Unknown drop group setting: " << name));
-                return TStatus::Error;
-            }
+            ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                TStringBuilder() << "Unknown drop group setting: " << name));
+            return TStatus::Error;
         }
 
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());

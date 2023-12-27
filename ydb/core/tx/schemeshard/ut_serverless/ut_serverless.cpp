@@ -255,7 +255,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
     Y_UNIT_TEST(TestServerlessComputeResourcesMode) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableExclusiveDynamicNodes(true));
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
@@ -359,7 +359,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
     Y_UNIT_TEST(TestServerlessComputeResourcesModeValidation) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableExclusiveDynamicNodes(true));
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
@@ -431,9 +431,80 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(
                 ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED
-                Name: "SharedDB"
+                Name: "Serverless0"
             )",
             {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED" }}
+        );
+    }
+
+
+    Y_UNIT_TEST(TestServerlessComputeResourcesModeFeatureFlag) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableExclusiveDynamicNodes(false));
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "SharedDB")"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "pool-kind-1"
+                }
+                StoragePools {
+                    Name: "pool-2"
+                    Kind: "pool-kind-2"
+                }
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                ExternalSchemeShard: true
+                ExternalHive: true
+                Name: "SharedDB"
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TString createData = Sprintf(
+            R"(
+                ResourcesDomainKey {
+                    SchemeShard: %lu
+                    PathId: 2 
+                }
+                Name: "ServerLess0"
+            )",
+            TTestTxConfig::SchemeShard
+        );
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", createData);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                ExternalSchemeShard: true
+                ExternalHive: false
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "pool-kind-1"
+                }
+                Name: "ServerLess0"
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED
+                Name: "Serverless0"
+            )",
+            {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "Unsupported: feature flag EnableExclusiveDynamicNodes is off" }}
         );
     }
 }

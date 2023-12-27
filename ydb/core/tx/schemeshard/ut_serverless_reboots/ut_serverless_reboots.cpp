@@ -40,6 +40,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLessReboots) {
 
     Y_UNIT_TEST(TestServerlessComputeResourcesModeWithReboots) {
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableExclusiveDynamicNodes(true);
+        
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             ui64 sharedHive = 0;
             ui64 tenantSchemeShard = 0;

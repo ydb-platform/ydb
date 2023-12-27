@@ -57,6 +57,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableChangefeedDynamoDBStreamsFormat, std::nullopt);
         OPTION(std::optional<bool>, EnableChangefeedDebeziumJsonFormat, std::nullopt);
         OPTION(std::optional<bool>, EnableTablePgTypes, std::nullopt);
+        OPTION(std::optional<bool>, EnableExclusiveDynamicNodes, std::nullopt);
 
         #undef OPTION
     };

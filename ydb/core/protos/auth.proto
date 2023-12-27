@@ -48,6 +48,7 @@ message TAuthConfig {
     optional string LdapAuthenticationDomain = 75 [default = "ldap"];
     optional bool UseAccessServiceApiKey = 76 [default = false]; // Use IAM ApiKey
     optional string AsSignatureExpireTime = 77 [default = "1m"];
+    optional TTvmSettings TvmSettings = 78;
 }
 
 message TUserRegistryConfig {
@@ -106,4 +107,22 @@ message TLdapAuthentication {
     optional string SearchAttribute = 7;
     optional TUseTls UseTls = 8;
     optional string RequestedGroupAttribute = 9;
+}
+
+message TTvmSettings {
+    // General settings
+    optional bool Enabled = 1;
+    optional string Host = 2;
+    optional uint32 Port = 3;
+    optional uint32 SelfTvmId = 4;
+    optional string DiskCacheDir = 5;
+    oneof Secret {
+        string SecretEnvironmentVariable = 6;
+        string PlainTextSecret = 7;
+    }
+
+    // Destinations
+    optional uint32 StaffTvmId = 101;
+    optional uint32 TracingTvmId = 102;
+    // Add more destinations here
 }

@@ -28,6 +28,7 @@ namespace NWilson {
             TString RootCA;
             TString ServiceName;
 
+            std::unique_ptr<IGrpcSigner> GrpcSigner;
             std::shared_ptr<grpc::Channel> Channel;
             std::unique_ptr<NServiceProto::TraceService::Stub> Stub;
             grpc::CompletionQueue CQ;
@@ -53,11 +54,12 @@ namespace NWilson {
             bool WakeupScheduled = false;
 
         public:
-            TWilsonUploader(TString host, ui16 port, TString rootCA, TString serviceName)
+            TWilsonUploader(TString host, ui16 port, TString rootCA, TString serviceName, std::unique_ptr<IGrpcSigner> grpcSigner)
                 : Host(std::move(host))
                 , Port(std::move(port))
                 , RootCA(std::move(rootCA))
                 , ServiceName(std::move(serviceName))
+                , GrpcSigner(std::move(grpcSigner))
             {}
 
             ~TWilsonUploader() {
@@ -142,6 +144,9 @@ namespace NWilson {
 
                 ScheduleWakeup(NextSendTimestamp);
                 Context = std::make_unique<grpc::ClientContext>();
+                if (GrpcSigner) {
+                    GrpcSigner->SignClientContext(*Context);
+                }
                 Reader = Stub->AsyncExport(Context.get(), std::move(request), &CQ);
                 Reader->Finish(&Response, &Status, nullptr);
             }
@@ -192,8 +197,8 @@ namespace NWilson {
 
     } // anonymous
 
-    IActor *CreateWilsonUploader(TString host, ui16 port, TString rootCA, TString serviceName) {
-        return new TWilsonUploader(std::move(host), port, std::move(rootCA), std::move(serviceName));
+    IActor *CreateWilsonUploader(TString host, ui16 port, TString rootCA, TString serviceName, std::unique_ptr<IGrpcSigner> grpcSigner) {
+        return new TWilsonUploader(std::move(host), port, std::move(rootCA), std::move(serviceName), std::move(grpcSigner));
     }
 
 } // NWilson

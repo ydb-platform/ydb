@@ -42,6 +42,8 @@ public:
 
 // base, nameservice, interconnect
 class TBasicServicesInitializer : public IKikimrServicesInitializer {
+    std::shared_ptr<TModuleFactories> Factories;
+
     static IExecutorPool*
     CreateExecutorPool(const NKikimrConfig::TActorSystemConfig::TExecutor& poolConfig,
         const NKikimrConfig::TActorSystemConfig& systemConfig,
@@ -50,7 +52,7 @@ class TBasicServicesInitializer : public IKikimrServicesInitializer {
     static ISchedulerThread* CreateScheduler(const NKikimrConfig::TActorSystemConfig::TScheduler &config);
 
 public:
-    TBasicServicesInitializer(const TKikimrRunConfig& runConfig);
+    TBasicServicesInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories);
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };

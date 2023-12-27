@@ -18,6 +18,7 @@
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/wilson/wilson_uploader.h>
 
 #include <functional>
 #include <unordered_map>
@@ -28,6 +29,10 @@ namespace NKikimr {
 
 // A way to parameterize YDB binary, we do it via a set of factories
 struct TModuleFactories {
+    // Initializes project-specific components, not available for other projects.
+    // Must be called first.
+    std::function<void(const NKikimrConfig::TAppConfig& config)> ProjectSpecificFactory;
+
     // A backend factory for Query Replay
     std::shared_ptr<NKqp::IQueryReplayBackendFactory> QueryReplayBackendFactory;
     //
@@ -39,7 +44,7 @@ struct TModuleFactories {
     // Factory for Simple queue services implementation details
     std::shared_ptr<NSQS::IEventsWriterFactory> SqsEventsWriterFactory;
 
-    IActor*(*CreateTicketParser)(const NKikimrProto::TAuthConfig&);
+    std::function<NKikimr::IActor*(const NKikimrProto::TAuthConfig& authConfig)> CreateTicketParser;
     IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&);
 
     // Factory for grpc services
@@ -54,6 +59,8 @@ struct TModuleFactories {
 
     std::shared_ptr<NHttpProxy::IAuthFactory> DataStreamsAuthFactory;
     std::vector<NKikimr::NMiniKQL::TComputationNodeFactory> AdditionalComputationNodeFactories;
+
+    std::function<std::unique_ptr<NWilson::IGrpcSigner>()> WilsonGrpcSignerFactory;
 
     ~TModuleFactories();
 };

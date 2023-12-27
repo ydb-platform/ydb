@@ -402,7 +402,7 @@ ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx) {
         return ConvertJsonValueToColumn(maybeJsonValue.Cast(), ctx);
     }
 
-    YQL_ENSURE(false, "Unknown node in OLAP comparison compiler: " << node.Ptr()->Content());
+    YQL_ENSURE(false, "Unknown node in OLAP comparison compiler: " << node.Ref().Content());
 }
 
 ui64 CompileSimpleArrowComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOlapCompileContext& ctx)
@@ -631,6 +631,33 @@ const TTypedColumn CompileExists(const TKqpOlapFilterExists& exists, TKqpOlapCom
     }
 }
 
+const TTypedColumn CompileJsonExists(const TKqpOlapJsonExists& jsonExistsCallable, TKqpOlapCompileContext& ctx) {
+    Y_ABORT_UNLESS(NKikimr::NSsa::RuntimeVersion >= 3, "JSON_EXISTS pushdown is supported starting from the v3 of SSA runtime.");
+
+    const auto columnId = GetOrCreateColumnId(jsonExistsCallable.Column(), ctx);
+    const auto pathId = GetOrCreateColumnId(jsonExistsCallable.Path(), ctx);
+
+    auto *const command = ctx.CreateAssignCmd();
+    auto *const jsonExistsFunc = command->MutableFunction();
+
+    jsonExistsFunc->AddArguments()->SetId(columnId);
+    jsonExistsFunc->AddArguments()->SetId(pathId);
+
+    jsonExistsFunc->SetFunctionType(TProgram::YQL_KERNEL);
+    const auto idx = ctx.AddYqlKernelJsonExists(
+        jsonExistsCallable.Column(),
+        jsonExistsCallable.Path(),
+        ctx.ExprCtx().MakeType<TOptionalExprType>(ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool)));
+    jsonExistsFunc->SetKernelIdx(idx);
+
+    const auto type = ctx.ExprCtx().MakeType<TBlockExprType>(ctx.ExprCtx().MakeType<TDataExprType>(NSsa::RuntimeVersion >= 4U ? EDataSlot::Uint8 : EDataSlot::Bool));
+    if constexpr (NSsa::RuntimeVersion >= 4U) {
+        return {ConvertSafeCastToColumn(command->GetColumn().GetId(), "Uint8", ctx), type};
+    } else {
+        return {command->GetColumn().GetId(), type};
+    }
+}
+
 const TTypedColumn BuildLogicalNot(const TExprBase& arg, TKqpOlapCompileContext& ctx) {
     if (const auto maybeExists = arg.Maybe<TKqpOlapFilterExists>()) {
         return CompileExists<true>(maybeExists.Cast(), ctx);
@@ -697,28 +724,6 @@ ui64 CompileComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOlapCompile
     }
 }
 
-ui64 CompileJsonExists(const TKqpOlapJsonExists& jsonExistsCallable, TKqpOlapCompileContext& ctx) {
-    Y_ABORT_UNLESS(NKikimr::NSsa::RuntimeVersion >= 3, "JSON_EXISTS pushdown is supported starting from the v3 of SSA runtime.");
-
-    const auto columnId = GetOrCreateColumnId(jsonExistsCallable.Column(), ctx);
-    const auto pathId = GetOrCreateColumnId(jsonExistsCallable.Path(), ctx);
-
-    auto *const command = ctx.CreateAssignCmd();
-    auto *const jsonExistsFunc = command->MutableFunction();
-
-    jsonExistsFunc->AddArguments()->SetId(columnId);
-    jsonExistsFunc->AddArguments()->SetId(pathId);
-
-    jsonExistsFunc->SetFunctionType(TProgram::YQL_KERNEL);
-    auto idx = ctx.AddYqlKernelJsonExists(
-        jsonExistsCallable.Column(),
-        jsonExistsCallable.Path(),
-        ctx.ExprCtx().MakeType<TOptionalExprType>(ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool)));
-    jsonExistsFunc->SetKernelIdx(idx);
-
-    return command->GetColumn().GetId();
-}
-
 ui64 CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx) {
     if (const auto maybeCompare = condition.Maybe<TKqpOlapFilterBinaryOp>()) {
         return CompileComparison(maybeCompare.Cast(), ctx);
@@ -729,7 +734,7 @@ ui64 CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx) {
     }
 
     if (const auto maybeJsonExists = condition.Maybe<TKqpOlapJsonExists>()) {
-        return CompileJsonExists(maybeJsonExists.Cast(), ctx);
+        return CompileJsonExists(maybeJsonExists.Cast(), ctx).Id;
     }
 
     if (const auto maybeNot = condition.Maybe<TKqpOlapNot>()) {

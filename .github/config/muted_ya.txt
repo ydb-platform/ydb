@@ -3,7 +3,6 @@ ydb/core/blobstorage/ut_blobstorage Defragmentation.DoesItWork
 ydb/core/blobstorage/ut_blobstorage SpaceCheckForDiskReassign.*
 ydb/core/blobstorage/ut_blobstorage VDiskAssimilation.Test
 ydb/core/blobstorage/ut_blobstorage [6/10]*
-ydb/core/client/ut TClientTest.FollowerOfflineBoot
 ydb/core/kqp/ut/federated_query/generic *
 ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.ForgetAfterFail
 ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.RebootForgetAfterFail

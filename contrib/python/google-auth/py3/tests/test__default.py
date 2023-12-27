@@ -36,8 +36,8 @@ from google.oauth2 import service_account
 import google.oauth2.credentials
 
 
-import yatest.common
-DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+import yatest.common as yc
+DATA_DIR = os.path.join(os.path.dirname(yc.source_path(__file__)), "data")
 AUTHORIZED_USER_FILE = os.path.join(DATA_DIR, "authorized_user.json")
 
 with open(AUTHORIZED_USER_FILE) as fh:

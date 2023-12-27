@@ -24,6 +24,7 @@ PEERDIR(
     library/cpp/yt/mlock
     library/cpp/yt/stockpile
     library/cpp/yt/string
+    library/cpp/getopt/small
 )
 
 END()

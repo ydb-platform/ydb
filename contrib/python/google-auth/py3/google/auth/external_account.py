@@ -132,7 +132,10 @@ class Credentials(
         self._default_scopes = default_scopes
         self._workforce_pool_user_project = workforce_pool_user_project
         self._universe_domain = universe_domain or _DEFAULT_UNIVERSE_DOMAIN
-        self._trust_boundary = "0"  # expose a placeholder trust boundary value.
+        self._trust_boundary = {
+            "locations": [],
+            "encoded_locations": "0x0",
+        }  # expose a placeholder trust boundary value.
 
         if self._client_id:
             self._client_auth = utils.ClientAuthentication(
@@ -408,6 +411,22 @@ class Credentials(
     def with_token_uri(self, token_uri):
         kwargs = self._constructor_args()
         kwargs.update(token_url=token_uri)
+        new_cred = self.__class__(**kwargs)
+        new_cred._metrics_options = self._metrics_options
+        return new_cred
+
+    def with_universe_domain(self, universe_domain):
+        """Create a copy of these credentials with the given universe domain.
+
+        Args:
+            universe_domain (str): The universe domain value.
+
+        Returns:
+            google.auth.external_account.Credentials: A new credentials
+                instance.
+        """
+        kwargs = self._constructor_args()
+        kwargs.update(universe_domain=universe_domain)
         new_cred = self.__class__(**kwargs)
         new_cred._metrics_options = self._metrics_options
         return new_cred

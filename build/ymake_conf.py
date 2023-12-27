@@ -1044,7 +1044,14 @@ class GnuToolchainOptions(ToolchainOptions):
             self.sys_lib = self.target.find_in_dict(self.sys_lib, [])
 
         self.os_sdk = preset('OS_SDK') or self._default_os_sdk()
-        self.os_sdk_local = self.os_sdk == 'local'
+
+        self.os_sdk_local = False
+
+        if build.target.is_apple and to_bool(preset('APPLE_SDK_LOCAL'), default=False):
+            self.os_sdk_local = True
+
+        if self.os_sdk == 'local':
+            self.os_sdk_local = True
 
     def _default_os_sdk(self):
         if self.target.is_linux:

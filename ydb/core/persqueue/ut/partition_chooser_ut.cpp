@@ -247,9 +247,17 @@ private:
         ctx.Send(ev->Sender, response.Release());
     }
 
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& , const TActorContext& ) {}
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& , const TActorContext& ) {}
+
     STFUNC(StateWork) {
+        TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvRequest, Handle);
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle)
+        default:
+            HandleDefaultEvents(ev, SelfId());
         }
     }
 
@@ -268,6 +276,7 @@ private:
     }
 
     void OnActivateExecutor(const TActorContext &ctx) override {
+        Cerr << ">>>>> OnActivateExecutor" << Endl;
         Become(&TThis::StateWork);
         SignalTabletActive(ctx);        
     }

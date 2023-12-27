@@ -5,7 +5,7 @@
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
-#include <ydb/public/lib/ydb_cli/dump/dump.h>
+
 #include <ydb/public/lib/ydb_cli/import/import.h>
 #include <ydb/library/backup/util.h>
 
@@ -19,7 +19,9 @@
 #include <unistd.h>
 #endif
 
-extern const char NYdb::NDump::SCHEME_FILE_NAME[];
+namespace NYdb::NDump {
+    extern const char SCHEME_FILE_NAME[];
+}
 
 namespace NYdb::NConsoleClient {
 

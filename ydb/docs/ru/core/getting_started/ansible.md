@@ -134,29 +134,29 @@ Ansible установлен, можно переходить к его наст
 
 Группа содержит задачи сбора информации о ВМ и фиксации её в переменных для дальнейшей обработки в других задачах и шаблонах файлов, передаваемых на ВМ.
 
-1. Формирование списка доступных для использования YDB блочных устройств, исключая стартовый диск. Полученный список дисков сохраняется в переменной `disk_info`. Далее при копировании конфигурационного файла для статической ноды Ansible сформирует секцию `drive` из данных переменной `disk_info`.
+1. Формирование списка доступных для использования YDB блочных устройств, исключая стартовый диск. Полученный список дисков сохраняется в переменной `non_mounted_disks`. Далее при копировании конфигурационного файла для статической ноды Ansible сформирует секцию `drive` из данных переменной `non_mounted_disks`.
     ```yaml
-    - name: List disk IDs matching 'virtio-ydb-disk-'
-        ansible.builtin.shell: ls -l /dev/disk/by-id/ | grep 'virtio-ydb-disk-' | awk '{print $9}'
-        register: disk_info
+    - name: Identify the root disk
+      ansible.builtin.shell: 
+        cmd: df / | tail -1 | awk '{print $1}' | xargs -n 1 basename | sed 's/[0-9]*//g'
+      register: root_disk
+
+    - name: List all non-mounted disks excluding the root disk
+      ansible.builtin.shell: 
+        cmd: lsblk -nlpo NAME,TYPE,MOUNTPOINT | grep -v "part\|loop" | awk -v rootdisk="{{ root_disk.stdout }}" '$2=="disk" && $3=="" && $1 !~ rootdisk {print $1}'
+      register: non_mounted_disks   
     ```
-2. Подсчитывание количества доступных для использования YDB дисков. Эта информация используется далее при создании базы данных.
-    ```yaml
-    - name: Count disks matching 'virtio-ydb-disk-'
-        ansible.builtin.shell: ls -l /dev/disk/by-id/ | grep 'virtio-ydb-disk-' | awk '{print $9}' | wc -l
-        register: disk_value  
-    ```
-3. Подсчитывание количества ядер процессора для их дальнейшего распределения между статической и динамической нодой.
+2. Подсчитывание количества ядер процессора для их дальнейшего распределения между статической и динамической нодой.
     ```yaml
     - name: Get number of CPU cores
-        ansible.builtin.shell: lscpu | grep '^CPU(s):' | awk '{print $2}'
-        register: cpu_cores_info
+      ansible.builtin.shell: lscpu | grep '^CPU(s):' | awk '{print $2}'
+      register: cpu_cores_info
     ```
-4. Запрос значение переменной окружения `host`. Оно используется в блоке `host` конфигурационных файлов нод.
+3. Запрос значение переменной окружения `host`. Оно используется в блоке `host` конфигурационных файлов нод.
     ```yaml
     - name: Get the hostname
-        ansible.builtin.command: hostname
-        register: hostname
+      ansible.builtin.command: hostname
+      register: hostname
     ```  
     
 
@@ -185,12 +185,12 @@ Ansible установлен, можно переходить к его наст
 3. Создание директории для временных файлов пользователя `ydb` (можно использовать для хранения шаблонов или иных файлов):
     ```yaml
     - name: Create the Ansible remote_tmp for the ydb user
-        file:
-            path: "{{ ydb_dir }}/home/.ansible/tmp" # Путь к каталогу
-            state: directory                        # Указывает, что должен быть создан каталог
-            recurse: true                           # Рекурсивно применить настройки к подкаталогам
-            group: ydb                              # Группа, которой будет принадлежать каталог
-            owner: ydb                              # Владелец каталога
+      file:
+          path: "{{ ydb_dir }}/home/.ansible/tmp" # Путь к каталогу
+          state: directory                        # Указывает, что должен быть создан каталог
+          recurse: true                           # Рекурсивно применить настройки к подкаталогам
+          group: ydb                              # Группа, которой будет принадлежать каталог
+          owner: ydb                              # Владелец каталога
     ```
 4. Создание директорий и присваивание им владельцев и прав доступа:
     ```yaml
@@ -288,14 +288,14 @@ Ansible установлен, можно переходить к его наст
         src: ./files/static_config.j2                    # Путь к шаблону Jinja2 для статической конфигурации
         dest: "{{ ydb_dir }}/cfg/static_config.yaml"     # Путь назначения для сгенерированного статического конфигурационного файла
       vars:
-        disk_info: "{{ disk_info }}"                     # Переменные, используемые в шаблоне
+        non_mounted_disks: "{{ non_mounted_disks}}"      # Переменные, используемые в шаблоне
 
     - name: Generate YDB dynamic configuration file from template
       ansible.builtin.template:
         src: ./files/dynamic_config.j2                   # Путь к шаблону Jinja2 для динамической конфигурации
         dest: "{{ ydb_dir }}/cfg/dynamic_config.yaml"    # Путь назначения для сгенерированного динамического конфигурационного файла
       vars:
-        disk_info: "{{ disk_info }}"                     # Переменные, используемые в шаблоне
+        non_mounted_disks: "{{ non_mounted_disks }}"     # Переменные, используемые в шаблоне
     ```      
 
 2. Генерация service-файлов для systemd:
@@ -355,7 +355,7 @@ Ansible установлен, можно переходить к его наст
         if grep -q 'register_database_done' {{ ydb_dir }}/ydb_init_status; then
             echo 'Register database already done';
         else
-            {{ ydb_dir }}/release/{{ ydb_version }}/bin/ydbd -s grpc://{{ inner_net }}:{{ grpc_port }} admin database /{{ ydb_domain }}/{{ ydb_dbname }} create ssd:{{ disk_value.stdout }} && echo 'register_database_done' >> {{ ydb_dir }}/ydb_init_status;
+            {{ ydb_dir }}/release/{{ ydb_version }}/bin/ydbd -s grpc://{{ inner_net }}:{{ grpc_port }} admin database /{{ ydb_domain }}/{{ ydb_dbname }} create ssd:{{ non_mounted_disks.stdout_lines | length }} && echo 'register_database_done' >> {{ ydb_dir }}/ydb_init_status;
         fi
     environment:
         LD_LIBRARY_PATH: "{{ ydb_dir }}/release/{{ ydb_version }}/lib"

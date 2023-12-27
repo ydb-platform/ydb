@@ -1,9 +1,9 @@
 ```yaml
 static_erasure: none
 host_configs:
-- drive:                                         # Генерация списка подключённых к ВМ дисков  
-{% for disk_name in disk_info.stdout_lines %}    # доступных для размещение базы данных.
-    - path: "/dev/disk/by-id/{{ disk_name }}"    # Переменная disk_name содержит список дисков.
+- drive:                                                # Генерация списка подключённых к ВМ дисков  
+{% for disk_name in non_mounted_disks.stdout_lines %}   # доступных для размещение базы данных.
+    - path: "{{ disk_name }}"                           
       type: SSD
 {% endfor %}
   host_config_id: 1
@@ -57,7 +57,7 @@ blob_storage_config:
       - fail_domains:
         - vdisk_locations:
           - node_id: 1
-            path: "/dev/disk/by-id/{{ disk_info.stdout_lines[0] }}"     # Задаётся диск содержащий копии конфигурационных файлов. 
+            path: "{{ non_mounted_disks.stdout_lines[0] }}"             # Задаётся диск содержащий копии конфигурационных файлов. 
             pdisk_category: SSD                                         # Выбирается первый диск из списка подключенных к ВМ дисков.  
 
 channel_profile_config:

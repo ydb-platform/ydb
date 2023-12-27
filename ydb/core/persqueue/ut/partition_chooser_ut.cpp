@@ -1,3 +1,4 @@
+#include "ydb/core/tablet/bootstrapper.h"
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/persqueue/writer/metadata_initializers.h>
@@ -219,8 +220,93 @@ void WriteToTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32
     auto scResult = server.AnnoyingClient->RunYqlDataQuery(query);
 }
 
+using namespace NKikimr;
+using namespace NActors;
+using namespace NKikimrPQ;
+
+class TPQTabletMock: public TActor<TPQTabletMock>, public NTabletFlatExecutor::TTabletExecutedFlat {
+public:
+    TPQTabletMock(const TActorId& tablet, TTabletStorageInfo* info, ETopicPartitionStatus status)
+        : TActor(&TThis::StateWork)
+    , TTabletExecutedFlat(info, tablet, nullptr)
+    , Status(status) {
+    }
+private:
+    STFUNC(StateInit) {
+        StateInitImpl(ev, SelfId());
+    }
+
+private:
+    void Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx) {
+        auto response = THolder<TEvPersQueue::TEvResponse>();
+
+        auto* cmd = response->Record.MutablePartitionResponse()->MutableCmdGetOwnershipResult();
+        cmd->SetOwnerCookie("ower_cookie");
+        cmd->SetStatus(Status);
+
+        ctx.Send(ev->Sender, response.Release());
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvPersQueue::TEvRequest, Handle);
+        }
+    }
+
+private:
+    void OnDetach(const TActorContext &ctx) override {
+        Die(ctx);
+    }
+
+    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
+        Y_UNUSED(ev);
+        Die(ctx);
+    }
+
+    void DefaultSignalTabletActive(const TActorContext&) override {
+
+    }
+
+    void OnActivateExecutor(const TActorContext &ctx) override {
+        Become(&TThis::StateWork);
+        SignalTabletActive(ctx);        
+    }
+
+private:
+    ETopicPartitionStatus Status;
+};
+
+
+TPQTabletMock* CreatePQTabletMock(NPersQueue::TTestServer& server, ui64 tabletId, ETopicPartitionStatus status) {
+    TPQTabletMock* mock = nullptr;
+    auto wrapCreatePQTabletMock = [&](const NActors::TActorId& tablet, NKikimr::TTabletStorageInfo* info) -> IActor* {
+        mock = new TPQTabletMock(tablet, info, status);
+        return mock;
+    };
+
+    Cerr << ">>>>> 1" << Endl;
+    CreateTestBootstrapper(*server.GetRuntime(),
+                           CreateTestTabletInfo(tabletId, NKikimrTabletBase::TTabletTypes::Dummy, TErasureType::ErasureNone),
+                           wrapCreatePQTabletMock);
+
+    Cerr << ">>>>> 2" << Endl;
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    Cerr << ">>>>> 2.1" << Endl;
+    server.GetRuntime()->DispatchEvents(options);
+
+    Cerr << ">>>>> 3" << Endl;
+
+    return mock;
+}
+
+
 Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_Test) {
     NPersQueue::TTestServer server{};
+    server.EnableLogs({NKikimrServices::PQ_PARTITION_CHOOSER}, NActors::NLog::PRI_TRACE);
+
+    CreatePQTabletMock(server, 1000, ETopicPartitionStatus::Active);
 
     {
         auto r = ChoosePartition(server, SMEnabled, "A_Source");

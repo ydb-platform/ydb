@@ -24,13 +24,15 @@ struct TEvPartitionChooser {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ_PARTITION_CHOOSER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ_PARTITION_CHOOSER)");
 
     struct TEvChooseResult: public TEventLocal<TEvChooseResult, EvChooseResult> {
-        TEvChooseResult(ui32 partitionId, ui64 tabletId)
+        TEvChooseResult(ui32 partitionId, ui64 tabletId, const TString& ownerCookie)
             : PartitionId(partitionId)
-            , TabletId(tabletId) {
+            , TabletId(tabletId)
+            , OwnerCookie(ownerCookie) {
         }
 
         ui32 PartitionId;
         ui64 TabletId;
+        TString OwnerCookie;
     };
 
     struct TEvChooseError: public TEventLocal<TEvChooseError, EvChooseError>  {

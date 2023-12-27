@@ -18,8 +18,6 @@
 namespace NKikimr::NPQ {
 namespace NPartitionChooser {
 
-#define DEBUG(message) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, message);    
-
 using namespace NActors;
 using namespace NSourceIdEncoding;
 using namespace Ydb::PersQueue::ErrorCode;
@@ -81,7 +79,6 @@ private:
     THasher Hasher;
 };
 
-
 class TPartitionChooserActor: public TActorBootstrapped<TPartitionChooserActor> {
     using TThis = TPartitionChooserActor;
     using TThisActor = TActor<TThis>;
@@ -100,35 +97,76 @@ public:
     void Bootstrap(const TActorContext& ctx);
 
 private:
-    void HandleInit(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx);
-    void HandleInit(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx);
+    void InitTable(const NActors::TActorContext& ctx);
+    void Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx);
 
-    STATEFN(StateInit) {
+    STATEFN(StateInitTable) {
+        TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
-            HFunc(NMetadata::NProvider::TEvManagerPrepared, HandleInit);
-            HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, HandleInit);
+            HFunc(NMetadata::NProvider::TEvManagerPrepared, Handle);
             sFunc(TEvents::TEvPoison, ScheduleStop);
         }
     }
 
 private:
-    void HandleSelect(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
-    void HandleSelect(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const TActorContext& ctx);
-    void HandleSelect(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx);
+    void StartKqpSession(const NActors::TActorContext& ctx);
+    void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx);
 
-    STATEFN(StateSelect) {
+    STATEFN(StateCreateKqpSession) {
+        TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
-            HFunc(NKqp::TEvKqp::TEvQueryResponse, HandleSelect);
-            HFunc(TEvPersQueue::TEvGetPartitionIdForWriteResponse, HandleSelect);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, HandleSelect);
+            HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
             sFunc(TEvents::TEvPoison, ScheduleStop);
         }
     }
+
+private:
+    void SendSelectRequest(const NActors::TActorContext& ctx);
+    void HandleSelect(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
+
+    STATEFN(StateSelect) {
+        TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
+        switch (ev->GetTypeRewrite()) {
+            HFunc(NKqp::TEvKqp::TEvQueryResponse, HandleSelect);
+            sFunc(TEvents::TEvPoison, ScheduleStop);
+        }
+    }
+
+private:
+    void RequestPQRB(const NActors::TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx);
+
+    STATEFN(StatePQRB) {
+        TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvPersQueue::TEvGetPartitionIdForWriteResponse, Handle);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            sFunc(TEvents::TEvPoison, ScheduleStop);
+        }
+    }
+
+private:
+    void GetOwnership();
+    void HandleOwnership(TEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx);
+
+    STATEFN(StateOwnership) {
+        TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvPersQueue::TEvResponse, HandleOwnership);
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle); // TODO?
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle); // TODO?
+            sFunc(TEvents::TEvPoison, ScheduleStop);
+        }
+    }
+
 
 private:
     void HandleIdle(TEvPartitionChooser::TEvRefreshRequest::TPtr& ev, const TActorContext& ctx);
 
     STATEFN(StateIdle)  {
+        TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPartitionChooser::TEvRefreshRequest, HandleIdle);
             SFunc(TEvents::TEvPoison, Stop);
@@ -139,6 +177,7 @@ private:
     void HandleUpdate(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
 
     STATEFN(StateUpdate) {
+        TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvQueryResponse, HandleUpdate);
             sFunc(TEvents::TEvPoison, ScheduleStop);
@@ -150,6 +189,7 @@ private:
     void HandleDestroy(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
 
     STATEFN(StateDestroy) {
+        TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, HandleDestroy);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, HandleDestroy);
@@ -166,14 +206,10 @@ private:
 
     TString GetDatabaseName(const NActors::TActorContext& ctx);
 
-    void InitTable(const NActors::TActorContext& ctx);
 
-    void StartKqpSession(const NActors::TActorContext& ctx);
     void CloseKqpSession(const TActorContext& ctx);
     void SendUpdateRequests(const TActorContext& ctx);
-    void SendSelectRequest(const NActors::TActorContext& ctx);
 
-    void RequestPQRB(const NActors::TActorContext& ctx);
 
     THolder<NKqp::TEvKqp::TEvCreateSessionRequest> MakeCreateSessionRequest(const NActors::TActorContext& ctx);
     THolder<NKqp::TEvKqp::TEvCloseSessionRequest> MakeCloseSessionRequest();
@@ -212,6 +248,9 @@ private:
 
     ui64 BalancerTabletId;
     TActorId PipeToBalancer;
+
+    TActorId PartitionPipe;
+    TString OwnerCookie;
 };
 
 

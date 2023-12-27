@@ -1,3 +1,4 @@
+#include "common.h"
 #include "partition_chooser_impl.h"
 #include "ydb/public/sdk/cpp/client/ydb_proto/accessor.h"
 
@@ -37,6 +38,22 @@ TString TMd5Converter::operator()(const TString& sourceId) const {
 // TPartitionChooserActor
 //
 
+#if defined(LOG_PREFIX) || defined(TRACE) || defined(DEBUG) || defined(INFO) || defined(ERROR)
+#error "Already defined LOG_PREFIX or TRACE or DEBUG or INFO or ERROR"
+#endif
+
+
+#define LOG_PREFIX "TPartitionChooser " << SelfId()                  \
+                    << " (SourceId=" << SourceId                     \
+                    << ", PreferedPartition=" << PreferedPartition   \
+                    << ", SplitMergeEnabled=" << SplitMergeEnabled_  \
+                    << ") "
+#define TRACE(message) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
+#define DEBUG(message) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
+#define INFO(message)  LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
+#define ERROR(message) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
+
+
 TPartitionChooserActor::TPartitionChooserActor(TActorId parent,
                                                          const NKikimrSchemeOp::TPersQueueGroupDescription& config,
                                                          std::shared_ptr<IPartitionChooser>& chooser,
@@ -56,7 +73,7 @@ TPartitionChooserActor::TPartitionChooserActor(TActorId parent,
 void TPartitionChooserActor::Bootstrap(const TActorContext& ctx) {
     const auto& pqConfig = AppData(ctx)->PQConfig;
 
-    NeedUpdateTable = (!pqConfig.GetTopicsAreFirstClassCitizen() || pqConfig.GetUseSrcIdMetaMappingInFirstClass()) && !SplitMergeEnabled_ && SourceId;
+    NeedUpdateTable = (!pqConfig.GetTopicsAreFirstClassCitizen() || pqConfig.GetUseSrcIdMetaMappingInFirstClass()) && SourceId;
 
     if (!SourceId) {
         return ChoosePartition(ctx);
@@ -76,16 +93,15 @@ void TPartitionChooserActor::Bootstrap(const TActorContext& ctx) {
     UpdateQuery = GetUpdateSourceIdQueryFromPath(pqConfig.GetSourceIdTablePath(), TableGeneration);
 
     DEBUG("SelectQuery: " << SelectQuery);
+    DEBUG("UpdateQuery: " << UpdateQuery);
 
     if (pqConfig.GetTopicsAreFirstClassCitizen()) {
         if (pqConfig.GetUseSrcIdMetaMappingInFirstClass()) {
-            TThisActor::Become(&TThis::StateInit);
             InitTable(ctx);
         } else {
             ChoosePartition(ctx);
         }
     } else {
-        TThisActor::Become(&TThis::StateInit);
         StartKqpSession(ctx);
     }
 }
@@ -94,6 +110,9 @@ void TPartitionChooserActor::Stop(const TActorContext& ctx) {
     CloseKqpSession(ctx);
     if (PipeToBalancer) {
         NTabletPipe::CloseClient(ctx, PipeToBalancer);
+    }
+    if (PartitionPipe) {
+        NTabletPipe::CloseClient(ctx, PartitionPipe);
     }
     IActor::Die(ctx);
 }
@@ -112,17 +131,171 @@ TString TPartitionChooserActor::GetDatabaseName(const NActors::TActorContext& ct
     }
 }
 
+//
+// StateInitTable
+//
+
 void TPartitionChooserActor::InitTable(const NActors::TActorContext& ctx) {
+    DEBUG("InitTable")
+    TThisActor::Become(&TThis::StateInitTable);
+
     ctx.Send(
             NMetadata::NProvider::MakeServiceId(ctx.SelfID.NodeId()),
             new NMetadata::NProvider::TEvPrepareManager(NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant())
     );
 }
 
+void TPartitionChooserActor::Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx) {
+    StartKqpSession(ctx);
+}
+
+
+//
+// StartKqpSession
+// 
+
+THolder<NKqp::TEvKqp::TEvCreateSessionRequest> TPartitionChooserActor::MakeCreateSessionRequest(const NActors::TActorContext& ctx) {
+    auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
+    ev->Record.MutableRequest()->SetDatabase(GetDatabaseName(ctx));
+    return ev;
+}
+
 void TPartitionChooserActor::StartKqpSession(const NActors::TActorContext& ctx) {
+    DEBUG("StartKqpSession")
+    TThisActor::Become(&TThis::StateCreateKqpSession);
+
     auto ev = MakeCreateSessionRequest(ctx);
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
 }
+
+void TPartitionChooserActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+
+    if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+        ReplyError(ErrorCode::INITIALIZING, TStringBuilder() << "kqp error Marker# PQ53 : " <<  record, ctx);
+        return;
+    }
+
+    KqpSessionId = record.GetResponse().GetSessionId();
+    Y_ABORT_UNLESS(!KqpSessionId.empty());
+
+    SendSelectRequest(ctx);
+}
+
+
+//
+// StatePQRB
+//
+
+void TPartitionChooserActor::RequestPQRB(const NActors::TActorContext& ctx) {
+    DEBUG("RequestPQRB")
+    TThisActor::Become(&TThis::StatePQRB);
+    Y_ABORT_UNLESS(BalancerTabletId);
+
+    if (!PipeToBalancer) {
+        NTabletPipe::TClientConfig clientConfig;
+        clientConfig.RetryPolicy = {
+            .RetryLimitCount = 6,
+            .MinRetryTime = TDuration::MilliSeconds(10),
+            .MaxRetryTime = TDuration::MilliSeconds(100),
+            .BackoffMultiplier = 2,
+            .DoFirstRetryInstantly = true
+        };
+        PipeToBalancer = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, BalancerTabletId, clientConfig));
+    }
+
+    NTabletPipe::SendData(ctx, PipeToBalancer, new TEvPersQueue::TEvGetPartitionIdForWrite());
+}
+
+void TPartitionChooserActor::Handle(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const TActorContext& ctx) {
+    PartitionId = ev->Get()->Record.GetPartitionId();
+    DEBUG("Received partition " << PartitionId << " from PQRB for SourceId=" << SourceId);
+    Partition = Chooser->GetPartition(PartitionId.value());
+
+    OnPartitionChosen(ctx);
+}
+
+void TPartitionChooserActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+    Y_UNUSED(ev);
+
+    if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
+        ReplyError(ErrorCode::INITIALIZING, "Pipe connection fail", ctx);
+    }
+}
+
+void TPartitionChooserActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
+    Y_UNUSED(ev);
+
+    ReplyError(ErrorCode::INITIALIZING, "Pipe destroyed", ctx);
+}
+
+
+
+//
+// GetOwnership
+//
+
+THolder<TEvPersQueue::TEvRequest> MakeRequest(ui32 partitionId, TActorId pipe) {
+    auto ev = MakeHolder<TEvPersQueue::TEvRequest>();
+
+    ev->Record.MutablePartitionRequest()->SetPartition(partitionId);
+    ActorIdToProto(pipe, ev->Record.MutablePartitionRequest()->MutablePipeClient());
+
+    return ev;
+}
+
+void TPartitionChooserActor::GetOwnership() {
+    Become(&TThis::StateOwnership);
+
+    NTabletPipe::TClientConfig config;
+    config.RetryPolicy = {
+        .RetryLimitCount = 6,
+        .MinRetryTime = TDuration::MilliSeconds(10),
+        .MaxRetryTime = TDuration::MilliSeconds(100),
+        .BackoffMultiplier = 2,
+        .DoFirstRetryInstantly = true
+    };
+
+    TRACE("GetOwnership Partition TabletId=" << Partition->TabletId);
+    PartitionPipe = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), Partition->TabletId, config));
+
+    auto ev = MakeRequest(Partition->PartitionId, PartitionPipe);
+
+    auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetOwnership();
+    cmd.SetOwner(SourceId ? SourceId : CreateGuidAsString());
+    cmd.SetForce(true);
+
+    NTabletPipe::SendData(SelfId(), PartitionPipe, ev.Release());
+}
+
+void TPartitionChooserActor::HandleOwnership(TEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx) {
+    auto& record = ev->Get()->Record;
+
+    TString error;
+    if (!BasicCheck(record, error)) {
+        return ReplyError(ErrorCode::INITIALIZING, std::move(error), ctx);
+    }
+
+    const auto& response = record.GetPartitionResponse();
+    if (!response.HasCmdGetOwnershipResult()) {
+        return ReplyError(ErrorCode::INITIALIZING, "Absent Ownership result", ctx);
+    }
+
+    if (NKikimrPQ::ETopicPartitionStatus::Active != response.GetCmdGetOwnershipResult().GetStatus()) {
+        return ReplyError(ErrorCode::INITIALIZING, "Absent Ownership result", ctx);
+    }
+
+    OwnerCookie = response.GetCmdGetOwnershipResult().GetOwnerCookie();
+
+    if (NeedUpdateTable) {
+        SendUpdateRequests(ctx);
+    } else {
+        TThisActor::Become(&TThis::StateIdle);
+
+        ReplyResult(ctx);
+    }
+}
+
 
 void TPartitionChooserActor::CloseKqpSession(const TActorContext& ctx) {
     if (KqpSessionId) {
@@ -151,11 +324,6 @@ void TPartitionChooserActor::SendSelectRequest(const NActors::TActorContext& ctx
     SelectInflight++;
 }
 
-THolder<NKqp::TEvKqp::TEvCreateSessionRequest> TPartitionChooserActor::MakeCreateSessionRequest(const NActors::TActorContext& ctx) {
-    auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
-    ev->Record.MutableRequest()->SetDatabase(GetDatabaseName(ctx));
-    return ev;
-}
 
 THolder<NKqp::TEvKqp::TEvCloseSessionRequest> TPartitionChooserActor::MakeCloseSessionRequest() {
     auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
@@ -246,51 +414,15 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TPartitionChooserActor::MakeUpdateQueryRe
     return ev;
 }
 
-void TPartitionChooserActor::RequestPQRB(const NActors::TActorContext& ctx) {
-    Y_ABORT_UNLESS(BalancerTabletId);
-
-    if (!PipeToBalancer) {
-        NTabletPipe::TClientConfig clientConfig;
-        clientConfig.RetryPolicy = {
-            .RetryLimitCount = 6,
-            .MinRetryTime = TDuration::MilliSeconds(10),
-            .MaxRetryTime = TDuration::MilliSeconds(100),
-            .BackoffMultiplier = 2,
-            .DoFirstRetryInstantly = true
-        };
-        PipeToBalancer = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, BalancerTabletId, clientConfig));
-    }
-
-    TThisActor::Become(&TThis::StateSelect);
-    NTabletPipe::SendData(ctx, PipeToBalancer, new TEvPersQueue::TEvGetPartitionIdForWrite());
-}
-
 void TPartitionChooserActor::ReplyResult(const NActors::TActorContext& ctx) {
-    ctx.Send(Parent, new TEvPartitionChooser::TEvChooseResult(Partition->PartitionId, Partition->TabletId));
+    ctx.Send(Parent, new TEvPartitionChooser::TEvChooseResult(Partition->PartitionId, Partition->TabletId, OwnerCookie));
 }
 
 void TPartitionChooserActor::ReplyError(ErrorCode code, TString&& errorMessage, const NActors::TActorContext& ctx) {
+    INFO("ReplyError: " << errorMessage);
     ctx.Send(Parent, new TEvPartitionChooser::TEvChooseError(code, std::move(errorMessage)));
 
     Stop(ctx);
-}
-
-void TPartitionChooserActor::HandleInit(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx) {
-    StartKqpSession(ctx);
-}
-
-void TPartitionChooserActor::HandleInit(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx) {
-    const auto& record = ev->Get()->Record;
-
-    if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        ReplyError(ErrorCode::INITIALIZING, TStringBuilder() << "kqp error Marker# PQ53 : " <<  record, ctx);
-        return;
-    }
-
-    KqpSessionId = record.GetResponse().GetSessionId();
-    Y_ABORT_UNLESS(!KqpSessionId.empty());
-
-    SendSelectRequest(ctx);
 }
 
 void TPartitionChooserActor::HandleDestroy(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -335,20 +467,6 @@ void TPartitionChooserActor::HandleSelect(NKqp::TEvKqp::TEvQueryResponse::TPtr& 
     } else {
         OnPartitionChosen(ctx);
     }
-}
-
-void TPartitionChooserActor::HandleSelect(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const TActorContext& ctx) {
-    PartitionId = ev->Get()->Record.GetPartitionId();
-    DEBUG("Received partition " << PartitionId << " from PQRB for SourceId=" << SourceId);
-    Partition = Chooser->GetPartition(PartitionId.value());
-
-    OnPartitionChosen(ctx);
-}
-
-void TPartitionChooserActor::HandleSelect(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
-    Y_UNUSED(ev);
-
-    ReplyError(ErrorCode::INITIALIZING, "Pipe destroyed", ctx);
 }
 
 void TPartitionChooserActor::HandleUpdate(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
@@ -428,14 +546,12 @@ void TPartitionChooserActor::OnPartitionChosen(const TActorContext& ctx) {
         }
     }
 
-    if (NeedUpdateTable) {
-        SendUpdateRequests(ctx);
-    } else {
-        TThisActor::Become(&TThis::StateIdle);
+    GetOwnership();
 
-        ReplyResult(ctx);
-    }
+/*
+*/
 }
+
 
 std::pair<bool, const typename TPartitionChooserActor::TPartitionInfo*> TPartitionChooserActor::ChoosePartitionSync(const TActorContext& ctx) const {
     const auto& pqConfig = AppData(ctx)->PQConfig;
@@ -480,5 +596,10 @@ IActor* CreatePartitionChooserActor(TActorId parentId,
     return new NPartitionChooser::TPartitionChooserActor(parentId, config, chooser, fullConverter, sourceId, preferedPartition);
 }
 
+#undef LOG_PREFIX
+#undef TRACE
+#undef DEBUG
+#undef INFO
+#undef ERROR
 
 } // namespace NKikimr::NPQ

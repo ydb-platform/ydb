@@ -12130,6 +12130,13 @@
             "uri": "https://{canondata_backend}/1599023/af9c2f81df0601cf266a0926b5ce73b6101b9115/resource.tar.gz#test_sql2yql.test_pg-sublink_projection_in_corr_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-sublink_projection_uncorrelated]": [
+        {
+            "checksum": "79141a5b9b9c23500431069b9d31b804",
+            "size": 684,
+            "uri": "https://{canondata_backend}/1871182/2bf182d62d0d6b300a9cb187b902374eb8f27321/resource.tar.gz#test_sql2yql.test_pg-sublink_projection_uncorrelated_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-sublink_where_all]": [
         {
             "checksum": "fc31f83221afa091432ab14824d7f1be",

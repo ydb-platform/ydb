@@ -165,7 +165,7 @@ Numeric PgFloatToNumeric(double item, ui64 scale, int digits) {
     }
 
     if (digits == 0) {
-        return int64_to_numeric(int_part);
+        return int64_to_numeric(intPart);
     } else {
         return numeric_add_opt_error(
             int64_to_numeric(intPart),

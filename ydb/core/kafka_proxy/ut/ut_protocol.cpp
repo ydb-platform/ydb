@@ -288,6 +288,25 @@ std::vector<NTopic::TReadSessionEvent::TDataReceivedEvent> Read(std::shared_ptr<
     return result;
 }
 
+struct TopicToCreate {
+    TopicToCreate(
+            TString name,
+            ui32 partionsNumber,
+            std::optional<TString> retentionMs = std::nullopt,
+            std::optional<TString> retentionBytes = std::nullopt)
+        : Name(name)
+        , PartitionsNumber(partionsNumber)
+        , RetentionMs(retentionMs)
+        , RetentionBytes(retentionBytes)
+    {
+    }
+
+    TString Name;
+    ui32 PartitionsNumber;
+    std::optional<TString> RetentionMs;
+    std::optional<TString> RetentionBytes;
+};
+
 class TTestClient {
 public:
     TTestClient(ui16 port, const TString clientName = "TestClient")
@@ -559,6 +578,36 @@ public:
         }
 
         return WriteAndRead<TFetchResponseData>(header, request);
+    }
+
+    TMessagePtr<TCreateTopicsResponseData> CreateTopics(std::vector<TopicToCreate> topicsToCreate, bool validateOnly = false) {
+        Cerr << ">>>>> TCreateTopicsRequestData\n";
+        
+        TRequestHeaderData header = Header(NKafka::EApiKey::CREATE_TOPICS, 7);
+        TCreateTopicsRequestData request;
+        request.ValidateOnly = validateOnly;
+
+        for (auto& topicToCreate : topicsToCreate) {
+            NKafka::TCreateTopicsRequestData::TCreatableTopic topic;
+            topic.Name = topicToCreate.Name;
+            topic.NumPartitions = topicToCreate.PartitionsNumber;
+
+            auto addConfig = [&topic](std::optional<TString> configValue, TString configName) { 
+                if (configValue.has_value()) {
+                    NKafka::TCreateTopicsRequestData::TCreatableTopic::TCreateableTopicConfig config;
+                    config.Name = configName;
+                    config.Value = configValue.value();
+                    topic.Configs.push_back(config);
+                }
+            };
+            
+            addConfig(topicToCreate.RetentionMs, "retention.ms");
+            addConfig(topicToCreate.RetentionBytes, "retention.bytes");
+
+            request.Topics.push_back(topic);
+        }
+
+        return WriteAndRead<TCreateTopicsResponseData>(header, request);
     }
 
     void UnknownApiKey() {
@@ -1372,6 +1421,215 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             }
         }
     } // Y_UNIT_TEST(OffsetFetchScenario)
+
+    Y_UNIT_TEST(CreateTopicsScenario) {
+        TInsecureTestServer testServer("2");
+
+        // TString key = "record-key";
+        // TString value = "record-value";
+        // TString headerKey = "header-key";
+        // TString headerValue = "header-value";
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+
+        TTestClient client(testServer.Port);
+
+        {
+            auto msg = client.ApiVersions();
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+        }
+
+        {
+            auto msg = client.SaslHandshake();
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[0], "PLAIN");
+        }
+
+        {
+            auto msg = client.SaslAuthenticate("ouruser@/Root", "ourUserPassword");
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
+        {
+            // Creation of two topics
+            auto msg = client.CreateTopics({
+                TopicToCreate("topic-999-test", 12),
+                TopicToCreate("topic-998-test", 13)
+            });
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-999-test");
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].Name.value(), "topic-998-test");
+
+            auto result999 = pqClient.DescribeTopic("/Root/topic-999-test", describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result999.IsSuccess());
+            UNIT_ASSERT_EQUAL(result999.GetTopicDescription().GetPartitions().size(), 12);
+
+            auto result998 = pqClient.DescribeTopic("/Root/topic-998-test", describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result998.IsSuccess());
+            UNIT_ASSERT_EQUAL(result998.GetTopicDescription().GetPartitions().size(), 13);
+        }
+
+        {
+            // Duplicate topics
+            auto msg = client.CreateTopics({
+                TopicToCreate("topic-997-test", 1),
+                TopicToCreate("topic-997-test", 1)
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-997-test");
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, DUPLICATE_RESOURCE);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].Name.value(), "topic-997-test");
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].ErrorCode, DUPLICATE_RESOURCE);
+
+            auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
+            auto result = pqClient.DescribeTopic("/Root/topic-997-test", describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+        }
+
+        {
+            // One OK, two duplicate topics
+            auto msg = client.CreateTopics({
+                TopicToCreate("topic-996-test", 1),
+                TopicToCreate("topic-995-test", 1),
+                TopicToCreate("topic-995-test", 1)
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-996-test");
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, NONE_ERROR);
+            auto result996 = pqClient.DescribeTopic("/Root/topic-996-test", describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result996.IsSuccess());
+            
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].Name.value(), "topic-995-test");
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].ErrorCode, DUPLICATE_RESOURCE);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[2].Name.value(), "topic-995-test");
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[2].ErrorCode, DUPLICATE_RESOURCE);
+
+            auto result995 = pqClient.DescribeTopic("/Root/topic-995-test", describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(!result995.IsSuccess());
+        }
+
+        {
+            // Existing topic
+            client.CreateTopics({ TopicToCreate("topic-994-test", 1) });
+            auto result = pqClient.DescribeTopic("/Root/topic-994-test", describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            
+            auto msg = client.CreateTopics({ TopicToCreate("topic-994-test", 1) });
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-994-test");
+        }
+
+        {
+            // Set valid retention
+            ui64 retentionMs = 168 * 60 * 60 * 1000;
+            ui64 retentionBytes = 51'200'000'000ul;
+
+            auto msg = client.CreateTopics({ TopicToCreate("topic-993-test", 1, std::to_string(retentionMs), std::to_string(retentionBytes))});
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-993-test");
+
+            auto result993 = pqClient.DescribeTopic("/Root/topic-993-test", describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result993.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(result993.GetTopicDescription().GetRetentionPeriod().MilliSeconds(), retentionMs);
+            UNIT_ASSERT_VALUES_EQUAL(result993.GetTopicDescription().GetRetentionStorageMb(), retentionBytes / 1'000'000);
+        }
+
+        {
+            // retention.ms is not number
+            auto msg = client.CreateTopics({ TopicToCreate("topic-992-test", 1, "not_a_number", "42")});
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-992-test");
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, INVALID_CONFIG);
+
+            auto result992 = pqClient.DescribeTopic("/Root/topic-992-test", describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(!result992.IsSuccess());
+        }
+
+        {
+            // retention.bytes is not number
+            auto msg = client.CreateTopics({ TopicToCreate("topic-991-test", 1, "42", "not_a_number")});
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-991-test");
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, INVALID_CONFIG);
+
+            auto result992 = pqClient.DescribeTopic("/Root/topic-992-test", describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(!result992.IsSuccess());
+        }
+
+        {
+            // Empty topic name
+            auto msg = client.CreateTopics({ TopicToCreate("", 1)});
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, INVALID_REQUEST);
+        }
+
+        {
+            // Wrong topic name
+            auto msg = client.CreateTopics({ TopicToCreate("//////", 1)});
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, INVALID_REQUEST);
+        }
+
+        {
+            // Wrong topic name
+            auto msg = client.CreateTopics({ TopicToCreate("/Root/", 1)});
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, INVALID_REQUEST);
+        }
+
+        {
+            // Wrong topic name
+            auto msg = client.CreateTopics({ TopicToCreate("/Root//", 1)});
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, INVALID_REQUEST);
+        }
+
+        {
+            // Set invalid retention
+            ui64 retentionMs = 13 * 60 * 60 * 1000;
+            ui64 retentionBytes = 11'000'000'000ul;
+
+            auto msg = client.CreateTopics({ TopicToCreate("topic-990-test", 1, std::to_string(retentionMs), std::to_string(retentionBytes))});
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-990-test");
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, INVALID_REQUEST);
+
+            auto result992 = pqClient.DescribeTopic("/Root/topic-990-test", describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(!result992.IsSuccess());
+        }
+
+        {
+            // Set only ms retention
+            ui64 retentionMs = 168 * 60 * 60 * 1000;
+            auto msg = client.CreateTopics({ TopicToCreate("topic-989-test", 1, std::to_string(retentionMs)) });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-989-test");
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, INVALID_REQUEST);
+
+            auto result993 = pqClient.DescribeTopic("/Root/topic-989-test", describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(!result993.IsSuccess());
+        }
+
+        {   
+            // Validation only
+            auto msg = client.CreateTopics({ TopicToCreate("topic-988-test", 1)}, true);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-988-test");
+
+            auto result993 = pqClient.DescribeTopic("/Root/topic-988-test", describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(!result993.IsSuccess());
+        }
+
+    } // Y_UNIT_TEST(CreateTopicsScenario)
 
     Y_UNIT_TEST(LoginWithApiKey) {
         TInsecureTestServer testServer;

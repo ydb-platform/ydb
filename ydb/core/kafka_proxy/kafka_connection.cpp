@@ -302,6 +302,10 @@ protected:
         Register(CreateKafkaOffsetCommitActor(Context, header->CorrelationId, message));
     }
 
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TCreateTopicsRequestData>& message) {
+        Register(CreateKafkaCreateTopicsActor(Context, header->CorrelationId, message));
+    }
+
     template<class T>
     TMessagePtr<T> Cast(std::shared_ptr<Msg>& request) {
         return TMessagePtr<T>(request->Buffer, request->Message);
@@ -380,6 +384,10 @@ protected:
 
             case OFFSET_COMMIT:
                 HandleMessage(&Request->Header, Cast<TOffsetCommitRequestData>(Request));
+                break;
+
+            case CREATE_TOPICS:
+                HandleMessage(&Request->Header, Cast<TCreateTopicsRequestData>(Request));
                 break;
 
             default:

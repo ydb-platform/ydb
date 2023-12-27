@@ -159,15 +159,19 @@ Numeric PgFloatToNumeric(double item, ui64 scale, int digits) {
     i64 fracInt = round(fracPart * scale);
 
     // scale compaction: represent 711.56000 as 711.56
-    while (fracInt && fracInt % 10 == 0) {
+    while (digits > 0 && fracInt % 10 == 0) {
         fracInt /= 10;
         digits -= 1;
     }
 
-    return numeric_add_opt_error(
-        int64_to_numeric(intPart),
-        int64_div_fast_to_numeric(fracInt, digits),
-        &error);
+    if (digits == 0) {
+        return int64_to_numeric(int_part);
+    } else {
+        return numeric_add_opt_error(
+            int64_to_numeric(intPart),
+            int64_div_fast_to_numeric(fracInt, digits),
+            &error);
+    }
 }
 
 template<typename T>

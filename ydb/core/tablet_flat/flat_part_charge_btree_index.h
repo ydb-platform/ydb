@@ -41,6 +41,10 @@ public:
 
         auto& meta = Part->IndexPages.BTreeGroups[0];
 
+        if (Y_UNLIKELY(row1 >= meta.Count)) {
+            return { true, true }; // already out of bounds, nothing to precharge
+        }
+
         TVector<TBtreeIndexNode> level, nextLevel(Reserve(2));
         for (ui32 high = 0; high < meta.LevelsCount && ready; high++) {
             if (high == 0) {
@@ -70,7 +74,7 @@ public:
         }
 
         if (meta.LevelsCount == 0) {
-            // TODO: no index nodes
+            ready &= HasDataPage(meta.PageId, { });
         } else {
             for (auto i : xrange(level.size())) {
                 TRecIdx begin = 0, end = level[i].GetChildrenCount();

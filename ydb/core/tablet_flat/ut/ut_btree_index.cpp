@@ -17,7 +17,6 @@ namespace {
     struct TTouchEnv : public NTest::TTestEnv {
         const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
         {
-            UNIT_ASSERT_C(part->GetPageType(pageId) == EPage::BTreeIndex || part->GetPageType(pageId) == EPage::Index, "Shouldn't request non-index pages");
             Touched[groupId].insert(pageId);
             if (Has[groupId].contains(pageId)) {
                 return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
@@ -1152,7 +1151,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                 }
             }
 
-            UNIT_ASSERT_VALUES_EQUAL_C(bTreeDataPages.size(), flatDataPages.size(), message);
+            UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages, message);
         }
     }
 

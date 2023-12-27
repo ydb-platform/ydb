@@ -317,9 +317,9 @@ private:
         ReplayMessage = std::nullopt;
         ReplayMessageUserView = std::nullopt;
         auto& stats = responseEv->Stats;
-        stats.SetFromCache(false);
-        stats.SetDurationUs((TInstant::Now() - StartTime).MicroSeconds());
-        stats.SetCpuTimeUs(CompileCpuTime.MicroSeconds());
+        stats.FromCache = false;
+        stats.DurationUs = (TInstant::Now() - StartTime).MicroSeconds();
+        stats.CpuTimeUs = CompileCpuTime.MicroSeconds();
         Send(Owner, responseEv.Release());
 
         Counters->ReportCompileFinish(DbCounters);

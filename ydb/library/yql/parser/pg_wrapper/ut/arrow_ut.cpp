@@ -7,8 +7,7 @@
 
 extern "C" {
 #include "utils/numeric.h"
-
-Datum numeric_out(PG_FUNCTION_ARGS);
+#include "utils/fmgrprotos.h"
 }
 
 namespace NYql {

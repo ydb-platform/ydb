@@ -74,15 +74,14 @@ public:
         if (!response.IsSuccess()) {
             throw TMisuseException() << "ListObjectKeys error: " << response.GetError().GetMessage();
         }
-        std::vector<TString> keys;
+        TListS3Result result;
         for (const auto& object : response.GetResult().GetContents()) {
-            keys.push_back(TString(object.GetKey()));
+            result.Keys.push_back(TString(object.GetKey()));
         }
-        std::optional<TString> nextToken;
         if (response.GetResult().GetIsTruncated()) {
-            nextToken = TString(response.GetResult().GetNextContinuationToken());
+            result.NextToken = TString(response.GetResult().GetNextContinuationToken());
         }
-        return {keys, nextToken};
+        return result;
     }
 
 private:

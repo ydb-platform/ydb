@@ -103,10 +103,10 @@ void TCheckpointCoordinator::Handle(NYql::NDqs::TEvReadyState::TPtr& ev) {
         AllActorsSet.insert(actorId);
     }
 
-    CC_LOG_I("ActorsToTrigger count: " << ActorsToTrigger.size() << ", ActorsToNotify count: " << ActorsToNotify.size() << ", ActorsToWaitFor count: " << ActorsToWaitFor.size());
+    CC_LOG_D("ActorsToTrigger count: " << ActorsToTrigger.size() << ", ActorsToNotify count: " << ActorsToNotify.size() << ", ActorsToWaitFor count: " << ActorsToWaitFor.size());
 
     if (ActorsToTrigger.empty()) {
-        CC_LOG_I("No ingress tasks, coordinator was disabled");
+        CC_LOG_D("No ingress tasks, coordinator was disabled");
         return;
     }
     PendingInit = std::make_unique<TPendingInitCoordinator>(AllActors.size());

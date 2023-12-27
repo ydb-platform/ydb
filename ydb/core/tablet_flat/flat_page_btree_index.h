@@ -316,7 +316,7 @@ namespace NKikimr::NTable::NPage {
             return beginRowId <= rowId && rowId < endRowId;
         }
 
-        TRecIdx Seek(TRowId rowId, std::optional<TRecIdx> on) const noexcept
+        TRecIdx Seek(TRowId rowId, std::optional<TRecIdx> on = { }) const noexcept
         {
             const TRecIdx childrenCount = GetChildrenCount();
             if (on && on >= childrenCount) {

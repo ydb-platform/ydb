@@ -9,6 +9,8 @@ namespace NKikimr::NTable {
 class TChargeBTreeIndex : public ICharge {
     using TBtreeIndexNode = NPage::TBtreeIndexNode;
     using TBtreeIndexMeta = NPage::TBtreeIndexMeta;
+    using TRecIdx = NPage::TRecIdx;
+    using TGroupId = NPage::TGroupId;
 
 public:
     TChargeBTreeIndex(IPages *env, const TPart &part, TTagsRef tags, bool includeHistory = false)
@@ -24,6 +26,8 @@ public:
     TResult Do(const TCells key1, const TCells key2, const TRowId row1,
             const TRowId row2, const TKeyCellDefaults &keyDefaults, ui64 itemsLimit,
             ui64 bytesLimit) const noexcept override {
+        bool ready = true;
+
         Y_UNUSED(key1);
         Y_UNUSED(key2);
         Y_UNUSED(row1);
@@ -32,22 +36,58 @@ public:
         Y_UNUSED(itemsLimit);
         Y_UNUSED(bytesLimit);
 
+        // TODO: row1 > row2
+        // TODO: key1 > key2
+
         auto& meta = Part->IndexPages.BTreeGroups[0];
 
         TVector<TBtreeIndexNode> level, nextLevel(Reserve(2));
-        for (ui32 high : xrange(meta.LevelsCount)) {
+        for (ui32 high = 0; high < meta.LevelsCount && ready; high++) {
             if (high == 0) {
-                if (!TryLoad(meta.PageId, nextLevel)) {
-                    return {false, false};
-                }
+                ready &= TryLoadNode(meta.PageId, nextLevel);
             } else {
-                Y_ABORT_UNLESS(level);
-                
+                for (auto i : xrange(level.size())) {
+                    TRecIdx begin = 0, end = level[i].GetChildrenCount();
+                    if (i == 0) {
+                        begin = level[i].Seek(row1);
+                    }
+                    if (i + 1 == level.size()) {
+                        end = level[i].Seek(row2) + 1;
+                    }
+                    for (TRecIdx j : xrange(begin, end)) {
+                        ready &= TryLoadNode(level[i].GetShortChild(j).PageId, nextLevel);
+                    }
+                }
+            }
 
+            level.swap(nextLevel);
+            nextLevel.clear();
+        }
+
+        if (!ready) {
+            // some index pages are missing, do not continue
+            return {false, false};
+        }
+
+        if (meta.LevelsCount == 0) {
+            // TODO: no index nodes
+        } else {
+            for (auto i : xrange(level.size())) {
+                TRecIdx begin = 0, end = level[i].GetChildrenCount();
+                if (i == 0) {
+                    begin = level[i].Seek(row1);
+                }
+                if (i + 1 == level.size()) {
+                    end = level[i].Seek(row2) + 1;
+                }
+                for (TRecIdx j : xrange(begin, end)) {
+                    ready &= HasDataPage(level[i].GetShortChild(j).PageId, { });
+                }
             }
         }
 
-        return {true, false};
+        // TODO: overshot for keys search
+        return {ready, false};
     }
 
     TResult DoReverse(const TCells key1, const TCells key2, const TRowId row1,
@@ -65,7 +105,11 @@ public:
     }
 
 private:
-    bool TryLoad(TPageId pageId, TVector<TBtreeIndexNode>& level) const noexcept {
+    bool HasDataPage(TPageId pageId, TGroupId groupId) const noexcept {
+        return Env->TryGetPage(Part, pageId, groupId);
+    }
+
+    bool TryLoadNode(TPageId pageId, TVector<TBtreeIndexNode>& level) const noexcept {
         auto page = Env->TryGetPage(Part, pageId);
         if (page) {
             level.emplace_back(*page);

@@ -252,7 +252,7 @@ namespace NTable {
                         }
                     }
                     if (itemsLimit && prechargeCurrentFirstRowId <= prechargeCurrentLastRowId) {
-                        ui64 left = itemsLimit - items; // we count only foolprof taken rows, so here we may precharge some extra rows
+                        ui64 left = itemsLimit - items; // we count only foolproof taken rows, so here we may precharge some extra rows
                         if (prechargeCurrentLastRowId - prechargeCurrentFirstRowId > left) {
                             prechargeCurrentLastRowId = prechargeCurrentFirstRowId + left;
                         }
@@ -347,7 +347,7 @@ namespace NTable {
                     }
 
                     if (itemsLimit && prechargeCurrentFirstRowId >= prechargeCurrentLastRowId) {
-                        ui64 left = itemsLimit - items; // we count only foolprof taken rows, so here we may precharge some extra rows
+                        ui64 left = itemsLimit - items; // we count only foolproof taken rows, so here we may precharge some extra rows
                         if (prechargeCurrentFirstRowId - prechargeCurrentLastRowId > left) {
                             prechargeCurrentLastRowId = prechargeCurrentFirstRowId - left;
                         }

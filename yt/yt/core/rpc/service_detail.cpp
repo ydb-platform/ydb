@@ -2451,6 +2451,7 @@ void TServiceBase::DoConfigure(
             auto methodConfig = methodIt ? methodIt->second : New<TMethodConfig>();
 
             const auto& descriptor = runtimeInfo->Descriptor;
+
             runtimeInfo->Heavy.store(methodConfig->Heavy.value_or(descriptor.Options.Heavy));
             runtimeInfo->QueueSizeLimit.store(methodConfig->QueueSizeLimit.value_or(descriptor.QueueSizeLimit));
             runtimeInfo->ConcurrencyLimit.Reconfigure(methodConfig->ConcurrencyLimit.value_or(descriptor.ConcurrencyLimit));

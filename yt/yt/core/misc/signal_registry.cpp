@@ -4,13 +4,15 @@
 
 #include <library/cpp/yt/system/thread_id.h>
 
+#include <util/generic/algorithm.h>
+
 #include <signal.h>
 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::vector<int> CrashSignals = {
+constexpr std::initializer_list<int> CrashSignals{
     SIGSEGV,
     SIGILL,
     SIGFPE,
@@ -19,8 +21,6 @@ std::vector<int> CrashSignals = {
     SIGBUS,
 #endif
 };
-
-////////////////////////////////////////////////////////////////////////////////
 
 // This variable is used for protecting signal handlers for crash signals from
 // dumping stuff while another thread is already doing that. Our policy is to let
@@ -43,19 +43,22 @@ void TSignalRegistry::SetupSignal(int signal, int flags)
         YT_VERIFY(signal != SIGALRM);
 
         if (!OverrideNonDefaultSignalHandlers_) {
-            struct sigaction oldact;
-            YT_VERIFY(sigaction(signal, NULL, &oldact) == 0);
-            if (reinterpret_cast<void*>(oldact.sa_sigaction) != SIG_DFL) {
+            struct sigaction sa;
+            YT_VERIFY(sigaction(signal, nullptr, &sa) == 0);
+            if (reinterpret_cast<void*>(sa.sa_sigaction) != SIG_DFL) {
                 return;
             }
         }
 
-        struct sigaction sa;
-        memset(&sa, 0, sizeof(sa));
-        sigemptyset(&sa.sa_mask);
-        sa.sa_flags = flags | SA_SIGINFO;
-        sa.sa_sigaction = &Handle;
-        YT_VERIFY(sigaction(signal, &sa, NULL) == 0);
+        {
+            struct sigaction sa;
+            memset(&sa, 0, sizeof(sa));
+            sigemptyset(&sa.sa_mask);
+            sa.sa_flags = flags | SA_SIGINFO | SA_ONSTACK;
+            sa.sa_sigaction = &Handle;
+            YT_VERIFY(sigaction(signal, &sa, nullptr) == 0);
+        }
+
         Signals_[signal].SetUp = true;
     });
 #else
@@ -84,7 +87,7 @@ void TSignalRegistry::PushCallback(int signal, TSignalRegistry::TSignalHandler c
 #ifdef _unix_
 void TSignalRegistry::PushCallback(int signal, std::function<void(int)> callback)
 {
-    PushCallback(signal, [callback = std::move(callback)] (int signal, siginfo_t* /* siginfo */, void* /* ucontext */) {
+    PushCallback(signal, [callback = std::move(callback)] (int signal, siginfo_t* /*siginfo*/, void* /*ucontext*/) {
         callback(signal);
     });
 }
@@ -93,11 +96,11 @@ void TSignalRegistry::PushCallback(int signal, std::function<void(int)> callback
 void TSignalRegistry::PushCallback(int signal, std::function<void(void)> callback)
 {
 #ifdef _unix_
-    PushCallback(signal, [callback = std::move(callback)] (int /* signal */, siginfo_t* /* siginfo */, void* /* ucontext */) {
+    PushCallback(signal, [callback = std::move(callback)] (int /*signal*/, siginfo_t* /*siginfo*/, void* /*ucontext*/) {
         callback();
     });
 #else
-    PushCallback(signal, [callback = std::move(callback)] (int /* signal */) {
+    PushCallback(signal, [callback = std::move(callback)] (int /*signal*/) {
         callback();
     });
 #endif
@@ -107,11 +110,13 @@ void TSignalRegistry::PushDefaultSignalHandler(int signal)
 {
     PushCallback(signal, [] (int signal) {
     #ifdef _unix_
-        struct sigaction sa;
-        memset(&sa, 0, sizeof(sa));
-        sigemptyset(&sa.sa_mask);
-        sa.sa_handler = SIG_DFL;
-        YT_VERIFY(sigaction(signal, &sa, nullptr) == 0);
+        {
+            struct sigaction sa;
+            memset(&sa, 0, sizeof(sa));
+            sigemptyset(&sa.sa_mask);
+            sa.sa_handler = SIG_DFL;
+            YT_VERIFY(sigaction(signal, &sa, nullptr) == 0);
+        }
 
         YT_VERIFY(raise(signal) == 0);
     #else
@@ -130,13 +135,12 @@ void TSignalRegistry::Handle(int signal)
     auto* self = Get();
 
     if (self->EnableCrashSignalProtection_ &&
-        std::find(CrashSignals.begin(), CrashSignals.end(), signal) != CrashSignals.end()) {
+        Find(CrashSignals, signal) != CrashSignals.end())
+    {
         // For crash signals we try pretty hard to prevent simultaneous execution of
         // several crash handlers.
-
         auto currentThreadId = GetSequentialThreadId();
         auto expectedCrashingThreadId = InvalidSequentialThreadId;
-
         if (!CrashingThreadId.compare_exchange_strong(expectedCrashingThreadId, currentThreadId)) {
             // We've already entered the signal handler. What should we do?
             if (currentThreadId == expectedCrashingThreadId) {

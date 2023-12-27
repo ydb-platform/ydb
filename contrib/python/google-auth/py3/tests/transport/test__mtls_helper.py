@@ -22,9 +22,6 @@ import pytest  # type: ignore
 from google.auth import exceptions
 from google.auth.transport import _mtls_helper
 
-import yatest.common
-DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
-
 CONTEXT_AWARE_METADATA = {"cert_provider_command": ["some command"]}
 
 ENCRYPTED_EC_PRIVATE_KEY = b"""-----BEGIN ENCRYPTED PRIVATE KEY-----
@@ -116,26 +113,26 @@ class TestCertAndKeyRegex(object):
 
 class TestCheckaMetadataPath(object):
     def test_success(self):
-        metadata_path = os.path.join(DATA_DIR, "context_aware_metadata.json")
+        metadata_path = os.path.join(pytest.data_dir, "context_aware_metadata.json")
         returned_path = _mtls_helper._check_dca_metadata_path(metadata_path)
         assert returned_path is not None
 
     def test_failure(self):
-        metadata_path = os.path.join(DATA_DIR, "not_exists.json")
+        metadata_path = os.path.join(pytest.data_dir, "not_exists.json")
         returned_path = _mtls_helper._check_dca_metadata_path(metadata_path)
         assert returned_path is None
 
 
 class TestReadMetadataFile(object):
     def test_success(self):
-        metadata_path = os.path.join(DATA_DIR, "context_aware_metadata.json")
+        metadata_path = os.path.join(pytest.data_dir, "context_aware_metadata.json")
         metadata = _mtls_helper._read_dca_metadata_file(metadata_path)
 
         assert "cert_provider_command" in metadata
 
     def test_file_not_json(self):
         # read a file which is not json format.
-        metadata_path = os.path.join(DATA_DIR, "privatekey.pem")
+        metadata_path = os.path.join(pytest.data_dir, "privatekey.pem")
         with pytest.raises(exceptions.ClientCertError):
             _mtls_helper._read_dca_metadata_file(metadata_path)
 

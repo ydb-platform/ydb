@@ -70,7 +70,7 @@
 
 #include <unistd.h>
 #include <fcntl.h>
-#if _POSIX_C_SOURCE < 200809L
+#if !defined(BOOST_FILESYSTEM_HAS_POSIX_AT_APIS)
 #include <utime.h>
 #endif
 #include <limits.h>
@@ -1116,7 +1116,7 @@ uintmax_t remove_all_impl
                 count += fs::detail::remove_all_impl
                 (
 #if defined(BOOST_FILESYSTEM_HAS_FDOPENDIR_NOFOLLOW) && defined(BOOST_FILESYSTEM_HAS_POSIX_AT_APIS)
-                    itr->path().filename(),
+                    path_algorithms::filename_v4(itr->path()),
 #else
                     itr->path(),
 #endif
@@ -1511,49 +1511,35 @@ boost::winapi::NTSTATUS_ nt_create_file_handle_at(HANDLE& out, HANDLE basedir_ha
 
 #endif // !defined(UNDER_CE)
 
-bool is_reparse_point_a_symlink_ioctl(HANDLE h)
+ULONG get_reparse_point_tag_ioctl(HANDLE h, path const& p, error_code* ec)
 {
-    boost::scoped_ptr< reparse_data_buffer_with_storage > buf(new reparse_data_buffer_with_storage);
+    boost::scoped_ptr< reparse_data_buffer_with_storage > buf(new (std::nothrow) reparse_data_buffer_with_storage);
+    if (BOOST_UNLIKELY(!buf.get()))
+    {
+        if (!ec)
+            BOOST_FILESYSTEM_THROW(filesystem_error("Cannot allocate memory to query reparse point", p, make_error_code(system::errc::not_enough_memory)));
+
+        *ec = make_error_code(system::errc::not_enough_memory);
+        return 0u;
+    }
 
     // Query the reparse data
     DWORD dwRetLen = 0u;
     BOOL result = ::DeviceIoControl(h, FSCTL_GET_REPARSE_POINT, NULL, 0, buf.get(), sizeof(*buf), &dwRetLen, NULL);
     if (BOOST_UNLIKELY(!result))
-        return false;
+    {
+        DWORD err = ::GetLastError();
+        if (!ec)
+            BOOST_FILESYSTEM_THROW(filesystem_error("Failed to query reparse point", p, error_code(err, system_category())));
 
-    return is_reparse_point_tag_a_symlink(buf->rdb.ReparseTag);
+        ec->assign(err, system_category());
+        return 0u;
+    }
+
+    return buf->rdb.ReparseTag;
 }
 
 namespace {
-
-inline bool is_reparse_point_a_symlink(path const& p)
-{
-    handle_wrapper h(create_file_handle(
-        p,
-        FILE_READ_ATTRIBUTES,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        NULL,
-        OPEN_EXISTING,
-        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT));
-    if (BOOST_UNLIKELY(h.handle == INVALID_HANDLE_VALUE))
-        return false;
-
-    GetFileInformationByHandleEx_t* get_file_information_by_handle_ex = filesystem::detail::atomic_load_relaxed(get_file_information_by_handle_ex_api);
-    if (BOOST_LIKELY(get_file_information_by_handle_ex != NULL))
-    {
-        file_attribute_tag_info info;
-        BOOL result = get_file_information_by_handle_ex(h.handle, file_attribute_tag_info_class, &info, sizeof(info));
-        if (BOOST_UNLIKELY(!result))
-            return false;
-
-        if ((info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0u)
-            return false;
-
-        return is_reparse_point_tag_a_symlink(info.ReparseTag);
-    }
-
-    return is_reparse_point_a_symlink_ioctl(h.handle);
-}
 
 inline std::size_t get_full_path_name(path const& src, std::size_t len, wchar_t* buf, wchar_t** p)
 {
@@ -1590,6 +1576,7 @@ fs::file_status status_by_handle(HANDLE h, path const& p, error_code* ec)
 {
     fs::file_type ftype;
     DWORD attrs;
+    ULONG reparse_tag = 0u;
     GetFileInformationByHandleEx_t* get_file_information_by_handle_ex = filesystem::detail::atomic_load_relaxed(get_file_information_by_handle_ex_api);
     if (BOOST_LIKELY(get_file_information_by_handle_ex != NULL))
     {
@@ -1609,12 +1596,7 @@ fs::file_status status_by_handle(HANDLE h, path const& p, error_code* ec)
         }
 
         attrs = info.FileAttributes;
-
-        if (attrs & FILE_ATTRIBUTE_REPARSE_POINT)
-        {
-            ftype = is_reparse_point_tag_a_symlink(info.ReparseTag) ? fs::symlink_file : fs::reparse_file;
-            goto done;
-        }
+        reparse_tag = info.ReparseTag;
     }
     else
     {
@@ -1626,25 +1608,48 @@ fs::file_status status_by_handle(HANDLE h, path const& p, error_code* ec)
 
         attrs = info.dwFileAttributes;
 
-        if (attrs & FILE_ATTRIBUTE_REPARSE_POINT)
+        if ((attrs & FILE_ATTRIBUTE_REPARSE_POINT) != 0u)
         {
-            ftype = is_reparse_point_a_symlink_ioctl(h) ? fs::symlink_file : fs::reparse_file;
-            goto done;
+            reparse_tag = get_reparse_point_tag_ioctl(h, p, ec);
+            if (ec)
+            {
+                if (BOOST_UNLIKELY(!!ec))
+                    return fs::file_status(fs::status_error);
+            }
         }
     }
 
-    ftype = (attrs & FILE_ATTRIBUTE_DIRECTORY) ? fs::directory_file : fs::regular_file;
+    if ((attrs & FILE_ATTRIBUTE_REPARSE_POINT) != 0u)
+    {
+        if (reparse_tag == IO_REPARSE_TAG_DEDUP)
+            ftype = fs::regular_file;
+        else if (is_reparse_point_tag_a_symlink(reparse_tag))
+            ftype = fs::symlink_file;
+        else
+            ftype = fs::reparse_file;
+    }
+    else if ((attrs & FILE_ATTRIBUTE_DIRECTORY) != 0u)
+    {
+        ftype = fs::directory_file;
+    }
+    else
+    {
+        ftype = fs::regular_file;
+    }
 
-done:
     return fs::file_status(ftype, make_permissions(p, attrs));
 }
 
 //! symlink_status() implementation
 fs::file_status symlink_status_impl(path const& p, error_code* ec)
 {
+    // Normally, we only need FILE_READ_ATTRIBUTES access mode. But SMBv1 reports incorrect
+    // file attributes in GetFileInformationByHandleEx in this case (e.g. it reports FILE_ATTRIBUTE_NORMAL
+    // for a directory in a SMBv1 share), so we add FILE_READ_EA as a workaround.
+    // https://github.com/boostorg/filesystem/issues/282
     handle_wrapper h(create_file_handle(
         p.c_str(),
-        FILE_READ_ATTRIBUTES, // dwDesiredAccess; attributes only
+        FILE_READ_ATTRIBUTES | FILE_READ_EA,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         NULL, // lpSecurityAttributes
         OPEN_EXISTING,
@@ -1688,7 +1693,7 @@ fs::file_status status_impl(path const& p, error_code* ec)
         // Resolve the symlink
         handle_wrapper h(create_file_handle(
             p.c_str(),
-            FILE_READ_ATTRIBUTES, // dwDesiredAccess; attributes only
+            FILE_READ_ATTRIBUTES | FILE_READ_EA, // see the comment in symlink_status_impl re. access mode
             FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
             NULL, // lpSecurityAttributes
             OPEN_EXISTING,
@@ -1775,7 +1780,7 @@ DWORD remove_nt6_by_handle(HANDLE handle, remove_impl_type impl)
                 break;
 
             err = ::GetLastError();
-            if (BOOST_UNLIKELY(err == ERROR_INVALID_PARAMETER || err == ERROR_INVALID_FUNCTION || err == ERROR_NOT_SUPPORTED))
+            if (BOOST_UNLIKELY(err == ERROR_INVALID_PARAMETER || err == ERROR_INVALID_FUNCTION || err == ERROR_NOT_SUPPORTED || err == ERROR_CALL_NOT_IMPLEMENTED))
             {
                 // Downgrade to the older implementation
                 impl = remove_disp_ex_flag_posix_semantics;
@@ -1833,7 +1838,7 @@ DWORD remove_nt6_by_handle(HANDLE handle, remove_impl_type impl)
 
                 break;
             }
-            else if (BOOST_UNLIKELY(err == ERROR_INVALID_PARAMETER || err == ERROR_INVALID_FUNCTION || err == ERROR_NOT_SUPPORTED))
+            else if (BOOST_UNLIKELY(err == ERROR_INVALID_PARAMETER || err == ERROR_INVALID_FUNCTION || err == ERROR_NOT_SUPPORTED || err == ERROR_CALL_NOT_IMPLEMENTED))
             {
                 // Downgrade to the older implementation
                 impl = remove_disp;
@@ -1902,7 +1907,7 @@ inline bool remove_nt6_impl(path const& p, remove_impl_type impl, error_code* ec
 {
     handle_wrapper h(create_file_handle(
         p,
-        DELETE | FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES,
+        DELETE | FILE_READ_ATTRIBUTES | FILE_READ_EA | FILE_WRITE_ATTRIBUTES | FILE_WRITE_EA,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         NULL,
         OPEN_EXISTING,
@@ -1999,12 +2004,12 @@ uintmax_t remove_all_nt6_by_handle(HANDLE h, path const& p, error_code* ec)
                 (
                     hh.handle,
                     h,
-                    nested_path.filename(),
+                    path_algorithms::filename_v4(nested_path),
                     0u, // FileAttributes
-                    FILE_LIST_DIRECTORY | DELETE | FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES | SYNCHRONIZE,
+                    FILE_LIST_DIRECTORY | DELETE | FILE_READ_ATTRIBUTES | FILE_READ_EA | FILE_WRITE_ATTRIBUTES | FILE_WRITE_EA | SYNCHRONIZE,
                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                     FILE_OPEN,
-                    FILE_OPEN_FOR_BACKUP_INTENT | FILE_OPEN_REPARSE_POINT
+                    FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_FOR_BACKUP_INTENT | FILE_OPEN_REPARSE_POINT
                 );
 
                 if (!NT_SUCCESS(status))
@@ -2027,7 +2032,7 @@ uintmax_t remove_all_nt6_by_handle(HANDLE h, path const& p, error_code* ec)
             {
                 hh.handle = create_file_handle(
                     nested_path,
-                    FILE_LIST_DIRECTORY | DELETE | FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES | SYNCHRONIZE,
+                    FILE_LIST_DIRECTORY | DELETE | FILE_READ_ATTRIBUTES | FILE_READ_EA | FILE_WRITE_ATTRIBUTES | FILE_WRITE_EA | SYNCHRONIZE,
                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                     NULL,
                     OPEN_EXISTING,
@@ -2144,7 +2149,7 @@ inline uintmax_t remove_all_impl(path const& p, error_code* ec)
     {
         handle_wrapper h(create_file_handle(
             p,
-            FILE_LIST_DIRECTORY | DELETE | FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES | SYNCHRONIZE,
+            FILE_LIST_DIRECTORY | DELETE | FILE_READ_ATTRIBUTES | FILE_READ_EA | FILE_WRITE_ATTRIBUTES | FILE_WRITE_EA | SYNCHRONIZE,
             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
             NULL,
             OPEN_EXISTING,
@@ -2385,12 +2390,12 @@ path absolute(path const& p, path const& base, system::error_code* ec)
     else
     {
         res.concat(abs_base.root_directory());
-        res /= abs_base.relative_path();
+        path_algorithms::append_v4(res, abs_base.relative_path());
     }
 
     path p_relative_path(p.relative_path());
     if (!p_relative_path.empty())
-        res /= p_relative_path;
+        path_algorithms::append_v4(res, p_relative_path);
 
     return res;
 }
@@ -2437,14 +2442,14 @@ path canonical(path const& p, path const& base, system::error_code* ec)
     path result;
     while (true)
     {
-        for (path::iterator itr(source.begin()), end(source.end()); itr != end; ++itr)
+        for (path::iterator itr(source.begin()), end(source.end()); itr != end; path_algorithms::increment_v4(itr))
         {
-            if (*itr == dot_p)
+            if (path_algorithms::compare_v4(*itr, dot_p) == 0)
                 continue;
-            if (*itr == dot_dot_p)
+            if (path_algorithms::compare_v4(*itr, dot_dot_p) == 0)
             {
-                if (result != root)
-                    result.remove_filename();
+                if (path_algorithms::compare_v4(result, root) != 0)
+                    result.remove_filename_and_trailing_separators();
                 continue;
             }
 
@@ -2459,7 +2464,7 @@ path canonical(path const& p, path const& base, system::error_code* ec)
                 continue;
             }
 
-            result /= *itr;
+            path_algorithms::append_v4(result, *itr);
 
             // If we don't have an absolute path yet then don't check symlink status.
             // This avoids checking "C:" which is "the current directory on drive C"
@@ -2484,14 +2489,14 @@ path canonical(path const& p, path const& base, system::error_code* ec)
                 path link(detail::read_symlink(result, ec));
                 if (ec && *ec)
                     goto return_empty_path;
-                result.remove_filename();
+                result.remove_filename_and_trailing_separators();
 
                 if (link.is_absolute())
                 {
-                    for (++itr; itr != end; ++itr)
+                    for (path_algorithms::increment_v4(itr); itr != end; path_algorithms::increment_v4(itr))
                     {
-                        if (*itr != dot_p)
-                            link /= *itr;
+                        if (path_algorithms::compare_v4(*itr, dot_p) != 0)
+                            path_algorithms::append_v4(link, *itr);
                     }
                     source = link;
                     root = source.root_path();
@@ -2499,15 +2504,15 @@ path canonical(path const& p, path const& base, system::error_code* ec)
                 else // link is relative
                 {
                     link.remove_trailing_separator();
-                    if (link == dot_p)
+                    if (path_algorithms::compare_v4(link, dot_p) == 0)
                         continue;
 
                     path new_source(result);
-                    new_source /= link;
-                    for (++itr; itr != end; ++itr)
+                    path_algorithms::append_v4(new_source, link);
+                    for (path_algorithms::increment_v4(itr); itr != end; path_algorithms::increment_v4(itr))
                     {
-                        if (*itr != dot_p)
-                            new_source /= *itr;
+                        if (path_algorithms::compare_v4(*itr, dot_p) != 0)
+                            path_algorithms::append_v4(new_source, *itr);
                     }
                     source = new_source;
                 }
@@ -2603,10 +2608,10 @@ void copy(path const& from, path const& to, unsigned int options, system::error_
                 relative_from = detail::relative(abs_from, abs_to, ec);
                 if (ec && *ec)
                     return;
-                if (relative_from != dot_path())
-                    relative_from /= from.filename();
+                if (path_algorithms::compare_v4(relative_from, dot_path()) != 0)
+                    path_algorithms::append_v4(relative_from, path_algorithms::filename_v4(from));
                 else
-                    relative_from = from.filename();
+                    relative_from = path_algorithms::filename_v4(from);
                 pfrom = &relative_from;
             }
             detail::create_symlink(*pfrom, to, ec);
@@ -2642,7 +2647,11 @@ void copy(path const& from, path const& to, unsigned int options, system::error_
         }
 
         if (is_directory(to_stat))
-            detail::copy_file(from, to / from.filename(), options, ec);
+        {
+            path target(to);
+            path_algorithms::append_v4(target, path_algorithms::filename_v4(from));
+            detail::copy_file(from, target, options, ec);
+        }
         else
             detail::copy_file(from, to, options, ec);
     }
@@ -2697,8 +2706,12 @@ void copy(path const& from, path const& to, unsigned int options, system::error_
             while (itr != end_dit)
             {
                 path const& p = itr->path();
-                // Set _detail_recursing flag so that we don't recurse more than for one level deeper into the directory if options are copy_options::none
-                detail::copy(p, to / p.filename(), options | static_cast< unsigned int >(copy_options::_detail_recursing), ec);
+                {
+                    path target(to);
+                    path_algorithms::append_v4(target, path_algorithms::filename_v4(p));
+                    // Set _detail_recursing flag so that we don't recurse more than for one level deeper into the directory if options are copy_options::none
+                    detail::copy(p, target, options | static_cast< unsigned int >(copy_options::_detail_recursing), ec);
+                }
                 if (ec && *ec)
                     return;
 
@@ -2953,7 +2966,14 @@ bool copy_file(path const& from, path const& to, unsigned int options, error_cod
         // Create handle_wrappers here so that CloseHandle calls don't clobber error code returned by GetLastError
         handle_wrapper hw_from, hw_to;
 
-        hw_from.handle = create_file_handle(from.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS);
+        // See the comment in last_write_time regarding access rights used here for GetFileTime.
+        hw_from.handle = create_file_handle(
+            from.c_str(),
+            FILE_READ_ATTRIBUTES | FILE_READ_EA,
+            FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+            NULL,
+            OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS);
 
         FILETIME lwt_from;
         if (hw_from.handle == INVALID_HANDLE_VALUE)
@@ -2967,7 +2987,13 @@ bool copy_file(path const& from, path const& to, unsigned int options, error_cod
         if (!::GetFileTime(hw_from.handle, NULL, NULL, &lwt_from))
             goto fail_last_error;
 
-        hw_to.handle = create_file_handle(to.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS);
+        hw_to.handle = create_file_handle(
+            to.c_str(),
+            FILE_READ_ATTRIBUTES | FILE_READ_EA,
+            FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+            NULL,
+            OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS);
 
         if (hw_to.handle != INVALID_HANDLE_VALUE)
         {
@@ -3088,9 +3114,9 @@ bool create_directories(path const& p, system::error_code* ec)
     error_code local_ec;
 
     // Find the initial part of the path that exists
-    for (path fname = parent.filename(); parent.has_relative_path(); fname = parent.filename())
+    for (path fname = path_algorithms::filename_v4(parent); parent.has_relative_path(); fname = path_algorithms::filename_v4(parent))
     {
-        if (!fname.empty() && fname != dot_p && fname != dot_dot_p)
+        if (!fname.empty() && path_algorithms::compare_v4(fname, dot_p) != 0 && path_algorithms::compare_v4(fname, dot_dot_p) != 0)
         {
             file_status existing_status = detail::status_impl(parent, &local_ec);
 
@@ -3107,19 +3133,19 @@ bool create_directories(path const& p, system::error_code* ec)
             }
         }
 
-        --it;
-        parent.remove_filename();
+        path_algorithms::decrement_v4(it);
+        parent.remove_filename_and_trailing_separators();
     }
 
     // Create missing directories
     bool created = false;
-    for (; it != e; ++it)
+    for (; it != e; path_algorithms::increment_v4(it))
     {
         path const& fname = *it;
-        parent /= fname;
-        if (!fname.empty() && fname != dot_p && fname != dot_dot_p)
+        path_algorithms::append_v4(parent, fname);
+        if (!fname.empty() && path_algorithms::compare_v4(fname, dot_p) != 0 && path_algorithms::compare_v4(fname, dot_dot_p) != 0)
         {
-            created = create_directory(parent, NULL, &local_ec);
+            created = detail::create_directory(parent, NULL, &local_ec);
             if (BOOST_UNLIKELY(!!local_ec))
             {
                 if (!ec)
@@ -3749,9 +3775,10 @@ std::time_t creation_time(path const& p, system::error_code* ec)
 
 #else // defined(BOOST_POSIX_API)
 
+    // See the comment in last_write_time regarding access rights used here for GetFileTime.
     handle_wrapper hw(create_file_handle(
         p.c_str(),
-        FILE_READ_ATTRIBUTES,
+        FILE_READ_ATTRIBUTES | FILE_READ_EA,
         FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
         NULL,
         OPEN_EXISTING,
@@ -3765,7 +3792,6 @@ std::time_t creation_time(path const& p, system::error_code* ec)
     }
 
     FILETIME ct;
-
     if (BOOST_UNLIKELY(!::GetFileTime(hw.handle, &ct, NULL, NULL)))
         goto fail;
 
@@ -3807,9 +3833,12 @@ std::time_t last_write_time(path const& p, system::error_code* ec)
 
 #else // defined(BOOST_POSIX_API)
 
+    // GetFileTime is documented to require GENERIC_READ access right, but this causes problems if the file
+    // is opened by another process without FILE_SHARE_READ. In practice, FILE_READ_ATTRIBUTES works, and
+    // FILE_READ_EA is also added for good measure, in case if it matters for SMBv1.
     handle_wrapper hw(create_file_handle(
         p.c_str(),
-        FILE_READ_ATTRIBUTES,
+        FILE_READ_ATTRIBUTES | FILE_READ_EA,
         FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
         NULL,
         OPEN_EXISTING,
@@ -3823,7 +3852,6 @@ std::time_t last_write_time(path const& p, system::error_code* ec)
     }
 
     FILETIME lwt;
-
     if (BOOST_UNLIKELY(!::GetFileTime(hw.handle, NULL, NULL, &lwt)))
         goto fail;
 
@@ -4055,9 +4083,8 @@ path read_symlink(path const& p, system::error_code* ec)
     DWORD error;
     if (BOOST_UNLIKELY(h.handle == INVALID_HANDLE_VALUE))
     {
+    return_last_error:
         error = ::GetLastError();
-
-    return_error:
         emit_error(error, p, ec, "boost::filesystem::read_symlink");
         return symlink_path;
     }
@@ -4065,10 +4092,7 @@ path read_symlink(path const& p, system::error_code* ec)
     boost::scoped_ptr< reparse_data_buffer_with_storage > buf(new reparse_data_buffer_with_storage);
     DWORD sz = 0u;
     if (BOOST_UNLIKELY(!::DeviceIoControl(h.handle, FSCTL_GET_REPARSE_POINT, NULL, 0, buf.get(), sizeof(*buf), &sz, NULL)))
-    {
-        error = ::GetLastError();
-        goto return_error;
-    }
+        goto return_last_error;
 
     const wchar_t* buffer;
     std::size_t offset, len;
@@ -4310,11 +4334,8 @@ path temp_directory_path(system::error_code* ec)
 #else // Windows
 #if !defined(UNDER_CE)
 
-    const wchar_t* tmp_env = L"TMP";
-    const wchar_t* temp_env = L"TEMP";
-    const wchar_t* localappdata_env = L"LOCALAPPDATA";
-    const wchar_t* userprofile_env = L"USERPROFILE";
-    const wchar_t* env_list[] = { tmp_env, temp_env, localappdata_env, userprofile_env };
+    static const wchar_t* env_list[] = { L"TMP", L"TEMP", L"LOCALAPPDATA", L"USERPROFILE" };
+    static const wchar_t temp_dir[] = L"Temp";
 
     path p;
     for (unsigned int i = 0; i < sizeof(env_list) / sizeof(*env_list); ++i)
@@ -4324,7 +4345,7 @@ path temp_directory_path(system::error_code* ec)
         {
             p = env;
             if (i >= 2)
-                p /= L"Temp";
+                path_algorithms::append_v4(p, temp_dir, temp_dir + (sizeof(temp_dir) / sizeof(*temp_dir) - 1u));
             error_code lcl_ec;
             if (exists(p, lcl_ec) && !lcl_ec && is_directory(p, lcl_ec) && !lcl_ec)
                 break;
@@ -4349,7 +4370,7 @@ path temp_directory_path(system::error_code* ec)
             goto getwindir_error;
 
         p = buf.get(); // do not depend on initial buf size, see ticket #10388
-        p /= L"Temp";
+        path_algorithms::append_v4(p, temp_dir, temp_dir + (sizeof(temp_dir) / sizeof(*temp_dir) - 1u));
     }
 
     return p;
@@ -4395,7 +4416,12 @@ path system_complete(path const& p, system::error_code* ec)
 {
 #ifdef BOOST_POSIX_API
 
-    return (p.empty() || p.is_absolute()) ? p : current_path() / p;
+    if (p.empty() || p.is_absolute())
+        return p;
+
+    path res(current_path());
+    path_algorithms::append_v4(res, p);
+    return res;
 
 #else
     if (p.empty())
@@ -4432,9 +4458,9 @@ path weakly_canonical(path const& p, path const& base, system::error_code* ec)
 
     path::iterator itr(p_end);
     path head(p);
-    for (; !head.empty(); --itr)
+    for (; !head.empty(); path_algorithms::decrement_v4(itr))
     {
-        file_status head_status = detail::status_impl(head, &local_ec);
+        file_status head_status(detail::status_impl(head, &local_ec));
         if (BOOST_UNLIKELY(head_status.type() == fs::status_error))
         {
             if (!ec)
@@ -4447,35 +4473,48 @@ path weakly_canonical(path const& p, path const& base, system::error_code* ec)
         if (head_status.type() != fs::file_not_found)
             break;
 
-        head.remove_filename();
+        head.remove_filename_and_trailing_separators();
     }
+
+    if (head.empty())
+        return path_algorithms::lexically_normal_v4(p);
+
+    path const& dot_p = dot_path();
+    path const& dot_dot_p = dot_dot_path();
 
 #else
 
-    // On Windows, filesystem APIs such as GetFileAttributesW perform lexical path normalization internally.
-    // As a result, a path like "c:\a\.." can be reported as present even if "c:\a" is not. This would break
-    // canonical, as symlink_status that it calls internally would report an error that the file at the intermediate
-    // path does not exist. To avoid this, scan the initial path in the forward direction.
-    // Also, operate on paths with preferred separators. This can be important on Windows since GetFileAttributesW,
-    // which is called in status() may return "file not found" for paths to network shares and mounted cloud
-    // storages that have forward slashes as separators.
+    // On Windows, filesystem APIs such as GetFileAttributesW and CreateFileW perform lexical path normalization
+    // internally. As a result, a path like "c:\a\.." can be reported as present even if "c:\a" is not. This would
+    // break canonical, as symlink_status that it calls internally would report an error that the file at the
+    // intermediate path does not exist. To avoid this, scan the initial path in the forward direction.
+    // Also, operate on paths with preferred separators. This can be important on Windows since GetFileAttributesW
+    // or CreateFileW, which is called in status() may return "file not found" for paths to network shares and
+    // mounted cloud storages that have forward slashes as separators.
+    // Also, avoid querying status of the root name such as \\?\c: as CreateFileW returns ERROR_INVALID_FUNCTION for
+    // such path. Querying the status of a root name such as c: is also not right as this path refers to the current
+    // directory on drive C:, which is not what we want to test for existence anyway.
     path::iterator itr(p.begin());
     path head;
-    for (; itr != p_end; ++itr)
+    if (p.has_root_name())
     {
-        path const& p_elem = *itr;
-        if (p_elem.size() == 1u && detail::is_directory_separator(p_elem.native()[0]))
-        {
-            // Convert generic separator returned by the iterator for the root directory to
-            // the preferred separator.
-            head += path::preferred_separator;
-        }
-        else
-        {
-            head /= p_elem;
-        }
+        BOOST_ASSERT(itr != p_end);
+        head = *itr;
+        path_algorithms::increment_v4(itr);
+    }
 
-        file_status head_status = detail::status_impl(head, &local_ec);
+    if (p.has_root_directory())
+    {
+        BOOST_ASSERT(itr != p_end);
+        // Convert generic separator returned by the iterator for the root directory to
+        // the preferred separator.
+        head += path::preferred_separator;
+        path_algorithms::increment_v4(itr);
+    }
+
+    if (!head.empty())
+    {
+        file_status head_status(detail::status_impl(head, &local_ec));
         if (BOOST_UNLIKELY(head_status.type() == fs::status_error))
         {
             if (!ec)
@@ -4487,37 +4526,64 @@ path weakly_canonical(path const& p, path const& base, system::error_code* ec)
 
         if (head_status.type() == fs::file_not_found)
         {
-            head.remove_filename();
+            // If the root path does not exist then no path element exists
+            return path_algorithms::lexically_normal_v4(p);
+        }
+    }
+
+    path const& dot_p = dot_path();
+    path const& dot_dot_p = dot_dot_path();
+    for (; itr != p_end; path_algorithms::increment_v4(itr))
+    {
+        path const& p_elem = *itr;
+
+        // Avoid querying status of paths containing dot and dot-dot elements, as this will break
+        // if the root name starts with "\\?\".
+        if (path_algorithms::compare_v4(p_elem, dot_p) == 0)
+            continue;
+
+        if (path_algorithms::compare_v4(p_elem, dot_dot_p) == 0)
+        {
+            if (head.has_relative_path())
+                head.remove_filename_and_trailing_separators();
+
+            continue;
+        }
+
+        path_algorithms::append_v4(head, p_elem);
+
+        file_status head_status(detail::status_impl(head, &local_ec));
+        if (BOOST_UNLIKELY(head_status.type() == fs::status_error))
+        {
+            if (!ec)
+                BOOST_FILESYSTEM_THROW(filesystem_error("boost::filesystem::weakly_canonical", head, local_ec));
+
+            *ec = local_ec;
+            return path();
+        }
+
+        if (head_status.type() == fs::file_not_found)
+        {
+            head.remove_filename_and_trailing_separators();
             break;
         }
     }
 
+    if (head.empty())
+        return path_algorithms::lexically_normal_v4(p);
+
 #endif
 
-    path const& dot_p = dot_path();
-    path const& dot_dot_p = dot_dot_path();
     path tail;
     bool tail_has_dots = false;
-    for (; itr != p_end; ++itr)
+    for (; itr != p_end; path_algorithms::increment_v4(itr))
     {
         path const& tail_elem = *itr;
-#if defined(BOOST_WINDOWS_API)
-        if (tail_elem.size() == 1u && detail::is_directory_separator(tail_elem.native()[0]))
-        {
-            // Convert generic separator returned by the iterator for the root directory to
-            // the preferred separator.
-            tail += path::preferred_separator;
-            continue;
-        }
-#endif
-        tail /= tail_elem;
+        path_algorithms::append_v4(tail, tail_elem);
         // for a later optimization, track if any dot or dot-dot elements are present
-        if (!tail_has_dots && (tail_elem == dot_p || tail_elem == dot_dot_p))
+        if (!tail_has_dots && (path_algorithms::compare_v4(tail_elem, dot_p) == 0 || path_algorithms::compare_v4(tail_elem, dot_dot_p) == 0))
             tail_has_dots = true;
     }
-
-    if (head.empty())
-        return p.lexically_normal();
 
     head = detail::canonical(head, base, &local_ec);
     if (BOOST_UNLIKELY(!!local_ec))
@@ -4531,11 +4597,11 @@ path weakly_canonical(path const& p, path const& base, system::error_code* ec)
 
     if (BOOST_LIKELY(!tail.empty()))
     {
-        head /= tail;
+        path_algorithms::append_v4(head, tail);
 
         // optimization: only normalize if tail had dot or dot-dot element
         if (tail_has_dots)
-            return head.lexically_normal();
+            return path_algorithms::lexically_normal_v4(head);
     }
 
     return head;

@@ -27,8 +27,8 @@ from google.auth import transport
 from google.oauth2 import credentials
 
 
-import yatest.common
-DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+import yatest.common as yc
+DATA_DIR = os.path.join(os.path.dirname(yc.source_path(__file__)), "..", "data")
 
 AUTH_USER_JSON_FILE = os.path.join(DATA_DIR, "authorized_user.json")
 
@@ -122,6 +122,17 @@ class TestCredentials(object):
             )
 
         assert excinfo.match("The provided refresh_handler is not a callable or None.")
+
+    def test_refresh_with_non_default_universe_domain(self):
+        creds = credentials.Credentials(
+            token="token", universe_domain="dummy_universe.com"
+        )
+        with pytest.raises(exceptions.RefreshError) as excinfo:
+            creds.refresh(mock.Mock())
+
+        assert excinfo.match(
+            "refresh is only supported in the default googleapis.com universe domain"
+        )
 
     @mock.patch("google.oauth2.reauth.refresh_grant", autospec=True)
     @mock.patch(
@@ -775,6 +786,12 @@ class TestCredentials(object):
         creds.apply(headers)
         assert "x-goog-user-project" in headers
 
+    def test_with_universe_domain(self):
+        creds = credentials.Credentials(token="token")
+        assert creds.universe_domain == "googleapis.com"
+        new_creds = creds.with_universe_domain("dummy_universe.com")
+        assert new_creds.universe_domain == "dummy_universe.com"
+
     def test_with_token_uri(self):
         info = AUTH_USER_INFO.copy()
 
@@ -869,6 +886,7 @@ class TestCredentials(object):
         assert json_asdict.get("scopes") == creds.scopes
         assert json_asdict.get("client_secret") == creds.client_secret
         assert json_asdict.get("expiry") == info["expiry"]
+        assert json_asdict.get("universe_domain") == creds.universe_domain
 
         # Test with a `strip` arg
         json_output = creds.to_json(strip=["client_secret"])
@@ -895,6 +913,17 @@ class TestCredentials(object):
 
         for attr in list(creds.__dict__):
             assert getattr(creds, attr) == getattr(unpickled, attr)
+
+    def test_pickle_and_unpickle_universe_domain(self):
+        # old version of auth lib doesn't have _universe_domain, so the pickled
+        # cred doesn't have such a field.
+        creds = self.make_credentials()
+        del creds._universe_domain
+
+        unpickled = pickle.loads(pickle.dumps(creds))
+
+        # make sure the unpickled cred sets _universe_domain to default.
+        assert unpickled.universe_domain == "googleapis.com"
 
     def test_pickle_and_unpickle_with_refresh_handler(self):
         expected_expiry = _helpers.utcnow() + datetime.timedelta(seconds=2800)

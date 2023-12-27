@@ -367,7 +367,7 @@ Json2RepeatedFieldValue(const NJson::TJsonValue& jsonValue,
                         const google::protobuf::FieldDescriptor& field,
                         const NProtobufJson::TJson2ProtoConfig& config,
                         const google::protobuf::Reflection* reflection,
-                        const TMaybe<TString>& key = {}) {
+                        const TString* key = nullptr) {
     using namespace google::protobuf;
 
     switch (field.cpp_type()) {
@@ -392,12 +392,12 @@ Json2RepeatedFieldValue(const NJson::TJsonValue& jsonValue,
         case FieldDescriptor::CPPTYPE_MESSAGE: {
             Message* innerProto = reflection->AddMessage(&proto, &field);
             Y_ASSERT(!!innerProto);
-            if (key.Defined()) {
-                const FieldDescriptor* keyField = innerProto->GetDescriptor()->FindFieldByName("key");
+            if (key) {
+                const FieldDescriptor* keyField = innerProto->GetDescriptor()->map_key();
                 Y_ENSURE(keyField, "Map entry key field not found: " << field.name());
                 SetKey(*innerProto, *keyField, *key);
 
-                const FieldDescriptor* valueField = innerProto->GetDescriptor()->FindFieldByName("value");
+                const FieldDescriptor* valueField = innerProto->GetDescriptor()->map_value();
                 Y_ENSURE(valueField, "Map entry value field not found.");
                 Json2SingleField(jsonValue, *innerProto, *valueField, config, /*isMapValue=*/true);
             } else {
@@ -457,7 +457,7 @@ Json2RepeatedField(const NJson::TJsonValue& json,
             if (config.UnknownFieldsCollector) {
                 config.UnknownFieldsCollector->OnEnterMapItem(key);
             }
-            Json2RepeatedFieldValue(jsonValue, proto, field, config, reflection, key);
+            Json2RepeatedFieldValue(jsonValue, proto, field, config, reflection, &key);
             if (config.UnknownFieldsCollector) {
                 config.UnknownFieldsCollector->OnLeaveMapItem();
             }

@@ -1,4 +1,3 @@
-#include "yt/yt/core/misc/ref_counted.h"
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
@@ -8,6 +7,8 @@
 
 #include <yt/yt/library/profiling/solomon/registry.h>
 #include <yt/yt/library/profiling/solomon/remote.h>
+
+#include <library/cpp/yt/memory/ref_counted.h>
 
 #include <util/string/join.h>
 

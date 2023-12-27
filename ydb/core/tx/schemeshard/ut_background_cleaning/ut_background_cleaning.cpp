@@ -17,9 +17,9 @@ THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> GetTestCompactionCon
     auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
 
     auto* backgroundCleaningConfig = request->Record.MutableConfig()->MutableBackgroundCleaningConfig();
-    backgroundCleaningConfig->SetMaxRate(1);
-    backgroundCleaningConfig->SetMinWakeupIntervalMs(5);
-    backgroundCleaningConfig->SetInflightLimit(1);
+    backgroundCleaningConfig->SetMaxRate(10);
+    backgroundCleaningConfig->SetMinWakeupIntervalMs(500);
+    backgroundCleaningConfig->SetInflightLimit(10);
 
     auto* retrySettings = backgroundCleaningConfig->MutableRetrySettings();
 
@@ -65,6 +65,28 @@ void TestCreateTempTable(TTestActorRuntime& runtime, ui64 txId, const TString& w
     TestModificationResults(runtime, txId, expectedResults);
 }
 
+void AsyncDropTempTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx) {
+    auto ev = DropTableRequest(txId, workingDir, scheme);
+    auto* tx = ev->Record.MutableTransaction(0);
+    auto* drop = tx->MutableDrop();
+    drop->SetTemporary(true);
+    drop->SetOwnerActorId(ownerActorId.ToString());
+
+    runtime.Send(new IEventHandle(MakeTabletResolverID(), ownerActorId,
+            new TEvTabletResolver::TEvForward(schemeShardId, new IEventHandle(TActorId(), ownerActorId, ev), { },
+                TEvTabletResolver::TEvForward::EActor::Tablet)), nodeIdx);
+}
+
+void TestDropTempTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, const TVector<TExpectedResult>& expectedResults, ui32 ownerNodeIdx, bool checkUnsubscribe) {
+    AsyncDropTempTable(runtime, TTestTxConfig::SchemeShard, txId, workingDir, scheme, ownerActorId, ownerNodeIdx);
+    TestModificationResults(runtime, txId, expectedResults);
+    if (checkUnsubscribe) {
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(NActors::TEvents::TSystem::Unsubscribe);
+        runtime.DispatchEvents(options);
+    }
+}
+
 THashSet<TString> GetTables(
     TTestActorRuntime &runtime,
     ui64 tabletId)
@@ -108,7 +130,7 @@ void CheckTable(
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
-    Y_UNIT_TEST(SchemeshardBackgroundCleaningTestSimple) {
+    Y_UNIT_TEST(SchemeshardBackgroundCleaningTestSimpleCreateClean) {
         TTestBasicRuntime runtime(3);
         TTestEnv env(runtime);
 
@@ -143,7 +165,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         CheckTable(runtime, "/MyRoot/TempTable", TTestTxConfig::SchemeShard, false);
     }
 
-    Y_UNIT_TEST(SchemeshardBackgroundCleaningTestWithRetry) {
+    Y_UNIT_TEST(SchemeshardBackgroundCleaningTestCreateCleanWithRetry) {
         TTestBasicRuntime runtime(3);
         TTestEnv env(runtime);
 
@@ -171,6 +193,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         const TActorId proxy = runtime.GetInterconnectProxy(1, 0);
 
         runtime.Send(new IEventHandle(proxy, TActorId(), new TEvInterconnect::TEvDisconnect(), 0, 0), 1, true);
+
         TDispatchOptions options;
         options.FinalEvents.emplace_back(TEvInterconnect::EvNodeDisconnected);
         runtime.DispatchEvents(options);
@@ -180,7 +203,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         CheckTable(runtime, "/MyRoot/TempTable", TTestTxConfig::SchemeShard, true);
     }
 
-    Y_UNIT_TEST(SchemeshardBackgroundCleaningTestTwoTables) {
+    Y_UNIT_TEST(SchemeshardBackgroundCleaningTestCreateCleanManyTables) {
         TTestBasicRuntime runtime(3);
         TTestEnv env(runtime);
 
@@ -191,25 +214,24 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         SetBackgroundCleaning(runtime, env, TTestTxConfig::SchemeShard);
         env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-        auto ownerActorId1 = runtime.AllocateEdgeActor(1);
-        ui64 txId1 = 100;
-        TestCreateTempTable(runtime, txId1, "/MyRoot", R"(
+        auto ownerActorId = runtime.AllocateEdgeActor(1);
+        ui64 txId = 100;
+        TestCreateTempTable(runtime, txId, "/MyRoot", R"(
                   Name: "TempTable1"
                   Columns { Name: "key"   Type: "Uint64" }
                   Columns { Name: "value" Type: "Utf8" }
                   KeyColumnNames: ["key"]
-            )", ownerActorId1, { NKikimrScheme::StatusAccepted }, 1);
-        env.TestWaitNotification(runtime, txId1);
+            )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        env.TestWaitNotification(runtime, txId);
 
-        auto ownerActorId2 = runtime.AllocateEdgeActor(2);
-        ui64 txId2 = ++txId1;
-        TestCreateTempTable(runtime, txId2, "/MyRoot", R"(
+        ++txId;
+        TestCreateTempTable(runtime, txId, "/MyRoot", R"(
                   Name: "TempTable2"
                   Columns { Name: "key"   Type: "Uint64" }
                   Columns { Name: "value" Type: "Utf8" }
                   KeyColumnNames: ["key"]
-            )", ownerActorId2, { NKikimrScheme::StatusAccepted }, 2);
-        env.TestWaitNotification(runtime, txId2);
+            )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+        env.TestWaitNotification(runtime, txId);
 
         CheckTable(runtime, "/MyRoot/TempTable1");
         CheckTable(runtime, "/MyRoot/TempTable2");
@@ -220,9 +242,14 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         options.FinalEvents.emplace_back(TEvInterconnect::EvNodeDisconnected);
         runtime.DispatchEvents(options);
 
-        env.SimulateSleep(runtime, TDuration::Seconds(50));
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvInterconnect::EvNodeConnected);
+            runtime.DispatchEvents(options);
+        }
+
         CheckTable(runtime, "/MyRoot/TempTable1", TTestTxConfig::SchemeShard, false);
-        CheckTable(runtime, "/MyRoot/TempTable2", TTestTxConfig::SchemeShard);
+        CheckTable(runtime, "/MyRoot/TempTable2", TTestTxConfig::SchemeShard, false);
     }
 
     Y_UNIT_TEST(SchemeshardBackgroundCleaningTestReboot) {
@@ -275,5 +302,37 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         env.SimulateSleep(runtime, TDuration::Seconds(50));
         CheckTable(runtime, "/MyRoot/TempTable1", TTestTxConfig::SchemeShard, false);
         CheckTable(runtime, "/MyRoot/TempTable2", TTestTxConfig::SchemeShard);
+    }
+
+    Y_UNIT_TEST(SchemeshardBackgroundCleaningTestSimpleDrop) {
+        TTestBasicRuntime runtime(3);
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        SetBackgroundCleaning(runtime, env, TTestTxConfig::SchemeShard);
+        env.SimulateSleep(runtime, TDuration::Seconds(30));
+
+        auto ownerActorId = runtime.AllocateEdgeActor(1);
+
+        ui64 txId = 100;
+        TestCreateTempTable(runtime, txId, "/MyRoot", R"(
+                  Name: "TempTable"
+                  Columns { Name: "key"   Type: "Uint64" }
+                  Columns { Name: "value" Type: "Utf8" }
+                  KeyColumnNames: ["key"]
+            )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1);
+
+        env.TestWaitNotification(runtime, txId);
+
+        CheckTable(runtime, "/MyRoot/TempTable");
+
+        ++txId;
+        TestDropTempTable(runtime, txId, "/MyRoot", "TempTable", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, true);
+
+        env.SimulateSleep(runtime, TDuration::Seconds(50));
+        CheckTable(runtime, "/MyRoot/TempTable", TTestTxConfig::SchemeShard, false);
     }
 };

@@ -152,7 +152,7 @@ struct TTempTablesState {
         TRetryState RetryState;
     };
 
-    THashMap<TActorId, THashSet<TTempTableId>> TempTablesByOwner; // OwnerActorId -> [ TTempTableId ]
+    THashMap<TActorId, THashSet<TPathId>> TempTablesByOwner; // OwnerActorId -> [ TPathId ]
     THashMap<ui32, TNodeState> NodeStates; // NodeId -> TNodeState
 };
 

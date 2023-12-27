@@ -702,11 +702,12 @@ public:
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Processing create temp table with Name: " << name
                     << ", WorkingDir: " << parentPathStr
-                    << ", OwnerActorId: " << ownerActorIdStr);
+                    << ", OwnerActorId: " << ownerActorIdStr
+                    << ", PathId: " << newTable->PathId);
             TActorId ownerActorId;
             ownerActorId.Parse(ownerActorIdStr.c_str(), ownerActorIdStr.size());
             context.OnComplete.UpdateTempTablesToCreateState(
-                ownerActorId, {parentPathStr, name});
+                ownerActorId, newTable->PathId);
         }
 
         Y_ABORT_UNLESS(shardsToCreate == txState.Shards.size());

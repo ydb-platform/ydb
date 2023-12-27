@@ -44,11 +44,13 @@ constexpr TShardIdx InvalidShardIdx = TShardIdx(InvalidOwnerId, InvalidLocalShar
 class TBackgroundCleaningInfo: public std::pair<std::pair<TString, TString>, TActorId> {
     using TBase = std::pair<std::pair<TString, TString>, TActorId>;
 
+    TPathId PathId;
 public:
     using TBase::TBase;
 
-    TBackgroundCleaningInfo(TString workingDir, TString name, TActorId ownerActorId)
-        : TBase({{std::move(workingDir), std::move(name)}, ownerActorId}) {
+    TBackgroundCleaningInfo(TString workingDir, TString name, TActorId ownerActorId, const TPathId& pathId)
+        : TBase({{std::move(workingDir), std::move(name)}, ownerActorId})
+        , PathId(pathId) {
     }
 
     TActorId GetOwnerId() const {
@@ -67,8 +69,12 @@ public:
         return second.NodeId();
     }
 
+    TPathId GetPathId() const {
+        return PathId;
+    }
+
     ui64 Hash() const noexcept {
-        return ::THash<std::pair<TString, TString>>()(first);
+        return ::THash<TPathId>()(PathId);
     }
 
     bool operator==(const TBackgroundCleaningInfo& info) const {
@@ -154,20 +160,6 @@ public:
     using TBase::TBase;
 };
 
-struct TTempTableId {
-    TString WorkingDir;
-    TString Name;
-
-    ui32 Hash() const noexcept {
-        auto hasher = ::THash<TString>();
-        return CombineHashes(hasher(WorkingDir), hasher(Name));
-    }
-
-    bool operator==(const NKikimr::NSchemeShard::TTempTableId& rhs) const {
-        return WorkingDir == rhs.WorkingDir && Name == rhs.Name;
-    }
-};
-
 }
 }
 
@@ -203,13 +195,6 @@ inline void Out<NKikimr::NSchemeShard::TShardIdx>(IOutputStream &o, const NKikim
 template<>
 struct THash<NKikimr::NSchemeShard::TBackgroundCleaningInfo> {
     inline ui64 operator()(const NKikimr::NSchemeShard::TBackgroundCleaningInfo &x) const noexcept {
-        return x.Hash();
-    }
-};
-
-template<>
-struct THash<NKikimr::NSchemeShard::TTempTableId> {
-    inline ui32 operator()(const NKikimr::NSchemeShard::TTempTableId& x) const noexcept {
         return x.Hash();
     }
 };

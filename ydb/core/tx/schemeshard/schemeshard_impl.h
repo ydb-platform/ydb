@@ -286,7 +286,7 @@ public:
 
     TBackgroundCleaningStarter BackgroundCleaningStarter;
     TBackgroundCleaningQueue* BackgroundCleaningQueue = nullptr;
-    THashMap<ui64, TTempTableId> BackgroundCleaningTxs;
+    THashMap<ui64, TPathId> BackgroundCleaningTxs;
     NKikimrConfig::TBackgroundCleaningConfig::TRetrySettings BackgroundCleaningRetrySettings;
 
     // shardIdx -> clientId

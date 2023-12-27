@@ -1823,11 +1823,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     if (it == tempTablesByOwner.end()) {
                         auto& currentTempTables = tempTablesByOwner[ownerActorId];
-                        currentTempTables.insert(TTempTableId{
-                            tempTableWorkingDir, tempTableName});
+                        currentTempTables.insert(pathId);
                     } else {
-                        it->second.insert(TTempTableId{
-                                tempTableWorkingDir, tempTableName});
+                        it->second.insert(pathId);
                     }
                 }
 

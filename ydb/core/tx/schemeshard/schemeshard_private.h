@@ -199,6 +199,7 @@ struct TEvPrivate {
         TString WorkingDir;
         TString Name;
         ui64 TxId;
+        TPathId PathId;
     };
 
 }; // TEvPrivate

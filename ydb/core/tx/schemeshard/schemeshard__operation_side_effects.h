@@ -64,8 +64,8 @@ private:
     TVector<TActivateShardCreated> PendingActivateShardCreated;
     TDeque<TWaitPublication> WaitPublications;
     TDeque<TBarrierRec> Barriers;
-    THashMap<TActorId, TVector<TTempTableId>> TempTablesToCreateState;
-    THashMap<TActorId, TVector<TTempTableId>> TempTablesToDropState;
+    THashMap<TActorId, TVector<TPathId>> TempTablesToCreateState;
+    THashMap<TActorId, TVector<TPathId>> TempTablesToDropState;
 
 public:
     using TPtr = TIntrusivePtr<TSideEffects>;
@@ -102,8 +102,8 @@ public:
     void UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TShardIdx shardIdx);
     void UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TPipeMessageId cookie);
 
-    void UpdateTempTablesToCreateState(const TActorId& ownerActorId, const TTempTableId& data);
-    void UpdateTempTablesToDropState(const TActorId& ownerActorId, const TTempTableId& data);
+    void UpdateTempTablesToCreateState(const TActorId& ownerActorId, const TPathId& pathId);
+    void UpdateTempTablesToDropState(const TActorId& ownerActorId, const TPathId& pathId);
 
     void RouteByTabletsFromOperation(TOperationId opId);
     void RouteByTablet(TOperationId opId, TTabletId dst);

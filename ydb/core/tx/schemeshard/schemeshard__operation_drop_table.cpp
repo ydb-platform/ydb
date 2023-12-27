@@ -605,7 +605,7 @@ public:
                     << ", OwnerActorId: " << ownerActorIdStr);
             TActorId ownerActorId;
             ownerActorId.Parse(ownerActorIdStr.c_str(), ownerActorIdStr.size());
-            context.OnComplete.UpdateTempTablesToDropState(ownerActorId, {parentPathStr, name});
+            context.OnComplete.UpdateTempTablesToDropState(ownerActorId, path.Base()->PathId);
         }
 
         context.OnComplete.ActivateTx(OperationId);

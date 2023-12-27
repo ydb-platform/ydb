@@ -156,7 +156,8 @@ public:
             NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
             TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
             const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-            const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig)
+            const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
+            const TActorId& kqpTempTablesAgentActor)
         : Owner(owner)
         , SessionId(sessionId)
         , Counters(counters)
@@ -169,6 +170,7 @@ public:
         , Transactions(*Config->_KqpMaxActiveTxPerSession.Get(), TDuration::Seconds(*Config->_KqpTxIdleTimeoutSec.Get()))
         , QueryServiceConfig(queryServiceConfig)
         , MetadataProviderConfig(metadataProviderConfig)
+        , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
     {
         RequestCounters = MakeIntrusive<TKqpRequestCounters>();
         RequestCounters->Counters = Counters;
@@ -1882,7 +1884,8 @@ public:
 
             LOG_D("Cleanup temp tables: " << TempTablesState.TempTables.size());
             auto tempTablesManager = CreateKqpTempTablesManager(
-                std::move(TempTablesState), SelfId(), Settings.Database);
+                std::move(TempTablesState), SelfId(), Settings.Database, KqpTempTablesAgentActor);
+
             RegisterWithSameMailbox(tempTablesManager);
             return;
         } else {
@@ -2001,7 +2004,6 @@ public:
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);
 
-                hFunc(NSchemeShard::TEvSchemeShard::TEvOwnerActorAck, HandleNoop);
             default:
                 UnexpectedEvent("ReadyState", ev);
             }
@@ -2041,8 +2043,6 @@ public:
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvQueryResponse, ForwardResponse);
-
-                hFunc(NSchemeShard::TEvSchemeShard::TEvOwnerActorAck, HandleNoop);
             default:
                 UnexpectedEvent("ExecuteState", ev);
             }
@@ -2080,8 +2080,6 @@ public:
                 hFunc(TEvKqp::TEvCloseSessionResponse, HandleCleanup);
                 hFunc(TEvKqp::TEvQueryResponse, HandleNoop);
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop)
-
-                hFunc(NSchemeShard::TEvSchemeShard::TEvOwnerActorAck, HandleNoop);
             default:
                 UnexpectedEvent("CleanupState", ev);
             }
@@ -2221,6 +2219,7 @@ private:
 
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     NKikimrConfig::TMetadataProviderConfig MetadataProviderConfig;
+    TActorId KqpTempTablesAgentActor;
     std::shared_ptr<std::atomic<bool>> CompilationCookie;
 };
 
@@ -2232,11 +2231,12 @@ IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig)
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
+    const TActorId& kqpTempTablesAgentActor)
 {
     return new TKqpSessionActor(owner, sessionId, kqpSettings, workerSettings, federatedQuerySetup,
                                 std::move(asyncIoFactory),  std::move(moduleResolverState), counters,
-                                queryServiceConfig, metadataProviderConfig
+                                queryServiceConfig, metadataProviderConfig, kqpTempTablesAgentActor
                                 );
 }
 

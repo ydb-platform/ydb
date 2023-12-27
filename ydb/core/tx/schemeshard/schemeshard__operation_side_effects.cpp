@@ -53,21 +53,21 @@ void TSideEffects::UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TPipeMess
     BindedMessageAcks.push_back(TBindMsgAck(opId, dst, cookie));
 }
 
-void  TSideEffects::UpdateTempTablesToCreateState(const TActorId& ownerActorId, const TTempTableId& data) {
+void  TSideEffects::UpdateTempTablesToCreateState(const TActorId& ownerActorId, const TPathId& pathId) {
     auto it = TempTablesToCreateState.find(ownerActorId);
     if (it == TempTablesToCreateState.end()) {
-        TempTablesToCreateState[ownerActorId] = { data };
+        TempTablesToCreateState[ownerActorId] = { pathId };
     } else {
-        it->second.push_back(data);
+        it->second.push_back(pathId);
     }
 }
 
-void  TSideEffects::UpdateTempTablesToDropState(const TActorId& ownerActorId, const TTempTableId& data) {
+void  TSideEffects::UpdateTempTablesToDropState(const TActorId& ownerActorId, const TPathId& pathId) {
     auto it = TempTablesToDropState.find(ownerActorId);
     if (it == TempTablesToDropState.end()) {
-        TempTablesToDropState[ownerActorId] = { data };
+        TempTablesToDropState[ownerActorId] = { pathId };
     } else {
-        it->second.push_back(data);
+        it->second.push_back(pathId);
     }
 }
 
@@ -803,14 +803,14 @@ void TSideEffects::DoUpdateTempTablesToCreateState(TSchemeShard* ss, const TActo
 
             auto& currentTempTables = tempTablesByOwner[ownerActorId];
 
-            for (auto& tempTableId : tempTables) {
-                currentTempTables.insert(std::move(tempTableId));
+            for (auto& pathId : tempTables) {
+                currentTempTables.insert(std::move(pathId));
             }
             continue;
         }
 
-        for (auto& tempTableId : tempTables) {
-            it->second.insert(std::move(tempTableId));
+        for (auto& pathId : tempTables) {
+            it->second.insert(std::move(pathId));
         }
     }
 }
@@ -824,16 +824,22 @@ void TSideEffects::DoUpdateTempTablesToDropState(TSchemeShard* ss, const TActorC
             continue;
         }
 
-        for (auto& tempTableId : tempTables) {
-            auto tempTableIt = it->second.find(std::move(tempTableId));
+        for (auto& pathId : tempTables) {
+            auto tempTableIt = it->second.find(std::move(pathId));
             if (tempTableIt == it->second.end()) {
                 continue;
             }
+
+            auto tempTablePath = TPath::Init(pathId, ss);
+            auto tempTableName = tempTablePath.LeafName();
+            auto tempTableWorkingDir = tempTablePath.Parent().PathString();
+
             it->second.erase(tempTableIt);
             ss->RemoveBackgroundCleaning(TBackgroundCleaningInfo(
-                std::move(tempTableId.WorkingDir),
-                std::move(tempTableId.Name),
-                ownerActorId)
+                std::move(tempTableWorkingDir),
+                std::move(tempTableName),
+                ownerActorId,
+                pathId)
             );
         }
 

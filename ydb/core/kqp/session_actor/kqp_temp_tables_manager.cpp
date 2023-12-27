@@ -39,10 +39,12 @@ public:
         return NKikimrServices::TActivity::KQP_SESSION_ACTOR;
     }
 
-    TKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target, const TString& database)
+    TKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target,
+            const TString& database, const TActorId& kqpTempTablesAgentActor)
         : TempTablesState(std::move(tempTablesState))
         , Target(target)
         , Database(database)
+        , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
     {}
 
     void Bootstrap() {
@@ -107,14 +109,16 @@ private:
     TKqpTempTablesState TempTablesState;
     const TActorId Target;
     const TString Database;
+    const TActorId KqpTempTablesAgentActor;
     ui32 ResultsCount = 0;
 };
 
 } // namespace
 
-IActor* CreateKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target, const TString& database)
+IActor* CreateKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target,
+        const TString& database, const TActorId& kqpTempTablesAgentActor)
 {
-    return new TKqpTempTablesManager(tempTablesState, target, database);
+    return new TKqpTempTablesManager(tempTablesState, target, database, kqpTempTablesAgentActor);
 }
 
 } // namespace NKikimr::NKqp

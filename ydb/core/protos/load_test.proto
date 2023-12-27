@@ -229,6 +229,7 @@ message TEvLoadTestRequest {
         optional bool DeleteTableOnFinish = 6;
         optional uint32 UniformPartitionsCount = 7;
         optional uint32 WorkloadType = 8;
+        optional string QueryType = 12;
         oneof Workload {
             TStockWorkload Stock = 9;
             TKvWorkload Kv = 10;

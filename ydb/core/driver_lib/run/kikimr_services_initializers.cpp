@@ -31,9 +31,9 @@
 
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/client/server/grpc_proxy_status.h>
+#include <ydb/core/client/server/msgbus_server.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
-#include <ydb/core/client/server/msgbus_server_tracer.h>
 
 #include <ydb/core/cms/cms.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -1524,12 +1524,6 @@ void TMessageBusServicesInitializer::InitializeServices(NActors::TActorSystemSet
                         )
                 );
             }
-        }
-
-        if (IActor* traceService = BusServer.CreateMessageBusTraceService()) {
-            TActorSetupCmd messageBusTraceServiceSetup(traceService, TMailboxType::HTSwap, appData->IOPoolId);
-            setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NMessageBusTracer::MakeMessageBusTraceServiceID(),
-                                                                               std::move(messageBusTraceServiceSetup)));
         }
     }
 }

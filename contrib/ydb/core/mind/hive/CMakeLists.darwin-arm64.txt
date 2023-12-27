@@ -31,6 +31,7 @@ target_link_libraries(core-mind-hive PUBLIC
 target_sources(core-mind-hive PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/ydb/core/mind/hive/balancer.cpp
   ${CMAKE_SOURCE_DIR}/contrib/ydb/core/mind/hive/boot_queue.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/ydb/core/mind/hive/domain_info.cpp
   ${CMAKE_SOURCE_DIR}/contrib/ydb/core/mind/hive/drain.cpp
   ${CMAKE_SOURCE_DIR}/contrib/ydb/core/mind/hive/fill.cpp
   ${CMAKE_SOURCE_DIR}/contrib/ydb/core/mind/hive/hive.cpp

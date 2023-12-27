@@ -24,6 +24,7 @@ target_link_libraries(contrib-ydb-core-tx-scheme_board-ut_monitoring PUBLIC
   library-actors-core
   cpp-testing-unittest
   testlib-basics-default
+  minikql-comp_nodes-llvm
 )
 target_link_options(contrib-ydb-core-tx-scheme_board-ut_monitoring PRIVATE
   -ldl

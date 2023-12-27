@@ -42,6 +42,8 @@ target_link_libraries(worker_node PUBLIC
   yql-utils-failure_injector
   yql-utils-backtrace
   yt-comp_nodes-dq
+  yt-comp_nodes-llvm
+  yt-codec-codegen
   providers-yt-mkql_dq
   dq-actors-yt
   providers-dq-global_worker_manager

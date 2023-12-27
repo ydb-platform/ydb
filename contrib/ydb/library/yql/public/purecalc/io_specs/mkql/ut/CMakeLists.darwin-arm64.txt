@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(no_llvm)
 
 add_executable(yql-public-purecalc-io_specs-mkql-ut)
 target_compile_options(yql-public-purecalc-io_specs-mkql-ut PRIVATE
@@ -16,7 +17,7 @@ target_link_libraries(yql-public-purecalc-io_specs-mkql-ut PUBLIC
   yutil
   cpp-testing-unittest_main
   udf-service-exception_policy
-  public-purecalc-common
+  yql-public-purecalc
   purecalc-io_specs-mkql
   purecalc-ut-lib
 )

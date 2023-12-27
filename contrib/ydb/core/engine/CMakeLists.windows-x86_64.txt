@@ -26,7 +26,7 @@ target_link_libraries(ydb-core-engine PUBLIC
   ydb-library-mkql_proto
   library-mkql_proto-protos
   api-protos
-  minikql-comp_nodes-llvm
+  yql-minikql-comp_nodes
   parser-pg_wrapper-interface
   yql-public-decimal
 )

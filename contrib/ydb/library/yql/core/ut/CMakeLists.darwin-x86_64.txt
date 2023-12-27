@@ -33,6 +33,10 @@ target_link_libraries(contrib-ydb-library-yql-core-ut PUBLIC
   providers-result-provider
   yt-gateway-file
   providers-yt-provider
+  yt-codec-codegen
+  yt-comp_nodes-llvm
+  minikql-comp_nodes-llvm
+  minikql-invoke_builtins-llvm
   yql-sql-pg
 )
 target_link_options(contrib-ydb-library-yql-core-ut PRIVATE

@@ -19,7 +19,7 @@ target_link_libraries(providers-dq-task_runner PUBLIC
   cpp-threading-task_scheduler
   cpp-yson-node
   dq-integration-transform
-  minikql-invoke_builtins-llvm
+  yql-minikql-invoke_builtins
   library-yql-protos
   library-yql-utils
   yql-utils-backtrace

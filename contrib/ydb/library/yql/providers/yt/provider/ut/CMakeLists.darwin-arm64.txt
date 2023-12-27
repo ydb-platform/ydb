@@ -21,6 +21,8 @@ target_link_libraries(contrib-ydb-library-yql-providers-yt-provider-ut PUBLIC
   providers-yt-provider
   yt-lib-schema
   yt-gateway-file
+  yt-codec-codegen
+  yt-comp_nodes-llvm
   yql-core-ut_common
   library-yql-ast
   udf-service-terminate_policy
@@ -35,6 +37,7 @@ target_link_libraries(contrib-ydb-library-yql-providers-yt-provider-ut PUBLIC
   providers-result-provider
   yql-sql-v1
   minikql-invoke_builtins-llvm
+  minikql-comp_nodes-llvm
   yql-sql-pg
 )
 target_link_options(contrib-ydb-library-yql-providers-yt-provider-ut PRIVATE

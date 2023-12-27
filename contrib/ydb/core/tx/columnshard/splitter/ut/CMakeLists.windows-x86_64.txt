@@ -34,6 +34,7 @@ target_link_libraries(contrib-ydb-core-tx-columnshard-splitter-ut PUBLIC
   core-tx-tx_proxy
   ydb-core-tx
   ydb-core-mind
+  minikql-comp_nodes-llvm
   udf-service-exception_policy
   yql-sql-pg
 )

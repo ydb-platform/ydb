@@ -20,7 +20,7 @@ target_link_libraries(fq-libs-result_formatter PUBLIC
   cpp-json-yson
   ydb-library-mkql_proto
   library-yql-ast
-  minikql-computation-llvm
+  yql-minikql-computation
   yql-public-udf
   api-protos
   cpp-client-ydb_proto

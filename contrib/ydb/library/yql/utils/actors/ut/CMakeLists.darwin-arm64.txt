@@ -17,6 +17,7 @@ target_link_libraries(contrib-ydb-library-yql-utils-actors-ut PUBLIC
   cpp-testing-unittest_main
   yql-utils-actors
   testlib-basics-default
+  minikql-comp_nodes-llvm
 )
 target_link_options(contrib-ydb-library-yql-utils-actors-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0

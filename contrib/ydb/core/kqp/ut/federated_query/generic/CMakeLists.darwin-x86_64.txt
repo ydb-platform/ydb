@@ -47,7 +47,7 @@ set_property(
   contrib-ydb-core-kqp-ut-federated_query-generic
   PROPERTY
   SPLIT_FACTOR
-  10
+  1
 )
 add_yunittest(
   NAME
@@ -66,14 +66,14 @@ set_yunittest_property(
   contrib-ydb-core-kqp-ut-federated_query-generic
   PROPERTY
   LABELS
-  SMALL
+  LARGE
 )
 set_yunittest_property(
   TEST
   contrib-ydb-core-kqp-ut-federated_query-generic
   PROPERTY
   PROCESSORS
-  1
+  all
 )
 target_allocator(contrib-ydb-core-kqp-ut-federated_query-generic
   system_allocator

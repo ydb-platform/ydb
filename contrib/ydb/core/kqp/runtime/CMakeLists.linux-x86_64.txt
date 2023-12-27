@@ -26,7 +26,8 @@ target_link_libraries(core-kqp-runtime PUBLIC
   ydb-core-protos
   ydb-core-scheme
   ydb-core-ydb_convert
-  minikql-comp_nodes-llvm
+  minikql-computation-llvm
+  yql-minikql-comp_nodes
   library-yql-utils
   dq-actors-protos
   dq-actors-spilling

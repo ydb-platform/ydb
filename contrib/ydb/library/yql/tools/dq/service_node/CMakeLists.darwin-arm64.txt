@@ -32,6 +32,8 @@ target_link_libraries(service_node PUBLIC
   providers-yt-dq_task_preprocessor
   providers-dq-global_worker_manager
   dq-actors-yt
+  yt-comp_nodes-llvm
+  yt-codec-codegen
   yt-yt-client
 )
 target_link_options(service_node PRIVATE

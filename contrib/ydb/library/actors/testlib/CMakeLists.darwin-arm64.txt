@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(common)
 add_subdirectory(ut)
 
 add_library(library-actors-testlib)
@@ -15,6 +16,7 @@ target_link_libraries(library-actors-testlib PUBLIC
   library-actors-core
   actors-interconnect-mock
   library-actors-protos
+  actors-testlib-common
   library-cpp-random_provider
   library-cpp-time_provider
 )

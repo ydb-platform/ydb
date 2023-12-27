@@ -22,7 +22,7 @@ target_link_libraries(yt-gateway-file PUBLIC
   yql-core-file_storage
   core-file_storage-proto
   core-file_storage-http_download
-  minikql-comp_nodes-llvm
+  yql-minikql-comp_nodes
   yql-public-udf
   library-yql-utils
   yql-utils-threading

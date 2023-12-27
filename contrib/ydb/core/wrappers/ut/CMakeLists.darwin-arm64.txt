@@ -24,6 +24,7 @@ target_link_libraries(contrib-ydb-core-wrappers-ut PUBLIC
   cpp-testing-unittest
   ydb-core-protos
   testlib-basics-default
+  minikql-comp_nodes-llvm
   core-wrappers-ut_helpers
 )
 target_link_options(contrib-ydb-core-wrappers-ut PRIVATE

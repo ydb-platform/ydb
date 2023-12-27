@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(no_llvm)
 
 add_executable(contrib-ydb-library-yql-providers-yt-codec-ut)
 target_compile_options(contrib-ydb-library-yql-providers-yt-codec-ut PRIVATE
@@ -28,6 +29,7 @@ target_link_libraries(contrib-ydb-library-yql-providers-yt-codec-ut PUBLIC
   providers-common-codec
   providers-common-mkql
   yt-lib-yson_helpers
+  yt-codec-codegen
 )
 target_link_options(contrib-ydb-library-yql-providers-yt-codec-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0

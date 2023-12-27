@@ -18,7 +18,7 @@ target_link_libraries(public-purecalc-io_specs-protobuf-ut PUBLIC
   cpp-testing-unittest_main
   cpp-protobuf-util
   udf-service-exception_policy
-  public-purecalc-common
+  yql-public-purecalc
   purecalc-io_specs-protobuf
   purecalc-ut-protos
 )

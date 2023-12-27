@@ -23,6 +23,7 @@ target_link_libraries(contrib-ydb-core-tx-scheme_board-ut_monitoring PUBLIC
   library-actors-core
   cpp-testing-unittest
   testlib-basics-default
+  minikql-comp_nodes-llvm
 )
 target_sources(contrib-ydb-core-tx-scheme_board-ut_monitoring PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/ydb/core/tx/scheme_board/monitoring_ut.cpp

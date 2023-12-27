@@ -38,6 +38,9 @@ target_link_libraries(pgrun PUBLIC
   providers-common-udf_resolve
   providers-dq-provider
   yt-gateway-file
+  yt-comp_nodes-llvm
+  yt-codec-codegen
+  providers-pg-provider
   yql-core-url_preprocessing
   yql-parser-pg_wrapper
 )

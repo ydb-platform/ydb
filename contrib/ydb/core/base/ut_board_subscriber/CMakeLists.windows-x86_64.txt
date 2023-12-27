@@ -25,6 +25,7 @@ target_link_libraries(contrib-ydb-core-base-ut_board_subscriber PUBLIC
   cpp-testing-unittest
   core-testlib-basics
   testlib-basics-default
+  minikql-comp_nodes-llvm
 )
 target_sources(contrib-ydb-core-base-ut_board_subscriber PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/ydb/core/base/board_subscriber_ut.cpp

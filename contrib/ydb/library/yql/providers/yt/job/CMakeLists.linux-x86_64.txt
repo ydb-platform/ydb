@@ -21,7 +21,7 @@ target_link_libraries(providers-yt-job PUBLIC
   cpp-yson-node
   cpp-mapreduce-interface
   mapreduce-library-user_job_statistics
-  minikql-comp_nodes-llvm
+  yql-minikql-comp_nodes
   yql-public-udf
   library-yql-utils
   yql-utils-backtrace

@@ -31,7 +31,6 @@ target_link_libraries(providers-yt-codec PUBLIC
   providers-yt-common
   yt-lib-mkql_helpers
   yt-lib-skiff
-  yt-codec-codegen
 )
 target_sources(providers-yt-codec PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/ydb/library/yql/providers/yt/codec/yt_codec_io.cpp

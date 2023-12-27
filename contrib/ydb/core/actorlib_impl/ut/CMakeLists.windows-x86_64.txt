@@ -26,6 +26,7 @@ target_link_libraries(contrib-ydb-core-actorlib_impl-ut PUBLIC
   library-cpp-svnversion
   core-testlib-actors
   testlib-basics-default
+  minikql-comp_nodes-llvm
 )
 target_sources(contrib-ydb-core-actorlib_impl-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/ydb/core/actorlib_impl/actor_activity_ut.cpp

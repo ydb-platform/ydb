@@ -30,7 +30,7 @@ target_link_libraries(providers-s3-actors PUBLIC
   cpp-xml-document
   fq-libs-events
   dq-actors-compute
-  minikql-computation-llvm
+  yql-minikql-computation
   providers-common-arrow
   common-arrow-interface
   providers-common-http_gateway

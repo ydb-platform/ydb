@@ -23,6 +23,7 @@ target_link_libraries(contrib-ydb-core-tx-scheme_board-ut_subscriber PUBLIC
   library-actors-interconnect
   cpp-testing-unittest
   testlib-basics-default
+  minikql-comp_nodes-llvm
 )
 target_sources(contrib-ydb-core-tx-scheme_board-ut_subscriber PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/ydb/core/tx/scheme_board/subscriber_ut.cpp

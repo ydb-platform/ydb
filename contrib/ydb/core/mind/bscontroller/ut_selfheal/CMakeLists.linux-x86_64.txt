@@ -21,6 +21,7 @@ target_link_libraries(contrib-ydb-core-mind-bscontroller-ut_selfheal PUBLIC
   blobstorage-pdisk-mock
   core-mind-bscontroller
   core-tx-scheme_board
+  minikql-comp_nodes-llvm
   udf-service-stub
   yql-sql-pg_dummy
 )

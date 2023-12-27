@@ -23,6 +23,11 @@ target_link_libraries(mrjob PUBLIC
   yql-parser-pg_wrapper
   yql-sql-pg
   providers-yt-job
+  yt-codec-codegen
+  yt-comp_nodes-llvm
+  minikql-computation-llvm
+  minikql-invoke_builtins-llvm
+  minikql-comp_nodes-llvm
 )
 target_link_options(mrjob PRIVATE
   -ldl

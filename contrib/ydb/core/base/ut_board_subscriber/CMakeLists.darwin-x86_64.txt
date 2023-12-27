@@ -25,6 +25,7 @@ target_link_libraries(contrib-ydb-core-base-ut_board_subscriber PUBLIC
   cpp-testing-unittest
   core-testlib-basics
   testlib-basics-default
+  minikql-comp_nodes-llvm
 )
 target_link_options(contrib-ydb-core-base-ut_board_subscriber PRIVATE
   -Wl,-platform_version,macos,11.0,11.0

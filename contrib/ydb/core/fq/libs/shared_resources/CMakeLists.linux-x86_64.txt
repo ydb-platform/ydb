@@ -31,6 +31,7 @@ target_link_libraries(fq-libs-shared_resources PUBLIC
   ydb-library-logger
   ydb-library-security
   cpp-client-ydb_driver
+  cpp-client-ydb_extension
   cpp-client-ydb_table
 )
 target_sources(fq-libs-shared_resources PRIVATE

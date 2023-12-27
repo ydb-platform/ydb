@@ -27,6 +27,8 @@ target_link_libraries(providers-dq-global_worker_manager-ut PUBLIC
   dq-actors-yt
   providers-dq-actors
   dq-actors-compute
+  minikql-computation-llvm
+  minikql-comp_nodes-llvm
 )
 target_link_options(providers-dq-global_worker_manager-ut PRIVATE
   -ldl

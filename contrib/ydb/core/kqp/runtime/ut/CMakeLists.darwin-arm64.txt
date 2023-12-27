@@ -21,6 +21,7 @@ target_link_libraries(contrib-ydb-core-kqp-runtime-ut PUBLIC
   core-kqp-runtime
   cpp-testing-unittest
   testlib-basics-default
+  minikql-comp_nodes-llvm
   udf-service-exception_policy
 )
 target_link_options(contrib-ydb-core-kqp-runtime-ut PRIVATE

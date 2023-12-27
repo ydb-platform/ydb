@@ -39,6 +39,8 @@ target_link_libraries(yqlrun PUBLIC
   providers-common-udf_resolve
   providers-dq-provider
   yt-gateway-file
+  yt-codec-codegen
+  yt-comp_nodes-llvm
   yql-core-url_preprocessing
   tools-yqlrun-http
   yql-parser-pg_wrapper

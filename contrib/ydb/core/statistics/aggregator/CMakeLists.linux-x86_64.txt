@@ -28,4 +28,5 @@ target_sources(core-statistics-aggregator PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/ydb/core/statistics/aggregator/tx_configure.cpp
   ${CMAKE_SOURCE_DIR}/contrib/ydb/core/statistics/aggregator/tx_init.cpp
   ${CMAKE_SOURCE_DIR}/contrib/ydb/core/statistics/aggregator/tx_init_schema.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/ydb/core/statistics/aggregator/tx_schemeshard_stats.cpp
 )

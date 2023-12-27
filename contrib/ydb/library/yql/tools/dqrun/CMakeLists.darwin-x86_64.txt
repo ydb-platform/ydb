@@ -68,8 +68,10 @@ target_link_libraries(dqrun PUBLIC
   providers-yt-dq_task_preprocessor
   yt-gateway-file
   yt-gateway-native
+  yt-codec-codegen
   providers-yt-mkql_dq
   providers-yt-provider
+  yt-comp_nodes-llvm
   yt-lib-yt_download
   yt-lib-yt_url_lister
   yt-lib-config_clusters

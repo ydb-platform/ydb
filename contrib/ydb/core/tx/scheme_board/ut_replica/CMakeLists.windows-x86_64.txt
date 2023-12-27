@@ -21,6 +21,7 @@ target_link_libraries(contrib-ydb-core-tx-scheme_board-ut_replica PUBLIC
   cpp-testing-unittest_main
   core-tx-scheme_board
   cpp-testing-unittest
+  minikql-comp_nodes-llvm
   testlib-basics-default
 )
 target_sources(contrib-ydb-core-tx-scheme_board-ut_replica PRIVATE

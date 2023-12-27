@@ -22,6 +22,7 @@ target_link_libraries(contrib-ydb-core-fq-libs-checkpointing-ut PUBLIC
   cpp-testing-unittest
   core-testlib-actors
   testlib-basics-default
+  minikql-comp_nodes-llvm
 )
 target_link_options(contrib-ydb-core-fq-libs-checkpointing-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0

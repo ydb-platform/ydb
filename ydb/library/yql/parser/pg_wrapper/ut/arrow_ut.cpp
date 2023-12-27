@@ -13,11 +13,6 @@ Datum numeric_out(PG_FUNCTION_ARGS);
 
 namespace NYql {
 
-Numeric PgFloatToNumeric(double item, ui64 scale, int digits);
-
-template<typename T>
-std::shared_ptr<arrow::Array> PgConvertNumeric(const std::shared_ptr<arrow::Array>& value);
-
 Y_UNIT_TEST_SUITE(TArrowUtilsTests) {
 
 Y_UNIT_TEST(TestPgFloatToNumeric) {

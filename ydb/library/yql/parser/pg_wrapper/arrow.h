@@ -17,6 +17,7 @@ extern "C" {
 #include "fmgr.h"
 #include "catalog/pg_type_d.h"
 #include "catalog/pg_collation_d.h"
+#include "utils/numeric.h"
 }
 
 #include "utils.h"
@@ -1297,5 +1298,10 @@ private:
 TExecFunc FindExec(Oid oid);
 
 const NPg::TAggregateDesc& ResolveAggregation(const TString& name, NKikimr::NMiniKQL::TTupleType* tupleType, const std::vector<ui32>& argsColumns, NKikimr::NMiniKQL::TType* returnType);
+
+Numeric PgFloatToNumeric(double item, ui64 scale, int digits);
+
+template<typename T>
+std::shared_ptr<arrow::Array> PgConvertNumeric(const std::shared_ptr<arrow::Array>& value);
 
 }

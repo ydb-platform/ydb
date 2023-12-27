@@ -431,7 +431,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(
                 ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED
-                Name: "Serverless0"
+                Name: "ServerLess0"
             )",
             {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED" }}
         );
@@ -502,7 +502,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(
                 ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED
-                Name: "Serverless0"
+                Name: "ServerLess0"
             )",
             {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "Unsupported: feature flag EnableExclusiveDynamicNodes is off" }}
         );

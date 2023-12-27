@@ -251,7 +251,9 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
     bool serverlessComputeResourcesModeChanged = false;
     if (input.HasServerlessComputeResourcesMode()) {
         if (!isExclusiveDynamicNodesEnabled) {
-            return paramError("Unsupported: feature flag EnableExclusiveDynamicNodes is off");
+            return std::make_tuple(NKikimrScheme::EStatus::StatusPreconditionFailed,
+                "Unsupported: feature flag EnableExclusiveDynamicNodes is off"
+            );
         }
 
         switch (input.GetServerlessComputeResourcesMode()) {

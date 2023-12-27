@@ -504,7 +504,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                 ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED
                 Name: "ServerLess0"
             )",
-            {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "Unsupported: feature flag EnableExclusiveDynamicNodes is off" }}
+            {{ TEvSchemeShard::EStatus::StatusPreconditionFailed, "Unsupported: feature flag EnableExclusiveDynamicNodes is off" }}
         );
     }
 }

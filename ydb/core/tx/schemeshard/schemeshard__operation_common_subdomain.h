@@ -347,7 +347,7 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
 
         if (txState->NeedSyncHive) {
-             context.SS->ChangeTxState(db, OperationId, TTxState::SyncHive);
+            context.SS->ChangeTxState(db, OperationId, TTxState::SyncHive);
         } else {
             context.SS->ChangeTxState(db, OperationId, TTxState::Done);
         }

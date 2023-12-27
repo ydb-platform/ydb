@@ -1,5 +1,7 @@
 #include "aws.h"
 
+#include <ydb/public/sdk/cpp/client/ydb_import/import.h>
+
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/s3/S3Client.h>
@@ -54,13 +56,14 @@ public:
             throw TMisuseException() << "\"" << settings.Scheme_ << "\" scheme type is not supported";
         }
 
-        Client = std::make_unique<Aws::S3::S3Client>(Aws::Auth::AWSCredentials(settings.AccessKey_, settings.SecretKey_),
-                                   config,
-                                   Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
-                                   true);
+        Client = std::make_unique<Aws::S3::S3Client>(
+            Aws::Auth::AWSCredentials(settings.AccessKey_, settings.SecretKey_),
+            config,
+            Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+            true);
     }
 
-    std::pair<std::vector<TString>, std::optional<TString>> ListObjectKeys(const TString& prefix, const std::optional<TString>& token) override {
+    TListS3Result ListObjectKeys(const TString& prefix, const std::optional<TString>& token) override {
         auto request = Aws::S3::Model::ListObjectsV2Request()
             .WithBucket(Bucket)
             .WithPrefix(prefix);

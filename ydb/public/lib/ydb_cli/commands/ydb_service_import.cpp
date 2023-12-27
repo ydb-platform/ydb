@@ -131,7 +131,6 @@ int TCommandImportFromS3::Run(TConfig& config) {
 
     settings.NumberOfRetries(NumberOfRetries);
 
-    const size_t suffixSize = strlen(NDump::SCHEME_FILE_NAME);
     InitAwsAPI();
     try {
         auto s3Client = CreateS3ClientWrapper(settings);
@@ -147,13 +146,12 @@ int TCommandImportFromS3::Run(TConfig& config) {
                 item.Destination += "/";
             }
             do {
-                const auto& [keys, current_token] = s3Client->ListObjectKeys(item.Source, token);
-                token = current_token;
-                for (const auto& key : keys) {
-                    if (key.EndsWith(NDump::SCHEME_FILE_NAME)) {
-                        TString source = key.substr(0, key.Size() - suffixSize);
-                        TString destination = item.Destination + source.substr(item.Source.Size());
-                        settings.AppendItem({std::move(source), std::move(destination)});
+                auto listResult = s3Client->ListObjectKeys(item.Source, token);
+                token = listResult.NextToken;
+                for (TStringBuf key : listResult.Keys) {
+                    if (key.ChopSuffix(NDump::SCHEME_FILE_NAME)) {
+                        TString destination = item.Destination + key.substr(item.Source.Size());
+                        settings.AppendItem({TString(key), std::move(destination)});
                     }
                 }
             } while (token);

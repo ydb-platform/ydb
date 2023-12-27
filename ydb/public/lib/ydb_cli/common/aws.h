@@ -2,12 +2,14 @@
 
 #include "command.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_import/import.h>
-
 #include <library/cpp/config/config.h>
 
 #include <util/generic/maybe.h>
 #include <util/system/env.h>
+
+namespace NYdb::NImport {
+    struct TImportFromS3Settings;
+}
 
 namespace NYdb::NConsoleClient {
 
@@ -62,9 +64,14 @@ private:
     TMaybe<TString> AwsProfile;
 };
 
+struct TListS3Result {
+    std::vector<TString> Keys;
+    std::optional<TString> NextToken;
+};
+
 class IS3ClientWrapper {
 public:
-    virtual std::pair<std::vector<TString>, std::optional<TString>> ListObjectKeys(const TString& prefix, const std::optional<TString>& token) = 0;
+    virtual TListS3Result ListObjectKeys(const TString& prefix, const std::optional<TString>& token) = 0;
     virtual ~IS3ClientWrapper() = default;
 };
 

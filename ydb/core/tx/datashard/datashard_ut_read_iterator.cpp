@@ -10,6 +10,9 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/read_table.h>
 
+#include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/data_events/payload_helper.h>
+
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 
 #include <algorithm>
@@ -25,46 +28,52 @@ namespace {
 
 using TCellVec = std::vector<TCell>;
 
-void CreateTable(Tests::TServer::TPtr server,
+TVector<TShardedTableOptions::TColumn> GetColumns() {
+    TVector<TShardedTableOptions::TColumn> columns = {
+        {"key1", "Uint32", true, false},
+        {"key2", "Uint32", true, false},
+        {"key3", "Uint32", true, false},
+        {"value", "Uint32", false, false}};
+
+    return columns;
+}
+
+TVector<TShardedTableOptions::TColumn> GetMoviesColumns() {
+    TVector<TShardedTableOptions::TColumn> columns = {
+        {"id", "Uint32", true, false},
+        {"title", "String", false, false},
+        {"rating", "Uint32", false, false}};
+
+    return columns;
+}
+
+std::tuple<TVector<ui64>, ui64> CreateTable(Tests::TServer::TPtr server,
                  TActorId sender,
                  const TString &root,
                  const TString &name,
                  bool withFollower = false,
                  ui64 shardCount = 1)
 {
-    TVector<TShardedTableOptions::TColumn> columns = {
-        {"key1", "Uint32", true, false},
-        {"key2", "Uint32", true, false},
-        {"key3", "Uint32", true, false},
-        {"value", "Uint32", false, false}
-    };
-
     auto opts = TShardedTableOptions()
         .Shards(shardCount)
-        .Columns(columns);
+        .Columns(GetColumns());
 
     if (withFollower)
         opts.Followers(1);
 
-    CreateShardedTable(server, sender, root, name, opts);
+    return CreateShardedTable(server, sender, root, name, opts);
 }
 
-void CreateMoviesTable(Tests::TServer::TPtr server,
+std::tuple<TVector<ui64>, ui64> CreateMoviesTable(Tests::TServer::TPtr server,
                        TActorId sender,
                        const TString &root,
                        const TString &name)
 {
-    TVector<TShardedTableOptions::TColumn> columns = {
-        {"id", "Uint32", true, false},
-        {"title", "String", false, false},
-        {"rating", "Uint32", false, false}
-    };
-
     auto opts = TShardedTableOptions()
         .Shards(1)
-        .Columns(columns);
+        .Columns(GetMoviesColumns());
 
-    CreateShardedTable(server, sender, root, name, opts);
+    return CreateShardedTable(server, sender, root, name, opts);
 }
 
 struct TRowWriter : public NArrow::IRowWriter {
@@ -308,11 +317,14 @@ void AddRangeQuery(
 struct TTableInfo {
     TString Name;
 
+    ui64 TableId;
     ui64 TabletId;
     ui64 OwnerId;
     NKikimrTxDataShard::TEvGetInfoResponse::TUserTable UserTable;
 
     TActorId ClientId;
+
+    TVector<TShardedTableOptions::TColumn> Columns;
 };
 
 struct TTestHelper {
@@ -345,7 +357,7 @@ struct TTestHelper {
         {
             auto& table1 = Tables["table-1"];
             table1.Name = "table-1";
-            CreateTable(Server, Sender, "/Root", "table-1", WithFollower, ShardCount);
+            auto [shards, tableId] = CreateTable(Server, Sender, "/Root", "table-1", WithFollower, ShardCount);
             ExecSQL(Server, Sender, R"(
                 UPSERT INTO `/Root/table-1`
                 (key1, key2, key3, value)
@@ -360,7 +372,7 @@ struct TTestHelper {
                 (11, 11, 11, 1111);
             )");
 
-            auto shards = GetTableShards(Server, Sender, "/Root/table-1");
+            table1.TableId = tableId;
             table1.TabletId = shards.at(0);
 
             auto [tables, ownerId] = GetTables(Server, table1.TabletId);
@@ -368,12 +380,14 @@ struct TTestHelper {
             table1.UserTable = tables["table-1"];
 
             table1.ClientId = runtime.ConnectToPipe(table1.TabletId, Sender, 0, GetTestPipeConfig());
+
+            table1.Columns = GetColumns();
         }
 
         {
             auto& table2 = Tables["movies"];
             table2.Name = "movies";
-            CreateMoviesTable(Server, Sender, "/Root", "movies");
+            auto [shards, tableId] = CreateMoviesTable(Server, Sender, "/Root", "movies");
             ExecSQL(Server, Sender, R"(
                 UPSERT INTO `/Root/movies`
                 (id, title, rating)
@@ -383,7 +397,7 @@ struct TTestHelper {
                 (3, "Hard die", 8);
             )");
 
-            auto shards = GetTableShards(Server, Sender, "/Root/movies");
+            table2.TableId = tableId;
             table2.TabletId = shards.at(0);
 
             auto [tables, ownerId] = GetTables(Server, table2.TabletId);
@@ -391,14 +405,16 @@ struct TTestHelper {
             table2.UserTable = tables["movies"];
 
             table2.ClientId = runtime.ConnectToPipe(table2.TabletId, Sender, 0, GetTestPipeConfig());
+
+            table2.Columns = GetMoviesColumns();
         }
 
         {
             auto& table3 = Tables["table-1-many"];
             table3.Name = "table-1-many";
-            CreateTable(Server, Sender, "/Root", "table-1-many", WithFollower, ShardCount);
+            auto [shards, tableId] = CreateTable(Server, Sender, "/Root", "table-1-many", WithFollower, ShardCount);
 
-            auto shards = GetTableShards(Server, Sender, "/Root/table-1-many");
+            table3.TableId = tableId;
             table3.TabletId = shards.at(0);
 
             auto [tables, ownerId] = GetTables(Server, table3.TabletId);
@@ -406,6 +422,8 @@ struct TTestHelper {
             table3.UserTable = tables["table-1-many"];
 
             table3.ClientId = runtime.ConnectToPipe(table3.TabletId, Sender, 0, GetTestPipeConfig());
+
+            table3.Columns = GetColumns();
         }
     }
 
@@ -715,6 +733,30 @@ struct TTestHelper {
         }
 
         UNIT_ASSERT_VALUES_EQUAL(rowsRead, Min(rowCount, limit));
+    }
+
+    NKikimrDataEvents::TEvWriteResult WriteRow(const TString& tableName, ui64 txId, const TVector<ui32>& values, NKikimrDataEvents::TEvWrite::ETxMode txMode = NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE) {
+        const auto& table = Tables[tableName];
+
+        auto opts = TShardedTableOptions().Columns(table.Columns);
+        size_t columnCount = table.Columns.size();
+
+        std::vector<ui32> columnIds(columnCount);
+        std::iota(columnIds.begin(), columnIds.end(), 1);
+
+        Y_ABORT_UNLESS(values.size() == columnCount);
+
+        TVector<TCell> cells;
+        for (ui32 col = 0; col < columnCount; ++col)
+            cells.emplace_back(TCell((const char*)&values[col], sizeof(ui32)));
+
+        TSerializedCellMatrix matrix(cells, 1, columnCount);
+
+        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, txMode);
+        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(matrix.ReleaseBuffer());
+        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, table.TableId, 1, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+
+        return Write(*Server->GetRuntime(), Sender, table.TabletId, std::move(evWrite));
     }
 
     struct THangedReturn {

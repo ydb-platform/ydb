@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         const ui32 rowCount = 3;
         ui64 txId = 100;
-        Write(runtime, shards[0], tableId, opts.Columns_, rowCount, sender, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        Write(runtime, sender, shards[0], tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
 
         auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
 
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         const ui32 rowCount = 3;
         ui64 txId = 100;
-        Write(runtime, shards[0], tableId, opts.Columns_, rowCount, sender, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        Write(runtime, sender, shards[0], tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
 
         auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
 
@@ -77,11 +77,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(matrix.ReleaseBuffer());
         evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, 1, {1}, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
 
-        runtime.SendToPipe(shards[0], sender, evWrite.release(), 0, GetPipeConfigWithRetries());
-        auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+        const auto& record = Write(runtime, sender, shards[0], std::move(evWrite), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
 
-        const auto& record = ev->Get()->Record;
-        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         UNIT_ASSERT_VALUES_EQUAL(record.GetIssues().size(), 1);
         UNIT_ASSERT(record.GetIssues(0).message().Contains("Operation [0:100] writes key of 1049601 bytes which exceeds limit 1049600 bytes"));
     }
@@ -94,7 +91,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         const ui32 rowCount = 3;
         ui64 txId = 100;
-        Write(runtime, shards[0], tableId, opts.Columns_, rowCount, sender, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+        Write(runtime, sender, shards[0], tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
         auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
 

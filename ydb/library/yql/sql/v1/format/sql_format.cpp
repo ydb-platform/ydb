@@ -421,7 +421,7 @@ private:
         } else {
             VisitAllFields(descr, msg);
         }
-        
+
         if (scopePtr) {
             Scopes.pop_back();
         }
@@ -890,27 +890,24 @@ private:
         NewLine();
         Visit(msg.GetToken1());
         Visit(msg.GetBlock2());
-        Visit(msg.GetRule_simple_table_ref3());
-        Visit(msg.GetToken4());
+        Visit(msg.GetBlock3());
+        Visit(msg.GetRule_simple_table_ref4());
+        Visit(msg.GetToken5());
         PushCurrentIndent();
         NewLine();
-        Visit(msg.GetRule_create_table_entry5());
-        for (const auto& b : msg.GetBlock6()) {
+        Visit(msg.GetRule_create_table_entry6());
+        for (const auto& b : msg.GetBlock7()) {
             Visit(b.GetToken1());
             NewLine();
             Visit(b.GetRule_create_table_entry2());
         }
-        if (msg.HasBlock7()) {
-            Visit(msg.GetBlock7());
+        if (msg.HasBlock8()) {
+            Visit(msg.GetBlock8());
         }
 
         PopCurrentIndent();
         NewLine();
-        Visit(msg.GetToken8());
-        if (msg.HasBlock9()) {
-            NewLine();
-            Visit(msg.GetBlock9());
-        }
+        Visit(msg.GetToken9());
         if (msg.HasBlock10()) {
             NewLine();
             Visit(msg.GetBlock10());
@@ -922,6 +919,10 @@ private:
         if (msg.HasBlock12()) {
             NewLine();
             Visit(msg.GetBlock12());
+        }
+        if (msg.HasBlock13()) {
+            NewLine();
+            Visit(msg.GetBlock13());
         }
     }
 
@@ -1556,7 +1557,7 @@ private:
         }
 
         if (str == "," && !MarkTokenStack.empty()) {
-            const bool addNewline = 
+            const bool addNewline =
                 (TokenIndex + 1 < ParsedTokens.size() && ParsedTokens[TokenIndex].Line != ParsedTokens[TokenIndex + 1].Line)
              || (TokenIndex > 0 && ParsedTokens[TokenIndex - 1].Line != ParsedTokens[TokenIndex].Line);
             // add line for trailing comma
@@ -2102,7 +2103,7 @@ private:
             NewLine();
             PushCurrentIndent();
         }
-        
+
         if (details.HasBlock1()) {
             NewLine();
             Visit(details.GetBlock1());
@@ -2767,7 +2768,7 @@ public:
 
             finalFormattedQuery << currentFormattedQuery;
             if (parsedTokens.back().Name != "SEMICOLON") {
-                if (hasTrailingComments 
+                if (hasTrailingComments
                      && !comments.back().Content.EndsWith("\n")
                      && comments.back().Content.StartsWith("--")) {
                     finalFormattedQuery << "\n";

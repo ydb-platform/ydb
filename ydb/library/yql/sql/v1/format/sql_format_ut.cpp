@@ -306,7 +306,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
               "\tbar bool?\n"
               ")\n"
               "PARTITION BY HASH (a, b, hash)\n"
-              "WITH (tiering = 'some');\n"}
+              "WITH (tiering = 'some');\n"},
+              {"create table if not  exists user(user int32)", "CREATE TABLE IF NOT EXISTS user (\n\tuser int32\n);\n"}
         };
 
         TSetup setup;
@@ -319,10 +320,14 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "ALTER OBJECT usEr (TYPE abcde) SET (a = b);\n"},
             {"creAte oBject usEr (tYpe abcde) With (a = b)",
              "CREATE OBJECT usEr (TYPE abcde) WITH (a = b);\n"},
+             {"creAte oBject if not exIstS usEr (tYpe abcde) With (a = b)",
+             "CREATE OBJECT IF NOT EXISTS usEr (TYPE abcde) WITH (a = b);\n"},
             {"creAte oBject usEr (tYpe abcde) With a = b",
              "CREATE OBJECT usEr (TYPE abcde) WITH a = b;\n"},
             {"dRop oBject usEr (tYpe abcde) With (aeEE)",
              "DROP OBJECT usEr (TYPE abcde) WITH (aeEE);\n"},
+             {"dRop oBject If ExistS usEr (tYpe abcde) With (aeEE)",
+             "DROP OBJECT IF EXISTS usEr (TYPE abcde) WITH (aeEE);\n"},
             {"dRop oBject usEr (tYpe abcde) With aeEE",
              "DROP OBJECT usEr (TYPE abcde) WITH aeEE;\n"}
         };
@@ -330,7 +335,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TSetup setup;
         setup.Run(cases);
     }
-    
+
     Y_UNIT_TEST(TableStoreOperations) {
         TCases cases = {
             {"alter tableStore uSer aDd column usEr int32",
@@ -347,8 +352,12 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TCases cases = {
             {"creAte exTernAl daTa SouRce usEr With (a = \"b\")",
              "CREATE EXTERNAL DATA SOURCE usEr WITH (a = \"b\");\n"},
+             {"creAte exTernAl daTa SouRce if not exists usEr With (a = \"b\")",
+             "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS usEr WITH (a = \"b\");\n"},
             {"dRop exTerNal Data SouRce usEr",
              "DROP EXTERNAL DATA SOURCE usEr;\n"},
+             {"dRop exTerNal Data SouRce if exists usEr",
+             "DROP EXTERNAL DATA SOURCE IF EXISTS usEr;\n"},
         };
 
         TSetup setup;
@@ -373,8 +382,12 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TCases cases = {
             {"creAte exTernAl TabLe usEr (a int) With (a = \"b\")",
              "CREATE EXTERNAL TABLE usEr (\n\ta int\n)\nWITH (a = \"b\");\n"},
+             {"creAte exTernAl TabLe iF NOt Exists usEr (a int) With (a = \"b\")",
+             "CREATE EXTERNAL TABLE IF NOT EXISTS usEr (\n\ta int\n)\nWITH (a = \"b\");\n"},
             {"dRop exTerNal taBlE usEr",
              "DROP EXTERNAL TABLE usEr;\n"},
+             {"dRop exTerNal taBlE iF eXiStS usEr",
+             "DROP EXTERNAL TABLE IF EXISTS usEr;\n"},
         };
 
         TSetup setup;
@@ -1349,7 +1362,7 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
 
     Y_UNIT_TEST(Union) {
         TCases cases = {
-            {"select 1 union all select 2 union select 3 union all select 4 union select 5", 
+            {"select 1 union all select 2 union select 3 union all select 4 union select 5",
              "SELECT\n\t1\nUNION ALL\nSELECT\n\t2\nUNION\nSELECT\n\t3\nUNION ALL\nSELECT\n\t4\nUNION\nSELECT\n\t5;\n"},
              };
 
@@ -1375,11 +1388,11 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
 
     Y_UNIT_TEST(WindowFunctionInsideExpr) {
         TCases cases = {
-            {"SELECT CAST(ROW_NUMBER() OVER () AS String) AS x,\nFROM Input;", 
+            {"SELECT CAST(ROW_NUMBER() OVER () AS String) AS x,\nFROM Input;",
              "SELECT\n\tCAST(ROW_NUMBER() OVER () AS String) AS x,\nFROM Input;\n"},
-            {"SELECT CAST(ROW_NUMBER() OVER (PARTITION BY key) AS String) AS x,\nFROM Input;", 
+            {"SELECT CAST(ROW_NUMBER() OVER (PARTITION BY key) AS String) AS x,\nFROM Input;",
              "SELECT\n\tCAST(\n\t\tROW_NUMBER() OVER (\n\t\t\tPARTITION BY\n\t\t\t\tkey\n\t\t) AS String\n\t) AS x,\nFROM Input;\n"},
-            {"SELECT CAST(ROW_NUMBER() OVER (users) AS String) AS x,\nFROM Input;", 
+            {"SELECT CAST(ROW_NUMBER() OVER (users) AS String) AS x,\nFROM Input;",
             "SELECT\n\tCAST(\n\t\tROW_NUMBER() OVER (\n\t\t\tusers\n\t\t) AS String\n\t) AS x,\nFROM Input;\n"},
         };
 
@@ -1389,9 +1402,9 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
 
     Y_UNIT_TEST(ExistsExpr) {
         TCases cases = {
-            {"SELECT EXISTS (SELECT 1);", 
+            {"SELECT EXISTS (SELECT 1);",
              "SELECT\n\tEXISTS (\n\t\tSELECT\n\t\t\t1\n\t);\n"},
-            {"SELECT CAST(EXISTS(SELECT 1) AS Int) AS x,\nFROM Input;", 
+            {"SELECT CAST(EXISTS(SELECT 1) AS Int) AS x,\nFROM Input;",
              "SELECT\n\tCAST(\n\t\tEXISTS (\n\t\t\tSELECT\n\t\t\t\t1\n\t\t) AS Int\n\t) AS x,\nFROM Input;\n"},
         };
 
@@ -1401,7 +1414,7 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
 
     Y_UNIT_TEST(LambdaInsideExpr) {
         TCases cases = {
-            {"SELECT ListMap(AsList(1,2),($x)->{return $x+1});", 
+            {"SELECT ListMap(AsList(1,2),($x)->{return $x+1});",
              "SELECT\n\tListMap(\n\t\tAsList(1, 2), ($x) -> {\n\t\t\tRETURN $x + 1\n\t\t}\n\t);\n"},
         };
 
@@ -1411,11 +1424,11 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
 
     Y_UNIT_TEST(CaseExpr) {
         TCases cases = {
-            {"SELECT CASE WHEN 1 == 2 THEN 3 WHEN 4 == 5 THEN 6 WHEN 7 == 8 THEN 9 ELSE 10 END;", 
+            {"SELECT CASE WHEN 1 == 2 THEN 3 WHEN 4 == 5 THEN 6 WHEN 7 == 8 THEN 9 ELSE 10 END;",
              "SELECT\n\tCASE\n\t\tWHEN 1 == 2\n\t\t\tTHEN 3\n\t\tWHEN 4 == 5\n\t\t\tTHEN 6\n\t\tWHEN 7 == 8\n\t\t\tTHEN 9\n\t\tELSE 10\n\tEND;\n"},
-            {"SELECT CAST(CASE WHEN 1 == 2 THEN 3 WHEN 4 == 5 THEN 6 ELSE 10 END AS String);", 
+            {"SELECT CAST(CASE WHEN 1 == 2 THEN 3 WHEN 4 == 5 THEN 6 ELSE 10 END AS String);",
              "SELECT\n\tCAST(\n\t\tCASE\n\t\t\tWHEN 1 == 2\n\t\t\t\tTHEN 3\n\t\t\tWHEN 4 == 5\n\t\t\t\tTHEN 6\n\t\t\tELSE 10\n\t\tEND AS String\n\t);\n"},
-            {"SELECT CASE x WHEN 1 THEN 2 WHEN 3 THEN 4 WHEN 5 THEN 6 ELSE 10 END;", 
+            {"SELECT CASE x WHEN 1 THEN 2 WHEN 3 THEN 4 WHEN 5 THEN 6 ELSE 10 END;",
              "SELECT\n\tCASE x\n\t\tWHEN 1\n\t\t\tTHEN 2\n\t\tWHEN 3\n\t\t\tTHEN 4\n\t\tWHEN 5\n\t\t\tTHEN 6\n\t\tELSE 10\n\tEND;\n"},
         };
 
@@ -1425,13 +1438,13 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
 
     Y_UNIT_TEST(MultiTokenOperations) {
         TCases cases = {
-            {"$x = 1 >>| 2;", 
+            {"$x = 1 >>| 2;",
              "$x = 1 >>| 2;\n"},
-             {"$x = 1 >> 2;", 
+             {"$x = 1 >> 2;",
              "$x = 1 >> 2;\n"},
-             {"$x = 1 ?? 2;", 
+             {"$x = 1 ?? 2;",
              "$x = 1 ?? 2;\n"},
-             {"$x = 1 >  /*comment*/  >  /*comment*/  | 2;", 
+             {"$x = 1 >  /*comment*/  >  /*comment*/  | 2;",
              "$x = 1 >/*comment*/>/*comment*/| 2;\n"},
         };
 
@@ -1441,29 +1454,29 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
 
     Y_UNIT_TEST(OperatorNewlines) {
         TCases cases = {
-            {"$x = TRUE\nOR\nFALSE;", 
+            {"$x = TRUE\nOR\nFALSE;",
              "$x = TRUE\n\tOR\n\tFALSE;\n"},
-            {"$x = TRUE OR\nFALSE;", 
+            {"$x = TRUE OR\nFALSE;",
              "$x = TRUE OR\n\tFALSE;\n"},
-            {"$x = TRUE\nOR FALSE;", 
+            {"$x = TRUE\nOR FALSE;",
              "$x = TRUE OR\n\tFALSE;\n"},
-            {"$x = 1\n+2\n*3;", 
+            {"$x = 1\n+2\n*3;",
              "$x = 1 +\n\t2 *\n\t\t3;\n"},
-            {"$x = 1\n+\n2\n*3\n*5\n+\n4;", 
+            {"$x = 1\n+\n2\n*3\n*5\n+\n4;",
              "$x = 1\n\t+\n\t2 *\n\t\t3 *\n\t\t5\n\t+\n\t4;\n"},
-            {"$x = 1\n+2+3+4\n+5+6+7+\n\n8+9+10;", 
+            {"$x = 1\n+2+3+4\n+5+6+7+\n\n8+9+10;",
              "$x = 1 +\n\t2 + 3 + 4 +\n\t5 + 6 + 7 +\n\t8 + 9 + 10;\n"},
-            {"$x = TRUE\nAND\nTRUE OR\nFALSE\nAND TRUE\nOR FALSE\nAND TRUE\nOR FALSE;", 
+            {"$x = TRUE\nAND\nTRUE OR\nFALSE\nAND TRUE\nOR FALSE\nAND TRUE\nOR FALSE;",
              "$x = TRUE\n\tAND\n\tTRUE OR\n\tFALSE AND\n\t\tTRUE OR\n\tFALSE AND\n\t\tTRUE OR\n\tFALSE;\n"},
-            {"$x = 1 -- comment\n+ 2;", 
+            {"$x = 1 -- comment\n+ 2;",
              "$x = 1-- comment\n\t+\n\t2;\n"},
-             {"$x = 1 -- comment\n+ -- comment\n2;", 
+             {"$x = 1 -- comment\n+ -- comment\n2;",
              "$x = 1-- comment\n\t+-- comment\n\t2;\n"},
-             {"$x = 1 + -- comment\n2;", 
+             {"$x = 1 + -- comment\n2;",
              "$x = 1 +-- comment\n\t2;\n"},
-             {"$x = 1\n>\n>\n|\n2;", 
+             {"$x = 1\n>\n>\n|\n2;",
              "$x = 1\n\t>>|\n\t2;\n"},
-             {"$x = 1\n?? 2 ??\n3\n??\n4 +\n5\n*\n6 +\n7 ??\n8;", 
+             {"$x = 1\n?? 2 ??\n3\n??\n4 +\n5\n*\n6 +\n7 ??\n8;",
              "$x = 1 ??\n\t2 ??\n\t3\n\t??\n\t4 +\n\t\t5\n\t\t\t*\n\t\t\t6 +\n\t\t7 ??\n\t8;\n"},
         };
 

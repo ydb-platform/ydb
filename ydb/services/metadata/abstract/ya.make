@@ -14,12 +14,12 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(kqp_common.h)
 
 PEERDIR(
+    ydb/core/base
     ydb/library/accessor
     ydb/library/actors/core
-    ydb/services/metadata/request
-    ydb/public/api/protos
-    ydb/core/base
     ydb/library/yql/core/expr_nodes
+    ydb/public/api/protos
+    ydb/services/metadata/request
 )
 
 END()

@@ -543,7 +543,7 @@ public:
                     postHandler = arg.Expr;
                 }
                 else {
-                    ctx.Warning(Pos, DEFAULT_ERROR) << "Unsupported named argument: " 
+                    ctx.Warning(Pos, DEFAULT_ERROR) << "Unsupported named argument: "
                         << label << " in " << Func;
                 }
             }
@@ -568,7 +568,7 @@ public:
             if (postHandler == nullptr) {
                 postHandler = Y("Void");
             }
-            
+
             const auto makeResolveDiveHandlerType = BuildBind(Pos, walkFoldersModuleName, "MakeResolveDiveHandlersType");
             const auto resolveDiveHandlerType = Y("EvaluateType", Y("TypeHandle", Y("Apply", makeResolveDiveHandlerType, Y("TypeOf", initState))));
             if (resolveHandler == nullptr) {
@@ -808,10 +808,11 @@ TNodePtr BuildInputTables(TPosition pos, const TTableList& tables, bool inSubque
 
 class TCreateTableNode final: public TAstListNode {
 public:
-    TCreateTableNode(TPosition pos, const TTableRef& tr, const TCreateTableParameters& params, TScopedStatePtr scoped)
+    TCreateTableNode(TPosition pos, const TTableRef& tr, bool existingOk, const TCreateTableParameters& params, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Table(tr)
         , Params(params)
+        , ExistingOk(existingOk)
         , Scoped(scoped)
     {
         scoped->UseCluster(Table.Service, Table.Cluster);
@@ -897,7 +898,7 @@ public:
             opts = Table.Options;
         }
 
-        opts = L(opts, Q(Y(Q("mode"), Q("create"))));
+        opts = L(opts, Q(Y(Q("mode"), Q(ExistingOk ? "create_if_not_exists" : "create"))));
 
         THashSet<TString> columnFamilyNames;
 
@@ -1146,12 +1147,13 @@ public:
 private:
     const TTableRef Table;
     const TCreateTableParameters Params;
+    const bool ExistingOk;
     TScopedStatePtr Scoped;
 };
 
-TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, const TCreateTableParameters& params, TScopedStatePtr scoped)
+TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, const TCreateTableParameters& params, TScopedStatePtr scoped)
 {
-    return new TCreateTableNode(pos, tr, params, scoped);
+    return new TCreateTableNode(pos, tr, existingOk, params, scoped);
 }
 
 class TAlterTableNode final: public TAstListNode {
@@ -1405,11 +1407,12 @@ TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTablePa
 
 class TDropTableNode final: public TAstListNode {
 public:
-    TDropTableNode(TPosition pos, const TTableRef& tr, ETableType tableType, TScopedStatePtr scoped)
+    TDropTableNode(TPosition pos, const TTableRef& tr, bool missingOk, ETableType tableType, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Table(tr)
         , TableType(tableType)
         , Scoped(scoped)
+        , MissingOk(missingOk)
     {
         FakeSource = BuildFakeSource(pos);
         scoped->UseCluster(Table.Service, Table.Cluster);
@@ -1424,7 +1427,7 @@ public:
 
         auto opts = Y();
 
-        opts = L(opts, Q(Y(Q("mode"), Q("drop"))));
+        opts = L(opts, Q(Y(Q("mode"), Q(MissingOk ? "drop_if_exists" : "drop"))));
 
         switch (TableType) {
             case ETableType::TableStore:
@@ -1454,10 +1457,11 @@ private:
     ETableType TableType;
     TScopedStatePtr Scoped;
     TSourcePtr FakeSource;
+    const bool MissingOk;
 };
 
-TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr, ETableType tableType, TScopedStatePtr scoped) {
-    return new TDropTableNode(pos, tr, tableType, scoped);
+TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr, bool missingOk, ETableType tableType, TScopedStatePtr scoped) {
+    return new TDropTableNode(pos, tr, missingOk, tableType, scoped);
 }
 
 
@@ -2021,13 +2025,13 @@ TNodePtr BuildAlterGroup(TPosition pos, const TString& service, const TDeferredA
 
 class TDropRoles final: public TAstListNode {
 public:
-    TDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool force, TScopedStatePtr scoped)
+    TDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool missingOk, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Service(service)
         , Cluster(cluster)
         , ToDrop(toDrop)
         , IsUser(isUser)
-        , Force(force)
+        , MissingOk(missingOk)
         , Scoped(scoped)
     {
         FakeSource = BuildFakeSource(pos);
@@ -2042,11 +2046,11 @@ public:
             return false;
         }
 
-        auto options = Y(Q(Y(Q("mode"), Q(IsUser ? "dropUser" : "dropGroup"))));
-        if (Force) {
-            options = L(options, Q(Y(Q("force"))));
-        }
+        const char* mode = IsUser ?
+            (MissingOk ? "dropUserIfExists" : "dropUser") :
+            (MissingOk ? "dropGroupIfExists" : "dropGroup");
 
+        auto options = Y(Q(Y(Q("mode"), Q(mode))));
 
         auto block = Y(Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), cluster)));
         for (auto& item : ToDrop) {
@@ -2071,32 +2075,32 @@ private:
     TDeferredAtom Cluster;
     TVector<TDeferredAtom> ToDrop;
     const bool IsUser;
-    const bool Force;
+    const bool MissingOk;
     TScopedStatePtr Scoped;
     TSourcePtr FakeSource;
 };
 
 TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
     std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
-    return new TUpsertObject(pos, objectId, typeId, std::move(features), context);
+    return new TUpsertObject(pos, objectId, typeId, false, std::move(features), context);
 }
 TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
-    std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
-    return new TCreateObject(pos, objectId, typeId, std::move(features), context);
+    bool existingOk, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
+    return new TCreateObject(pos, objectId, typeId, existingOk, std::move(features), context);
 }
 TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
     std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context)
 {
-    return new TAlterObject(pos, secretId, typeId, std::move(features), context);
+    return new TAlterObject(pos, secretId, typeId, false, std::move(features), context);
 }
 TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-    std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context)
+    bool missingOk, std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context)
 {
-    return new TDropObject(pos, secretId, typeId, std::move(options), context);
+    return new TDropObject(pos, secretId, typeId, missingOk, std::move(options), context);
 }
 
-TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool force, TScopedStatePtr scoped) {
-    return new TDropRoles(pos, service, cluster, toDrop, isUser, force, scoped);
+TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool missingOk, TScopedStatePtr scoped) {
+    return new TDropRoles(pos, service, cluster, toDrop, isUser, missingOk, scoped);
 }
 
 class TPermissionsAction final : public TAstListNode {

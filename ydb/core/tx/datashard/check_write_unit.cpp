@@ -52,7 +52,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
 
     TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
     Y_VERIFY_S(writeOp, "cannot cast operation of kind " << op->GetKind());
-    auto writeTx = writeOp->WriteTx();
+    auto writeTx = writeOp->GetWriteTx();
     Y_ABORT_UNLESS(writeTx);
     Y_ABORT_UNLESS(writeTx->Ready() || writeTx->RequirePrepare());
 
@@ -66,7 +66,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
 
         DataShard.IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
 
-        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err);
+        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err, DataShard.TabletID());
         op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
         LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckWriteUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
@@ -87,7 +87,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
                         << " bytes which exceeds limit " << NLimits::MaxWriteKeySize
                         << " bytes at " << DataShard.TabletID();
 
-                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, err);
+                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, err, DataShard.TabletID());
                     op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
                     LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
@@ -103,7 +103,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
                                 << "Transaction write column value of " << col.ImmediateUpdateSize
                                 << " bytes is larger than the allowed threshold";
 
-                            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, err);
+                            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, err, DataShard.TabletID());
                             op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
                             LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
@@ -126,7 +126,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
 
                             DataShard.IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
 
-                            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err);
+                            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err, DataShard.TabletID());
                             op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
                             LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckWriteUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
@@ -143,7 +143,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
         if (!Pipeline.AssignPlanInterval(op)) {
             TString err = TStringBuilder() << "Can't propose tx " << op->GetTxId() << " at blocked shard " << DataShard.TabletID();
 
-            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err);
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err, DataShard.TabletID());
             op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
             LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
@@ -151,7 +151,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
             return EExecutionStatus::Executed;
         }
 
-        writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildPrepared(writeOp->WriteTx()->TabletId(), op->GetTxId(), {op->GetMinStep(), op->GetMaxStep(), {}}));
+        writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildPrepared(DataShard.TabletID(), op->GetTxId(), {op->GetMinStep(), op->GetMaxStep(), {}}));
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Prepared " << *op << " at " << DataShard.TabletID());
     }
 

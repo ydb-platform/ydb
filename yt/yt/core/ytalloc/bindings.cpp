@@ -9,9 +9,9 @@
 #include <yt/yt/core/misc/singleton.h>
 #include <yt/yt/core/misc/string_builder.h>
 
-#include <yt/yt/core/ytree/yson_serializable.h>
-
 #include <library/cpp/ytalloc/api/ytalloc.h>
+
+#include <library/cpp/yt/yson_string/string.h>
 
 #include <util/system/env.h>
 

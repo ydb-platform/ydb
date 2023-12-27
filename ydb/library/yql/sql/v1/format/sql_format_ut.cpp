@@ -1471,7 +1471,7 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
         setup.Run(cases);
     }
 
-    Y_UNIT_TEST(Obfuscate) {
+    Y_UNIT_TEST(ObfuscateSelect) {
         TCases cases = {
             {"select 1;",
              "SELECT\n\t0;\n"},
@@ -1495,9 +1495,49 @@ FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
              "DECLARE $id AS int32;\n"},
             {"select * from `logs/of/bob` where pwd='foo';",
              "SELECT\n\t*\nFROM id\nWHERE id = 'str';\n"},
+            {"select $f();",
+             "SELECT\n\t$id();\n"},
         };
 
         TSetup setup;
         setup.Run(cases, NSQLFormat::EFormatMode::Obfuscate);
-    }    
+    }
+
+    Y_UNIT_TEST(ObfuscatePragma) {
+        TCases cases = {
+            {"pragma a=1",
+             "PRAGMA id = 0;\n"},
+            {"pragma a='foo';",
+             "PRAGMA id = 'str';\n"},
+            {"pragma a=true;",
+             "PRAGMA id = FALSE;\n"},
+            {"pragma a=$foo;",
+             "PRAGMA id = $id;\n"},
+            {"pragma a=foo;",
+             "PRAGMA id = id;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases, NSQLFormat::EFormatMode::Obfuscate);
+    }
+
+    Y_UNIT_TEST(CreateView) {
+        TCases cases = {
+            {"creAte vIEw TheView wiTh (security_invoker = trUE) As SELect 1",
+             "CREATE VIEW TheView WITH (security_invoker = TRUE) AS\nSELECT\n\t1;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
+
+    Y_UNIT_TEST(DropView) {
+        TCases cases = {
+            {"dRop viEW theVIEW",
+             "DROP VIEW theVIEW;\n"},
+        };
+
+        TSetup setup;
+        setup.Run(cases);
+    }
 }

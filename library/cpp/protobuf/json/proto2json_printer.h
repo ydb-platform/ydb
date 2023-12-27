@@ -39,7 +39,7 @@ namespace NProtobufJson {
         void PrintSingleField(const NProtoBuf::Message& proto,
                               const NProtoBuf::FieldDescriptor& field,
                               IJsonOutput& json,
-                              TStringBuf key = {});
+                              TStringBuf key = {}, bool inProtoMap = false);
 
         void PrintKeyValue(const NProtoBuf::Message& proto,
                            IJsonOutput& json);

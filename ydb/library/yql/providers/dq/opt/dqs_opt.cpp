@@ -10,6 +10,7 @@
 #include <ydb/library/yql/core/type_ann/type_ann_core.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
 
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
@@ -92,12 +93,13 @@ namespace NYql::NDqs {
                     }
 
                     YQL_CLOG(INFO, ProviderDq) << "DqsRewritePhyBlockReadOnDqIntegration";
-
                     return Build<TCoWideFromBlocks>(ctx, node->Pos())
-                            .Input(Build<TDqReadBlockWideWrap>(ctx, node->Pos())
-                                    .Input(readWideWrap.Input())
-                                    .Flags(readWideWrap.Flags())
-                                    .Token(readWideWrap.Token())
+                            .Input(Build<TCoToFlow>(ctx, node->Pos())
+                                .Input(Build<TDqReadBlockWideWrap>(ctx, node->Pos())
+                                        .Input(readWideWrap.Input())
+                                        .Flags(readWideWrap.Flags())
+                                        .Token(readWideWrap.Token())
+                                    .Done())
                                 .Done())
                             .Done().Ptr();
                 }, ctx, optSettings);

@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -97,7 +97,7 @@ char *curl_easy_escape(struct Curl_easy *data, const char *string,
     return strdup("");
 
   while(length--) {
-    unsigned char in = *string++; /* treat the characters unsigned */
+    unsigned char in = *string; /* we need to treat the characters unsigned */
 
     if(Curl_isunreserved(in)) {
       /* append this */
@@ -106,27 +106,14 @@ char *curl_easy_escape(struct Curl_easy *data, const char *string,
     }
     else {
       /* encode it */
-      const char hex[] = "0123456789ABCDEF";
-      char out[3]={'%'};
-      out[1] = hex[in>>4];
-      out[2] = hex[in & 0xf];
-      if(Curl_dyn_addn(&d, out, 3))
+      if(Curl_dyn_addf(&d, "%%%02X", in))
         return NULL;
     }
+    string++;
   }
 
   return Curl_dyn_ptr(&d);
 }
-
-static const unsigned char hextable[] = {
-  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 0, 0, 0, 0, 0,       /* 0x30 - 0x3f */
-  0, 10, 11, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 0x40 - 0x4f */
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,       /* 0x50 - 0x5f */
-  0, 10, 11, 12, 13, 14, 15                             /* 0x60 - 0x66 */
-};
-
-/* the input is a single hex digit */
-#define onehex2dec(x) hextable[x - '0']
 
 /*
  * Curl_urldecode() URL decodes the given string.
@@ -150,47 +137,54 @@ CURLcode Curl_urldecode(const char *string, size_t length,
 {
   size_t alloc;
   char *ns;
+  size_t strindex = 0;
+  unsigned long hex;
 
   DEBUGASSERT(string);
   DEBUGASSERT(ctrl >= REJECT_NADA); /* crash on TRUE/FALSE */
 
-  alloc = (length?length:strlen(string));
-  ns = malloc(alloc + 1);
+  alloc = (length?length:strlen(string)) + 1;
+  ns = malloc(alloc);
 
   if(!ns)
     return CURLE_OUT_OF_MEMORY;
 
-  /* store output string */
-  *ostring = ns;
-
-  while(alloc) {
+  while(--alloc > 0) {
     unsigned char in = *string;
     if(('%' == in) && (alloc > 2) &&
        ISXDIGIT(string[1]) && ISXDIGIT(string[2])) {
       /* this is two hexadecimal digits following a '%' */
-      in = (unsigned char)(onehex2dec(string[1]) << 4) | onehex2dec(string[2]);
+      char hexstr[3];
+      char *ptr;
+      hexstr[0] = string[1];
+      hexstr[1] = string[2];
+      hexstr[2] = 0;
 
-      string += 3;
-      alloc -= 3;
-    }
-    else {
-      string++;
-      alloc--;
+      hex = strtoul(hexstr, &ptr, 16);
+
+      in = curlx_ultouc(hex); /* this long is never bigger than 255 anyway */
+
+      string += 2;
+      alloc -= 2;
     }
 
     if(((ctrl == REJECT_CTRL) && (in < 0x20)) ||
        ((ctrl == REJECT_ZERO) && (in == 0))) {
-      Curl_safefree(*ostring);
+      free(ns);
       return CURLE_URL_MALFORMAT;
     }
 
-    *ns++ = in;
+    ns[strindex++] = in;
+    string++;
   }
-  *ns = 0; /* terminate it */
+  ns[strindex] = 0; /* terminate it */
 
   if(olen)
     /* store output size */
-    *olen = ns - *ostring;
+    *olen = strindex;
+
+  /* store output string */
+  *ostring = ns;
 
   return CURLE_OK;
 }
@@ -208,7 +202,7 @@ char *curl_easy_unescape(struct Curl_easy *data, const char *string,
   char *str = NULL;
   (void)data;
   if(length >= 0) {
-    size_t inputlen = (size_t)length;
+    size_t inputlen = length;
     size_t outputlen;
     CURLcode res = Curl_urldecode(string, inputlen, &str, &outputlen,
                                   REJECT_NADA);
@@ -232,4 +226,30 @@ char *curl_easy_unescape(struct Curl_easy *data, const char *string,
 void curl_free(void *p)
 {
   free(p);
+}
+
+/*
+ * Curl_hexencode()
+ *
+ * Converts binary input to lowercase hex-encoded ASCII output.
+ * Null-terminated.
+ */
+void Curl_hexencode(const unsigned char *src, size_t len, /* input length */
+                    unsigned char *out, size_t olen) /* output buffer size */
+{
+  const char *hex = "0123456789abcdef";
+  DEBUGASSERT(src && len && (olen >= 3));
+  if(src && len && (olen >= 3)) {
+    while(len-- && (olen >= 3)) {
+      /* clang-tidy warns on this line without this comment: */
+      /* NOLINTNEXTLINE(clang-analyzer-core.UndefinedBinaryOperatorResult) */
+      *out++ = hex[(*src & 0xF0)>>4];
+      *out++ = hex[*src & 0x0F];
+      ++src;
+      olen -= 2;
+    }
+    *out = 0;
+  }
+  else if(olen)
+    *out = 0;
 }

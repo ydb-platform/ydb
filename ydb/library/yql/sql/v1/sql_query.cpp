@@ -950,6 +950,56 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildUpsertObjectOperation(Ctx.Pos(), objectId, typeId, std::move(kv), context));
             break;
         }
+        case TRule_sql_stmt_core::kAltSqlStmtCore40: {
+            // create_view_stmt: CREATE VIEW name WITH (k = v, ...) AS select_stmt;
+            auto& node = core.GetAlt_sql_stmt_core40().GetRule_create_view_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref3().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
+                                 false,
+                                 context.ServiceId,
+                                 context.Cluster)) {
+                    return false;
+                }
+            }
+
+            std::map<TString, TDeferredAtom> features;
+            ParseViewOptions(features, node.GetRule_with_table_settings4());
+            ParseViewQuery(features, node.GetRule_select_stmt6());
+
+            const TString objectId = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
+            constexpr const char* TypeId = "VIEW";
+            AddStatementToBlocks(blocks,
+                                 BuildCreateObjectOperation(Ctx.Pos(),
+                                                            BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                            TypeId,
+                                                            std::move(features),
+                                                            context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore41: {
+            // drop_view_stmt: DROP VIEW name;
+            auto& node = core.GetAlt_sql_stmt_core41().GetRule_drop_view_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref3().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
+                                 false,
+                                 context.ServiceId,
+                                 context.Cluster)) {
+                    return false;
+                }
+            }
+
+            const TString objectId = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
+            constexpr const char* TypeId = "VIEW";
+            AddStatementToBlocks(blocks,
+                                 BuildDropObjectOperation(Ctx.Pos(),
+                                                          BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                          TypeId,
+                                                          {},
+                                                          context));
+            break;
+        }
         case TRule_sql_stmt_core::ALT_NOT_SET:
             Ctx.IncrementMonCounter("sql_errors", "UnknownStatement" + internalStatementName);
             AltNotImplemented("sql_stmt_core", core);

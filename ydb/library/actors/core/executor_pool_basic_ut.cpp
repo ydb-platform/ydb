@@ -225,21 +225,21 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         TBasicExecutorPool::TSemaphore semaphore;
         semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(0);
 
-        VALUES_EQUAL(0, semaphore.ConverToI64());
+        VALUES_EQUAL(0, semaphore.ConvertToI64());
         semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(-1);
-        VALUES_EQUAL(-1, semaphore.ConverToI64());
+        VALUES_EQUAL(-1, semaphore.ConvertToI64());
         semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(1);
-        VALUES_EQUAL(1, semaphore.ConverToI64());
+        VALUES_EQUAL(1, semaphore.ConvertToI64());
 
         for (i64 value = -1'000'000; value <= 1'000'000; ++value) {
-            VALUES_EQUAL(TBasicExecutorPool::TSemaphore::GetSemaphore(value).ConverToI64(), value);
+            VALUES_EQUAL(TBasicExecutorPool::TSemaphore::GetSemaphore(value).ConvertToI64(), value);
         }
 
         for (i8 sleepThreads = -10; sleepThreads <= 10; ++sleepThreads) {
 
             semaphore = TBasicExecutorPool::TSemaphore();
             semaphore.CurrentSleepThreadCount = sleepThreads;
-            i64 initialValue = semaphore.ConverToI64();
+            i64 initialValue = semaphore.ConvertToI64();
 
             semaphore = TBasicExecutorPool::TSemaphore::GetSemaphore(initialValue - 1);
             VALUES_EQUAL(-1, semaphore.OldSemaphore);
@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
                 semaphore = TBasicExecutorPool::TSemaphore();
                 semaphore.OldSemaphore = expected;
                 semaphore.CurrentSleepThreadCount = sleepThreads;
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.ConverToI64(), value);
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.ConvertToI64(), value);
                 value++;
             }
 

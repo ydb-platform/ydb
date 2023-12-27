@@ -8,12 +8,11 @@ namespace NKikimr::NOlap {
 
 class TBuildSlicesTask: public NConveyor::ITask {
 private:
-    std::shared_ptr<IBlobsWritingAction> Action;
     NEvWrite::TWriteData WriteData;
     const ui64 TabletId;
     const NActors::TActorId ParentActorId;
+    const NActors::TActorId BufferActorId;
     std::optional<std::vector<NArrow::TSerializedBatch>> BuildSlices();
-    std::shared_ptr<arrow::Schema> PrimaryKeySchema;
 protected:
     virtual bool DoExecute() override;
 public:
@@ -21,15 +20,13 @@ public:
         return "Write::ConstructBlobs::Slices";
     }
 
-    TBuildSlicesTask(const ui64 tabletId, const NActors::TActorId parentActorId, const std::shared_ptr<IBlobsWritingAction>& action,
-        const NEvWrite::TWriteData& writeData, const std::shared_ptr<arrow::Schema>& primaryKeySchema)
-        : Action(action)
-        , WriteData(writeData)
+    TBuildSlicesTask(const ui64 tabletId, const NActors::TActorId parentActorId,
+        const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData)
+        : WriteData(std::move(writeData))
         , TabletId(tabletId)
         , ParentActorId(parentActorId)
-        , PrimaryKeySchema(primaryKeySchema)
+        , BufferActorId(bufferActorId)
     {
-        Y_ABORT_UNLESS(Action);
     }
 };
 }

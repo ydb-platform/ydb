@@ -6,7 +6,7 @@
 
 #include <yt/yt/core/yson/string.h>
 
-#include <yt/yt/core/ytree/attributes.h>
+#include <yt/yt/core/ytree/public.h>
 
 #include <yt/yt/core/tracing/public.h>
 

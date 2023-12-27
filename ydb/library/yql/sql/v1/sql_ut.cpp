@@ -1,5 +1,7 @@
 #include "sql_ut.h"
 #include "format/sql_format.h"
+#include "lexer/lexer.h"
+
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/sql/sql.h>
 #include <util/generic/map.h>
@@ -8,8 +10,37 @@
 
 #include <util/string/split.h>
 
+#include <format>
+
 using namespace NSQLTranslation;
 
+namespace {
+
+TParsedTokenList Tokenize(const TString& query) {
+    auto lexer = NSQLTranslationV1::MakeLexer(true);
+    TParsedTokenList tokens;
+    NYql::TIssues issues;
+    UNIT_ASSERT_C(Tokenize(*lexer, query, "Query", tokens, issues, SQL_MAX_PARSER_ERRORS),
+                  issues.ToString());
+
+    return tokens;
+}
+
+TString ToString(const TParsedTokenList& tokens) {
+    TStringBuilder reconstructedQuery;
+    for (const auto& token : tokens) {
+        if (token.Name == "WS" || token.Name == "EOF") {
+            continue;
+        }
+        if (!reconstructedQuery.Empty()) {
+            reconstructedQuery << ' ';
+        }
+        reconstructedQuery << token.Content;
+    }
+    return reconstructedQuery;
+}
+
+}
 
 Y_UNIT_TEST_SUITE(AnsiMode) {
     Y_UNIT_TEST(PragmaAnsi) {
@@ -5941,5 +5972,95 @@ Y_UNIT_TEST_SUITE(BlockEnginePragma) {
     Y_UNIT_TEST(UnknownSetting) {
         ExpectFailWithError("use plato; pragma BlockEngine='foo';",
             "<main>:1:31: Error: Expected `disable|auto|force' argument for: BlockEngine\n");
+    }
+}
+
+Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
+    Y_UNIT_TEST(CreateViewSimple) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                CREATE VIEW TheView WITH (security_invoker = true) AS SELECT 1;
+            )"
+        );
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+    }
+    
+    Y_UNIT_TEST(CreateViewFromTable) {
+        constexpr const char* path = "/PathPrefix/TheView";
+        constexpr const char* query = R"(
+            SELECT * FROM SomeTable
+        )";
+
+        NYql::TAstParseResult res = SqlToYql(std::format(R"(
+                    USE plato;
+                    CREATE VIEW `{}` WITH (security_invoker = true) AS {};
+                )",
+                path,
+                query
+            )
+        );
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_STRING_CONTAINS(line, path);
+                UNIT_ASSERT_STRING_CONTAINS(line, "createObject");
+            }
+        };
+        TWordCountHive elementStat = { {"Write!"} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+    }
+
+    Y_UNIT_TEST(CheckReconstructedQuery) {
+        constexpr const char* path = "/PathPrefix/TheView";
+        constexpr const char* query = R"(
+            SELECT * FROM FirstTable JOIN SecondTable ON FirstTable.key == SecondTable.key
+        )";
+
+        NYql::TAstParseResult res = SqlToYql(std::format(R"(
+                    USE plato;
+                    CREATE VIEW `{}` WITH (security_invoker = true) AS {};
+                )",
+                path,
+                query
+            )
+        );
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+        
+        TString reconstructedQuery = ToString(Tokenize(query));
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "query_text") {
+                UNIT_ASSERT_STRING_CONTAINS(line, reconstructedQuery);
+            }
+        };
+        TWordCountHive elementStat = { {"Write!"} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+    }
+
+    Y_UNIT_TEST(DropView) {
+        constexpr const char* path = "/PathPrefix/TheView";
+        NYql::TAstParseResult res = SqlToYql(std::format(R"(
+                    USE plato;
+                    DROP VIEW `{}`;
+                )",
+                path
+            )
+        );
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_STRING_CONTAINS(line, path);
+                UNIT_ASSERT_STRING_CONTAINS(line, "dropObject");
+            }
+        };
+        TWordCountHive elementStat = { {"Write!"} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
     }
 }

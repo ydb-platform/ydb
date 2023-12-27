@@ -451,4 +451,69 @@ Y_UNIT_TEST_SUITE(Viewer) {
 #endif
 #endif
     }
+
+    NJson::TJsonValue SendQuery(const TString& query, const TString& schema, const bool base64) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("schema", schema);
+        httpReq.CgiParameters.emplace("base64", base64 ? "true" : "false");
+        httpReq.CgiParameters.emplace("query", query);
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/query", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
+        Ctest << "json result: " << jsonResult << Endl;
+        NJson::TJsonValue json;
+        try {
+            NJson::ReadJsonTree(jsonResult, &json, true);
+        }
+        catch (yexception ex) {
+            Ctest << ex.what() << Endl;
+        }
+        return json;
+    }
+
+    void QueryTest(const TString& query, const bool base64, const TString& reply) {
+        NJson::TJsonValue result = SendQuery(query, "classic", base64);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetMap().at("column0").GetString(), reply);
+
+        result = SendQuery(query, "ydb", base64);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetMap().at("result").GetArray()[0].GetMap().at("column0").GetString(), reply);
+
+        result = SendQuery(query, "modern", base64);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetMap().at("result").GetArray()[0].GetArray()[0].GetString(), reply);
+
+        result = SendQuery(query, "multi", base64);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetMap().at("result").GetArray()[0].GetMap().at("rows").GetArray()[0].GetArray()[0].GetString(), reply);
+    }
+
+    Y_UNIT_TEST(SelectStringWithBase64Encoding)
+    {
+        QueryTest("select \"Hello\"", true, "SGVsbG8=");
+    }
+
+    Y_UNIT_TEST(SelectStringWithNoBase64Encoding)
+    {
+        QueryTest("select \"Hello\"", false, "Hello");
+    }
 }

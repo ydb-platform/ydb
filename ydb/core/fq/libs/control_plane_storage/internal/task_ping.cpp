@@ -51,7 +51,7 @@ TPingTaskParams ConstructHardPingTask(
     const TString& tablePathPrefix, const TDuration& automaticQueriesTtl, const TDuration& taskLeaseTtl,
     const THashMap<ui64, TRetryPolicyItem>& retryPolicies, ::NMonitoring::TDynamicCounterPtr rootCounters,
     uint64_t maxRequestSize, bool dumpRawStatistics, const std::shared_ptr<TFinalStatus>& finalStatus,
-    const TRequestCommonCountersPtr& commonCounters) {
+    const TRequestCommonCountersPtr& commonCounters, const std::shared_ptr<StatsValuesList>& finalStatistics) {
 
     auto scope = request.scope();
     auto query_id = request.query_id().value();
@@ -253,10 +253,14 @@ TPingTaskParams ConstructHardPingTask(
 
         if (request.statistics()) {
             TString statistics = request.statistics();
+            internal.clear_statistics();
+            PackStatisticsToProtobuf(*internal.mutable_statistics(), statistics);
+
             if (!dumpRawStatistics) {
                 try {
                     statistics = GetPrettyStatistics(statistics);
                 } catch (const std::exception&) {
+                    // LOG_AS?
                     CPS_LOG_E("Error on statistics prettification: " << CurrentExceptionMessage());
                 }
             }
@@ -482,6 +486,7 @@ TPingTaskParams ConstructHardPingTask(
                     // YQv2 may not provide statistics with terminal status, use saved one
                     statistics = query.statistics().json();
                 }
+                *finalStatistics = ExtractStatisticsFromProtobuf(internal.statistics());
                 auto records = GetMeteringRecords(statistics, isBillable, jobId, request.scope(), HostName());
                 meteringRecords->swap(records);
             } catch (const std::exception&) {
@@ -597,11 +602,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
 
     std::shared_ptr<Fq::Private::PingTaskResult> response = std::make_shared<Fq::Private::PingTaskResult>();
     std::shared_ptr<TFinalStatus> finalStatus = std::make_shared<TFinalStatus>();
+    std::shared_ptr finalStatistics = std::make_shared<StatsValuesList>();
 
     auto pingTaskParams = DoesPingTaskUpdateQueriesTable(request) ?
         ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config->AutomaticQueriesTtl,
             Config->TaskLeaseTtl, Config->RetryPolicies, Counters.Counters, Config->Proto.GetMaxRequestSize(),
-            Config->Proto.GetDumpRawStatistics(), finalStatus, requestCounters.Common) :
+            Config->Proto.GetDumpRawStatistics(), finalStatus, requestCounters.Common, finalStatistics) :
         ConstructSoftPingTask(request, response, YdbConnection->TablePathPrefix, Config->TaskLeaseTtl, requestCounters.Common);
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = ReadModifyWrite(pingTaskParams.Query, pingTaskParams.Params, pingTaskParams.Prepare, requestCounters, debugInfo);
@@ -628,7 +634,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
             }
 
             if (success) {
-                actorSystem->Send(ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvFinalStatusReport(request.query_id().value(), request.job_id().value(), cloudId, scope, finalStatus->Status, finalStatus->Issues, finalStatus->TransientIssues));
+                actorSystem->Send(ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvFinalStatusReport(
+                    request.query_id().value(), request.job_id().value(), cloudId, scope, std::move(*finalStatistics),
+                    finalStatus->Status, finalStatus->Issues, finalStatus->TransientIssues));
             }
         });
 }
@@ -644,7 +652,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvFinalStatus
     }
 
     Counters.GetFinalStatusCounters(event.CloudId, event.Scope)->IncByStatus(event.Status);
-    LOG_YQ_AUDIT_SERVICE_INFO("FinalStatus: cloud id: [" << event.CloudId  << "], scope: [" << event.Scope << "], query id: [" << event.QueryId << "], job id: [" << event.JobId << "], status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status));
+
+    Statistics statistics{event.Statistics};
+    LOG_YQ_AUDIT_SERVICE_INFO("FinalStatus: cloud id: [" << event.CloudId  << "], scope: [" << event.Scope << "], query id: [" <<
+                              event.QueryId << "], job id: [" << event.JobId << "], " << statistics << (statistics ? ", " : "") <<
+                              "status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status));
 }
 
 

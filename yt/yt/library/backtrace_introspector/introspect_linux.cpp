@@ -163,6 +163,12 @@ std::vector<TThreadIntrospectionInfo> IntrospectThreads()
 
     std::vector<TThreadIntrospectionInfo> infos;
     for (auto threadId : GetCurrentProcessThreadIds()) {
+        if (!IsUserspaceThread(threadId)) {
+            YT_LOG_DEBUG("Skipping a non-userspace thread (ThreadId: %v)",
+                threadId);
+            continue;
+        }
+
         TSignalHandlerContext signalHandlerContext;
         if (::syscall(SYS_tkill, threadId, SIGUSR1) != 0) {
             YT_LOG_DEBUG(TError::FromSystem(), "Failed to signal to thread (ThreadId: %v)",

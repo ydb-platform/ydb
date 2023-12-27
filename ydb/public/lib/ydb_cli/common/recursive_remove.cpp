@@ -92,6 +92,30 @@ TStatus Remove(TRemoveFunc<TClient, TSettings> func, TSchemeClient& schemeClient
     }
 }
 
+TStatus Remove(
+    TSchemeClient& schemeClient, TTableClient* tableClient, TTopicClient* topicClient, const TSchemeEntry& entry,
+    ERecursiveRemovePrompt prompt, const TRemoveDirectorySettings& settings)
+{
+    switch (entry.Type) {
+    case ESchemeEntryType::Directory:
+        return Remove(&RemoveDirectory, schemeClient, &schemeClient, entry, prompt, settings);
+
+    case ESchemeEntryType::ColumnStore:
+        return Remove(&RemoveColumnStore, schemeClient, tableClient, entry, prompt, settings);
+
+    case ESchemeEntryType::ColumnTable:
+    case ESchemeEntryType::Table:
+        return Remove(&RemoveTable, schemeClient, tableClient, entry, prompt, settings);
+
+    case ESchemeEntryType::Topic:
+        return Remove(&RemoveTopic, schemeClient, topicClient, entry, prompt, settings);
+
+    default:
+        return TStatus(EStatus::UNSUPPORTED, MakeIssues(TStringBuilder()
+            << "Unsupported entry type: " << entry.Type));
+    }
+}
+
 TStatus RemoveDirectoryRecursive(
         TSchemeClient& schemeClient,
         TTableClient* tableClient,
@@ -120,36 +144,8 @@ TStatus RemoveDirectoryRecursive(
     // output order is: Root, Recursive(children)...
     // we need to reverse it to delete recursively
     for (auto it = recursiveListResult.Entries.rbegin(); it != recursiveListResult.Entries.rend(); ++it) {
-        const auto& entry = *it;
-        switch (entry.Type) {
-            case ESchemeEntryType::Directory:
-                if (auto result = Remove(&RemoveDirectory, schemeClient, &schemeClient, entry, prompt, settings); !result.IsSuccess()) {
-                    return result;
-                }
-                break;
-
-            case ESchemeEntryType::ColumnStore:
-                if (auto result = Remove(&RemoveColumnStore, schemeClient, tableClient, entry, prompt, settings); !result.IsSuccess()) {
-                    return result;
-                }
-                break;
-
-            case ESchemeEntryType::ColumnTable:
-            case ESchemeEntryType::Table:
-                if (auto result = Remove(&RemoveTable, schemeClient, tableClient, entry, prompt, settings); !result.IsSuccess()) {
-                    return result;
-                }
-                break;
-
-            case ESchemeEntryType::Topic:
-                if (auto result = Remove(&RemoveTopic, schemeClient, topicClient, entry, prompt, settings); !result.IsSuccess()) {
-                    return result;
-                }
-                break;
-
-            default:
-                return TStatus(EStatus::UNSUPPORTED, MakeIssues(TStringBuilder()
-                    << "Unsupported entry type: " << entry.Type));
+        if (auto result = Remove(schemeClient, tableClient, topicClient, *it, prompt, settings); !result.IsSuccess()) {
+            return result;
         }
         if (createProgressBar) {
             bar->AddProgress(1);
@@ -183,4 +179,17 @@ TStatus RemoveDirectoryRecursive(
     return RemoveDirectoryRecursive(schemeClient, &tableClient, &topicClient, path, prompt, settings, removeSelf, createProgressBar);
 }
 
+NYdb::TStatus RemovePathRecursive(NScheme::TSchemeClient& schemeClient, NTable::TTableClient& tableClient, NTopic::TTopicClient& topicClient, const TString& path, ERecursiveRemovePrompt prompt, const NScheme::TRemoveDirectorySettings& settings /*= {}*/, bool createProgressBar /*= true*/) {
+    auto entity = schemeClient.DescribePath(path).ExtractValueSync();
+    if (!entity.IsSuccess()) {
+        return entity;
+    }
+    switch (entity.GetEntry().Type) {
+    case ESchemeEntryType::Directory:
+    case ESchemeEntryType::ColumnStore:
+        return RemoveDirectoryRecursive(schemeClient, tableClient, topicClient, path, prompt, settings, true, createProgressBar);
+    default:
+        return Remove(schemeClient, &tableClient, &topicClient, entity.GetEntry(), prompt, settings);
+    }
+}
 }

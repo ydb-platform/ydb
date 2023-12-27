@@ -224,6 +224,25 @@ class StatsModeExtension(ExtensionPoint):
         kikimr.control_plane.fq_config['control_plane_storage']['dump_raw_statistics'] = True
 
 
+class BindingsModeExtension(ExtensionPoint):
+
+    def __init__(self, bindings_mode, yq_version):
+        YQv2Extension.__init__.__annotations__ = {
+            'bindings_mode': str,
+            'yq_version': str,
+            'return': None
+        }
+        super().__init__()
+        self.bindings_mode = bindings_mode
+        self.yq_version = yq_version
+
+    def is_applicable(self, request):
+        return self.yq_version == 'v2' and self.bindings_mode != ''
+
+    def apply_to_kikimr(self, request, kikimr):
+        kikimr.compute_plane.config_generator.yaml_config["table_service_config"]["bindings_mode"] = self.bindings_mode
+
+
 @contextmanager
 def start_kikimr(request, kikimr_extensions):
     start_kikimr.__annotations__ = {

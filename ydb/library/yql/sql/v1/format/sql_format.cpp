@@ -269,6 +269,10 @@ private:
             First = false;
         }
 
+        if (str == "$" && FuncCall) {
+            FuncCall = false;
+        }
+
         if (Scopes.back() == EScope::Identifier && !FuncCall) {
             if (str != "$" && !NYql::LookupSimpleTypeBySqlAlias(str, true)) {
                 SB << "id";
@@ -281,6 +285,25 @@ private:
         } else {
             SB << str;
         }
+    }
+
+    void VisitPragmaValue(const TRule_pragma_value& msg) {
+        switch (msg.Alt_case()) {
+        case TRule_pragma_value::kAltPragmaValue1: {
+            NextToken = "0";
+            break;
+        }
+        case TRule_pragma_value::kAltPragmaValue3: {
+            NextToken = "'str'";
+            break;
+        }
+        case TRule_pragma_value::kAltPragmaValue4: {
+            NextToken = "false";
+            break;
+        }
+        default:;
+        }
+        VisitAllFields(TRule_pragma_value::GetDescriptor(), msg);
     }
 
     void VisitLiteralValue(const TRule_literal_value& msg) {
@@ -1390,6 +1413,18 @@ private:
         VisitAllFields(TRule_drop_external_data_source_stmt::GetDescriptor(), msg);
     }
 
+    void VisitCreateView(const TRule_create_view_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_create_view_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropView(const TRule_drop_view_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_drop_view_stmt::GetDescriptor(), msg);
+    }
+
     void VisitCreateAsyncReplication(const TRule_create_replication_stmt& msg) {
         PosFromToken(msg.GetToken1());
         NewLine();
@@ -2224,10 +2259,12 @@ private:
             NewLine();
         }
 
-        Y_ENSURE(msg.HasBlock4());
-        const auto& block = msg.GetBlock4();
-        VisitKeyword(block.GetToken1());
-        Visit(block.GetRule_expr2());
+        if (msg.HasBlock4()) {
+            const auto& block = msg.GetBlock4();
+            VisitKeyword(block.GetToken1());
+            Visit(block.GetRule_expr2());
+        }
+
         PopCurrentIndent();
         NewLine();
         Visit(msg.GetToken5());
@@ -2581,11 +2618,14 @@ TStaticData::TStaticData()
         {TRule_drop_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTopic)},
         {TRule_grant_permissions_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGrantPermissions)},
         {TRule_revoke_permissions_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRevokePermissions)},
-        {TRule_alter_table_store_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTableStore)}
+        {TRule_alter_table_store_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTableStore)},
+        {TRule_create_view_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateView)},
+        {TRule_drop_view_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropView)}
         })
     , ObfuscatingVisitDispatch({
         {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},
         {TRule_literal_value::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitLiteralValue)},
+        {TRule_pragma_value::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitPragmaValue)},
         {TRule_atom_expr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitAtomExpr)},
         {TRule_in_atom_expr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitInAtomExpr)},
         {TRule_unary_casual_subexpr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitUnaryCasualSubexpr)},

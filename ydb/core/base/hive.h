@@ -47,6 +47,7 @@ namespace NKikimr {
             EvRequestTabletOwners,
             EvReassignOnDecommitGroup,
             EvUpdateTabletsObject,
+            EvUpdateDomain,
 
             // replies
             EvBootTabletReply = EvBootTablet + 512,
@@ -80,6 +81,7 @@ namespace NKikimr {
             EvInvalidateStoragePoolsReply,
             EvReassignOnDecommitGroupReply,
             EvUpdateTabletsObjectReply,
+            EvUpdateDomainReply,
 
             EvEnd
         };
@@ -862,6 +864,10 @@ namespace NKikimr {
                 Record.SetStatus(status);
             }
         };
+
+        struct TEvUpdateDomain : TEventPB<TEvUpdateDomain, NKikimrHive::TEvUpdateDomain, EvUpdateDomain> {};
+
+        struct TEvUpdateDomainReply : TEventPB<TEvUpdateDomainReply, NKikimrHive::TEvUpdateDomainReply, EvUpdateDomainReply> {};
     };
 
     IActor* CreateDefaultHive(const TActorId &tablet, TTabletStorageInfo *info);

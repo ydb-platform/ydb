@@ -102,10 +102,10 @@ void TNodeInfo::UpdateResourceValues(const TTabletInfo* tablet, const NKikimrTab
 }
 
 bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debugState) const {
-    const auto& allowedDomains = filter.AllowedDomains;
+    const auto& effectiveAllowedDomains = filter.GetEffectiveAllowedDomains();
     bool result = false;
 
-    for (const auto& candidate : allowedDomains) {
+    for (const auto& candidate : effectiveAllowedDomains) {
         if (Hive.DomainHasNodes(candidate)) {
             result = std::find(ServicedDomains.begin(),
                                ServicedDomains.end(),
@@ -115,6 +115,7 @@ bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debu
             }
         }
     }
+
     if (!result) {
         if (debugState) {
             debugState->NodesWithoutDomain++;

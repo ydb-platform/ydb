@@ -341,7 +341,7 @@ class TTransactionsCache {
         }
         auto oldest = std::begin(Active);
         for (auto it = std::next(oldest); it != std::end(Active); ++it) {
-            if (oldest->second->LastAccessTime < it->second->LastAccessTime) {
+            if (oldest->second->LastAccessTime > it->second->LastAccessTime) {
                 oldest = it;
             }
         }

@@ -1157,16 +1157,17 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     }
 
     void AssertEqual(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message) {
-        AssertEqual(part, bTree.Has, flat.Has, message + " Has");
-        AssertEqual(part, bTree.Touched, flat.Touched, message + " Touched");
+        AssertEqual(part, bTree.Has, flat.Has, message);
+        AssertEqual(part, bTree.Touched, flat.Touched, message);
     }
 
-    void DoChargeRowId(ICharge& charge, const TRowId row1, const TRowId row2, ui64 itemsLimit, ui64 bytesLimit,
+    void DoChargeRowId(ICharge& charge, IPages& env, const TRowId row1, const TRowId row2, ui64 itemsLimit, ui64 bytesLimit,
             const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 10) {
         while (true) {
             if (charge.Do(row1, row2, keyDefaults, itemsLimit, bytesLimit)) {
                 return;
             }
+            TTouchEnv::LoadTouched(env, false);
             UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
         }
         Y_UNREACHABLE();
@@ -1180,8 +1181,8 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                 TCharge flat(&flatEnv, part, tags, true);
 
                 TString message = TStringBuilder() << "ChargeRowId " << rowId1 << " " << rowId2;
-                DoChargeRowId(bTree, rowId1, rowId2, 0, 0, *keyDefaults, message);
-                DoChargeRowId(bTree, rowId1, rowId2, 0, 0, *keyDefaults, message);
+                DoChargeRowId(bTree, bTreeEnv, rowId1, rowId2, 0, 0, *keyDefaults, message);
+                DoChargeRowId(flat, flatEnv, rowId1, rowId2, 0, 0, *keyDefaults, message);
                 AssertEqual(part, bTreeEnv, flatEnv, message);
             }
         }

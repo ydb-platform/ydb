@@ -92,6 +92,7 @@ public:
               State_->Configuration->MinDesiredDirectoriesOfFilesPerQuery,
               State_->Configuration->MaxInflightListsPerQuery,
               State_->Configuration->AllowLocalFiles)) {
+        State_->FileQueueParams.Gateway = gateway;
     }
 
     void Rewind() final {
@@ -746,6 +747,9 @@ private:
             GenColumnsByNode_[read.Raw()] = config;
         }
 
+        State_->FileQueueParams.Url = url;
+        State_->FileQueueParams.AuthInfo = authInfo;
+
         for (const auto& path : paths) {
             // each path in CONCAT() can generate multiple list requests for explicit partitioning
             TVector<TListRequest> reqs;
@@ -835,6 +839,8 @@ private:
                 return false;
             }
 
+            auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
+
             for (auto& req : reqs) {
                 RequestsByNode_[read.Raw()].push_back(req);
                 if (PendingRequests_.find(req) == PendingRequests_.end()) {
@@ -845,6 +851,12 @@ private:
                             std::vector<NS3Lister::TObjectListEntry>{0},
                             std::vector<NS3Lister::TDirectoryListEntry>{1}};
                         entries.Directories.back().Path = req.S3Request.Pattern;
+                        future = NThreading::MakeFuture<NS3Lister::TListResult>(std::move(entries));
+                    } else if (!req.Options.IsPartitionedDataset && req.FilePattern == "*" && useRuntimeListing) {
+                        NS3Lister::TListEntries entries{
+                            std::vector<NS3Lister::TObjectListEntry>{0},
+                            std::vector<NS3Lister::TDirectoryListEntry>{1}};
+                        entries.Directories.back().Path = req.S3Request.Prefix;
                         future = NThreading::MakeFuture<NS3Lister::TListResult>(std::move(entries));
                     } else {
                         future = ListingStrategy_->List(req.S3Request, req.Options);

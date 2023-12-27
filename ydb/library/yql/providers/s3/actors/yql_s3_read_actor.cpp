@@ -51,6 +51,7 @@
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
@@ -62,6 +63,7 @@
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
+#include <ydb/library/yql/providers/s3/proto/file_queue.pb.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/providers/s3/serializations/serialization_interval.h>
 
@@ -138,14 +140,7 @@ struct TS3ReadError : public yexception {
     using yexception::yexception;
 };
 
-struct TObjectPath {
-    TString Path;
-    size_t Size;
-    size_t PathIndex;
-
-    TObjectPath(TString path, size_t size, size_t pathIndex)
-        : Path(std::move(path)), Size(size), PathIndex(pathIndex) { }
-};
+using TObjectPath = NS3::FileQueue::TObjectPath;
 
 struct TEvPrivate {
     // Event ids
@@ -266,18 +261,28 @@ struct TEvPrivate {
     };
 
     struct TEvObjectPathBatch :
-        public NActors::TEventLocal<TEvObjectPathBatch, EvObjectPathBatch> {
-        std::vector<TObjectPath> ObjectPaths;
-        bool NoMoreFiles = false;
-        TEvObjectPathBatch(
-            std::vector<TObjectPath> objectPaths, bool noMoreFiles)
-            : ObjectPaths(std::move(objectPaths)), NoMoreFiles(noMoreFiles) { }
+        public NActors::TEventPB<TEvObjectPathBatch, NS3::FileQueue::TEvObjectPathBatch, EvObjectPathBatch> {
+
+        TEvObjectPathBatch() {
+            Record.SetNoMoreFiles(false);
+        }
+
+        TEvObjectPathBatch(std::vector<TObjectPath> objectPaths, bool noMoreFiles) {
+            Record.MutableObjectPaths()->Assign(
+                std::make_move_iterator(objectPaths.begin()),
+                std::make_move_iterator(objectPaths.end()));
+            Record.SetNoMoreFiles(noMoreFiles);
+        }
     };
 
     struct TEvObjectPathReadError :
-        public NActors::TEventLocal<TEvObjectPathReadError, EvObjectPathReadError> {
-        TIssues Issues;
-        TEvObjectPathReadError(TIssues issues) : Issues(std::move(issues)) { }
+        public NActors::TEventPB<TEvObjectPathReadError, NS3::FileQueue::TEvObjectPathReadError, EvObjectPathReadError> {
+
+        TEvObjectPathReadError() { }
+
+        TEvObjectPathReadError(TIssues issues) {
+            IssuesToMessage(issues, Record.MutableIssues());
+        }
     };
 
     struct TReadRange {
@@ -312,9 +317,13 @@ public:
             EvEnd <= EventSpaceEnd(TEvents::ES_PRIVATE),
             "expected EvEnd <= EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-        struct TEvGetNextFile : public TEventLocal<TEvGetNextFile, EvGetNextFile> {
-            size_t RequestedAmount = 1;
-            TEvGetNextFile(size_t requestedAmount) : RequestedAmount(requestedAmount){};
+        struct TEvGetNextFile : TEventPB<TEvGetNextFile, NS3::FileQueue::TEvGetNextFile, EvGetNextFile> {
+            TEvGetNextFile() {
+                Record.SetRequestedAmount(1);
+            };
+            TEvGetNextFile(ui64 requestedAmount) {
+                Record.SetRequestedAmount(requestedAmount);
+            }
         };
         struct TEvNextListingChunkReceived :
             public TEventLocal<TEvNextListingChunkReceived, EvNextListingChunkReceived> {
@@ -330,6 +339,8 @@ public:
         TPathList paths,
         size_t prefetchSize,
         ui64 fileSizeLimit,
+        bool useRuntimeListing,
+        TMaybe<size_t> consumersCount,
         IHTTPGateway::TPtr gateway,
         TString url,
         TS3Credentials::TAuthInfo authInfo,
@@ -340,22 +351,33 @@ public:
         , PrefetchSize(prefetchSize)
         , FileSizeLimit(fileSizeLimit)
         , MaybeIssues(Nothing())
+        , UseRuntimeListing(useRuntimeListing)
+        , ConsumersCount(consumersCount)
         , Gateway(std::move(gateway))
         , Url(std::move(url))
         , AuthInfo(std::move(authInfo))
         , Pattern(std::move(pattern))
         , PatternVariant(patternVariant)
         , PatternType(patternType) {
+        Y_UNUSED(ConsumersCount);
         for (size_t i = 0; i < paths.size(); ++i) {
+            TObjectPath object;
+            object.SetPath(paths[i].Path);
+            object.SetPathIndex(paths[i].PathIndex);
             if (paths[i].IsDirectory) {
-                Directories.emplace_back(paths[i].Path, 0, paths[i].PathIndex);
+                object.SetSize(0);
+                Directories.emplace_back(std::move(object));
             } else {
-                Objects.emplace_back(paths[i].Path, paths[i].Size, paths[i].PathIndex);
+                object.SetSize(paths[i].Size);
+                Objects.emplace_back(std::move(object));
             }
         }
     }
 
     void Bootstrap() {
+        if (UseRuntimeListing) {
+            Schedule(PoisonTimeout, new TEvents::TEvPoison());
+        }
         if (Directories.empty()) {
             LOG_I("TS3FileQueueActor", "Bootstrap there is no directories to list");
             Become(&TS3FileQueueActor::NoMoreDirectoriesState);
@@ -384,7 +406,7 @@ public:
     }
 
     void HandleGetNextFile(TEvPrivatePrivate::TEvGetNextFile::TPtr& ev) {
-        auto requestAmount = ev->Get()->RequestedAmount;
+        auto requestAmount = ev->Get()->Record.GetRequestedAmount();
         LOG_D("TS3FileQueueActor", "HandleGetNextFile requestAmount:" << requestAmount);
         if (Objects.size() > requestAmount) {
             LOG_D("TS3FileQueueActor", "HandleGetNextFile sending right away");
@@ -440,7 +462,11 @@ public:
                 return false;
             }
             LOG_T("TS3FileQueueActor", "SaveRetrievedResults adding path: " << object.Path);
-            Objects.emplace_back(object.Path, object.Size, CurrentDirectoryPathIndex);
+            TObjectPath objectPath;
+            objectPath.SetPath(object.Path);
+            objectPath.SetSize(object.Size);
+            objectPath.SetPathIndex(CurrentDirectoryPathIndex);
+            Objects.emplace_back(std::move(objectPath));
         }
         return true;
     }
@@ -513,7 +539,7 @@ public:
 
     void HandleGetNextFileForEmptyState(TEvPrivatePrivate::TEvGetNextFile::TPtr& ev) {
         LOG_D("TS3FileQueueActor", "HandleGetNextFileForEmptyState Giving away rest of Objects");
-        SendObjects(ev->Sender, ev->Get()->RequestedAmount);
+        SendObjects(ev->Sender, ev->Get()->Record.GetRequestedAmount());
     }
 
     STATEFN(AnErrorOccurredState) {
@@ -538,6 +564,8 @@ public:
     }
 
     void PassAway() override {
+        LOG_D("TS3FileQueueActor", "PassAway");
+
         if (!MaybeIssues.Defined()) {
             for (auto& [requestorId, size]: RequestQueue) {
                 SendObjects(requestorId, size);
@@ -559,20 +587,17 @@ public:
 private:
     void SendObjects(const TActorId& recipient, size_t amount) {
         Y_ENSURE(!MaybeIssues.Defined());
-        size_t correctedAmount = std::min(amount, Objects.size());
         std::vector<TObjectPath> result;
-        if (correctedAmount != 0) {
-            result.reserve(correctedAmount);
-            for (size_t i = 0; i < correctedAmount; ++i) {
+        if (Objects.size() > 0) {
+            size_t totalSize = 0;
+            do {
                 result.push_back(Objects.back());
                 Objects.pop_back();
-            }
+                totalSize += result.back().GetSize();
+            } while (Objects.size() > 0 && totalSize < MaxTotalBatchSize);
         }
 
-        LOG_T(
-            "TS3FileQueueActor",
-            "SendObjects amount: " << amount << " correctedAmount: " << correctedAmount
-                                   << " result size: " << result.size());
+        LOG_T("TS3FileQueueActor", "SendObjects amount: " << amount << " result size: " << result.size());
 
         Send(
             recipient,
@@ -605,9 +630,9 @@ private:
         if (!Directories.empty()) {
             LOG_D("TS3FileQueueActor", "TryFetch fetching from new lister");
 
-            auto [path, size, pathIndex] = Directories.back();
+            auto object = Directories.back();
             Directories.pop_back();
-            CurrentDirectoryPathIndex = pathIndex;
+            CurrentDirectoryPathIndex = object.GetPathIndex();
             MaybeLister = NS3Lister::MakeS3Lister(
                 Gateway,
                 NS3Lister::TListingRequest{
@@ -615,9 +640,9 @@ private:
                     AuthInfo,
                     PatternVariant == ES3PatternVariant::PathPattern
                         ? Pattern
-                        : TStringBuilder{} << path << Pattern,
+                        : TStringBuilder{} << object.GetPath() << Pattern,
                     PatternType,
-                    path},
+                    object.GetPath()},
                 Nothing(),
                 false);
             Fetch();
@@ -658,6 +683,8 @@ private:
     size_t CurrentDirectoryPathIndex = 0;
     std::deque<std::pair<TActorId, size_t>> RequestQueue;
     TMaybe<TIssues> MaybeIssues;
+    bool UseRuntimeListing;
+    TMaybe<size_t> ConsumersCount;
 
     const IHTTPGateway::TPtr Gateway;
     const TString Url;
@@ -665,6 +692,9 @@ private:
     const TString Pattern;
     const ES3PatternVariant PatternVariant;
     const ES3PatternType PatternType;
+    
+    static constexpr TDuration PoisonTimeout = TDuration::Hours(3);
+    static constexpr size_t MaxTotalBatchSize = 4'000'000;
 };
 
 ui64 SubtractSaturating(ui64 lhs, ui64 rhs) {
@@ -691,7 +721,8 @@ public:
         ::NMonitoring::TDynamicCounterPtr counters,
         ::NMonitoring::TDynamicCounterPtr taskCounters,
         ui64 fileSizeLimit,
-        std::optional<ui64> rowsLimitHint)
+        std::optional<ui64> rowsLimitHint,
+        bool useRuntimeListing)
         : ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
@@ -710,7 +741,8 @@ public:
         , Counters(counters)
         , TaskCounters(taskCounters)
         , FileSizeLimit(fileSizeLimit)
-        , FilesRemained(rowsLimitHint) {
+        , FilesRemained(rowsLimitHint)
+        , UseRuntimeListing(useRuntimeListing) {
         if (Counters) {
             QueueDataSize = Counters->GetCounter("QueueDataSize");
             QueueDataLimit = Counters->GetCounter("QueueDataLimit");
@@ -727,17 +759,24 @@ public:
 
     void Bootstrap() {
         LOG_D("TS3ReadActor", "Bootstrap" << ", InputIndex: " << InputIndex);
-        FileQueueActor = RegisterWithSameMailbox(new TS3FileQueueActor{
-            TxId,
-            std::move(Paths),
-            ReadActorFactoryCfg.MaxInflight * 2,
-            FileSizeLimit,
-            Gateway,
-            Url,
-            AuthInfo,
-            Pattern,
-            PatternVariant,
-            ES3PatternType::Wildcard});
+        if (UseRuntimeListing) {
+            TString fileQueueActor = Paths.front().Path;
+            FileQueueActor.Parse(fileQueueActor.c_str(), fileQueueActor.size());
+        } else {
+            FileQueueActor = RegisterWithSameMailbox(new TS3FileQueueActor{
+                TxId,
+                std::move(Paths),
+                ReadActorFactoryCfg.MaxInflight * 2,
+                FileSizeLimit,
+                false,
+                Nothing(),
+                Gateway,
+                Url,
+                AuthInfo,
+                Pattern,
+                PatternVariant,
+                ES3PatternType::Wildcard});
+        }
         SendPathRequest();
         Become(&TS3ReadActor::StateFunc);
     }
@@ -766,17 +805,17 @@ public:
 
     void StartDownload() {
         DownloadInflight++;
-        const auto& [path, size, index] = ReadPathFromCache();
-        auto url = Url + path;
-        auto id = index;
+        const auto& object = ReadPathFromCache();
+        auto url = Url + object.GetPath();
+        auto id = object.GetPathIndex();
         const TString requestId = CreateGuidAsString();
         LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id << ", request id: [" << requestId << "]");
         Gateway->Download(
             UrlEscapeRet(url, true),
             IHTTPGateway::MakeYcHeaders(requestId, AuthInfo.GetToken(), {}, AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
             0U,
-            std::min(size, SizeLimit),
-            std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), requestId, std::placeholders::_1, id, path),
+            std::min(object.GetSize(), SizeLimit),
+            std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), requestId, std::placeholders::_1, id, object.GetPath()),
             {},
             RetryPolicy);
     }
@@ -833,12 +872,13 @@ private:
     void HandleObjectPathBatch(TEvPrivate::TEvObjectPathBatch::TPtr& objectPathBatch) {
         Y_ENSURE(IsWaitingObjectQueueResponse);
         IsWaitingObjectQueueResponse = false;
-        ListedFiles += objectPathBatch->Get()->ObjectPaths.size();
-        IsObjectQueueEmpty = objectPathBatch->Get()->NoMoreFiles;
+        auto& objectBatch = objectPathBatch->Get()->Record;
+        ListedFiles += objectBatch.GetObjectPaths().size();
+        IsObjectQueueEmpty = objectBatch.GetNoMoreFiles();
         ObjectPathCache.insert(
             ObjectPathCache.end(),
-            std::make_move_iterator(objectPathBatch->Get()->ObjectPaths.begin()),
-            std::make_move_iterator(objectPathBatch->Get()->ObjectPaths.end()));
+            std::make_move_iterator(objectBatch.MutableObjectPaths()->begin()),
+            std::make_move_iterator(objectBatch.MutableObjectPaths()->end()));
         while (TryStartDownload()) {}
 
         if (LastFileWasProcessed()) {
@@ -847,8 +887,10 @@ private:
     }
     void HandleObjectPathReadError(TEvPrivate::TEvObjectPathReadError::TPtr& result) {
         IsObjectQueueEmpty = true;
-        LOG_E("TS3ReadActor", "Error while object listing, details: TEvObjectPathReadError: " << result->Get()->Issues.ToOneLineString());
-        auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while object listing", TIssues{result->Get()->Issues});
+        TIssues issues;
+        IssuesFromMessage(result->Get()->Record.GetIssues(), issues);
+        LOG_E("TS3ReadActor", "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
+        issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while object listing", std::move(issues));
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
     }
 
@@ -977,7 +1019,9 @@ private:
         QueueTotalDataSize = 0;
 
         ContainerCache.Clear();
-        Send(FileQueueActor, new NActors::TEvents::TEvPoison());
+        if (!UseRuntimeListing) {
+            Send(FileQueueActor, new NActors::TEvents::TEvPoison());
+        }
         TActorBootstrapped<TS3ReadActor>::PassAway();
     }
 
@@ -1026,6 +1070,7 @@ private:
     ui64 DownloadInflight = 0;
     const ui64 FileSizeLimit;
     std::optional<ui64> FilesRemained;
+    bool UseRuntimeListing;
 };
 
 struct TReadSpec {
@@ -2260,7 +2305,8 @@ public:
         ::NMonitoring::TDynamicCounterPtr taskCounters,
         ui64 fileSizeLimit,
         std::optional<ui64> rowsLimitHint,
-        IMemoryQuotaManager::TPtr memoryQuotaManager
+        IMemoryQuotaManager::TPtr memoryQuotaManager,
+        bool useRuntimeListing
     )   : ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
@@ -2279,7 +2325,8 @@ public:
         , Counters(std::move(counters))
         , TaskCounters(std::move(taskCounters))
         , FileSizeLimit(fileSizeLimit)
-        , MemoryQuotaManager(memoryQuotaManager) {
+        , MemoryQuotaManager(memoryQuotaManager)
+        , UseRuntimeListing(useRuntimeListing) {
         if (Counters) {
             QueueDataSize = Counters->GetCounter("QueueDataSize");
             QueueDataLimit = Counters->GetCounter("QueueDataLimit");
@@ -2326,17 +2373,24 @@ public:
             TaskDownloadPaused,
             TaskChunkDownloadCount,
             DecodedChunkSizeHist);
-        FileQueueActor = RegisterWithSameMailbox(new TS3FileQueueActor{
-            TxId,
-            std::move(Paths),
-            ReadActorFactoryCfg.MaxInflight * 2,
-            FileSizeLimit,
-            Gateway,
-            Url,
-            AuthInfo,
-            Pattern,
-            PatternVariant,
-            ES3PatternType::Wildcard});
+        if (UseRuntimeListing) {
+            TString fileQueueActor = Paths.front().Path;
+            FileQueueActor.Parse(fileQueueActor.c_str(), fileQueueActor.size());
+        } else {
+            FileQueueActor = RegisterWithSameMailbox(new TS3FileQueueActor{
+                TxId,
+                std::move(Paths),
+                ReadActorFactoryCfg.MaxInflight * 2,
+                FileSizeLimit,
+                false,
+                Nothing(),
+                Gateway,
+                Url,
+                AuthInfo,
+                Pattern,
+                PatternVariant,
+                ES3PatternType::Wildcard});
+        }
         SendPathRequest();
         Become(&TS3StreamReadActor::StateFunc);
         Bootstrapped = true;
@@ -2378,24 +2432,24 @@ public:
         if (TaskCounters) {
             TaskDownloadCount->Inc();
         }
-        const auto& objectPath = ReadPathFromCache();
-        DownloadSize += objectPath.Size;
+        const auto& object = ReadPathFromCache();
+        DownloadSize += object.GetSize();
         const TString requestId = CreateGuidAsString();
         auto stuff = std::make_shared<TRetryStuff>(
             Gateway,
-            Url + objectPath.Path,
+            Url + object.GetPath(),
             IHTTPGateway::MakeYcHeaders(requestId, AuthInfo.GetToken(), {}, AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
-            objectPath.Size,
+            object.GetSize(),
             TxId,
             requestId,
             RetryPolicy);
-        auto pathIndex = objectPath.PathIndex;
+        auto pathIndex = object.GetPathIndex();
         if (TaskCounters) {
             HttpInflightLimit->Add(Gateway->GetBuffersSizePerStream());
         }
         LOG_D(
             "TS3StreamReadActor",
-            "RegisterCoro with path " << objectPath.Path << " with pathIndex "
+            "RegisterCoro with path " << object.GetPath() << " with pathIndex "
                                       << pathIndex);
         auto impl = MakeHolder<TS3ReadCoroImpl>(
             InputIndex,
@@ -2404,7 +2458,7 @@ public:
             std::move(stuff),
             ReadSpec,
             pathIndex,
-            objectPath.Path,
+            object.GetPath(),
             Url,
             RowsRemained,
             ReadActorFactoryCfg,
@@ -2560,7 +2614,9 @@ private:
             for (const auto actorId : CoroActors) {
                 Send(actorId, new NActors::TEvents::TEvPoison());
             }
-            Send(FileQueueActor, new NActors::TEvents::TEvPoison());
+            if (!UseRuntimeListing) {
+                Send(FileQueueActor, new NActors::TEvents::TEvPoison());
+            }
 
             ContainerCache.Clear();
             ArrowTupleContainerCache.Clear();
@@ -2587,24 +2643,30 @@ private:
     void HandleObjectPathBatch(TEvPrivate::TEvObjectPathBatch::TPtr& objectPathBatch) {
         Y_ENSURE(IsWaitingObjectQueueResponse);
         IsWaitingObjectQueueResponse = false;
-        ListedFiles += objectPathBatch->Get()->ObjectPaths.size();
-        IsObjectQueueEmpty = objectPathBatch->Get()->NoMoreFiles;
-
+        auto& objectBatch = objectPathBatch->Get()->Record;
+        ListedFiles += objectBatch.GetObjectPaths().size();
+        IsObjectQueueEmpty = objectBatch.GetNoMoreFiles();
         ObjectPathCache.insert(
             ObjectPathCache.end(),
-            std::make_move_iterator(objectPathBatch->Get()->ObjectPaths.begin()),
-            std::make_move_iterator(objectPathBatch->Get()->ObjectPaths.end()));
+            std::make_move_iterator(objectBatch.MutableObjectPaths()->begin()),
+            std::make_move_iterator(objectBatch.MutableObjectPaths()->end()));
         LOG_D(
             "TS3StreamReadActor",
             "HandleObjectPathBatch " << ObjectPathCache.size() << " IsObjectQueueEmpty "
                                      << IsObjectQueueEmpty << " MaxInflight " << ReadActorFactoryCfg.MaxInflight);
         while (TryRegisterCoro()) {}
+
+        if (LastFileWasProcessed()) {
+            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+        }
     }
 
     void HandleObjectPathReadError(TEvPrivate::TEvObjectPathReadError::TPtr& result) {
         IsObjectQueueEmpty = true;
-        LOG_W("TS3StreamReadActor", "Error while object listing, details: TEvObjectPathReadError: " << result->Get()->Issues.ToOneLineString());
-        auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while object listing", TIssues{result->Get()->Issues});
+        TIssues issues;
+        IssuesFromMessage(result->Get()->Record.GetIssues(), issues);
+        LOG_W("TS3StreamReadActor", "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
+        issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while object listing", std::move(issues));
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
     }
 
@@ -2768,6 +2830,7 @@ private:
     const ui64 FileSizeLimit;
     bool Bootstrapped = false;
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
+    bool UseRuntimeListing;
 };
 
 using namespace NKikimr::NMiniKQL;
@@ -2909,6 +2972,35 @@ NDB::FormatSettings::TimestampFormat ToTimestampFormat(const TString& formatName
 } // namespace
 
 using namespace NKikimr::NMiniKQL;
+
+IActor* CreateS3FileQueueActor(
+        TTxId  txId,
+        TPathList paths,
+        size_t prefetchSize,
+        ui64 fileSizeLimit,
+        bool useRuntimeListing,
+        TMaybe<size_t> consumersCount,
+        IHTTPGateway::TPtr gateway,
+        TString url,
+        TS3Credentials::TAuthInfo authInfo,
+        TString pattern,
+        ES3PatternVariant patternVariant,
+        ES3PatternType patternType) {
+    return new TS3FileQueueActor(
+        txId,
+        paths,
+        prefetchSize,
+        fileSizeLimit,
+        useRuntimeListing,
+        consumersCount,
+        gateway,
+        url,
+        authInfo,
+        pattern,
+        patternVariant,
+        patternType
+    );
+}
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     const TTypeEnvironment& typeEnv,
@@ -3086,7 +3178,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 #undef SUPPORTED_FLAGS
         const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authInfo, pathPattern, pathPatternVariant,
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
-                                                  cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint, memoryQuotaManager);
+                                                  cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint, memoryQuotaManager, params.GetUseRuntimeListing());
 
         return {actor, actor};
     } else {
@@ -3096,7 +3188,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
         const auto actor = new TS3ReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authInfo, pathPattern, pathPatternVariant,
                                             std::move(paths), addPathIndex, computeActorId, sizeLimit, retryPolicy,
-                                            cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint);
+                                            cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint, params.GetUseRuntimeListing());
         return {actor, actor};
     }
 }

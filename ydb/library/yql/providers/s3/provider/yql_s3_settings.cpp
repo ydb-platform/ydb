@@ -22,6 +22,7 @@ TS3Configuration::TS3Configuration()
     REGISTER_SETTING(*this, AtomicUploadCommit);
     REGISTER_SETTING(*this, UseConcurrentDirectoryLister);
     REGISTER_SETTING(*this, MaxDiscoveryFilesPerDirectory).Lower(1);
+    REGISTER_SETTING(*this, UseRuntimeListing);
 }
 
 TS3Settings::TConstPtr TS3Configuration::Snapshot() const {

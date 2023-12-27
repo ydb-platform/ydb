@@ -6,6 +6,7 @@
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_read_actor.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
@@ -72,7 +73,12 @@ public:
     }
 
     ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
+        auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
+
         std::vector<std::vector<TPath>> parts;
+        if (useRuntimeListing) {
+            parts.emplace_back();
+        }
         std::optional<ui64> mbLimitHint;
         if (const TMaybeNode<TDqSource> source = &node) {
             const auto settings = source.Cast().Settings().Cast<TS3SourceSettingsBase>();
@@ -85,9 +91,13 @@ public:
                     packed.Data().Literal().Value(),
                     FromString<bool>(packed.IsText().Literal().Value()),
                     paths);
-                parts.reserve(parts.size() + paths.size());
-                for (const auto& path : paths) {
-                    parts.emplace_back(1U, path);
+                if (useRuntimeListing) {
+                    parts.front().insert(parts.front().end(), paths.begin(), paths.end());
+                } else {
+                    parts.reserve(parts.size() + paths.size());
+                    for (const auto& path : paths) {
+                        parts.emplace_back(1U, path);
+                    }
                 }
             }
         }
@@ -97,43 +107,74 @@ public:
             maxPartitions = std::max(*mbLimitHint / maxTaskRatio, ui64{1});
             YQL_CLOG(TRACE, ProviderS3) << "limited max partitions to " << maxPartitions;
         }
+        NActors::TActorId fileQueueActor;
+        if (useRuntimeListing) {
+            fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(NDq::CreateS3FileQueueActor(
+                0ul,
+                parts.front(),
+                1000 * maxPartitions,
+                State_->Configuration->FileSizeLimit,
+                useRuntimeListing,
+                maxPartitions,
+                State_->FileQueueParams.Gateway,
+                State_->FileQueueParams.Url,
+                State_->FileQueueParams.AuthInfo,
+                "*",
+                NS3Lister::ES3PatternVariant::PathPattern,
+                NS3Lister::ES3PatternType::Wildcard
+            ));
+            partitions.reserve(maxPartitions);
 
-        if (maxPartitions && parts.size() > maxPartitions) {
-            if (const auto extraParts = parts.size() - maxPartitions; extraParts > maxPartitions) {
-                const auto partsPerTask = (parts.size() - 1ULL) / maxPartitions + 1ULL;
-                for (auto it = parts.begin(); parts.end() > it;) {
-                    const auto to = it;
-                    const auto up = to + std::min<std::size_t>(partsPerTask, std::distance(to, parts.end()));
-                    for (auto jt = ++it; jt < up; ++jt)
-                        std::move(jt->begin(), jt->end(), std::back_inserter(*to));
-                    it = parts.erase(it, up);
-                }
-            } else {
-                const auto dropEachPart = maxPartitions / extraParts;
-                for (auto it = parts.begin(); parts.size() > maxPartitions;) {
-                    const auto to = it + dropEachPart;
-                    it = to - 1U;
-                    std::move(to->begin(), to->end(), std::back_inserter(*it));
-                    it = parts.erase(to);
+            ui64 startIdx = 0;
+            for (size_t i = 0; i < maxPartitions; ++i) {
+                NS3::TRange range;
+                range.SetStartPathIndex(startIdx);
+                TFileTreeBuilder builder;
+                builder.AddPath(fileQueueActor.ToString(), 0, false);
+                builder.Save(&range);
+
+                partitions.emplace_back();
+                TStringOutput out(partitions.back());
+                range.Save(&out);
+            }
+        } else {
+            if (maxPartitions && parts.size() > maxPartitions) {
+                if (const auto extraParts = parts.size() - maxPartitions; extraParts > maxPartitions) {
+                    const auto partsPerTask = (parts.size() - 1ULL) / maxPartitions + 1ULL;
+                    for (auto it = parts.begin(); parts.end() > it;) {
+                        const auto to = it;
+                        const auto up = to + std::min<std::size_t>(partsPerTask, std::distance(to, parts.end()));
+                        for (auto jt = ++it; jt < up; ++jt)
+                            std::move(jt->begin(), jt->end(), std::back_inserter(*to));
+                        it = parts.erase(it, up);
+                    }
+                } else {
+                    const auto dropEachPart = maxPartitions / extraParts;
+                    for (auto it = parts.begin(); parts.size() > maxPartitions;) {
+                        const auto to = it + dropEachPart;
+                        it = to - 1U;
+                        std::move(to->begin(), to->end(), std::back_inserter(*it));
+                        it = parts.erase(to);
+                    }
                 }
             }
-        }
 
-        partitions.reserve(parts.size());
-        ui64 startIdx = 0;
-        for (const auto& part : parts) {
-            NS3::TRange range;
-            range.SetStartPathIndex(startIdx);
-            TFileTreeBuilder builder;
-            std::for_each(part.cbegin(), part.cend(), [&builder, &startIdx](const TPath& f) {
-                builder.AddPath(f.Path, f.Size, f.IsDirectory);
-                ++startIdx;
-            });
-            builder.Save(&range);
+            partitions.reserve(parts.size());
+            ui64 startIdx = 0;
+            for (const auto& part : parts) {
+                NS3::TRange range;
+                range.SetStartPathIndex(startIdx);
+                TFileTreeBuilder builder;
+                std::for_each(part.cbegin(), part.cend(), [&builder, &startIdx](const TPath& f) {
+                    builder.AddPath(f.Path, f.Size, f.IsDirectory);
+                    ++startIdx;
+                });
+                builder.Save(&range);
 
-            partitions.emplace_back();
-            TStringOutput out(partitions.back());
-            range.Save(&out);
+                partitions.emplace_back();
+                TStringOutput out(partitions.back());
+                range.Save(&out);
+            }
         }
 
         return 0;
@@ -382,10 +423,14 @@ public:
             if (extraColumnsType->GetSize()) {
                 srcDesc.MutableSettings()->insert({"addPathIndex", "true"});
             }
+            
+            auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
+            srcDesc.SetUseRuntimeListing(useRuntimeListing);
 
             protoSettings.PackFrom(srcDesc);
             sourceType = "S3Source";
         }
+        
     }
 
     TMaybe<bool> CanWrite(const TExprNode& write, TExprContext& ctx) override {

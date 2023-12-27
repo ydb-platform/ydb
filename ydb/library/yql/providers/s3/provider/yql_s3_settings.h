@@ -24,6 +24,7 @@ struct TS3Settings {
     NCommon::TConfSetting<bool, false> AtomicUploadCommit;         // Commit each file independently, w/o transaction semantic over all files
     NCommon::TConfSetting<bool, false> UseConcurrentDirectoryLister;
     NCommon::TConfSetting<ui64, false> MaxDiscoveryFilesPerDirectory;
+    NCommon::TConfSetting<bool, false> UseRuntimeListing;
 };
 
 struct TS3ClusterSettings {

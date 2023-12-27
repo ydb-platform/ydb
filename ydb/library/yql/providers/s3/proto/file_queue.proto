@@ -1,0 +1,25 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NYql.NS3.FileQueue;
+
+import "ydb/public/api/protos/ydb_issue_message.proto";
+
+message TEvGetNextFile {
+    uint64 RequestedAmount = 1;
+}
+
+message TEvObjectPathBatch {
+    bool NoMoreFiles = 1;
+    repeated TObjectPath ObjectPaths = 2;
+}
+
+message TEvObjectPathReadError {
+    repeated Ydb.Issue.IssueMessage Issues = 1;
+}
+
+message TObjectPath {
+    uint64 PathIndex = 1;
+    uint64 Size = 2;
+    string Path = 3;
+}

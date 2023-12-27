@@ -513,6 +513,7 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::KQP_NODE);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_BLOBS_STORAGE);
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD);
+    SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);

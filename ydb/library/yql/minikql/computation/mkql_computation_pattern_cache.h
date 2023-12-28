@@ -1,7 +1,6 @@
 #pragma once
 
 #include "mkql_computation_node.h"
-#include "mkql_serialized_program.h"
 
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <library/cpp/threading/future/future.h>
@@ -58,8 +57,8 @@ class TComputationPatternLRUCache {
 public:
     class TTicket : private TNonCopyable {
     public:
-        TTicket(const TSerializedProgram& serializedProgram, bool isOwned, const NThreading::TFuture<std::shared_ptr<TPatternCacheEntry>>& future, TComputationPatternLRUCache* cache)
-            : SerializedProgram(serializedProgram)
+        TTicket(const TString& serialized, bool isOwned, const NThreading::TFuture<std::shared_ptr<TPatternCacheEntry>>& future, TComputationPatternLRUCache* cache)
+            : Serialized(serialized)
             , IsOwned(isOwned)
             , Future(future)
             , Cache(cache)
@@ -67,7 +66,7 @@ public:
 
         ~TTicket() {
             if (Cache) {
-                Cache->NotifyMissing(SerializedProgram);
+                Cache->NotifyMissing(Serialized);
             }
         }
 
@@ -85,7 +84,7 @@ public:
         }
 
     private:
-        const TSerializedProgram SerializedProgram;
+        const TString Serialized;
         const bool IsOwned;
         const NThreading::TFuture<std::shared_ptr<TPatternCacheEntry>> Future;
         TComputationPatternLRUCache* Cache;
@@ -125,13 +124,13 @@ public:
         return std::make_shared<TPatternCacheEntry>(useAlloc);
     }
 
-    std::shared_ptr<TPatternCacheEntry> Find(const TSerializedProgram& serializedProgram);
+    std::shared_ptr<TPatternCacheEntry> Find(const TString& serializedProgram);
 
-    TTicket FindOrSubscribe(const TSerializedProgram& serializedProgram);
+    TTicket FindOrSubscribe(const TString& serializedProgram);
 
-    void EmplacePattern(const TSerializedProgram& serializedProgram, std::shared_ptr<TPatternCacheEntry> patternWithEnv);
+    void EmplacePattern(const TString& serializedProgram, std::shared_ptr<TPatternCacheEntry> patternWithEnv);
 
-    void NotifyPatternCompiled(const TSerializedProgram& serializedProgram, std::shared_ptr<TPatternCacheEntry> patternWithEnv);
+    void NotifyPatternCompiled(const TString& serializedProgram, std::shared_ptr<TPatternCacheEntry> patternWithEnv);
 
     size_t GetSize() const;
 
@@ -160,27 +159,27 @@ public:
         return PatternsToCompile.size();
     }
 
-    void GetPatternsToCompile(THashMap<TSerializedProgram, std::shared_ptr<TPatternCacheEntry>> & result) {
+    void GetPatternsToCompile(THashMap<TString, std::shared_ptr<TPatternCacheEntry>> & result) {
         std::lock_guard lock(Mutex);
         result.swap(PatternsToCompile);
     }
 
 private:
-    void AccessPattern(const TSerializedProgram & serializedProgram, std::shared_ptr<TPatternCacheEntry> & entry);
+    void AccessPattern(const TString & serializedProgram, std::shared_ptr<TPatternCacheEntry> & entry);
 
-    void NotifyMissing(const TSerializedProgram& serializedProgram);
+    void NotifyMissing(const TString& serialized);
 
     static constexpr size_t CacheMaxElementsSize = 10000;
 
     friend class TTicket;
 
     mutable std::mutex Mutex;
-    THashMap<TSerializedProgram, TMaybe<TVector<NThreading::TPromise<std::shared_ptr<TPatternCacheEntry>>>>> Notify;
+    THashMap<TString, TMaybe<TVector<NThreading::TPromise<std::shared_ptr<TPatternCacheEntry>>>>> Notify;
 
     class TLRUPatternCacheImpl;
     std::unique_ptr<TLRUPatternCacheImpl> Cache;
 
-    THashMap<TSerializedProgram, std::shared_ptr<TPatternCacheEntry>> PatternsToCompile;
+    THashMap<TString, std::shared_ptr<TPatternCacheEntry>> PatternsToCompile;
 
     const Config Configuration;
 

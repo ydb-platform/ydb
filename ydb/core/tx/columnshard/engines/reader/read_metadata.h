@@ -255,18 +255,32 @@ public:
 struct TReadStatsMetadata : public TReadMetadataBase, public std::enable_shared_from_this<TReadStatsMetadata> {
 private:
     using TBase = TReadMetadataBase;
+    std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
 public:
     using TConstPtr = std::shared_ptr<const TReadStatsMetadata>;
 
     const ui64 TabletId;
     std::vector<ui32> ReadColumnIds;
     std::vector<ui32> ResultColumnIds;
-    THashMap<ui64, std::shared_ptr<NOlap::TColumnEngineStats>> IndexStats;
+    std::deque<std::shared_ptr<NOlap::TPortionInfo>> IndexPortions;
 
-    explicit TReadStatsMetadata(ui64 tabletId, const ESorting sorting, const TProgramContainer& ssaProgram)
+    std::optional<std::string> GetColumnNameDef(const ui32 columnId) const { 
+        if (!ResultIndexSchema) {
+            return {};
+        }
+        auto f = ResultIndexSchema->GetFieldByColumnId(columnId);
+        if (!f) {
+            return {};
+        }
+        return f->name();
+    }
+
+    explicit TReadStatsMetadata(ui64 tabletId, const ESorting sorting, const TProgramContainer& ssaProgram, const std::shared_ptr<ISnapshotSchema>& schema)
         : TBase(sorting, ssaProgram)
+        , ResultIndexSchema(schema)
         , TabletId(tabletId)
-    {}
+    {
+    }
 
     std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const override;
 

@@ -327,7 +327,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                         if (c.first == "RawBytes") {
                             rawBytes += GetUint64(c.second);
                         }
-                        if (c.first == "Bytes") {
+                        if (c.first == "BlobRangeSize") {
                             bytes += GetUint64(c.second);
                         }
                         if (verbose) {
@@ -3431,8 +3431,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto tableClient = kikimr.GetTableClient();
         auto selectQuery = TString(R"(
-            SELECT *
+            SELECT PathId, Kind, TabletId, PortionId
             FROM `/Root/olapStore/.sys/store_primary_index_stats`
+            GROUP BY PathId, Kind, TabletId, PortionId
             ORDER BY PathId, Kind, TabletId
         )");
 
@@ -3476,8 +3477,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto tableClient = kikimr.GetTableClient();
         {
             auto selectQuery = TString(R"(
-                SELECT *
+                SELECT PathId, PortionId, Kind, TabletId
                 FROM `/Root/olapStore/olapTable_1/.sys/primary_index_stats`
+                GROUP BY PathId, TabletId, PortionId, Kind
                 ORDER BY PathId, Kind, TabletId
             )");
 
@@ -3950,7 +3952,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
         {
             auto selectQuery = TString(R"(
-                SELECT Bytes, Rows
+                SELECT BlobRangeSize as Bytes, Rows
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 ORDER BY Bytes
             )");
@@ -3962,8 +3964,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
         {
             auto selectQuery = TString(R"(
-                SELECT Rows, Kind, RawBytes, Rows as Rows2, Rows as Rows3, PathId
+                SELECT Sum(Rows) as Rows, Kind, Sum(RawBytes) as RawBytes, Sum(Rows) as Rows2, Sum(Rows) as Rows3, PathId, PortionId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                GROUP BY Kind, PortionId, PathId
                 ORDER BY PathId, Kind, Rows3
             )");
 
@@ -4001,9 +4004,18 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto selectQuery = TString(R"(
                 SELECT *
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
+            )");
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+        }
+
+        {
+            auto selectQuery = TString(R"(
+                SELECT PathId, Kind, TabletId, PortionId
+                FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    PathId == UInt64("3") AND Kind < UInt32("4")
-                ORDER BY PathId, Kind, TabletId;
+                    PathId == UInt64("3") AND Kind != 'INACTIVE'
+                GROUP BY TabletId, PathId, PortionId, Kind
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -4019,8 +4031,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto selectQuery = TString(R"(
-                SELECT *
+                SELECT PathId, Kind, TabletId, PortionId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                GROUP BY PortionId, PathId, Kind, TabletId
                 ORDER BY
                     PathId DESC, Kind DESC, TabletId DESC
                 ;
@@ -4038,11 +4051,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto selectQuery = TString(R"(
-                SELECT *
+                SELECT PathId, Kind, TabletId, PortionId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
                     PathId > UInt64("0") AND PathId < UInt32("4")
                     OR PathId > UInt64("4") AND PathId <= UInt64("5")
+                GROUP BY PathId, Kind, TabletId, PortionId
                 ORDER BY
                     PathId DESC, Kind DESC, TabletId DESC
                 ;
@@ -4075,9 +4089,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto selectQuery = TString(R"(
-                SELECT *
+                SELECT PathId, Kind, TabletId, PortionId, Sum(BlobRangeSize) as Bytes
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE Bytes > UInt64("0")
+                GROUP BY PathId, Kind, TabletId, PortionId
                 ORDER BY PathId, Kind, TabletId;
             )");
 
@@ -4088,9 +4103,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto selectQuery = TString(R"(
-                SELECT PathId, Kind, TabletId
+                SELECT PathId, Kind, TabletId, PortionId, Sum(BlobRangeSize) as Bytes
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE Bytes > UInt64("0")
+                GROUP BY PathId, Kind, TabletId, PortionId
                 ORDER BY PathId, Kind, TabletId;
             )");
 
@@ -4103,7 +4119,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto selectQuery = TString(R"(
                 SELECT *
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE Kind == UInt32("6")
+                WHERE Kind == 'EVICTED'
                 ORDER BY PathId, Kind, TabletId;
             )");
 
@@ -4114,9 +4130,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto selectQuery = TString(R"(
-                SELECT *
+                SELECT PathId, Kind, TabletId, PortionId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE Kind >= UInt32("3")
+                WHERE Kind IN ('SPLIT_COMPACTED', 'INACTIVE', 'EVICTED')
+                GROUP BY PathId, Kind, TabletId, PortionId
                 ORDER BY PathId, Kind, TabletId;
             )");
 
@@ -4152,7 +4169,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     SUM(Rows) as rows,
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    Kind != UInt32("4") -- not INACTIVE
+                    Kind != 'INACTIVE'
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -4166,7 +4183,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     SUM(Rows) as rows,
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    Kind != UInt32("4") -- not INACTIVE
+                    Kind != 'INACTIVE'
                 GROUP BY
                     PathId
                 ORDER BY
@@ -4185,13 +4202,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 SELECT
                     PathId,
                     SUM(Rows) as rows,
-                    SUM(Bytes) as bytes,
-                    SUM(RawBytes) as bytes_raw,
-                    SUM(Portions) as portions,
-                    SUM(Blobs) as blobs
+                    SUM(BlobRangeSize) as bytes,
+                    SUM(RawBytes) as bytes_raw
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    Kind < UInt32("4")
+                    Kind IN ('INSERTED', 'SPLIT_COMPACTED', 'COMPACTED')
                 GROUP BY PathId
                 ORDER BY rows DESC
                 LIMIT 10
@@ -4209,13 +4224,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 SELECT
                     PathId,
                     SUM(Rows) as rows,
-                    SUM(Bytes) as bytes,
-                    SUM(RawBytes) as bytes_raw,
-                    SUM(Portions) as portions,
-                    SUM(Blobs) as blobs
+                    SUM(BlobRangeSize) as bytes,
+                    SUM(RawBytes) as bytes_raw
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    PathId == UInt64("3") AND Kind < UInt32("4")
+                    PathId == UInt64("3") AND Kind IN ('INSERTED', 'SPLIT_COMPACTED', 'COMPACTED')
                 GROUP BY PathId
                 ORDER BY rows DESC
                 LIMIT 10
@@ -4231,13 +4244,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 SELECT
                     PathId,
                     SUM(Rows) as rows,
-                    SUM(Bytes) as bytes,
-                    SUM(RawBytes) as bytes_raw,
-                    SUM(Portions) as portions,
-                    SUM(Blobs) as blobs
+                    SUM(BlobRangeSize) as bytes,
+                    SUM(RawBytes) as bytes_raw
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    PathId >= UInt64("4") AND Kind < UInt32("4")
+                    PathId >= UInt64("4") AND Kind IN ('INSERTED', 'SPLIT_COMPACTED', 'COMPACTED')
                 GROUP BY PathId
                 ORDER BY rows DESC
                 LIMIT 10
@@ -4251,13 +4262,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto selectQuery = TString(R"(
-                SELECT count(*)
+                SELECT PathId, TabletId, PortionId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                GROUP BY PathId, TabletId, PortionId
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             // 3 Tables with 3 Shards each and 4 KindId-s of stats
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column0")), 3*3*numKinds);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3 * 3 * numKinds);
         }
 
         {
@@ -4277,7 +4289,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto selectQuery = TString(R"(
-                SELECT PathId, count(*), sum(Rows), sum(Bytes), sum(RawBytes)
+                SELECT PathId, count(*), sum(Rows), sum(BlobRangeSize), sum(RawBytes)
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 GROUP BY PathId
                 ORDER BY PathId

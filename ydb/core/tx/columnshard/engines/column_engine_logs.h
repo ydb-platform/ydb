@@ -189,6 +189,17 @@ public:
         return it->second;
     }
 
+    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const ui64 pathIdFrom, const ui64 pathIdTo) const {
+        std::vector<std::shared_ptr<TGranuleMeta>> result;
+        for (auto&& i : Tables) {
+            if (i.first < pathIdFrom || i.first > pathIdTo) {
+                continue;
+            }
+            result.emplace_back(i.second);
+        }
+        return result;
+    }
+
     ui64 GetTabletId() const {
         return TabletId;
     }

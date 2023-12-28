@@ -78,6 +78,13 @@ public:
         }
     };
 
+    ui32 GetColumnId() const { 
+        return ColumnId;
+    }
+    ui16 GetChunkIdx() const {
+        return Chunk;
+    }
+
     TColumnSerializationStat GetSerializationStat(const std::string& columnName) const {
         TColumnSerializationStat result(ColumnId, columnName);
         result.Merge(GetSerializationStat());

@@ -20,4 +20,3 @@ class TestS3(object):
             assert "message: \"text\\\'s length is not in [1; 102400]" in e.args[0]
             return
         assert False
-

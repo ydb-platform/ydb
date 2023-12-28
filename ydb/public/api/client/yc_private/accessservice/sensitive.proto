@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+// Based on:
+// https://bb.yandexcloud.net/projects/CLOUD/repos/cloud-go/browse/private-api/yandex/cloud/priv/sensitive.proto
+
+package yandex.cloud;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "cloud/proto_extensions";
+
+enum SensitiveType {
+  SENSITIVE_TYPE_UNSPECIFIED = 0;
+  SENSITIVE_CRC = 1;
+  SENSITIVE_IAM_TOKEN = 2;
+  SENSITIVE_REMOVE = 3;
+  SENSITIVE_YANDEX_PASSPORT_OAUTH_TOKEN = 4;
+  SENSITIVE_IAM_COOKIE = 5;
+  SENSITIVE_REFRESH_TOKEN = 6;
+  SENSITIVE_SESSION_TOKEN = 7;
+}
+
+extend google.protobuf.FieldOptions {
+  // novikoff:
+  // Sensitive fields are hidden in logs
+  // For now could be applied only to string fields
+  bool sensitive = 110601;
+  SensitiveType sensitive_type = 110602;
+}

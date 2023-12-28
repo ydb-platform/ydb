@@ -698,7 +698,7 @@ namespace NActors {
         }
 
     public:
-        using TThis = TDerived;
+        typedef TDerived TThis;
 
         // UnsafeBecome methods don't verify the bindings of the stateFunc to the TDerived
         template <typename T>

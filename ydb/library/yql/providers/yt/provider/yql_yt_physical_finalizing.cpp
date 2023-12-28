@@ -631,6 +631,12 @@ private:
 
             bool good = true;
             THashSet<TString> usedColumns;
+            if (NYql::HasSetting(*writer->Child(TYtTransientOpBase::idx_Settings), EYtSettingType::KeepSorted)) {
+                for (size_t i = 0; i < rowSpec.SortedBy.size(); ++i) {
+                    usedColumns.insert(rowSpec.SortedBy[i]);
+                }
+            }
+
             for (auto& item: x.second) {
                 if (auto rawSection = std::get<1>(item)) {
                     if (HasNonEmptyKeyFilter(TYtSection(rawSection))) {

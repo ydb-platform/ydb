@@ -1,4 +1,5 @@
 #include "arrow.h"
+#include "arrow_impl.h"
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
@@ -151,6 +152,55 @@ std::shared_ptr<arrow::Array> PgConvertString(const std::shared_ptr<arrow::Array
     return ret;
 }
 
+Numeric PgFloatToNumeric(double item, ui64 scale, int digits) {
+    double intPart, fracPart;
+    bool error;
+    fracPart = modf(item, &intPart);
+    i64 fracInt = round(fracPart * scale);
+
+    // scale compaction: represent 711.56000 as 711.56
+    while (digits > 0 && fracInt % 10 == 0) {
+        fracInt /= 10;
+        digits -= 1;
+    }
+
+    if (digits == 0) {
+        return int64_to_numeric(intPart);
+    } else {
+        return numeric_add_opt_error(
+            int64_to_numeric(intPart),
+            int64_div_fast_to_numeric(fracInt, digits),
+            &error);
+    }
+}
+
+TColumnConverter BuildPgNumericColumnConverter(const std::shared_ptr<arrow::DataType>& originalType) {
+    switch (originalType->id()) {
+    case arrow::Type::INT16:
+        return [](const std::shared_ptr<arrow::Array>& value) {
+            return PgConvertNumeric<i16>(value);
+        };
+    case arrow::Type::INT32:
+        return [](const std::shared_ptr<arrow::Array>& value) {
+            return PgConvertNumeric<i32>(value);
+        };
+    case arrow::Type::INT64:
+        return [](const std::shared_ptr<arrow::Array>& value) {
+            return PgConvertNumeric<i64>(value);
+        };
+    case arrow::Type::FLOAT:
+        return [](const std::shared_ptr<arrow::Array>& value) {
+            return PgConvertNumeric<float>(value);
+        };
+    case arrow::Type::DOUBLE:
+        return [](const std::shared_ptr<arrow::Array>& value) {
+            return PgConvertNumeric<double>(value);
+        };
+    default:
+        return {};
+    }
+}
+
 template <typename T, typename F>
 TColumnConverter BuildPgFixedColumnConverter(const std::shared_ptr<arrow::DataType>& originalType, const F& f) {
     auto primaryType = NKikimr::NMiniKQL::GetPrimitiveDataType<T>();
@@ -199,6 +249,9 @@ TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& 
     }
     case FLOAT8OID: {
         return BuildPgFixedColumnConverter<double>(originalType, [](auto value){ return Float8GetDatum(value); });
+    }
+    case NUMERICOID: {
+        return BuildPgNumericColumnConverter(originalType);
     }
     case BYTEAOID:
     case VARCHAROID:

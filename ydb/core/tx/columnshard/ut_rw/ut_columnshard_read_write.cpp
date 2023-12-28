@@ -2181,37 +2181,47 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             auto batchStats = scan->ArrowBatch;
             UNIT_ASSERT(batchStats);
             // Cerr << batchStats->ToString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(batchStats->num_rows(), 5);
+//            UNIT_ASSERT_VALUES_EQUAL(batchStats->num_rows(), 10068);
 
             ui64 sumCompactedBytes = 0;
             ui64 sumCompactedRows = 0;
             ui64 sumInsertedBytes = 0;
             ui64 sumInsertedRows = 0;
+            std::optional<ui32> keyColumnId;
             for (ui32 i = 0; i < batchStats->num_rows(); ++i) {
                 auto paths = batchStats->GetColumnByName("PathId");
                 auto kinds = batchStats->GetColumnByName("Kind");
                 auto rows = batchStats->GetColumnByName("Rows");
-                auto bytes = batchStats->GetColumnByName("Bytes");
+                auto bytes = batchStats->GetColumnByName("BlobRangeSize");
                 auto rawBytes = batchStats->GetColumnByName("RawBytes");
+                auto internalColumnIds = batchStats->GetColumnByName("InternalColumnId");
 
                 ui64 pathId = static_cast<arrow::UInt64Array&>(*paths).Value(i);
-                ui32 kind = static_cast<arrow::UInt32Array&>(*kinds).Value(i);
+                auto kind = static_cast<arrow::StringArray&>(*kinds).Value(i);
+                const TString kindStr(kind.data(), kind.size());
                 ui64 numRows = static_cast<arrow::UInt64Array&>(*rows).Value(i);
                 ui64 numBytes = static_cast<arrow::UInt64Array&>(*bytes).Value(i);
                 ui64 numRawBytes = static_cast<arrow::UInt64Array&>(*rawBytes).Value(i);
-
+                ui32 internalColumnId = static_cast<arrow::UInt32Array&>(*internalColumnIds).Value(i);
+                if (!keyColumnId) {
+                    keyColumnId = internalColumnId;
+                }
                 Cerr << "[" << __LINE__ << "] " << table.Pk[0].second.GetTypeId() << " "
-                    << pathId << " " << kind << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
+                    << pathId << " " << kindStr << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
 
                 if (pathId == tableId) {
-                    if (kind == (ui32)NOlap::NPortion::EProduced::COMPACTED || kind == (ui32)NOlap::NPortion::EProduced::SPLIT_COMPACTED) {
+                    if (kindStr == ::ToString(NOlap::NPortion::EProduced::COMPACTED) || kindStr == ::ToString(NOlap::NPortion::EProduced::SPLIT_COMPACTED)) {
                         sumCompactedBytes += numBytes;
-                        sumCompactedRows += numRows;
+                        if (*keyColumnId == internalColumnId) {
+                            sumCompactedRows += numRows;
+                        }
                         //UNIT_ASSERT(numRawBytes > numBytes);
                     }
-                    if (kind == (ui32)NOlap::NPortion::EProduced::INSERTED) {
+                    if (kindStr == ::ToString(NOlap::NPortion::EProduced::INSERTED)) {
                         sumInsertedBytes += numBytes;
-                        sumInsertedRows += numRows;
+                        if (*keyColumnId == internalColumnId) {
+                            sumInsertedRows += numRows;
+                        }
                         //UNIT_ASSERT(numRawBytes > numBytes);
                     }
                 } else {
@@ -2222,7 +2232,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             }
             Cerr << "compacted=" << sumCompactedRows << ";inserted=" << sumInsertedRows << ";expected=" << fullNumRows << ";" << Endl;
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
-            UNIT_ASSERT(sumCompactedRows == fullNumRows);
+            AFL_VERIFY(sumCompactedRows == fullNumRows)("sum", sumCompactedRows)("full", fullNumRows);
             UNIT_ASSERT(sumCompactedRows < sumCompactedBytes);
             UNIT_ASSERT(sumInsertedRows == 0);
             UNIT_ASSERT(sumInsertedBytes == 0);

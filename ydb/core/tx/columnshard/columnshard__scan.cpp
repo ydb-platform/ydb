@@ -23,6 +23,7 @@
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/services/metadata/request/common.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <util/generic/noncopyable.h>
 
 namespace NKikimr::NColumnShard {
@@ -644,29 +645,40 @@ PrepareStatsReadMetadata(ui64 tabletId, const NOlap::TReadDescription& read, con
 
     auto out = std::make_shared<NOlap::TReadStatsMetadata>(tabletId,
                 isReverse ? NOlap::TReadStatsMetadata::ESorting::DESC : NOlap::TReadStatsMetadata::ESorting::ASC,
-                read.GetProgram());
+                read.GetProgram(), index ? index->GetVersionedIndex().GetSchema(read.GetSnapshot()) : nullptr);
 
     out->SetPKRangesFilter(read.PKRangesFilter);
     out->ReadColumnIds.assign(readColumnIds.begin(), readColumnIds.end());
     out->ResultColumnIds = read.ColumnIds;
 
-    if (!index) {
+    const NOlap::TColumnEngineForLogs* logsIndex = dynamic_cast<const NOlap::TColumnEngineForLogs*>(index.get());
+    if (!index || !logsIndex) {
         return out;
     }
-
+    THashMap<ui64, THashSet<ui64>> portionsInUse;
     for (auto&& filter : read.PKRangesFilter) {
         const ui64 fromPathId = *filter.GetPredicateFrom().Get<arrow::UInt64Array>(0, 0, 1);
         const ui64 toPathId = *filter.GetPredicateTo().Get<arrow::UInt64Array>(0, 0, Max<ui64>());
-        const auto& stats = index->GetStats();
         if (read.TableName.EndsWith(NOlap::TIndexInfo::TABLE_INDEX_STATS_TABLE)) {
-            if (fromPathId <= read.PathId && toPathId >= read.PathId && stats.contains(read.PathId)) {
-                out->IndexStats[read.PathId] = std::make_shared<NOlap::TColumnEngineStats>(*stats.at(read.PathId));
+            if (fromPathId <= read.PathId && toPathId >= read.PathId) {
+                auto pathInfo = logsIndex->GetGranuleOptional(read.PathId);
+                if (!pathInfo) {
+                    continue;
+                }
+                for (auto&& p : pathInfo->GetPortions()) {
+                    if (p.second->GetRemoveSnapshot().IsZero() && portionsInUse[read.PathId].emplace(p.first).second) {
+                        out->IndexPortions.emplace_back(p.second);
+                    }
+                }
             }
         } else if (read.TableName.EndsWith(NOlap::TIndexInfo::STORE_INDEX_STATS_TABLE)) {
-            auto it = stats.lower_bound(fromPathId);
-            auto itEnd = stats.upper_bound(toPathId);
-            for (; it != itEnd; ++it) {
-                out->IndexStats[it->first] = std::make_shared<NOlap::TColumnEngineStats>(*it->second);
+            auto pathInfos = logsIndex->GetTables(fromPathId, toPathId);
+            for (auto&& pathInfo: pathInfos) {
+                for (auto&& p: pathInfo->GetPortions()) {
+                    if (p.second->GetRemoveSnapshot().IsZero() && portionsInUse[p.second->GetPathId()].emplace(p.first).second) {
+                        out->IndexPortions.emplace_back(p.second);
+                    }
+                }
             }
         }
     }

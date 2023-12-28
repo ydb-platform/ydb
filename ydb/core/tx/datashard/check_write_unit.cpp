@@ -77,42 +77,6 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
     {
         for (const auto& key : writeTx->TxInfo().Keys) {
             if (key.IsWrite && DataShard.IsUserTable(key.Key->TableId)) {
-                ui64 keySize = 0;
-                for (const auto& cell : key.Key->Range.From) {
-                    keySize += cell.Size();
-                }
-                if (keySize > NLimits::MaxWriteKeySize) {
-                    TString err = TStringBuilder()
-                        << "Operation " << *op << " writes key of " << keySize
-                        << " bytes which exceeds limit " << NLimits::MaxWriteKeySize
-                        << " bytes at " << DataShard.TabletID();
-
-                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, err, DataShard.TabletID());
-                    op->Abort(EExecutionUnitKind::FinishProposeWrite);
-
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
-
-                    return EExecutionStatus::Executed;
-                }
-                for (const auto& col : key.Key->Columns) {
-                    if (col.Operation == TKeyDesc::EColumnOperation::Set ||
-                        col.Operation == TKeyDesc::EColumnOperation::InplaceUpdate)
-                    {
-                        if (col.ImmediateUpdateSize > NLimits::MaxWriteValueSize) {
-                            TString err = TStringBuilder()
-                                << "Transaction write column value of " << col.ImmediateUpdateSize
-                                << " bytes is larger than the allowed threshold";
-
-                            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, err, DataShard.TabletID());
-                            op->Abort(EExecutionUnitKind::FinishProposeWrite);
-
-                            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
-
-                            return EExecutionStatus::Executed;
-                        }
-                    }
-                }
-
                 if (DataShard.IsSubDomainOutOfSpace()) {
                     switch (key.Key->RowOperation) {
                         case TKeyDesc::ERowOperation::Read:

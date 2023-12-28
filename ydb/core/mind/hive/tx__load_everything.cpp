@@ -710,11 +710,13 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         BLOG_NOTICE("THive::TTxLoadEverything::Complete " << Self->DatabaseConfig.ShortDebugString());
-        i64 tabletsTotal = 0;
+        ui64 tabletsTotal = 0;
         for (auto it = Self->Tablets.begin(); it != Self->Tablets.end(); ++it) {
             ++tabletsTotal;
+            Self->UpdateTabletsTotalByDomain(+1, it->second.ObjectDomain);
             for (const TTabletInfo& follower : it->second.Followers) {
                 ++tabletsTotal;
+                Self->UpdateTabletsTotalByDomain(+1, it->second.ObjectDomain);
                 if (follower.IsLeader()) {
                     follower.AsLeader();
                 } else {

@@ -63,6 +63,8 @@ TFollowerId TLeaderTabletInfo::GetFollowerPromotableOnNode(TNodeId nodeId) const
 }
 
 void TLeaderTabletInfo::AssignDomains(const TSubDomainKey& objectDomain, const TVector<TSubDomainKey>& allowedDomains) {
+    const TSubDomainKey oldObjectDomain = ObjectDomain;
+
     if (!allowedDomains.empty()) {
         NodeFilter.AllowedDomains = allowedDomains;
         if (!objectDomain) {
@@ -81,6 +83,22 @@ void TLeaderTabletInfo::AssignDomains(const TSubDomainKey& objectDomain, const T
     for (auto& followerGroup : FollowerGroups) {
         followerGroup.NodeFilter.AllowedDomains = NodeFilter.AllowedDomains;
         followerGroup.NodeFilter.ObjectDomain = NodeFilter.ObjectDomain;
+    }
+
+    const ui64 leaderAndFollowers = 1 + Followers.size();
+    Hive.UpdateTabletsTotalByDomain(-leaderAndFollowers, oldObjectDomain);
+    Hive.UpdateTabletsTotalByDomain(+leaderAndFollowers, ObjectDomain);
+
+    if (IsAlive()) {
+        Hive.UpdateTabletsAliveByDomain(-1, oldObjectDomain, Node->GetServicedDomain());
+        Hive.UpdateTabletsAliveByDomain(+1, ObjectDomain, Node->GetServicedDomain());
+    }
+
+    for (const auto& follower : Followers) {
+        if (follower.IsAlive()) {
+            Hive.UpdateTabletsAliveByDomain(-1, oldObjectDomain, follower.Node->GetServicedDomain());
+            Hive.UpdateTabletsAliveByDomain(+1, ObjectDomain, follower.Node->GetServicedDomain());
+        }
     }
 }
 
@@ -127,6 +145,7 @@ TFollowerTabletInfo& TLeaderTabletInfo::AddFollower(TFollowerGroup& followerGrou
         follower.Id = followerId;
     }
     Hive.UpdateCounterTabletsTotal(+1);
+    Hive.UpdateTabletsTotalByDomain(+1, ObjectDomain);
     return follower;
 }
 

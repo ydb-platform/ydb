@@ -323,6 +323,9 @@ protected:
     ui32 DataCenters = 1;
     ui32 RegisteredDataCenters = 1;
     TObjectDistributions ObjectDistributions;
+    std::unordered_map<TSubDomainKey, ui64> TabletsTotalByDomain;
+    std::unordered_map<TSubDomainKey, ui64> TabletsAliveByDomain;
+    std::unordered_map<TSubDomainKey, ui64> TabletsAliveInObjectDomainByDomain;
 
     bool AreWeRootHive() const { return RootHiveId == HiveId; }
     bool AreWeSubDomainHive() const { return RootHiveId != HiveId; }
@@ -633,6 +636,8 @@ public:
     TTabletCategoryInfo& GetTabletCategory(TTabletCategoryId tabletCategoryId);
     void KillNode(TNodeId nodeId, const TActorId& local);
     void AddToBootQueue(TTabletInfo* tablet);
+    void UpdateTabletsTotalByDomain(i64 tabletsTotalDiff, const TSubDomainKey& objectDomain);
+    void UpdateTabletsAliveByDomain(i64 tabletsAliveDiff, const TSubDomainKey& objectDomain, const TSubDomainKey& tabletNodeDomain);
     void SetCounterTabletsTotal(ui64 tabletsTotal);
     void UpdateCounterTabletsTotal(i64 tabletsTotalDiff);
     void UpdateCounterTabletsAlive(i64 tabletsAliveDiff);

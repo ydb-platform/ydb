@@ -1039,9 +1039,9 @@
     ],
     "test.test[expr-to_hashed_set_varstruct_key-default.txt-Debug]": [
         {
-            "checksum": "3e7ed40fad76c78290b099f1a83fa95c",
-            "size": 1622,
-            "uri": "https://{canondata_backend}/212715/066a810564ce803f5d673538ddbbac01b99fce6a/resource.tar.gz#test.test_expr-to_hashed_set_varstruct_key-default.txt-Debug_/opt.yql"
+            "checksum": "3493a0af61fa93fef80fe43b490228cb",
+            "size": 1863,
+            "uri": "https://{canondata_backend}/1936842/18647e69ea072b03d2429bceb6900e1c03dbb5e6/resource.tar.gz#test.test_expr-to_hashed_set_varstruct_key-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[expr-to_hashed_set_varstruct_key-default.txt-Plan]": [
@@ -1053,9 +1053,9 @@
     ],
     "test.test[expr-to_hashed_set_varstruct_key-default.txt-Results]": [
         {
-            "checksum": "52f4ff7e947eb31b9389fc4f970f6744",
-            "size": 18448,
-            "uri": "https://{canondata_backend}/1900335/4871e48d29e4933514d3ed0c9c5d19de571eda1f/resource.tar.gz#test.test_expr-to_hashed_set_varstruct_key-default.txt-Results_/results.txt"
+            "checksum": "da16aaa7b994321bbed07136e352f4c2",
+            "size": 14326,
+            "uri": "https://{canondata_backend}/1936842/18647e69ea072b03d2429bceb6900e1c03dbb5e6/resource.tar.gz#test.test_expr-to_hashed_set_varstruct_key-default.txt-Results_/results.txt"
         }
     ],
     "test.test[expr-untag-default.txt-Debug]": [

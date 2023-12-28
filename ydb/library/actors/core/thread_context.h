@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include <ydb/library/actors/util/datetime.h>
+#include <ydb/library/actors/util/mpmc_ring_queue.h>
 
 #include <util/system/tls.h>
 
@@ -42,6 +43,7 @@ namespace NActors {
         TWaitingStats<ui64> *WaitingStats = nullptr;
         bool IsCurrentRecipientAService = false;
         TTimers Timers;
+        TMPMCRingQueue<20>::EPopMode ActivationPopMode = TMPMCRingQueue<20>::EPopMode::ReallySlow;
     };
 
     extern Y_POD_THREAD(TThreadContext*) TlsThreadContext; // in actor.cpp

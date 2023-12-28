@@ -33,7 +33,7 @@ public:
         Y_UNUSED(itemsLimit);
         Y_UNUSED(bytesLimit);
 
-        auto& meta = Part->IndexPages.BTreeGroups[0];
+        const auto& meta = Part->IndexPages.BTreeGroups[0];
 
         if (Y_UNLIKELY(row1 >= meta.RowsCount)) {
             return { true, true }; // already out of bounds, nothing to precharge
@@ -101,7 +101,7 @@ public:
         Y_UNUSED(itemsLimit);
         Y_UNUSED(bytesLimit);
 
-        auto& meta = Part->IndexPages.BTreeGroups[0];
+        const auto& meta = Part->IndexPages.BTreeGroups[0];
 
         if (Y_UNLIKELY(row1 >= meta.RowsCount)) {
             row1 = meta.RowsCount - 1; // start from the last row

@@ -142,7 +142,7 @@ public:
                 const auto* channelInfo = tablet.TabletStorageInfo->ChannelInfo(channelId);
 
                 if (channelInfo
-                    && channelInfo->StoragePool == Settings.StoragePool
+                    && (Settings.StoragePool.empty() || channelInfo->StoragePool == Settings.StoragePool)
                     && channelInfo->History.back().Timestamp + Hive->GetMinPeriodBetweenReassign() <= now
                     && channelInfo->History.size() < Hive->GetMaxChannelHistorySize()) {
                     channels.push_back(tablet.GetChannel(channelId));

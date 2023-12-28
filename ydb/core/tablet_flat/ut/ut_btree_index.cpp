@@ -174,7 +174,7 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(node.GetKeysCount() + 1, children.size());
         for (TRecIdx i : xrange(node.GetKeysCount() + 1)) {
             UNIT_ASSERT_EQUAL(node.GetChild(i), children[i]);
-            TShortChild shortChild{children[i].PageId, children[i].Count, children[i].DataSize};
+            TShortChild shortChild{children[i].PageId, children[i].RowsCount, children[i].DataSize};
             UNIT_ASSERT_EQUAL(node.GetShortChild(i), shortChild);
         }
     }
@@ -314,7 +314,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
             writer.AddKey(deserialized.GetCells());
         }
         for (auto &c : children) {
-            c.ErasedCount = 0;
+            c.ErasedRowsCount = 0;
             writer.AddChild(c);
         }
 
@@ -359,7 +359,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
             writer.AddKey(deserialized.GetCells());
         }
         for (auto &c : children) {
-            c.ErasedCount = 0;
+            c.ErasedRowsCount = 0;
             writer.AddChild(c);
         }
 
@@ -644,9 +644,9 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
 
         TBtreeIndexMeta expected{{9, 0, 0, 0}, 3, 1550};
         for (auto c : children) {
-            expected.Count += c.Count;
+            expected.RowsCount += c.RowsCount;
             expected.DataSize += c.DataSize;
-            expected.ErasedCount += c.ErasedCount;
+            expected.ErasedRowsCount += c.ErasedRowsCount;
         }
         UNIT_ASSERT_EQUAL_C(*result, expected, "Got " + result->ToString());
     }

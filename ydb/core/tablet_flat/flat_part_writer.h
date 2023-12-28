@@ -669,8 +669,8 @@ namespace NTable {
                         m->SetLevelsCount(meta.LevelsCount);
                         m->SetIndexSize(meta.IndexSize);
                         m->SetDataSize(meta.DataSize);
-                        m->SetCount(meta.Count);
-                        m->SetErasedCount(meta.ErasedCount);
+                        m->SetRowsCount(meta.RowsCount);
+                        m->SetErasedRowsCount(meta.ErasedRowsCount);
                     }
                 }
 

@@ -246,7 +246,7 @@ public:
     }
 
     TRowId GetEndRowId() const override {
-        return Meta.Count;
+        return Meta.RowsCount;
     }
 
     TPageId GetPageId() const override {
@@ -334,8 +334,8 @@ private:
 
         auto child = current.Node->GetChild(pos);
 
-        TRowId beginRowId = pos ? current.Node->GetChild(pos - 1).Count : current.BeginRowId;
-        TRowId endRowId = child.Count;
+        TRowId beginRowId = pos ? current.Node->GetChild(pos - 1).RowsCount : current.BeginRowId;
+        TRowId endRowId = child.RowsCount;
         
         TCellsIterable beginKey = pos ? current.Node->GetKeyCellsIterable(pos - 1, GroupInfo.ColsKeyIdx) : current.BeginKey;
         TCellsIterable endKey = pos < current.Node->GetKeysCount() ? current.Node->GetKeyCellsIterable(pos, GroupInfo.ColsKeyIdx) : current.EndKey;

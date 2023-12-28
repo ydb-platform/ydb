@@ -23,26 +23,23 @@ public:
     }
 
 public:
-    TResult Do(const TCells key1, const TCells key2, const TRowId row1,
-            const TRowId row2, const TKeyCellDefaults &keyDefaults, ui64 itemsLimit,
-            ui64 bytesLimit) const noexcept override {
+    TResult Do(const TCells key1, const TCells key2, TRowId row1, TRowId row2, 
+            const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override {
         bool ready = true;
 
         Y_UNUSED(key1);
         Y_UNUSED(key2);
-        Y_UNUSED(row1);
-        Y_UNUSED(row2);
         Y_UNUSED(keyDefaults);
         Y_UNUSED(itemsLimit);
         Y_UNUSED(bytesLimit);
 
-        // TODO: row1 > row2
-        // TODO: key1 > key2
-
         auto& meta = Part->IndexPages.BTreeGroups[0];
 
-        if (Y_UNLIKELY(row1 >= meta.Count)) {
+        if (Y_UNLIKELY(row1 >= meta.RowsCount)) {
             return { true, true }; // already out of bounds, nothing to precharge
+        }
+        if (Y_UNLIKELY(row1 > row2)) {
+            row2 = row1; // will not go further than row1
         }
 
         TVector<TBtreeIndexNode> level, nextLevel(Reserve(2));
@@ -50,12 +47,12 @@ public:
             if (high == 0) {
                 ready &= TryLoadNode(meta.PageId, nextLevel);
             } else {
-                for (auto i : xrange(level.size())) {
+                for (ui32 i : xrange<ui32>(level.size())) {
                     TRecIdx begin = 0, end = level[i].GetChildrenCount();
                     if (i == 0) {
                         begin = level[i].Seek(row1);
                     }
-                    if (i + 1 == level.size()) {
+                    if (i + 1 == level.size() && row2 < meta.RowsCount) {
                         end = level[i].Seek(row2) + 1;
                     }
                     for (TRecIdx j : xrange(begin, end)) {
@@ -76,12 +73,12 @@ public:
         if (meta.LevelsCount == 0) {
             ready &= HasDataPage(meta.PageId, { });
         } else {
-            for (auto i : xrange(level.size())) {
+            for (ui32 i : xrange<ui32>(level.size())) {
                 TRecIdx begin = 0, end = level[i].GetChildrenCount();
                 if (i == 0) {
                     begin = level[i].Seek(row1);
                 }
-                if (i + 1 == level.size()) {
+                if (i + 1 == level.size() && row2 < meta.RowsCount) {
                     end = level[i].Seek(row2) + 1;
                 }
                 for (TRecIdx j : xrange(begin, end)) {
@@ -94,9 +91,8 @@ public:
         return {ready, false};
     }
 
-    TResult DoReverse(const TCells key1, const TCells key2, const TRowId row1,
-            const TRowId row2, const TKeyCellDefaults &keyDefaults, ui64 itemsLimit,
-            ui64 bytesLimit) const noexcept override {
+    TResult DoReverse(const TCells key1, const TCells key2, TRowId row1, TRowId row2, 
+            const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override {
         // TODO: implement
         Y_UNUSED(key1);
         Y_UNUSED(key2);

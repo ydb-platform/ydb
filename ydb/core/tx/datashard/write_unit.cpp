@@ -53,6 +53,8 @@ public:
 
         const ui32 writeTableId = localTableId;
         auto [readVersion, writeVersion] = self->GetReadWriteVersions(writeOp);
+        writeTx->SetReadVersion(readVersion);
+        writeTx->SetWriteVersion(writeVersion);
 
         TDataShardUserDb userDb(*self, txc.DB, readVersion);
         TDataShardChangeGroupProvider groupProvider(*self, txc.DB);
@@ -68,34 +70,20 @@ public:
         {
             key.clear();
             keyCells.clear();
+            keyCells.reserve(TableInfo_.KeyColumnIds.size());
             ui64 keyBytes = 0;
             for (ui16 keyColIdx = 0; keyColIdx < TableInfo_.KeyColumnIds.size(); ++keyColIdx) {
                 const auto& cellType = TableInfo_.KeyColumnTypes[keyColIdx];
                 const TCell& cell = matrix.GetCell(rowIdx, keyColIdx);
-                if (cellType.GetTypeId() == NScheme::NTypeIds::Uint8 && !cell.IsNull() && cell.AsValue<ui8>() > 127) {
-                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "Keys with Uint8 column values >127 are currently prohibited", self->TabletID());
-                    return;
-                }
-
                 keyBytes += cell.Size();
                 key.emplace_back(TRawTypeValue(cell.AsRef(), cellType));
                 keyCells.emplace_back(cell);
-            }
-
-            if (keyBytes > NLimits::MaxWriteKeySize) {
-                writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder() << "Row key size of " << keyBytes << " bytes is larger than the allowed threshold " << NLimits::MaxWriteKeySize, self->TabletID());
-                return;
             }
 
             value.clear();
             for (ui16 valueColIdx = TableInfo_.KeyColumnIds.size(); valueColIdx < matrix.GetColCount(); ++valueColIdx) {
                 ui32 columnTag = writeTx->RecordOperation().GetColumnIds(valueColIdx);
                 const TCell& cell = matrix.GetCell(rowIdx, valueColIdx);
-                if (cell.Size() > NLimits::MaxWriteValueSize) {
-                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder() << "Row cell size of " << cell.Size() << " bytes is larger than the allowed threshold " << NLimits::MaxWriteValueSize, self->TabletID());
-                    return;
-                }
-
                 auto* col = TableInfo_.Columns.FindPtr(valueColIdx + 1);
                 Y_ABORT_UNLESS(col);
 

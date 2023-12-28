@@ -678,7 +678,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                     return;
                 }
                 LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " recieved " << res->ToString());
-    
+
                 if (IsWorkingNow) {
                     ctx.Send(ctx.SelfID, new TEvStopTest());
                 }
@@ -982,8 +982,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         }
 
         void IssueGarbageCollectRequest(const TActorContext& ctx) {
-            auto ev = TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier(TabletId, Generation, GarbageCollectStep,
-                    Channel, Generation, 0, TInstant::Max());
+            auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, Generation, GarbageCollectStep, Channel,
+                    true, Generation, GarbageCollectStep, nullptr, nullptr, TInstant::Max(), false);
             auto callback = [this](IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult *>(event);
                 Y_ABORT_UNLESS(res);

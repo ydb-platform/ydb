@@ -165,6 +165,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, nullptr)
     , ProgressTxController(std::make_unique<TTxController>(*this))
+    , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetGuaranteeIndexationInterval(TSettings::DefaultPeriodicWakeupActivationPeriod))
     , StoragesManager(std::make_shared<TStoragesManager>(*this))
     , InFlightReadsTracker(StoragesManager)
     , TablesManager(StoragesManager, info->TabletID)
@@ -485,6 +486,7 @@ void TColumnShard::RunInit(const NKikimrTxColumnShard::TInitShard& proto, const 
                            NTabletFlatExecutor::TTransactionContext& txc) {
     Y_UNUSED(version);
 
+    LOG_S_DEBUG("TColumnShard.RunInit");
     NIceDb::TNiceDb db(txc.DB);
 
     if (proto.HasOwnerPathId()) {

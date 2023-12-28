@@ -31,6 +31,7 @@ void TColumnShard::BecomeBroken(const TActorContext& ctx) {
 }
 
 void TColumnShard::SwitchToWork(const TActorContext& ctx) {
+    LOG_S_DEBUG("TColumnShard.SwitchToWork");
     {
         const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SwitchToWork");
@@ -46,7 +47,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
         EnqueueProgressTx(ctx);
     }
     EnqueueBackgroundActivities();
-    ctx.Schedule(ActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
+    ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
 }
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
@@ -150,6 +151,7 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx) {
+    LOG_S_DEBUG("TColumnShard.Handle for TEvPeriodicWakeup");
     if (ev->Get()->Manual) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvPrivate::TEvPeriodicWakeup::MANUAL")("tablet_id", TabletID());
         EnqueueBackgroundActivities();
@@ -158,7 +160,7 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         SendWaitPlanStep(GetOutdatedStep());
 
         SendPeriodicStats();
-        ctx.Schedule(ActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
+        ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
     }
 }
 
@@ -294,6 +296,8 @@ void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage&
 }
 
 void TColumnShard::SendPeriodicStats() {
+    LOG_S_DEBUG("TColumnShard.SendPeriodicStats");
+
     if (!CurrentSchemeShardId || !OwnerPathId) {
         LOG_S_DEBUG("Disabled periodic stats at tablet " << TabletID());
         return;
@@ -344,6 +348,9 @@ void TColumnShard::SendPeriodicStats() {
 
             tabletStats->SetRowCount(activeIndexStats.Rows);
             tabletStats->SetDataSize(activeIndexStats.Bytes + TabletCounters->Simple()[COUNTER_COMMITTED_BYTES].Get());
+
+            LOG_S_DEBUG("SendPeriodicStats: table_stats has row_count=" << tabletStats->GetRowCount());
+
             // TODO: we need row/dataSize counters for evicted data (managed by tablet but stored outside)
             //tabletStats->SetIndexSize(); // TODO: calc size of internal tables
             tabletStats->SetLastAccessTime(LastAccessTime.MilliSeconds());

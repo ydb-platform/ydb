@@ -69,6 +69,7 @@ struct TSettings {
 
     static constexpr ui32 MAX_INDEXATIONS_TO_SKIP = 16;
     static constexpr TDuration GuaranteeIndexationInterval = TDuration::Seconds(10);
+    static constexpr TDuration DefaultPeriodicWakeupActivationPeriod = TDuration::Seconds(60);
     static constexpr i64 GuaranteeIndexationStartBytesLimit = (i64)5 * 1024 * 1024 * 1024;
 
     TControlWrapper BlobWriteGrouppingEnabled;
@@ -389,7 +390,7 @@ private:
     bool MediatorTimeCastRegistered = false;
     TSet<ui64> MediatorTimeCastWaitingSteps;
     TDuration MaxReadStaleness = TDuration::Minutes(5); // TODO: Make configurable?
-    TDuration ActivationPeriod = TDuration::Seconds(60);
+    const TDuration PeriodicWakeupActivationPeriod;
     TDuration FailActivationDelay = TDuration::Seconds(1);
     TDuration StatsReportInterval = TDuration::Seconds(10);
     TInstant LastAccessTime;

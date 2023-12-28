@@ -11,6 +11,8 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartitionStats& tableStats) {
+    Cerr << "### FillTableStats, row_count=" << tableStats.RowCount << Endl;
+
     stats->SetRowCount(tableStats.RowCount);
     stats->SetDataSize(tableStats.DataSize);
     stats->SetIndexSize(tableStats.IndexSize);
@@ -407,6 +409,8 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
         if (description->HasSchemaPresetVersionAdj()) {
             description->MutableSchema()->SetVersion(description->GetSchema().GetVersion() + description->GetSchemaPresetVersionAdj());
         }
+
+        FillAggregatedStats(*pathDescription, storeInfo->GetStats());
     }
 }
 
@@ -895,6 +899,8 @@ static bool ConsiderAsDropped(const TPath& path) {
 }
 
 THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe(const TActorContext& ctx) {
+    LOG_DEBUG(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE, "TPathDescriber.Describe");
+
     TPathId pathId = Params.HasPathId() ? TPathId(Params.GetSchemeshardId(), Params.GetPathId()) : InvalidPathId;
     TString pathStr = Params.GetPath();
 
@@ -986,6 +992,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             DescribeOlapStore(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeColumnTable:
+            LOG_DEBUG(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE, "TPathDescriber.Describe ColumnTable");
             DescribeColumnTable(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypePersQueueGroup:
@@ -1071,6 +1078,9 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
                                      bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TTableDescription* entry) const
 {
     Y_UNUSED(typeRegistry);
+
+    Cerr << "test # TSchemeShard::DescribeTable()" << Endl;
+
     THashMap<ui32, TString> familyNames;
     bool familyNamesBuilt = false;
 
@@ -1150,6 +1160,8 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
     }
 
     entry->SetIsBackup(tableInfo->IsBackup);
+
+    Cerr << "test # TSchemeShard::DescribeTable() finished" << Endl;
 }
 
 void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name,

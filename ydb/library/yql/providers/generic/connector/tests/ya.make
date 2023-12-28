@@ -3,7 +3,7 @@ PY3TEST()
 STYLE_PYTHON()
 NO_CHECK_IMPORTS()
 
-SIZE(LARGE)
+SIZE(MEDIUM)
 
 IF (AUTOCHECK) 
     # Split tests to chunks only when they're running on different machines with distbuild,
@@ -51,7 +51,6 @@ PEERDIR(
 )
 
 DEPENDS(
-    ydb/library/yql/providers/generic/connector/app
     ydb/library/yql/tools/dqrun
     ydb/tests/tools/kqprun
 )

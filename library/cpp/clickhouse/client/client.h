@@ -81,13 +81,13 @@ namespace NClickHouse {
 
         /// Intends for execute select queries.  Data will be returned with
         /// one or more call of \p cb.
-        void Select(const TString& query, TSelectCallback cb);
+        void Select(const TString& query, TSelectCallback cb, const TString& query_id = "");
 
         /// Alias for Execute.
         void Select(const TQuery& query);
 
         /// Intends for insert block of data into a table \p table_name.
-        void Insert(const TString& table_name, const TBlock& block);
+        void Insert(const TString& table_name, const TBlock& block, const TString& query_id = "");
 
         /// Ping server for aliveness.
         void Ping();

@@ -91,7 +91,7 @@ struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::Ev
     }
 
     TKqpCompileResult::TConstPtr CompileResult;
-    TKqpStatsCompile Stats;
+    NKqpProto::TKqpStatsCompile Stats;
     std::optional<TString> ReplayMessage;
     std::optional<TString> ReplayMessageUserView;
 

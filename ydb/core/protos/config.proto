@@ -1517,7 +1517,7 @@ message TCompactionConfig {
 }
 
 message TTracingConfig {
-    message TAuthCredentials {
+    message TAuthConfig {
         message TTvm {
             optional string Host = 1;
             optional uint32 Port = 2;
@@ -1543,7 +1543,7 @@ message TTracingConfig {
     optional uint32 Port = 2;
     optional string RootCA = 3;
     optional string ServiceName = 4;
-    optional TAuthCredentials AuthCredentials = 5;
+    optional TAuthCredentials AuthConfig = 5;
 }
 
 message TFailureInjectionConfig {

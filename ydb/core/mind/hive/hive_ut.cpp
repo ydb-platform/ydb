@@ -2778,6 +2778,77 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(getGroup(tabletId), goodGroup);
     }
 
+    Y_UNIT_TEST(TestStorageBalancer) {
+        static constexpr ui64 NUM_TABLETS = 4;
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 2, [](TAppPrepare& app) {
+            app.HiveConfig.SetMinPeriodBetweenReassign(0);
+        });
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        TVector<ui64> tablets;
+        for (ui64 i = 0; i < NUM_TABLETS; ++i) {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS));
+            ev->Record.SetObjectId(i);
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            tablets.emplace_back(tabletId);
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+        ui64 tabletBase = tablets.front();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        auto getGroup = [&runtime, sender, hiveTablet](ui64 tabletId) {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo({
+                .TabletId = tabletId,
+                .ReturnChannelHistory = true,
+            }));
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+
+            const auto& tablet = response->Record.GetTablets().Get(0);
+            const auto& channel = tablet.GetTabletChannels().Get(0);
+            const auto& history = channel.GetHistory();
+            return history.Get(history.size() - 1).GetGroup();
+        };
+
+        std::unordered_map<ui64, std::vector<ui64>> groupToTablets;
+        for (auto tablet : tablets) {
+            groupToTablets[getGroup(tablet)].push_back(tablet);
+        }
+        ui64 tabletA;
+        ui64 tabletB;
+        for (const auto& [group, tablets] : groupToTablets) {
+            if (tablets.size() >= 2) {
+                tabletA = tablets[0];
+                tabletB = tablets[1];
+            }
+        }
+        TChannelsBindings channels = BINDED_CHANNELS;
+        for (auto& bind : channels) {
+            bind.SetSize(200'000'000);
+        }
+        for (auto tablet : {tabletA, tabletB}) {
+            TAutoPtr<TEvHive::TEvCreateTablet> updateTablet(new TEvHive::TEvCreateTablet(testerTablet, 100500 + (tablet - tabletBase), tabletType, channels));
+            SendCreateTestTablet(runtime, hiveTablet, testerTablet, updateTablet, 0, true);
+        }
+        runtime.SendToPipe(hiveTablet, sender, new NHive::TEvPrivate::TEvStartStorageBalancer({
+            .NumReassigns = 100,
+            .MaxInFlight = 1,
+            .StoragePool = "def1",
+        }));
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvRestartComplete, 4); // should actually be less than 4
+            runtime.DispatchEvents(options, TDuration::Seconds(10));
+        }
+
+        UNIT_ASSERT_VALUES_UNEQUAL(getGroup(tabletA), getGroup(tabletB));
+    }
+
 //    Y_UNIT_TEST(TestCreateTabletAndChangeProfiles) {
 //        TTestBasicRuntime runtime(1, false);
 //        Setup(runtime, true);

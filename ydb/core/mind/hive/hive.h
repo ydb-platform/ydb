@@ -85,8 +85,9 @@ enum class EBalancerType {
     ScatterNetwork,
     Emergency,
     SpreadNeighbours,
+    Storage,
 
-    Last = SpreadNeighbours,
+    Last = Storage,
 };
 
 constexpr std::size_t EBalancerTypeSize = static_cast<std::size_t>(EBalancerType::Last) + 1;
@@ -259,6 +260,12 @@ struct TBalancerSettings {
     const std::vector<TNodeId> FilterNodeIds = {};
     EResourceToBalance ResourceToBalance = EResourceToBalance::Dominant;
     std::optional<TFullObjectId> FilterObjectId;
+};
+
+struct TStorageBalancerSettings {
+    ui64 NumReassigns;
+    ui64 MaxInFlight;
+    TString StoragePool;
 };
 
 struct TBalancerStats {

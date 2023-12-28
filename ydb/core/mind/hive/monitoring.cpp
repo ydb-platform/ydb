@@ -1401,7 +1401,8 @@ public:
             EBalancerType::Emergency,
             EBalancerType::SpreadNeighbours,
             EBalancerType::Scatter,
-            EBalancerType::Manual
+            EBalancerType::Manual,
+            EBalancerType::Storage,
         }) {
             int balancer = static_cast<int>(type);
             out << "<tr id='balancer" << balancer << "'><td>" << EBalancerTypeName(type) << "</td><td></td><td></td><td></td><td></td><td></td></tr>";
@@ -2474,6 +2475,32 @@ public:
             .Type = EBalancerType::Manual,
             .MaxMovements = MaxMovements
         });
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
+    }
+};
+
+class TTxMonEvent_StorageRebalance : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    TStorageBalancerSettings Settings;
+
+    TTxMonEvent_StorageRebalance(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , Source(source)
+    {
+        Settings.NumReassigns = FromStringWithDefault(ev->Get()->Cgi().Get("reassigns"), 1000);
+        Settings.MaxInFlight = FromStringWithDefault(ev->Get()->Cgi().Get("inflight"), 1);
+        Settings.StoragePool = ev->Get()->Cgi().Get("pool");
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE; }
+
+    bool Execute(TTransactionContext&, const TActorContext&) override {
+        Self->StartHiveStorageBalancer(Settings);
         return true;
     }
 
@@ -3913,6 +3940,8 @@ public:
     }
 };
 
+
+
 void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
     if (!ReadyForConnections) {
         return Execute(new TTxMonEvent_NotReady(ev->Sender, this), ctx);
@@ -4037,6 +4066,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "Storage") {
         return Execute(new TTxMonEvent_Storage(ev->Sender, ev, this), ctx);
+    }
+    if (page == "StorageRebalance") {
+        return Execute(new TTxMonEvent_StorageRebalance(ev->Sender, ev, this), ctx);
     }
     return Execute(new TTxMonEvent_Landing(ev->Sender, ev, this), ctx);
 }

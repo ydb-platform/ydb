@@ -2175,59 +2175,70 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             auto& msg = scanInited->Record;
             auto scanActorId = ActorIdFromProto(msg.GetScanActorId());
 
-            ui32 resultLimit = 1024 * 1024;
-            runtime.Send(new IEventHandle(scanActorId, sender, new NKqp::TEvKqpCompute::TEvScanDataAck(resultLimit, 0, 1)));
-            auto scan = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanData>(handle);
-            auto batchStats = scan->ArrowBatch;
-            UNIT_ASSERT(batchStats);
-            // Cerr << batchStats->ToString() << Endl;
-//            UNIT_ASSERT_VALUES_EQUAL(batchStats->num_rows(), 10068);
-
             ui64 sumCompactedBytes = 0;
             ui64 sumCompactedRows = 0;
             ui64 sumInsertedBytes = 0;
             ui64 sumInsertedRows = 0;
             std::optional<ui32> keyColumnId;
-            for (ui32 i = 0; i < batchStats->num_rows(); ++i) {
-                auto paths = batchStats->GetColumnByName("PathId");
-                auto kinds = batchStats->GetColumnByName("Kind");
-                auto rows = batchStats->GetColumnByName("Rows");
-                auto bytes = batchStats->GetColumnByName("BlobRangeSize");
-                auto rawBytes = batchStats->GetColumnByName("RawBytes");
-                auto internalColumnIds = batchStats->GetColumnByName("InternalColumnId");
-
-                ui64 pathId = static_cast<arrow::UInt64Array&>(*paths).Value(i);
-                auto kind = static_cast<arrow::StringArray&>(*kinds).Value(i);
-                const TString kindStr(kind.data(), kind.size());
-                ui64 numRows = static_cast<arrow::UInt64Array&>(*rows).Value(i);
-                ui64 numBytes = static_cast<arrow::UInt64Array&>(*bytes).Value(i);
-                ui64 numRawBytes = static_cast<arrow::UInt64Array&>(*rawBytes).Value(i);
-                ui32 internalColumnId = static_cast<arrow::UInt32Array&>(*internalColumnIds).Value(i);
-                if (!keyColumnId) {
-                    keyColumnId = internalColumnId;
+            while (true) {
+                ui32 resultLimit = 1024 * 1024;
+                runtime.Send(new IEventHandle(scanActorId, sender, new NKqp::TEvKqpCompute::TEvScanDataAck(resultLimit, 0, 1)));
+                auto scan = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanData>(handle);
+                auto batchStats = scan->ArrowBatch;
+                if (scan->Finished) {
+                    AFL_VERIFY(!scan->ArrowBatch || !scan->ArrowBatch->num_rows());
+                    break;
                 }
-                Cerr << "[" << __LINE__ << "] " << table.Pk[0].second.GetTypeId() << " "
-                    << pathId << " " << kindStr << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
+                UNIT_ASSERT(batchStats);
+//                Cerr << batchStats->ToString() << Endl;
 
-                if (pathId == tableId) {
-                    if (kindStr == ::ToString(NOlap::NPortion::EProduced::COMPACTED) || kindStr == ::ToString(NOlap::NPortion::EProduced::SPLIT_COMPACTED)) {
-                        sumCompactedBytes += numBytes;
-                        if (*keyColumnId == internalColumnId) {
-                            sumCompactedRows += numRows;
-                        }
-                        //UNIT_ASSERT(numRawBytes > numBytes);
+                for (ui32 i = 0; i < batchStats->num_rows(); ++i) {
+                    auto paths = batchStats->GetColumnByName("PathId");
+                    auto kinds = batchStats->GetColumnByName("Kind");
+                    auto rows = batchStats->GetColumnByName("Rows");
+                    auto bytes = batchStats->GetColumnByName("BlobRangeSize");
+                    auto rawBytes = batchStats->GetColumnByName("RawBytes");
+                    auto internalColumnIds = batchStats->GetColumnByName("InternalColumnId");
+                    auto activities = batchStats->GetColumnByName("Activity");
+                    AFL_VERIFY(activities);
+
+                    ui64 pathId = static_cast<arrow::UInt64Array&>(*paths).Value(i);
+                    auto kind = static_cast<arrow::StringArray&>(*kinds).Value(i);
+                    const TString kindStr(kind.data(), kind.size());
+                    ui64 numRows = static_cast<arrow::UInt64Array&>(*rows).Value(i);
+                    ui64 numBytes = static_cast<arrow::UInt64Array&>(*bytes).Value(i);
+                    ui64 numRawBytes = static_cast<arrow::UInt64Array&>(*rawBytes).Value(i);
+                    ui32 internalColumnId = static_cast<arrow::UInt32Array&>(*internalColumnIds).Value(i);
+                    bool activity = static_cast<arrow::BooleanArray&>(*activities).Value(i);
+                    if (!activity) {
+                        continue;
                     }
-                    if (kindStr == ::ToString(NOlap::NPortion::EProduced::INSERTED)) {
-                        sumInsertedBytes += numBytes;
-                        if (*keyColumnId == internalColumnId) {
-                            sumInsertedRows += numRows;
-                        }
-                        //UNIT_ASSERT(numRawBytes > numBytes);
+                    if (!keyColumnId) {
+                        keyColumnId = internalColumnId;
                     }
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL(numRows, 0);
-                    UNIT_ASSERT_VALUES_EQUAL(numBytes, 0);
-                    UNIT_ASSERT_VALUES_EQUAL(numRawBytes, 0);
+                    Cerr << "[" << __LINE__ << "] " << activity << " " << table.Pk[0].second.GetTypeId() << " "
+                        << pathId << " " << kindStr << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
+
+                    if (pathId == tableId) {
+                        if (kindStr == ::ToString(NOlap::NPortion::EProduced::COMPACTED) || kindStr == ::ToString(NOlap::NPortion::EProduced::SPLIT_COMPACTED)) {
+                            sumCompactedBytes += numBytes;
+                            if (*keyColumnId == internalColumnId) {
+                                sumCompactedRows += numRows;
+                            }
+                            //UNIT_ASSERT(numRawBytes > numBytes);
+                        }
+                        if (kindStr == ::ToString(NOlap::NPortion::EProduced::INSERTED)) {
+                            sumInsertedBytes += numBytes;
+                            if (*keyColumnId == internalColumnId) {
+                                sumInsertedRows += numRows;
+                            }
+                            //UNIT_ASSERT(numRawBytes > numBytes);
+                        }
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(numRows, 0);
+                        UNIT_ASSERT_VALUES_EQUAL(numBytes, 0);
+                        UNIT_ASSERT_VALUES_EQUAL(numRawBytes, 0);
+                    }
                 }
             }
             Cerr << "compacted=" << sumCompactedRows << ";inserted=" << sumInsertedRows << ";expected=" << fullNumRows << ";" << Endl;

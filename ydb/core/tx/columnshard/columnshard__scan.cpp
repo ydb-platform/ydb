@@ -645,7 +645,7 @@ PrepareStatsReadMetadata(ui64 tabletId, const NOlap::TReadDescription& read, con
 
     auto out = std::make_shared<NOlap::TReadStatsMetadata>(tabletId,
                 isReverse ? NOlap::TReadStatsMetadata::ESorting::DESC : NOlap::TReadStatsMetadata::ESorting::ASC,
-                read.GetProgram(), index ? index->GetVersionedIndex().GetSchema(read.GetSnapshot()) : nullptr);
+                read.GetProgram(), index ? index->GetVersionedIndex().GetSchema(read.GetSnapshot()) : nullptr, read.GetSnapshot());
 
     out->SetPKRangesFilter(read.PKRangesFilter);
     out->ReadColumnIds.assign(readColumnIds.begin(), readColumnIds.end());

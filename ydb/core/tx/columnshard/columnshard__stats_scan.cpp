@@ -81,7 +81,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
         NArrow::Append<arrow::StringType>(*builders[9], blobIdString);
         NArrow::Append<arrow::UInt64Type>(*builders[10], r->BlobRange.Offset);
         NArrow::Append<arrow::UInt64Type>(*builders[11], r->BlobRange.Size);
-        NArrow::Append<arrow::BooleanType>(*builders[12], portion.HasRemoveSnapshot());
+        NArrow::Append<arrow::BooleanType>(*builders[12], !portion.HasRemoveSnapshot() || ReadMetadata->GetRequestSnapshot() < portion.GetRemoveSnapshot());
         std::string strTierName(portion.GetMeta().GetTierName().data(), portion.GetMeta().GetTierName().size());
         NArrow::Append<arrow::StringType>(*builders[13], strTierName);
     }

@@ -44,11 +44,13 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
             const TBlobState &blobState = Blackboard.GetState(query.Id);
             outResponse.Id = query.Id;
             outResponse.PartMap = blobState.PartMap;
-            outResponse.Keep = blobState.Keep;
-            outResponse.DoNotKeep = blobState.DoNotKeep;
             outResponse.LooksLikePhantom = PhantomCheck
                 ? std::make_optional(blobState.WholeSituation == TBlobState::ESituation::Absent)
                 : std::nullopt;
+
+            // fill in keep/doNotKeep flags
+            const auto it = BlobFlags.find(query.Id);
+            std::tie(outResponse.Keep, outResponse.DoNotKeep) = it != BlobFlags.end() ? it->second : std::make_tuple(false, false);
 
             if (blobState.WholeSituation == TBlobState::ESituation::Absent) {
                 bool okay = true;

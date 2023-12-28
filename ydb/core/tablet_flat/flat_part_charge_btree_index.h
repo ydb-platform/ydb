@@ -48,14 +48,14 @@ public:
                 ready &= TryLoadNode(meta.PageId, nextLevel);
             } else {
                 for (ui32 i : xrange<ui32>(level.size())) {
-                    TRecIdx begin = 0, end = level[i].GetChildrenCount();
+                    TRecIdx from = 0, to = level[i].GetKeysCount();
                     if (i == 0) {
-                        begin = level[i].Seek(row1);
+                        from = level[i].Seek(row1);
                     }
                     if (i + 1 == level.size() && row2 < meta.RowsCount) {
-                        end = level[i].Seek(row2) + 1;
+                        to = level[i].Seek(row2);
                     }
-                    for (TRecIdx j : xrange(begin, end)) {
+                    for (TRecIdx j : xrange(from, to + 1)) {
                         ready &= TryLoadNode(level[i].GetShortChild(j).PageId, nextLevel);
                     }
                 }
@@ -74,14 +74,14 @@ public:
             ready &= HasDataPage(meta.PageId, { });
         } else {
             for (ui32 i : xrange<ui32>(level.size())) {
-                TRecIdx begin = 0, end = level[i].GetChildrenCount();
+                TRecIdx from = 0, to = level[i].GetKeysCount();
                 if (i == 0) {
-                    begin = level[i].Seek(row1);
+                    from = level[i].Seek(row1);
                 }
                 if (i + 1 == level.size() && row2 < meta.RowsCount) {
-                    end = level[i].Seek(row2) + 1;
+                    to = level[i].Seek(row2);
                 }
-                for (TRecIdx j : xrange(begin, end)) {
+                for (TRecIdx j : xrange(from, to + 1)) {
                     ready &= HasDataPage(level[i].GetShortChild(j).PageId, { });
                 }
             }
@@ -93,15 +93,71 @@ public:
 
     TResult DoReverse(const TCells key1, const TCells key2, TRowId row1, TRowId row2, 
             const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override {
-        // TODO: implement
+        bool ready = true;
+        
         Y_UNUSED(key1);
         Y_UNUSED(key2);
-        Y_UNUSED(row1);
-        Y_UNUSED(row2);
         Y_UNUSED(keyDefaults);
         Y_UNUSED(itemsLimit);
         Y_UNUSED(bytesLimit);
-        return {true, false};
+
+        auto& meta = Part->IndexPages.BTreeGroups[0];
+
+        if (Y_UNLIKELY(row1 >= meta.RowsCount)) {
+            row1 = meta.RowsCount - 1; // start from the last row
+        }
+        if (Y_UNLIKELY(row1 < row2)) {
+            row2 = row1; // will not go further than row1
+        }
+
+        // level contains nodes in reverse order
+        TVector<TBtreeIndexNode> level, nextLevel(Reserve(2));
+        for (ui32 high = 0; high < meta.LevelsCount && ready; high++) {
+            if (high == 0) {
+                ready &= TryLoadNode(meta.PageId, nextLevel);
+            } else {
+                for (ui32 i : xrange<ui32>(level.size())) {
+                    TRecIdx from = level[i].GetKeysCount(), to = 0;
+                    if (i == 0) {
+                        from = level[i].Seek(row1);
+                    }
+                    if (i + 1 == level.size() && row2 < meta.RowsCount) {
+                        to = level[i].Seek(row2);
+                    }
+                    for (TRecIdx j = from + 1; j > to; j--) {
+                        ready &= TryLoadNode(level[i].GetShortChild(j - 1).PageId, nextLevel);
+                    }
+                }
+            }
+
+            level.swap(nextLevel);
+            nextLevel.clear();
+        }
+
+        if (!ready) {
+            // some index pages are missing, do not continue
+            return {false, false};
+        }
+
+        if (meta.LevelsCount == 0) {
+            ready &= HasDataPage(meta.PageId, { });
+        } else {
+            for (ui32 i : xrange<ui32>(level.size())) {
+                TRecIdx from = level[i].GetKeysCount(), to = 0;
+                if (i == 0) {
+                    from = level[i].Seek(row1);
+                }
+                if (i + 1 == level.size() && row2 < meta.RowsCount) {
+                    to = level[i].Seek(row2);
+                }
+                for (TRecIdx j = from + 1; j > to; j--) {
+                    ready &= HasDataPage(level[i].GetShortChild(j - 1).PageId, { });
+                }
+            }
+        }
+
+        // TODO: overshot for keys search
+        return {ready, false};
     }
 
 private:

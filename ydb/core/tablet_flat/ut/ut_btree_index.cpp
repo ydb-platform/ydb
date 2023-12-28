@@ -1161,9 +1161,12 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     }
 
     void DoChargeRowId(ICharge& charge, IPages& env, const TRowId row1, const TRowId row2, ui64 itemsLimit, ui64 bytesLimit,
-            const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 10) {
+            bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 10) {
         while (true) {
-            if (charge.Do(row1, row2, keyDefaults, itemsLimit, bytesLimit)) {
+            bool ready = reverse
+                ? charge.DoReverse(row1, row2, keyDefaults, itemsLimit, bytesLimit)
+                : charge.Do(row1, row2, keyDefaults, itemsLimit, bytesLimit);
+            if (ready) {
                 return;
             }
             TTouchEnv::LoadTouched(env, false);
@@ -1172,16 +1175,16 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         Y_UNREACHABLE();
     }
 
-    void CheckChargeRowId(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
+    void CheckChargeRowId(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults, bool reverse) {
         for (TRowId rowId1 : xrange(part.Stat.Rows + 1)) {
             for (TRowId rowId2 : xrange(part.Stat.Rows + 1)) {
                 TTouchEnv bTreeEnv, flatEnv;
                 TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
                 TCharge flat(&flatEnv, part, tags, true);
 
-                TString message = TStringBuilder() << "ChargeRowId " << rowId1 << " " << rowId2;
-                DoChargeRowId(bTree, bTreeEnv, rowId1, rowId2, 0, 0, *keyDefaults, message);
-                DoChargeRowId(flat, flatEnv, rowId1, rowId2, 0, 0, *keyDefaults, message);
+                TString message = TStringBuilder() << (reverse ? "ChargeRowIdReverse " : "ChargeRowId ") << rowId1 << " " << rowId2;
+                DoChargeRowId(bTree, bTreeEnv, rowId1, rowId2, 0, 0, reverse, *keyDefaults, message);
+                DoChargeRowId(flat, flatEnv, rowId1, rowId2, 0, 0, reverse, *keyDefaults, message);
                 AssertEqual(part, bTreeEnv, flatEnv, message);
             }
         }
@@ -1215,7 +1218,8 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
             tags.push_back(c.Tag);
         }
 
-        CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get());
+        CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get(), false);
+        CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get(), true);
     }
 
     Y_UNIT_TEST(NoNodes) {

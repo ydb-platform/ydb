@@ -10,9 +10,9 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpOlapStats) {
-    class TPeriodicWakeupActivationPeriodController: public NKikimr::NYDBTest::ICSController {
+    class TPeriodicWakeupActivationPeriodController: public NYDBTest::NColumnShard::TController {
     public:
-        virtual TDuration GetGuaranteeIndexationInterval(const TDuration /*defaultValue*/) const override {
+        virtual TDuration GetPeriodicWakeupActivationPeriod(const TDuration /*defaultValue*/) const override {
             return TDuration::MilliSeconds(10);
         }
     };

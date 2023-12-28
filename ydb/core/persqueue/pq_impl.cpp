@@ -3508,15 +3508,19 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         if (tx.PartitionRepliesCount == tx.PartitionRepliesExpected) {
             switch (tx.Kind) {
             case NKikimrPQ::TTransaction::KIND_DATA:
-
-                [[fallthrough]];
-
-            case NKikimrPQ::TTransaction::KIND_CONFIG:
                 SendEvReadSetToReceivers(ctx, tx);
 
                 WriteTx(tx, NKikimrPQ::TTransaction::WAIT_RS);
 
                 tx.State = NKikimrPQ::TTransaction::CALCULATED;
+                break;
+
+            case NKikimrPQ::TTransaction::KIND_CONFIG:
+                SendEvReadSetToReceivers(ctx, tx);
+
+                tx.State = NKikimrPQ::TTransaction::WAIT_RS;
+
+                CheckTxState(ctx, tx);
                 break;
 
             case NKikimrPQ::TTransaction::KIND_UNKNOWN:

@@ -470,6 +470,7 @@ TFuture<TIssues> TStateStorage::SaveState(
         
         TStatus status = upsertRowStatus.GetValue();
         if (!status.IsSuccess()) {
+            context->Callback = nullptr;
             promise.SetValue(StatusToIssues(status));
             return;
         }
@@ -482,6 +483,7 @@ TFuture<TIssues> TStateStorage::SaveState(
             nextFuture.Subscribe(context->Callback);
             return;
         }
+        context->Callback = nullptr;
         promise.SetValue(StatusToIssues(status));
     };
     future.Subscribe(context->Callback);
@@ -922,19 +924,20 @@ TFuture<TStatus> TStateStorage::ReadRows(const TContextPtr& context)
             TStatus status = future.GetValue();
             if (!status.IsSuccess()) {
                 promise.SetValue(status);
+                context->Callback = nullptr;
                 return;
             }
             auto& taskInfo = context->Tasks[context->CurrentProcessingTaskIndex];
             ++taskInfo.CurrentProcessingRow;
 
-            if (taskInfo.CurrentProcessingRow == taskInfo.ListOfStatesForReading.front().StateRowsCount)
-            {
+            if (taskInfo.CurrentProcessingRow == taskInfo.ListOfStatesForReading.front().StateRowsCount) {
                 EStateType type = thisPtr->DeserealizeState(taskInfo);
                 if (type != EStateType::Snapshot) {
                     taskInfo.ListOfStatesForReading.pop_front();
                     taskInfo.CurrentProcessingRow = 0;
                     if (taskInfo.ListOfStatesForReading.empty()) {
                         promise.SetValue(TStatus{EStatus::INTERNAL_ERROR, NYql::TIssues{NYql::TIssue{"Checkpoint is not found"}}});
+                        context->Callback = nullptr;
                         return;
                     }
                 }
@@ -943,7 +946,9 @@ TFuture<TStatus> TStateStorage::ReadRows(const TContextPtr& context)
                     taskInfo.CurrentProcessingRow = 0;
                 }
                 else {
+                    context->Callback = nullptr;
                     promise.SetValue(TStatus{EStatus::SUCCESS,  NYql::TIssues{}});
+                    return;
                 }
             }
             auto nextFuture = thisPtr->SelectRowState(context);

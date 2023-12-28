@@ -666,7 +666,7 @@ PrepareStatsReadMetadata(ui64 tabletId, const NOlap::TReadDescription& read, con
                     continue;
                 }
                 for (auto&& p : pathInfo->GetPortions()) {
-                    if (p.second->GetRemoveSnapshot().IsZero() && portionsInUse[read.PathId].emplace(p.first).second) {
+                    if (portionsInUse[read.PathId].emplace(p.first).second) {
                         out->IndexPortions.emplace_back(p.second);
                     }
                 }
@@ -675,7 +675,7 @@ PrepareStatsReadMetadata(ui64 tabletId, const NOlap::TReadDescription& read, con
             auto pathInfos = logsIndex->GetTables(fromPathId, toPathId);
             for (auto&& pathInfo: pathInfos) {
                 for (auto&& p: pathInfo->GetPortions()) {
-                    if (p.second->GetRemoveSnapshot().IsZero() && portionsInUse[p.second->GetPathId()].emplace(p.first).second) {
+                    if (portionsInUse[p.second->GetPathId()].emplace(p.first).second) {
                         out->IndexPortions.emplace_back(p.second);
                     }
                 }

@@ -293,19 +293,13 @@ TPQTabletMock* CreatePQTabletMock(NPersQueue::TTestServer& server, ui64 tabletId
         return mock;
     };
 
-    Cerr << ">>>>> 1" << Endl;
-    CreateTestBootstrapper(*server.GetRuntime(),
-                           CreateTestTabletInfo(tabletId, NKikimrTabletBase::TTabletTypes::Dummy, TErasureType::ErasureNone),
-                           wrapCreatePQTabletMock);
-
-    Cerr << ">>>>> 2" << Endl;
-
-    TDispatchOptions options;
-    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-    Cerr << ">>>>> 2.1" << Endl;
-    server.GetRuntime()->DispatchEvents(options);
-
-    Cerr << ">>>>> 3" << Endl;
+    for(size_t i = 0; i < server.GetRuntime()->GetNodeCount(); ++i) {
+        Cerr << ">>>>> 1: " << i << Endl;
+        CreateTestBootstrapper(*server.GetRuntime(),
+                            CreateTestTabletInfo(tabletId, NKikimrTabletBase::TTabletTypes::Dummy, TErasureType::ErasureNone),
+                            wrapCreatePQTabletMock,
+                            i);
+    }
 
     return mock;
 }

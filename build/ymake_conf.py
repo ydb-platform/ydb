@@ -75,6 +75,7 @@ class Platform(object):
         self.is_riscv32 = self.is_rv32imc
 
         self.is_nds32 = self.arch in ('nds32le_elf_mculib_v5f',)
+        self.is_tc32 = self.arch in ('tc32_elf',)
 
         self.is_xtensa = self.arch in ('xtensa_hifi5',)
 
@@ -100,7 +101,7 @@ class Platform(object):
         self.is_wasm64 = self.arch == 'wasm64'
         self.is_wasm = self.is_wasm64
 
-        self.is_32_bit = self.is_x86 or self.is_armv7 or self.is_armv8m or self.is_riscv32 or self.is_nds32 or self.is_armv7em or self.is_xtensa
+        self.is_32_bit = self.is_x86 or self.is_armv7 or self.is_armv8m or self.is_riscv32 or self.is_nds32 or self.is_armv7em or self.is_xtensa or self.is_tc32
         self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64
 
         assert self.is_32_bit or self.is_64_bit
@@ -1406,8 +1407,8 @@ class GnuCompiler(Compiler):
                 '-fdebug-default-version=4',
             ]
         elif self.tc.is_gcc:
-            if self.target.is_xtensa:
-                # Xtensa toolchain does not support this flag
+            if self.target.is_xtensa or self.target.is_tc32:
+                # Xtensa and tc32 toolchains does not support this flag
                 pass
             else:
                 self.c_foptions += [

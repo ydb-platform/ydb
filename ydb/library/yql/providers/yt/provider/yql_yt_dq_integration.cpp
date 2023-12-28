@@ -695,7 +695,7 @@ public:
 
         pipeline->Add(CreateSinglePassFunctorTransformer([state, providerParams](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
             output = input;
-            auto status = SubstTables(output, state, true, ctx);
+            auto status = SubstTables(output, state, false, ctx);
             if (status.Level != IGraphTransformer::TStatus::Error && input != output) {
                 YQL_CLOG(INFO, ProviderYt) << "Peephole-YtSubstTables";
             }

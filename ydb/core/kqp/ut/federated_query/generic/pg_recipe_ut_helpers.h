@@ -9,6 +9,7 @@ namespace NTestUtils {
     ui32 GetPgPort();
     TString GetPgUser();
     TString GetPgDatabase();
+    TString GetPgPassword();
 
     pqxx::connection CreatePostgresqlConnection();
 

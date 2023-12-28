@@ -8,6 +8,7 @@
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_factory.h>
+#include <ydb/core/mind/hive/domain_info.h>
 #include <ydb/core/protos/tablet_database.pb.h>
 #include <ydb/core/tx/tx.h>
 
@@ -89,7 +90,9 @@ namespace NKikimr {
     struct TEvFakeHive {
         enum EEv {
             EvSubscribeToTabletDeletion = TEvHive::EvEnd + 1,
-            EvNotifyTabletDeleted
+            EvNotifyTabletDeleted,
+            EvRequestDomainInfo,
+            EvRequestDomainInfoReply
         };
 
         struct TEvSubscribeToTabletDeletion : public TEventLocal<TEvSubscribeToTabletDeletion, EvSubscribeToTabletDeletion> {
@@ -107,6 +110,23 @@ namespace NKikimr {
                 : TabletId(tabletId)
             {}
         };
+
+        struct TEvRequestDomainInfo : public TEventLocal<TEvRequestDomainInfo, EvRequestDomainInfo> {
+            TSubDomainKey DomainKey;
+
+            explicit TEvRequestDomainInfo(TSubDomainKey domainKey)
+                : DomainKey(domainKey)
+            {}
+        };
+        
+        struct TEvRequestDomainInfoReply: public TEventLocal<TEvRequestDomainInfoReply, EvRequestDomainInfoReply> {
+            NHive::TDomainInfo DomainInfo;
+
+            explicit TEvRequestDomainInfoReply(const NHive::TDomainInfo& domainInfo)
+                : DomainInfo(domainInfo)
+            {}
+        };
+
     };
 
     struct TFakeHiveTabletInfo {
@@ -134,7 +154,7 @@ namespace NKikimr {
         TMap<ui64, ui64> TabletIdToHive;
         ui64 NextTabletId;
         ui64 NextHiveNextTabletId;
-
+        TMap<TSubDomainKey, NHive::TDomainInfo> Domains;
         static constexpr ui64 TABLETS_PER_CHILD_HIVE = 1000000; // amount of tablet ids we reserve for child hive
 
         typedef TIntrusivePtr<TFakeHiveState> TPtr;

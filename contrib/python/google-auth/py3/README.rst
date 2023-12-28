@@ -20,7 +20,7 @@ You can install using `pip`_::
 
 For more information on setting up your Python development environment, please refer to `Python Development Environment Setup Guide`_ for Google Cloud Platform.
 
-.. _`Python Development Environment Setup Guide`: https://cloud.google.com/python/setup
+.. _`Python Development Environment Setup Guide`: https://cloud.google.com/python/docs/setup
 
 Extras
 ------
@@ -36,6 +36,16 @@ Note that the extras pyopenssl and enterprise_cert should not be used together b
 Supported Python Versions
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 Python >= 3.7
+
+**NOTE**:
+Python 3.7 was marked as `unsupported`_ by the python community in June 2023.
+We recommend that all developers upgrade to Python 3.8 and newer as soon as
+they can. Support for Python 3.7 will be removed from this library after
+January 1 2024. Previous releases that support Python 3.7 will continue to be available
+for download, but releases after January 1 2024 will only target Python 3.8 and
+newer.
+
+.. _unsupported: https://devguide.python.org/versions/#unsupported-versions
 
 Unsupported Python Versions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^

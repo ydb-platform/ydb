@@ -19,15 +19,27 @@ ydb scripting yql --help
 
 ## Parameters of the subcommand {#options}
 
-| Name | Description |
----|---
-| `--timeout` | The time within which the operation should be completed on the server. |
-| `--stats` | Statistics mode.<br>Acceptable values:<ul><li>`none`: Do not collect statistics.</li><li>`basic`: Collect statistics for basic events.</li><li>`full`: Collect statistics for all events.</li></ul>Defaults to `none`. |
-| `-s`, `--script` | Text of the YQL query to be executed. |
-| `-f`, `--file` | Path to the text of the YQL query to be executed. |
-| `--explain` | Show the query execution plan. |
-| `--show-response-metadata` | Show the response metadata. |
-| `--format` | Input format.<br>Default value: `pretty`.<br>Acceptable values:<ul><li>`pretty`: A human-readable format.</li><li>`json-unicode`: [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %} output with binary strings [Unicode]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Юникод){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unicode){% endif %}-encoded and each JSON string in a separate line.</li><li>`json-unicode-array`: JSON output with binary strings Unicode-encoded and the result output as an array of JSON strings with each JSON string in a separate line.</li><li>`json-base64`: JSON output with binary strings [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64){% endif %}-encoded and each JSON string in a separate line.</li><li>`json-base64-array`: JSON output with binary strings Base64-encoded and the result output as an array of JSON strings with each JSON string in a separate line.</li></ul> |
+#|
+|| **Name** | **Description** ||
+|| `--timeout` | The time within which the operation should be completed on the server. ||
+|| `--stats` | Statistics mode.
+Acceptable values:
+* `none`: Do not collect statistics.
+* `basic`: Collect statistics for basic events.
+* `full`: Collect statistics for all events.
+    Defaults to `none`. ||
+|| `-s`, `--script` | Text of the YQL query to be executed. ||
+|| `-f`, `--file` | Path to the text of the YQL query to be executed. ||
+|| `--explain` | Show the query execution plan. ||
+|| `--show-response-metadata` | Show the response metadata. ||
+|| `--format` | Result format.
+Default value: `pretty`.
+Acceptable values:
+
+{% include notitle [format](./_includes/result_format_common.md) %}
+
+||
+|#
 
 ### Working with parameterized queries {#parameterized-query}
 

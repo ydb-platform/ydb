@@ -14,11 +14,6 @@ inline TActorId MakeSysViewServiceID(ui32 node) {
     return TActorId(node, TStringBuf(x, 12));
 }
 
-void CollectQueryStats(const TActorContext& ctx, const NKqpProto::TKqpStatsQuery* queryStats,
-    TDuration queryDuration, const TString& queryText,
-    const TString& userSID, ui64 parametersSize, const TString& database,
-    const NKikimrKqp::EQueryType type, ui64 requestUnits);
-
 THolder<NActors::IActor> CreateSysViewService(
     TExtCountersConfig&& config, bool hasExternalCounters);
 

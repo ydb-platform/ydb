@@ -90,7 +90,7 @@ namespace NActors {
         ThreadCount = MaxThreadCount;
         auto semaphore = TSemaphore();
         semaphore.CurrentThreadCount = ThreadCount;
-        Semaphore = semaphore.ConverToI64();
+        Semaphore = semaphore.ConvertToI64();
     }
 
     TBasicExecutorPool::TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer)
@@ -126,7 +126,7 @@ namespace NActors {
             TSemaphore semaphore = TSemaphore::GetSemaphore(x);;
             if (semaphore.CurrentSleepThreadCount < 0) {
                 semaphore.CurrentSleepThreadCount++;
-                x = AtomicGetAndCas(&Semaphore, semaphore.ConverToI64(), x);
+                x = AtomicGetAndCas(&Semaphore, semaphore.ConvertToI64(), x);
                 if (x == oldX) {
                     *needToWait = true;
                     *needToBlock = true;
@@ -140,7 +140,7 @@ namespace NActors {
                 if (semaphore.CurrentSleepThreadCount == AtomicLoad(&ThreadCount)) {
                     AllThreadsSleep.store(true);
                 }
-                x = AtomicGetAndCas(&Semaphore, semaphore.ConverToI64(), x);
+                x = AtomicGetAndCas(&Semaphore, semaphore.ConvertToI64(), x);
                 if (x == oldX) {
                     *needToWait = true;
                     *needToBlock = false;
@@ -285,12 +285,12 @@ namespace NActors {
 
         do {
             needToWakeUp = semaphore.CurrentSleepThreadCount > SharedExecutorsCount;
-            i64 oldX = semaphore.ConverToI64();
+            i64 oldX = semaphore.ConvertToI64();
             semaphore.OldSemaphore++;
             if (needToWakeUp) {
                 semaphore.CurrentSleepThreadCount--;
             }
-            x = AtomicGetAndCas(&Semaphore, semaphore.ConverToI64(), oldX);
+            x = AtomicGetAndCas(&Semaphore, semaphore.ConvertToI64(), oldX);
             if (x == oldX) {
                 break;
             }
@@ -495,14 +495,14 @@ namespace NActors {
             i16 prevCount = GetThreadCount();
             AtomicSet(ThreadCount, threads);
             TSemaphore semaphore = TSemaphore::GetSemaphore(AtomicGet(Semaphore));
-            i64 oldX = semaphore.ConverToI64();
+            i64 oldX = semaphore.ConvertToI64();
             semaphore.CurrentThreadCount = threads;
             if (threads > prevCount) {
                 semaphore.CurrentSleepThreadCount += (i64)threads - prevCount;
             } else {
                 semaphore.CurrentSleepThreadCount -= (i64)prevCount - threads;
             }
-            AtomicAdd(Semaphore, semaphore.ConverToI64() - oldX);
+            AtomicAdd(Semaphore, semaphore.ConvertToI64() - oldX);
             LWPROBE(ThreadCount, PoolId, PoolName, threads, MinThreadCount, MaxThreadCount, DefaultThreadCount);
         }
     }

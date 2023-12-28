@@ -16,8 +16,11 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
         { // precharge
             auto sysParamsRowset = db.Table<Schema::SysParams>().Range().Select();
+            auto baseStatsRowset = db.Table<Schema::BaseStats>().Range().Select();
 
-            if (!sysParamsRowset.IsReady()) {
+            if (!sysParamsRowset.IsReady() ||
+                !baseStatsRowset.IsReady())
+            {
                 return false;
             }
         }
@@ -46,6 +49,30 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                     return false;
                 }
             }
+        }
+
+        // BaseStats
+        {
+            Self->BaseStats.clear();
+
+            auto rowset = db.Table<Schema::BaseStats>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                ui64 schemeShardId = rowset.GetValue<Schema::BaseStats::SchemeShardId>();
+                TString stats = rowset.GetValue<Schema::BaseStats::Stats>();
+
+                Self->BaseStats[schemeShardId] = stats;
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+
+            SA_LOG_D("[" << Self->TabletID() << "] Loading base stats: "
+                << "schemeshard count# " << Self->BaseStats.size());
         }
 
         return true;

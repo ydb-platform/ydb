@@ -906,17 +906,27 @@ public:
     {
         YT_VERIFY(tableSchemas.size() > 0);
 
-        auto tableSchema = tableSchemas[0];
+        ColumnConverters_.resize(tableSchemas.size());
+        TableNumbers_ = tableSchemas.size();
+        ColumnSchemas_.resize(tableSchemas.size());
 
-        for (const auto& columnSchema : tableSchema->Columns()) {
-            NameTable_->GetIdOrRegisterName(columnSchema.Name());
-        }
-
-        auto columnCount = NameTable_->GetSize();
-        SchemaExistenceFlags_.resize(columnCount, true);
-
-        for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
-            ColumnSchemas_.push_back(GetColumnSchema(tableSchema, columnIndex));
+        for (int tableIndex = 0; tableIndex < std::ssize(tableSchemas); ++tableIndex) {
+            for (const auto& columnSchema : tableSchemas[tableIndex]->Columns()) {
+                auto columnId = NameTable_->GetIdOrRegisterName(columnSchema.Name());
+                ColumnSchemas_[tableIndex][columnId] = columnSchema;
+            }
+            if (CheckColumnInNameTable(GetRangeIndexColumnId())) {
+                ColumnSchemas_[tableIndex][GetRangeIndexColumnId()] = GetSystemColumnSchema(NameTable_->GetName(GetRangeIndexColumnId()), GetRangeIndexColumnId());
+            }
+            if (CheckColumnInNameTable(GetRowIndexColumnId())) {
+                ColumnSchemas_[tableIndex][GetRowIndexColumnId()] = GetSystemColumnSchema(NameTable_->GetName(GetRowIndexColumnId()), GetRowIndexColumnId());
+            }
+            if (CheckColumnInNameTable(GetTableIndexColumnId())) {
+                ColumnSchemas_[tableIndex][GetTableIndexColumnId()] = GetSystemColumnSchema(NameTable_->GetName(GetTableIndexColumnId()), GetTableIndexColumnId());
+            }
+            if (CheckColumnInNameTable(GetTabletIndexColumnId())) {
+                ColumnSchemas_[tableIndex][GetTabletIndexColumnId()] = GetSystemColumnSchema(NameTable_->GetName(GetTabletIndexColumnId()), GetTabletIndexColumnId());
+            }
         }
     }
 
@@ -935,20 +945,56 @@ private:
         output->Write(&zero, sizeof(zero));
     }
 
-    void DoWrite(TRange<TUnversionedRow> rows) override
+    bool CheckColumnInNameTable(int columnIndex) const
+    {
+        return columnIndex >= 0 && columnIndex < NameTable_->GetSize();
+    }
+
+    void WriteRowsForSingleTable(TRange<TUnversionedRow> rows, i32 tableIndex)
     {
         Reset();
-
-        auto convertedColumns = ColumnConverters_.ConvertRowsToColumns(rows, ColumnSchemas_);
-
+        auto convertedColumns = ColumnConverters_[tableIndex].ConvertRowsToColumns(rows, ColumnSchemas_[tableIndex]);
         std::vector<const TBatchColumn*> rootColumns;
         rootColumns.reserve( std::ssize(convertedColumns));
         for (ssize_t columnIndex = 0; columnIndex < std::ssize(convertedColumns); columnIndex++) {
             rootColumns.push_back(convertedColumns[columnIndex].RootColumn);
         }
         RowCount_ = rows.size();
-        PrepareColumns(rootColumns);
-        Encode();
+        PrepareColumns(rootColumns, tableIndex);
+        Encode(tableIndex);
+    }
+
+    void DoWrite(TRange<TUnversionedRow> rows) override
+    {
+        Reset();
+
+        ssize_t sameTableRangeBeginRowIndex = 0;
+        i32 tableIndex = 0;
+
+        for (ssize_t rowIndex = 0; rowIndex < std::ssize(rows); rowIndex++) {
+            i32 currentTableIndex = -1;
+            if(TableNumbers_ > 1) {
+                const auto& elems = rows[rowIndex].Elements();
+                for (ssize_t columnIndex = std::ssize(elems) - 1; columnIndex >= 0; --columnIndex) {
+                    if (elems[columnIndex].Id == GetTableIndexColumnId()) {
+                        currentTableIndex = elems[columnIndex].Data.Int64;
+                        break;
+                    }
+                }
+            } else {
+                currentTableIndex = 0;
+            }
+            YT_VERIFY(currentTableIndex < TableNumbers_ && currentTableIndex >= 0);
+            if (tableIndex != currentTableIndex && rowIndex != 0) {
+                auto currentRows = rows.Slice(sameTableRangeBeginRowIndex, rowIndex);
+                WriteRowsForSingleTable(currentRows, tableIndex);
+                sameTableRangeBeginRowIndex = rowIndex;
+            }
+            tableIndex = currentTableIndex;
+        }
+
+        auto currentRows = rows.Slice(sameTableRangeBeginRowIndex, rows.size());
+        WriteRowsForSingleTable(currentRows, tableIndex);
     }
 
     void DoWriteBatch(NTableClient::IUnversionedRowBatchPtr rowBatch) override
@@ -959,22 +1005,24 @@ private:
             DoWrite(rowBatch->MaterializeRows());
         } else {
             YT_LOG_DEBUG("Encoding columnar batch (RowCount: %v)", rowBatch->GetRowCount());
+            YT_VERIFY(TableNumbers_ == 1);
             Reset();
             RowCount_ = rowBatch->GetRowCount();
-            PrepareColumns(columnarBatch->MaterializeColumns());
-            Encode();
+            PrepareColumns(columnarBatch->MaterializeColumns(), 0);
+            Encode(0);
         }
     }
 
-    void Encode()
+    void Encode(i32 tableIndex)
     {
         auto output = GetOutputStream();
-        if (IsSchemaMessageNeeded()) {
+        if (tableIndex != PrevTableIndex_ || IsSchemaMessageNeeded()) {
+            PrevTableIndex_ = tableIndex;
             if (!IsFirstBatch_) {
                 RegisterEosMarker();
             }
             ResetArrowDictionaries();
-            PrepareSchema();
+            PrepareSchema(tableIndex);
         }
         IsFirstBatch_ = false;
         PrepareDictionaryBatches();
@@ -985,13 +1033,14 @@ private:
     }
 
 private:
+    i32 TableNumbers_ = 0;
     bool IsFirstBatch_ = true;
+    i64 PrevTableIndex_ = 0;
     i64 RowCount_ = 0;
     std::vector<TTypedBatchColumn> TypedColumns_;
-    std::vector<TColumnSchema> ColumnSchemas_;
+    std::vector<THashMap<int, TColumnSchema>> ColumnSchemas_;
     std::vector<IUnversionedColumnarRowBatch::TDictionaryId> ArrowDictionaryIds_;
-    std::vector<bool> SchemaExistenceFlags_;
-    NColumnConverters::TColumnConverters ColumnConverters_;
+    std::vector<NColumnConverters::TColumnConverters> ColumnConverters_;
 
     struct TMessage
     {
@@ -1002,7 +1051,7 @@ private:
 
     std::vector<TMessage> Messages_;
 
-    bool CheckIfSystemColumnEnable(int columnIndex)
+    bool CheckIfSystemColumnEnable(int columnIndex) const
     {
         return ControlAttributesConfig_->EnableTableIndex && IsTableIndexColumnId(columnIndex) ||
             ControlAttributesConfig_->EnableRangeIndex && IsRangeIndexColumnId(columnIndex) ||
@@ -1010,34 +1059,30 @@ private:
             ControlAttributesConfig_->EnableTabletIndex && IsTabletIndexColumnId(columnIndex);
     }
 
-    TColumnSchema GetColumnSchema(NTableClient::TTableSchemaPtr& tableSchema, int columnIndex)
+    bool IsColumnNeedsToAdd(int columnIndex) const
     {
-        YT_VERIFY(columnIndex >= 0);
-        SchemaExistenceFlags_[columnIndex] = true;
-        auto name = NameTable_->GetName(columnIndex);
-        auto columnSchema = tableSchema->FindColumn(name);
-        if (!columnSchema) {
-            if (IsSystemColumnId(columnIndex)) {
-                if (CheckIfSystemColumnEnable(columnIndex)) {
-                    return TColumnSchema(TString(name), EValueType::Int64);
-                }
-                SchemaExistenceFlags_[columnIndex] = false;
-                return TColumnSchema(TString(name), EValueType::Null);
-            }
-            THROW_ERROR_EXCEPTION("Column %Qv has no schema", name);
-        }
-        return *columnSchema;
+        return !IsSystemColumnId(columnIndex)
+            || (CheckIfSystemColumnEnable(columnIndex) && !IsTableIndexColumnId(columnIndex));
     }
 
-    void PrepareColumns(const TRange<const TBatchColumn*>& batchColumns)
+    TColumnSchema GetSystemColumnSchema(TStringBuf name, int columnIndex)
+    {
+        if (CheckIfSystemColumnEnable(columnIndex) && !IsTableIndexColumnId(columnIndex)) {
+            return TColumnSchema(TString(name), EValueType::Int64);
+        }
+        return TColumnSchema(TString(name), EValueType::Null);
+    }
+
+    void PrepareColumns(const TRange<const TBatchColumn*>& batchColumns, int tableIndex)
     {
         TypedColumns_.reserve(batchColumns.Size());
         for (const auto* column : batchColumns) {
-            if (SchemaExistenceFlags_[column->Id]) {
-                YT_VERIFY(column->Id >= 0 && column->Id < std::ssize(ColumnSchemas_));
+            if(IsColumnNeedsToAdd(column->Id)) {
+                auto iterSchema = ColumnSchemas_[tableIndex].find(column->Id);
+                YT_VERIFY(iterSchema != ColumnSchemas_[tableIndex].end());
                 TypedColumns_.push_back(TTypedBatchColumn{
                     column,
-                    ColumnSchemas_[column->Id].LogicalType()
+                    iterSchema->second.LogicalType()
                 });
             }
         }
@@ -1093,7 +1138,7 @@ private:
                 std::move(bodyWriter)});
     }
 
-    void PrepareSchema()
+    void PrepareSchema(i32 tableIndex)
     {
         flatbuffers::FlatBufferBuilder flatbufBuilder;
 
@@ -1101,8 +1146,9 @@ private:
         std::vector<flatbuffers::Offset<org::apache::arrow::flatbuf::Field>> fieldOffsets;
         for (int columnIndex = 0; columnIndex < std::ssize(TypedColumns_); columnIndex++) {
             const auto& typedColumn = TypedColumns_[columnIndex];
-            YT_VERIFY(typedColumn.Column->Id >= 0 && typedColumn.Column->Id < std::ssize(ColumnSchemas_));
-            auto columnSchema = ColumnSchemas_[typedColumn.Column->Id];
+            auto iterSchema = ColumnSchemas_[tableIndex].find(typedColumn.Column->Id);
+            YT_VERIFY(iterSchema != ColumnSchemas_[tableIndex].end());
+            auto columnSchema = iterSchema->second;
             auto nameOffset = SerializeString(&flatbufBuilder, columnSchema.Name());
 
             auto [typeType, typeOffset] = SerializeColumnType(&flatbufBuilder, columnSchema);
@@ -1130,10 +1176,22 @@ private:
 
         auto fieldsOffset = flatbufBuilder.CreateVector(fieldOffsets);
 
+        std::vector<flatbuffers::Offset<org::apache::arrow::flatbuf::KeyValue>> customMetadata;
+
+        if (TableNumbers_ > 1) {
+            auto keyValueOffsett = org::apache::arrow::flatbuf::CreateKeyValue(
+                flatbufBuilder,
+                flatbufBuilder.CreateString("TableId"),
+                flatbufBuilder.CreateString(std::to_string(tableIndex))
+            );
+            customMetadata.push_back(keyValueOffsett);
+        }
+
         auto schemaOffset = org::apache::arrow::flatbuf::CreateSchema(
             flatbufBuilder,
             org::apache::arrow::flatbuf::Endianness_Little,
-            fieldsOffset);
+            fieldsOffset,
+            flatbufBuilder.CreateVector(customMetadata));
 
         auto messageOffset = org::apache::arrow::flatbuf::CreateMessage(
             flatbufBuilder,

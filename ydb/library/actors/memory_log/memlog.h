@@ -42,7 +42,7 @@ public:
     static constexpr size_t LAST_MARK_SIZE = sizeof(DEFAULT_LAST_MARK);
 
     inline static TMemoryLog* GetMemoryLogger() noexcept {
-        return AtomicGet(MemLogBuffer);
+        return MemLogBuffer.load(std::memory_order_acquire);
     }
 
     void* GetWriteBuffer(size_t amount) noexcept;
@@ -63,11 +63,11 @@ public:
         size_t totalSize = DEFAULT_TOTAL_SIZE,
         size_t grainSize = DEFAULT_GRAIN_SIZE)
         Y_COLD {
-        if (AtomicGet(MemLogBuffer) != nullptr) {
+        if (MemLogBuffer.load(std::memory_order_acquire) != nullptr) {
             return;
         }
 
-        AtomicSet(MemLogBuffer, new TMemoryLog(totalSize, grainSize));
+        MemLogBuffer.store(new TMemoryLog(totalSize, grainSize), std::memory_order_release);
     }
 
     static std::atomic<bool> PrintLastMark;
@@ -163,7 +163,7 @@ private:
 
     static unsigned GetSelfCpu() noexcept;
 
-    static TMemoryLog* MemLogBuffer;
+    static std::atomic<TMemoryLog*> MemLogBuffer;
     static Y_POD_THREAD(TThread::TId) LogThreadId;
     static char* LastMarkIsHere;
 };

@@ -21,8 +21,6 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 
-#include <ydb/core/client/server/msgbus_server_tracer.h>
-
 using namespace NKikimr::NUdf;
 
 namespace {
@@ -174,7 +172,7 @@ void TYqlServer::Initialize() {
         }
     );
 
-    SetupMessageBus(GetSettings().Port, GetSettings().TracePath);
+    SetupMessageBus(GetSettings().Port);
 
     SetupTabletServices(*Runtime, &app, StaticNodes() == 1 && Settings->EnableMockOnSingleNode, Settings->CustomDiskParams);
 

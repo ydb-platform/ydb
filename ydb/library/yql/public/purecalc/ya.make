@@ -11,6 +11,8 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+PROVIDES(YQL_PURECALC)
+
 END()
 
 RECURSE(
@@ -18,6 +20,7 @@ RECURSE(
     examples
     helpers
     io_specs
+    no_llvm
 )
 
 RECURSE_FOR_TESTS(

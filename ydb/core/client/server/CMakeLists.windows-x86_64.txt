@@ -89,7 +89,6 @@ target_sources(core-client-server PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_tablet_kill.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_tablet_state.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_test_shard_request.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_tracer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_tx_request.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_types.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_whoami.cpp

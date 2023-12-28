@@ -27,6 +27,8 @@ Options:
                                Output in json format, binary strings are encoded with base64. Every row is a separate json on a separate line.
                              json-base64-array
                                Output in json format, binary strings are encoded with base64. Every resultset is a json array of rows. Every row is a separate json on a separate line.
+                             parquet
+                               Output in parquet format
                            Default: "pretty".
   {-p|--param} $name=value Query parameter[s].
                            Several parameter options can be specified.

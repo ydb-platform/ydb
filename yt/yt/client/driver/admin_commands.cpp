@@ -497,13 +497,19 @@ void TDisableChunkLocationsCommand::DoExecute(ICommandContextPtr context)
 void TDestroyChunkLocationsCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("node_address", &TThis::NodeAddress_);
+    registrar.Parameter("recover_unlinked_disks", &TThis::RecoverUnlinkedDisks_)
+        .Default(false);
     registrar.Parameter("location_uuids", &TThis::LocationUuids_)
         .Default();
 }
 
 void TDestroyChunkLocationsCommand::DoExecute(ICommandContextPtr context)
 {
-    auto result = WaitFor(context->GetClient()->DestroyChunkLocations(NodeAddress_, LocationUuids_, Options))
+    auto result = WaitFor(context->GetClient()->DestroyChunkLocations(
+        NodeAddress_,
+        RecoverUnlinkedDisks_,
+        LocationUuids_,
+        Options))
         .ValueOrThrow();
 
     context->ProduceOutputValue(BuildYsonStringFluently()

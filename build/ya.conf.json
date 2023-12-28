@@ -1177,8 +1177,8 @@
         }
     },
     "toolchain_aliases": {
-        "clang-win-i686": "clang14-win-i686",
-        "clang-win-x86_64": "clang14-win-x86_64",
+        "clang-win-i686": "default-win-i686",
+        "clang-win-x86_64": "default-win-x86_64",
         "gcc-linux-x86_64": "gcc82-linux-x86_64",
         "msvc-win-x86_64": "msvc2019-win-x86_64"
     },

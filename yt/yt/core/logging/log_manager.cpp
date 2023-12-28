@@ -137,11 +137,6 @@ public:
             YT_ASSERT(rv >= static_cast<ssize_t>(sizeof(struct inotify_event)));
             struct inotify_event* event = (struct inotify_event*)buffer;
 
-            if (event->mask & IN_ATTRIB) {
-                YT_LOG_TRACE(
-                    "Watch %v has triggered metadata change (IN_ATTRIB)",
-                    event->wd);
-            }
             if (event->mask & IN_DELETE_SELF) {
                 YT_LOG_TRACE(
                     "Watch %v has triggered a deletion (IN_DELETE_SELF)",
@@ -201,9 +196,10 @@ public:
 
     void Run()
     {
-        Callback_();
-        // Reinitialize watch to hook to the newly created file.
+        // Unregister before create a new file.
         DropWatch();
+        Callback_();
+        // Register the newly created file.
         CreateWatch();
     }
 
@@ -215,7 +211,7 @@ private:
         WD_ = inotify_add_watch(
             FD_,
             Path_.c_str(),
-            IN_ATTRIB | IN_DELETE_SELF | IN_MOVE_SELF);
+            IN_DELETE_SELF | IN_MOVE_SELF);
 
         if (WD_ < 0) {
             YT_LOG_ERROR(TError::FromSystem(errno), "Error registering watch for %v",
@@ -892,6 +888,7 @@ private:
         KeyToCachedWriter_.clear();
         WDToNotificationWatch_.clear();
         NotificationWatches_.clear();
+        InvalidNotificationWatches_.clear();
 
         for (const auto& [name, writerConfig] : config->Writers) {
             auto typedWriterConfig = ConvertTo<TLogWriterConfigPtr>(writerConfig);
@@ -910,12 +907,10 @@ private:
 
             if (auto fileWriter = DynamicPointerCast<IFileLogWriter>(writer)) {
                 auto watch = CreateNotificationWatch(config, fileWriter);
-                if (watch && watch->IsValid()) {
-                    // Watch can fail to initialize if the writer is disabled
-                    // e.g. due to the lack of space.
-                    EmplaceOrCrash(WDToNotificationWatch_, watch->GetWD(), watch.get());
+                if (watch) {
+                    RegisterNotificatonWatch(watch.get());
+                    NotificationWatches_.push_back(std::move(watch));
                 }
-                NotificationWatches_.push_back(std::move(watch));
             }
         }
         for (const auto& [_, category] : NameToCategory_) {
@@ -992,6 +987,17 @@ private:
         }
     }
 
+    void RegisterNotificatonWatch(TNotificationWatch* watch)
+    {
+        if (watch->IsValid()) {
+            // Watch can fail to initialize if the writer is disabled
+            // e.g. due to the lack of space.
+            EmplaceOrCrash(WDToNotificationWatch_, watch->GetWD(), watch);
+        } else {
+            InvalidNotificationWatches_.push_back(watch);
+        }
+    }
+
     void WatchWriters()
     {
         VERIFY_THREAD_AFFINITY(LoggingThread);
@@ -1016,14 +1022,19 @@ private:
 
             if (watch->GetWD() != currentWD) {
                 WDToNotificationWatch_.erase(it);
-                if (watch->GetWD() >= 0) {
-                    // Watch can fail to initialize if the writer is disabled
-                    // e.g. due to the lack of space.
-                    EmplaceOrCrash(WDToNotificationWatch_, watch->GetWD(), watch);
-                }
+                RegisterNotificatonWatch(watch);
             }
 
             previousWD = currentWD;
+        }
+        // Handle invalid watches, try to register they again.
+        {
+            std::vector<TNotificationWatch*> invalidNotificationWatches;
+            invalidNotificationWatches.swap(InvalidNotificationWatches_);
+            for (auto* watch : invalidNotificationWatches) {
+                watch->Run();
+                RegisterNotificatonWatch(watch);
+            }
         }
     }
 
@@ -1453,6 +1464,7 @@ private:
     std::unique_ptr<TNotificationHandle> NotificationHandle_;
     std::vector<std::unique_ptr<TNotificationWatch>> NotificationWatches_;
     THashMap<int, TNotificationWatch*> WDToNotificationWatch_;
+    std::vector<TNotificationWatch*> InvalidNotificationWatches_;
 
     THashMap<TString, TLoggingAnchor*> AnchorMap_;
     std::atomic<TLoggingAnchor*> FirstAnchor_ = nullptr;

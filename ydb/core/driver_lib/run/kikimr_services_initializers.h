@@ -289,13 +289,6 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TNodeIdentifierInitializer : public IKikimrServicesInitializer {
-public:
-    TNodeIdentifierInitializer(const TKikimrRunConfig& runConfig);
-
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
-};
-
 class TTabletMonitorInitializer : public IKikimrServicesInitializer {
     TIntrusivePtr<NNodeTabletMonitor::ITabletStateClassifier> TabletStateClassifier;
     TIntrusivePtr<NNodeTabletMonitor::ITabletListRenderer> TabletListRenderer;

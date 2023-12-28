@@ -19,14 +19,26 @@ View the description of the YQL script command:
 
 ## Parameters of the subcommand {#options}
 
-| Name | Description |
----|---
-| `--timeout` | The time within which the operation should be completed on the server. |
-| `--stats` | Statistics mode.<br>Acceptable values:<ul><li>`none` (default): Do not collect.</li><li>`basic`: Collect statistics for basic events.</li><li>`full`: Collect statistics for all events.</li></ul> |
-| `-s`, `--script` | Text of the YQL query to be executed. |
-| `-f`, `--file` | Path to the text of the YQL query to be executed. |
-| `--format` | Result format.<br>Possible values:<ul><li>`pretty` (default): Human-readable format.</li><li>`json-unicode`: [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %} output with binary strings [Unicode]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Юникод){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unicode){% endif %}-encoded and each JSON string in a separate line.</li><li>`json-unicode-array`: JSON output with binary strings Unicode-encoded and the result output as an array of JSON strings with each JSON string in a separate line.</li><li>`json-base64`: JSON output with binary strings [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64){% endif %}-encoded and each JSON string in a separate line.</li><li>`json-base64-array`: JSON output with binary strings Base64-encoded and the result output as an array of JSON strings with each JSON string in a separate line.</li><li>`csv`: Output in [CSV](https://ru.wikipedia.org/wiki/CSV) format.</li><li>`tsv`: Output in [TSV](https://ru.wikipedia.org/wiki/TSV) format.</li></ul> |
+#|
+|| **Name** | **Description** ||
+|| `--timeout` | The time within which the operation should be completed on the server. ||
+|| `--stats` | Statistics mode.
+Acceptable values:
+* `none` (default): Do not collect.
+* `basic`: Collect statistics for basic events.
+* `full`: Collect statistics for all events.
+     ||
+|| `-s`, `--script` | Text of the YQL query to be executed. ||
+|| `-f`, `--file` | Path to the text of the YQL query to be executed. ||
+|| `--format` | Result format.
+Possible values:
 
+{% include notitle [format](./_includes/result_format_common.md) %}
+
+{% include notitle [format](./_includes/result_format_csv_tsv.md) %}
+
+||
+|#
 ### Working with parameterized queries {#parameterized-query}
 
 {% include [parameterized-query](../../_includes/parameterized-query.md) %}

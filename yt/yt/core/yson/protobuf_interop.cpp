@@ -1007,22 +1007,20 @@ protected:
         }
         switch (config->Utf8Check) {
             case EUtf8Check::Disable:
-                break;
+                return;
             case EUtf8Check::LogOnFail:
-                YT_LOG_WARNING("Field %v accepts only valid UTF-8 sequence, but got (%Qv)",
+                YT_LOG_WARNING("String field got non UTF-8 value (Path: %v, Value: %v)",
                     YPathStack_.GetHumanReadablePath(),
                     data);
-                break;
+                return;
             case EUtf8Check::ThrowOnFail:
-                THROW_ERROR_EXCEPTION("Field %v accepts only valid UTF-8 sequence, but got (%Qv)",
+                THROW_ERROR_EXCEPTION("String field got non UTF-8 value (Path: %v, Value: %v)",
                     YPathStack_.GetHumanReadablePath(),
                     data)
                     << TErrorAttribute("ypath", YPathStack_.GetPath())
                     << TErrorAttribute("proto_field", fieldFullName);
-                break;
         }
     }
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -66,7 +66,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
     const auto& dataTx = tx->GetDataTx();
     ui64 tabletId = DataShard.TabletID();
 
-    if (tx->GetDataTx()->CheckCancelled()) {
+    if (tx->GetDataTx()->CheckCancelled(tabletId)) {
         tx->ReleaseTxData(txc, ctx);
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED)
             ->AddError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Tx was cancelled");

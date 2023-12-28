@@ -41,4 +41,10 @@ struct TKqpCompileResult {
 
     std::shared_ptr<const TPreparedQueryHolder> PreparedQuery;
 };
+
+struct TKqpStatsCompile {
+    bool FromCache = false;
+    ui64 DurationUs = 0;
+    ui64 CpuTimeUs = 0;
+};
 } // namespace NKikimr::NKqp

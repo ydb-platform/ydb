@@ -500,7 +500,7 @@ struct TSerializerTraits {
     using TTuple = TTupleBlockSerializer<Nullable>;
     template <typename T, bool Nullable>
     using TFixedSize = TFixedSizeBlockSerializer<sizeof(T), Nullable>;
-    template <typename TStringType, bool Nullable>
+    template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
     using TStrings = TStringBlockSerializer<TStringType, Nullable>;
     using TExtOptional = TExtOptionalBlockSerializer;
 
@@ -519,7 +519,7 @@ struct TDeserializerTraits {
     using TTuple = TTupleBlockDeserializer<Nullable>;
     template <typename T, bool Nullable>
     using TFixedSize = TFixedSizeBlockDeserializer<sizeof(T), Nullable>;
-    template <typename TStringType, bool Nullable>
+    template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
     using TStrings = TStringBlockDeserializer<TStringType, Nullable>;
     using TExtOptional = TExtOptionalBlockDeserializer;
 

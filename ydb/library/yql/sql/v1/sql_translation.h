@@ -224,6 +224,8 @@ protected:
     bool ObjectFeatureValueClause(const TRule_object_feature_value& node, TDeferredAtom& result);
     bool ParseObjectFeatures(std::map<TString, TDeferredAtom>& result, const TRule_object_features& features);
     bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom> & result, const TRule_with_table_settings & settings);
+    bool ParseViewOptions(std::map<TString, TDeferredAtom>& features, const TRule_with_table_settings& options);
+    bool ParseViewQuery(std::map<TString, TDeferredAtom>& features, const TRule_select_stmt& query);
     bool RoleNameClause(const TRule_role_name& node, TDeferredAtom& result, bool allowSystemRoles);
     bool RoleParameters(const TRule_create_user_option& node, TRoleParameters& result);
     bool PermissionNameClause(const TRule_permission_name_target& node, TVector<TDeferredAtom>& result, bool withGrantOption);

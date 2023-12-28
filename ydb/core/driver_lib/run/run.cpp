@@ -1383,9 +1383,6 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableWhiteBoard) {
         sil->AddServiceInitializer(new TWhiteBoardServiceInitializer(runConfig));
     }
-    if (serviceMask.EnableNodeIdentifier) {
-        sil->AddServiceInitializer(new TNodeIdentifierInitializer(runConfig));
-    }
     if (serviceMask.EnableBSNodeWarden) {
         sil->AddServiceInitializer(new TBSNodeWardenInitializer(runConfig));
     }

@@ -2425,7 +2425,7 @@ struct TComparatorTraits {
     using TTuple = NUdf::TTupleBlockItemComparator<Nullable>;
     template <typename T, bool Nullable>
     using TFixedSize = NUdf::TFixedSizeBlockItemComparator<T, Nullable>;
-    template <typename TStringType, bool Nullable>
+    template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
     using TStrings = NUdf::TStringBlockItemComparator<TStringType, Nullable>;
     using TExtOptional = NUdf::TExternalOptionalBlockItemComparator;
 
@@ -2441,7 +2441,7 @@ struct THasherTraits {
     using TTuple = NUdf::TTupleBlockItemHasher<Nullable>;
     template <typename T, bool Nullable>
     using TFixedSize = NUdf::TFixedSizeBlockItemHasher<T, Nullable>;
-    template <typename TStringType, bool Nullable>
+    template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
     using TStrings = NUdf::TStringBlockItemHasher<TStringType, Nullable>;
     using TExtOptional = NUdf::TExternalOptionalBlockItemHasher;
 

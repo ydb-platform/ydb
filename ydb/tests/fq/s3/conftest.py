@@ -15,6 +15,7 @@ from ydb.tests.tools.fq_runner.kikimr_utils import DefaultConfigExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import YQv2Extension
 from ydb.tests.tools.fq_runner.kikimr_utils import ComputeExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import StatsModeExtension
+from ydb.tests.tools.fq_runner.kikimr_utils import BindingsModeExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import start_kikimr
 from ydb.tests.fq.s3.s3_helpers import S3
 from library.recipes import common as recipes_common
@@ -67,14 +68,20 @@ def stats_mode():
 
 
 @pytest.fixture
-def kikimr(request: pytest.FixtureRequest, s3: S3, yq_version: str, stats_mode: str):
+def bindings_mode():
+    return ''
+
+
+@pytest.fixture
+def kikimr(request: pytest.FixtureRequest, s3: S3, yq_version: str, stats_mode: str, bindings_mode: str):
     kikimr_extensions = [AddInflightExtension(),
                          AddDataInflightExtension(),
                          AddFormatSizeLimitExtension(),
                          DefaultConfigExtension(s3.s3_url),
                          YQv2Extension(yq_version),
                          ComputeExtension(),
-                         StatsModeExtension(stats_mode)]
+                         StatsModeExtension(stats_mode),
+                         BindingsModeExtension(bindings_mode, yq_version)]
     with start_kikimr(request, kikimr_extensions) as kikimr:
         yield kikimr
 

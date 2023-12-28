@@ -230,6 +230,10 @@ namespace {
     }
 }
 
+bool ICodegen::IsCodegenAvailable() {
+    return true;
+}
+
 class TCodegen : public ICodegen, private llvm::JITEventListener {
 public:
     TCodegen(ETarget target, ESanitize sanitize)

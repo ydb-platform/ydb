@@ -1,7 +1,6 @@
 #pragma once
 
 #include "ydb_command.h"
-#include "ydb_common.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_import/import.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>

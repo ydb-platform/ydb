@@ -280,7 +280,8 @@ public:
 
 class TPropose: public TSubOperationState {
 private:
-    TOperationId OperationId;
+    const TOperationId OperationId;
+    const TTxState::ETxState NextState;
 
     TString DebugHint() const override {
         return TStringBuilder()
@@ -289,8 +290,9 @@ private:
     }
 
 public:
-    TPropose(TOperationId id)
+    TPropose(TOperationId id, TTxState::ETxState nextState = TTxState::Done)
         : OperationId(id)
+        , NextState(nextState)
     {
         IgnoreMessages(DebugHint(), {
             TEvHive::TEvCreateTabletReply::EventType,
@@ -356,7 +358,7 @@ public:
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
 
-        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+        context.SS->ChangeTxState(db, OperationId, NextState);
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "NSubDomainState::TPropose HandleReply TEvOperationPlan"

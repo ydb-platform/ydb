@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.23.0)
+VERSION(2.25.2)
 
 LICENSE(Apache-2.0)
 
@@ -10,10 +10,10 @@ PEERDIR(
     contrib/python/cachetools
     contrib/python/cryptography
     contrib/python/grpcio
+    contrib/python/packaging
     contrib/python/pyasn1-modules
     contrib/python/requests
     contrib/python/rsa
-    contrib/python/urllib3
 )
 
 NO_LINT()

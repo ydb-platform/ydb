@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -15,12 +16,12 @@ public:
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_WRITE; }
 
-    bool InsertOneBlob(TTransactionContext& txc, const TEvPrivate::TEvWriteBlobsResult::TPutBlobData& blobData, const TWriteId writeId, const TString& blob);
+    bool InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TWriteId writeId);
 
 private:
     TEvPrivate::TEvWriteBlobsResult::TPtr PutBlobResult;
     const ui32 TabletTxNo;
-    std::unique_ptr<NActors::IEventBase> Result;
+    std::vector<std::unique_ptr<NActors::IEventBase>> Results;
 
     TStringBuilder TxPrefix() const {
         return TStringBuilder() << "TxWrite[" << ToString(TabletTxNo) << "] ";

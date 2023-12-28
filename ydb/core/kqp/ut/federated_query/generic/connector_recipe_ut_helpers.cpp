@@ -6,13 +6,11 @@
 namespace NTestUtils {
 
     TString GetConnectorHost() {
-        return GetEnv("YDB_CONNECTOR_RECIPE_GRPC_HOST", "localhost");
+        return "localhost";
     }
 
     ui32 GetConnectorPort() {
-        const TString port = GetEnv("YDB_CONNECTOR_RECIPE_GRPC_PORT");
-        UNIT_ASSERT_C(port, "No connector port specified");
-        return FromString<ui32>(port);
+        return 50051;
     }
 
     std::shared_ptr<NKikimr::NKqp::TKikimrRunner> MakeKikimrRunnerWithConnector() {

@@ -753,38 +753,6 @@ private:
         return std::nullopt;
     }
 
-    static std::optional<TPartOfConstraintBase::TPathType> GetPathToKey(const TExprNode& body, const TExprNode& arg) {
-        if (&body == &arg)
-            return TPartOfConstraintBase::TPathType();
-
-        if (body.IsCallable({"Member","Nth"})) {
-            if (auto path = GetPathToKey(body.Head(), arg)) {
-                path->emplace_back(body.Tail().Content());
-                return path;
-            }
-        }
-
-        if (body.IsCallable({"CastStruct","FilterMembers","Just","Unwrap"}))
-            return GetPathToKey(body.Head(), arg);
-        if (body.IsCallable("Member") && body.Head().IsCallable("AsStruct"))
-            return GetPathToKey(GetLiteralStructMember(body.Head(), body.Tail()), arg);
-        if (body.IsCallable("Nth") && body.Head().IsList())
-            return GetPathToKey(*body.Head().Child(FromString<ui32>(body.Tail().Content())), arg);
-        if (body.IsList() && 1U == body.ChildrenSize() && body.Head().IsCallable("Nth") && body.Head().Tail().IsAtom("0") &&
-            1U == RemoveOptionality(*body.Head().Head().GetTypeAnn()).Cast<TTupleExprType>()->GetSize())
-            // Especialy for "Extract single item tuple from Condense1" optimizer.
-            return GetPathToKey(body.Head().Head(), arg);
-        if (body.IsCallable("AsStruct") && 1U == body.ChildrenSize() && body.Head().Tail().IsCallable("Member") &&
-            body.Head().Head().Content() == body.Head().Tail().Tail().Content() &&
-            1U == RemoveOptionality(*body.Head().Tail().Head().GetTypeAnn()).Cast<TStructExprType>()->GetSize())
-            // Especialy for "Extract single item struct from Condense1" optimizer.
-            return GetPathToKey(body.Head().Tail().Head(), arg);
-        if (IsTransparentIfPresent(body) && &body.Head() == &arg)
-            return GetPathToKey(body.Child(1)->Tail().Head(), body.Child(1)->Head().Head());
-
-         return std::nullopt;
-    }
-
     static std::vector<std::pair<TPartOfConstraintBase::TPathType, bool>>
     ExtractSimpleSortTraits(const TExprNode& sortDirections, const TExprNode& keySelectorLambda) {
         const auto& keySelectorBody = keySelectorLambda.Tail();
@@ -2684,34 +2652,6 @@ private:
             .Combine(UpdateLambdaConstraints(input->ChildRef(TCoIsKeySwitch::idx_StateKeyExtractor), ctx, stateConstraints));
     }
 
-   static const TExprNode& GetLiteralStructMember(const TExprNode& literal, const TExprNode& member) {
-        for (const auto& child : literal.Children())
-            if (&child->Head() == &member || child->Head().Content() == member.Content())
-                return child->Tail();
-        ythrow yexception() << "Member '" << member.Content() << "' not found in literal struct.";
-    }
-
-    static std::optional<std::pair<TPartOfConstraintBase::TPathType, ui32>> GetPathToKey(const TExprNode& body, const TExprNode::TChildrenType& args) {
-        if (body.IsArgument()) {
-            for (auto i = 0U; i < args.size(); ++i)
-                if (&body == args[i].Get())
-                    return std::make_pair(TPartOfConstraintBase::TPathType(), i);
-        } else if (body.IsCallable({"Member","Nth"})) {
-            if (auto path = GetPathToKey(body.Head(), args)) {
-                path->first.emplace_back(body.Tail().Content());
-                return path;
-            } else if (const auto& head = SkipCallables(body.Head(), {"CastStruct","FilterMembers"}); head.IsCallable("AsStruct") && body.IsCallable("Member")) {
-                return GetPathToKey(GetLiteralStructMember(head, body.Tail()), args);
-            } else if (body.IsCallable("Nth") && body.Head().IsList()) {
-                return GetPathToKey(*body.Head().Child(FromString<ui32>(body.Tail().Content())), args);
-            } else if (body.IsCallable({"CastStruct","FilterMembers"}))  {
-                return GetPathToKey(body.Head(), args);
-            }
-        }
-
-        return std::nullopt;
-    }
-
     template<bool Wide>
     static TPartOfConstraintBase::TSetType GetSimpleKeys(const TExprNode& body, const TExprNode::TChildrenType& args, TExprContext& ctx) {
         TPartOfConstraintBase::TSetType keys;
@@ -2749,24 +2689,6 @@ private:
         return keys;
     }
 
-    static TPartOfConstraintBase::TSetType GetSimpleKeys(const TExprNode& body, const TExprNode& arg) {
-        TPartOfConstraintBase::TSetType keys;
-        if (body.IsList()) {
-            if (const auto size = body.ChildrenSize()) {
-                keys.reserve(size);
-                for (auto i = 0U; i < size; ++i)
-                    if (auto path = GetPathToKey(*body.Child(i), arg))
-                        keys.insert_unique(std::move(*path));
-            }
-        } else if (body.IsCallable("StablePickle")) {
-            return GetSimpleKeys(body.Head(), arg);
-        } else if (auto path = GetPathToKey(body, arg)) {
-            keys.insert_unique(std::move(*path));
-        }
-
-        return keys;
-    }
-
     template<bool Wide>
     static TPartOfConstraintBase::TSetType GetSimpleKeys(const TExprNode& selector, TExprContext& ctx) {
         YQL_ENSURE(selector.IsLambda() && 2U == selector.ChildrenSize());
@@ -2774,8 +2696,8 @@ private:
         if constexpr (!Wide) {
             if (TCoIsKeySwitch::Match(&body)) {
                 const TCoIsKeySwitch keySwitch(&body);
-                const auto& i = GetSimpleKeys(*ctx.ReplaceNode(keySwitch.ItemKeyExtractor().Body().Ptr(), keySwitch.ItemKeyExtractor().Args().Arg(0).Ref(), keySwitch.Item().Ptr()), keySwitch.Item().Ref());
-                const auto& s = GetSimpleKeys(*ctx.ReplaceNode(keySwitch.StateKeyExtractor().Body().Ptr(), keySwitch.StateKeyExtractor().Args().Arg(0).Ref(), keySwitch.State().Ptr()), keySwitch.Item().Ref());
+                const auto& i = GetPathsToKeys(*ctx.ReplaceNode(keySwitch.ItemKeyExtractor().Body().Ptr(), keySwitch.ItemKeyExtractor().Args().Arg(0).Ref(), keySwitch.Item().Ptr()), keySwitch.Item().Ref());
+                const auto& s = GetPathsToKeys(*ctx.ReplaceNode(keySwitch.StateKeyExtractor().Body().Ptr(), keySwitch.StateKeyExtractor().Args().Arg(0).Ref(), keySwitch.State().Ptr()), keySwitch.Item().Ref());
                 return i == s  ? i : TPartOfConstraintBase::TSetType();
             }
         }
@@ -3005,13 +2927,13 @@ private:
 
         TPartOfConstraintBase::TSetType keys;
         if constexpr (Partitions) {
-            keys = GetSimpleKeys(input->Child(TCoBase::idx_KeySelectorLambda)->Tail(), input->Child(TCoBase::idx_KeySelectorLambda)->Head().Head());
+            keys = GetPathsToKeys(input->Child(TCoBase::idx_KeySelectorLambda)->Tail(), input->Child(TCoBase::idx_KeySelectorLambda)->Head().Head());
             if (const auto sortKeySelector = input->Child(TCoBase::idx_SortKeySelectorLambda); sortKeySelector->IsLambda()) {
                 if (const auto status = UpdateLambdaConstraints(*sortKeySelector); status != TStatus::Ok) {
                     return status;
                 }
 
-                auto sortKeys = GetSimpleKeys(sortKeySelector->Tail(), sortKeySelector->Head().Head());
+                auto sortKeys = GetPathsToKeys(sortKeySelector->Tail(), sortKeySelector->Head().Head());
                 std::move(sortKeys.begin(), sortKeys.end(), std::back_inserter(keys));
                 std::sort(keys.begin(), keys.end());
             }

@@ -115,7 +115,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
     }
 
     // TODO: cancel tx in special execution unit.
-    if (tx->GetDataTx()->CheckCancelled())
+    if (tx->GetDataTx()->CheckCancelled(DataShard.TabletID()))
         engine->Cancel();
     else {
         ui64 consumed = tx->GetDataTx()->GetTxSize() + engine->GetMemoryAllocated();

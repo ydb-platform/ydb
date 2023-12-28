@@ -2445,23 +2445,17 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
     const bool isStream = node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ||
         node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream;
     TExprNode::TPtr sort;
-    auto keyExtractor = node->ChildPtr(1);
+    const auto keyExtractor = node->Child(TCoPartitionsByKeys::idx_KeySelectorLambda);
     const bool isConstKey = !IsDepended(keyExtractor->Tail(), keyExtractor->Head().Head());
-    const bool haveSort = !node->Child(2)->IsCallable("Void");
-    auto idLambda = ctx.Builder(node->Pos())
-        .Lambda()
-            .Param("x")
-            .Arg("x")
-        .Seal()
-        .Build();
+    const bool haveSort = node->Child(TCoPartitionsByKeys::idx_SortKeySelectorLambda)->IsLambda();
 
     auto sortLambda =  ctx.Builder(node->Pos())
         .Lambda()
             .Param("x")
             .Callable("Sort")
                 .Arg(0, "x")
-                .Add(1, node->ChildPtr(2))
-                .Add(2, node->ChildPtr(3))
+                .Add(1, node->ChildPtr(TCoPartitionsByKeys::idx_SortDirections))
+                .Add(2, node->ChildPtr(TCoPartitionsByKeys::idx_SortKeySelectorLambda))
             .Seal()
         .Seal()
         .Build();
@@ -2480,7 +2474,7 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
                 .Callable(0, "DictPayloads")
                     .Arg(0, "dict")
                 .Seal()
-                .Add(1, haveSort ? sortLambda : idLambda)
+                .Add(1, haveSort ? sortLambda : MakeIdentityLambda(node->Pos(), ctx))
             .Seal()
         .Seal()
         .Build();
@@ -2490,8 +2484,8 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
             sort = ctx.Builder(node->Pos())
                 .Callable("Sort")
                     .Add(0, node->HeadPtr())
-                    .Add(1, node->ChildPtr(2))
-                    .Add(2, node->ChildPtr(3))
+                    .Add(1, node->ChildPtr(TCoPartitionsByKeys::idx_SortDirections))
+                    .Add(2, node->ChildPtr(TCoPartitionsByKeys::idx_SortKeySelectorLambda))
                 .Seal()
                 .Build();
         } else {
@@ -2503,8 +2497,8 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
                 .Callable("OrderedFlatMap")
                     .Callable(0, "SqueezeToDict")
                         .Add(0, node->HeadPtr())
-                        .Add(1, std::move(keyExtractor))
-                        .Add(2, std::move(idLambda))
+                        .Add(1, node->ChildPtr(TCoPartitionsByKeys::idx_KeySelectorLambda))
+                        .Add(2, MakeIdentityLambda(node->Pos(), ctx))
                         .Add(3, std::move(settings))
                     .Seal()
                     .Add(1, std::move(flatten))
@@ -2516,17 +2510,44 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
                     .With(0)
                         .Callable("ToDict")
                             .Add(0, node->HeadPtr())
-                            .Add(1, std::move(keyExtractor))
-                            .Add(2, std::move(idLambda))
+                            .Add(1, node->ChildPtr(TCoPartitionsByKeys::idx_KeySelectorLambda))
+                            .Add(2, MakeIdentityLambda(node->Pos(), ctx))
                             .Add(3, std::move(settings))
                         .Seal()
                     .Done()
                 .Seal()
                 .Build();
         }
+
+        if (auto keys = GetPathsToKeys(keyExtractor->Tail(), keyExtractor->Head().Head()); !keys.empty()) {
+            if (const auto sortKeySelector = node->Child(TCoPartitionsByKeys::idx_SortKeySelectorLambda); sortKeySelector->IsLambda()) {
+                auto sortKeys = GetPathsToKeys(sortKeySelector->Tail(), sortKeySelector->Head().Head());
+                std::move(sortKeys.begin(), sortKeys.end(), std::back_inserter(keys));
+                std::sort(keys.begin(), keys.end());
+            }
+
+            TExprNode::TListType columns;
+            columns.reserve(keys.size());
+            for (const auto& path : keys) {
+                if (1U == path.size())
+                    columns.emplace_back(ctx.NewAtom(node->Pos(), path.front()));
+                else {
+                    TExprNode::TListType atoms(path.size());
+                    std::transform(path.cbegin(), path.cend(), atoms.begin(), [&](const std::string_view& name) { return ctx.NewAtom(node->Pos(), name); });
+                    columns.emplace_back(ctx.NewList(node->Pos(), std::move(atoms)));
+                }
+            }
+
+            sort = ctx.Builder(node->Pos())
+                .Callable("AssumeChopped")
+                    .Add(0, std::move(sort))
+                    .List(1).Add(std::move(columns)).Seal()
+                .Seal()
+                .Build();
+        }
     }
 
-    return KeepConstraints(ctx.ReplaceNode(node->Tail().TailPtr(), node->Tail().Head().Head(), std::move(sort)), *node, ctx);
+    return ctx.ReplaceNode(node->Tail().TailPtr(), node->Tail().Head().Head(), std::move(sort));
 }
 
 TExprNode::TPtr ExpandIsKeySwitch(const TExprNode::TPtr& node, TExprContext& ctx) {

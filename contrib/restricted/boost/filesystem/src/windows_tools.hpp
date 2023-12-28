@@ -1,7 +1,8 @@
 //  windows_tools.hpp  -----------------------------------------------------------------//
 
-//  Copyright 2002-2009, 2014 Beman Dawes
 //  Copyright 2001 Dietmar Kuehl
+//  Copyright 2002-2009, 2014 Beman Dawes
+//  Copyright 2021-2022 Andrey Semashev
 
 //  Distributed under the Boost Software License, Version 1.0.
 //  See http://www.boost.org/LICENSE_1_0.txt
@@ -22,6 +23,10 @@
 #include <windows.h>
 
 #include <boost/filesystem/detail/header.hpp> // must be the last #include
+
+#ifndef IO_REPARSE_TAG_DEDUP
+#define IO_REPARSE_TAG_DEDUP (0x80000013L)
+#endif
 
 #ifndef IO_REPARSE_TAG_MOUNT_POINT
 #define IO_REPARSE_TAG_MOUNT_POINT (0xA0000003L)
@@ -57,14 +62,14 @@ inline boost::filesystem::perms make_permissions(boost::filesystem::path const& 
     boost::filesystem::perms prms = boost::filesystem::owner_read | boost::filesystem::group_read | boost::filesystem::others_read;
     if ((attr & FILE_ATTRIBUTE_READONLY) == 0u)
         prms |= boost::filesystem::owner_write | boost::filesystem::group_write | boost::filesystem::others_write;
-    boost::filesystem::path ext = p.extension();
+    boost::filesystem::path ext = detail::path_algorithms::extension_v4(p);
     wchar_t const* q = ext.c_str();
     if (equal_extension(q, L".exe", L".EXE") || equal_extension(q, L".com", L".COM") || equal_extension(q, L".bat", L".BAT") || equal_extension(q, L".cmd", L".CMD"))
         prms |= boost::filesystem::owner_exe | boost::filesystem::group_exe | boost::filesystem::others_exe;
     return prms;
 }
 
-bool is_reparse_point_a_symlink_ioctl(HANDLE h);
+ULONG get_reparse_point_tag_ioctl(HANDLE h, boost::filesystem::path const& p, boost::system::error_code* ec);
 
 inline bool is_reparse_point_tag_a_symlink(ULONG reparse_point_tag)
 {
@@ -155,6 +160,9 @@ struct object_attributes
 
 #ifndef FILE_DIRECTORY_FILE
 #define FILE_DIRECTORY_FILE 0x00000001
+#endif
+#ifndef FILE_SYNCHRONOUS_IO_NONALERT
+#define FILE_SYNCHRONOUS_IO_NONALERT 0x00000020
 #endif
 #ifndef FILE_OPEN_FOR_BACKUP_INTENT
 #define FILE_OPEN_FOR_BACKUP_INTENT 0x00004000

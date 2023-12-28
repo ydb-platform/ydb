@@ -1,5 +1,10 @@
 LIBRARY()
 
+OWNER(
+    monster
+    g:kikimr
+)
+
 SRCS(
     aggregator.h
     aggregator.cpp
@@ -10,6 +15,7 @@ SRCS(
     tx_configure.cpp
     tx_init.cpp
     tx_init_schema.cpp
+    tx_schemeshard_stats.cpp
 )
 
 PEERDIR(

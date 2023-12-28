@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(KqpGenericPlanTest) {
         {
             const TString sql = fmt::format(
                 R"sql(
-                CREATE OBJECT pg_password_obj (TYPE SECRET) WITH (value="");
+                CREATE OBJECT pg_password_obj (TYPE SECRET) WITH (value="{pg_password}");
                 CREATE EXTERNAL DATA SOURCE pg_data_source WITH (
                     SOURCE_TYPE="PostgreSQL",
                     LOCATION="{pg_host}:{pg_port}",
@@ -58,6 +58,7 @@ Y_UNIT_TEST_SUITE(KqpGenericPlanTest) {
                 "pg_host"_a = GetPgHost(),
                 "pg_port"_a = GetPgPort(),
                 "pg_user"_a = GetPgUser(),
+                "pg_password"_a = GetPgPassword(),
                 "pg_database"_a = GetPgDatabase());
             auto result = session.ExecuteSchemeQuery(sql).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

@@ -823,6 +823,22 @@ std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStora
     }
 }
 
+void NSchemeShardUT_Private::TTestEnv::TestServerlessComputeResourcesModeInHive(TTestActorRuntime& runtime,
+    const TString& path, NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode, ui64 hive) 
+{   
+    auto record = DescribePath(runtime, path);
+    const auto& pathDescr = record.GetPathDescription();
+    const TSubDomainKey subdomainKey(pathDescr.GetDomainDescription().GetDomainKey());
+
+    const TActorId sender = runtime.AllocateEdgeActor();
+    auto ev = MakeHolder<TEvFakeHive::TEvRequestDomainInfo>(subdomainKey);
+    ForwardToTablet(runtime, hive, sender, ev.Release());
+
+    const auto event = runtime.GrabEdgeEvent<TEvFakeHive::TEvRequestDomainInfoReply>(sender);
+    UNIT_ASSERT(event);
+    UNIT_ASSERT_VALUES_EQUAL(event->Get()->DomainInfo.ServerlessComputeResourcesMode, serverlessComputeResourcesMode);
+}
+
 TEvSchemeShard::TEvInitRootShardResult::EStatus NSchemeShardUT_Private::TTestEnv::InitRoot(NActors::TTestActorRuntime &runtime, ui64 schemeRoot, const NActors::TActorId &sender, const TString& domainName, const TDomainsInfo::TDomain::TStoragePoolKinds& StoragePoolTypes, const TString& owner) {
     auto ev = new TEvSchemeShard::TEvInitRootShard(sender, 32, domainName);
     for (const auto& [kind, pool] : StoragePoolTypes) {

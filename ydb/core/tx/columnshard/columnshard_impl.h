@@ -345,10 +345,10 @@ private:
             return TGuard(*this);
         }
 
-        TGuard FinishWrite(const ui64 dataSize) {
+        TGuard FinishWrite(const ui64 dataSize, const ui32 writesCount = 1) {
             Y_ABORT_UNLESS(WritesInFlight > 0);
             Y_ABORT_UNLESS(WritesSizeInFlight >= dataSize);
-            --WritesInFlight;
+            WritesInFlight -= writesCount;
             WritesSizeInFlight -= dataSize;
             return TGuard(*this);
         }
@@ -396,6 +396,7 @@ private:
     TInstant LastStatsReport;
 
     TActorId ResourceSubscribeActor;
+    TActorId BufferizationWriteActorId;
     TActorId StatsReportPipe;
 
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;

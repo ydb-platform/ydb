@@ -51,6 +51,10 @@ namespace NKikimr {
         SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie);
     }
 
+    NWilson::TTraceId TLoggedRecVPut::GetTraceId() const {
+        return Span.GetTraceId();
+    }
+
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
     // TLoggedRecVPut -- incapsulates TEvVPut replay action (for small blobs)
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -86,6 +90,10 @@ namespace NKikimr {
 
         Span.EndOk();
         ctx.Send(Recipient, Result.release(), RecipientCookie);
+    }
+
+    NWilson::TTraceId TLoggedRecVMultiPutItem::GetTraceId() const {
+        return Span.GetTraceId();
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -166,6 +174,7 @@ namespace NKikimr {
         , Ingress(ingress)
         , Result(std::move(result))
         , OrigEv(origEv)
+        , Span(TWilson::VDiskInternals, std::move(OrigEv->TraceId), "VDisk.LoggedRecVCollectGarbage")
     {}
 
     void TLoggedRecVCollectGarbage::Replay(THull &hull, const TActorContext &ctx) {
@@ -175,6 +184,7 @@ namespace NKikimr {
         LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_GC, hull.GetHullCtx()->VCtx->VDiskLogPrefix
                 << "TEvVCollectGarbage: result# " << Result->ToString()
                 << " Marker# BSVSLR05");
+        Span.EndOk();
         SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie);
     }
 
@@ -189,6 +199,7 @@ namespace NKikimr {
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Result(std::move(result))
         , OrigEv(origEv)
+        , Span(TWilson::VDiskInternals, std::move(OrigEv->TraceId), "VDisk.LoggedRecLocalSyncData")
     {}
 
     void TLoggedRecLocalSyncData::Replay(THull &hull, const TActorContext &ctx) {
@@ -201,6 +212,7 @@ namespace NKikimr {
 #else
         hull.AddSyncDataCmd(ctx, OrigEv->Get()->Data, Seg, replySender);
 #endif
+        Span.EndOk();
         SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie);
     }
 

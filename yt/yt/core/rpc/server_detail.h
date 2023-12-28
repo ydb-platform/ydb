@@ -3,6 +3,7 @@
 #include "authentication_identity.h"
 #include "server.h"
 #include "service.h"
+#include "config.h"
 
 #include <yt/yt/core/logging/log.h>
 
@@ -269,7 +270,8 @@ public:
     IServicePtr FindService(const TServiceId& serviceId) const override;
     IServicePtr GetServiceOrThrow(const TServiceId& serviceId) const override;
 
-    void Configure(TServerConfigPtr config) override;
+    void Configure(const TServerConfigPtr& config) override;
+    void OnDynamicConfigChanged(const TServerDynamicConfigPtr& config) override;
 
     void Start() override;
     TFuture<void> Stop(bool graceful) override;
@@ -280,13 +282,17 @@ protected:
     std::atomic<bool> Started_ = false;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, ServicesLock_);
-    TServerConfigPtr Config_;
+    TServerConfigPtr StaticConfig_;
+    TServerDynamicConfigPtr DynamicConfig_ = New<TServerDynamicConfig>();
+    TServerConfigPtr AppliedConfig_;
 
     //! Service name to service.
     using TServiceMap = THashMap<TString, IServicePtr>;
     THashMap<TGuid, TServiceMap> RealmIdToServiceMap_;
 
     explicit TServerBase(NLogging::TLogger logger);
+
+    void ApplyConfig();
 
     virtual void DoStart();
     virtual TFuture<void> DoStop(bool graceful);

@@ -477,7 +477,7 @@ IReconfigurableThroughputThrottlerPtr CreateNamedReconfigurableThroughputThrottl
 ////////////////////////////////////////////////////////////////////////////////
 
 class TUnlimitedThroughputThrottler
-    : public IThroughputThrottler
+    : public IReconfigurableThroughputThrottler
 {
 public:
     explicit TUnlimitedThroughputThrottler(
@@ -552,17 +552,37 @@ public:
         YT_UNIMPLEMENTED();
     }
 
+    void Reconfigure(TThroughputThrottlerConfigPtr /*config*/) override
+    {
+        VERIFY_THREAD_AFFINITY_ANY();
+    }
+
+    void SetLimit(std::optional<double> /*limit*/) override
+    {
+        VERIFY_THREAD_AFFINITY_ANY();
+    }
+
+    TFuture<void> GetAvailableFuture() override
+    {
+        YT_UNIMPLEMENTED();
+    }
+
+    TThroughputThrottlerConfigPtr GetConfig() const override
+    {
+        YT_UNIMPLEMENTED();
+    }
+
 private:
     NProfiling::TCounter ValueCounter_;
     NProfiling::TCounter ReleaseCounter_;
 };
 
-IThroughputThrottlerPtr GetUnlimitedThrottler()
+IReconfigurableThroughputThrottlerPtr GetUnlimitedThrottler()
 {
     return LeakyRefCountedSingleton<TUnlimitedThroughputThrottler>();
 }
 
-IThroughputThrottlerPtr CreateNamedUnlimitedThroughputThrottler(
+IReconfigurableThroughputThrottlerPtr CreateNamedUnlimitedThroughputThrottler(
     const TString& name,
     NProfiling::TProfiler profiler)
 {

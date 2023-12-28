@@ -26,8 +26,8 @@ from google.auth.crypt import _python_rsa
 from google.auth.crypt import base
 
 
-import yatest.common
-DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+import yatest.common as yc
+DATA_DIR = os.path.join(os.path.dirname(yc.source_path(__file__)), "..", "data")
 
 # To generate privatekey.pem, privatekey.pub, and public_cert.pem:
 #   $ openssl req -new -newkey rsa:1024 -x509 -nodes -out public_cert.pem \

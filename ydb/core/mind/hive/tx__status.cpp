@@ -33,7 +33,11 @@ public:
             }
             if (Self->WarmUp &&
                 node.Statistics.RestartTimestampSize() < Self->GetNodeRestartsToIgnoreInWarmup()) {
-                Self->LastConnect = TActivationContext::Now();
+                TInstant now = TActivationContext::Now();
+                if (Self->LastConnect != TInstant{}) {
+                    Self->MaxTimeBetweenConnects = std::max(Self->MaxTimeBetweenConnects, now - Self->LastConnect);
+                }
+                Self->LastConnect = now;
             }
             if (node.LocationAcquired) {
                 NIceDb::TNiceDb db(txc.DB);

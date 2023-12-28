@@ -13,11 +13,11 @@ $l = AsList(
 );
 
 $d = ToDict($l);
-select $d,DictKeys($d),DictPayloads($d),DictItems($d);
+select ListSort(DictItems($d)),ListSort(DictKeys($d)),ListSort(DictPayloads($d));
 select DictLookup($d,$i), DictLookup($d,$k);
 select DictContains($d,$i), DictContains($d,$k);
 
 $d = Yql::ToDict($l,$first,$second,AsTuple(AsAtom("Compact"),AsAtom("Hashed"),AsAtom("One")));
-select $d,DictKeys($d),DictPayloads($d),DictItems($d);
+select ListSort(DictItems($d)),ListSort(DictKeys($d)),ListSort(DictPayloads($d));
 select DictLookup($d,$i), DictLookup($d,$k);
 select DictContains($d,$i), DictContains($d,$k);

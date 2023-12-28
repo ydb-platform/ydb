@@ -829,8 +829,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     if (Config.HasTracingConfig()) {
         const auto& tracing = Config.GetTracingConfig();
         std::unique_ptr<NWilson::IGrpcSigner> grpcSigner;
-        if (Factories && Factories->WilsonGrpcSignerFactory) {
-            grpcSigner = Factories->WilsonGrpcSignerFactory();
+        if (tracing.HasAuthCredentials() && Factories && Factories->WilsonGrpcSignerFactory) {
+            grpcSigner = Factories->WilsonGrpcSignerFactory(tracing.GetAuthCredentials());
         }
         auto wilsonUploader = NWilson::CreateWilsonUploader(tracing.GetHost(), tracing.GetPort(), tracing.GetRootCA(), tracing.GetServiceName(), std::move(grpcSigner));
         setup->LocalServices.emplace_back(

@@ -1517,16 +1517,25 @@ message TCompactionConfig {
 }
 
 message TTracingConfig {
-    message TTvmCredentials {
-        required uint32 SelfTvmId = 1;
-        required uint32 TracingTvmId = 2;
+    message TAuthCredentials {
+        message TTvm {
+            optional string Host = 1;
+            optional uint32 Port = 2;
 
-        optional string DiskCacheDir = 3;
+            required uint32 SelfTvmId = 3;
+            required uint32 TracingTvmId = 4;
 
-        oneof Secret {
-            string PlainTextSecret = 4;
-            string SecretFile = 5;
-            string SecretEnvironmentVariable = 6;
+            optional string DiskCacheDir = 5;
+
+            oneof Secret {
+                string PlainTextSecret = 6;
+                string SecretFile = 7;
+                string SecretEnvironmentVariable = 8;
+            }
+        }
+
+        oneof Method {
+            TTvm Tvm = 1;
         }
     }
 
@@ -1534,7 +1543,7 @@ message TTracingConfig {
     optional uint32 Port = 2;
     optional string RootCA = 3;
     optional string ServiceName = 4;
-    optional TTvmCredentials TvmCredentials = 5;
+    optional TAuthCredentials AuthCredentials = 5;
 }
 
 message TFailureInjectionConfig {

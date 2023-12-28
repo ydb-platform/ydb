@@ -29,8 +29,6 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
             TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
         };
 
-        Cerr << "\n=========== Start create a table ============\n" << Endl;
-
         TTestHelper::TColumnTable testTable;
 
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
@@ -39,8 +37,6 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TPeriodicWakeupActivationPeriodController>();
         
         {
-            Cerr << "\n=========== Start insert to table ============\n" << Endl;
-
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
 
@@ -53,8 +49,6 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
 
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).SetPriority(NActors::NLog::PRI_TRACE).Initialize();
         {
-            Cerr << "\n=========== Start describe the table ============\n" << Endl;
-
             auto settings = TDescribeTableSettings().WithTableStatistics(true);
             auto describeResult = testHelper.GetSession().DescribeTable("/Root/ColumnTableTest", settings).GetValueSync();
 
@@ -62,7 +56,6 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
 
             const auto& description = describeResult.GetTableDescription();
 
-            // UNIT_ASSERT_VALUES_EQUAL(0, description.GetTableSize());
             UNIT_ASSERT_VALUES_EQUAL(1, description.GetTableRows());
         }
     }
@@ -79,8 +72,6 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
             TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
         };
 
-        Cerr << "\n=========== Start create a table ============\n" << Endl;
-        
         TTestHelper::TColumnTableStore testTableStore;
 
         testTableStore.SetName("/Root/TableStoreTest").SetPrimaryKey({"id"}).SetSchema(schema);
@@ -92,8 +83,6 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TPeriodicWakeupActivationPeriodController>();
 
         {
-            Cerr << "\n=========== Start insert to table ============\n" << Endl;
-
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
             testHelper.InsertData(testTable, tableInserter);
@@ -105,8 +94,6 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
 
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).SetPriority(NActors::NLog::PRI_TRACE).Initialize();
         {
-            Cerr << "\n=========== Start describe the table ============\n" << Endl;
-
             auto settings = TDescribeTableSettings().WithTableStatistics(true);
             auto describeResult = testHelper.GetSession().DescribeTable("/Root/TableStoreTest/ColumnTableTest", settings).GetValueSync();
 
@@ -114,7 +101,6 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
 
             const auto& description = describeResult.GetTableDescription();
 
-            // UNIT_ASSERT_VALUES_EQUAL(0, description.GetTableSize());
             UNIT_ASSERT_VALUES_EQUAL(1, description.GetTableRows());
         }
     }

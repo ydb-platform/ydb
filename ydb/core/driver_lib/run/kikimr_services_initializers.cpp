@@ -370,8 +370,9 @@ static bool IsServiceInitialized(NActors::TActorSystemSetup* setup, TActorId ser
     return false;
 }
 
-TBasicServicesInitializer::TBasicServicesInitializer(const TKikimrRunConfig& runConfig)
+TBasicServicesInitializer::TBasicServicesInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories)
     : IKikimrServicesInitializer(runConfig)
+    , Factories(std::move(factories))
 {
 }
 
@@ -827,10 +828,14 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
     if (Config.HasTracingConfig()) {
         const auto& tracing = Config.GetTracingConfig();
+        std::unique_ptr<NWilson::IGrpcSigner> grpcSigner;
+        if (Factories && Factories->WilsonGrpcSignerFactory) {
+            grpcSigner = Factories->WilsonGrpcSignerFactory();
+        }
+        auto wilsonUploader = NWilson::CreateWilsonUploader(tracing.GetHost(), tracing.GetPort(), tracing.GetRootCA(), tracing.GetServiceName(), std::move(grpcSigner));
         setup->LocalServices.emplace_back(
             NWilson::MakeWilsonUploaderId(),
-            TActorSetupCmd(NWilson::CreateWilsonUploader(tracing.GetHost(), tracing.GetPort(), tracing.GetRootCA(), tracing.GetServiceName()),
-            TMailboxType::ReadAsFilled, appData->BatchPoolId));
+            TActorSetupCmd(wilsonUploader, TMailboxType::ReadAsFilled, appData->BatchPoolId));
     }
 }
 

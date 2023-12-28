@@ -154,6 +154,7 @@ public:
         const TContentHandler& handler) = 0;
 
     virtual TString GetCORS(const NMon::TEvHttpInfo* request) = 0;
+    virtual TString GetHTTPOK(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString response = {}) = 0;
     virtual TString GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request) = 0;
     virtual TString GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) = 0;

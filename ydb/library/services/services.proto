@@ -83,6 +83,8 @@ enum EServiceKikimr {
     TENANT_POOL = 303;
     LABELS_MAINTAINER = 305;
 
+    GRAPH = 306;
+
     // TABLET section
     TABLET_EXECUTOR = 310;
     TABLET_MAIN = 311;
@@ -1012,5 +1014,6 @@ message TActivity {
         PQ_FETCH_REQUEST = 621;
         STATISTICS_AGGREGATOR = 622;
         KAFKA_READ_SESSION_ACTOR = 623;
+        GRAPH_SERVICE = 624;
     };
 };

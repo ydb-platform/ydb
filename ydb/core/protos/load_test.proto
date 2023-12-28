@@ -32,6 +32,16 @@ message TEvLoadTestRequest {
         optional double Weight = 3;
     }
     message TStorageLoad {
+        message TInitialBlobAllocation {
+            oneof DataSize {
+                uint64 TotalSize = 1;
+                uint64 BlobsNumber = 2;
+            }
+            repeated TSizeInfo BlobSizes = 3;
+            optional uint32 WritesInFlight = 4 [default = 1];
+            optional NKikimrBlobStorage.EPutHandleClass PutHandleClass = 5;
+        }
+
         message TRequestInfo {
             optional float SendTime = 1;
             optional uint64 Type = 2;
@@ -72,6 +82,8 @@ message TEvLoadTestRequest {
 
             optional THardRateDispatcherInfo WriteHardRateDispatcher = 15;
             optional THardRateDispatcherInfo ReadHardRateDispatcher = 16;
+
+            optional TInitialBlobAllocation InitialAllocation = 17;
         };
         optional uint64 Tag = 1;
         optional uint32 DurationSeconds = 2;

@@ -3,12 +3,6 @@ import sys
 
 NSPLIT=10
 
-def flush_lines(pending_lines, out_file):
-    if pending_lines is None:
-        return
-    for p in pending_lines:
-        out_file.write(p)
-
 def main(argv):
     input_dir="."
     output_dir="."
@@ -40,7 +34,6 @@ def main(argv):
                 extern_data=False
                 extern_code=False
                 in_class_def=False
-                pending_lines=None
                 for line in in_file:
                     if line.startswith("#include") and "SQLv1Parser.pb.h" in line:
                         out_file.write('#include "SQLv1Parser.pb.main.h"\n')
@@ -54,19 +47,14 @@ def main(argv):
                 for line in in_file:
                     line=line.replace("inline ","")
                     if line.startswith("#"):
-                        if pending_lines is not None:
-                            pending_lines.append(line)
-                        else:
-                            out_file.write(line)
+                        out_file.write(line)
                         continue
                     if line.startswith("namespace") or line.startswith("PROTOBUF_NAMESPACE_OPEN"):
                         open_namespace = True
-                        pending_lines = flush_lines(pending_lines, out_file)
                         out_file.write(line)
                         continue
                     if (line.startswith("}  // namespace") or line.startswith("PROTOBUF_NAMESPACE_CLOSE")) and open_namespace:
                         open_namespace = False
-                        pending_lines = flush_lines(pending_lines, out_file)
                         out_file.write(line)
                         continue
                     if in_class_def:
@@ -92,16 +80,13 @@ def main(argv):
                     if not is_data_stmt and (statement_index % NSPLIT)==i:
                         if line.startswith("struct"):
                             current_types.add(line.split(" ")[1])
-                        if pending_lines is None:
-                            pending_lines=[]
-                        pending_lines.append(line)
+                        out_file.write(line)
                     if is_data_stmt and i==NSPLIT:
                         if extern_data:
                            line = line.replace("static ","")
                         out_file.write(line)
                     if is_data_stmt and i<NSPLIT:
                         if extern_data or extern_code:
-                            pending_lines = flush_lines(pending_lines, out_file)
                             if extern_data:
                                 line = "extern " + line.replace("static ","").replace(" = {",";")
                             if extern_code:
@@ -118,8 +103,6 @@ def main(argv):
                             extern_code = False
                         else:
                             statement_index += 1
-                            pending_lines = flush_lines(pending_lines, out_file)
-                pending_lines = flush_lines(pending_lines, out_file)
 
 if __name__ == "__main__":
     main(sys.argv)

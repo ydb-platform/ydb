@@ -1171,6 +1171,7 @@ public:
         if (!tx) {
             return std::nullopt;
         }
+
         auto optPath = tx->GetSchemeOpTempTablePath();
         if (!optPath) {
             return std::nullopt;

@@ -823,10 +823,11 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
 
         SELECT task_id, blob, type
         FROM %s
-        WHERE task_id = $task_id AND graph_id = $graph_id AND coordinator_generation = $coordinator_generation AND seq_no = $seq_no AND blob_seq_num = $blob_seq_num;
+        WHERE task_id = $task_id AND graph_id = $graph_id AND coordinator_generation = $coordinator_generation AND seq_no = $seq_no AND (blob_seq_num = $blob_seq_num %s);
     )",
         context->TablePathPrefix.c_str(),
-        StatesTable);
+        StatesTable,
+        (taskInfo.CurrentProcessingRow == 0) ? " OR blob_seq_num is NULL" : "");
 
     Y_ABORT_UNLESS(context->Session);
     return context->Session->ExecuteDataQuery(
@@ -899,7 +900,10 @@ TFuture<TStatus> TStateStorage::SkipStatesInFuture(const TContextPtr& context)
             if (it->CheckpointId == context->CheckpointId) {
                 break;
             }
-            Y_ABORT_UNLESS(context->CheckpointId < it->CheckpointId);
+            if (it->CheckpointId < context->CheckpointId) {
+                // ListOfStatesForReading sorted by "time"
+                return MakeFuture(TStatus{EStatus::INTERNAL_ERROR, NYql::TIssues{NYql::TIssue{"Checkpoint is not found"}}});
+            }
             it = taskInfo.ListOfStatesForReading.erase(it);
         }
         if (taskInfo.ListOfStatesForReading.empty()) {

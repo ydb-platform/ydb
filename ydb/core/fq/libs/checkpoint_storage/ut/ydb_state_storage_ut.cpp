@@ -39,6 +39,8 @@ private:
     NKikimr::TActorSystemStub ActorSystemStub;
 };
 
+TYqSharedResources::TPtr YqSharedResources;
+
 TStateStoragePtr GetStateStorage(const char* tablePrefix) {
 
     NConfig::TCheckpointCoordinatorConfig config;
@@ -50,11 +52,23 @@ TStateStoragePtr GetStateStorage(const char* tablePrefix) {
     auto& stateStorageLimits = *config.MutableStateStorageLimits();
     stateStorageLimits.SetMaxRowSizeBytes(YdbRowSizeLimit);
 
-    auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, NKikimr::CreateYdbCredentialsProviderFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
-    auto storage = NewYdbStateStorage(config, NKikimr::CreateYdbCredentialsProviderFactory, yqSharedResources);
+    YqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, NKikimr::CreateYdbCredentialsProviderFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+    auto storage = NewYdbStateStorage(config, NKikimr::CreateYdbCredentialsProviderFactory, YqSharedResources);
     storage->Init().GetValueSync();
     return storage;
 }
+
+NYdb::NTable::TSession GetYdbSession()
+{
+    NYdb::TDriverConfig cfg;
+    cfg.SetEndpoint(GetEnv("YDB_ENDPOINT")).SetDatabase(GetEnv("YDB_DATABASE"));
+    NYdb::TDriver driver(cfg);
+    NYdb::NTable::TTableClient tableClient(driver);
+    auto createSessionResult = tableClient.CreateSession().ExtractValueSync();
+    UNIT_ASSERT_C(createSessionResult.IsSuccess(), createSessionResult.GetIssues().ToString());
+    return createSessionResult.GetSession();
+}
+
 
 NYql::NDqProto::TComputeActorState MakeState(NYql::NUdf::TUnboxedValuePod&& value) {
     const TStringBuf savedBuf = value.AsStringRef();
@@ -382,6 +396,40 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
 
         auto actual = GetState(storage, 1, "graph1", CheckpointId3);
         UNIT_ASSERT(google::protobuf::util::MessageDifferencer::Equals(expected, actual));
+    }
+
+    Y_UNIT_TEST(ShouldLoadStateWithNull)
+    {
+        TString prefix("ShouldLoadStateWithNull");
+        auto storage = GetStateStorage(prefix.c_str());
+
+        auto actorState = MakeStateFromBlob(4);
+        TString serializedState;
+        UNIT_ASSERT(actorState.SerializeToString(&serializedState));
+
+        NYdb::NTable::TSession session = GetYdbSession();
+        prefix = "/local/" + prefix;
+        TString path = prefix + "/states";
+        auto result = session.DescribeTable(path).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        const auto& createdColumns = result.GetTableDescription().GetColumns();
+        UNIT_ASSERT_EQUAL_C(createdColumns.size(), 7, "expected 7 columns");
+        auto query = Sprintf(R"(
+            --!syntax_v1
+            PRAGMA TablePathPrefix("%s");
+
+            UPSERT INTO states (graph_id, task_id, coordinator_generation, seq_no, blob, blob_seq_num, type) VALUES
+                ("graph1", 1, %d, %d, "%s", Null, Null);
+            )", prefix.c_str(), 
+                static_cast<int>(CheckpointId1.CoordinatorGeneration), 
+                static_cast<int>(CheckpointId1.SeqNo),
+                serializedState.c_str());
+
+        auto execResult = session.ExecuteDataQuery(query,
+             NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(execResult.IsSuccess(), execResult.GetIssues().ToString());
+        auto actual = GetState(storage, 1, "graph1", CheckpointId1);
+        UNIT_ASSERT(google::protobuf::util::MessageDifferencer::Equals(actorState, actual));
     }
 };
 

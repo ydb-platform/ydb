@@ -91,4 +91,4 @@ cd ~/ydbwork/ydb
 ya test ydb/core
 ```
 
-Чтобы запустить medium и large тестов добавьте опции `-tt` и `-ttt` к вызову `ya test` соответственно.
+Для запуска medium и large тестов добавьте опции `-tt` и `-ttt` к вызову `ya test` соответственно.

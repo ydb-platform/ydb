@@ -73,13 +73,13 @@ gh auth login
 ```
 Вам будет задано несколько вопросов в интерактивном режиме, ответьте на них следующим образом:
 
-|Вопрос|Ответ/
+|Вопрос|Ответ|
 |--|--|
-|В какую учетную запись вы хотите войти?|**GitHub.com**|
-|Какой протокол вы предпочитаете для операций Git?|**SSH**|
-|Загрузите свой открытый ключ SSH в свою учетную запись GitHub?|Выберите файл с открытым ключом (расширение `.pub`) из тех, что были созданы на шаге ["Создать пару ключей SSH"](#ssh_key_pair), например **/home/user/.ssh/id_ed25519.pub**|
-|Название вашего SSH-ключа|**GitHub CLI** (оставьте значение по умолчанию)|
-|Как бы вы хотели аутентифицировать GitHub CLI|**Paste your authentication token**|
+|What account do you want to log into?|**GitHub.com**|
+|What is your preferred protocol for Git operations?|**SSH**|
+|Upload your SSH public key to your GitHub account?|Выберите файл с открытым ключом (расширение `.pub`) из тех, что были созданы на шаге ["Создать пару ключей SSH"](#ssh_key_pair), например **/home/user/.ssh/id_ed25519.pub**|
+|Title for your SSH key|**GitHub CLI** (оставьте значение по умолчанию)|
+|How would you like to authenticate GitHub CLI|**Paste your authentication token**|
 
 После последнего ответа вам будет предложено ввести токен, который вы можете сгенерировать в пользовательском интерфейсе GitHub:
 

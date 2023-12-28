@@ -15,6 +15,7 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 
 import ydb.tests.fq.s3.s3_helpers as s3_helpers
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
+from google.protobuf import struct_pb2
 
 
 class TestS3(TestYdsBase):
@@ -753,3 +754,30 @@ Pear;15;33'''
         assert result_set.columns[3].type.type_id == ydb.Type.INT32
 
         assert len(result_set.rows) == 6
+
+    @yq_all
+    @pytest.mark.parametrize("filename, type_format", [
+        ("date_null/as_default/test.csv", "csv_with_names"),
+        ("date_null/parse_error/test.csv", "csv_with_names")
+    ])
+    def test_date_null(self, kikimr, s3, client, filename, type_format):
+        self.create_bucket_and_upload_file(filename, s3, kikimr)
+        client.create_storage_connection("hcpp", "fbucket")
+
+        sql = '''
+            SELECT
+                `put`
+            FROM
+                `hcpp`.`{name}`
+            WITH (FORMAT="csv_with_names",
+                csv_delimiter=",",
+                SCHEMA=(
+                `put` Date
+                ))
+            LIMIT 10;
+            '''.format(name="/" + filename)
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert data.result.result_set.rows[0].items[0].null_flag_value == struct_pb2.NULL_VALUE, str(data.result.result_set)

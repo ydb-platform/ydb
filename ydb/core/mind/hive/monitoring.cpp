@@ -3951,8 +3951,6 @@ public:
     }
 };
 
-
-
 void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
     if (!ReadyForConnections) {
         return Execute(new TTxMonEvent_NotReady(ev->Sender, this), ctx);

@@ -325,6 +325,8 @@ void TStockWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComman
     case TWorkloadParams::ECommandType::Run:
         opts.AddLongOption('p', "products", "Products count to use in workload.")
             .DefaultValue(100).StoreResult(&ProductCount);
+        opts.AddLongOption('l', "limit", "Number of last orders to select.")
+            .DefaultValue(10).StoreResult(&Limit);
         break;
     case TWorkloadParams::ECommandType::Clean:
         break;

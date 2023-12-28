@@ -336,6 +336,11 @@ int TWorkloadCommandInit::Run(TConfig& config) {
     return InitTables(*workloadGen);
 }
 
+void TWorkloadCommandInit::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    Params->ConfigureOpts(*config.Opts, CommandType);
+}
+
 
 TWorkloadCommandRun::TWorkloadCommandRun(const TString& name, const TString& key, int type)
     : TWorkloadCommandBase(name, key, NYdbWorkload::TWorkloadParams::ECommandType::Run, "Run YDB " + key + " " + name + " workload")

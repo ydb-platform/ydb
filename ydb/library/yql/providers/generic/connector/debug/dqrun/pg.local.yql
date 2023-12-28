@@ -1,2 +1,0 @@
--- SELECT col_19_bytea FROM rtmr_dev00_postgresql.primitives;
-SELECT MAX(id + LENGTH(col)) FROM rtmr_dev00_postgresql.benchmark_1g;

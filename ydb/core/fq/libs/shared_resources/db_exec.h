@@ -141,8 +141,11 @@ public:
         if (CurrentStepIndex == Steps.size()) {
             if (Transaction) {
                 return Transaction->Commit()
-                .Apply([this, session=session](const TFuture<TCommitTransactionResult>& future) {
-
+                .Apply([this, self=SelfHolder, session=session](const TFuture<TCommitTransactionResult>& future) {
+                    auto lock = self.lock();
+                    if (!lock) {
+                        return MakeFuture(TStatus{EStatus::INTERNAL_ERROR, NYql::TIssues{NYql::TIssue{"this has been deleted"}}});
+                    }
                     TCommitTransactionResult result = future.GetValue();
                     auto status = static_cast<TStatus>(result);
                     if (!status.IsSuccess()) {
@@ -179,7 +182,11 @@ public:
             }
 
             return session.ExecuteDataQuery(query.Sql, transaction, query.Params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true))
-            .Apply([this, session=session](const TFuture<TDataQueryResult>& future) {
+            .Apply([this, self=SelfHolder, session=session](const TFuture<TDataQueryResult>& future) {
+                auto lock = self.lock();
+                if (!lock) {
+                    return MakeFuture(TStatus{EStatus::INTERNAL_ERROR, NYql::TIssues{NYql::TIssue{"this has been deleted"}}});
+                }
 
                 NYdb::NTable::TDataQueryResult result = future.GetValue();
                 auto status = static_cast<TStatus>(result);

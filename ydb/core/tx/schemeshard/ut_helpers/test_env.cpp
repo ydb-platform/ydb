@@ -15,7 +15,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 
-static const bool ENABLE_SCHEMESHARD_LOG = true;
+bool NSchemeShardUT_Private::TTestEnv::ENABLE_SCHEMESHARD_LOG = true;
 static const bool ENABLE_DATASHARD_LOG = false;
 static const bool ENABLE_COORDINATOR_MEDIATOR_LOG = false;
 static const bool ENABLE_SCHEMEBOARD_LOG = false;

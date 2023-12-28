@@ -18,6 +18,7 @@ RECURSE(
     filestore
     fq
     formats
+    graph
     grpc_caching
     grpc_services
     grpc_streaming

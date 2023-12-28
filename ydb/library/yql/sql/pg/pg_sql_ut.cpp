@@ -456,4 +456,74 @@ SELECT COUNT(*) FROM public.t;");
         auto issue = *(res.Issues.begin());
         UNIT_ASSERT(issue.GetMessage().Contains("VariableSetStmt, not supported BlockEngine option value: foo"));
     }
+
+    Y_UNIT_TEST(SetConfig_SearchPath) {
+        TTranslationSettings settings;
+        settings.ClusterMapping["pg_catalog"] = NYql::PgProviderName;
+
+        auto res = SqlToYqlWithMode(
+            R"(select set_config("search_path", "pg_catalog");)",
+            NSQLTranslation::ESqlMode::QUERY,
+            10,
+            {},
+            EDebugOutput::None,
+            false,
+            settings);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Root);
+        
+        res = SqlToYqlWithMode(
+            R"(select oid,
+typinput::int4 as typinput,
+typname,
+typnamespace,
+typtype
+from pg_type)",
+            NSQLTranslation::ESqlMode::QUERY,
+            10,
+            {},
+            EDebugOutput::None,
+            false,
+            settings);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Root);
+
+        res = SqlToYqlWithMode(
+            R"(select oid,
+typinput::int4 as typinput,
+typname,
+typnamespace,
+typtype
+from pg_catalog.pg_type)",
+            NSQLTranslation::ESqlMode::QUERY,
+            10,
+            {},
+            EDebugOutput::None,
+            false,
+            settings);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Root);
+        
+        res = SqlToYqlWithMode(
+            R"(select set_config("search_path", "public");)",
+            NSQLTranslation::ESqlMode::QUERY,
+            10,
+            {},
+            EDebugOutput::None,
+            false,
+            settings);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Root);
+
+        res = SqlToYqlWithMode(
+            R"(select set_config("search_path", "yql");)",
+            NSQLTranslation::ESqlMode::QUERY,
+            10,
+            {},
+            EDebugOutput::None,
+            false,
+            settings);
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(!res.Root);
+    }
 }

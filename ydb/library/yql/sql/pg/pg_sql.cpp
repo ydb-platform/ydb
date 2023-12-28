@@ -632,6 +632,57 @@ public:
         return QL(QA("values"), QVL(valNames.data(), valNames.size()), VL(valueRows));
     }
 
+    TAstNode* ParseSetConfig(const FuncCall* value) {
+        auto length = ListLength(value->args);
+        if (length != 2 && length != 3) {
+            AddError(TStringBuilder() << "Excepted 2 or 3 arguments, but got: " << length);
+            return;
+        }
+        auto loc = value->location;
+        VariableSetStmt config;
+        auto arg0 = ListNodeNth(value->args, 0);
+        auto arg1 = ListNodeNth(value->args, 1);
+        if (length == 3) {
+            auto arg2 = ListNodeNth(value->args, 2);
+            if (NodeTag(arg2) != T_TypeCast) {
+                AddError(TStringBuilder() << "Excepted type cast node as is_local arg, but got node with tag");
+                return;
+            }
+            auto isLocalCast = CAST_NODE(TypeCast, arg2)->arg;
+            if (NodeTag(isLocalCast) != T_A_Const) {
+                AddError(TStringBuilder() << "Excepted a_const in cast, but got something wrong: " << NodeTag(isLocalCast));
+                return nullptr;
+            }
+            auto isLocalConst = CAST_NODE(A_Const, isLocalCast);
+            if (NodeTag(isLocalConst->val) != T_String) {
+                AddError(TStringBuilder() << "Excepted string in const, but got something wrong: " << NodeTag(isLocalCast));
+                return nullptr;
+            }
+            auto rawVal = TString(StrVal(isLocalConst->val));
+            if (rawVal != "t" && rawVal != "f") {
+                AddError(TStringBuilder() << "Excepted t/f, but got " << rawVal);
+                return;
+            }
+            config.is_local = rawVal == "t";
+        }
+
+        if (NodeTag(arg0) != T_ColumnRef || NodeTag(arg1) != T_ColumnRef) {
+            AddError(TStringBuilder() << "Excepted column name ref arg, but got something other: " << NodeTag(arg0));
+            return nullptr;
+        }
+
+        auto name = ListNodeNth(CAST_NODE(ColumnRef, arg0)->fields, 0);
+        auto val = ListNodeNth(CAST_NODE(ColumnRef, arg1)->fields, 0);
+        if (NodeTag(name) != T_String || NodeTag(val) != T_String) {
+            AddError(TStringBuilder() << "Excepted string const as name arg, but got something other: " << NodeTag(name));
+            return;
+        }
+        config.name = (char*)StrVal(name);
+        A_Const constVal{.type = T_A_Const, .val = *(Value*)val, .location = loc};
+        config.args = list_make1((void*)(&constVal));
+        return ParseVariableSetStmt(&config, true);
+    }
+
     using TTraverseSelectStack = TStack<std::pair<const SelectStmt*, bool>>;
     using TTraverseNodeStack = TStack<std::pair<const Node*, bool>>;
 
@@ -973,6 +1024,36 @@ public:
             if (emitPgStar && id + 1 == setItems.size()) {
                 res.emplace_back(CreatePgStarResultItem());
                 i++;
+            }
+
+            if (!inner && ListLength(x->targetList) == 1 && !sort && windowItems.empty() && !having && !groupBy && !whereFilter && !x->distinctClause) {
+                auto node = ListNodeNth(x->targetList, 0);
+                if (NodeTag(node) != T_ResTarget) {
+                    NodeNotImplemented(x, node);
+                    return nullptr;
+                }
+                auto r = CAST_NODE(ResTarget, node);
+                if (!r->val) {
+                    AddError("SelectStmt: expected val");
+                    return nullptr;
+                }
+                auto call = r->val;
+                if (NodeTag(call) == T_FuncCall) {
+                    auto fn = CAST_NODE(FuncCall, call);
+                    if (ListLength(fn->funcname) > 1) {
+                        AddError("Expected 1 argument as function name");
+                        return nullptr;
+                    }
+                    auto nameNode = ListNodeNth(fn->funcname, 0);
+                    if (NodeTag(nameNode) != T_String) {
+                        AddError("Function name must be string");
+                        return nullptr;
+                    }
+                    auto name = to_lower(TString(StrVal(ListNodeNth(fn->funcname, 0))));
+                    if (name == "set_config") {
+                        return ParseSetConfig(fn);
+                    }
+                }
             }
             for (int targetIndex = 0; targetIndex < ListLength(x->targetList); ++targetIndex) {
                 auto node = ListNodeNth(x->targetList, targetIndex);
@@ -1993,13 +2074,36 @@ public:
     }
 
     [[nodiscard]]
-    TAstNode* ParseVariableSetStmt(const VariableSetStmt* value) {
+    TAstNode* ParseVariableSetStmt(const VariableSetStmt* value, bool isSetConfig = false) {
         if (value->kind != VAR_SET_VALUE) {
             AddError(TStringBuilder() << "VariableSetStmt, not supported kind: " << (int)value->kind);
             return nullptr;
         }
 
         auto name = to_lower(TString(value->name));
+        if (isSetConfig) {
+            if (ListLength(value->args) != 1) {
+                AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
+                return nullptr;
+            }
+            auto val = ListNodeNth(value->args, 0);
+            if (NodeTag(val) != T_A_Const || NodeTag(CAST_NODE(A_Const, val)->val) != T_String) {
+                AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
+                return nullptr;
+            }
+            TString rawStr = TString(StrVal(CAST_NODE(A_Const, val)->val));
+            if (name != "search_path") {
+                AddError(TStringBuilder() << "VariableSetStmt, set_config doesn't support that option:" << name);
+                return nullptr;
+            }
+            if (rawStr != "pg_catalog" && rawStr != "public") {
+                AddError(TStringBuilder() << "VariableSetStmt, search path supports only public and pg_catalogue, but got :" << rawStr);
+                return nullptr;
+            }
+            Settings.GUCSettings->Set(name, rawStr, value->is_local);
+            return;
+        }
+
         if (name == "useblocks" || name == "emitaggapply") {
             if (ListLength(value->args) != 1) {
                 AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
@@ -2413,6 +2517,20 @@ public:
         return true;
     }
 
+    TStringBuf ResolveCluster(const TStringBuf schemaname) {
+        if (schemaname == "public") {
+            return "";
+        }
+        if (schemaname == "") {
+            auto search_path = Settings.GUCSettings->Get("search_path");
+            if (!search_path || search_path == "public") {
+                return Settings.DefaultCluster;
+            }
+            return TStringBuf(*search_path);
+        }
+        return schemaname;
+    }
+
     TAstNode* BuildClusterSinkOrSourceExpression(
         bool isSink, const TStringBuf schemaname) {
       const auto p = Settings.ClusterMapping.FindPtr(schemaname);
@@ -2443,7 +2561,7 @@ public:
         return {};
       }
 
-      const auto cluster = !schemaname.Empty() && schemaname != "public" ? schemaname : Settings.DefaultCluster;
+      const auto cluster = ResolveCluster(schemaname);
       const auto sinkOrSource = BuildClusterSinkOrSourceExpression(isSink, cluster);
       const auto key = BuildTableKeyExpression(relname, isScheme);
       return {sinkOrSource, key};
@@ -2470,7 +2588,7 @@ public:
             return {};
         }
 
-        const auto cluster = !schemaname.Empty() && schemaname != "public" ? schemaname : Settings.DefaultCluster;
+        const auto cluster = ResolveCluster(schemaname);
         const auto sinkOrSource = BuildClusterSinkOrSourceExpression(true, cluster);
         const auto key = BuildPgObjectExpression(objectName, pgObjectType);
         return {sinkOrSource, key};
@@ -3262,6 +3380,7 @@ public:
         }
 
         auto name = names.back();
+
         const bool isAggregateFunc = NYql::NPg::HasAggregation(name);
         const bool hasReturnSet = NYql::NPg::HasReturnSetProc(name);
 

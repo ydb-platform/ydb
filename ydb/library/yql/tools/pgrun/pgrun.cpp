@@ -1014,6 +1014,7 @@ int Main(int argc, char* argv[])
     const TString username = GetUsername();
     THashSet<TString> sqlFlags;
 
+    NSQLTranslation::TTranslationSettings settings;
     for (const auto& raw_stmt : TStatementIterator{Cin.ReadAll()}) {
         const auto stmt = GetFormattedStmt(raw_stmt);
         Cout << stmt << '\n';
@@ -1035,7 +1036,6 @@ int Main(int argc, char* argv[])
         }
 
         google::protobuf::Arena arena;
-        NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &arena;
         settings.ClusterMapping = clusterMapping;
         settings.DefaultCluster = DefaultCluster;

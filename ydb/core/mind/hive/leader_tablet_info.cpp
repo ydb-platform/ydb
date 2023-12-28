@@ -77,8 +77,10 @@ void TLeaderTabletInfo::AssignDomains(const TSubDomainKey& objectDomain, const T
         NodeFilter.AllowedDomains = { Hive.GetRootDomainKey() };
         ObjectDomain = { Hive.GetRootDomainKey() };
     }
+    NodeFilter.ObjectDomain = ObjectDomain;
     for (auto& followerGroup : FollowerGroups) {
         followerGroup.NodeFilter.AllowedDomains = NodeFilter.AllowedDomains;
+        followerGroup.NodeFilter.ObjectDomain = NodeFilter.ObjectDomain;
     }
 }
 
@@ -133,7 +135,7 @@ TFollowerGroupId TLeaderTabletInfo::GenerateFollowerGroupId() const {
 }
 
 TFollowerGroup& TLeaderTabletInfo::AddFollowerGroup(TFollowerGroupId followerGroupId) {
-    FollowerGroups.emplace_back();
+    FollowerGroups.emplace_back(Hive);
     TFollowerGroup& followerGroup = FollowerGroups.back();
     if (followerGroupId == 0) {
         followerGroup.Id = GenerateFollowerGroupId();
@@ -141,6 +143,7 @@ TFollowerGroup& TLeaderTabletInfo::AddFollowerGroup(TFollowerGroupId followerGro
         followerGroup.Id = followerGroupId;
     }
     followerGroup.NodeFilter.AllowedDomains = NodeFilter.AllowedDomains;
+    followerGroup.NodeFilter.ObjectDomain = NodeFilter.ObjectDomain;
     return followerGroup;
 }
 

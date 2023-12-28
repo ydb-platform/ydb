@@ -1,5 +1,12 @@
 #include "aws.h"
 
+#include <ydb/public/sdk/cpp/client/ydb_import/import.h>
+
+#include <aws/core/Aws.h>
+#include <aws/core/auth/AWSCredentialsProvider.h>
+#include <aws/s3/S3Client.h>
+#include <aws/s3/model/ListObjectsV2Request.h>
+
 namespace NYdb::NConsoleClient {
 
 const TString TCommandWithAwsCredentials::AwsCredentialsFile = "~/.aws/credentials";
@@ -32,6 +39,66 @@ TString TCommandWithAwsCredentials::ReadIniKey(const TString& iniKey) {
     } catch (const TConfigError& ex) {
         throw yexception() << "Invalid " << fileName << " file: " << ex.what();
     }
+}
+
+class TS3ClientWrapper : public IS3ClientWrapper {
+public:
+    TS3ClientWrapper(const NImport::TImportFromS3Settings& settings) 
+        : Bucket(settings.Bucket_)
+    {
+        Aws::S3::S3ClientConfiguration config;
+        config.endpointOverride = settings.Endpoint_;
+        if (settings.Scheme_ == ES3Scheme::HTTP) {
+            config.scheme = Aws::Http::Scheme::HTTP;
+        } else if (settings.Scheme_ == ES3Scheme::HTTPS) {
+            config.scheme = Aws::Http::Scheme::HTTPS;
+        } else {
+            throw TMisuseException() << "\"" << settings.Scheme_ << "\" scheme type is not supported";
+        }
+
+        Client = std::make_unique<Aws::S3::S3Client>(
+            Aws::Auth::AWSCredentials(settings.AccessKey_, settings.SecretKey_),
+            config,
+            Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+            true);
+    }
+
+    TListS3Result ListObjectKeys(const TString& prefix, const std::optional<TString>& token) override {
+        auto request = Aws::S3::Model::ListObjectsV2Request()
+            .WithBucket(Bucket)
+            .WithPrefix(prefix);
+        if (token) {
+            request.WithContinuationToken(*token);
+        }
+        auto response = Client->ListObjectsV2(request);
+        if (!response.IsSuccess()) {
+            throw TMisuseException() << "ListObjectKeys error: " << response.GetError().GetMessage();
+        }
+        TListS3Result result;
+        for (const auto& object : response.GetResult().GetContents()) {
+            result.Keys.push_back(TString(object.GetKey()));
+        }
+        if (response.GetResult().GetIsTruncated()) {
+            result.NextToken = TString(response.GetResult().GetNextContinuationToken());
+        }
+        return result;
+    }
+
+private:
+    std::unique_ptr<Aws::S3::S3Client> Client;
+    const TString Bucket;
+};
+
+std::unique_ptr<IS3ClientWrapper> CreateS3ClientWrapper(const NImport::TImportFromS3Settings& settings) {
+    return std::make_unique<TS3ClientWrapper>(settings);
+}
+
+void InitAwsAPI() {
+    Aws::InitAPI(Aws::SDKOptions());
+}
+
+void ShutdownAwsAPI() {
+    Aws::ShutdownAPI(Aws::SDKOptions());
 }
 
 }

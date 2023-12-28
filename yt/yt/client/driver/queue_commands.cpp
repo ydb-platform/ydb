@@ -233,8 +233,7 @@ void TAdvanceConsumerCommand::DoExecute(ICommandContextPtr context)
 {
     auto transaction = GetTransaction(context);
 
-    WaitFor(transaction->AdvanceConsumer(ConsumerPath, QueuePath, PartitionIndex, OldOffset, NewOffset, /*options*/ {}))
-        .ThrowOnError();
+    transaction->AdvanceConsumer(ConsumerPath, QueuePath, PartitionIndex, OldOffset, NewOffset);
 
     if (ShouldCommitTransaction()) {
         WaitFor(transaction->Commit())

@@ -1466,9 +1466,9 @@
     ],
     "test.test[key_filter-contains_tuples_no_keyfilter-default.txt-Debug]": [
         {
-            "checksum": "9ef6267bc73b19c842c4fd7f48c05db2",
-            "size": 2977,
-            "uri": "https://{canondata_backend}/1942415/14c2050022adcb6379d90c4a2a09abf0847e7643/resource.tar.gz#test.test_key_filter-contains_tuples_no_keyfilter-default.txt-Debug_/opt.yql"
+            "checksum": "bd73e0f8f15acc3142eb18cb9e2f2441",
+            "size": 2994,
+            "uri": "https://{canondata_backend}/1942100/0890f0844da2eab4954201bf726caf9e4f8db2e9/resource.tar.gz#test.test_key_filter-contains_tuples_no_keyfilter-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[key_filter-contains_tuples_no_keyfilter-default.txt-Plan]": [

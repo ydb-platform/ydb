@@ -1469,7 +1469,7 @@ void TMkqlReaderImpl::SetSpecs(const TMkqlIOSpecs& specs, const NKikimr::NMiniKQ
     Buf_.SetStats(JobStats_);
     if (Specs_->UseSkiff_) {
 #ifndef MKQL_DISABLE_CODEGEN
-        if (Specs_->OptLLVM_ != "OFF") {
+        if (Specs_->OptLLVM_ != "OFF" && NCodegen::ICodegen::IsCodegenAvailable()) {
             Decoder_.Reset(new TSkiffLLVMDecoder(Buf_, *Specs_, holderFactory));
         }
         else
@@ -1976,7 +1976,7 @@ void TMkqlWriterImpl::SetSpecs(const TMkqlIOSpecs& specs, const TVector<TString>
 
 #ifndef MKQL_DISABLE_CODEGEN
     THashMap<TStructType*, std::pair<llvm::Function*, llvm::Function*>> llvmFunctions;
-    if (Specs_->UseSkiff_ && Specs_->OptLLVM_ != "OFF") {
+    if (Specs_->UseSkiff_ && Specs_->OptLLVM_ != "OFF" && NCodegen::ICodegen::IsCodegenAvailable()) {
         for (size_t i: xrange(Specs_->Outputs.size())) {
             auto rowType = Specs_->Outputs[i].RowType;
             if (rowType->GetMembersCount() != 0 && !llvmFunctions.contains(rowType)) {

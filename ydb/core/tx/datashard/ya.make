@@ -235,6 +235,7 @@ PEERDIR(
     library/cpp/string_utils/quote
     ydb/core/actorlib_impl
     ydb/core/base
+    ydb/core/change_exchange
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats

@@ -282,6 +282,13 @@ struct TNodeFilter {
     TVector<TSubDomainKey> AllowedDomains;
     TVector<TNodeId> AllowedNodes;
     TVector<TDataCenterId> AllowedDataCenters;
+    TSubDomainKey ObjectDomain;
+
+    const THive& Hive;
+
+    explicit TNodeFilter(const THive& hive);
+
+    TArrayRef<const TSubDomainKey> GetEffectiveAllowedDomains() const;
 };
 
 } // NHive

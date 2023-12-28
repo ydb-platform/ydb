@@ -6,7 +6,6 @@
 #include <ydb/core/actorlib_impl/destruct_actor.h>
 #include <ydb/core/actorlib_impl/load_network.h>
 #include <ydb/core/actorlib_impl/mad_squirrel.h>
-#include <ydb/core/actorlib_impl/node_identifier.h>
 
 #include "ydb/core/audit/audit_log.h"
 
@@ -31,9 +30,9 @@
 
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/client/server/grpc_proxy_status.h>
+#include <ydb/core/client/server/msgbus_server.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
-#include <ydb/core/client/server/msgbus_server_tracer.h>
 
 #include <ydb/core/cms/cms.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -1525,12 +1524,6 @@ void TMessageBusServicesInitializer::InitializeServices(NActors::TActorSystemSet
                 );
             }
         }
-
-        if (IActor* traceService = BusServer.CreateMessageBusTraceService()) {
-            TActorSetupCmd messageBusTraceServiceSetup(traceService, TMailboxType::HTSwap, appData->IOPoolId);
-            setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NMessageBusTracer::MakeMessageBusTraceServiceID(),
-                                                                               std::move(messageBusTraceServiceSetup)));
-        }
     }
 }
 
@@ -1802,21 +1795,6 @@ void TWhiteBoardServiceInitializer::InitializeServices(NActors::TActorSystemSetu
                                                                        TActorSetupCmd(tabletStateService,
                                                                                       TMailboxType::HTSwap,
                                                                                       appData->SystemPoolId)));
-}
-
-// TNodeIdentifierInitializer
-
-TNodeIdentifierInitializer::TNodeIdentifierInitializer(const TKikimrRunConfig& runConfig)
-    : IKikimrServicesInitializer(runConfig) {
-}
-
-void TNodeIdentifierInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
-                                                    const NKikimr::TAppData* appData) {
-    IActor* nodeIdentifier = CreateNodeIdentifier();
-    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeNodeIdentifierServiceId(),
-                                                                       TActorSetupCmd(nodeIdentifier,
-                                                                                      TMailboxType::Simple,
-                                                                                      appData->IOPoolId)));
 }
 
 // TTabletMonitorInitializer

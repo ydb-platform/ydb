@@ -1187,7 +1187,7 @@ public:
 
     TFuture<TGenericResult> CreateExternalTable(const TString& cluster,
                                                 const NYql::TCreateExternalTableSettings& settings,
-                                                bool createDir) override {
+                                                bool createDir, bool existingOk) override {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
         try {
@@ -1211,6 +1211,7 @@ public:
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(pathPair.first);
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalTable);
+            schemeTx.SetFailedOnAlreadyExists(!existingOk);
 
             NKikimrSchemeOp::TExternalTableDescription& externalTableDesc = *schemeTx.MutableCreateExternalTable();
             NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, settings);
@@ -1228,7 +1229,8 @@ public:
     }
 
     TFuture<TGenericResult> DropExternalTable(const TString& cluster,
-                                              const NYql::TDropExternalTableSettings& settings) override {
+                                              const NYql::TDropExternalTableSettings& settings,
+                                              bool missingOk) override {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
         try {
@@ -1253,6 +1255,7 @@ public:
             auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
             schemeTx.SetWorkingDir(pathPair.first);
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropExternalTable);
+            schemeTx.SetSuccessOnNotExist(missingOk);
 
             NKikimrSchemeOp::TDrop& drop = *schemeTx.MutableDrop();
             drop.SetName(pathPair.second);
@@ -1489,7 +1492,7 @@ public:
             auto& dropUser = *schemeTx.MutableAlterLogin()->MutableRemoveUser();
 
             dropUser.SetUser(settings.UserName);
-            dropUser.SetMissingOk(settings.Force);
+            dropUser.SetMissingOk(settings.MissingOk);
 
             SendSchemeRequest(ev.Release()).Apply(
                 [dropUserPromise](const TFuture<TGenericResult>& future) mutable {
@@ -1840,7 +1843,7 @@ public:
             auto& dropGroup = *schemeTx.MutableAlterLogin()->MutableRemoveGroup();
 
             dropGroup.SetGroup(settings.GroupName);
-            dropGroup.SetMissingOk(settings.Force);
+            dropGroup.SetMissingOk(settings.MissingOk);
 
             SendSchemeRequest(ev.Release()).Apply(
                 [dropGroupPromise](const TFuture<TGenericResult>& future) mutable {

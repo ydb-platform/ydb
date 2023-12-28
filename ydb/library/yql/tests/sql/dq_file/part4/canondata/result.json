@@ -219,9 +219,9 @@
     ],
     "test.test[aggr_factory-udaf_in_udaf-default.txt-Debug]": [
         {
-            "checksum": "1d495bde48f568ec5ef6d949262cc71b",
-            "size": 3500,
-            "uri": "https://{canondata_backend}/212715/cac0988e3f0d6d4f0bc782106479af0e9a38af20/resource.tar.gz#test.test_aggr_factory-udaf_in_udaf-default.txt-Debug_/opt.yql_patched"
+            "checksum": "e1b2951e46ff2a3be721b812c4296fe9",
+            "size": 3629,
+            "uri": "https://{canondata_backend}/1936997/73aed6912c63e0c9849547f60724686e52b76a17/resource.tar.gz#test.test_aggr_factory-udaf_in_udaf-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggr_factory-udaf_in_udaf-default.txt-Plan]": [

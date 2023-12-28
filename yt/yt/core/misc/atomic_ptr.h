@@ -1,7 +1,8 @@
 #pragma once
 
 #include "hazard_ptr.h"
-#include "intrusive_ptr.h"
+
+#include <library/cpp/yt/memory/intrusive_ptr.h>
 
 namespace NYT {
 

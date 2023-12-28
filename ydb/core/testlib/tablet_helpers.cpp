@@ -1147,6 +1147,8 @@ namespace NKikimr {
                 HFunc(TEvHive::TEvInitiateTabletExternalBoot, Handle);
                 HFunc(TEvHive::TEvUpdateTabletsObject, Handle);
                 HFunc(TEvFakeHive::TEvSubscribeToTabletDeletion, Handle);
+                HFunc(TEvHive::TEvUpdateDomain, Handle);
+                HFunc(TEvFakeHive::TEvRequestDomainInfo, Handle);
                 HFunc(TEvents::TEvPoisonPill, Handle);
             }
         }
@@ -1435,6 +1437,25 @@ namespace NKikimr {
             response->Record.SetTxId(ev->Get()->Record.GetTxId());
             response->Record.SetTxPartId(ev->Get()->Record.GetTxPartId());
             ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+        }
+
+        void Handle(TEvHive::TEvUpdateDomain::TPtr &ev, const TActorContext &ctx) {
+            LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvUpdateDomain, msg: " << ev->Get()->Record.ShortDebugString());
+            
+            const TSubDomainKey subdomainKey(ev->Get()->Record.GetDomainKey());
+            NHive::TDomainInfo& domainInfo = State->Domains[subdomainKey];
+            domainInfo.ServerlessComputeResourcesMode = ev->Get()->Record.GetServerlessComputeResourcesMode();
+
+            auto response = std::make_unique<TEvHive::TEvUpdateDomainReply>();
+            response->Record.SetTxId(ev->Get()->Record.GetTxId());
+            response->Record.SetOrigin(TabletID());
+            ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+        }
+
+        void Handle(TEvFakeHive::TEvRequestDomainInfo::TPtr &ev, const TActorContext &ctx) {
+            LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvRequestDomainInfo, " << ev->Get()->DomainKey);
+            auto response = std::make_unique<TEvFakeHive::TEvRequestDomainInfoReply>(State->Domains[ev->Get()->DomainKey]);
+            ctx.Send(ev->Sender, response.release());
         }
 
         void Handle(TEvFakeHive::TEvSubscribeToTabletDeletion::TPtr &ev, const TActorContext &ctx) {

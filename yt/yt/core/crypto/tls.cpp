@@ -279,7 +279,7 @@ public:
             .Run();
     }
 
-    void SubscribePeerDisconnect(TCallback<void ()> cb) override
+    void SubscribePeerDisconnect(TCallback<void()> cb) override
     {
         return Underlying_->SubscribePeerDisconnect(std::move(cb));
     }

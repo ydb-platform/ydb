@@ -1,5 +1,6 @@
 #pragma once
 
+#include "kqp_query_stats.h"
 #include "kqp_worker_common.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -85,7 +86,7 @@ public:
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     TKqpCompileResult::TConstPtr CompileResult;
-    NKqpProto::TKqpStatsCompile CompileStats;
+    TKqpStatsCompile CompileStats;
     TIntrusivePtr<TKqpTransactionContext> TxCtx;
     TQueryData::TPtr QueryData;
 
@@ -97,8 +98,7 @@ public:
 
     TInstant StartTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
-
-    NKqpProto::TKqpStatsQuery Stats;
+    TKqpQueryStats QueryStats;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     NActors::TMonotonic StartedAt;
@@ -235,7 +235,7 @@ public:
     }
 
     bool NeedCheckTableVersions() const {
-        return CompileStats.GetFromCache();
+        return CompileStats.FromCache;
     }
 
     TString ExtractQueryText() const {

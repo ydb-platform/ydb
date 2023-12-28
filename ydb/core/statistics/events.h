@@ -44,10 +44,16 @@ struct TEvStatistics {
         EvGetStatisticsFromSS, // deprecated
         EvGetStatisticsFromSSResult, // deprecated
 
-        EvBroadcastStatistics,
-        EvRegisterNode,
+        EvBroadcastStatistics, // deprecated
+        EvRegisterNode, // deprecated
 
         EvConfigureAggregator,
+
+        EvConnectSchemeShard,
+        EvSchemeShardStats,
+        EvConnectNode,
+        EvRequestStats,
+        EvPropagateStatistics,
 
         EvEnd
     };
@@ -60,19 +66,7 @@ struct TEvStatistics {
         bool Success = true;
         std::vector<TResponse> StatResponses;
     };
-
-    struct TEvBroadcastStatistics : public TEventPreSerializedPB<
-        TEvBroadcastStatistics,
-        NKikimrStat::TEvBroadcastStatistics,
-        EvBroadcastStatistics>
-    {};
-
-    struct TEvRegisterNode : public TEventPB<
-        TEvRegisterNode,
-        NKikimrStat::TEvRegisterNode,
-        EvRegisterNode>
-    {};
-
+    
     struct TEvConfigureAggregator : public TEventPB<
         TEvConfigureAggregator,
         NKikimrStat::TEvConfigureAggregator,
@@ -85,6 +79,35 @@ struct TEvStatistics {
         }
     };
 
+    struct TEvConnectSchemeShard : public TEventPB<
+        TEvConnectSchemeShard,
+        NKikimrStat::TEvConnectSchemeShard,
+        EvConnectSchemeShard>
+    {};
+
+    struct TEvSchemeShardStats : public TEventPB<
+        TEvSchemeShardStats,
+        NKikimrStat::TEvSchemeShardStats,
+        EvSchemeShardStats>
+    {};
+
+    struct TEvConnectNode : public TEventPB<
+        TEvConnectNode,
+        NKikimrStat::TEvConnectNode,
+        EvConnectNode>
+    {};
+
+    struct TEvRequestStats : public TEventPB<
+        TEvRequestStats,
+        NKikimrStat::TEvRequestStats,
+        EvRequestStats>
+    {};
+
+    struct TEvPropagateStatistics : public TEventPreSerializedPB<
+        TEvPropagateStatistics,
+        NKikimrStat::TEvPropagateStatistics,
+        EvPropagateStatistics>
+    {};
 };
 
 } // NStat

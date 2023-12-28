@@ -542,9 +542,9 @@ void PrintQueryStats(const TDataQueryResult& result) {
     }
 }
 
-void AssertTableStats(const TDataQueryResult& result, TStringBuf table, const TExpectedTableStats& expectedStats) {
-    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
+void AssertTableStats(const Ydb::TableStats::QueryStats& stats, TStringBuf table,
+    const TExpectedTableStats& expectedStats)
+{
     ui64 actualReads = 0;
     ui64 actualUpdates = 0;
     ui64 actualDeletes = 0;
@@ -573,6 +573,11 @@ void AssertTableStats(const TDataQueryResult& result, TStringBuf table, const TE
         UNIT_ASSERT_EQUAL_C(*expectedStats.ExpectedDeletes, actualDeletes, "table: " << table
             << ", deletes expected " << *expectedStats.ExpectedDeletes << ", actual " << actualDeletes);
     }
+}
+
+void AssertTableStats(const TDataQueryResult& result, TStringBuf table, const TExpectedTableStats& expectedStats) {
+    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+    return AssertTableStats(stats, table, expectedStats);
 }
 
 TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query, const NYdb::TParams& params,

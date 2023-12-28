@@ -221,7 +221,8 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "UserName", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"},
+                {"Index": 4, "Name": "MissingOk", "Type": "TCoAtom"}
             ]
         },
         {
@@ -245,7 +246,8 @@
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "ObjectId", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "TypeId", "Type": "TCoAtom"},
-                {"Index": 4, "Name": "Features", "Type": "TCoNameValueTupleList"}
+                {"Index": 4, "Name": "Features", "Type": "TCoNameValueTupleList"},
+                {"Index": 5, "Name": "ExistingOk", "Type": "TCoAtom"}
             ]
         },
         {
@@ -269,7 +271,8 @@
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "ObjectId", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "TypeId", "Type": "TCoAtom"},
-                {"Index": 4, "Name": "Features", "Type": "TCoNameValueTupleList"}
+                {"Index": 4, "Name": "Features", "Type": "TCoNameValueTupleList"},
+                {"Index": 5, "Name": "MissingOk", "Type": "TCoAtom"}
             ]
         },
         {
@@ -314,7 +317,8 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "GroupName", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"},
+                {"Index": 4, "Name": "MissingOk", "Type": "TCoAtom"}
             ]
         },
         {

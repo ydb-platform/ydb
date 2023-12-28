@@ -5,7 +5,7 @@ UNITTEST()
 PEERDIR(
     library/cpp/protobuf/util
     ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/public/purecalc/common
+    ydb/library/yql/public/purecalc
     ydb/library/yql/public/purecalc/io_specs/protobuf
     ydb/library/yql/public/purecalc/ut/protos
 )

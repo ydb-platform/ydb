@@ -8,9 +8,13 @@
 
 #include <library/cpp/yt/misc/tls.h>
 
+#include <util/generic/size_literals.h>
+
 #ifdef _linux_
     #include <sched.h>
 #endif
+
+#include <signal.h>
 
 namespace NYT::NThreading {
 
@@ -203,6 +207,7 @@ void TThread::ThreadMainTrampoline()
     CurrentUniqueThreadId = UniqueThreadId_;
 
     SetThreadPriority();
+    ConfigureSignalHandlerStack();
 
     StartedEvent_.NotifyAll();
 
@@ -272,6 +277,30 @@ void TThread::SetThreadPriority()
 #else
     Y_UNUSED(ThreadPriority_);
     Y_UNUSED(Logger);
+#endif
+}
+
+void TThread::ConfigureSignalHandlerStack()
+{
+#if !defined(_asan_enabled_) && !defined(_msan_enabled_) && \
+    (_XOPEN_SOURCE >= 500 || \
+    /* Since glibc 2.12: */ _POSIX_C_SOURCE >= 200809L || \
+    /* glibc <= 2.19: */ _BSD_SOURCE)
+    YT_THREAD_LOCAL(bool) Configured;
+    if (std::exchange(Configured, true)) {
+        return;
+    }
+
+    // The size of of the custom stack to be provided for signal handlers.
+    constexpr size_t SignalHandlerStackSize = 16_KB;
+    YT_THREAD_LOCAL(std::array<char, SignalHandlerStackSize>) Stack;
+
+    stack_t stack{
+        .ss_sp = GetTlsRef(Stack).data(),
+        .ss_flags = 0,
+        .ss_size = GetTlsRef(Stack).size(),
+    };
+    YT_VERIFY(sigaltstack(&stack, nullptr) == 0);
 #endif
 }
 

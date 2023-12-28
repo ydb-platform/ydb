@@ -17,6 +17,19 @@ struct TJournalReaderOptions
     TJournalReaderConfigPtr Config;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
+struct IJournalWritesObserver
+    : public TRefCounted
+{
+    virtual void RegisterPayloadWrite(int payloadBytes) = 0;
+    virtual void RegisterJournalWrite(int journalBytes, int mediumBytes) = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(IJournalWritesObserver)
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TJournalWriterPerformanceCounters
 {
     TJournalWriterPerformanceCounters() = default;
@@ -40,6 +53,8 @@ struct TJournalWriterPerformanceCounters
     NProfiling::TCounter MediumWrittenBytes;
     NProfiling::TCounter IORequestCount;
     NProfiling::TCounter JournalWrittenBytes;
+
+    IJournalWritesObserverPtr JournalWritesObserver;
 };
 
 struct TJournalWriterOptions

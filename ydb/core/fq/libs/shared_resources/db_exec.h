@@ -138,7 +138,7 @@ public:
 
     static std::shared_ptr<TDbExecuter> Lock(const std::weak_ptr<TDbExecutable>& self) {
         auto lock = self.lock();
-        return std::dynamic_pointer_cast<TDbExecuter>(lock);
+        return std::static_pointer_cast<TDbExecuter>(lock);
     }
 
     TAsyncStatus NextStep(NYdb::NTable::TSession session) {

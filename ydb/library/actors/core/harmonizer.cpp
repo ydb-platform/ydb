@@ -481,8 +481,8 @@ TAccumulatedStatistics THarmonizer::AccumulateStatistics(ui64 ts) {
         poolConsumed += Rescale(pool.GetSharedConsumed());
 
         // Cerr << (TStringBuilder() << "PoolId# " << poolIdx << " Booked# "
-                << poolBooked << " Consumed# " << poolConsumed << " HasShared# " << pool.HasSharedThread
-                << " HasBorrowedSharedThread# " << (pool.OtherHalfSharedThread ? std::to_string(*pool.OtherHalfSharedThread) : "none") << Endl);
+        //         << poolBooked << " Consumed# " << poolConsumed << " HasShared# " << pool.HasSharedThread
+        //         << " HasBorrowedSharedThread# " << (pool.OtherHalfSharedThread ? std::to_string(*pool.OtherHalfSharedThread) : "none") << Endl);
 
         bool isStarved = IsStarved(poolConsumed, poolBooked) || IsStarved(lastSecondPoolConsumed, lastSecondPoolBooked);
         if (isStarved) {

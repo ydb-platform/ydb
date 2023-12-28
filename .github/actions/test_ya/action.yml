@@ -219,7 +219,7 @@ runs:
           ./ya test "${params[@]}" \
             --bazel-remote-put --bazel-remote-username "${{ inputs.bazel_remote_username }}" --bazel-remote-password "${{ inputs.bazel_remote_password }}" -DCONSISTENT_DEBUG \
             --log-file "$LOG_DIR/ya_log_prewarm.txt" --evlog-file "$LOG_DIR/ya_evlog_prewarm.jsonl" \
-            --dist-cache-evict-bins --cache-tests --no-dir-outputs --test-node-output-limit 100000 --drop-graph-result-before-tests || (
+            --dist-cache-evict-bins --dist-cache-evict-cached --cache-tests --no-dir-outputs --test-node-output-limit 100000 --drop-graph-result-before-tests || (
               RC=$?
               echo "::debug::ya test RC=$RC"
             )
@@ -228,8 +228,8 @@ runs:
         echo "::debug::save tests reports"
         ./ya test "${params[@]}" \
           --stat --log-file "$LOG_DIR/ya_log.txt" --evlog-file "$LOG_DIR/ya_evlog.jsonl" -DCONSISTENT_DEBUG \
-          --cache-tests --dist-cache-evict-bins --no-dir-outputs --test-node-output-limit 100000 --drop-graph-result-before-tests \
-          --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || (
+          --cache-tests --dist-cache-evict-cached --dist-cache-evict-bins --no-dir-outputs --test-node-output-limit 100000 \
+          --drop-graph-result-before-tests --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || (
             RC=$?
             if [ $RC -ne 0 ]; then
               echo "ya test returned $RC, check existence $JUNIT_REPORT_XML"

@@ -52,6 +52,8 @@ runs:
           extra_params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
           extra_params+=(--bazel-remote-password "${{ inputs.bazel_remote_password }}")
           extra_params+=(--bazel-remote-put --dist-cache-evict-bins --add-result .o --add-result .a)
+        else
+          extra_params+=(--dist-cache-evict-cached -dist-cache-evict-bins --add-result .o --add-result .a)
         fi
         
         case "${{ inputs.build_preset }}" in

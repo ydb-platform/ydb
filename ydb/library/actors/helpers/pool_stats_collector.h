@@ -399,9 +399,10 @@ private:
     void Wakeup(const TActorContext &ctx) {
         for (size_t poolId = 0; poolId < PoolCounters.size(); ++poolId) {
             TVector<TExecutorThreadStats> stats;
+            TVector<TExecutorThreadStats> sharedStats;
             TExecutorPoolStats poolStats;
-            ctx.ExecutorThread.ActorSystem->GetPoolStats(poolId, poolStats, stats);
-            SetAggregatedCounters(PoolCounters[poolId], poolStats, stats);
+            ctx.ExecutorThread.ActorSystem->GetPoolStats(poolId, poolStats, stats, sharedStats);
+            SetAggregatedCounters(PoolCounters[poolId], poolStats, stats, sharedStats);
         }
         THarmonizerStats harmonizerStats = ctx.ExecutorThread.ActorSystem->GetHarmonizerStats();
         ActorSystemCounters.Set(harmonizerStats);
@@ -411,10 +412,13 @@ private:
         ctx.Schedule(TDuration::Seconds(IntervalSec), new TEvents::TEvWakeup());
     }
 
-    void SetAggregatedCounters(TExecutorPoolCounters& poolCounters, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& stats) {
+    void SetAggregatedCounters(TExecutorPoolCounters& poolCounters, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& stats, TVector<TExecutorThreadStats>& sharedStats) {
         // Sum all per-thread counters into the 0th element
         for (ui32 idx = 1; idx < stats.size(); ++idx) {
             stats[0].Aggregate(stats[idx]);
+        }
+        for (auto &stat : sharedStats) {
+            stats[0].Aggregate(stat);
         }
         if (stats.size()) {
             poolCounters.Set(poolStats, stats[0], stats.size() - 1);

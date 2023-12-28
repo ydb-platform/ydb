@@ -45,6 +45,7 @@ int ActorsysPerfTest(TCommandConfig &cmdConf, int argc, char **argv) {
 
     TActorSystem actorSys(setup, nullptr);
     TVector<TExecutorThreadStats> stats(1);
+    TVector<TExecutorThreadStats> sharedStats(0);
     TExecutorPoolStats poolStats;
 
     TVector<std::pair<ui32, double>> lineProfile = {{ 0, .0 }, { 0, .0 }, { 0, .0 }, { 0, .0 }, { 0, .0 }, { 0, .0 }, { 0, 0 }, { 0, .0 }};
@@ -52,7 +53,7 @@ int ActorsysPerfTest(TCommandConfig &cmdConf, int argc, char **argv) {
     actorSys.Start();
     actorSys.Register(CreateGopherMother(lineProfile, 1000, 2));
     Sleep(TDuration::Seconds(config.Duration));
-    actorSys.GetPoolStats(0, poolStats, stats);
+    actorSys.GetPoolStats(0, poolStats, stats, sharedStats);
     actorSys.Stop();
 
     ui64 sentEvents = 0;

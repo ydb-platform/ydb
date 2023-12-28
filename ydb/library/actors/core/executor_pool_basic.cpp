@@ -638,9 +638,9 @@ namespace NActors {
             if (semaphore.OldSemaphore > 0) {
                 return false;
             }
-            i64 oldX = semaphore.ConverToI64();
+            i64 oldX = semaphore.ConvertToI64();
             semaphore.HasSleepBorrowedSharedThreads = true;
-            x = AtomicGetAndCas(&Semaphore, semaphore.ConverToI64(), oldX);
+            x = AtomicGetAndCas(&Semaphore, semaphore.ConvertToI64(), oldX);
             if (x == oldX) {
                 break;
             }
@@ -656,9 +656,9 @@ namespace NActors {
             if (semaphore.OldSemaphore > 0) {
                 return false;
             }
-            i64 oldX = semaphore.ConverToI64();
+            i64 oldX = semaphore.ConvertToI64();
             semaphore.HasSleepOwnSharedThreads = true;
-            x = AtomicGetAndCas(&Semaphore, semaphore.ConverToI64(), oldX);
+            x = AtomicGetAndCas(&Semaphore, semaphore.ConvertToI64(), oldX);
             if (x == oldX) {
                 break;
             }

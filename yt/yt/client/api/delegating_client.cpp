@@ -885,10 +885,11 @@ TFuture<TDisableChunkLocationsResult> TDelegatingClient::DisableChunkLocations(
 
 TFuture<TDestroyChunkLocationsResult> TDelegatingClient::DestroyChunkLocations(
     const TString& nodeAddress,
+    bool recoverUnlinkedDisks,
     const std::vector<TGuid>& locationUuids,
     const TDestroyChunkLocationsOptions& options)
 {
-    return Underlying_->DestroyChunkLocations(nodeAddress, locationUuids, options);
+    return Underlying_->DestroyChunkLocations(nodeAddress, recoverUnlinkedDisks, locationUuids, options);
 }
 
 TFuture<TResurrectChunkLocationsResult> TDelegatingClient::ResurrectChunkLocations(

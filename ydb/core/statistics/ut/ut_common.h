@@ -14,7 +14,7 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(
     
 class TTestEnv {
 public:
-    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 1, ui32 storagePools = 0);
+    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 1, ui32 storagePools = 1);
     ~TTestEnv();
 
     Tests::TServer& GetServer() const {

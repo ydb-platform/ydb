@@ -15,6 +15,53 @@ using namespace NTableClient;
 using namespace NTabletClient;
 using namespace NTransactionClient;
 
+namespace NDetail {
+
+void FormatProgressWithProjection(
+    TStringBuilderBase* builder,
+    const TReplicationProgress& replicationProgress,
+    TReplicationProgressProjection replicationProgressProjection)
+{
+    const auto& segments = replicationProgress.Segments;
+    if (segments.empty()) {
+        builder->AppendString("[]");
+        return;
+    }
+
+    auto it = std::upper_bound(
+    segments.begin(),
+    segments.end(),
+    replicationProgressProjection.From,
+    [] (const auto& lhs, const auto& rhs) {
+            return CompareRows(lhs, rhs.LowerKey) <= 0;
+    });
+
+    bool comma = false;
+    builder->AppendChar('[');
+
+    if (it != segments.begin()) {
+        builder->AppendFormat("<%v, %x>", segments[0].LowerKey, segments[0].Timestamp);
+        if (it != std::next(segments.begin())) {
+            builder->AppendString(", ...");
+        }
+        comma = true;
+    }
+
+    for (; it != segments.end() && it->LowerKey <= replicationProgressProjection.To; ++it) {
+        builder->AppendFormat("%v<%v, %x>", comma ? ", " : "", it->LowerKey,  it->Timestamp);
+        comma = true;
+    }
+
+    if (it != segments.end()) {
+        builder->AppendString(", ...");
+    }
+
+    builder->AppendChar(']');
+}
+
+} // namespace NDetail
+
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TReplicationCardFetchOptions::operator size_t() const
@@ -40,13 +87,24 @@ TString ToString(const TReplicationCardFetchOptions& options)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void FormatValue(TStringBuilderBase* builder, const TReplicationProgress& replicationProgress, TStringBuf /*spec*/)
+void FormatValue(
+    TStringBuilderBase* builder,
+    const TReplicationProgress& replicationProgress,
+    TStringBuf /*spec*/,
+    std::optional<TReplicationProgressProjection> replicationProgressProjection)
 {
-    builder->AppendFormat("{Segments: %v, UpperKey: %v}",
-        MakeFormattableView(replicationProgress.Segments, [] (auto* builder, const auto& segment) {
+    builder->AppendString("{Segments: ");
+    const auto& segments = replicationProgress.Segments;
+    if (!replicationProgressProjection) {
+        builder->AppendFormat("%v", MakeFormattableView(segments, [] (auto* builder, const auto& segment) {
             builder->AppendFormat("<%v, %x>", segment.LowerKey, segment.Timestamp);
-        }),
-        replicationProgress.UpperKey);
+        }));
+    } else  {
+        NDetail::FormatProgressWithProjection(builder, replicationProgress, *replicationProgressProjection);
+    }
+
+    builder->AppendFormat(", UpperKey: %v}", replicationProgress.UpperKey);
+
 }
 
 TString ToString(const TReplicationProgress& replicationProgress)
@@ -68,16 +126,22 @@ TString ToString(const TReplicaHistoryItem& replicaHistoryItem)
     return ToStringViaBuilder(replicaHistoryItem);
 }
 
-void FormatValue(TStringBuilderBase* builder, const TReplicaInfo& replicaInfo, TStringBuf /*spec*/)
+void FormatValue(
+    TStringBuilderBase* builder,
+    const TReplicaInfo& replicaInfo,
+    TStringBuf /*spec*/,
+    std::optional<TReplicationProgressProjection> replicationProgressProjection)
 {
-    builder->AppendFormat("{ClusterName: %v, ReplicaPath: %v, ContentType: %v, Mode: %v, State: %v, Progress: %v, History: %v}",
+    builder->AppendFormat("{ClusterName: %v, ReplicaPath: %v, ContentType: %v, Mode: %v, State: %v, Progress: ",
         replicaInfo.ClusterName,
         replicaInfo.ReplicaPath,
         replicaInfo.ContentType,
         replicaInfo.Mode,
-        replicaInfo.State,
-        replicaInfo.ReplicationProgress,
-        replicaInfo.History);
+        replicaInfo.State);
+
+    FormatValue(builder, replicaInfo.ReplicationProgress, TStringBuf(), replicationProgressProjection);
+
+    builder->AppendFormat(", History: %v}", replicaInfo.History);
 }
 
 TString ToString(const TReplicaInfo& replicaInfo)
@@ -85,11 +149,21 @@ TString ToString(const TReplicaInfo& replicaInfo)
     return ToStringViaBuilder(replicaInfo);
 }
 
-void FormatValue(TStringBuilderBase* builder, const TReplicationCard& replicationCard, TStringBuf /*spec*/)
+void FormatValue(
+    TStringBuilderBase* builder,
+    const TReplicationCard& replicationCard,
+    TStringBuf /*spec*/,
+    std::optional<TReplicationProgressProjection> replicationProgressProjection)
 {
     builder->AppendFormat("{Era: %v, Replicas: %v, CoordinatorCellIds: %v, TableId: %v, TablePath: %v, TableClusterName: %v, CurrentTimestamp: %v, CollocationId: %v}",
         replicationCard.Era,
-        replicationCard.Replicas,
+        MakeFormattableView(
+            replicationCard.Replicas,
+            [&] (TStringBuilderBase* builder, std::pair<const NYT::TGuid, NYT::NChaosClient::TReplicaInfo> replica) {
+                FormatValue(builder, replica.first, TStringBuf());
+                builder->AppendString(": ");
+                FormatValue(builder, replica.second, TStringBuf(), replicationProgressProjection);
+            }),
         replicationCard.CoordinatorCellIds,
         replicationCard.TableId,
         replicationCard.TablePath,
@@ -98,9 +172,13 @@ void FormatValue(TStringBuilderBase* builder, const TReplicationCard& replicatio
         replicationCard.ReplicationCardCollocationId);
 }
 
-TString ToString(const TReplicationCard& replicationCard)
+TString ToString(
+    const TReplicationCard& replicationCard,
+    std::optional<TReplicationProgressProjection> replicationProgressProjection)
 {
-    return ToStringViaBuilder(replicationCard);
+    TStringBuilder builder;
+    FormatValue(&builder, replicationCard, {}, replicationProgressProjection);
+    return builder.Flush();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

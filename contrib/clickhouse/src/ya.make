@@ -770,9 +770,13 @@ SRCS(
     Functions/UserDefined/UserDefinedSQLFunctionFactory.cpp
     Functions/UserDefined/UserDefinedSQLFunctionVisitor.cpp
     Functions/UserDefined/UserDefinedSQLObjectsBackup.cpp
+    Functions/UserDefined/UserDefinedSQLObjectsDiskStorage.cpp
     Functions/UserDefined/UserDefinedSQLObjectsLoaderFromDisk.cpp
     Functions/UserDefined/UserDefinedSQLObjectsLoaderFromZooKeeper.cpp
+    Functions/UserDefined/UserDefinedSQLObjectsStorageBase.cpp
+    Functions/UserDefined/UserDefinedSQLObjectsZooKeeperStorage.cpp
     Functions/UserDefined/createUserDefinedSQLObjectsLoader.cpp
+    Functions/UserDefined/createUserDefinedSQLObjectsStorage.cpp
     Functions/divide/divide.cpp
     GLOBAL Functions/CRC.cpp
     GLOBAL Functions/CastOverloadResolver.cpp

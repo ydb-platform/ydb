@@ -1,4 +1,5 @@
 #include "helpers.h"
+#include "attributes.h"
 #include "ypath_client.h"
 
 #include <yt/yt/core/misc/error.h>

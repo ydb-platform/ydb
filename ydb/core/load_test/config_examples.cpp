@@ -16,6 +16,7 @@ TVector<TConfigTemplate> BuildExamples() {
     UniformPartitionsCount: 1000
     DeleteTableOnFinish: 1
     WorkloadType: 0
+    QueryType: "data"
     Kv: {
         InitRowCount: 1000
         PartitionsByLoad: true

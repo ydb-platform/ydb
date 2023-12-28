@@ -121,7 +121,7 @@ namespace boost { namespace program_options {
         /** gcc says that throw specification on dtor is loosened 
          *  without this line                                     
          *  */ 
-        ~error_with_option_name() {}
+        BOOST_DEFAULTED_FUNCTION(~error_with_option_name(), {})
 
 
         //void dump() const
@@ -183,7 +183,7 @@ namespace boost { namespace program_options {
 
         /** Creates the error_message on the fly
          *      Currently a thin wrapper for substitute_placeholders() */
-        virtual const char* what() const noexcept;
+        virtual const char* what() const BOOST_NOEXCEPT_OR_NOTHROW;
 
     protected:
         /** Used to hold the error text returned by what() */
@@ -209,7 +209,7 @@ namespace boost { namespace program_options {
         multiple_values() 
          : error_with_option_name("option '%canonical_option%' only takes a single argument"){}
 
-        ~multiple_values() {}
+        BOOST_DEFAULTED_FUNCTION(~multiple_values(), {})
     };
 
     /** Class thrown when there are several occurrences of an
@@ -220,7 +220,7 @@ namespace boost { namespace program_options {
         multiple_occurrences() 
          : error_with_option_name("option '%canonical_option%' cannot be specified more than once"){}
 
-        ~multiple_occurrences() {}
+        BOOST_DEFAULTED_FUNCTION(~multiple_occurrences(), {})
 
     };
 
@@ -233,7 +233,7 @@ namespace boost { namespace program_options {
        {
        }
 
-       ~required_option() {}
+       BOOST_DEFAULTED_FUNCTION(~required_option(), {})
     };
 
     /** Base class of unparsable options,
@@ -258,7 +258,7 @@ namespace boost { namespace program_options {
         /** Does NOT set option name, because no option name makes sense */
         virtual void set_option_name(const std::string&) {}
 
-        ~error_with_no_option_name() {}
+        BOOST_DEFAULTED_FUNCTION(~error_with_no_option_name(), {})
     };
 
 
@@ -270,7 +270,7 @@ namespace boost { namespace program_options {
         {
         }
 
-        ~unknown_option() {}
+        BOOST_DEFAULTED_FUNCTION(~unknown_option(), {})
     };
 
 
@@ -283,9 +283,9 @@ namespace boost { namespace program_options {
             m_alternatives(xalternatives)
         {}
 
-        ~ambiguous_option() {}
+        BOOST_DEFAULTED_FUNCTION(~ambiguous_option(), {})
 
-        const std::vector<std::string>& alternatives() const noexcept {return m_alternatives;}
+        const std::vector<std::string>& alternatives() const BOOST_NOEXCEPT_OR_NOTHROW {return m_alternatives;}
 
     protected:
         /** Makes all substitutions using the template */
@@ -320,7 +320,7 @@ namespace boost { namespace program_options {
         {
         }
 
-        ~invalid_syntax() {}
+        BOOST_DEFAULTED_FUNCTION(~invalid_syntax(), {})
 
         kind_t kind() const {return m_kind;}
 
@@ -340,7 +340,7 @@ namespace boost { namespace program_options {
             m_substitutions["invalid_line"] = invalid_line;
         }
 
-        ~invalid_config_file_syntax() {}
+        BOOST_DEFAULTED_FUNCTION(~invalid_config_file_syntax(), {})
 
         /** Convenience functions for backwards compatibility */
         virtual std::string tokens() const {return m_substitutions.find("invalid_line")->second;    }
@@ -355,7 +355,7 @@ namespace boost { namespace program_options {
                        const std::string& original_token = "",
                        int option_style              = 0):
             invalid_syntax(kind, option_name, original_token, option_style) {}
-        ~invalid_command_line_syntax() {}
+        BOOST_DEFAULTED_FUNCTION(~invalid_command_line_syntax(), {})
     };
 
 
@@ -380,7 +380,7 @@ namespace boost { namespace program_options {
         {
         }
 
-        ~validation_error() {}
+        BOOST_DEFAULTED_FUNCTION(~validation_error(), {})
 
         kind_t kind() const { return m_kind; }
 

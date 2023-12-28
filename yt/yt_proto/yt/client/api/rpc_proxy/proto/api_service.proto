@@ -601,6 +601,20 @@ message TRspSelectRows
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqAdvanceConsumer
+{
+    optional NYT.NProto.TGuid transaction_id = 1;
+    optional string consumer_path = 2;
+    optional string queue_path = 3;
+    optional int32 partition_index = 4;
+    optional int64 old_offset = 5;
+    optional int64 new_offset = 6;
+}
+
+message TRspAdvanceConsumer
+{
+}
+
 message TRowBatchReadOptions
 {
     optional int64 max_row_count = 1;
@@ -1916,6 +1930,7 @@ message TReqDestroyChunkLocations
 {
     required string node_address = 1;
     repeated NYT.NProto.TGuid location_uuids = 2;
+    optional bool recover_unlinked_disks = 3 [default = false];
 }
 
 message TRspDestroyChunkLocations

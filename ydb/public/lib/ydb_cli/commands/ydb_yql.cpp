@@ -39,7 +39,8 @@ void TCommandYql::Config(TConfig& config) {
         EOutputFormat::JsonBase64,
         EOutputFormat::JsonBase64Array,
         EOutputFormat::Csv,
-        EOutputFormat::Tsv
+        EOutputFormat::Tsv,
+        EOutputFormat::Parquet,
     });
 
     AddParametersOption(config);

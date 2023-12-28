@@ -72,6 +72,7 @@ private:
     ::TThread UnderlyingThread_;
 
     void SetThreadPriority();
+    void ConfigureSignalHandlerStack();
 
     bool StartSlow();
 

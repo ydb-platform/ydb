@@ -139,7 +139,7 @@ TIpAddressRange::TIpAddressRangeBuilder& TIpAddressRange::TIpAddressRangeBuilder
     return *this;
 }
 
-TIpAddressRange::TIpAddressRangeBuilder& TIpAddressRange::TIpAddressRangeBuilder::WithPrefix(ui8 len) {
+TIpAddressRange::TIpAddressRangeBuilder& TIpAddressRange::TIpAddressRangeBuilder::WithPrefixImpl(ui8 len, bool checkLowerBound) {
     Y_ENSURE_EX(IsValid(Start_), TInvalidIpRangeException() << "Start value must be set before prefix");
     const auto type = Start_.Type();
     const auto maxLen = MaxPrefixLenForType(type);
@@ -147,12 +147,23 @@ TIpAddressRange::TIpAddressRangeBuilder& TIpAddressRange::TIpAddressRangeBuilder
         << maxLen << ", but requested " << (ui32)len);
 
     const auto lowerBound = LowerBoundForPrefix(Start_, len);
-    Y_ENSURE_EX(Start_ == lowerBound, TInvalidIpRangeException() << "Cannot create IP range from start address "
-        << Start_ << " with prefix length " << (ui32)len);
+    if (checkLowerBound) {
+        Y_ENSURE_EX(Start_ == lowerBound, TInvalidIpRangeException() << "Cannot create IP range from start address "
+            << Start_ << " with prefix length " << (ui32)len);
+    }
 
+    Start_ = lowerBound;
     End_ = UpperBoundForPrefix(Start_, len);
 
     return *this;
+}
+
+TIpAddressRange::TIpAddressRangeBuilder& TIpAddressRange::TIpAddressRangeBuilder::WithPrefix(ui8 len) {
+    return WithPrefixImpl(len, true);
+}
+
+TIpAddressRange::TIpAddressRangeBuilder& TIpAddressRange::TIpAddressRangeBuilder::WithMaskedPrefix(ui8 len) {
+    return WithPrefixImpl(len, false);
 }
 
 void TIpAddressRange::Init(TIpv6Address from, TIpv6Address to) {
@@ -230,7 +241,7 @@ TIpAddressRange TIpAddressRange::FromCidrString(const TStringBuf str) {
     ythrow TInvalidIpRangeException() << "Cannot parse " << str << " as a CIDR string";
 }
 
-TMaybe<TIpAddressRange> TIpAddressRange::TryFromCidrString(const TStringBuf str) {
+TMaybe<TIpAddressRange> TIpAddressRange::TryFromCidrStringImpl(const TStringBuf str, bool compact) {
     auto idx = str.rfind('/');
     if (idx == TStringBuf::npos) {
         return Nothing();
@@ -246,8 +257,25 @@ TMaybe<TIpAddressRange> TIpAddressRange::TryFromCidrString(const TStringBuf str)
         return Nothing();
     }
 
-    return TIpAddressRange::From(address)
-        .WithPrefix(prefixLen);
+    return compact ?
+        TIpAddressRange::From(address).WithMaskedPrefix(prefixLen) :
+        TIpAddressRange::From(address).WithPrefix(prefixLen);
+}
+
+TMaybe<TIpAddressRange> TIpAddressRange::TryFromCidrString(const TStringBuf str) {
+    return TryFromCidrStringImpl(str, false);
+}
+
+TIpAddressRange TIpAddressRange::FromCompactString(const TStringBuf str) {
+    if (auto result = TryFromCompactString(str)) {
+        return *result;
+    }
+
+    ythrow TInvalidIpRangeException() << "Cannot parse " << str << " as a CIDR string";
+}
+
+TMaybe<TIpAddressRange> TIpAddressRange::TryFromCompactString(const TStringBuf str) {
+    return TryFromCidrStringImpl(str, true);
 }
 
 TIpAddressRange TIpAddressRange::FromRangeString(const TStringBuf str) {

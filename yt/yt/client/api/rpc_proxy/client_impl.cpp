@@ -1953,12 +1953,14 @@ TFuture<TDisableChunkLocationsResult> TClient::DisableChunkLocations(
 
 TFuture<TDestroyChunkLocationsResult> TClient::DestroyChunkLocations(
     const TString& nodeAddress,
+    bool recoverUnlinkedDisks,
     const std::vector<TGuid>& locationUuids,
     const TDestroyChunkLocationsOptions& /*options*/)
 {
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.DestroyChunkLocations();
+    req->set_recover_unlinked_disks(recoverUnlinkedDisks);
     ToProto(req->mutable_node_address(), nodeAddress);
     ToProto(req->mutable_location_uuids(), locationUuids);
 

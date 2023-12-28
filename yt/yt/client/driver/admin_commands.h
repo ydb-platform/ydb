@@ -310,6 +310,7 @@ public:
 
 private:
     TString NodeAddress_;
+    bool RecoverUnlinkedDisks_;
     std::vector<TGuid> LocationUuids_;
 
     void DoExecute(ICommandContextPtr context) override;

@@ -9,7 +9,7 @@
 #define LOG_D(stream) LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-
+#define LOG_E(stream) LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 
 namespace NKikimr::NSchemeShard {
 
@@ -39,6 +39,7 @@ struct TParamsDelta {
     uint8_t AddExternalStatisticsAggregator = 0;
     bool SharedTxSupportAdded = false;
     TVector<TStoragePool> StoragePoolsAdded;
+    bool ServerlessComputeResourcesModeChanged = false;
 };
 
 std::tuple<NKikimrScheme::EStatus, TString>
@@ -247,6 +248,7 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
     }
 
     // ServerlessComputeResourcesMode check
+    bool serverlessComputeResourcesModeChanged = false;
     if (input.HasServerlessComputeResourcesMode()) {
         switch (input.GetServerlessComputeResourcesMode()) {
             case EServerlessComputeResourcesMode::SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED:
@@ -262,6 +264,8 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
         if (!isServerless) {
             return paramError("ServerlessComputeResourcesMode can be changed only for serverless");
         }
+
+        serverlessComputeResourcesModeChanged = current->GetServerlessComputeResourcesMode() != input.GetServerlessComputeResourcesMode();
     }
 
     delta->CoordinatorsAdded = coordinatorsAdded;
@@ -273,6 +277,7 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
     delta->AddExternalStatisticsAggregator = addExternalStatisticsAggregator;
     delta->SharedTxSupportAdded = sharedTxSupportAdded;
     delta->StoragePoolsAdded = std::move(storagePoolsAdded);
+    delta->ServerlessComputeResourcesModeChanged = serverlessComputeResourcesModeChanged;
 
     return {NKikimrScheme::EStatus::StatusAccepted, {}};
 }
@@ -327,7 +332,7 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder() << "TCreateHive, operationId# " << OperationId << ", ";
+        return TStringBuilder() << "TCreateHive, operationId " << OperationId << ", ";
     }
 
 public:
@@ -705,6 +710,73 @@ public:
     }
 };
 
+class TSyncHive: public TSubOperationState {
+private:
+    const TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder() << "TSyncHive, operationId " << OperationId << ", ";
+    }
+
+public:
+    TSyncHive(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(), {
+            TEvPrivate::TEvOperationPlan::EventType
+        });
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        const TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+
+        LOG_I(DebugHint() << "ProgressState, NeedSyncHive: " << txState->NeedSyncHive);
+
+        if (txState->NeedSyncHive) {
+            const TPathId pathId = txState->TargetPathId;
+            Y_ABORT_UNLESS(context.SS->SubDomains.contains(pathId));
+            TSubDomainInfo::TConstPtr subDomain = context.SS->SubDomains.at(pathId);
+
+            const TTabletId hiveToSync = context.SS->ResolveHive(pathId, context.Ctx);
+
+            auto event = MakeHolder<TEvHive::TEvUpdateDomain>();
+            event->Record.SetTxId(ui64(OperationId.GetTxId()));
+            event->Record.MutableDomainKey()->SetSchemeShard(pathId.OwnerId);
+            event->Record.MutableDomainKey()->SetPathId(pathId.LocalPathId);
+            const auto& serverlessComputeResourcesMode = subDomain->GetServerlessComputeResourcesMode();
+            if (serverlessComputeResourcesMode) {
+                event->Record.SetServerlessComputeResourcesMode(*serverlessComputeResourcesMode);
+            }
+
+            LOG_D(DebugHint() << "ProgressState"
+                << ", Syncing hive: " << hiveToSync
+                << ", msg: {" << event->Record.ShortDebugString() << "}");
+
+            context.OnComplete.BindMsgToPipe(OperationId, hiveToSync, pathId, event.Release());
+            return false;
+        } else {
+            NIceDb::TNiceDb db(context.GetDB());
+            context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+            return true;
+        }
+    }
+
+    bool HandleReply(TEvHive::TEvUpdateDomainReply::TPtr& ev, TOperationContext& context) override {
+        const TTabletId hive = TTabletId(ev->Get()->Record.GetOrigin()); 
+
+        LOG_I(DebugHint() << "HandleReply TEvUpdateDomainReply"
+            << ", from hive: " << hive);
+
+        const TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        context.OnComplete.UnbindMsgFromPipe(OperationId, hive, txState->TargetPathId);
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+        return true;
+    }
+};
+
 class TAlterExtSubDomain: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::Waiting;
@@ -719,6 +791,8 @@ class TAlterExtSubDomain: public TSubOperation {
         case TTxState::ConfigureParts:
             return TTxState::Propose;
         case TTxState::Propose:
+            return TTxState::SyncHive;
+        case TTxState::SyncHive:
             return TTxState::Done;
         default:
             return TTxState::Invalid;
@@ -735,7 +809,9 @@ class TAlterExtSubDomain: public TSubOperation {
         case TTxState::ConfigureParts:
             return MakeHolder<NSubDomainState::TConfigureParts>(OperationId);
         case TTxState::Propose:
-            return MakeHolder<NSubDomainState::TPropose>(OperationId);
+            return MakeHolder<NSubDomainState::TPropose>(OperationId, TTxState::SyncHive);
+        case TTxState::SyncHive:
+            return MakeHolder<TSyncHive>(OperationId);
         case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
         default:
@@ -899,6 +975,7 @@ public:
         {
             // txState.State = TTxState::CreateParts;
             txState.State = TTxState::Waiting;
+            txState.NeedSyncHive = delta.ServerlessComputeResourcesModeChanged;
             context.DbChanges.PersistTxState(OperationId);
         }
 

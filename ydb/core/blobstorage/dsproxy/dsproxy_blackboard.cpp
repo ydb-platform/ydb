@@ -87,7 +87,7 @@ bool TBlobState::Restore(const TBlobStorageGroupInfo &info) {
 }
 
 void TBlobState::AddResponseData(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 orderNumber,
-        ui32 shift, TRope&& data, bool keep, bool doNotKeep) {
+        ui32 shift, TRope&& data) {
     // Add actual data to Parts
     Y_ABORT_UNLESS(id.PartId() != 0);
     const ui32 partIdx = id.PartId() - 1;
@@ -112,9 +112,6 @@ void TBlobState::AddResponseData(const TBlobStorageGroupInfo &info, const TLogoB
         TIntervalVec<i32> responseInterval(shift, shift + dataSize);
         diskPart.Requested.Subtract(responseInterval);
     }
-
-    Keep |= keep;
-    DoNotKeep |= doNotKeep;
 }
 
 void TBlobState::AddNoDataResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 orderNumber) {
@@ -164,8 +161,7 @@ void TBlobState::AddErrorResponse(const TBlobStorageGroupInfo &info, const TLogo
     diskPart.Requested.Clear();
 }
 
-void TBlobState::AddNotYetResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 orderNumber,
-        bool keep, bool doNotKeep) {
+void TBlobState::AddNotYetResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 orderNumber) {
     Y_ABORT_UNLESS(id.PartId() != 0);
     const ui32 partIdx = id.PartId() - 1;
     IsChanged = true;
@@ -179,9 +175,6 @@ void TBlobState::AddNotYetResponse(const TBlobStorageGroupInfo &info, const TLog
     TDiskPart &diskPart = disk.DiskParts[partIdx];
     diskPart.Situation = ESituation::Lost;
     diskPart.Requested.Clear();
-
-    Keep |= keep;
-    DoNotKeep |= doNotKeep;
 }
 
 ui64 TBlobState::GetPredictedDelayNs(const TBlobStorageGroupInfo &info, TGroupQueues &groupQueues,
@@ -377,11 +370,11 @@ void TBlackboard::AddPutOkResponse(const TLogoBlobID &id, ui32 orderNumber) {
     state.AddPutOkResponse(*Info, id, orderNumber);
 }
 
-void TBlackboard::AddResponseData(const TLogoBlobID &id, ui32 orderNumber, ui32 shift, TRope&& data, bool keep, bool doNotKeep) {
+void TBlackboard::AddResponseData(const TLogoBlobID &id, ui32 orderNumber, ui32 shift, TRope&& data) {
     Y_ABORT_UNLESS(bool(id));
     Y_ABORT_UNLESS(id.PartId() != 0);
     TBlobState &state = GetState(id);
-    state.AddResponseData(*Info, id, orderNumber, shift, std::move(data), keep, doNotKeep);
+    state.AddResponseData(*Info, id, orderNumber, shift, std::move(data));
 }
 
 void TBlackboard::AddNoDataResponse(const TLogoBlobID &id, ui32 orderNumber) {
@@ -391,11 +384,11 @@ void TBlackboard::AddNoDataResponse(const TLogoBlobID &id, ui32 orderNumber) {
     state.AddNoDataResponse(*Info, id, orderNumber);
 }
 
-void TBlackboard::AddNotYetResponse(const TLogoBlobID &id, ui32 orderNumber, bool keep, bool doNotKeep) {
+void TBlackboard::AddNotYetResponse(const TLogoBlobID &id, ui32 orderNumber) {
     Y_ABORT_UNLESS(bool(id));
     Y_ABORT_UNLESS(id.PartId() != 0);
     TBlobState &state = GetState(id);
-    state.AddNotYetResponse(*Info, id, orderNumber, keep, doNotKeep);
+    state.AddNotYetResponse(*Info, id, orderNumber);
 }
 
 void TBlackboard::AddErrorResponse(const TLogoBlobID &id, ui32 orderNumber) {

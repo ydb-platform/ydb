@@ -3,6 +3,10 @@
 #include <arrow/array.h>
 #include <arrow/array/builder_binary.h>
 
+extern "C" {
+#include "utils/numeric.h"
+}
+
 namespace NYql {
 
 Numeric PgFloatToNumeric(double item, ui64 scale, int digits);

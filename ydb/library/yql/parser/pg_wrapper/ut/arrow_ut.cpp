@@ -4,9 +4,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include "arrow.h"
+#include "arrow_impl.h"
 
 extern "C" {
-#include "utils/numeric.h"
 #include "utils/fmgrprotos.h"
 }
 

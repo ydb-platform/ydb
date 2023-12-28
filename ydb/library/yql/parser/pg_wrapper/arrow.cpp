@@ -1,4 +1,5 @@
 #include "arrow.h"
+#include "arrow_impl.h"
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
@@ -13,7 +14,6 @@
 extern "C" {
 #include "utils/date.h"
 #include "utils/timestamp.h"
-#include "utils/numeric.h"
 }
 
 namespace NYql {

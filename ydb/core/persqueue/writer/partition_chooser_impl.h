@@ -82,6 +82,48 @@ private:
     THasher Hasher;
 };
 
+
+
+class TTableHelper {
+public:
+    bool Initialize(const TActorContext& ctx, const TString& topicName, const TString& topicHashName, const TString& sourceId);
+    TString GetDatabaseName(const TActorContext& ctx);
+
+    void SendInitTableRequest(const TActorContext& ctx);
+
+    void SendCreateSessionRequest(const TActorContext& ctx);
+    THolder<NKqp::TEvKqp::TEvCreateSessionRequest> MakeCreateSessionRequest(const TActorContext& ctx);
+    bool Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
+
+    void CloseKqpSession(const TActorContext& ctx);
+    THolder<NKqp::TEvKqp::TEvCloseSessionRequest> MakeCloseSessionRequest();
+
+    void SendSelectRequest(const TActorContext& ctx);
+    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSelectQueryRequest(const NActors::TActorContext& ctx);
+    std::pair<bool, std::optional<ui32>> HandleSelect(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
+
+    void SendUpdateRequest(ui32 partitionId, const TActorContext& ctx);
+    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeUpdateQueryRequest(ui32 partitionId, const NActors::TActorContext& ctx);
+
+private:
+    TString TopicName;
+    NPQ::NSourceIdEncoding::TEncodedSourceId EncodedSourceId;
+   
+    NPQ::ESourceIdTableGeneration TableGeneration;
+    TString SelectQuery;
+    TString UpdateQuery;
+
+    TString KqpSessionId;
+    TString TxId;
+
+    size_t UpdatesInflight = 0;
+    size_t SelectInflight = 0;
+
+    ui64 CreateTime = 0;
+    ui64 AccessTime = 0;
+};
+
+
 template<typename TPipe>
 class TPartitionChooserActor: public TActorBootstrapped<TPartitionChooserActor<TPipe>> {
     using TThis = TPartitionChooserActor<TPipe>;
@@ -182,6 +224,7 @@ private:
     }
 
 private:
+    void SendUpdateRequests(const TActorContext& ctx);
     void HandleUpdate(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
 
     STATEFN(StateUpdate) {
@@ -212,18 +255,6 @@ private:
     void OnPartitionChosen(const TActorContext& ctx);
     std::pair<bool, const TPartitionInfo*> ChoosePartitionSync(const TActorContext& ctx) const;
 
-    TString GetDatabaseName(const NActors::TActorContext& ctx);
-
-
-    void CloseKqpSession(const TActorContext& ctx);
-    void SendUpdateRequests(const TActorContext& ctx);
-
-
-    THolder<NKqp::TEvKqp::TEvCreateSessionRequest> MakeCreateSessionRequest(const NActors::TActorContext& ctx);
-    THolder<NKqp::TEvKqp::TEvCloseSessionRequest> MakeCloseSessionRequest();
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSelectQueryRequest(const NActors::TActorContext& ctx);
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeUpdateQueryRequest(const NActors::TActorContext& ctx);
-
     void ReplyResult(const NActors::TActorContext& ctx);
     void ReplyError(ErrorCode code, TString&& errorMessage, const NActors::TActorContext& ctx);
 
@@ -238,21 +269,10 @@ private:
     std::optional<ui32> PartitionId;
     const TPartitionInfo* Partition;
     bool PartitionPersisted = false;
-    ui64 CreateTime = 0;
-    ui64 AccessTime = 0;
+
 
     bool NeedUpdateTable = false;
-
-    NPQ::NSourceIdEncoding::TEncodedSourceId EncodedSourceId;
-    TString KqpSessionId;
-    TString TxId;
-
-    NPQ::ESourceIdTableGeneration TableGeneration;
-    TString SelectQuery;
-    TString UpdateQuery;
-
-    size_t UpdatesInflight = 0;
-    size_t SelectInflight = 0;
+    TTableHelper TableHelper;
 
     ui64 BalancerTabletId;
     TActorId PipeToBalancer;
@@ -333,6 +353,7 @@ const typename THashChooser<THasher>::TPartitionInfo* THashChooser<THasher>::Get
 }
 
 
+
 //
 // TPartitionChooserActor
 //
@@ -379,21 +400,7 @@ void TPartitionChooserActor<TPipe>::Bootstrap(const TActorContext& ctx) {
         return ChoosePartition(ctx);
     }
 
-    TableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping
-                                                               : ESourceIdTableGeneration::SrcIdMeta2;
-    try {
-        EncodedSourceId = NSourceIdEncoding::EncodeSrcId(
-                FullConverter->GetTopicForSrcIdHash(), SourceId, TableGeneration
-        );
-    } catch (yexception& e) {
-        return ReplyError(ErrorCode::BAD_REQUEST, TStringBuilder() << "incorrect sourceId \"" << SourceId << "\": " << e.what(), ctx);
-    }
-
-    SelectQuery = GetSelectSourceIdQueryFromPath(pqConfig.GetSourceIdTablePath(), TableGeneration);
-    UpdateQuery = GetUpdateSourceIdQueryFromPath(pqConfig.GetSourceIdTablePath(), TableGeneration);
-
-    DEBUG("SelectQuery: " << SelectQuery);
-    DEBUG("UpdateQuery: " << UpdateQuery);
+    TableHelper.Initialize(ctx, FullConverter->GetClientsideName(), FullConverter->GetTopicForSrcIdHash(), SourceId);
 
     if (pqConfig.GetTopicsAreFirstClassCitizen()) {
         if (pqConfig.GetUseSrcIdMetaMappingInFirstClass()) {
@@ -409,7 +416,7 @@ void TPartitionChooserActor<TPipe>::Bootstrap(const TActorContext& ctx) {
 
 template<typename TPipe>
 void TPartitionChooserActor<TPipe>::Stop(const TActorContext& ctx) {
-    CloseKqpSession(ctx);
+    TableHelper.CloseKqpSession(ctx);
     if (PipeToBalancer) {
         NTabletPipe::CloseClient(ctx, PipeToBalancer);
     }
@@ -424,17 +431,6 @@ void TPartitionChooserActor<TPipe>::ScheduleStop() {
     TThisActor::Become(&TThis::StateDestroy);
 }
 
-template<typename TPipe>
-TString TPartitionChooserActor<TPipe>::GetDatabaseName(const NActors::TActorContext& ctx) {
-    const auto& pqConfig = AppData(ctx)->PQConfig;
-    switch (TableGeneration) {
-        case ESourceIdTableGeneration::SrcIdMeta2:
-            return NKikimr::NPQ::GetDatabaseFromConfig(pqConfig);
-        case ESourceIdTableGeneration::PartitionMapping:
-            return AppData(ctx)->TenantName;
-    }
-}
-
 //
 // StateInitTable
 //
@@ -443,11 +439,7 @@ template<typename TPipe>
 void TPartitionChooserActor<TPipe>::InitTable(const NActors::TActorContext& ctx) {
     DEBUG("InitTable")
     TThisActor::Become(&TThis::StateInitTable);
-
-    ctx.Send(
-            NMetadata::NProvider::MakeServiceId(ctx.SelfID.NodeId()),
-            new NMetadata::NProvider::TEvPrepareManager(NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant())
-    );
+    TableHelper.SendInitTableRequest(ctx);
 }
 
 template<typename TPipe>
@@ -461,32 +453,17 @@ void TPartitionChooserActor<TPipe>::Handle(NMetadata::NProvider::TEvManagerPrepa
 // 
 
 template<typename TPipe>
-THolder<NKqp::TEvKqp::TEvCreateSessionRequest> TPartitionChooserActor<TPipe>::MakeCreateSessionRequest(const NActors::TActorContext& ctx) {
-    auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
-    ev->Record.MutableRequest()->SetDatabase(GetDatabaseName(ctx));
-    return ev;
-}
-
-template<typename TPipe>
 void TPartitionChooserActor<TPipe>::StartKqpSession(const NActors::TActorContext& ctx) {
     DEBUG("StartKqpSession")
     TThisActor::Become(&TThis::StateCreateKqpSession);
-
-    auto ev = MakeCreateSessionRequest(ctx);
-    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+    TableHelper.SendCreateSessionRequest(ctx);
 }
 
 template<typename TPipe>
 void TPartitionChooserActor<TPipe>::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx) {
-    const auto& record = ev->Get()->Record;
-
-    if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        ReplyError(ErrorCode::INITIALIZING, TStringBuilder() << "kqp error Marker# PQ53 : " <<  record, ctx);
-        return;
+    if (!TableHelper.Handle(ev, ctx)) {
+        return ReplyError(ErrorCode::INITIALIZING, TStringBuilder() << "kqp error Marker# PQ53 : " <<  ev->Get()->Record.DebugString(), ctx);
     }
-
-    KqpSessionId = record.GetResponse().GetSessionId();
-    Y_ABORT_UNLESS(!KqpSessionId.empty());
 
     SendSelectRequest(ctx);
 }
@@ -612,128 +589,21 @@ void TPartitionChooserActor<TPipe>::HandleOwnership(TEvPersQueue::TEvResponse::T
 }
 
 
-template<typename TPipe>
-void TPartitionChooserActor<TPipe>::CloseKqpSession(const TActorContext& ctx) {
-    if (KqpSessionId) {
-        auto ev = MakeCloseSessionRequest();
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-
-        KqpSessionId = "";
-    }
-}
 
 template<typename TPipe>
 void TPartitionChooserActor<TPipe>::SendUpdateRequests(const TActorContext& ctx) {
     TThisActor::Become(&TThis::StateUpdate);
-
-    auto ev = MakeUpdateQueryRequest(ctx);
-    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-
-    UpdatesInflight++;
+    TableHelper.SendUpdateRequest(Partition->PartitionId, ctx);
 }
 
 template<typename TPipe>
 void TPartitionChooserActor<TPipe>::SendSelectRequest(const NActors::TActorContext& ctx) {
     TThisActor::Become(&TThis::StateSelect);
-
-    auto ev = MakeSelectQueryRequest(ctx);
-    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-
-    SelectInflight++;
+    TableHelper.SendSelectRequest(ctx);
 }
 
 
-template<typename TPipe>
-THolder<NKqp::TEvKqp::TEvCloseSessionRequest> TPartitionChooserActor<TPipe>::MakeCloseSessionRequest() {
-    auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
-    ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
-    return ev;
-}
 
-template<typename TPipe>
-THolder<NKqp::TEvKqp::TEvQueryRequest> TPartitionChooserActor<TPipe>::MakeSelectQueryRequest(const NActors::TActorContext& ctx) {
-    auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-
-    ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-    ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-    ev->Record.MutableRequest()->SetQuery(SelectQuery);
-
-    ev->Record.MutableRequest()->SetDatabase(GetDatabaseName(ctx));
-    // fill tx settings: set commit tx flag&  begin new serializable tx.
-    ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
-    ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(false);
-    ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-    // keep compiled query in cache.
-    ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
-
-    NYdb::TParamsBuilder paramsBuilder = NYdb::TParamsBuilder();
-
-    SetHashToTParamsBuilder(paramsBuilder, EncodedSourceId);
-
-    paramsBuilder
-        .AddParam("$Topic")
-            .Utf8(FullConverter->GetClientsideName())
-            .Build()
-        .AddParam("$SourceId")
-            .Utf8(EncodedSourceId.EscapedSourceId)
-            .Build();
-
-    NYdb::TParams params = paramsBuilder.Build();
-
-    ev->Record.MutableRequest()->MutableYdbParameters()->swap(*(NYdb::TProtoAccessor::GetProtoMapPtr(params)));
-
-    return ev;
-}
-
-template<typename TPipe>
-THolder<NKqp::TEvKqp::TEvQueryRequest> TPartitionChooserActor<TPipe>::MakeUpdateQueryRequest(const NActors::TActorContext& ctx) {
-    auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-
-    ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-    ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-    ev->Record.MutableRequest()->SetQuery(UpdateQuery);
-    ev->Record.MutableRequest()->SetDatabase(GetDatabaseName(ctx));
-    // fill tx settings: set commit tx flag&  begin new serializable tx.
-    ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
-    if (KqpSessionId) {
-        ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
-    }
-    if (TxId) {
-        ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);
-        TxId = "";
-    } else {
-        ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-    }
-    // keep compiled query in cache.
-    ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
-
-    NYdb::TParamsBuilder paramsBuilder = NYdb::TParamsBuilder();
-
-    SetHashToTParamsBuilder(paramsBuilder, EncodedSourceId);
-
-    paramsBuilder
-        .AddParam("$Topic")
-            .Utf8(FullConverter->GetClientsideName())
-            .Build()
-        .AddParam("$SourceId")
-            .Utf8(EncodedSourceId.EscapedSourceId)
-            .Build()
-        .AddParam("$CreateTime")
-            .Uint64(CreateTime)
-            .Build()
-        .AddParam("$AccessTime")
-            .Uint64(TInstant::Now().MilliSeconds())
-            .Build()
-        .AddParam("$Partition")
-            .Uint32(Partition->PartitionId)
-            .Build();
-
-    NYdb::TParams params = paramsBuilder.Build();
-
-    ev->Record.MutableRequest()->MutableYdbParameters()->swap(*(NYdb::TProtoAccessor::GetProtoMapPtr(params)));
-
-    return ev;
-}
 
 template<typename TPipe>
 void TPartitionChooserActor<TPipe>::ReplyResult(const NActors::TActorContext& ctx) {
@@ -750,41 +620,20 @@ void TPartitionChooserActor<TPipe>::ReplyError(ErrorCode code, TString&& errorMe
 
 template<typename TPipe>
 void TPartitionChooserActor<TPipe>::HandleDestroy(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx) {
-    const auto& record = ev->Get()->Record;
-    KqpSessionId = record.GetResponse().GetSessionId();
-
+    TableHelper.Handle(ev, ctx);
     Stop(ctx);
 }
 
 template<typename TPipe>
 void TPartitionChooserActor<TPipe>::HandleSelect(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-    auto& record = ev->Get()->Record.GetRef();
-
-    if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        return ReplyError(ErrorCode::INITIALIZING, TStringBuilder() << "kqp error Marker# PQ50 : " <<  record, ctx);
+    auto [success, partition] = TableHelper.HandleSelect(ev, ctx);
+    if (!success) {
+        return ReplyError(ErrorCode::INITIALIZING, TStringBuilder() << "kqp error Marker# PQ50 : " <<  ev->Get()->Record.DebugString(), ctx);
     }
 
-    auto& t = record.GetResponse().GetResults(0).GetValue().GetStruct(0);
-
-    TxId = record.GetResponse().GetTxMeta().id();
-    Y_ABORT_UNLESS(!TxId.empty());
-
-    if (t.ListSize() != 0) {
-        auto& tt = t.GetList(0).GetStruct(0);
-        if (tt.HasOptional() && tt.GetOptional().HasUint32()) { //already got partition
-            auto accessTime = t.GetList(0).GetStruct(2).GetOptional().GetUint64();
-            if (accessTime > AccessTime) { // AccessTime
-                PartitionId = tt.GetOptional().GetUint32();
-                DEBUG("Received partition " << PartitionId << " from table for SourceId=" << SourceId);
-                Partition = Chooser->GetPartition(PartitionId.value());
-                CreateTime = t.GetList(0).GetStruct(1).GetOptional().GetUint64();
-                AccessTime = accessTime;
-            }
-        }
-    }
-
-    if (CreateTime == 0) {
-        CreateTime = TInstant::Now().MilliSeconds();
+    if (partition) {
+        PartitionId = partition;
+        Partition = Chooser->GetPartition(PartitionId.value());
     }
 
     if (!Partition) {
@@ -800,7 +649,7 @@ void TPartitionChooserActor<TPipe>::HandleUpdate(NKqp::TEvKqp::TEvQueryResponse:
 
     if (record.GetYdbStatus() == Ydb::StatusIds::ABORTED) {
         if (!PartitionPersisted) {
-            CloseKqpSession(ctx);
+            TableHelper.CloseKqpSession(ctx);
             StartKqpSession(ctx);
         }
         return;
@@ -817,7 +666,7 @@ void TPartitionChooserActor<TPipe>::HandleUpdate(NKqp::TEvKqp::TEvQueryResponse:
         ReplyResult(ctx);
         PartitionPersisted = true;
         // Use tx only for query after select. Updating AccessTime without transaction.
-        CloseKqpSession(ctx);
+        TableHelper.CloseKqpSession(ctx);
     }
 
     TThisActor::Become(&TThis::StateIdle);

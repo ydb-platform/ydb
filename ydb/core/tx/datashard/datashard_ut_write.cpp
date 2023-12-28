@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         const auto& record = Write(runtime, sender, shards[0], std::move(evWrite), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
 
         UNIT_ASSERT_VALUES_EQUAL(record.GetIssues().size(), 1);
-        UNIT_ASSERT(record.GetIssues(0).message().Contains("Operation [0:100] writes key of 1049601 bytes which exceeds limit 1049600 bytes"));
+        UNIT_ASSERT(record.GetIssues(0).message().Contains("Row key size of 1049601 bytes is larger than the allowed threshold 1049600"));
     }
 
     Y_UNIT_TEST(WriteOnShard) {

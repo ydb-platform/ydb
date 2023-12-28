@@ -25,7 +25,7 @@ private:
     void AddDiagnosticsResult(NEvents::TDataEvents::TEvWriteResult& res);
     void UpdateCounters(const TWriteOperation* writeOp, const TActorContext& ctx);
 
-    static TWriteOperation* CastWriteOperation(TOperation::TPtr op);
+
 };
 
 TFinishProposeWriteUnit::TFinishProposeWriteUnit(TDataShard &dataShard,
@@ -36,13 +36,6 @@ TFinishProposeWriteUnit::TFinishProposeWriteUnit(TDataShard &dataShard,
 
 TFinishProposeWriteUnit::~TFinishProposeWriteUnit()
 {
-}
-
-TWriteOperation* TFinishProposeWriteUnit::CastWriteOperation(TOperation::TPtr op)
-{
-    TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
-    Y_ABORT_UNLESS(writeOp);
-    return writeOp;
 }
 
 bool TFinishProposeWriteUnit::IsReadyToExecute(TOperation::TPtr) const
@@ -75,7 +68,7 @@ EExecutionStatus TFinishProposeWriteUnit::Execute(TOperation::TPtr op,
                                              TTransactionContext &txc,
                                              const TActorContext &ctx)
 {
-    TWriteOperation* writeOp = CastWriteOperation(op);
+    TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
     if (writeOp->GetWriteResult())
         UpdateCounters(writeOp, ctx);
 
@@ -132,7 +125,7 @@ EExecutionStatus TFinishProposeWriteUnit::Execute(TOperation::TPtr op,
 
 void TFinishProposeWriteUnit::Complete(TOperation::TPtr op, const TActorContext &ctx)
 {
-    TWriteOperation* writeOp = CastWriteOperation(op);
+    TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
     if (!op->HasResultSentFlag()) {
         DataShard.IncCounter(COUNTER_PREPARE_COMPLETE);
@@ -155,7 +148,7 @@ void TFinishProposeWriteUnit::Complete(TOperation::TPtr op, const TActorContext 
 
 void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorContext &ctx)
 {
-    TWriteOperation* writeOp = CastWriteOperation(op);
+    TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
     auto res = writeOp->ReleaseWriteResult();
 
     TDuration duration = TAppData::TimeProvider->Now() - op->GetReceivedAt();

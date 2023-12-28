@@ -72,16 +72,17 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
             }
 
             TOperation::TPtr op = Self->Pipeline.BuildOperation(Ev, ReceivedAt, TieBreakerIndex, txc, ctx, ProposeTransactionSpan.GetTraceId());
+            TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
             // Unsuccessful operation parse.
             if (op->IsAborted()) {
                 LWTRACK(ProposeTransactionParsed, op->Orbit, false);
-                Y_ABORT_UNLESS(op->Result());
+                Y_ABORT_UNLESS(writeOp->GetWriteResult());
 
                 if (ProposeTransactionSpan) {
                     ProposeTransactionSpan.EndError("TTxWrite:: unsuccessful operation parse");
                 }
-                ctx.Send(op->GetTarget(), op->Result().Release());
+                ctx.Send(op->GetTarget(), writeOp->ReleaseWriteResult().release());
                 return true;
             }
             LWTRACK(ProposeTransactionParsed, op->Orbit, true);

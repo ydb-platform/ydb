@@ -245,8 +245,8 @@ namespace NActors {
         return ServiceMap->RegisterLocalService(serviceId, actorId);
     }
 
-    void TActorSystem::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
-        CpuManager->GetPoolStats(poolId, poolStats, statsCopy);
+    void TActorSystem::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats> &sharedStatsCopy) const {
+        CpuManager->GetPoolStats(poolId, poolStats, statsCopy, sharedStatsCopy);
     }
 
     THarmonizerStats TActorSystem::GetHarmonizerStats() const {

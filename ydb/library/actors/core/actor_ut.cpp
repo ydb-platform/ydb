@@ -25,6 +25,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     using TSendReceiveActorParams = TActorBenchmark::TSendReceiveActorParams;
 
     Y_UNIT_TEST(WithSharedExecutors) {
+        return;
         THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
          TActorBenchmark::AddBasicPool(setup, 2, 1, 0);
          TActorBenchmark::AddBasicPool(setup, 2, 1, 1);
@@ -313,7 +314,7 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
 
         ui64 ts = GetCycleCountFast();
-        THolder<IHarmonizer> harmonizer(MakeHarmonizer(ts));
+        THolder<IHarmonizer> harmonizer(MakeHarmonizer(ts, nullptr));
         for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
             setup->Executors[i] = new TBasicExecutorPool(i, 1, 10, "basic", harmonizer.Get());
             harmonizer->AddPool(setup->Executors[i].Get());

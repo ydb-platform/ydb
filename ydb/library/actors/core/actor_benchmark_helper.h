@@ -258,14 +258,14 @@ struct TActorBenchmark {
         ui32 ReceiveTurn = 0;
     };
 
-    static void AddBasicPool(THolder<TActorSystemSetup>& setup, ui32 threads, bool activateEveryEvent, i16 sharedExecutorsCount) {
+    static void AddBasicPool(THolder<TActorSystemSetup>& setup, ui32 threads, bool activateEveryEvent, bool hasSharedThread) {
         TBasicExecutorPoolConfig basic;
         basic.PoolId = setup->GetExecutorsCount();
         basic.PoolName = TStringBuilder() << "b" << basic.PoolId;
         basic.Threads = threads;
         basic.SpinThreshold = TSettings::DefaultSpinThreshold;
         basic.TimePerMailbox = TDuration::Hours(1);
-        basic.SharedExecutorsCount = sharedExecutorsCount;
+        basic.HasSharedThread = hasSharedThread;
         basic.SoftProcessingDurationTs = Us2Ts(100);
         if (activateEveryEvent) {
             basic.EventsPerMailbox = 1;
@@ -288,7 +288,7 @@ struct TActorBenchmark {
         if (poolType == EPoolType::Basic) {
             THolder<TActorSystemSetup> setup = GetActorSystemSetup();
             for (ui32 i = 0; i < poolsCount; ++i) {
-                AddBasicPool(setup, threads, activateEveryEvent, 0);
+                AddBasicPool(setup, threads, activateEveryEvent, false);
             }
             return setup;
         }

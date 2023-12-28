@@ -10,6 +10,7 @@ namespace NActors {
         const ui32 ExecutorPoolCount;
         TArrayHolder<TAutoPtr<IExecutorPool>> Executors;
         THolder<IHarmonizer> Harmonizer;
+        THolder<IActorThreadPool> SharedPool;
         TCpuManagerConfig Config;
 
     public:
@@ -32,11 +33,7 @@ namespace NActors {
             return Executors[poolId].Get();
         }
 
-        void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
-            if (poolId < ExecutorPoolCount) {
-                Executors[poolId]->GetCurrentStats(poolStats, statsCopy);
-            }
-        }
+        void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats> &sharedStatsCopy) const;
 
         THarmonizerStats GetHarmonizerStats() const {
             if (Harmonizer) {

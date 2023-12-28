@@ -135,7 +135,7 @@ namespace NActors {
                 continue;
             }
 
-            if (semaphore.OldSemaphore == 0) {
+            if (semaphore.OldSemaphore <= 0) {
                 semaphore.CurrentSleepThreadCount++;
                 if (semaphore.CurrentSleepThreadCount == AtomicLoad(&ThreadCount)) {
                     AllThreadsSleep.store(true);
@@ -166,6 +166,13 @@ namespace NActors {
             Harmonizer->Harmonize(TlsThreadContext->Timers.HPStart);
         }
 
+        TExecutorThreadCtx *threadCtx = wctx.ThreadCtx;
+        if (workerId == -2 && threadCtx != BorrowedSharedThread.load()) {
+            TlsThreadContext->Timers.HPNow = GetCycleCountFast();
+            wctx.AddElapsedCycles(ActorSystemIndex, TlsThreadContext->Timers.HPNow - TlsThreadContext->Timers.HPStart);
+            return 0;
+        }
+
         if (workerId >= 0) {
             Threads[workerId].ExchangeState(TExecutorThreadCtx::WS_NONE);
         }
@@ -183,10 +190,14 @@ namespace NActors {
                 bool needToWait = false;
                 bool needToBlock = false;
                 AskToGoToSleep(&needToWait, &needToBlock);
-                if (needToWait) {
-                    if (Threads[workerId].Wait(SpinThresholdCycles, &StopFlag)) {
-                        return 0;
-                    }
+                bool interrupted = false;
+                if (needToBlock) {
+                    interrupted = Threads[workerId].Block(&StopFlag);
+                } else if (needToWait) {
+                    interrupted = Threads[workerId].Wait(SpinThresholdCycles, &StopFlag);
+                }
+                if (interrupted) {
+                    return 0;
                 }
             } else {
                 if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
@@ -241,6 +252,26 @@ namespace NActors {
         return 0;
     }
 
+    bool TBasicExecutorPool::TryToWakeUpThread(TExecutorThreadCtx *thread, TExecutorThreadCtx::TWaitState state) {
+        if (thread->ReplaceState(state, TExecutorThreadCtx::WS_NONE, PoolId)) {
+            if (state.Flag  == TExecutorThreadCtx::WS_BLOCKED) {
+                thread->WaitingPad.Unpark();
+            }
+            return true;
+        }
+        return false;
+    }
+
+    bool TBasicExecutorPool::TryToWakeUpSharedThread(TExecutorThreadCtx *thread) {
+        TExecutorThreadCtx::TWaitState state = thread->GetState();
+        if (state.Flag == TExecutorThreadCtx::WS_ACTIVE || state.Flag == TExecutorThreadCtx::WS_BLOCKED) {
+            return TryToWakeUpThread(thread, state);
+        } else {
+            // TODO(kruall) thread->FullCycleCheckCount++;
+        }
+        return false;
+    }
+
     inline void TBasicExecutorPool::WakeUpLoop(i16 currentThreadCount) {
         for (i16 i = 0;;) {
             TExecutorThreadCtx& threadCtx = Threads[i];
@@ -248,23 +279,13 @@ namespace NActors {
             switch (state.Flag) {
                 case TExecutorThreadCtx::WS_NONE:
                 case TExecutorThreadCtx::WS_RUNNING:
-                    if (++i >= MaxThreadCount - SharedExecutorsCount) {
+                    if (++i >= ThreadCount) {
                         i = 0;
                     }
                     break;
                 case TExecutorThreadCtx::WS_ACTIVE:
                 case TExecutorThreadCtx::WS_BLOCKED:
-                    if (threadCtx.ReplaceState(state, TExecutorThreadCtx::WS_NONE)) {
-                        if (state.Flag  == TExecutorThreadCtx::WS_BLOCKED) {
-                            ui64 beforeUnpark = GetCycleCountFast();
-                            threadCtx.StartWakingTs = beforeUnpark;
-                            if (TlsThreadContext && TlsThreadContext->WaitingStats) {
-                                threadCtx.WaitingPad.Unpark();
-                                TlsThreadContext->WaitingStats->AddWakingUp(GetCycleCountFast() - beforeUnpark);
-                            } else {
-                                threadCtx.WaitingPad.Unpark();
-                            }
-                        }
+                    if (TryToWakeUpThread(&threadCtx, state)) {
                         if (i >= currentThreadCount) {
                             AtomicIncrement(WrongWakenedThreadCount);
                         }
@@ -600,18 +621,64 @@ namespace NActors {
         }
     }
 
+    void TBasicExecutorPool::SetOwnSharedThread(TExecutorThreadCtx *thread) {
+        OwnSharedThread = thread;
+    }
+
+    TExecutorThreadCtx* TBasicExecutorPool::ExchangeBorrowedSharedThread(TExecutorThreadCtx *thread) {
+        auto res = BorrowedSharedThread.exchange(thread);
+        SetSleepBorrowedSharedThread();
+        return res;
+    }
+
+    bool TBasicExecutorPool::SetSleepBorrowedSharedThread() {
+        TAtomic x = AtomicGet(Semaphore);
+        TSemaphore semaphore = TSemaphore::GetSemaphore(x);
+        do {
+            if (semaphore.OldSemaphore > 0) {
+                return false;
+            }
+            i64 oldX = semaphore.ConverToI64();
+            semaphore.HasSleepBorrowedSharedThreads = true;
+            x = AtomicGetAndCas(&Semaphore, semaphore.ConverToI64(), oldX);
+            if (x == oldX) {
+                break;
+            }
+            semaphore = TSemaphore::GetSemaphore(x);
+        } while (true);
+        return true;
+    }
+
+    bool TBasicExecutorPool::SetSleepOwnSharedThread() {
+        TAtomic x = AtomicGet(Semaphore);
+        TSemaphore semaphore = TSemaphore::GetSemaphore(x);
+        do {
+            if (semaphore.OldSemaphore > 0) {
+                return false;
+            }
+            i64 oldX = semaphore.ConverToI64();
+            semaphore.HasSleepOwnSharedThreads = true;
+            x = AtomicGetAndCas(&Semaphore, semaphore.ConverToI64(), oldX);
+            if (x == oldX) {
+                break;
+            }
+            semaphore = TSemaphore::GetSemaphore(x);
+        } while (true);
+        return true;
+    }
+
     bool TExecutorThreadCtx::Wait(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag) {
         TWaitState state = ExchangeState(WS_ACTIVE);
         Y_ABORT_UNLESS(state.Flag == WS_NONE, "WaitingFlag# %d", int(state.Flag));
         if (OwnerExecutorPool) {
-            // if (!OwnerExecutorPool->SetSleepOwnSharedThread()) {
-            //    return false;
-            // }
-            // if (TBasicExecutorPool *pool = OtherExecutorPool; pool) {
-            //    if (!pool->SetSleepBorrowedSharedThread()) {
-            //        return false;
-            //    }
-            //}
+            if (!OwnerExecutorPool->SetSleepOwnSharedThread()) {
+                return false;
+            }
+            if (TBasicExecutorPool *pool = OtherExecutorPool; pool) {
+                if (!pool->SetSleepBorrowedSharedThread()) {
+                    return false;
+                }
+            }
         }
         if (spinThresholdCycles > 0) {
             // spin configured period

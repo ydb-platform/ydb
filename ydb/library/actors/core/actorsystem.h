@@ -285,7 +285,7 @@ namespace NActors {
             return LoggerSettings0.Get();
         }
 
-        void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const;
+        void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats> &sharedStatsCopy) const;
 
         THarmonizerStats GetHarmonizerStats() const;
 

@@ -131,6 +131,9 @@ namespace NActors {
 
         TArrayHolder<NThreading::TPadded<TExecutorThreadCtx>> Threads;
         static_assert(sizeof(std::decay_t<decltype(Threads[0])>) == PLATFORM_CACHE_LINE);
+        TExecutorThreadCtx *OwnSharedThread = nullptr;
+        std::atomic<TExecutorThreadCtx *> BorrowedSharedThread;
+
         TArrayHolder<NThreading::TPadded<std::queue<ui32>>> LocalQueues;
         TArrayHolder<TWaitingStats<ui64>> WaitingStats;
         TArrayHolder<TWaitingStats<double>> MovingWaitingStats;
@@ -169,22 +172,28 @@ namespace NActors {
         struct TSemaphore {
             i64 OldSemaphore = 0; // 34 bits
             // Sign bit
-            i16 CurrentSleepThreadCount = 0; // 14 bits
+            bool HasSleepOwnSharedThreads = false;
+            bool HasSleepBorrowedSharedThreads = false;
+            i16 CurrentSleepThreadCount = 0; // 13 bits
             // Sign bit
-            i16 CurrentThreadCount = 0; // 14 bits
+            i16 CurrentThreadCount = 0; // 13 bits
 
             inline i64 ConvertToI64() {
                 i64 value = (1ll << 34) + OldSemaphore;
                 return value
-                    | (((i64)CurrentSleepThreadCount + (1 << 14)) << 35)
-                    | ((i64)CurrentThreadCount << 50);
+                    | ((i64)HasSleepOwnSharedThreads << 35)
+                    | ((i64)HasSleepBorrowedSharedThreads << 36)
+                    | (((i64)CurrentSleepThreadCount + (1 << 13)) << 37)
+                    | ((i64)CurrentThreadCount << 51);
             }
 
             static inline TSemaphore GetSemaphore(i64 value) {
                 TSemaphore semaphore;
-                semaphore.OldSemaphore = (value & 0x7ffffffffll) - (1ll << 34);
-                semaphore.CurrentSleepThreadCount = ((value >> 35) & 0x7fff) - (1 << 14);
-                semaphore.CurrentThreadCount = (value >> 50) & 0x3fff;
+                semaphore.OldSemaphore = (value & 0x7'ffff'ffffll) - (1ll << 34);
+                semaphore.HasSleepOwnSharedThreads = (value & (1ll << 35));
+                semaphore.HasSleepBorrowedSharedThreads = (value & (1ll << 36));
+                semaphore.CurrentSleepThreadCount = ((value >> 37) & 0x3fff) - (1 << 13);
+                semaphore.CurrentThreadCount = (value >> 51) & 0x1fff;
                 return semaphore;
             }
         };
@@ -251,9 +260,17 @@ namespace NActors {
         void CalcSpinPerThread(ui64 wakingUpConsumption);
         void ClearWaitingStats() const;
 
+        void SetOwnSharedThread(TExecutorThreadCtx *thread);
+        TExecutorThreadCtx * ExchangeBorrowedSharedThread(TExecutorThreadCtx *thread);
+        bool SetSleepOwnSharedThread();
+        bool SetSleepBorrowedSharedThread();
+
     private:
         void AskToGoToSleep(bool *needToWait, bool *needToBlock);
-
         void WakeUpLoop(i16 currentThreadCount);
+
+        bool TryToWakeUpThread(TExecutorThreadCtx *thread, TExecutorThreadCtx::TWaitState state);
+        bool TryToWakeUpSharedThread(TExecutorThreadCtx *thread);
+        bool GoToWaiting(TExecutorThreadCtx& threadCtx, bool needToBlock);
     };
 }

@@ -3,6 +3,7 @@
 
 #include "executor_pool_basic.h"
 #include "executor_pool_io.h"
+#include "executor_pool_shared.h"
 
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
@@ -22,18 +23,26 @@ namespace NActors {
         TAffinity available;
         available.Current();
 
+        std::vector<i16> poolsWithSharedThreads;
+        for (TBasicExecutorPoolConfig& cfg : Config.Basic) {
+            if (cfg.HasSharedThread) {
+                poolsWithSharedThreads.push_back(cfg.PoolId);
+            }
+        }
+
+        SharedPool.Reset(new TSharedExecutorPool(Config.Shared, ExecutorPoolCount, poolsWithSharedThreads));
+        auto shared = static_cast<TSharedExecutorPool*>(SharedPool.Get());
+
         ui64 ts = GetCycleCountFast();
-        Harmonizer.Reset(MakeHarmonizer(ts));
+        Harmonizer.Reset(MakeHarmonizer(ts, shared));
 
         Executors.Reset(new TAutoPtr<IExecutorPool>[ExecutorPoolCount]);
 
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
             Executors[excIdx].Reset(CreateExecutorPool(excIdx));
-            if (excIdx < Config.PingInfoByPool.size()) {
-                Harmonizer->AddPool(Executors[excIdx].Get(), &Config.PingInfoByPool[excIdx]);
-            } else {
-                Harmonizer->AddPool(Executors[excIdx].Get());
-            }
+            bool hasSharedThread = shared->GetSharedThread(excIdx);
+            auto *pingInfo = (excIdx < Config.PingInfoByPool.size() ? &Config.PingInfoByPool[excIdx] : nullptr);
+            Harmonizer->AddPool(Executors[excIdx].Get(), pingInfo, hasSharedThread, shared);
         }
     }
 
@@ -46,11 +55,22 @@ namespace NActors {
                 scheduleReaders.push_back(readers);
             }
         }
+        if (auto shared = static_cast<TSharedExecutorPool*>(SharedPool.Get())) {
+            NSchedulerQueue::TReader* readers;
+            ui32 readersCount = 0;
+            shared->Prepare(actorSystem, &readers, &readersCount);
+            for (ui32 i = 0; i != readersCount; ++i, ++readers) {
+                scheduleReaders.push_back(readers);
+            }
+        }
     }
 
     void TCpuManager::Start() {
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
             Executors[excIdx]->Start();
+        }
+        if (SharedPool) {
+            SharedPool->Start();
         }
     }
 
@@ -61,6 +81,9 @@ namespace NActors {
     }
 
     void TCpuManager::Shutdown() {
+        if (SharedPool) {
+            SharedPool->Shutdown();
+        }
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
             Executors[excIdx]->Shutdown();
         }
@@ -90,7 +113,10 @@ namespace NActors {
     IExecutorPool* TCpuManager::CreateExecutorPool(ui32 poolId) {
         for (TBasicExecutorPoolConfig& cfg : Config.Basic) {
             if (cfg.PoolId == poolId) {
-                return new TBasicExecutorPool(cfg, Harmonizer.Get());
+                TBasicExecutorPool *pool = new TBasicExecutorPool(cfg, Harmonizer.Get());
+                auto sharedPool = static_cast<TSharedExecutorPool*>(SharedPool.Get());
+                pool->SetOwnSharedThread(sharedPool->GetSharedThread(poolId));
+                return pool;
             }
         }
         for (TIOExecutorPoolConfig& cfg : Config.IO) {
@@ -109,6 +135,15 @@ namespace NActors {
             }
         }
         return pools;
+    }
+
+    void TCpuManager::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats> &sharedStatsCopy) const {
+        if (poolId < ExecutorPoolCount) {
+            Executors[poolId]->GetCurrentStats(poolStats, statsCopy);
+            if (auto shared = static_cast<TSharedExecutorPool*>(SharedPool.Get())) {
+                shared->GetSharedStats(poolId, sharedStatsCopy);
+            }
+        }
     }
 
 }

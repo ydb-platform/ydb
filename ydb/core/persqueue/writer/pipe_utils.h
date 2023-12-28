@@ -3,6 +3,8 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+#include <unordered_map>
+
 namespace NKikimr::NTabletPipe {
 
 class TPipeHelper {

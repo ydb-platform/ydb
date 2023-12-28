@@ -1,4 +1,3 @@
-#include "ydb/core/tablet/bootstrapper.h"
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/persqueue/writer/metadata_initializers.h>
@@ -6,6 +5,7 @@
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
 
+#include <ydb/core/persqueue/writer/pipe_utils.h>
 
 using namespace NKikimr::NPQ;
 
@@ -179,7 +179,7 @@ TWriteSessionMock* ChoosePartition(NPersQueue::TTestServer& server, bool spliMer
     TWriteSessionMock* mock = new TWriteSessionMock();
 
     NActors::TActorId parentId = server.GetRuntime()->Register(mock);
-    server.GetRuntime()->Register(NKikimr::NPQ::CreatePartitionChooserActor(parentId, 
+    server.GetRuntime()->Register(NKikimr::NPQ::CreatePartitionChooserActorM(parentId, 
                                                                                    CreateConfig(spliMergeEnabled),
                                                                                    fullConverter,
                                                                                    sourceId,
@@ -224,21 +224,19 @@ using namespace NKikimr;
 using namespace NActors;
 using namespace NKikimrPQ;
 
-class TPQTabletMock: public TActor<TPQTabletMock>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TPQTabletMock: public TActor<TPQTabletMock> {
 public:
-    TPQTabletMock(const TActorId& tablet, TTabletStorageInfo* info, ETopicPartitionStatus status)
+    TPQTabletMock(ETopicPartitionStatus status)
         : TActor(&TThis::StateWork)
-    , TTabletExecutedFlat(info, tablet, nullptr)
-    , Status(status) {
-    }
-private:
-    STFUNC(StateInit) {
-        StateInitImpl(ev, SelfId());
+        , Status(status) {
     }
 
 private:
     void Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx) {
-        auto response = THolder<TEvPersQueue::TEvResponse>();
+        auto response = MakeHolder<TEvPersQueue::TEvResponse>();
+
+        response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+        response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
 
         auto* cmd = response->Record.MutablePartitionResponse()->MutableCmdGetOwnershipResult();
         cmd->SetOwnerCookie("ower_cookie");
@@ -247,38 +245,11 @@ private:
         ctx.Send(ev->Sender, response.Release());
     }
 
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& , const TActorContext& ) {}
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& , const TActorContext& ) {}
-
     STFUNC(StateWork) {
         TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvRequest, Handle);
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle)
-        default:
-            HandleDefaultEvents(ev, SelfId());
         }
-    }
-
-private:
-    void OnDetach(const TActorContext &ctx) override {
-        Die(ctx);
-    }
-
-    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
-        Y_UNUSED(ev);
-        Die(ctx);
-    }
-
-    void DefaultSignalTabletActive(const TActorContext&) override {
-
-    }
-
-    void OnActivateExecutor(const TActorContext &ctx) override {
-        Cerr << ">>>>> OnActivateExecutor" << Endl;
-        Become(&TThis::StateWork);
-        SignalTabletActive(ctx);        
     }
 
 private:
@@ -287,20 +258,9 @@ private:
 
 
 TPQTabletMock* CreatePQTabletMock(NPersQueue::TTestServer& server, ui64 tabletId, ETopicPartitionStatus status) {
-    TPQTabletMock* mock = nullptr;
-    auto wrapCreatePQTabletMock = [&](const NActors::TActorId& tablet, NKikimr::TTabletStorageInfo* info) -> IActor* {
-        mock = new TPQTabletMock(tablet, info, status);
-        return mock;
-    };
-
-    for(size_t i = 0; i < server.GetRuntime()->GetNodeCount(); ++i) {
-        Cerr << ">>>>> 1: " << i << Endl;
-        CreateTestBootstrapper(*server.GetRuntime(),
-                            CreateTestTabletInfo(tabletId, NKikimrTabletBase::TTabletTypes::Dummy, TErasureType::ErasureNone),
-                            wrapCreatePQTabletMock,
-                            i);
-    }
-
+    TPQTabletMock* mock = new TPQTabletMock(status);
+    auto actorId = server.GetRuntime()->Register(mock);
+    NKikimr::NTabletPipe::NTest::TPipeMock::Register(tabletId, actorId);
     return mock;
 }
 
@@ -310,6 +270,7 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_Test) {
     server.EnableLogs({NKikimrServices::PQ_PARTITION_CHOOSER}, NActors::NLog::PRI_TRACE);
 
     CreatePQTabletMock(server, 1000, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 1002, ETopicPartitionStatus::Active);
 
     {
         auto r = ChoosePartition(server, SMEnabled, "A_Source");

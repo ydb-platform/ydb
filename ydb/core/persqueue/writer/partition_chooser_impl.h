@@ -14,8 +14,9 @@
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include "common.h"
-#include "partition_chooser.h"
 #include "pipe_utils.h"
+#include "partition_chooser.h"
+
 
 namespace NKikimr::NPQ {
 namespace NPartitionChooser {
@@ -905,5 +906,16 @@ std::pair<bool, const typename TPartitionChooserActor<TPipe>::TPartitionInfo*> T
 #undef DEBUG
 #undef INFO
 #undef ERROR
+
+inline IActor* CreatePartitionChooserActorM(TActorId parentId,
+                                    const NKikimrSchemeOp::TPersQueueGroupDescription& config,
+                                    NPersQueue::TTopicConverterPtr& fullConverter,
+                                    const TString& sourceId,
+                                    std::optional<ui32> preferedPartition,
+                                    bool withoutHash) {
+    auto chooser = CreatePartitionChooser(config, withoutHash);
+    return new NPartitionChooser::TPartitionChooserActor<NTabletPipe::NTest::TPipeMock>(parentId, config, chooser, fullConverter, sourceId, preferedPartition);
+}
+
 
 } // namespace NKikimr::NPQ

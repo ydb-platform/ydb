@@ -1,4 +1,5 @@
 #include "partition_chooser_impl.h"
+#include "ydb/library/actors/interconnect/types.h"
 
 #include <library/cpp/digest/md5/md5.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
@@ -50,7 +51,6 @@ std::shared_ptr<IPartitionChooser> CreatePartitionChooser(const NKikimrSchemeOp:
     }
 }
 
-
 IActor* CreatePartitionChooserActor(TActorId parentId,
                                     const NKikimrSchemeOp::TPersQueueGroupDescription& config,
                                     NPersQueue::TTopicConverterPtr& fullConverter,
@@ -62,3 +62,5 @@ IActor* CreatePartitionChooserActor(TActorId parentId,
 }
 
 } // namespace NKikimr::NPQ
+
+std::unordered_map<ui64, TActorId> NKikimr::NTabletPipe::NTest::TPipeMock::Tablets;

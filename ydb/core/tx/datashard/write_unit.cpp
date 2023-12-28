@@ -69,10 +69,8 @@ public:
         {
             keyCells.clear();
             keyCells.reserve(TableInfo_.KeyColumnIds.size());
-            ui64 keyBytes = 0;
             for (ui16 keyColIdx = 0; keyColIdx < TableInfo_.KeyColumnIds.size(); ++keyColIdx) {
                 const TCell& cell = matrix.GetCell(rowIdx, keyColIdx);
-                keyBytes += cell.IsNull() ? 1 : cell.Size();
                 keyCells.emplace_back(cell);
             }
 
@@ -80,11 +78,9 @@ public:
             Y_ABORT_UNLESS(matrix.GetColCount() >= TableInfo_.KeyColumnIds.size());
             commands.reserve(matrix.GetColCount() - TableInfo_.KeyColumnIds.size());
 
-            ui64 valueBytes = 0;
             for (ui16 valueColIdx = TableInfo_.KeyColumnIds.size(); valueColIdx < matrix.GetColCount(); ++valueColIdx) {
                 ui32 columnTag = writeTx->RecordOperation().GetColumnIds(valueColIdx);
                 const TCell& cell = matrix.GetCell(rowIdx, valueColIdx);
-                valueBytes += cell.IsNull() ? 1 : cell.Size();
 
                 NMiniKQL::IEngineFlatHost::TUpdateCommand command = {columnTag, TKeyDesc::EColumnOperation::Set, {}, cell};
                 commands.emplace_back(std::move(command));

@@ -28,6 +28,7 @@ struct TEvKafka {
         EvLeaveGroupRequest,
         EvKillReadSession,
         EvCommitedOffsetsResponse,
+        EvCreateTopicsResponse,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -224,6 +225,23 @@ struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffse
     std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, ui32>>> PartitionIdToOffsets;
 };
 
+struct TEvCreateTopicsResponse : public NActors::TEventLocal<TEvCreateTopicsResponse, EvCreateTopicsResponse> 
+                           , public NKikimr::NGRpcProxy::V1::TEvPQProxy::TLocalResponseBase
+{
+    enum EStatus {
+        OK,
+        ERROR,
+        BAD_REQUEST,
+        INVALID_CONFIG,
+    };
+
+    TEvCreateTopicsResponse()
+    {}
+
+    TString TopicPath;
+    EStatus Status;
+    TString Message;
+};
 };
 
 } // namespace NKafka

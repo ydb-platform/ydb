@@ -375,9 +375,6 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
 void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl) {
     const TOlapStoreInfo::TPtr storeInfo = *Self->OlapStores.FindPtr(pathId);
 
-    Cerr << "test # DescribeOlapStore: pathId=" << pathId.OwnerId << " and " << pathId.LocalPathId << ", store=" 
-        << storeInfo->GetStats().Aggregated.RowCount << Endl;
-
     Y_ABORT_UNLESS(storeInfo, "OlapStore not found");
     Y_UNUSED(pathEl);
 
@@ -907,18 +904,13 @@ static bool ConsiderAsDropped(const TPath& path) {
 }
 
 THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe(const TActorContext& ctx) {
-    Cerr << "test # TPathDescriber::Describe" << Endl;
-
     TPathId pathId = Params.HasPathId() ? TPathId(Params.GetSchemeshardId(), Params.GetPathId()) : InvalidPathId;
     TString pathStr = Params.GetPath();
-
-    Cerr << "pathId=" << pathId.ToString() << ", pathStr=" << pathStr << Endl;
 
     TPath path = Params.HasPathId()
         ? TPath::Init(pathId, Self)
         : TPath::Resolve(pathStr, Self);
 
-    Cerr << "path=" << path.PathString() << Endl;
 
     {
         TPath::TChecker checks = path.Check();
@@ -973,8 +965,6 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         }
     }
 
-    Cerr << "after checks: pathId=" << pathId << ", pathStr=" << pathStr << Endl;
-
     Result = MakeHolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder>(pathStr, Self->TabletID(), pathId);
 
     auto descr = Result->Record.MutablePathDescription()->MutableSelf();
@@ -1004,12 +994,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             break;
         case NKikimrSchemeOp::EPathTypeColumnStore:
             DescribeDir(path);
-            Cerr << "test # EPathTypeColumnStore: PathId" << base->PathId << Endl;
             DescribeOlapStore(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeColumnTable:
-            Cerr << "test # EPathTypeColumnTable: use PathId=" << base->PathId << " but should PathId=" << pathId << Endl;
-            // DescribeColumnTable(base->PathId, base);
             DescribeColumnTable(pathId, base);
             break;
         case NKikimrSchemeOp::EPathTypePersQueueGroup:

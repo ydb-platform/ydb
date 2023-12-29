@@ -8,7 +8,7 @@
 #include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Parser.h>
 
-#include <ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.pb.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
 
 #if defined(_tsan_enabled_)
 #include <util/system/mutex.h>

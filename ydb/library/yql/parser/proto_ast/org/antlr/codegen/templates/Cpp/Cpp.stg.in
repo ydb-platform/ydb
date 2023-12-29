@@ -133,7 +133,7 @@ outputFile( LEXER,
  * Include the ANTLR3 generated header file.
  */
 <if(PARSER)>
-#include \<@PROTOBUF_HEADER_PATH@/<name>.pb.h>
+#include \<@PROTOBUF_HEADER_PATH@/<name>@PROTOBUF_SUFFIX_PATH@>
 <endif>
 
 #include "<recognizer.grammar.name>Lexer.h"

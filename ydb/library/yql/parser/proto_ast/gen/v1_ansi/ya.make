@@ -1,7 +1,7 @@
 LIBRARY()
 
 PEERDIR (
-    ydb/library/yql/parser/proto_ast/gen/v1_proto
+    ydb/library/yql/parser/proto_ast/gen/v1_proto_split
 )
 
 SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
@@ -9,7 +9,8 @@ SET(antlr_templates ${antlr_output}/org/antlr/codegen/templates)
 SET(sql_grammar ${antlr_output}/SQLv1.g)
 
 SET(ANTLR_PACKAGE_NAME NSQLv1Generated)
-SET(PROTOBUF_HEADER_PATH ydb/library/yql/parser/proto_ast/gen/v1_proto)
+SET(PROTOBUF_HEADER_PATH ydb/library/yql/parser/proto_ast/gen/v1_proto_split)
+SET(PROTOBUF_SUFFIX_PATH .pb.main.h)
 
 SET(LEXER_PARSER_NAMESPACE NALPAnsi)
 
@@ -36,7 +37,7 @@ RUN_ANTLR(
     IN ${sql_grammar} ${antlr_templates}/Cpp/Cpp.stg
     OUT SQLv1Parser.cpp SQLv1Lexer.cpp SQLv1Parser.h SQLv1Lexer.h
     OUTPUT_INCLUDES
-    ${PROTOBUF_HEADER_PATH}/SQLv1Parser.pb.h
+    ${PROTOBUF_HEADER_PATH}/SQLv1Parser.pb.main.h
     ${STG_INCLUDES}
     CWD ${antlr_output}
 )

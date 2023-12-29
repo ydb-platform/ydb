@@ -44,17 +44,23 @@ TString TMd5Converter::operator()(const TString& sourceId) const {
 #define INFO(message)  LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
 #define ERROR(message) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
 
+TTableHelper::TTableHelper(const TString& topicName, const TString& topicHashName)
+    : TopicName(topicName)
+    , TopicHashName(topicHashName) {
+}
 
-bool TTableHelper::Initialize(const TActorContext& ctx, const TString& topicName,  const TString& topicHashName, const TString& sourceId) {
-    TopicName = topicName;
+std::optional<ui32> TTableHelper::PartitionId() const {
+    return PartitionId_;
+}
 
+bool TTableHelper::Initialize(const TActorContext& ctx, const TString& sourceId) {
     const auto& pqConfig = AppData(ctx)->PQConfig;
 
     TableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping
                                                                    : ESourceIdTableGeneration::SrcIdMeta2;
     try {
         EncodedSourceId = NSourceIdEncoding::EncodeSrcId(
-                    topicHashName, sourceId, TableGeneration
+                    TopicHashName, sourceId, TableGeneration
             );
     } catch (yexception& e) {
         return false;
@@ -128,8 +134,6 @@ THolder<NKqp::TEvKqp::TEvCloseSessionRequest> TTableHelper::MakeCloseSessionRequ
 void TTableHelper::SendSelectRequest(const NActors::TActorContext& ctx) {
     auto ev = MakeSelectQueryRequest(ctx);
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-
-    SelectInflight++;
 }
 
 THolder<NKqp::TEvKqp::TEvQueryRequest> TTableHelper::MakeSelectQueryRequest(const NActors::TActorContext& ctx) {
@@ -166,11 +170,11 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TTableHelper::MakeSelectQueryRequest(cons
     return ev;
 }
 
-std::pair<bool, std::optional<ui32>> TTableHelper::HandleSelect(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
+bool TTableHelper::HandleSelect(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
     auto& record = ev->Get()->Record.GetRef();
 
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        return {false, std::nullopt};
+        return false;
     }
 
     auto& t = record.GetResponse().GetResults(0).GetValue().GetStruct(0);
@@ -178,14 +182,12 @@ std::pair<bool, std::optional<ui32>> TTableHelper::HandleSelect(NKqp::TEvKqp::TE
     TxId = record.GetResponse().GetTxMeta().id();
     Y_ABORT_UNLESS(!TxId.empty());
 
-    std::optional<ui32> partition;
-
     if (t.ListSize() != 0) {
         auto& tt = t.GetList(0).GetStruct(0);
         if (tt.HasOptional() && tt.GetOptional().HasUint32()) { //already got partition
             auto accessTime = t.GetList(0).GetStruct(2).GetOptional().GetUint64();
             if (accessTime > AccessTime) { // AccessTime
-                partition = tt.GetOptional().GetUint32();
+                PartitionId_ = tt.GetOptional().GetUint32();
                 CreateTime = t.GetList(0).GetStruct(1).GetOptional().GetUint64();
                 AccessTime = accessTime;
             }
@@ -196,15 +198,13 @@ std::pair<bool, std::optional<ui32>> TTableHelper::HandleSelect(NKqp::TEvKqp::TE
         CreateTime = TInstant::Now().MilliSeconds();
     }
 
-    return {true, partition};
+    return true;
 }
 
 
 void TTableHelper::SendUpdateRequest(ui32 partitionId, const TActorContext& ctx) {
     auto ev = MakeUpdateQueryRequest(partitionId, ctx);
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-
-    UpdatesInflight++;
 }
 
 THolder<NKqp::TEvKqp::TEvQueryRequest> TTableHelper::MakeUpdateQueryRequest(ui32 partitionId, const NActors::TActorContext& ctx) {

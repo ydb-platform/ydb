@@ -1821,12 +1821,12 @@ TExprNode::TPtr BuildDictOverTuple(TExprNode::TPtr&& collection, const TTypeAnno
     }
     TTypeAnnotationNode::TListType types(tupleType->GetItems());
     dictKeyType = CommonType(pos, types, ctx);
-    YQL_ENSURE(dictKeyType, "Uncompatible colllection elements.");
+    YQL_ENSURE(dictKeyType, "Uncompatible collection elements.");
 
     TExprNode::TPtr tuple;
     if (collection->IsList()) {
         tuple = collection;
-    } else{
+    } else {
         TExprNode::TListType items;
         items.reserve(tupleType->GetSize());
         for (size_t i = 0; i != tupleType->GetSize(); ++i) {
@@ -1834,7 +1834,7 @@ TExprNode::TPtr BuildDictOverTuple(TExprNode::TPtr&& collection, const TTypeAnno
                 ctx.NewCallable(
                     pos,
                     "Nth",
-                    {collection, ctx.NewAtom(pos, ToString(i))}
+                    {collection, ctx.NewAtom(pos, ui32(i))}
                 )
             );
         }

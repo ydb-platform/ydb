@@ -38,8 +38,10 @@ message TEvLoadTestRequest {
                 uint64 BlobsNumber = 2;
             }
             repeated TSizeInfo BlobSizes = 3;
-            optional uint32 WritesInFlight = 4 [default = 1];
-            optional NKikimrBlobStorage.EPutHandleClass PutHandleClass = 5;
+            optional uint32 MaxWritesInFlight = 4;
+            optional uint32 MaxWriteBytesInFlight = 5;
+            optional NKikimrBlobStorage.EPutHandleClass PutHandleClass = 6;
+            optional uint32 DelayAfterCompletionSec = 7;
         }
 
         message TRequestInfo {

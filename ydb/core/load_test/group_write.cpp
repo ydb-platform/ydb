@@ -86,6 +86,44 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         NKikimrBlobStorage::EPutHandleClass PutHandleClass;
     };
 
+    struct TInFlightTracker {
+    public:
+        TInFlightTracker(ui32 maxRequestsInFlight = 0, ui64 maxBytesInFlight = 0)
+            : MaxRequestsInFlight(maxRequestsInFlight)
+            , MaxBytesInFlight(maxBytesInFlight)
+            , RequestsInFlight(0)
+            , BytesInFlight(0)
+        {}
+
+        operator bool() const {
+            return (!MaxRequestsInFlight || RequestsInFlight < MaxRequestsInFlight) &&
+                    (!MaxBytesInFlight || BytesInFlight < MaxBytesInFlight);
+        }
+
+        void Request(ui64 size) {
+            BytesInFlight += size;
+            ++RequestsInFlight;
+        }
+
+        void Response(ui64 size) {
+            Y_DEBUG_ABORT_UNLESS(BytesInFlight >= size && RequestsInFlight >= 0);
+            BytesInFlight -= size;
+            --RequestsInFlight;
+        }
+    
+        TString ToString()  const{
+            return TStringBuilder() << "{"
+                << " Requests# " << RequestsInFlight << "/" << MaxRequestsInFlight
+                << " Bytes# " << BytesInFlight << "/" << MaxBytesInFlight
+                << " }";
+        }
+
+        ui32 MaxRequestsInFlight;
+        ui64 MaxBytesInFlight;
+        ui32 RequestsInFlight;
+        ui64 BytesInFlight;
+    };
+
     class TInitialAllocation {
     public:
         using TProtoSettings = NKikimr::TEvLoadTestRequest::TStorageLoad::TInitialBlobAllocation;
@@ -96,7 +134,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             : SizeGenerator(proto.GetBlobSizes())
             , SizeToWrite(proto.GetTotalSize())
             , BlobsToWrite(proto.GetBlobsNumber())
-            , WritesInFlight(proto.GetWritesInFlight())
+            , InFlightTracker(proto.GetMaxWritesInFlight(), proto.GetMaxWriteBytesInFlight())
         {
             if (proto.HasPutHandleClass()) {
                 PutHandleClass = proto.GetPutHandleClass();
@@ -104,10 +142,6 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         }
 
     public:
-        bool IsEmpty() {
-            return ConfirmedBlobs.empty();
-        }
-
         bool Size() {
             return ConfirmedBlobs.size();
         }
@@ -120,18 +154,24 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             return SizeToWrite > 0 || BlobsToWrite > 0;
         }
 
+        bool CanSendRequest() {
+            if (!InFlightTracker) {
+                return false;
+            }
+            return !EnoughBlobsWritten(true);
+        }
+
         bool EnoughBlobsWritten(bool countPending = false) {
             if (SizeToWrite > 0) {
-                return ConfirmedDataSize + PendingWriteSize * countPending >= SizeToWrite;
+                return ConfirmedDataSize + InFlightTracker.BytesInFlight * countPending >= SizeToWrite;
             } else if (BlobsToWrite > 0) {
-                return ConfirmedBlobs.size() + PendingWrites * countPending >= BlobsToWrite;
+                return ConfirmedBlobs.size() + InFlightTracker.RequestsInFlight * countPending >= BlobsToWrite;
             }
             return true;
         }
 
         void ConfirmBlob(const TLogoBlobID& id, bool success) {
-            PendingWriteSize -= id.BlobSize();
-            PendingWrites -= 1;
+            InFlightTracker.Response(id.BlobSize());
             if (success) {
                 ConfirmedBlobs.push_back(id);
                 ConfirmedDataSize += id.BlobSize();
@@ -139,12 +179,12 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         }
 
         std::unique_ptr<TEvBlobStorage::TEvPut> MakePutMessage(ui64 tabletId, ui32 gen, ui32 step, ui32 channel) {
+            Y_DEBUG_ABORT_UNLESS(CanSendRequest());
             ui32 blobSize = SizeGenerator.Generate();
             const TLogoBlobID id(tabletId, gen, step, channel, blobSize, BlobCookie++);
             const TSharedData buffer = GenerateBuffer<TSharedData>(id);
             auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), PutHandleClass);
-            PendingWriteSize += blobSize;
-            PendingWrites += 1;
+            InFlightTracker.Request(blobSize);
             return std::move(ev);
         }
 
@@ -164,7 +204,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         }
 
         TLogoBlobID GetRandomBlobId() {
-            Y_VERIFY(!IsEmpty());
+            Y_ABORT_UNLESS(!ConfirmedBlobs.empty());
             auto iter = ConfirmedBlobs.begin();
             std::advance(iter, RandomNumber(ConfirmedBlobs.size()));
             return *iter;
@@ -175,16 +215,10 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 << " PutHandleClass# " << NKikimrBlobStorage::EPutHandleClass_Name(PutHandleClass)
                 << " SizeToWrite# " << SizeToWrite
                 << " BlobsToWrite# " << BlobsToWrite
-                << " WritesInFlight# " << WritesInFlight
+                << " PendingWrites# " << InFlightTracker.ToString()
                 << " ConfirmedSize# " << ConfirmedDataSize
-                << " ConfirmedBlobs.size()# " << ConfirmedBlobs.size()
-                << " PendingWrites# " << PendingWrites
-                << " PendingWriteSize# " << PendingWriteSize << " }";
+                << " ConfirmedBlobs.size()# " << ConfirmedBlobs.size() << " }";
         }
-
-    ui32 GetWritesInFlight() {
-        return WritesInFlight;
-    }
 
     private:
         TSizeGenerator SizeGenerator;
@@ -192,12 +226,10 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
         uint64_t SizeToWrite;
         uint64_t BlobsToWrite;
-        ui32 WritesInFlight = 1;
         uint64_t ConfirmedDataSize = 0;
         TVector<TLogoBlobID> ConfirmedBlobs;
 
-        uint64_t PendingWriteSize = 0;
-        uint64_t PendingWrites = 0;
+        TInFlightTracker InFlightTracker;
 
         ui64 BlobCookie = 0;
     };
@@ -330,8 +362,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             bool LoadEnabled = true;
             std::optional<TSizeGenerator> SizeGen;
             std::shared_ptr<TRequestDelayManager> DelayManager;
-            const ui32 MaxRequestsInFlight;
-            const ui64 MaxBytesInFlight;
+            TInFlightTracker InFlightTracker;
             const ui64 MaxTotalBytes;
         };
 
@@ -360,8 +391,6 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         const NKikimrBlobStorage::EPutHandleClass PutHandleClass;
         TRequestDispatchingSettings WriteSettings;
         TMonotonic NextWriteTimestamp;
-        ui32 WritesInFlight = 0;
-        ui64 WriteBytesInFlight = 0;
         ui64 TotalBytesWritten = 0;
         THashMap<ui64, ui64> SentTimestamp;
         ui64 WriteQueryId = 0;
@@ -378,8 +407,6 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         const NKikimrBlobStorage::EGetHandleClass GetHandleClass;
         TRequestDispatchingSettings ReadSettings;
         TMonotonic NextReadTimestamp;
-        ui32 ReadsInFlight = 0;
-        ui64 ReadBytesInFlight = 0;
         ui64 TotalBytesRead = 0;
         THashMap<ui64, ui64> ReadSentTimestamp;
         ui64 ReadQueryId = 0;
@@ -582,13 +609,13 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         }
 
         void MakeInitialAllocation(const TActorContext& ctx) {
-            if (InitialAllocation.EnoughBlobsWritten(false)) {
+            if (!InitialAllocation) {
                 Self.InitialAllocationCompleted(ctx);
                 return;
             }
             LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " going to make initial allocation,"
                     << InitialAllocation.ToString());
-            for (ui32 i = 0; i < InitialAllocation.GetWritesInFlight() && !InitialAllocation.EnoughBlobsWritten(true); ++i) {
+            while (InitialAllocation.CanSendRequest()) {
                 IssueInitialPut(ctx);
             }
         }
@@ -601,9 +628,10 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 Y_ABORT_UNLESS(res);
 
                 InitialAllocation.ConfirmBlob(res->Id, CheckStatus(ctx, res, {}));
-                if (!InitialAllocation.EnoughBlobsWritten(true)) {
+                while (InitialAllocation.CanSendRequest()) {
                     IssueInitialPut(ctx);
-                } else if (InitialAllocation.EnoughBlobsWritten(false)) {
+                }
+                if (InitialAllocation.EnoughBlobsWritten()) {
                     SetKeepFlagsOnInitialAllocation(ctx);
                 }
             };
@@ -672,10 +700,10 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             if (ReadMegabytesPerSecondST.CalculateSpeed(&speed)) {
                 ReadMegabytesPerSecondQT.Add(now, speed);
             }
-            WritesInFlightQT.Add(now, WritesInFlight);
-            WriteBytesInFlightQT.Add(now, WriteBytesInFlight);
-            ReadsInFlightQT.Add(now, ReadsInFlight);
-            ReadBytesInFlightQT.Add(now, ReadBytesInFlight);
+            WritesInFlightQT.Add(now, WriteSettings.InFlightTracker.RequestsInFlight);
+            WriteBytesInFlightQT.Add(now, WriteSettings.InFlightTracker.BytesInFlight);
+            ReadsInFlightQT.Add(now, ReadSettings.InFlightTracker.RequestsInFlight);
+            ReadBytesInFlightQT.Add(now, ReadSettings.InFlightTracker.BytesInFlight);
             if (now > LastLatencyTrackerUpdate + TDuration::Seconds(1)) {
                 LastLatencyTrackerUpdate = now;
                 ResponseQT->Update();
@@ -736,18 +764,12 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                     DUMP_PARAM(EarliestTimestamp)
                 }
                 DUMP_PARAM(NextWriteTimestamp)
-                DUMP_PARAM(WritesInFlight)
-                DUMP_PARAM(WriteBytesInFlight)
-                DUMP_PARAM_FINAL(WriteSettings.MaxRequestsInFlight)
-                DUMP_PARAM_FINAL(WriteSettings.MaxBytesInFlight)
+                DUMP_PARAM(WriteSettings.InFlightTracker.ToString())
                 DUMP_PARAM_FINAL(TotalBytesWritten)
                 DUMP_PARAM_FINAL(WriteSettings.MaxTotalBytes)
                 DUMP_PARAM_FINAL(TotalBytesRead)
                 DUMP_PARAM(NextReadTimestamp)
-                DUMP_PARAM(ReadsInFlight)
-                DUMP_PARAM(ReadBytesInFlight)
-                DUMP_PARAM_FINAL(ReadSettings.MaxRequestsInFlight)
-                DUMP_PARAM_FINAL(ReadSettings.MaxBytesInFlight)
+                DUMP_PARAM(ReadSettings.InFlightTracker.ToString())
                 DUMP_PARAM(ConfirmedBlobIds.size())
                 DUMP_PARAM(InitialAllocation.ToString())
 
@@ -807,10 +829,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
         void IssueWriteIfPossible(const TActorContext& ctx) {
             const TMonotonic now = TActivationContext::Monotonic();
-            while (WriteSettings.LoadEnabled &&
-                    (WritesInFlight < WriteSettings.MaxRequestsInFlight || !WriteSettings.MaxRequestsInFlight) &&
-                    (WriteBytesInFlight < WriteSettings.MaxBytesInFlight || !WriteSettings.MaxBytesInFlight) &&
-                    (TotalBytesWritten + WriteBytesInFlight < WriteSettings.MaxTotalBytes || !WriteSettings.MaxTotalBytes) &&
+            while (WriteSettings.LoadEnabled && WriteSettings.InFlightTracker &&
+                    (TotalBytesWritten + WriteSettings.InFlightTracker.BytesInFlight < WriteSettings.MaxTotalBytes || !WriteSettings.MaxTotalBytes) &&
                     now >= NextWriteTimestamp &&
                     (!ScriptedRequests || ScriptedRequests[ScriptedCounter].EvType == TEvBlobStorage::EvPut)) {
                 IssueWriteRequest(ctx);
@@ -858,9 +878,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                     ConfirmedBlobIds.insert(std::lower_bound(ConfirmedBlobIds.begin(), ConfirmedBlobIds.end(), id), id);
                 }
 
-                Y_ABORT_UNLESS(WritesInFlight >= 1 && WriteBytesInFlight >= size);
-                --WritesInFlight;
-                WriteBytesInFlight -= size;
+                WriteSettings.InFlightTracker.Response(size);
 
                 TotalBytesWritten += size;
 
@@ -878,7 +896,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 ResponseQT->Increment(response.MicroSeconds());
                 IssueWriteIfPossible(ctx);
 
-                if (ConfirmedBlobIds.size() == 1 && InitialAllocation.IsEmpty()) {
+                if (ConfirmedBlobIds.size() == 1 && !InitialAllocation) {
                     if (NextReadTimestamp == TMonotonic()) {
                         NextReadTimestamp = TActivationContext::Monotonic();
                     }
@@ -896,8 +914,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
             ++Cookie;
 
-            ++WritesInFlight;
-            WriteBytesInFlight += size;
+            WriteSettings.InFlightTracker.Request(size);
 
             if (ScriptedRequests) {
                 UpdateNextTimestemps(true);
@@ -968,8 +985,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         void IssueReadIfPossible(const TActorContext& ctx) {
             const TMonotonic now = TActivationContext::Monotonic();
 
-            while (ReadSettings.LoadEnabled && ReadsInFlight < ReadSettings.MaxRequestsInFlight &&
-                    (ReadBytesInFlight < ReadSettings.MaxBytesInFlight || !ReadSettings.MaxBytesInFlight) &&
+            while (ReadSettings.LoadEnabled && ReadSettings.InFlightTracker &&
                     now >= NextReadTimestamp &&
                     ConfirmedBlobIds.size() + InitialAllocation.Size() > 0 &&
                     (!ScriptedRequests || ScriptedRequests[ScriptedCounter].EvType == TEvBlobStorage::EvGet)) {
@@ -1020,9 +1036,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                     return;
                 }
 
-                Y_ABORT_UNLESS(ReadsInFlight >= 1 && ReadBytesInFlight >= size);
-                --ReadsInFlight;
-                ReadBytesInFlight -= size;
+                ReadSettings.InFlightTracker.Response(size);
                 TotalBytesRead += size;
 
                 auto it = ReadSentTimestamp.find(readQueryId);
@@ -1037,8 +1051,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             SendToBSProxy(ctx, GroupId, ev.release(), Self.QueryDispatcher.ObtainCookie(std::move(readCallback)));
             ReadSentTimestamp.emplace(readQueryId, GetCycleCountFast());
 
-            ++ReadsInFlight;
-            ReadBytesInFlight += size;
+            ReadSettings.InFlightTracker.Request(size);
 
             // calculate time of next read request
             if (ScriptedRequests) {
@@ -1049,6 +1062,12 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             NextReadInQueue = false;
         }
     };
+
+    enum EWakeupType : ui32 {
+        MAIN_CYCLE = 0,
+        DELAY_AFTER_INITIAL_WRITE,
+    };
+
 
     TString ConfingString;
     const ui64 Tag;
@@ -1077,6 +1096,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
     static constexpr ui64 DefaultTabletId = 5000;
     ui32 WorkersInInitialState = 0;
 
+    ui32 DelayAfterInitialWrite = 0;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_LOAD_ACTOR;
@@ -1103,7 +1124,11 @@ public:
 
             TInitialAllocation initialAllocation;
             if (profile.HasInitialAllocation()) {
+                auto initialAllocationProto = profile.GetInitialAllocation();
                 initialAllocation = TInitialAllocation(profile.GetInitialAllocation());
+                if (initialAllocationProto.HasDelayAfterCompletionSec()) {
+                    DelayAfterInitialWrite = std::max(DelayAfterInitialWrite, initialAllocationProto.GetDelayAfterCompletionSec());
+                }
             }
 
             NKikimrBlobStorage::EPutHandleClass putHandleClass = NKikimrBlobStorage::EPutHandleClass::UserData;
@@ -1126,8 +1151,7 @@ public:
                 .LoadEnabled = enableWrites,
                 .SizeGen = TSizeGenerator(profile.GetWriteSizes()),
                 .DelayManager = std::move(writeDelayManager),
-                .MaxRequestsInFlight = profile.GetMaxInFlightWriteRequests(),
-                .MaxBytesInFlight = profile.GetMaxInFlightWriteBytes(),
+                .InFlightTracker = TInFlightTracker(profile.GetMaxInFlightWriteRequests(), profile.GetMaxInFlightWriteBytes()),
                 .MaxTotalBytes = profile.GetMaxTotalBytesWritten(),
             };
 
@@ -1156,8 +1180,7 @@ public:
                 .LoadEnabled = enableReads,
                 .SizeGen = readSizeGen,
                 .DelayManager = std::move(readDelayManager),
-                .MaxRequestsInFlight = profile.GetMaxInFlightReadRequests(),
-                .MaxBytesInFlight = profile.GetMaxInFlightReadBytes(),
+                .InFlightTracker = TInFlightTracker(profile.GetMaxInFlightReadRequests(), profile.GetMaxInFlightReadBytes()),
                 .MaxTotalBytes = ::Max<ui64>(),
             };
 
@@ -1215,14 +1238,22 @@ public:
         }
     }
 
+    void StartWorkers(const TActorContext& ctx) {
+        if (TestDuration) {
+            ctx.Schedule(*TestDuration, new TEvents::TEvPoisonPill());
+        }
+        for (auto& writer : TabletWriters) {
+            writer->StartWorking(ctx);
+        }
+    }
+
     void InitialAllocationCompleted(const TActorContext& ctx) {
         WorkersInInitialState--;
-        if (!WorkersInInitialState) {
-            if (TestDuration) {
-                ctx.Schedule(*TestDuration, new TEvents::TEvPoisonPill());
-            }
-            for (auto& writer : TabletWriters) {
-                writer->StartWorking(ctx);
+        if (!WorkersInInitialState)  {
+            if (DelayAfterInitialWrite) {
+                ctx.Schedule(TDuration::Seconds(DelayAfterInitialWrite), new TEvents::TEvWakeup);
+            } else {
+                StartWorkers(ctx);
             }
         }
     }
@@ -1282,9 +1313,20 @@ public:
         ctx.Schedule(TDuration::MilliSeconds(5), new TEvUpdateQuantile);
     }
 
-    void HandleWakeup(const TActorContext& ctx) {
-        --WakeupsScheduled;
-        UpdateWakeupQueue(ctx);
+    void HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+        switch (ev->Get()->Tag) {
+        case MAIN_CYCLE:
+            --WakeupsScheduled;
+            UpdateWakeupQueue(ctx);
+            break;
+
+        case DELAY_AFTER_INITIAL_WRITE:
+            StartWorkers(ctx);
+            break;
+
+        default:
+            Y_FAIL_S("Unexpected wakeup tag# " << ev->Get()->Tag);
+        }
     }
 
     void UpdateWakeupQueue(const TActorContext& ctx) {
@@ -1390,7 +1432,7 @@ public:
     STRICT_STFUNC(StateFunc,
         CFunc(EvStopTest, HandleStopTest);
         CFunc(EvUpdateQuantile, HandleUpdateQuantile);
-        CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+        HFunc(TEvents::TEvWakeup, HandleWakeup);
         CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
         HFunc(TEvBlobStorage::TEvDiscoverResult, HandleDispatcher);
         HFunc(TEvBlobStorage::TEvBlockResult, HandleDispatcher);

@@ -1497,6 +1497,9 @@ public:
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
         out << "<button type='button' class='btn btn-info' data-toggle='modal' data-target='#reassign-groups' style='width:138px'>Reassign Groups</button>";
         out << "</div>";
+        out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"app?TabletID=" << Self->HiveId << "&page=Subactors\";' style='width:138px'>SubActors</button>";
+        out << "</div>";
         out << "</div>";
 
         out << "<div class='row' style='margin-top:50px'>";
@@ -2424,6 +2427,14 @@ public:
         PassAway();
     }
 
+    TString GetDescription() const override {
+        return "DrainWaitActor";
+    }
+
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
+    }
+
     void Handle(TEvHive::TEvDrainNodeResult::TPtr& result) {
         Send(Source, new NMon::TEvRemoteJsonInfoRes(
             TStringBuilder() << "{\"status\":\"" << NKikimrProto::EReplyStatus_Name(result->Get()->Record.GetStatus()) << "\","
@@ -2595,6 +2606,14 @@ public:
 
     void Cleanup() override {
         PassAway();
+    }
+
+    TString GetDescription() const override {
+        return "ReassignWaitActor";
+    }
+
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
     }
 
     void Handle(TEvPrivate::TEvRestartComplete::TPtr&) {
@@ -2771,6 +2790,14 @@ public:
         PassAway();
     }
 
+    TString GetDescription() const override {
+        return "InitMigrationWaitActor";
+    }
+
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
+    }
+
     void Handle(TEvHive::TEvInitMigrationReply::TPtr& reply) {
         TStringBuilder output;
         NProtobufJson::TProto2JsonConfig config;
@@ -2848,6 +2875,14 @@ public:
         PassAway();
     }
 
+    TString GetDescription() const override {
+        return "QueryMigrationWaitActor";
+    }
+
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
+    }
+
     void Handle(TEvHive::TEvQueryMigrationReply::TPtr& reply) {
         TStringBuilder output;
         NProtobufJson::TProto2JsonConfig config;
@@ -2915,6 +2950,14 @@ public:
 
     void Cleanup() override {
         PassAway();
+    }
+
+    TString GetDescription() const override {
+        return "MoveWaitActor";
+    }
+
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
     }
 
     void Handle(TEvPrivate::TEvRestartComplete::TPtr& result) {
@@ -3005,6 +3048,14 @@ public:
         PassAway();
     }
 
+    TString GetDescription() const override {
+        return "StopWaitActor";
+    }
+
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
+    }
+
     void Handle(TEvHive::TEvStopTabletResult::TPtr& result) {
         Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << result->Get()->Record.AsJSON()));
         PassAway();
@@ -3081,6 +3132,14 @@ public:
 
     void Cleanup() override {
         PassAway();
+    }
+
+    TString GetDescription() const override {
+        return "ResumeWaitActor";
+    }
+
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
     }
 
     void Handle(TEvHive::TEvResumeTabletResult::TPtr& result) {
@@ -3974,6 +4033,57 @@ public:
     }
 };
 
+class TTxMonEvent_Subactors : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    THolder<NMon::TEvRemoteHttpInfo> Event;
+    TMaybe<TSubActorId> SubActorToStop;
+
+    TTxMonEvent_Subactors(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
+        : TBase(hive)
+        , Source(source)
+        , Event(ev->Release())
+    {
+        SubActorToStop = TryFromString<TSubActorId>(Event->Cgi().Get("stop"));
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_SUBACTORS; }
+
+    bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
+        Y_UNUSED(txc);
+        if (SubActorToStop) {
+            Self->StopSubActor(*SubActorToStop);
+        }
+        TStringStream str;
+        RenderHTMLPage(str);
+        ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(str.Str()));
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        Y_UNUSED(ctx);
+    }
+
+    void RenderHTMLPage(IOutputStream& out) {
+        out << "<script>$('.container').css('width', 'auto');</script>";
+        out << "<table class = 'table simple-table2'>";
+        out << "<thead>";
+        out << "<tr><th>Id</th><th>Description</th><th>Stop</th></tr>";
+        out << "</thead>";
+        out << "<tbody>";
+        for (const auto* subActor: Self->SubActors) {
+            out << "<tr>";
+            out << "<td>" << subActor->GetId() << "</td>";
+            out << "<td>" << subActor->GetDescription() << "</td>";
+            out << "<td><a href = '?TabletID=" << Self->HiveId << "&page=Subactors&stop=" << subActor->GetId() << "'>Stop</a></td>";
+            out << "</tr>";
+        }
+        out << "</tbody>";
+        out << "</table>";
+    }
+};
+
+
 void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
     if (!ReadyForConnections) {
         return Execute(new TTxMonEvent_NotReady(ev->Sender, this), ctx);
@@ -4101,6 +4211,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "StorageRebalance") {
         return Execute(new TTxMonEvent_StorageRebalance(ev->Sender, ev, this), ctx);
+    }
+    if (page == "Subactors") {
+        return Execute(new TTxMonEvent_Subactors(ev->Sender, ev, this), ctx);
     }
     return Execute(new TTxMonEvent_Landing(ev->Sender, ev, this), ctx);
 }

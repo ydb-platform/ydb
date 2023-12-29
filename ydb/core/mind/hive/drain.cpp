@@ -38,6 +38,14 @@ protected:
         PassAway();
     }
 
+    TString GetDescription() const override {
+        return TStringBuilder() << "Drain(" << NodeId << ")";
+    }
+
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
+    }
+
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
         BLOG_I("Drain " << SelfId() << " finished with " << Movements << " movements made");
         TNodeInfo* nodeInfo = Hive->FindNode(NodeId);

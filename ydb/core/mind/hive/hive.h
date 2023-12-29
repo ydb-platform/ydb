@@ -52,6 +52,7 @@ using TFullObjectId = std::pair<TOwnerId, TObjectId>;
 using TResourceRawValues = std::tuple<i64, i64, i64, i64>; // CPU, Memory, Network, Counter
 using TResourceNormalizedValues = std::tuple<double, double, double, double>;
 using TOwnerIdxType = NScheme::TPairUi64Ui64;
+using TSubActorId = ui64; // = LocalId part of TActorId
 
 static constexpr std::size_t MAX_TABLET_CHANNELS = 256;
 
@@ -106,6 +107,12 @@ EResourceToBalance ToResourceToBalance(NMetrics::EResource resource);
 
 struct ISubActor {
     virtual void Cleanup() = 0;
+
+    virtual TString GetDescription() const {
+        return {};
+    }
+
+    virtual TSubActorId GetId() const = 0;
 };
 
 

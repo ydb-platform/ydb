@@ -484,6 +484,7 @@ private:
     void UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage);
     ui64 MemoryUsage() const;
     void SendPeriodicStats();
+    void ConfigureStats(::NKikimrTableStats::TTableStats * tabletStats);
 public:
     const std::shared_ptr<NOlap::IStoragesManager>& GetStoragesManager() const {
         return StoragesManager;

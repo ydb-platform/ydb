@@ -293,6 +293,37 @@ void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage&
     metrics->TryUpdate(ctx);
 }
 
+void TColumnShard::ConfigureStats(::NKikimrTableStats::TTableStats * tabletStats) {
+    tabletStats->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOAD].Get());
+    tabletStats->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_OUT_OF_SPACE].Get());
+    tabletStats->SetInFlightTxCount(Executor()->GetStats().TxInFly);
+
+    if (!TablesManager.HasPrimaryIndex()) {
+        return;
+    }
+
+    const auto& indexStats = TablesManager.MutablePrimaryIndex().GetTotalStats();
+    NOlap::TSnapshot lastIndexUpdate = TablesManager.GetPrimaryIndexSafe().LastUpdate();
+    auto activeIndexStats = indexStats.Active(); // data stats excluding inactive and evicted
+
+    if (activeIndexStats.Rows < 0 || activeIndexStats.Bytes < 0) {
+        LOG_S_WARN("Negative stats counter. Rows: " << activeIndexStats.Rows
+            << " Bytes: " << activeIndexStats.Bytes << TabletID());
+
+        activeIndexStats.Rows = (activeIndexStats.Rows < 0) ? 0 : activeIndexStats.Rows;
+        activeIndexStats.Bytes = (activeIndexStats.Bytes < 0) ? 0 : activeIndexStats.Bytes;
+    }
+
+    tabletStats->SetRowCount(activeIndexStats.Rows);
+    tabletStats->SetDataSize(activeIndexStats.Bytes + TabletCounters->Simple()[COUNTER_COMMITTED_BYTES].Get());
+    
+    // TODO: we need row/dataSize counters for evicted data (managed by tablet but stored outside)
+    //tabletStats->SetIndexSize(); // TODO: calc size of internal tables
+    
+    tabletStats->SetLastAccessTime(LastAccessTime.MilliSeconds());
+    tabletStats->SetLastUpdateTime(lastIndexUpdate.GetPlanStep());
+}
+
 void TColumnShard::SendPeriodicStats() {
     if (!CurrentSchemeShardId || !OwnerPathId) {
         LOG_S_DEBUG("Disabled periodic stats at tablet " << TabletID());
@@ -325,33 +356,38 @@ void TColumnShard::SendPeriodicStats() {
         }
 
         auto* tabletStats = ev->Record.MutableTableStats();
-        tabletStats->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOAD].Get());
-        tabletStats->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_OUT_OF_SPACE].Get());
-        tabletStats->SetInFlightTxCount(Executor()->GetStats().TxInFly);
-
-        if (TablesManager.HasPrimaryIndex()) {
-            const auto& indexStats = TablesManager.MutablePrimaryIndex().GetTotalStats();
-            NOlap::TSnapshot lastIndexUpdate = TablesManager.GetPrimaryIndexSafe().LastUpdate();
-            auto activeIndexStats = indexStats.Active(); // data stats excluding inactive and evicted
-
-            if (activeIndexStats.Rows < 0 || activeIndexStats.Bytes < 0) {
-                LOG_S_WARN("Negative stats counter. Rows: " << activeIndexStats.Rows
-                    << " Bytes: " << activeIndexStats.Bytes << TabletID());
-
-                activeIndexStats.Rows = (activeIndexStats.Rows < 0) ? 0 : activeIndexStats.Rows;
-                activeIndexStats.Bytes = (activeIndexStats.Bytes < 0) ? 0 : activeIndexStats.Bytes;
-            }
-
-            tabletStats->SetRowCount(activeIndexStats.Rows);
-            tabletStats->SetDataSize(activeIndexStats.Bytes + TabletCounters->Simple()[COUNTER_COMMITTED_BYTES].Get());
-            // TODO: we need row/dataSize counters for evicted data (managed by tablet but stored outside)
-            //tabletStats->SetIndexSize(); // TODO: calc size of internal tables
-            tabletStats->SetLastAccessTime(LastAccessTime.MilliSeconds());
-            tabletStats->SetLastUpdateTime(lastIndexUpdate.GetPlanStep());
-        }
+        
+        ConfigureStats(tabletStats);
     }
 
-    LOG_S_DEBUG("Sending periodic stats at tablet " << TabletID());
+    if (TablesManager.HasPrimaryIndex()) {
+        const auto& tablesIndexStats = TablesManager.MutablePrimaryIndex().GetStats();
+
+        for(const auto& [tableLocalID, columnStats] : tablesIndexStats) {
+            if (!columnStats) {
+                LOG_S_ERROR("SendPeriodicStats: empty stats");
+                continue;
+            }
+            auto* periodicTableStats = ev->Record.AddColumnTables();
+
+            periodicTableStats->SetDatashardId(TabletID());
+            periodicTableStats->SetTableLocalId(tableLocalID);
+            
+            periodicTableStats->SetShardState(2); // NKikimrTxDataShard.EDatashardState.Ready
+            periodicTableStats->SetGeneration(Executor()->Generation());
+            periodicTableStats->SetRound(StatsReportRound++);
+            periodicTableStats->SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
+            periodicTableStats->SetStartTime(StartTime().MilliSeconds());
+
+            if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {
+                resourceMetrics->Fill(*periodicTableStats->MutableTabletMetrics());
+            }
+
+            auto* tabletStats = periodicTableStats->MutableTableStats();
+
+            ConfigureStats(tabletStats);
+        }
+    }
     NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
 }
 

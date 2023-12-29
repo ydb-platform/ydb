@@ -48,6 +48,11 @@ static void FillAggregatedStats(NKikimrSchemeOp::TPathDescription& pathDescripti
     FillTableMetrics(pathDescription.MutableTabletMetrics(), stats.Aggregated);
 }
 
+static void FillTableStats(NKikimrSchemeOp::TPathDescription& pathDescription, const TPartitionStats& stats) {
+    FillTableStats(pathDescription.MutableTableStats(), stats);
+    FillTableMetrics(pathDescription.MutableTabletMetrics(), stats);
+}
+
 void TPathDescriber::FillPathDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElement::TPtr pathEl, TPathElement::EPathSubType subType) {
     FillChildDescr(descr, pathEl);
 
@@ -369,6 +374,10 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
 
 void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl) {
     const TOlapStoreInfo::TPtr storeInfo = *Self->OlapStores.FindPtr(pathId);
+
+    Cerr << "test # DescribeOlapStore: pathId=" << pathId.OwnerId << " and " << pathId.LocalPathId << ", store=" 
+        << storeInfo->GetStats().Aggregated.RowCount << Endl;
+
     Y_ABORT_UNLESS(storeInfo, "OlapStore not found");
     Y_UNUSED(pathEl);
 
@@ -387,7 +396,7 @@ void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl
 }
 
 void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr pathEl) {
-    const auto tableInfo = Self->ColumnTables.GetVerified(pathId);
+    const auto tableInfo = Self->ColumnTables.GetVerified(pathId);    
     Y_UNUSED(pathEl);
 
     auto* pathDescription = Result->Record.MutablePathDescription();
@@ -407,8 +416,9 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
         if (description->HasSchemaPresetVersionAdj()) {
             description->MutableSchema()->SetVersion(description->GetSchema().GetVersion() + description->GetSchemaPresetVersionAdj());
         }
-
-        FillAggregatedStats(*pathDescription, storeInfo->GetStats());
+        if (tableInfo->GetStats().TableStats.contains(pathId)) {
+            FillTableStats(*pathDescription, tableInfo->GetStats().TableStats.at(pathId));
+        }
     }
 }
 
@@ -897,12 +907,19 @@ static bool ConsiderAsDropped(const TPath& path) {
 }
 
 THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe(const TActorContext& ctx) {
+    Cerr << "test # TPathDescriber::Describe" << Endl;
+
     TPathId pathId = Params.HasPathId() ? TPathId(Params.GetSchemeshardId(), Params.GetPathId()) : InvalidPathId;
     TString pathStr = Params.GetPath();
+
+    Cerr << "pathId=" << pathId.ToString() << ", pathStr=" << pathStr << Endl;
 
     TPath path = Params.HasPathId()
         ? TPath::Init(pathId, Self)
         : TPath::Resolve(pathStr, Self);
+
+    Cerr << "path=" << path.PathString() << Endl;
+
     {
         TPath::TChecker checks = path.Check();
         checks
@@ -956,6 +973,8 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         }
     }
 
+    Cerr << "after checks: pathId=" << pathId << ", pathStr=" << pathStr << Endl;
+
     Result = MakeHolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder>(pathStr, Self->TabletID(), pathId);
 
     auto descr = Result->Record.MutablePathDescription()->MutableSelf();
@@ -985,10 +1004,13 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             break;
         case NKikimrSchemeOp::EPathTypeColumnStore:
             DescribeDir(path);
+            Cerr << "test # EPathTypeColumnStore: PathId" << base->PathId << Endl;
             DescribeOlapStore(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeColumnTable:
-            DescribeColumnTable(base->PathId, base);
+            Cerr << "test # EPathTypeColumnTable: use PathId=" << base->PathId << " but should PathId=" << pathId << Endl;
+            // DescribeColumnTable(base->PathId, base);
+            DescribeColumnTable(pathId, base);
             break;
         case NKikimrSchemeOp::EPathTypePersQueueGroup:
             DescribePersQueueGroup(base->PathId, base);

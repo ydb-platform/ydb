@@ -10,10 +10,10 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpOlapStats) {
-    constexpr size_t inserted_rows = 1'000;
-    constexpr size_t tables_in_store = 100;
+    constexpr size_t inserted_rows = 2;
+    constexpr size_t tables_in_store = 400;
 
-    TVector<TTestHelper::TColumnSchema> schema = {
+    const TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
             TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
             TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
@@ -108,13 +108,15 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         testTableStore.SetName("/Root/TableStoreTest").SetPrimaryKey({"id"}).SetSchema(schema);
         testHelper.CreateTable(testTableStore);
 
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).SetPriority(NActors::NLog::PRI_INFO).Initialize();
+
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TPeriodicWakeupActivationPeriodController>();
 
         for(size_t t=0; t<tables_in_store; t++) {
             TTestHelper::TColumnTable testTable;
             testTable.SetName("/Root/TableStoreTest/ColumnTableTest_" + std::to_string(t)).SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
             testHelper.CreateTable(testTable);
-            
+
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             for(size_t i=0; i<inserted_rows; i++) {
                 tableInserter.AddRow().Add(i + t * tables_in_store).Add("test_res_" + std::to_string(i + t * tables_in_store)).AddNull();
@@ -124,12 +126,13 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         }
         
         Sleep(TDuration::Seconds(10));
-        
+                
         auto settings = TDescribeTableSettings().WithTableStatistics(true);
         for(size_t t=0; t<tables_in_store; t++) {
             auto describeResult = testHelper.GetSession().DescribeTable("/Root/TableStoreTest/ColumnTableTest_" + std::to_string(t), settings).GetValueSync();
             UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
             const auto& description = describeResult.GetTableDescription();
+
             UNIT_ASSERT_VALUES_EQUAL(inserted_rows, description.GetTableRows());
         }
     }

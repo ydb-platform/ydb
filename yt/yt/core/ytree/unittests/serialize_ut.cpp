@@ -351,7 +351,7 @@ TEST(TSerializationTest, Deque)
 
 TEST(TSerializationTest, Pair)
 {
-    auto original = std::make_pair<size_t, TString>(1U, "Second");
+    auto original = std::pair<size_t, TString>(1U, "Second");
     TestSerializationDeserialization(original);
 }
 

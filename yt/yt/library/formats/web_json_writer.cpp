@@ -301,7 +301,7 @@ public:
                 Converters_.push_back(
                     CreateUnversionedValueToYqlConverter(column.LogicalType(), converterConfig, Consumer_));
                 auto [it, inserted] = TableIndexAndColumnNameToTypeIndex_.emplace(
-                    std::make_pair(tableIndex, column.Name()),
+                    std::pair(tableIndex, column.Name()),
                     static_cast<int>(Types_.size()) - 1);
                 YT_VERIFY(inserted);
             }
@@ -358,7 +358,7 @@ private:
         if (typeIndex == UnschematizedTypeIndex) {
             typeIndex = ValueTypeToTypeIndex_[valueType];
         } else if (typeIndex == UnknownTypeIndex) {
-            auto it = TableIndexAndColumnNameToTypeIndex_.find(std::make_pair(tableIndex, columnName));
+            auto it = TableIndexAndColumnNameToTypeIndex_.find(std::pair(tableIndex, columnName));
             if (it == TableIndexAndColumnNameToTypeIndex_.end()) {
                 typeIndex = ValueTypeToTypeIndex_[valueType];
                 columnIdToTypeIndex[columnId] = UnschematizedTypeIndex;

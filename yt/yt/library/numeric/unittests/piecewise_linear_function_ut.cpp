@@ -1212,7 +1212,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestPiecewiseSegmentScalar)
             EXPECT_TRUE(segment.IsDefinedAt(arg)) << testCaseMsg << ". " << sampleMsg;
             EXPECT_EQ(expectedLeftLimit, segment.LeftLimitAt(arg)) << testCaseMsg << ". " << sampleMsg;
             EXPECT_EQ(expectedRightLimit, segment.RightLimitAt(arg)) << testCaseMsg << ". " << sampleMsg;
-            auto expectedLeftRightLimit = std::make_pair(expectedLeftLimit, expectedRightLimit);
+            auto expectedLeftRightLimit = std::pair(expectedLeftLimit, expectedRightLimit);
             EXPECT_EQ(expectedLeftRightLimit, segment.LeftRightLimitAt(arg)) << testCaseMsg << ". " << sampleMsg;
             EXPECT_EQ(expectedLeftLimit, segment.ValueAt(arg)) << testCaseMsg << ". " << sampleMsg;
         }

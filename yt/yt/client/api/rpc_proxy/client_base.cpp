@@ -1065,7 +1065,7 @@ TFuture<TPullRowsResult> TClientBase::PullRows(
                 THROW_ERROR_EXCEPTION("Duplicate tablet id in end replication row indexes")
                     << TErrorAttribute("tablet_id", tabletId);
             }
-            InsertOrCrash(result.EndReplicationRowIndexes, std::make_pair(tabletId, rowIndex));
+            InsertOrCrash(result.EndReplicationRowIndexes, std::pair(tabletId, rowIndex));
         }
 
         result.Rowset = DeserializeRowset(

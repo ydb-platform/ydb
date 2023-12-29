@@ -420,7 +420,7 @@ public:
         // TODO(lukyan): Use reader guard and update it to writer if needed.
         auto guard = Guard(MappingLock_);
 
-        auto [bucketIt, bucketInserted] = BucketMapping_.emplace(std::make_pair(poolName, bucketName), nullptr);
+        auto [bucketIt, bucketInserted] = BucketMapping_.emplace(std::pair(poolName, bucketName), nullptr);
 
         auto bucket = bucketIt->second ? DangerousGetPtr(bucketIt->second) : nullptr;
         if (!bucket) {
@@ -436,7 +436,7 @@ public:
     void RemoveBucket(TBucket* bucket)
     {
         auto guard = Guard(MappingLock_);
-        auto bucketIt = BucketMapping_.find(std::make_pair(bucket->PoolName, bucket->BucketName));
+        auto bucketIt = BucketMapping_.find(std::pair(bucket->PoolName, bucket->BucketName));
 
         if (bucketIt != BucketMapping_.end() && bucketIt->second == bucket) {
             BucketMapping_.erase(bucketIt);

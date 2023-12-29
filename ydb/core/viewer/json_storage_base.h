@@ -407,36 +407,6 @@ public:
     TList<NKikimrWhiteboard::TPDiskStateInfo> PDisksAppended;
     TList<NKikimrWhiteboard::TVDiskStateInfo> VDisksAppended;
 
-    bool CheckGroupFilters(const TString& groupId, const TString& poolName) {
-        if (!EffectiveFilterGroupIds.empty() && !EffectiveFilterGroupIds.contains(groupId)) {
-            return false;
-        }
-        switch (With) {
-            case EWith::MissingDisks:
-                if (BSGroupWithMissingDisks.count(groupId) == 0) {
-                    return false;
-                }
-                break;
-            case EWith::SpaceProblems:
-                if (BSGroupWithSpaceProblems.count(groupId) == 0) {
-                    return false;
-                }
-                break;
-            case EWith::Everything:
-                break;
-        }
-        if (Filter) {
-            if (poolName.Contains(Filter)) {
-                return true;
-            }
-            if (groupId.Contains(Filter)) {
-                return true;
-            }
-            return false;
-        }
-        return true;
-    }
-
     bool CheckAdditionalNodesInfoNeeded() {
         if (NeedAdditionalNodesRequests) {
             NeedAdditionalNodesRequests = false;

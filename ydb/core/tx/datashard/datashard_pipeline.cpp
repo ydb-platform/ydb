@@ -1160,20 +1160,99 @@ void TPipeline::ProposeSchemeTx(const TSchemaOperation &op,
 bool TPipeline::CancelPropose(NIceDb::TNiceDb& db, const TActorContext& ctx, ui64 txId,
         std::vector<std::unique_ptr<IEventHandle>>& replies)
 {
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+            "Start CancelPropose " << Self->TabletID()
+            << " txId " << txId);
+
     auto op = Self->TransQueue.FindTxInFly(txId);
     if (!op || op->GetStep()) {
+
+        if (!op) {
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "CancelPropose No Op " << Self->TabletID()
+                << " txId " << txId);
+        } else {
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "CancelPropose Op " << Self->TabletID()
+                << " txId " << txId
+                << " step " << op->GetStep());
+        }
+        
         // Operation either doesn't exist, or already planned and cannot be cancelled
         return true;
     }
 
     if (!Self->TransQueue.CancelPropose(db, txId, replies)) {
         // Page fault, try again
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "CancelPropose page fault " << Self->TabletID()
+                << " txId " << txId);
         return false;
     }
 
-    ForgetTx(txId);
-    Self->CheckDelayedProposeQueue(ctx);
-    MaybeActivateWaitingSchemeOps(ctx);
+    { // ForgetTx(txId)
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "Start ForgetTx " << Self->TabletID()
+                << " txId " << txId);
+        auto it = DataTxCache.find(txId);
+        if (it != DataTxCache.end()) {
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "ForgetTx ReleaseCache " << Self->TabletID()
+                    << " txId " << txId);
+            Self->ReleaseCache(*it->second);
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "ForgetTx DataTxCache.erase " << Self->TabletID()
+                    << " txId " << txId);
+            DataTxCache.erase(it);
+        } else {
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "ForgetTx No " << Self->TabletID()
+                    << " txId " << txId);
+        }
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "End ForgetTx " << Self->TabletID()
+                << " txId " << txId);
+    }
+
+    { // Self->CheckDelayedProposeQueue(ctx);
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "Start CheckDelayedProposeQueue " << Self->TabletID()
+                << " txId " << txId);
+        if (Self->DelayedProposeQueue && !Self->Pipeline.HasProposeDelayers()) {
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "CheckDelayedProposeQueue Check DelayedProposeQueue " << Self->TabletID()
+                    << " txId " << txId);
+            for (auto& ev : Self->DelayedProposeQueue) {
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                        "CheckDelayedProposeQueue ExecutorThread Release " << Self->TabletID()
+                        << " txId " << txId);
+                ctx.ExecutorThread.Send(ev.Release());
+            }
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "CheckDelayedProposeQueue Clear " << Self->TabletID()
+                    << " txId " << txId);
+            Self->DelayedProposeQueue.clear();
+            Self->DelayedProposeQueue.shrink_to_fit();
+            Self->UpdateProposeQueueSize();
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "End CheckDelayedProposeQueue " << Self->TabletID()
+                    << " txId " << txId);
+        }
+    }
+    
+    { // MaybeActivateWaitingSchemeOps(ctx);
+        if (Self->TxPlanWaiting() == 0) {
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "MaybeActivateWaitingSchemeOps ActivateWaitingSchemeOps " << Self->TabletID()
+                    << " txId " << txId);
+            ActivateWaitingSchemeOps(ctx);
+        }
+    }
+
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+            "End CancelPropose " << Self->TabletID()
+            << " txId " << txId);
+
     return true;
 }
 

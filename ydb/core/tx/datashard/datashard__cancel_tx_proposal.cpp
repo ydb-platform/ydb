@@ -46,19 +46,33 @@ bool TDataShard::TTxCancelTransactionProposal::Execute(TTransactionContext &txc,
     NIceDb::TNiceDb db(txc.DB);
     if (!Self->Pipeline.CancelPropose(db, ctx, TxId, Replies)) {
         // Page fault, try again
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "TTxCancelTransactionProposal page fault " << Self->TabletID()
+                << " txId " << TxId);
         return false;
     }
 
     if (!Replies.empty() && !txc.DB.HasChanges()) {
         // We want to send confirmed replies when cleaning up volatile transactions
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "TTxCancelTransactionProposal ConfirmReadOnlyLease " << Self->TabletID()
+                << " txId " << TxId);
         ReplyTs = Self->ConfirmReadOnlyLease();
     }
+
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+            "End TTxCancelTransactionProposal " << Self->TabletID()
+            << " txId " << TxId);
 
     return true;
 }
 
 void TDataShard::TTxCancelTransactionProposal::Complete(const TActorContext &ctx)
 {
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+            "TTxCancelTransactionProposal completing " << Self->TabletID()
+            << " txId " << TxId);
+
     if (ReplyTs) {
         Self->SendConfirmedReplies(ReplyTs, std::move(Replies));
     } else {
@@ -66,6 +80,10 @@ void TDataShard::TTxCancelTransactionProposal::Complete(const TActorContext &ctx
     }
     Self->CheckSplitCanStart(ctx);
     Self->CheckMvccStateChangeCanStart(ctx);
+
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+            "TTxCancelTransactionProposal completed " << Self->TabletID()
+            << " txId " << TxId);
 }
 
 void TDataShard::Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr &ev, const TActorContext &ctx) {

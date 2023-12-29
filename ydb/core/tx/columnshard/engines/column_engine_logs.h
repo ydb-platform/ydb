@@ -197,6 +197,8 @@ public:
             }
             result.emplace_back(i.second);
         }
+        const auto pred = [](const std::shared_ptr<TGranuleMeta>& lhs, const std::shared_ptr<TGranuleMeta>& rhs) { return lhs->GetPathId() < rhs->GetPathId(); };
+        std::sort(result.begin(), result.end(), pred);
         return result;
     }
 

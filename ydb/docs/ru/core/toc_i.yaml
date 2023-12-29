@@ -19,6 +19,7 @@ items:
 # References
 - { name: YQL,                                     include: { mode: link, path: yql/toc_p.yaml } }
 - { name: Совместимость с PostgreSQL,              include: { mode: link, path: postgresql/toc_p.yaml } }
+- { name: Интеграции,                              include: { mode: link, path: integrations/toc_p.yaml } }
 - { name: Работа с YDB CLI,                        include: { mode: link, path: reference/ydb-cli/toc_p.yaml } }
 - { name: Работа с YDB SDK,                        include: { mode: link, path: reference/ydb-sdk/toc_p.yaml } }
 - { name: Работа с Kafka API,                      include: { mode: link, path: reference/kafka-api/toc_p.yaml } }

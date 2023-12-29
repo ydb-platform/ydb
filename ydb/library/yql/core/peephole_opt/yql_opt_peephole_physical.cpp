@@ -1813,15 +1813,34 @@ TExprNode::TPtr BuildDictOverList(TPositionHandle pos, const TExprNode::TPtr& co
 
 TExprNode::TPtr BuildDictOverTuple(TExprNode::TPtr&& collection, const TTypeAnnotationNode*& dictKeyType, TExprContext& ctx)
 {
-    if (!collection->GetTypeAnn()->Cast<TTupleExprType>()->GetSize()) {
+    const auto pos = collection->Pos();
+    const auto tupleType = collection->GetTypeAnn()->Cast<TTupleExprType>();
+    if (!tupleType->GetSize()) {
         dictKeyType = nullptr;
         return nullptr;
     }
+    TTypeAnnotationNode::TListType types(tupleType->GetItems());
+    dictKeyType = CommonType(pos, types, ctx);
+    YQL_ENSURE(dictKeyType, "Uncompatible collection elements.");
 
-    dictKeyType = CommonTypeForChildren(*collection, ctx);
-    YQL_ENSURE(dictKeyType, "Uncompatible colllection elements.");
-    const auto pos = collection->Pos();
-    return ctx.NewCallable(pos, "DictFromKeys", {ExpandType(pos, *dictKeyType, ctx), std::move(collection)});
+    TExprNode::TPtr tuple;
+    if (collection->IsList()) {
+        tuple = collection;
+    } else {
+        TExprNode::TListType items;
+        items.reserve(tupleType->GetSize());
+        for (size_t i = 0; i != tupleType->GetSize(); ++i) {
+            items.push_back(
+                ctx.NewCallable(
+                    pos,
+                    "Nth",
+                    {collection, ctx.NewAtom(pos, ui32(i))}
+                )
+            );
+        }
+        tuple = ctx.NewList(pos, std::move(items));
+    }
+    return ctx.NewCallable(pos, "DictFromKeys", {ExpandType(pos, *dictKeyType, ctx), std::move(tuple)});
 }
 
 TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {

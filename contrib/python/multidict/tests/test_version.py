@@ -95,6 +95,8 @@ class VersionMixin:
         v = self.getver(m)
         m.popone("key2", "default")
         assert self.getver(m) == v
+        m.popone(key="key2", default="default")
+        assert self.getver(m) == v
 
     def test_popone_key_error(self):
         m = self.cls()

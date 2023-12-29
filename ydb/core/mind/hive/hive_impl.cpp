@@ -1550,7 +1550,9 @@ void THive::DeleteTablet(TTabletId tabletId) {
             }
             Y_ENSURE_LOG(nt->second.LockedTablets.count(&tablet) == 0, " Deleting tablet found on node " << nt->first << " in locked set");
         }
-        UpdateCounterTabletsTotal(-1 - (tablet.Followers.size()));
+        const i64 tabletsTotalDiff = -1 - (tablet.Followers.size());
+        UpdateCounterTabletsTotal(tabletsTotalDiff);
+        UpdateDomainTabletsTotal(tablet.ObjectDomain, tabletsTotalDiff);
         Tablets.erase(it);
     }
 }
@@ -1581,6 +1583,21 @@ void THive::KillNode(TNodeId nodeId, const TActorId& local) {
         }
     }
     Execute(CreateKillNode(nodeId, local));
+}
+
+void THive::UpdateDomainTabletsTotal(const TSubDomainKey& objectDomain, i64 tabletsTotalDiff) {
+    if (objectDomain) {
+        Domains[objectDomain].TabletsTotal += tabletsTotalDiff;
+    }
+}
+
+void THive::UpdateDomainTabletsAlive(const TSubDomainKey& objectDomain, i64 tabletsAliveDiff, const TSubDomainKey& tabletNodeDomain) {
+    if (objectDomain) {
+        Domains[objectDomain].TabletsAlive += tabletsAliveDiff;
+        if (tabletNodeDomain == objectDomain) {
+            Domains[objectDomain].TabletsAliveInObjectDomain += tabletsAliveDiff;
+        }
+    }
 }
 
 void THive::SetCounterTabletsTotal(ui64 tabletsTotal) {

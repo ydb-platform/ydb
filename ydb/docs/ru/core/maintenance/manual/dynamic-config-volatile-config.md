@@ -10,15 +10,15 @@
 
 ```bash
 # Получить все временные конфигурации загруженные на кластер
-{{ ydb-cli }} admin config volatile fetch --all --output-directory <dir>
+{{ ydb-cli }} admin volatile-config fetch --all --output-directory <dir>
 # Получить временную конфигурацию с id=1
-{{ ydb-cli }} admin config volatile fetch --id 1
+{{ ydb-cli }} admin volatile-config fetch --id 1
 # Применить временную конфигурацию volatile.yaml на кластер
-{{ ydb-cli }} admin config volatile add -f volatile.yaml
+{{ ydb-cli }} admin volatile-config add -f volatile.yaml
 # Удалить временные конфигурации с id=1 и id=3 на кластере
-{{ ydb-cli }} admin config volatile drop --id 1 --id 3
+{{ ydb-cli }} admin volatile-config drop --id 1 --id 3
 # Удалить все временные конфигурации на кластере
-{{ ydb-cli }} admin config volatile drop --all
+{{ ydb-cli }} admin volatile-config drop --all
 ```
 
 ## Пример работы с временной конфигурацией
@@ -26,18 +26,22 @@
 Временное включение настроек журналирования компонента `blobstorage` в `DEBUG` на узле `host1.example.com`:
 ```bash
 # Запрос текущих метаданных, чтобы сформировать корректный заголовок временной конфигурации
-$ {{ ydb-cli }} admin config describe --all
+$ {{ ydb-cli }} admin config fetch --all
 ---
 kind: MainConfig
 cluster: "example-cluster-name"
 version: 2
+config:
+  # ...
 ---
 kind: VolatileConfig
 cluster: "example-cluster-name"
 version: 2
 id: 1
+selector_config:
+  # ...
 # Загрузка конфигурации с версией 2, именем кластера example-cluster-name и идентификатором 2
-$ {{ ydb-cli }} admin config volatile add -f - <<<EOF
+$ {{ ydb-cli }} admin volatile-config add -f - <<<EOF
 metadata:
   kind: VolatileConfig
   cluster: "example-cluster-name"
@@ -57,5 +61,5 @@ EOF
 # анализ журнала
 # ...
 # Удаление конфигурации
-$ {{ ydb-cli }} admin config volatile drop --id 2
+$ {{ ydb-cli }} admin volatile-config drop --id 2
 ```

@@ -24,9 +24,9 @@ from google.auth import transport
 from google.oauth2 import id_token
 from google.oauth2 import service_account
 
-import yatest.common
+import yatest.common as yc
 SERVICE_ACCOUNT_FILE = os.path.join(
-    yatest.common.test_source_path(), "data/service_account.json"
+    os.path.dirname(yc.source_path(__file__)), "../data/service_account.json"
 )
 ID_TOKEN_AUDIENCE = "https://pubsub.googleapis.com"
 
@@ -263,7 +263,7 @@ def test_fetch_id_token_credentials_no_cred_exists(monkeypatch):
 
 def test_fetch_id_token_credentials_invalid_cred_file_type(monkeypatch):
     user_credentials_file = os.path.join(
-        yatest.common.test_source_path(), "data/authorized_user.json"
+        os.path.dirname(yc.source_path(__file__)), "../data/authorized_user.json"
     )
     monkeypatch.setenv(environment_vars.CREDENTIALS, user_credentials_file)
 
@@ -276,7 +276,7 @@ def test_fetch_id_token_credentials_invalid_cred_file_type(monkeypatch):
 
 
 def test_fetch_id_token_credentials_invalid_json(monkeypatch):
-    not_json_file = os.path.join(yatest.common.test_source_path(), "data/public_cert.pem")
+    not_json_file = os.path.join(os.path.dirname(yc.source_path(__file__)), "../data/public_cert.pem")
     monkeypatch.setenv(environment_vars.CREDENTIALS, not_json_file)
 
     with pytest.raises(exceptions.DefaultCredentialsError) as excinfo:
@@ -287,7 +287,7 @@ def test_fetch_id_token_credentials_invalid_json(monkeypatch):
 
 
 def test_fetch_id_token_credentials_invalid_cred_path(monkeypatch):
-    not_json_file = os.path.join(yatest.common.test_source_path(), "data/not_exists.json")
+    not_json_file = os.path.join(os.path.dirname(yc.source_path(__file__)), "../data/not_exists.json")
     monkeypatch.setenv(environment_vars.CREDENTIALS, not_json_file)
 
     with pytest.raises(exceptions.DefaultCredentialsError) as excinfo:

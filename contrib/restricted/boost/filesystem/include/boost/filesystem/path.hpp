@@ -2,7 +2,7 @@
 
 //  Copyright Vladimir Prus 2002
 //  Copyright Beman Dawes 2002-2005, 2009
-//  Copyright Andrey Semashev 2021
+//  Copyright Andrey Semashev 2021-2023
 
 //  Distributed under the Boost Software License, Version 1.0.
 //  See http://www.boost.org/LICENSE_1_0.txt
@@ -18,25 +18,25 @@
 
 #include <boost/assert.hpp>
 #include <boost/filesystem/config.hpp>
-#include <boost/filesystem/path_traits.hpp> // includes <cwchar>
+#include <boost/filesystem/detail/path_traits.hpp>
 #include <boost/iterator/iterator_facade.hpp>
 #include <boost/iterator/iterator_categories.hpp>
 #include <boost/core/enable_if.hpp>
 #include <boost/io/quoted.hpp>
 #include <boost/functional/hash_fwd.hpp>
-#include <boost/type_traits/integral_constant.hpp>
+#include <boost/type_traits/negation.hpp>
+#include <boost/type_traits/conjunction.hpp>
+#include <boost/type_traits/disjunction.hpp>
 #include <boost/type_traits/is_same.hpp>
-#include <boost/type_traits/is_integral.hpp>
-#include <boost/type_traits/remove_reference.hpp>
 #include <boost/type_traits/remove_cv.hpp>
-#include <boost/type_traits/decay.hpp>
 #include <cstddef>
-#include <cwchar> // for mbstate_t
-#include <string>
 #include <iosfwd>
-#include <iterator>
 #include <locale>
-#include <utility>
+#include <string>
+#include <iterator>
+#if !defined(BOOST_NO_CXX17_HDR_STRING_VIEW)
+#include <string_view>
+#endif
 
 #include <boost/filesystem/detail/header.hpp> // must be the last #include
 
@@ -69,59 +69,82 @@ BOOST_CONSTEXPR_OR_CONST typename path_constants< Char, Separator, PreferredSepa
 path_constants< Char, Separator, PreferredSeparator, Dot >::dot;
 #endif
 
-// A struct that denotes a contiguous range of characters in a string. A lightweight alternative to string_view.
-struct substring
-{
-    std::size_t pos;
-    std::size_t size;
-};
-
-template< typename T >
-struct is_native_char_ptr_impl : public boost::false_type {};
-
-#if defined(BOOST_WINDOWS_API)
-template< >
-struct is_native_char_ptr_impl< wchar_t* > : public boost::true_type {};
-template< >
-struct is_native_char_ptr_impl< const wchar_t* > : public boost::true_type {};
-#else // defined(BOOST_WINDOWS_API)
-template< >
-struct is_native_char_ptr_impl< char* > : public boost::true_type {};
-template< >
-struct is_native_char_ptr_impl< const char* > : public boost::true_type {};
-#endif // defined(BOOST_WINDOWS_API)
-
-template< typename T >
-struct is_native_char_ptr : public is_native_char_ptr_impl< typename boost::remove_cv< typename boost::remove_reference< T >::type >::type > {};
-
-template< typename T >
-struct is_native_pathable_impl : public boost::false_type {};
-
-template< typename T >
-struct is_native_pathable_impl< T* > : public is_native_char_ptr_impl< T* > {};
-
-#if defined(BOOST_WINDOWS_API)
-template< >
-struct is_native_pathable_impl< const wchar_t[] > : public boost::true_type {};
-template< std::size_t N >
-struct is_native_pathable_impl< const wchar_t[N] > : public boost::true_type {};
-template< >
-struct is_native_pathable_impl< std::basic_string< wchar_t > > : public boost::true_type {};
-#else // defined(BOOST_WINDOWS_API)
-template< >
-struct is_native_pathable_impl< const char[] > : public boost::true_type {};
-template< std::size_t N >
-struct is_native_pathable_impl< const char[N] > : public boost::true_type {};
-template< >
-struct is_native_pathable_impl< std::basic_string< char > > : public boost::true_type {};
-#endif // defined(BOOST_WINDOWS_API)
-template< >
-struct is_native_pathable_impl< filesystem::path > : public boost::true_type {};
-
-template< typename T >
-struct is_native_pathable : public is_native_pathable_impl< typename boost::remove_cv< typename boost::remove_reference< T >::type >::type > {};
+class path_iterator;
+class path_reverse_iterator;
 
 } // namespace path_detail
+
+namespace detail {
+
+struct path_algorithms
+{
+    // A struct that denotes a contiguous range of characters in a string. A lightweight alternative to string_view.
+    struct substring
+    {
+        std::size_t pos;
+        std::size_t size;
+    };
+
+    typedef path_traits::path_native_char_type value_type;
+    typedef std::basic_string< value_type > string_type;
+
+    static bool has_filename_v3(path const& p);
+    static bool has_filename_v4(path const& p);
+    BOOST_FILESYSTEM_DECL static path filename_v3(path const& p);
+    static path filename_v4(path const& p);
+
+    BOOST_FILESYSTEM_DECL static path stem_v3(path const& p);
+    BOOST_FILESYSTEM_DECL static path stem_v4(path const& p);
+    BOOST_FILESYSTEM_DECL static path extension_v3(path const& p);
+    static path extension_v4(path const& p);
+
+    BOOST_FILESYSTEM_DECL static void remove_filename_v3(path& p);
+    BOOST_FILESYSTEM_DECL static void remove_filename_v4(path& p);
+
+    BOOST_FILESYSTEM_DECL static void replace_extension_v3(path& p, path const& new_extension);
+    BOOST_FILESYSTEM_DECL static void replace_extension_v4(path& p, path const& new_extension);
+
+    BOOST_FILESYSTEM_DECL static path lexically_normal_v3(path const& p);
+    BOOST_FILESYSTEM_DECL static path lexically_normal_v4(path const& p);
+
+    BOOST_FILESYSTEM_DECL static int compare_v3(path const& left, path const& right);
+    BOOST_FILESYSTEM_DECL static int compare_v4(path const& left, path const& right);
+
+    BOOST_FILESYSTEM_DECL static void append_v3(path& p, const value_type* b, const value_type* e);
+    BOOST_FILESYSTEM_DECL static void append_v4(path& p, const value_type* b, const value_type* e);
+    static void append_v4(path& left, path const& right);
+
+    //  Returns: If separator is to be appended, m_pathname.size() before append. Otherwise 0.
+    //  Note: An append is never performed if size()==0, so a returned 0 is unambiguous.
+    BOOST_FILESYSTEM_DECL static string_type::size_type append_separator_if_needed(path& p);
+    BOOST_FILESYSTEM_DECL static void erase_redundant_separator(path& p, string_type::size_type sep_pos);
+
+    BOOST_FILESYSTEM_DECL static string_type::size_type find_root_name_size(path const& p);
+    BOOST_FILESYSTEM_DECL static string_type::size_type find_root_path_size(path const& p);
+    BOOST_FILESYSTEM_DECL static substring find_root_directory(path const& p);
+    BOOST_FILESYSTEM_DECL static substring find_relative_path(path const& p);
+    BOOST_FILESYSTEM_DECL static string_type::size_type find_parent_path_size(path const& p);
+    BOOST_FILESYSTEM_DECL static string_type::size_type find_filename_v4_size(path const& p);
+    BOOST_FILESYSTEM_DECL static string_type::size_type find_extension_v4_size(path const& p);
+
+    BOOST_FILESYSTEM_DECL static int lex_compare_v3
+    (
+        path_detail::path_iterator first1, path_detail::path_iterator const& last1,
+        path_detail::path_iterator first2, path_detail::path_iterator const& last2
+    );
+    BOOST_FILESYSTEM_DECL static int lex_compare_v4
+    (
+        path_detail::path_iterator first1, path_detail::path_iterator const& last1,
+        path_detail::path_iterator first2, path_detail::path_iterator const& last2
+    );
+
+    BOOST_FILESYSTEM_DECL static void increment_v3(path_detail::path_iterator& it);
+    BOOST_FILESYSTEM_DECL static void increment_v4(path_detail::path_iterator& it);
+    BOOST_FILESYSTEM_DECL static void decrement_v3(path_detail::path_iterator& it);
+    BOOST_FILESYSTEM_DECL static void decrement_v4(path_detail::path_iterator& it);
+};
+
+} // namespace detail
 
 //------------------------------------------------------------------------------------//
 //                                                                                    //
@@ -132,19 +155,23 @@ struct is_native_pathable : public is_native_pathable_impl< typename boost::remo
 class path :
     public filesystem::path_detail::path_constants<
 #ifdef BOOST_WINDOWS_API
-        wchar_t, L'/', L'\\', L'.'
+        detail::path_traits::path_native_char_type, L'/', L'\\', L'.'
 #else
-        char, '/', '/', '.'
+        detail::path_traits::path_native_char_type, '/', '/', '.'
 #endif
     >
 {
+    friend class path_detail::path_iterator;
+    friend class path_detail::path_reverse_iterator;
+    friend struct detail::path_algorithms;
+
 public:
     //  value_type is the character type used by the operating system API to
     //  represent paths.
 
-    typedef path_constants_base::value_type value_type;
-    typedef std::basic_string< value_type > string_type;
-    typedef std::codecvt< wchar_t, char, std::mbstate_t > codecvt_type;
+    typedef detail::path_algorithms::value_type value_type;
+    typedef detail::path_algorithms::string_type string_type;
+    typedef detail::path_traits::codecvt_type codecvt_type;
 
     //  ----- character encoding conversions -----
 
@@ -201,131 +228,302 @@ public:
     //  that actually depend on locale(""). It further ensures that exceptions thrown
     //  as a result of such failues occur after main() has started, so can be caught.
 
+private:
+    //! Assignment operation
+    class assign_op
+    {
+    private:
+        path& m_self;
+
+    public:
+        typedef void result_type;
+
+        explicit assign_op(path& self) BOOST_NOEXCEPT : m_self(self) {}
+
+        result_type operator() (const value_type* source, const value_type* source_end, const codecvt_type* = NULL) const
+        {
+            m_self.m_pathname.assign(source, source_end);
+        }
+
+        template< typename OtherChar >
+        result_type operator() (const OtherChar* source, const OtherChar* source_end, const codecvt_type* cvt = NULL) const
+        {
+            m_self.m_pathname.clear();
+            detail::path_traits::convert(source, source_end, m_self.m_pathname, cvt);
+        }
+    };
+
+    //! Concatenation operation
+    class concat_op
+    {
+    private:
+        path& m_self;
+
+    public:
+        typedef void result_type;
+
+        explicit concat_op(path& self) BOOST_NOEXCEPT : m_self(self) {}
+
+        result_type operator() (const value_type* source, const value_type* source_end, const codecvt_type* = NULL) const
+        {
+            m_self.m_pathname.append(source, source_end);
+        }
+
+        template< typename OtherChar >
+        result_type operator() (const OtherChar* source, const OtherChar* source_end, const codecvt_type* cvt = NULL) const
+        {
+            detail::path_traits::convert(source, source_end, m_self.m_pathname, cvt);
+        }
+    };
+
+    //! Path appending operation
+    class append_op
+    {
+    private:
+        path& m_self;
+
+    public:
+        typedef void result_type;
+
+        explicit append_op(path& self) BOOST_NOEXCEPT : m_self(self) {}
+
+        BOOST_FORCEINLINE result_type operator() (const value_type* source, const value_type* source_end, const codecvt_type* = NULL) const
+        {
+            m_self.append(source, source_end);
+        }
+
+        template< typename OtherChar >
+        BOOST_FORCEINLINE result_type operator() (const OtherChar* source, const OtherChar* source_end, const codecvt_type* cvt = NULL) const
+        {
+            string_type src;
+            detail::path_traits::convert(source, source_end, src, cvt);
+            m_self.append(src.data(), src.data() + src.size());
+        }
+    };
+
+    //! Path comparison operation
+    class compare_op
+    {
+    private:
+        path const& m_self;
+
+    public:
+        typedef int result_type;
+
+        explicit compare_op(path const& self) BOOST_NOEXCEPT : m_self(self) {}
+
+        result_type operator() (const value_type* source, const value_type* source_end, const codecvt_type* = NULL) const;
+
+        template< typename OtherChar >
+        result_type operator() (const OtherChar* source, const OtherChar* source_end, const codecvt_type* cvt = NULL) const;
+    };
+
+public:
+    typedef path_detail::path_iterator iterator;
+    typedef iterator const_iterator;
+    typedef path_detail::path_reverse_iterator reverse_iterator;
+    typedef reverse_iterator const_reverse_iterator;
+
+public:
     //  -----  constructors  -----
 
     path() BOOST_NOEXCEPT {}
     path(path const& p) : m_pathname(p.m_pathname) {}
-
-    template< class Source >
-    path(Source const& source, typename boost::enable_if_c<
-        path_traits::is_pathable< typename boost::decay< Source >::type >::value && !path_detail::is_native_pathable< Source >::value
-    >::type* = NULL)
-    {
-        path_traits::dispatch(source, m_pathname);
-    }
+    path(path const& p, codecvt_type const&) : m_pathname(p.m_pathname) {}
 
     path(const value_type* s) : m_pathname(s) {}
+    path(const value_type* s, codecvt_type const&) : m_pathname(s) {}
     path(string_type const& s) : m_pathname(s) {}
+    path(string_type const& s, codecvt_type const&) : m_pathname(s) {}
+#if !defined(BOOST_NO_CXX17_HDR_STRING_VIEW)
+    path(std::basic_string_view< value_type > const& s) : m_pathname(s) {}
+    path(std::basic_string_view< value_type > const& s, codecvt_type const&) : m_pathname(s) {}
+#endif
+
+#if !defined(BOOST_NO_CXX11_FUNCTION_TEMPLATE_DEFAULT_ARGS)
+    template<
+        typename Source,
+        typename = typename boost::enable_if_c<
+            boost::conjunction<
+                detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type >,
+                boost::negation< detail::path_traits::is_native_path_source< typename boost::remove_cv< Source >::type > >
+            >::value
+        >::type
+    >
+    path(Source const& source)
+#else
+    template< typename Source >
+    path(Source const& source, typename boost::enable_if_c<
+        boost::conjunction<
+            detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type >,
+            boost::negation< detail::path_traits::is_native_path_source< typename boost::remove_cv< Source >::type > >
+        >::value
+    >::type* = NULL)
+#endif
+    {
+        assign(source);
+    }
+
+#if !defined(BOOST_NO_CXX11_FUNCTION_TEMPLATE_DEFAULT_ARGS)
+    template<
+        typename Source,
+        typename = typename boost::enable_if_c<
+            boost::conjunction<
+                detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type >,
+                boost::negation< detail::path_traits::is_native_path_source< typename boost::remove_cv< Source >::type > >
+            >::value
+        >::type
+    >
+    explicit path(Source const& source, codecvt_type const& cvt)
+#else
+    template< typename Source >
+    explicit path(Source const& source, codecvt_type const& cvt, typename boost::enable_if_c<
+        boost::conjunction<
+            detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type >,
+            boost::negation< detail::path_traits::is_native_path_source< typename boost::remove_cv< Source >::type > >
+        >::value
+    >::type* = NULL)
+#endif
+    {
+        assign(source, cvt);
+    }
 
     //  As of October 2015 the interaction between noexcept and =default is so troublesome
     //  for VC++, GCC, and probably other compilers, that =default is not used with noexcept
     //  functions. GCC is not even consistent for the same release on different platforms.
 
 #if !defined(BOOST_NO_CXX11_RVALUE_REFERENCES)
-    path(path&& p) BOOST_NOEXCEPT : m_pathname(std::move(p.m_pathname))
+    path(path&& p) BOOST_NOEXCEPT : m_pathname(static_cast< string_type&& >(p.m_pathname))
     {
     }
-    path(path&& p, codecvt_type const&) BOOST_NOEXCEPT : m_pathname(std::move(p.m_pathname))
+    path(path&& p, codecvt_type const&) BOOST_NOEXCEPT : m_pathname(static_cast< string_type&& >(p.m_pathname))
     {
     }
     path& operator=(path&& p) BOOST_NOEXCEPT
     {
-        m_pathname = std::move(p.m_pathname);
+        m_pathname = static_cast< string_type&& >(p.m_pathname);
         return *this;
     }
     path& assign(path&& p) BOOST_NOEXCEPT
     {
-        m_pathname = std::move(p.m_pathname);
+        m_pathname = static_cast< string_type&& >(p.m_pathname);
         return *this;
     }
     path& assign(path&& p, codecvt_type const&) BOOST_NOEXCEPT
     {
-        m_pathname = std::move(p.m_pathname);
+        m_pathname = static_cast< string_type&& >(p.m_pathname);
         return *this;
     }
 
-    path(string_type&& s) BOOST_NOEXCEPT : m_pathname(std::move(s))
+    path(string_type&& s) BOOST_NOEXCEPT : m_pathname(static_cast< string_type&& >(s))
     {
     }
-    path(string_type&& s, codecvt_type const&) BOOST_NOEXCEPT : m_pathname(std::move(s))
+    path(string_type&& s, codecvt_type const&) BOOST_NOEXCEPT : m_pathname(static_cast< string_type&& >(s))
     {
     }
     path& operator=(string_type&& p) BOOST_NOEXCEPT
     {
-        m_pathname = std::move(p);
+        m_pathname = static_cast< string_type&& >(p);
         return *this;
     }
     path& assign(string_type&& p) BOOST_NOEXCEPT
     {
-        m_pathname = std::move(p);
+        m_pathname = static_cast< string_type&& >(p);
         return *this;
     }
     path& assign(string_type&& p, codecvt_type const&) BOOST_NOEXCEPT
     {
-        m_pathname = std::move(p);
+        m_pathname = static_cast< string_type&& >(p);
         return *this;
     }
 #endif
 
-    path(path const& p, codecvt_type const&) : m_pathname(p.m_pathname) {}
-    path(const value_type* s, codecvt_type const&) : m_pathname(s) {}
-    path(string_type const& s, codecvt_type const&) : m_pathname(s) {}
-
-    template< class Source >
-    path(Source const& source, codecvt_type const& cvt, typename boost::enable_if_c<
-        path_traits::is_pathable< typename boost::decay< Source >::type >::value && !path_detail::is_native_pathable< Source >::value
-    >::type* = NULL)
-    {
-        path_traits::dispatch(source, m_pathname, cvt);
-    }
-
     path(const value_type* begin, const value_type* end) : m_pathname(begin, end) {}
-
-    template< class InputIterator >
-    path(InputIterator begin, InputIterator end, typename boost::disable_if< path_detail::is_native_char_ptr< InputIterator > >::type* = NULL)
-    {
-        if (begin != end)
-        {
-            // convert requires contiguous string, so copy
-            std::basic_string< typename std::iterator_traits< InputIterator >::value_type > seq(begin, end);
-            path_traits::convert(seq.c_str(), seq.c_str() + seq.size(), m_pathname);
-        }
-    }
-
     path(const value_type* begin, const value_type* end, codecvt_type const&) : m_pathname(begin, end) {}
 
-    template< class InputIterator >
-    path(InputIterator begin, InputIterator end, codecvt_type const& cvt, typename boost::disable_if< path_detail::is_native_char_ptr< InputIterator > >::type* = NULL)
+#if !defined(BOOST_NO_CXX11_FUNCTION_TEMPLATE_DEFAULT_ARGS)
+    template<
+        typename InputIterator,
+        typename = typename boost::enable_if_c<
+            boost::conjunction<
+                detail::path_traits::is_path_source_iterator< InputIterator >,
+                boost::negation< detail::path_traits::is_native_char_ptr< InputIterator > >
+            >::value
+        >::type
+    >
+    path(InputIterator begin, InputIterator end)
+#else
+    template< typename InputIterator >
+    path(InputIterator begin, InputIterator end, typename boost::enable_if_c<
+        boost::conjunction<
+            detail::path_traits::is_path_source_iterator< InputIterator >,
+            boost::negation< detail::path_traits::is_native_char_ptr< InputIterator > >
+        >::value
+    >::type* = NULL)
+#endif
     {
         if (begin != end)
         {
-            // convert requires contiguous string, so copy
-            std::basic_string< typename std::iterator_traits< InputIterator >::value_type > seq(begin, end);
-            path_traits::convert(seq.c_str(), seq.c_str() + seq.size(), m_pathname, cvt);
+            typedef std::basic_string< typename std::iterator_traits< InputIterator >::value_type > source_t;
+            source_t source(begin, end);
+#if !defined(BOOST_NO_CXX11_RVALUE_REFERENCES)
+            assign(static_cast< source_t&& >(source));
+#else
+            assign(source);
+#endif
         }
     }
 
+#if !defined(BOOST_NO_CXX11_FUNCTION_TEMPLATE_DEFAULT_ARGS)
+    template<
+        typename InputIterator,
+        typename = typename boost::enable_if_c<
+            boost::conjunction<
+                detail::path_traits::is_path_source_iterator< InputIterator >,
+                boost::negation< detail::path_traits::is_native_char_ptr< InputIterator > >
+            >::value
+        >::type
+    >
+    path(InputIterator begin, InputIterator end, codecvt_type const& cvt)
+#else
+    template< typename InputIterator >
+    path(InputIterator begin, InputIterator end, codecvt_type const& cvt, typename boost::enable_if_c<
+        boost::conjunction<
+            detail::path_traits::is_path_source_iterator< InputIterator >,
+            boost::negation< detail::path_traits::is_native_char_ptr< InputIterator > >
+        >::value
+    >::type* = NULL)
+#endif
+    {
+        if (begin != end)
+        {
+            typedef std::basic_string< typename std::iterator_traits< InputIterator >::value_type > source_t;
+            source_t source(begin, end);
+#if !defined(BOOST_NO_CXX11_RVALUE_REFERENCES)
+            assign(static_cast< source_t&& >(source), cvt);
+#else
+            assign(source, cvt);
+#endif
+        }
+    }
+
+#if !defined(BOOST_NO_CXX11_NULLPTR)
+    BOOST_DELETED_FUNCTION(path(std::nullptr_t))
+    BOOST_DELETED_FUNCTION(path& operator= (std::nullptr_t))
+#endif
+
+public:
     //  -----  assignments  -----
 
     // We need to explicitly define copy assignment as otherwise it will be implicitly defined as deleted because there is move assignment
-    path& operator=(path const& p)
-    {
-        return assign(p);
-    }
+    path& operator=(path const& p);
 
-    path& operator=(string_type const& s)
-    {
-        return assign(s);
-    }
-
-    path& operator=(const value_type* ptr)
-    {
-        return assign(ptr);
-    }
-
-    template< class Source >
+    template< typename Source >
     typename boost::enable_if_c<
-        path_traits::is_pathable< typename boost::decay< Source >::type >::value && !path_detail::is_native_pathable< Source >::value,
+        boost::disjunction<
+            detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type >,
+            detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >
+        >::value,
         path&
     >::type operator=(Source const& source)
     {
@@ -338,26 +536,26 @@ public:
         return *this;
     }
 
-    path& assign(string_type const& s)
-    {
-        m_pathname = s;
-        return *this;
-    }
-
-    path& assign(const value_type* ptr)
-    {
-        m_pathname = ptr;
-        return *this;
-    }
-
-    template< class Source >
+    template< typename Source >
     typename boost::enable_if_c<
-        path_traits::is_pathable< typename boost::decay< Source >::type >::value && !path_detail::is_native_pathable< Source >::value,
+        detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type >::value,
         path&
     >::type assign(Source const& source)
     {
-        m_pathname.clear();
-        path_traits::dispatch(source, m_pathname);
+        detail::path_traits::dispatch(source, assign_op(*this));
+        return *this;
+    }
+
+    template< typename Source >
+    typename boost::enable_if_c<
+        boost::conjunction<
+            detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >,
+            boost::negation< detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type > >
+        >::value,
+        path&
+    >::type assign(Source const& source)
+    {
+        detail::path_traits::dispatch_convertible(source, assign_op(*this));
         return *this;
     }
 
@@ -367,26 +565,26 @@ public:
         return *this;
     }
 
-    path& assign(string_type const& s, codecvt_type const&)
-    {
-        m_pathname = s;
-        return *this;
-    }
-
-    path& assign(const value_type* ptr, codecvt_type const&)
-    {
-        m_pathname = ptr;
-        return *this;
-    }
-
-    template< class Source >
+    template< typename Source >
     typename boost::enable_if_c<
-        path_traits::is_pathable< typename boost::decay< Source >::type >::value && !path_detail::is_native_pathable< Source >::value,
+        detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type >::value,
         path&
     >::type assign(Source const& source, codecvt_type const& cvt)
     {
-        m_pathname.clear();
-        path_traits::dispatch(source, m_pathname, cvt);
+        detail::path_traits::dispatch(source, assign_op(*this), &cvt);
+        return *this;
+    }
+
+    template< typename Source >
+    typename boost::enable_if_c<
+        boost::conjunction<
+            detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >,
+            boost::negation< detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type > >
+        >::value,
+        path&
+    >::type assign(Source const& source, codecvt_type const& cvt)
+    {
+        detail::path_traits::dispatch_convertible(source, assign_op(*this), &cvt);
         return *this;
     }
 
@@ -396,15 +594,25 @@ public:
         return *this;
     }
 
-    template< class InputIterator >
-    typename boost::disable_if< path_detail::is_native_char_ptr< InputIterator >, path& >::type
-    assign(InputIterator begin, InputIterator end)
+    template< typename InputIterator >
+    typename boost::enable_if_c<
+        boost::conjunction<
+            detail::path_traits::is_path_source_iterator< InputIterator >,
+            boost::negation< detail::path_traits::is_native_char_ptr< InputIterator > >
+        >::value,
+        path&
+    >::type assign(InputIterator begin, InputIterator end)
     {
         m_pathname.clear();
         if (begin != end)
         {
-            std::basic_string< typename std::iterator_traits< InputIterator >::value_type > seq(begin, end);
-            path_traits::convert(seq.c_str(), seq.c_str() + seq.size(), m_pathname);
+            typedef std::basic_string< typename std::iterator_traits< InputIterator >::value_type > source_t;
+            source_t source(begin, end);
+#if !defined(BOOST_NO_CXX11_RVALUE_REFERENCES)
+            assign(static_cast< source_t&& >(source));
+#else
+            assign(source);
+#endif
         }
         return *this;
     }
@@ -415,39 +623,36 @@ public:
         return *this;
     }
 
-    template< class InputIterator >
-    typename boost::disable_if< path_detail::is_native_char_ptr< InputIterator >, path& >::type
-    assign(InputIterator begin, InputIterator end, codecvt_type const& cvt)
+    template< typename InputIterator >
+    typename boost::enable_if_c<
+        boost::conjunction<
+            detail::path_traits::is_path_source_iterator< InputIterator >,
+            boost::negation< detail::path_traits::is_native_char_ptr< InputIterator > >
+        >::value,
+        path&
+    >::type assign(InputIterator begin, InputIterator end, codecvt_type const& cvt)
     {
         m_pathname.clear();
         if (begin != end)
         {
-            std::basic_string< typename std::iterator_traits< InputIterator >::value_type > seq(begin, end);
-            path_traits::convert(seq.c_str(), seq.c_str() + seq.size(), m_pathname, cvt);
+            typedef std::basic_string< typename std::iterator_traits< InputIterator >::value_type > source_t;
+            source_t source(begin, end);
+#if !defined(BOOST_NO_CXX11_RVALUE_REFERENCES)
+            assign(static_cast< source_t&& >(source), cvt);
+#else
+            assign(source, cvt);
+#endif
         }
         return *this;
     }
 
     //  -----  concatenation  -----
 
-    path& operator+=(path const& p)
-    {
-        return concat(p);
-    }
+    path& operator+=(path const& p);
 
-    path& operator+=(const value_type* ptr)
-    {
-        return concat(ptr);
-    }
-
-    path& operator+=(string_type const& s)
-    {
-        return concat(s);
-    }
-
-    template< class Source >
+    template< typename Source >
     typename boost::enable_if_c<
-        path_traits::is_pathable< typename boost::decay< Source >::type >::value && !path_detail::is_native_pathable< Source >::value,
+        detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >::value,
         path&
     >::type operator+=(Source const& source)
     {
@@ -460,69 +665,74 @@ public:
         return *this;
     }
 
-    template< class CharT >
-    typename boost::enable_if< boost::is_integral< CharT >, path& >::type
-    operator+=(CharT c)
+    template< typename CharT >
+    typename boost::enable_if_c<
+        detail::path_traits::is_path_char_type< CharT >::value,
+        path&
+    >::type operator+=(CharT c)
     {
         CharT tmp[2];
         tmp[0] = c;
         tmp[1] = static_cast< CharT >(0);
-        return concat(tmp);
+        concat_op(*this)(tmp, tmp + 1);
+        return *this;
     }
 
     path& concat(path const& p)
     {
-        m_pathname += p.m_pathname;
+        m_pathname.append(p.m_pathname);
         return *this;
     }
 
-    path& concat(const value_type* ptr)
-    {
-        m_pathname += ptr;
-        return *this;
-    }
-
-    path& concat(string_type const& s)
-    {
-        m_pathname += s;
-        return *this;
-    }
-
-    template< class Source >
+    template< typename Source >
     typename boost::enable_if_c<
-        path_traits::is_pathable< typename boost::decay< Source >::type >::value && !path_detail::is_native_pathable< Source >::value,
+        detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type >::value,
         path&
     >::type concat(Source const& source)
     {
-        path_traits::dispatch(source, m_pathname);
+        detail::path_traits::dispatch(source, concat_op(*this));
+        return *this;
+    }
+
+    template< typename Source >
+    typename boost::enable_if_c<
+        boost::conjunction<
+            detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >,
+            boost::negation< detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type > >
+        >::value,
+        path&
+    >::type concat(Source const& source)
+    {
+        detail::path_traits::dispatch_convertible(source, concat_op(*this));
         return *this;
     }
 
     path& concat(path const& p, codecvt_type const&)
     {
-        m_pathname += p.m_pathname;
+        m_pathname.append(p.m_pathname);
         return *this;
     }
 
-    path& concat(const value_type* ptr, codecvt_type const&)
-    {
-        m_pathname += ptr;
-        return *this;
-    }
-
-    path& concat(string_type const& s, codecvt_type const&)
-    {
-        m_pathname += s;
-        return *this;
-    }
-
-    template< class Source >
+    template< typename Source >
     typename boost::enable_if_c<
-        path_traits::is_pathable< typename boost::decay< Source >::type >::value && !path_detail::is_native_pathable< Source >::value,
+        detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type >::value,
         path&
     >::type concat(Source const& source, codecvt_type const& cvt)
     {
-        path_traits::dispatch(source, m_pathname, cvt);
+        detail::path_traits::dispatch(source, concat_op(*this), &cvt);
+        return *this;
+    }
+
+    template< typename Source >
+    typename boost::enable_if_c<
+        boost::conjunction<
+            detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >,
+            boost::negation< detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type > >
+        >::value,
+        path&
+    >::type concat(Source const& source, codecvt_type const& cvt)
+    {
+        detail::path_traits::dispatch_convertible(source, concat_op(*this), &cvt);
         return *this;
     }
 
@@ -532,14 +742,19 @@ public:
         return *this;
     }
 
-    template< class InputIterator >
-    typename boost::disable_if< path_detail::is_native_char_ptr< InputIterator >, path& >::type
-    concat(InputIterator begin, InputIterator end)
+    template< typename InputIterator >
+    typename boost::enable_if_c<
+        boost::conjunction<
+            detail::path_traits::is_path_source_iterator< InputIterator >,
+            boost::negation< detail::path_traits::is_native_char_ptr< InputIterator > >
+        >::value,
+        path&
+    >::type concat(InputIterator begin, InputIterator end)
     {
         if (begin != end)
         {
-            std::basic_string< typename std::iterator_traits< InputIterator >::value_type > seq(begin, end);
-            path_traits::convert(seq.c_str(), seq.c_str() + seq.size(), m_pathname);
+            std::basic_string< typename std::iterator_traits< InputIterator >::value_type > source(begin, end);
+            detail::path_traits::dispatch(source, concat_op(*this));
         }
         return *this;
     }
@@ -550,14 +765,19 @@ public:
         return *this;
     }
 
-    template< class InputIterator >
-    typename boost::disable_if< path_detail::is_native_char_ptr< InputIterator >, path& >::type
-    concat(InputIterator begin, InputIterator end, codecvt_type const& cvt)
+    template< typename InputIterator >
+    typename boost::enable_if_c<
+        boost::conjunction<
+            detail::path_traits::is_path_source_iterator< InputIterator >,
+            boost::negation< detail::path_traits::is_native_char_ptr< InputIterator > >
+        >::value,
+        path&
+    >::type concat(InputIterator begin, InputIterator end, codecvt_type const& cvt)
     {
         if (begin != end)
         {
-            std::basic_string< typename std::iterator_traits< InputIterator >::value_type > seq(begin, end);
-            path_traits::convert(seq.c_str(), seq.c_str() + seq.size(), m_pathname, cvt);
+            std::basic_string< typename std::iterator_traits< InputIterator >::value_type > source(begin, end);
+            detail::path_traits::dispatch(source, concat_op(*this), &cvt);
         }
         return *this;
     }
@@ -567,124 +787,97 @@ public:
     //  if a separator is added, it is the preferred separator for the platform;
     //  slash for POSIX, backslash for Windows
 
-    path& operator/=(path const& p)
-    {
-        return append(p);
-    }
+    path& operator/=(path const& p);
 
-    path& operator/=(const value_type* ptr)
-    {
-        return append(ptr);
-    }
-
-    path& operator/=(string_type const& s)
-    {
-        return append(s);
-    }
-
-    template< class Source >
+    template< typename Source >
     BOOST_FORCEINLINE typename boost::enable_if_c<
-        path_traits::is_pathable< typename boost::decay< Source >::type >::value && !path_detail::is_native_pathable< Source >::value,
+        detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >::value,
         path&
     >::type operator/=(Source const& source)
     {
         return append(source);
     }
 
-    BOOST_FORCEINLINE path& append(path const& p)
-    {
-        BOOST_FILESYSTEM_VERSIONED_SYM(append)(p);
-        return *this;
-    }
+    path& append(path const& p);
 
-    BOOST_FORCEINLINE path& append(string_type const& p)
-    {
-        BOOST_FILESYSTEM_VERSIONED_SYM(append)(p.c_str(), p.c_str() + p.size());
-        return *this;
-    }
-
-    BOOST_FORCEINLINE path& append(const value_type* ptr)
-    {
-        BOOST_FILESYSTEM_VERSIONED_SYM(append)(ptr, ptr + string_type::traits_type::length(ptr));
-        return *this;
-    }
-
-    template< class Source >
-    typename boost::enable_if_c<
-        path_traits::is_pathable< typename boost::decay< Source >::type >::value && !path_detail::is_native_pathable< Source >::value,
+    template< typename Source >
+    BOOST_FORCEINLINE typename boost::enable_if_c<
+        detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type >::value,
         path&
     >::type append(Source const& source)
     {
-        path p;
-        path_traits::dispatch(source, p.m_pathname);
-        return append(p);
-    }
-
-    BOOST_FORCEINLINE path& append(path const& p, codecvt_type const&)
-    {
-        BOOST_FILESYSTEM_VERSIONED_SYM(append)(p);
+        detail::path_traits::dispatch(source, append_op(*this));
         return *this;
     }
 
-    BOOST_FORCEINLINE path& append(string_type const& p, codecvt_type const&)
+    template< typename Source >
+    BOOST_FORCEINLINE typename boost::enable_if_c<
+        boost::conjunction<
+            detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >,
+            boost::negation< detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type > >
+        >::value,
+        path&
+    >::type append(Source const& source)
     {
-        BOOST_FILESYSTEM_VERSIONED_SYM(append)(p.c_str(), p.c_str() + p.size());
+        detail::path_traits::dispatch_convertible(source, append_op(*this));
         return *this;
     }
 
-    BOOST_FORCEINLINE path& append(const value_type* ptr, codecvt_type const&)
-    {
-        BOOST_FILESYSTEM_VERSIONED_SYM(append)(ptr, ptr + string_type::traits_type::length(ptr));
-        return *this;
-    }
+    path& append(path const& p, codecvt_type const&);
 
-    template< class Source >
-    typename boost::enable_if_c<
-        path_traits::is_pathable< typename boost::decay< Source >::type >::value && !path_detail::is_native_pathable< Source >::value,
+    template< typename Source >
+    BOOST_FORCEINLINE typename boost::enable_if_c<
+        detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type >::value,
         path&
     >::type append(Source const& source, codecvt_type const& cvt)
     {
-        path p;
-        path_traits::dispatch(source, p.m_pathname, cvt);
-        return append(p);
-    }
-
-    BOOST_FORCEINLINE path& append(const value_type* begin, const value_type* end)
-    {
-        BOOST_FILESYSTEM_VERSIONED_SYM(append)(begin, end);
+        detail::path_traits::dispatch(source, append_op(*this), &cvt);
         return *this;
     }
 
-    template< class InputIterator >
-    typename boost::disable_if< path_detail::is_native_char_ptr< InputIterator >, path& >::type
-    append(InputIterator begin, InputIterator end)
+    template< typename Source >
+    BOOST_FORCEINLINE typename boost::enable_if_c<
+        boost::conjunction<
+            detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >,
+            boost::negation< detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type > >
+        >::value,
+        path&
+    >::type append(Source const& source, codecvt_type const& cvt)
     {
-        path p;
-        if (begin != end)
-        {
-            std::basic_string< typename std::iterator_traits< InputIterator >::value_type > seq(begin, end);
-            path_traits::convert(seq.c_str(), seq.c_str() + seq.size(), p.m_pathname);
-        }
-        return append(p);
-    }
-
-    BOOST_FORCEINLINE path& append(const value_type* begin, const value_type* end, codecvt_type const&)
-    {
-        BOOST_FILESYSTEM_VERSIONED_SYM(append)(begin, end);
+        detail::path_traits::dispatch_convertible(source, append_op(*this), &cvt);
         return *this;
     }
 
-    template< class InputIterator >
-    typename boost::disable_if< path_detail::is_native_char_ptr< InputIterator >, path& >::type
-    append(InputIterator begin, InputIterator end, const codecvt_type& cvt)
+    path& append(const value_type* begin, const value_type* end);
+
+    template< typename InputIterator >
+    BOOST_FORCEINLINE typename boost::enable_if_c<
+        boost::conjunction<
+            detail::path_traits::is_path_source_iterator< InputIterator >,
+            boost::negation< detail::path_traits::is_native_char_ptr< InputIterator > >
+        >::value,
+        path&
+    >::type append(InputIterator begin, InputIterator end)
     {
-        path p;
-        if (begin != end)
-        {
-            std::basic_string< typename std::iterator_traits< InputIterator >::value_type > seq(begin, end);
-            path_traits::convert(seq.c_str(), seq.c_str() + seq.size(), p.m_pathname, cvt);
-        }
-        return append(p);
+        std::basic_string< typename std::iterator_traits< InputIterator >::value_type > source(begin, end);
+        detail::path_traits::dispatch(source, append_op(*this));
+        return *this;
+    }
+
+    path& append(const value_type* begin, const value_type* end, codecvt_type const&);
+
+    template< typename InputIterator >
+    BOOST_FORCEINLINE typename boost::enable_if_c<
+        boost::conjunction<
+            detail::path_traits::is_path_source_iterator< InputIterator >,
+            boost::negation< detail::path_traits::is_native_char_ptr< InputIterator > >
+        >::value,
+        path&
+    >::type append(InputIterator begin, InputIterator end, const codecvt_type& cvt)
+    {
+        std::basic_string< typename std::iterator_traits< InputIterator >::value_type > source(begin, end);
+        detail::path_traits::dispatch(source, append_op(*this), &cvt);
+        return *this;
     }
 
     //  -----  modifiers  -----
@@ -699,13 +892,12 @@ public:
 #else // BOOST_WINDOWS_API
     BOOST_FILESYSTEM_DECL path& make_preferred(); // change slashes to backslashes
 #endif
-    BOOST_FILESYSTEM_DECL path& remove_filename();
+    path& remove_filename();
+    BOOST_FILESYSTEM_DECL path& remove_filename_and_trailing_separators();
     BOOST_FILESYSTEM_DECL path& remove_trailing_separator();
-    BOOST_FORCEINLINE path& replace_extension(path const& new_extension = path())
-    {
-        BOOST_FILESYSTEM_VERSIONED_SYM(replace_extension)(new_extension);
-        return *this;
-    }
+    BOOST_FILESYSTEM_DECL path& replace_filename(path const& replacement);
+    path& replace_extension(path const& new_extension = path());
+
     void swap(path& rhs) BOOST_NOEXCEPT { m_pathname.swap(rhs.m_pathname); }
 
     //  -----  observers  -----
@@ -733,10 +925,10 @@ public:
     const value_type* c_str() const BOOST_NOEXCEPT { return m_pathname.c_str(); }
     string_type::size_type size() const BOOST_NOEXCEPT { return m_pathname.size(); }
 
-    template< class String >
+    template< typename String >
     String string() const;
 
-    template< class String >
+    template< typename String >
     String string(codecvt_type const& cvt) const;
 
 #ifdef BOOST_WINDOWS_API
@@ -744,14 +936,14 @@ public:
     {
         std::string tmp;
         if (!m_pathname.empty())
-            path_traits::convert(m_pathname.c_str(), m_pathname.c_str() + m_pathname.size(), tmp);
+            detail::path_traits::convert(m_pathname.data(), m_pathname.data() + m_pathname.size(), tmp);
         return tmp;
     }
     std::string string(codecvt_type const& cvt) const
     {
         std::string tmp;
         if (!m_pathname.empty())
-            path_traits::convert(m_pathname.c_str(), m_pathname.c_str() + m_pathname.size(), tmp, cvt);
+            detail::path_traits::convert(m_pathname.data(), m_pathname.data() + m_pathname.size(), tmp, &cvt);
         return tmp;
     }
 
@@ -767,14 +959,14 @@ public:
     {
         std::wstring tmp;
         if (!m_pathname.empty())
-            path_traits::convert(m_pathname.c_str(), m_pathname.c_str() + m_pathname.size(), tmp);
+            detail::path_traits::convert(m_pathname.data(), m_pathname.data() + m_pathname.size(), tmp);
         return tmp;
     }
     std::wstring wstring(codecvt_type const& cvt) const
     {
         std::wstring tmp;
         if (!m_pathname.empty())
-            path_traits::convert(m_pathname.c_str(), m_pathname.c_str() + m_pathname.size(), tmp, cvt);
+            detail::path_traits::convert(m_pathname.data(), m_pathname.data() + m_pathname.size(), tmp, &cvt);
         return tmp;
     }
 #endif
@@ -787,13 +979,13 @@ public:
 #ifdef BOOST_WINDOWS_API
     BOOST_FILESYSTEM_DECL path generic_path() const;
 #else
-    path generic_path() const { return path(*this); }
+    path generic_path() const;
 #endif
 
-    template< class String >
+    template< typename String >
     String generic_string() const;
 
-    template< class String >
+    template< typename String >
     String generic_string(codecvt_type const& cvt) const;
 
 #ifdef BOOST_WINDOWS_API
@@ -811,51 +1003,88 @@ public:
 
     //  -----  compare  -----
 
-    BOOST_FORCEINLINE int compare(path const& p) const BOOST_NOEXCEPT // generic, lexicographical
+    int compare(path const& p) const; // generic, lexicographical
+
+    template< typename Source >
+    BOOST_FORCEINLINE typename boost::enable_if_c<
+        detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type >::value,
+        int
+    >::type compare(Source const& source) const
     {
-        return BOOST_FILESYSTEM_VERSIONED_SYM(compare)(p);
+        return detail::path_traits::dispatch(source, compare_op(*this));
     }
-    int compare(std::string const& s) const { return compare(path(s)); }
-    int compare(const value_type* s) const { return compare(path(s)); }
+
+    template< typename Source >
+    BOOST_FORCEINLINE typename boost::enable_if_c<
+        boost::conjunction<
+            detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >,
+            boost::negation< detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type > >
+        >::value,
+        int
+    >::type compare(Source const& source) const
+    {
+        return detail::path_traits::dispatch_convertible(source, compare_op(*this));
+    }
+
+    template< typename Source >
+    BOOST_FORCEINLINE typename boost::enable_if_c<
+        detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type >::value,
+        int
+    >::type compare(Source const& source, codecvt_type const& cvt) const
+    {
+        return detail::path_traits::dispatch(source, compare_op(*this), &cvt);
+    }
+
+    template< typename Source >
+    BOOST_FORCEINLINE typename boost::enable_if_c<
+        boost::conjunction<
+            detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >,
+            boost::negation< detail::path_traits::is_path_source< typename boost::remove_cv< Source >::type > >
+        >::value,
+        int
+    >::type compare(Source const& source, codecvt_type const& cvt) const
+    {
+        return detail::path_traits::dispatch_convertible(source, compare_op(*this), &cvt);
+    }
 
     //  -----  decomposition  -----
 
-    path root_path() const { return path(m_pathname.c_str(), m_pathname.c_str() + find_root_path_size()); }
+    path root_path() const { return path(m_pathname.c_str(), m_pathname.c_str() + detail::path_algorithms::find_root_path_size(*this)); }
     // returns 0 or 1 element path even on POSIX, root_name() is non-empty() for network paths
-    path root_name() const { return path(m_pathname.c_str(), m_pathname.c_str() + find_root_name_size()); }
+    path root_name() const { return path(m_pathname.c_str(), m_pathname.c_str() + detail::path_algorithms::find_root_name_size(*this)); }
 
     // returns 0 or 1 element path
     path root_directory() const
     {
-        path_detail::substring root_dir = find_root_directory();
+        detail::path_algorithms::substring root_dir = detail::path_algorithms::find_root_directory(*this);
         const value_type* p = m_pathname.c_str() + root_dir.pos;
         return path(p, p + root_dir.size);
     }
 
     path relative_path() const
     {
-        path_detail::substring root_dir = find_relative_path();
-        const value_type* p = m_pathname.c_str() + root_dir.pos;
-        return path(p, p + root_dir.size);
+        detail::path_algorithms::substring rel_path = detail::path_algorithms::find_relative_path(*this);
+        const value_type* p = m_pathname.c_str() + rel_path.pos;
+        return path(p, p + rel_path.size);
     }
 
-    path parent_path() const { return path(m_pathname.c_str(), m_pathname.c_str() + find_parent_path_size()); }
+    path parent_path() const { return path(m_pathname.c_str(), m_pathname.c_str() + detail::path_algorithms::find_parent_path_size(*this)); }
 
-    BOOST_FORCEINLINE path filename() const { return BOOST_FILESYSTEM_VERSIONED_SYM(filename)(); }   // returns 0 or 1 element path
-    BOOST_FORCEINLINE path stem() const { return BOOST_FILESYSTEM_VERSIONED_SYM(stem)(); }           // returns 0 or 1 element path
-    BOOST_FORCEINLINE path extension() const { return BOOST_FILESYSTEM_VERSIONED_SYM(extension)(); } // returns 0 or 1 element path
+    path filename() const;  // returns 0 or 1 element path
+    path stem() const;      // returns 0 or 1 element path
+    path extension() const; // returns 0 or 1 element path
 
     //  -----  query  -----
 
     bool empty() const BOOST_NOEXCEPT { return m_pathname.empty(); }
     bool filename_is_dot() const;
     bool filename_is_dot_dot() const;
-    bool has_root_path() const { return find_root_path_size() > 0; }
-    bool has_root_name() const { return find_root_name_size() > 0; }
-    bool has_root_directory() const { return find_root_directory().size > 0; }
-    bool has_relative_path() const { return find_relative_path().size > 0; }
-    bool has_parent_path() const { return find_parent_path_size() > 0; }
-    BOOST_FORCEINLINE bool has_filename() const { return BOOST_FILESYSTEM_VERSIONED_SYM(has_filename)(); }
+    bool has_root_path() const { return detail::path_algorithms::find_root_path_size(*this) > 0; }
+    bool has_root_name() const { return detail::path_algorithms::find_root_name_size(*this) > 0; }
+    bool has_root_directory() const { return detail::path_algorithms::find_root_directory(*this).size > 0; }
+    bool has_relative_path() const { return detail::path_algorithms::find_relative_path(*this).size > 0; }
+    bool has_parent_path() const { return detail::path_algorithms::find_parent_path_size(*this) > 0; }
+    bool has_filename() const;
     bool has_stem() const { return !stem().empty(); }
     bool has_extension() const { return !extension().empty(); }
     bool is_relative() const { return !is_absolute(); }
@@ -871,21 +1100,11 @@ public:
 
     //  -----  lexical operations  -----
 
-    BOOST_FORCEINLINE path lexically_normal() const { return BOOST_FILESYSTEM_VERSIONED_SYM(lexically_normal)(); }
+    path lexically_normal() const;
     BOOST_FILESYSTEM_DECL path lexically_relative(path const& base) const;
-    path lexically_proximate(path const& base) const
-    {
-        path tmp(lexically_relative(base));
-        return tmp.empty() ? *this : tmp;
-    }
+    path lexically_proximate(path const& base) const;
 
     //  -----  iterators  -----
-
-    class iterator;
-    friend class iterator;
-    typedef iterator const_iterator;
-    class reverse_iterator;
-    typedef reverse_iterator const_reverse_iterator;
 
     BOOST_FILESYSTEM_DECL iterator begin() const;
     BOOST_FILESYSTEM_DECL iterator end() const;
@@ -901,84 +1120,43 @@ public:
 
 #if !defined(BOOST_FILESYSTEM_NO_DEPRECATED)
     //  recently deprecated functions supplied by default
-    path& normalize()
-    {
-        path tmp(lexically_normal());
-        m_pathname.swap(tmp.m_pathname);
-        return *this;
-    }
+    path& normalize();
+    BOOST_FILESYSTEM_DETAIL_DEPRECATED("Use path::remove_filename() instead")
     path& remove_leaf() { return remove_filename(); }
+    BOOST_FILESYSTEM_DETAIL_DEPRECATED("Use path::filename() instead")
     path leaf() const { return filename(); }
+    BOOST_FILESYSTEM_DETAIL_DEPRECATED("Use path::parent_path() instead")
     path branch_path() const { return parent_path(); }
+    BOOST_FILESYSTEM_DETAIL_DEPRECATED("Use path::generic_path() instead")
     path generic() const { return generic_path(); }
+    BOOST_FILESYSTEM_DETAIL_DEPRECATED("Use !path::empty() instead")
     bool has_leaf() const { return !m_pathname.empty(); }
-    bool has_branch_path() const { return !parent_path().empty(); }
+    BOOST_FILESYSTEM_DETAIL_DEPRECATED("Use path::has_parent_path() instead")
+    bool has_branch_path() const { return has_parent_path(); }
+    BOOST_FILESYSTEM_DETAIL_DEPRECATED("Use path::is_absolute() instead")
     bool is_complete() const { return is_absolute(); }
 #endif
 
 #if defined(BOOST_FILESYSTEM_DEPRECATED)
     //  deprecated functions with enough signature or semantic changes that they are
     //  not supplied by default
+    BOOST_FILESYSTEM_DETAIL_DEPRECATED("Use path::string() instead")
     std::string file_string() const { return string(); }
+    BOOST_FILESYSTEM_DETAIL_DEPRECATED("Use path::string() instead")
     std::string directory_string() const { return string(); }
+    BOOST_FILESYSTEM_DETAIL_DEPRECATED("Use path::string() instead")
     std::string native_file_string() const { return string(); }
+    BOOST_FILESYSTEM_DETAIL_DEPRECATED("Use path::string() instead")
     std::string native_directory_string() const { return string(); }
+    BOOST_FILESYSTEM_DETAIL_DEPRECATED("Use path::native() instead")
     string_type external_file_string() const { return native(); }
+    BOOST_FILESYSTEM_DETAIL_DEPRECATED("Use path::native() instead")
     string_type external_directory_string() const { return native(); }
 #endif
 
     //--------------------------------------------------------------------------------------//
     //                            class path private members                                //
     //--------------------------------------------------------------------------------------//
-private:
-    bool has_filename_v3() const { return !m_pathname.empty(); }
-    bool has_filename_v4() const { return find_filename_v4_size() > 0; }
-    BOOST_FILESYSTEM_DECL path filename_v3() const;
-    path filename_v4() const
-    {
-        string_type::size_type filename_size = find_filename_v4_size();
-        string_type::size_type pos = m_pathname.size() - filename_size;
-        const value_type* p = m_pathname.c_str() + pos;
-        return path(p, p + filename_size);
-    }
-    BOOST_FILESYSTEM_DECL path stem_v3() const;
-    BOOST_FILESYSTEM_DECL path stem_v4() const;
-    BOOST_FILESYSTEM_DECL path extension_v3() const;
-    path extension_v4() const
-    {
-        string_type::size_type extension_size = find_extension_v4_size();
-        string_type::size_type pos = m_pathname.size() - extension_size;
-        const value_type* p = m_pathname.c_str() + pos;
-        return path(p, p + extension_size);
-    }
-
-    BOOST_FILESYSTEM_DECL void replace_extension_v3(path const& new_extension);
-    BOOST_FILESYSTEM_DECL void replace_extension_v4(path const& new_extension);
-
-    BOOST_FILESYSTEM_DECL path lexically_normal_v3() const;
-    BOOST_FILESYSTEM_DECL path lexically_normal_v4() const;
-
-    BOOST_FILESYSTEM_DECL int compare_v3(path const& p) const BOOST_NOEXCEPT;
-    BOOST_FILESYSTEM_DECL int compare_v4(path const& p) const BOOST_NOEXCEPT;
-
-    BOOST_FILESYSTEM_DECL void append_v3(const value_type* b, const value_type* e);
-    BOOST_FILESYSTEM_DECL void append_v4(const value_type* b, const value_type* e);
-    BOOST_FILESYSTEM_DECL void append_v3(path const& p);
-    BOOST_FILESYSTEM_DECL void append_v4(path const& p);
-
-    //  Returns: If separator is to be appended, m_pathname.size() before append. Otherwise 0.
-    //  Note: An append is never performed if size()==0, so a returned 0 is unambiguous.
-    BOOST_FILESYSTEM_DECL string_type::size_type append_separator_if_needed();
-    BOOST_FILESYSTEM_DECL void erase_redundant_separator(string_type::size_type sep_pos);
-
-    BOOST_FILESYSTEM_DECL string_type::size_type find_root_name_size() const;
-    BOOST_FILESYSTEM_DECL string_type::size_type find_root_path_size() const;
-    BOOST_FILESYSTEM_DECL path_detail::substring find_root_directory() const;
-    BOOST_FILESYSTEM_DECL path_detail::substring find_relative_path() const;
-    BOOST_FILESYSTEM_DECL string_type::size_type find_parent_path_size() const;
-    BOOST_FILESYSTEM_DECL string_type::size_type find_filename_v4_size() const;
-    BOOST_FILESYSTEM_DECL string_type::size_type find_extension_v4_size() const;
-
 private:
     /*
      * m_pathname has the type, encoding, and format required by the native
@@ -993,8 +1171,6 @@ private:
 };
 
 namespace detail {
-BOOST_FILESYSTEM_DECL int lex_compare_v3(path::iterator first1, path::iterator last1, path::iterator first2, path::iterator last2);
-BOOST_FILESYSTEM_DECL int lex_compare_v4(path::iterator first1, path::iterator last1, path::iterator first2, path::iterator last2);
 BOOST_FILESYSTEM_DECL path const& dot_path();
 BOOST_FILESYSTEM_DECL path const& dot_dot_path();
 } // namespace detail
@@ -1003,13 +1179,15 @@ BOOST_FILESYSTEM_DECL path const& dot_dot_path();
 typedef path wpath;
 #endif
 
+namespace path_detail {
+
 //------------------------------------------------------------------------------------//
 //                             class path::iterator                                   //
 //------------------------------------------------------------------------------------//
 
-class path::iterator :
+class path_iterator :
     public boost::iterator_facade<
-        path::iterator,
+        path_iterator,
         const path,
         boost::bidirectional_traversal_tag
     >
@@ -1017,24 +1195,18 @@ class path::iterator :
 private:
     friend class boost::iterator_core_access;
     friend class boost::filesystem::path;
-    friend class boost::filesystem::path::reverse_iterator;
-    friend BOOST_FILESYSTEM_DECL int detail::lex_compare_v3(path::iterator first1, path::iterator last1, path::iterator first2, path::iterator last2);
+    friend class path_reverse_iterator;
+    friend struct boost::filesystem::detail::path_algorithms;
 
     path const& dereference() const { return m_element; }
 
-    bool equal(iterator const& rhs) const
+    bool equal(path_iterator const& rhs) const BOOST_NOEXCEPT
     {
         return m_path_ptr == rhs.m_path_ptr && m_pos == rhs.m_pos;
     }
 
-    BOOST_FORCEINLINE void increment() { BOOST_FILESYSTEM_VERSIONED_SYM(increment)(); }
-    BOOST_FORCEINLINE void decrement() { BOOST_FILESYSTEM_VERSIONED_SYM(decrement)(); }
-
-private:
-    BOOST_FILESYSTEM_DECL void increment_v3();
-    BOOST_FILESYSTEM_DECL void increment_v4();
-    BOOST_FILESYSTEM_DECL void decrement_v3();
-    BOOST_FILESYSTEM_DECL void decrement_v4();
+    void increment();
+    void decrement();
 
 private:
     // current element
@@ -1046,22 +1218,22 @@ private:
     // position of the last separator in the path.
     // end() iterator is indicated by
     // m_pos == m_path_ptr->m_pathname.size()
-    string_type::size_type m_pos;
+    path::string_type::size_type m_pos;
 };
 
 //------------------------------------------------------------------------------------//
 //                         class path::reverse_iterator                               //
 //------------------------------------------------------------------------------------//
 
-class path::reverse_iterator :
+class path_reverse_iterator :
     public boost::iterator_facade<
-        path::reverse_iterator,
+        path_reverse_iterator,
         const path,
         boost::bidirectional_traversal_tag
     >
 {
 public:
-    explicit reverse_iterator(iterator itr) :
+    explicit path_reverse_iterator(path_iterator itr) :
         m_itr(itr)
     {
         if (itr != itr.m_path_ptr->begin())
@@ -1073,14 +1245,14 @@ private:
     friend class boost::filesystem::path;
 
     path const& dereference() const { return m_element; }
-    bool equal(reverse_iterator const& rhs) const { return m_itr == rhs.m_itr; }
+    bool equal(path_reverse_iterator const& rhs) const BOOST_NOEXCEPT { return m_itr == rhs.m_itr; }
 
     void increment()
     {
         --m_itr;
         if (m_itr != m_itr.m_path_ptr->begin())
         {
-            iterator tmp = m_itr;
+            path_iterator tmp = m_itr;
             m_element = *--tmp;
         }
     }
@@ -1092,9 +1264,17 @@ private:
     }
 
 private:
-    iterator m_itr;
+    path_iterator m_itr;
     path m_element;
 };
+
+//  std::lexicographical_compare would infinitely recurse because path iterators
+//  yield paths, so provide a path aware version
+bool lexicographical_compare(path_iterator first1, path_iterator const& last1, path_iterator first2, path_iterator const& last2);
+
+} // namespace path_detail
+
+using path_detail::lexicographical_compare;
 
 //------------------------------------------------------------------------------------//
 //                                                                                    //
@@ -1102,89 +1282,191 @@ private:
 //                                                                                    //
 //------------------------------------------------------------------------------------//
 
-//  std::lexicographical_compare would infinitely recurse because path iterators
-//  yield paths, so provide a path aware version
-inline bool lexicographical_compare(path::iterator first1, path::iterator last1, path::iterator first2, path::iterator last2)
-{
-    return BOOST_FILESYSTEM_VERSIONED_SYM(detail::lex_compare)(first1, last1, first2, last2) < 0;
-}
-
-inline bool operator==(path const& lhs, path const& rhs)
+BOOST_FORCEINLINE bool operator==(path const& lhs, path const& rhs)
 {
     return lhs.compare(rhs) == 0;
 }
 
-inline bool operator==(path const& lhs, path::string_type const& rhs)
+template< typename Path, typename Source >
+BOOST_FORCEINLINE typename boost::enable_if_c<
+    boost::conjunction<
+        boost::is_same< Path, path >,
+        detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >
+    >::value,
+    bool
+>::type operator==(Path const& lhs, Source const& rhs)
 {
     return lhs.compare(rhs) == 0;
 }
 
-inline bool operator==(path::string_type const& lhs, path const& rhs)
+template< typename Source, typename Path >
+BOOST_FORCEINLINE typename boost::enable_if_c<
+    boost::conjunction<
+        boost::is_same< Path, path >,
+        detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >
+    >::value,
+    bool
+>::type operator==(Source const& lhs, Path const& rhs)
 {
     return rhs.compare(lhs) == 0;
 }
 
-inline bool operator==(path const& lhs, const path::value_type* rhs)
-{
-    return lhs.compare(rhs) == 0;
-}
-
-inline bool operator==(const path::value_type* lhs, path const& rhs)
-{
-    return rhs.compare(lhs) == 0;
-}
-
-inline bool operator!=(path const& lhs, path const& rhs)
+BOOST_FORCEINLINE bool operator!=(path const& lhs, path const& rhs)
 {
     return lhs.compare(rhs) != 0;
 }
 
-inline bool operator!=(path const& lhs, path::string_type const& rhs)
+template< typename Path, typename Source >
+BOOST_FORCEINLINE typename boost::enable_if_c<
+    boost::conjunction<
+        boost::is_same< Path, path >,
+        detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >
+    >::value,
+    bool
+>::type operator!=(Path const& lhs, Source const& rhs)
 {
     return lhs.compare(rhs) != 0;
 }
 
-inline bool operator!=(path::string_type const& lhs, path const& rhs)
+template< typename Source, typename Path >
+BOOST_FORCEINLINE typename boost::enable_if_c<
+    boost::conjunction<
+        boost::is_same< Path, path >,
+        detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >
+    >::value,
+    bool
+>::type operator!=(Source const& lhs, Path const& rhs)
 {
     return rhs.compare(lhs) != 0;
 }
 
-inline bool operator!=(path const& lhs, const path::value_type* rhs)
-{
-    return lhs.compare(rhs) != 0;
-}
-
-inline bool operator!=(const path::value_type* lhs, path const& rhs)
-{
-    return rhs.compare(lhs) != 0;
-}
-
-// TODO: why do == and != have additional overloads, but the others don't?
-
-inline bool operator<(path const& lhs, path const& rhs)
+BOOST_FORCEINLINE bool operator<(path const& lhs, path const& rhs)
 {
     return lhs.compare(rhs) < 0;
 }
-inline bool operator<=(path const& lhs, path const& rhs)
+
+template< typename Path, typename Source >
+BOOST_FORCEINLINE typename boost::enable_if_c<
+    boost::conjunction<
+        boost::is_same< Path, path >,
+        detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >
+    >::value,
+    bool
+>::type operator<(Path const& lhs, Source const& rhs)
 {
-    return !(rhs < lhs);
-}
-inline bool operator>(path const& lhs, path const& rhs)
-{
-    return rhs < lhs;
-}
-inline bool operator>=(path const& lhs, path const& rhs)
-{
-    return !(lhs < rhs);
+    return lhs.compare(rhs) < 0;
 }
 
+template< typename Source, typename Path >
+BOOST_FORCEINLINE typename boost::enable_if_c<
+    boost::conjunction<
+        boost::is_same< Path, path >,
+        detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >
+    >::value,
+    bool
+>::type operator<(Source const& lhs, Path const& rhs)
+{
+    return rhs.compare(lhs) > 0;
+}
+
+BOOST_FORCEINLINE bool operator<=(path const& lhs, path const& rhs)
+{
+    return lhs.compare(rhs) <= 0;
+}
+
+template< typename Path, typename Source >
+BOOST_FORCEINLINE typename boost::enable_if_c<
+    boost::conjunction<
+        boost::is_same< Path, path >,
+        detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >
+    >::value,
+    bool
+>::type operator<=(Path const& lhs, Source const& rhs)
+{
+    return lhs.compare(rhs) <= 0;
+}
+
+template< typename Source, typename Path >
+BOOST_FORCEINLINE typename boost::enable_if_c<
+    boost::conjunction<
+        boost::is_same< Path, path >,
+        detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >
+    >::value,
+    bool
+>::type operator<=(Source const& lhs, Path const& rhs)
+{
+    return rhs.compare(lhs) >= 0;
+}
+
+BOOST_FORCEINLINE bool operator>(path const& lhs, path const& rhs)
+{
+    return lhs.compare(rhs) > 0;
+}
+
+template< typename Path, typename Source >
+BOOST_FORCEINLINE typename boost::enable_if_c<
+    boost::conjunction<
+        boost::is_same< Path, path >,
+        detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >
+    >::value,
+    bool
+>::type operator>(Path const& lhs, Source const& rhs)
+{
+    return lhs.compare(rhs) > 0;
+}
+
+template< typename Source, typename Path >
+BOOST_FORCEINLINE typename boost::enable_if_c<
+    boost::conjunction<
+        boost::is_same< Path, path >,
+        detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >
+    >::value,
+    bool
+>::type operator>(Source const& lhs, Path const& rhs)
+{
+    return rhs.compare(lhs) < 0;
+}
+
+BOOST_FORCEINLINE bool operator>=(path const& lhs, path const& rhs)
+{
+    return lhs.compare(rhs) >= 0;
+}
+
+template< typename Path, typename Source >
+BOOST_FORCEINLINE typename boost::enable_if_c<
+    boost::conjunction<
+        boost::is_same< Path, path >,
+        detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >
+    >::value,
+    bool
+>::type operator>=(Path const& lhs, Source const& rhs)
+{
+    return lhs.compare(rhs) >= 0;
+}
+
+template< typename Source, typename Path >
+BOOST_FORCEINLINE typename boost::enable_if_c<
+    boost::conjunction<
+        boost::is_same< Path, path >,
+        detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >
+    >::value,
+    bool
+>::type operator>=(Source const& lhs, Path const& rhs)
+{
+    return rhs.compare(lhs) <= 0;
+}
+
+
 // Note: Declared as a template to delay binding to Boost.ContainerHash functions and make the dependency optional
-template< typename T >
-inline typename boost::enable_if< boost::is_same< T, path >, std::size_t >::type hash_value(T const& p) BOOST_NOEXCEPT
+template< typename Path >
+inline typename boost::enable_if_c<
+    boost::is_same< Path, path >::value,
+    std::size_t
+>::type hash_value(Path const& p) BOOST_NOEXCEPT
 {
 #ifdef BOOST_WINDOWS_API
     std::size_t seed = 0u;
-    for (typename T::value_type const* it = p.c_str(); *it; ++it)
+    for (typename Path::value_type const* it = p.c_str(); *it; ++it)
         hash_combine(seed, *it == L'/' ? L'\\' : *it);
     return seed;
 #else // BOOST_POSIX_API
@@ -1197,33 +1479,34 @@ inline void swap(path& lhs, path& rhs) BOOST_NOEXCEPT
     lhs.swap(rhs);
 }
 
-inline path operator/(path const& lhs, path const& rhs)
+BOOST_FORCEINLINE path operator/(path lhs, path const& rhs)
 {
-    path p = lhs;
-    p /= rhs;
-    return p;
+    lhs.append(rhs);
+    return lhs;
 }
 
-#if !defined(BOOST_NO_CXX11_RVALUE_REFERENCES)
-inline path operator/(path&& lhs, path const& rhs)
+template< typename Source >
+BOOST_FORCEINLINE typename boost::enable_if_c<
+    detail::path_traits::is_convertible_to_path_source< typename boost::remove_cv< Source >::type >::value,
+    path
+>::type operator/(path lhs, Source const& rhs)
 {
-    lhs /= rhs;
-    return std::move(lhs);
+    lhs.append(rhs);
+    return lhs;
 }
-#endif
 
 //  inserters and extractors
 //    use boost::io::quoted() to handle spaces in paths
 //    use '&' as escape character to ease use for Windows paths
 
-template< class Char, class Traits >
+template< typename Char, typename Traits >
 inline std::basic_ostream< Char, Traits >&
 operator<<(std::basic_ostream< Char, Traits >& os, path const& p)
 {
     return os << boost::io::quoted(p.template string< std::basic_string< Char > >(), static_cast< Char >('&'));
 }
 
-template< class Char, class Traits >
+template< typename Char, typename Traits >
 inline std::basic_istream< Char, Traits >&
 operator>>(std::basic_istream< Char, Traits >& is, path& p)
 {
@@ -1275,10 +1558,96 @@ inline bool is_element_separator(path::value_type c) BOOST_NOEXCEPT
 //                  class path miscellaneous function implementations                 //
 //------------------------------------------------------------------------------------//
 
+namespace detail {
+
+inline bool path_algorithms::has_filename_v3(path const& p)
+{
+    return !p.m_pathname.empty();
+}
+
+inline bool path_algorithms::has_filename_v4(path const& p)
+{
+    return path_algorithms::find_filename_v4_size(p) > 0;
+}
+
+inline path path_algorithms::filename_v4(path const& p)
+{
+    string_type::size_type filename_size = path_algorithms::find_filename_v4_size(p);
+    string_type::size_type pos = p.m_pathname.size() - filename_size;
+    const value_type* ptr = p.m_pathname.c_str() + pos;
+    return path(ptr, ptr + filename_size);
+}
+
+inline path path_algorithms::extension_v4(path const& p)
+{
+    string_type::size_type extension_size = path_algorithms::find_extension_v4_size(p);
+    string_type::size_type pos = p.m_pathname.size() - extension_size;
+    const value_type* ptr = p.m_pathname.c_str() + pos;
+    return path(ptr, ptr + extension_size);
+}
+
+inline void path_algorithms::append_v4(path& left, path const& right)
+{
+    path_algorithms::append_v4(left, right.m_pathname.c_str(), right.m_pathname.c_str() + right.m_pathname.size());
+}
+
+} // namespace detail
+
+// Note: Because of the range constructor in C++23 std::string_view that involves a check for contiguous_range concept,
+//       any non-template function call that requires a check whether the source argument (which may be fs::path)
+//       is convertible to std::string_view must be made after fs::path::iterator is defined. This includes overload
+//       resolution and SFINAE checks. Otherwise, the concept check result formally changes between fs::path::iterator
+//       is not defined and defined, which causes compilation errors with gcc 11 and later.
+//       https://gcc.gnu.org/bugzilla/show_bug.cgi?id=106808
+
+BOOST_FORCEINLINE path::compare_op::result_type path::compare_op::operator() (const value_type* source, const value_type* source_end, const codecvt_type*) const
+{
+    path src;
+    src.m_pathname.assign(source, source_end);
+    return m_self.compare(src);
+}
+
+template< typename OtherChar >
+BOOST_FORCEINLINE path::compare_op::result_type path::compare_op::operator() (const OtherChar* source, const OtherChar* source_end, const codecvt_type* cvt) const
+{
+    path src;
+    detail::path_traits::convert(source, source_end, src.m_pathname, cvt);
+    return m_self.compare(src);
+}
+
+inline path& path::operator=(path const& p)
+{
+    return assign(p);
+}
+
+inline path& path::operator+=(path const& p)
+{
+    return concat(p);
+}
+
+BOOST_FORCEINLINE path& path::operator/=(path const& p)
+{
+    return append(p);
+}
+
+#if !defined(BOOST_WINDOWS_API)
+inline path path::generic_path() const
+{
+    return path(*this);
+}
+#endif
+
+inline path path::lexically_proximate(path const& base) const
+{
+    path tmp(lexically_relative(base));
+    return tmp.empty() ? *this : tmp;
+}
+
 inline path::reverse_iterator path::rbegin() const
 {
     return reverse_iterator(end());
 }
+
 inline path::reverse_iterator path::rend() const
 {
     return reverse_iterator(begin());
@@ -1299,92 +1668,164 @@ inline bool path::filename_is_dot_dot() const
     // to deal with "c:.." edge case on Windows when ':' acts as a separator
 }
 
+#if !defined(BOOST_FILESYSTEM_NO_DEPRECATED)
+
+BOOST_FILESYSTEM_DETAIL_DEPRECATED("Use path::lexically_normal() instead")
+BOOST_FORCEINLINE path& path::normalize()
+{
+    path tmp(lexically_normal());
+    m_pathname.swap(tmp.m_pathname);
+    return *this;
+}
+
+#endif // !defined(BOOST_FILESYSTEM_NO_DEPRECATED)
+
+// The following functions are defined differently, depending on Boost.Filesystem version in use.
+// To avoid ODR violation, these functions are not defined when the library itself is built.
+// This makes sure they are not compiled when the library is built, and the only version there is
+// is the one in user's code. Users are supposed to consistently use the same Boost.Filesystem version
+// in all their translation units.
+#if !defined(BOOST_FILESYSTEM_SOURCE)
+
+BOOST_FORCEINLINE path& path::append(path const& p)
+{
+    BOOST_FILESYSTEM_VERSIONED_SYM(detail::path_algorithms::append)(*this, p.m_pathname.data(), p.m_pathname.data() + p.m_pathname.size());
+    return *this;
+}
+
+BOOST_FORCEINLINE path& path::append(path const& p, codecvt_type const&)
+{
+    BOOST_FILESYSTEM_VERSIONED_SYM(detail::path_algorithms::append)(*this, p.m_pathname.data(), p.m_pathname.data() + p.m_pathname.size());
+    return *this;
+}
+
+BOOST_FORCEINLINE path& path::append(const value_type* begin, const value_type* end)
+{
+    BOOST_FILESYSTEM_VERSIONED_SYM(detail::path_algorithms::append)(*this, begin, end);
+    return *this;
+}
+
+BOOST_FORCEINLINE path& path::append(const value_type* begin, const value_type* end, codecvt_type const&)
+{
+    BOOST_FILESYSTEM_VERSIONED_SYM(detail::path_algorithms::append)(*this, begin, end);
+    return *this;
+}
+
+BOOST_FORCEINLINE path& path::remove_filename()
+{
+    BOOST_FILESYSTEM_VERSIONED_SYM(detail::path_algorithms::remove_filename)(*this);
+    return *this;
+}
+
+BOOST_FORCEINLINE path& path::replace_extension(path const& new_extension)
+{
+    BOOST_FILESYSTEM_VERSIONED_SYM(detail::path_algorithms::replace_extension)(*this, new_extension);
+    return *this;
+}
+
+BOOST_FORCEINLINE int path::compare(path const& p) const
+{
+    return BOOST_FILESYSTEM_VERSIONED_SYM(detail::path_algorithms::compare)(*this, p);
+}
+
+BOOST_FORCEINLINE path path::filename() const
+{
+    return BOOST_FILESYSTEM_VERSIONED_SYM(detail::path_algorithms::filename)(*this);
+}
+
+BOOST_FORCEINLINE path path::stem() const
+{
+    return BOOST_FILESYSTEM_VERSIONED_SYM(detail::path_algorithms::stem)(*this);
+}
+
+BOOST_FORCEINLINE path path::extension() const
+{
+    return BOOST_FILESYSTEM_VERSIONED_SYM(detail::path_algorithms::extension)(*this);
+}
+
+BOOST_FORCEINLINE bool path::has_filename() const
+{
+    return BOOST_FILESYSTEM_VERSIONED_SYM(detail::path_algorithms::has_filename)(*this);
+}
+
+BOOST_FORCEINLINE path path::lexically_normal() const
+{
+    return BOOST_FILESYSTEM_VERSIONED_SYM(detail::path_algorithms::lexically_normal)(*this);
+}
+
+namespace path_detail {
+
+BOOST_FORCEINLINE void path_iterator::increment()
+{
+    BOOST_FILESYSTEM_VERSIONED_SYM(detail::path_algorithms::increment)(*this);
+}
+
+BOOST_FORCEINLINE void path_iterator::decrement()
+{
+    BOOST_FILESYSTEM_VERSIONED_SYM(detail::path_algorithms::decrement)(*this);
+}
+
+BOOST_FORCEINLINE bool lexicographical_compare(path_iterator first1, path_iterator const& last1, path_iterator first2, path_iterator const& last2)
+{
+    return BOOST_FILESYSTEM_VERSIONED_SYM(detail::path_algorithms::lex_compare)(first1, last1, first2, last2) < 0;
+}
+
+} // namespace path_detail
+
+#endif // !defined(BOOST_FILESYSTEM_SOURCE)
+
 //--------------------------------------------------------------------------------------//
 //                     class path member template specializations                       //
 //--------------------------------------------------------------------------------------//
 
-template<>
+template< >
 inline std::string path::string< std::string >() const
 {
     return string();
 }
 
-template<>
+template< >
 inline std::wstring path::string< std::wstring >() const
 {
     return wstring();
 }
 
-template<>
-inline std::string path::string< std::string >(const codecvt_type& cvt) const
+template< >
+inline std::string path::string< std::string >(codecvt_type const& cvt) const
 {
     return string(cvt);
 }
 
-template<>
-inline std::wstring path::string< std::wstring >(const codecvt_type& cvt) const
+template< >
+inline std::wstring path::string< std::wstring >(codecvt_type const& cvt) const
 {
     return wstring(cvt);
 }
 
-template<>
+template< >
 inline std::string path::generic_string< std::string >() const
 {
     return generic_string();
 }
 
-template<>
+template< >
 inline std::wstring path::generic_string< std::wstring >() const
 {
     return generic_wstring();
 }
 
-template<>
+template< >
 inline std::string path::generic_string< std::string >(codecvt_type const& cvt) const
 {
     return generic_string(cvt);
 }
 
-template<>
+template< >
 inline std::wstring path::generic_string< std::wstring >(codecvt_type const& cvt) const
 {
     return generic_wstring(cvt);
 }
 
-//--------------------------------------------------------------------------------------//
-//                     path_traits convert function implementations                     //
-//                        requiring path::codecvt() be visable                          //
-//--------------------------------------------------------------------------------------//
-
-namespace path_traits { //  without codecvt
-
-inline void convert(const char* from,
-                    const char* from_end, // NULL for null terminated MBCS
-                    std::wstring& to)
-{
-    convert(from, from_end, to, path::codecvt());
-}
-
-inline void convert(const wchar_t* from,
-                    const wchar_t* from_end, // NULL for null terminated MBCS
-                    std::string& to)
-{
-    convert(from, from_end, to, path::codecvt());
-}
-
-inline void convert(const char* from, std::wstring& to)
-{
-    BOOST_ASSERT(!!from);
-    convert(from, NULL, to, path::codecvt());
-}
-
-inline void convert(const wchar_t* from, std::string& to)
-{
-    BOOST_ASSERT(!!from);
-    convert(from, NULL, to, path::codecvt());
-}
-
-} // namespace path_traits
 } // namespace filesystem
 } // namespace boost
 

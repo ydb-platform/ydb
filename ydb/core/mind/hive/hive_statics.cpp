@@ -384,7 +384,7 @@ void MakeTabletTypeSet(std::vector<TTabletTypes::EType>& list) {
 
 bool IsValidTabletType(TTabletTypes::EType type) {
     return (type > TTabletTypes::Unknown
-            && type < TTabletTypes::Reserved41
+            && type < TTabletTypes::EType_MAX
             );
 }
 

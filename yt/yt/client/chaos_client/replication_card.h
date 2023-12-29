@@ -53,6 +53,12 @@ struct TReplicaInfo
     int FindHistoryItemIndex(NTransactionClient::TTimestamp timestamp) const;
 };
 
+struct TReplicationProgressProjection
+{
+    NTableClient::TUnversionedRow From;
+    NTableClient::TUnversionedRow To;
+};
+
 struct TReplicationCard
     : public TRefCounted
 {
@@ -91,17 +97,31 @@ TString ToString(const TReplicationCardFetchOptions& options);
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void FormatValue(TStringBuilderBase* builder, const TReplicationProgress& replicationProgress, TStringBuf /*spec*/);
+void FormatValue(
+    TStringBuilderBase* builder,
+    const TReplicationProgress& replicationProgress,
+    TStringBuf /*spec*/,
+    std::optional<TReplicationProgressProjection> replicationProgressProjection = std::nullopt);
 TString ToString(const TReplicationProgress& replicationProgress);
 
 void FormatValue(TStringBuilderBase* builder, const TReplicaHistoryItem& replicaHistoryItem, TStringBuf /*spec*/);
 TString ToString(const TReplicaHistoryItem& replicaHistoryItem);
 
-void FormatValue(TStringBuilderBase* builder, const TReplicaInfo& replicaInfo, TStringBuf /*spec*/);
+void FormatValue(
+    TStringBuilderBase* builder,
+    const TReplicaInfo& replicaInfo,
+    TStringBuf /*spec*/,
+    std::optional<TReplicationProgressProjection> replicationProgressProjection = std::nullopt);
 TString ToString(const TReplicaInfo& replicaInfo);
 
-void FormatValue(TStringBuilderBase* builder, const TReplicationCard& replicationCard, TStringBuf /*spec*/);
-TString ToString(const TReplicationCard& replicationCard);
+void FormatValue(
+    TStringBuilderBase* builder,
+    const TReplicationCard& replicationCard,
+    TStringBuf /*spec*/,
+    std::optional<TReplicationProgressProjection> replicationProgressProjection = std::nullopt);
+TString ToString(
+    const TReplicationCard& replicationCard,
+    std::optional<TReplicationProgressProjection> replicationProgressProjection = std::nullopt);
 
 ////////////////////////////////////////////////////////////////////////////////
 

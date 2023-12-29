@@ -1027,9 +1027,9 @@
     ],
     "test.test[expr-to_hashed_set_varstruct_key-default.txt-Debug]": [
         {
-            "checksum": "f8ccea4289a903536726853f3f8ae4d4",
-            "size": 1699,
-            "uri": "https://{canondata_backend}/1936997/db38af28837978b5cfc77f77b59d165785593692/resource.tar.gz#test.test_expr-to_hashed_set_varstruct_key-default.txt-Debug_/opt.yql_patched"
+            "checksum": "7fb3fb8b72d96182dfaa30b0be8c825e",
+            "size": 1939,
+            "uri": "https://{canondata_backend}/1781765/f9e777fe209fab69cd7ccadffec108363985195b/resource.tar.gz#test.test_expr-to_hashed_set_varstruct_key-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[expr-to_hashed_set_varstruct_key-default.txt-Plan]": [

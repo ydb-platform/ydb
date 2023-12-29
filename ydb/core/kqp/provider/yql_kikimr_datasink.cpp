@@ -856,13 +856,16 @@ public:
                         .Features(settings.Features)
                         .Done()
                         .Ptr();
-                } else if (mode == "createObject") {
+                } else if (mode == "createObject" || mode == "createObjectIfNotExists") {
                     return Build<TKiCreateObject>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .ObjectId().Build(key.GetObjectId())
                         .TypeId().Build(key.GetObjectType())
                         .Features(settings.Features)
+                        .ExistingOk<TCoAtom>()
+                            .Value(mode == "createObjectIfNotExists")
+                        .Build()
                         .Done()
                         .Ptr();
                 } else if (mode == "alterObject") {
@@ -874,13 +877,16 @@ public:
                         .Features(settings.Features)
                         .Done()
                         .Ptr();
-                } else if (mode == "dropObject") {
+                } else if (mode == "dropObject" || mode == "dropObjectIfExists") {
                     return Build<TKiDropObject>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .ObjectId().Build(key.GetObjectId())
                         .TypeId().Build(key.GetObjectType())
                         .Features(settings.Features)
+                        .MissingOk<TCoAtom>()
+                            .Value(mode == "dropObjectIfExists")
+                        .Build()
                         .Done()
                         .Ptr();
                 } else {
@@ -910,12 +916,15 @@ public:
                         .Settings(settings.Other)
                         .Done()
                         .Ptr();
-                } else if (mode == "dropUser") {
+                } else if (mode == "dropUser" || mode == "dropUserIfExists") {
                     return Build<TKiDropUser>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .UserName().Build(key.GetRoleName())
                         .Settings(settings.Other)
+                        .MissingOk<TCoAtom>()
+                            .Value(mode == "dropUserIfExists")
+                        .Build()
                         .Done()
                         .Ptr();
                 } else if (mode == "createGroup") {
@@ -943,12 +952,15 @@ public:
                         .NewName(settings.NewName.Cast())
                         .Done()
                         .Ptr();
-                } else if (mode == "dropGroup") {
+                } else if (mode == "dropGroup" || mode == "dropGroupIfExists") {
                     return Build<TKiDropGroup>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .GroupName().Build(key.GetRoleName())
                         .Settings(settings.Other)
+                        .MissingOk<TCoAtom>()
+                            .Value(mode == "dropGroupIfExists")
+                        .Build()
                         .Done()
                         .Ptr();
                 } else {

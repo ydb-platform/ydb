@@ -177,7 +177,7 @@ TExprBase MakeNonexistingRowsFilter(const TDqPhyPrecompute& inputRows, const TDq
 TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecompute& inputRows,
     const TDqPhyPrecompute& lookupDict, const THashSet<TStringBuf>& inputColumns,
     const THashSet<TStringBuf>& indexColumns, const TKikimrTableDescription& table, TPositionHandle pos,
-    TExprContext& ctx)
+    TExprContext& ctx, bool opt)
 {
     // Check if we can update index table from just input data
     bool allColumnFromInput = true; // - indicate all data from input
@@ -250,14 +250,18 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
                         .Build()
                     .Done()
             );
+            TExprNode::TPtr member = payload.Ptr();
+            if (opt) {
+                member = Build<TCoNth>(ctx, pos)
+                    .Tuple(member)
+                    .Index().Build(0)
+                    .Done().Ptr();
+            }
             presentKeyRow.emplace_back(
                 Build<TCoNameValueTuple>(ctx, pos)
                     .Name(columnAtom)
                     .Value<TCoMember>()
-                        .Struct<TCoNth>()
-                            .Tuple(payload)
-                            .Index().Build(0)
-                            .Build()
+                        .Struct(member)
                         .Name(columnAtom)
                         .Build()
                     .Done()
@@ -269,19 +273,29 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
         .Add(presentKeyRow)
         .Done();
 
+    TExprNode::TPtr b;
+
+    if (opt) {
+        b = Build<TCoFlatOptionalIf>(ctx, pos)
+            .Predicate<TCoNth>()
+                .Tuple(payload)
+                .Index().Build(1)
+                .Build()
+            .Value<TCoJust>()
+                .Input(presentKeyRowStruct)
+                .Build()
+            .Done().Ptr();
+    } else {
+        b = Build<TCoJust>(ctx, pos)
+            .Input(presentKeyRowStruct)
+            .Done().Ptr();
+    }
+
     TExprBase flatmapBody = Build<TCoIfPresent>(ctx, pos)
         .Optional(lookup)
         .PresentHandler<TCoLambda>()
             .Args(payload)
-            .Body<TCoFlatOptionalIf>()
-                .Predicate<TCoNth>()
-                    .Tuple(payload)
-                    .Index().Build(1)
-                    .Build()
-                .Value<TCoJust>()
-                    .Input(presentKeyRowStruct)
-                    .Build()
-                .Build()
+            .Body(b)
             .Build()
         .MissingValue<TCoJust>()
             .Input<TCoAsStruct>()
@@ -531,12 +545,18 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         auto indexTableColumnsWithoutData = indexTableColumns;
 
         bool indexDataColumnsUpdated = false;
+        bool optUpsert = true;
         for (const auto& column : indexDesc->DataColumns) {
             // TODO: Conder not fetching/updating data columns without input value.
             YQL_ENSURE(indexTableColumns.emplace(column).second);
 
             if (inputColumnsSet.contains(column)) {
                 indexDataColumnsUpdated = true;
+                // 'skip index update' optimization checks given value equal to saved one
+                // so the type must be equatable to perform it
+                auto t = table.GetColumnType(column);
+                YQL_ENSURE(t);
+                optUpsert &= t->IsEquatable();
             }
         }
 
@@ -695,7 +715,9 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
 
         if (indexKeyColumnsUpdated) {
             // Have to delete old index value from index table in case when index key columns were updated
-            auto deleteIndexKeys = MakeRowsFromTupleDict(lookupDictRecomputed, pk, indexTableColumnsWithoutData, pos, ctx);
+            auto deleteIndexKeys = optUpsert
+                ? MakeRowsFromTupleDict(lookupDictRecomputed, pk, indexTableColumnsWithoutData, pos, ctx)
+                : MakeRowsFromDict(lookupDict.Cast(), pk, indexTableColumnsWithoutData, pos, ctx);
 
             auto indexDelete = Build<TKqlDeleteRows>(ctx, pos)
                 .Table(tableNode)
@@ -711,8 +733,11 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         needIndexTableUpdate = needIndexTableUpdate || indexKeyColumnsUpdated || indexDataColumnsUpdated;
 
         if (needIndexTableUpdate) {
-            auto upsertIndexRows = MakeUpsertIndexRows(mode, inputRowsAndKeys.RowsPrecompute, lookupDictRecomputed,
-                inputColumnsSet, indexTableColumns, table, pos, ctx);
+            auto upsertIndexRows = optUpsert
+                ? MakeUpsertIndexRows(mode, inputRowsAndKeys.RowsPrecompute, lookupDictRecomputed,
+                      inputColumnsSet, indexTableColumns, table, pos, ctx, true)
+                : MakeUpsertIndexRows(mode, inputRowsAndKeys.RowsPrecompute, lookupDict.Cast(),
+                      inputColumnsSet, indexTableColumns, table, pos, ctx, false);
 
             auto indexUpsert = Build<TKqlUpsertRows>(ctx, pos)
                 .Table(tableNode)

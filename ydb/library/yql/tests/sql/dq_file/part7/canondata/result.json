@@ -669,9 +669,9 @@
     ],
     "test.test[expr-as_dict_tuple_key-default.txt-Debug]": [
         {
-            "checksum": "5a9f1676547d3807c35c226068e4a7aa",
-            "size": 1885,
-            "uri": "https://{canondata_backend}/1936947/900ed4b07b3e497bdca6ea0063b227dc2b03c52d/resource.tar.gz#test.test_expr-as_dict_tuple_key-default.txt-Debug_/opt.yql_patched"
+            "checksum": "8b762676429d2b11b1acd24acc02711b",
+            "size": 2226,
+            "uri": "https://{canondata_backend}/1871182/1190fc5a06f4110089c31af3c580fe42db3cce31/resource.tar.gz#test.test_expr-as_dict_tuple_key-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[expr-as_dict_tuple_key-default.txt-Plan]": [

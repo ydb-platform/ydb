@@ -636,9 +636,9 @@
     ],
     "test.test[expr-as_dict_dict_key-default.txt-Debug]": [
         {
-            "checksum": "f16e4cf85b1a7da3cc195c1763c9e255",
-            "size": 1133,
-            "uri": "https://{canondata_backend}/1817427/cd1ccdb594fb5c0d7ccd4116b70e61c92e494ff1/resource.tar.gz#test.test_expr-as_dict_dict_key-default.txt-Debug_/opt.yql_patched"
+            "checksum": "d9d87b670d8672018682fbea72e69b63",
+            "size": 1425,
+            "uri": "https://{canondata_backend}/1937367/bddc39b328825607a7c8da47b95102cc9333b395/resource.tar.gz#test.test_expr-as_dict_dict_key-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[expr-as_dict_dict_key-default.txt-Plan]": [
@@ -709,9 +709,9 @@
     ],
     "test.test[expr-to_hashed_set_vartuple_key-default.txt-Debug]": [
         {
-            "checksum": "f281ba1402a632de3c5f77b5306c00a4",
-            "size": 1676,
-            "uri": "https://{canondata_backend}/212715/cac0988e3f0d6d4f0bc782106479af0e9a38af20/resource.tar.gz#test.test_expr-to_hashed_set_vartuple_key-default.txt-Debug_/opt.yql_patched"
+            "checksum": "ffe5cc372feacb4861741feff07e5a91",
+            "size": 1916,
+            "uri": "https://{canondata_backend}/1937367/bddc39b328825607a7c8da47b95102cc9333b395/resource.tar.gz#test.test_expr-to_hashed_set_vartuple_key-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[expr-to_hashed_set_vartuple_key-default.txt-Plan]": [

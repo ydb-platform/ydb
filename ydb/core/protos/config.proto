@@ -1543,7 +1543,7 @@ message TTracingConfig {
     optional uint32 Port = 2;
     optional string RootCA = 3;
     optional string ServiceName = 4;
-    optional TAuthCredentials AuthConfig = 5;
+    optional TAuthConfig AuthConfig = 5;
 }
 
 message TFailureInjectionConfig {

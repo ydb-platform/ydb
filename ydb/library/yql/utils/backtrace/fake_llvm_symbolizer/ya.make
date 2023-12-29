@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/llvm12/lib/DebugInfo/Symbolize
+    contrib/libs/llvm14/lib/DebugInfo/Symbolize
 )
 
 END()

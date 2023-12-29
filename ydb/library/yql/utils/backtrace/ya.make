@@ -23,7 +23,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    contrib/libs/llvm12/lib/DebugInfo/Symbolize
+    contrib/libs/llvm14/lib/DebugInfo/Symbolize
     library/cpp/deprecated/atomic
 )
 

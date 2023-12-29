@@ -1,6 +1,6 @@
 #include "fake_llvm_symbolizer.h"
 
-#include <contrib/libs/llvm12/lib/DebugInfo/Symbolize/SymbolizableObjectFile.h>
+#include <contrib/libs/llvm14/lib/DebugInfo/Symbolize/SymbolizableObjectFile.h>
 #include <util/string/builder.h>
 #include <llvm/DebugInfo/Symbolize/DIPrinter.h>
 #include <llvm/DebugInfo/Symbolize/SymbolizableModule.h>
@@ -382,7 +382,8 @@ llvm::Expected<llvm::symbolize::SymbolizableModule*> GetOrCreateModuleInfo(const
     ObjectPair Objects = ObjectsOrErr.get();
 
     // Only DWARF available on linux
-    std::unique_ptr<llvm::DIContext> Context = llvm::DWARFContext::create(*Objects.second, nullptr, "", DoNothing, DoNothing);
+    std::unique_ptr<llvm::DIContext> Context = llvm::DWARFContext::create(
+        *Objects.second, llvm::DWARFContext::ProcessDebugRelocations::Process, nullptr, "", DoNothing, DoNothing);
     return CreateModuleInfo(Objects.first, std::move(Context), ModuleName);
 }
 
@@ -487,8 +488,16 @@ TString SymbolizeAndDumpToString(const std::string &moduleName, llvm::object::Se
 
         std::stringstream ss;
         TRawOStreamProxy stream_proxy(ss);
-        llvm::symbolize::DIPrinter printer(stream_proxy, true, true, false);
-        printer << value;
+        llvm::symbolize::PrinterConfig config;
+        config.PrintAddress = true;
+        config.PrintFunctions = true;
+        config.Pretty = true;
+        config.Verbose = false;
+        config.SourceContextLines = 0;
+        llvm::symbolize::LLVMPrinter printer(stream_proxy, stream_proxy, config);
+        llvm::symbolize::Request request;
+        request.Address = moduleOffset.Address + offset;
+        printer.print(request, value);
         ss.flush();
 
         return ss.str();

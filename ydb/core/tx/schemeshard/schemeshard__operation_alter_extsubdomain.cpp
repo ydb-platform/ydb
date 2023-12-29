@@ -44,7 +44,7 @@ struct TParamsDelta {
 
 std::tuple<NKikimrScheme::EStatus, TString>
 VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TPtr& current,
-             const NKikimrSubDomains::TSubDomainSettings& input, const bool isExclusiveDynamicNodesEnabled) {
+             const NKikimrSubDomains::TSubDomainSettings& input, const bool isServerlessExclusiveDynamicNodesEnabled) {
     auto paramError = [](const TStringBuf& msg) {
         return std::make_tuple(NKikimrScheme::EStatus::StatusInvalidParameter,
             TStringBuilder() << "Invalid ExtSubDomain request: " << msg
@@ -250,9 +250,9 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
     // ServerlessComputeResourcesMode check
     bool serverlessComputeResourcesModeChanged = false;
     if (input.HasServerlessComputeResourcesMode()) {
-        if (!isExclusiveDynamicNodesEnabled) {
+        if (!isServerlessExclusiveDynamicNodesEnabled) {
             return std::make_tuple(NKikimrScheme::EStatus::StatusPreconditionFailed,
-                "Unsupported: feature flag EnableExclusiveDynamicNodes is off"
+                "Unsupported: feature flag EnableServerlessExclusiveDynamicNodes is off"
             );
         }
 
@@ -290,10 +290,10 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
 
 void VerifyParams(TProposeResponse* result, TParamsDelta* delta, const TPathId pathId,
                   const TSubDomainInfo::TPtr& current, const NKikimrSubDomains::TSubDomainSettings& input,
-                  const bool isExclusiveDynamicNodesEnabled) {
+                  const bool isServerlessExclusiveDynamicNodesEnabled) {
     // TProposeRespose should come in assuming positive outcome (status NKikimrScheme::StatusAccepted, no errors)
     Y_ABORT_UNLESS(result->IsAccepted());
-    auto [status, reason] = VerifyParams(delta, pathId, current, input, isExclusiveDynamicNodesEnabled);
+    auto [status, reason] = VerifyParams(delta, pathId, current, input, isServerlessExclusiveDynamicNodesEnabled);
     result->SetStatus(status, reason);
 }
 
@@ -602,7 +602,7 @@ public:
 
         // Check params and build change delta
         TParamsDelta delta;
-        VerifyParams(result.Get(), &delta, basenameId, subdomainInfo, inputSettings, context.SS->EnableExclusiveDynamicNodes);
+        VerifyParams(result.Get(), &delta, basenameId, subdomainInfo, inputSettings, context.SS->EnableServerlessExclusiveDynamicNodes);
         if (!result->IsAccepted()) {
             return result;
         }
@@ -854,7 +854,7 @@ public:
 
         // Check params and build change delta
         TParamsDelta delta;
-        VerifyParams(result.Get(), &delta, basenameId, subdomainInfo, inputSettings, context.SS->EnableExclusiveDynamicNodes);
+        VerifyParams(result.Get(), &delta, basenameId, subdomainInfo, inputSettings, context.SS->EnableServerlessExclusiveDynamicNodes);
         if (!result->IsAccepted()) {
             return result;
         }
@@ -1096,7 +1096,7 @@ TVector<ISubOperation::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId id, 
     // Check params and build change delta
     TParamsDelta delta;
     {
-        auto [status, reason] = VerifyParams(&delta, basenameId, subdomainInfo, inputSettings, context.SS->EnableExclusiveDynamicNodes);
+        auto [status, reason] = VerifyParams(&delta, basenameId, subdomainInfo, inputSettings, context.SS->EnableServerlessExclusiveDynamicNodes);
         if (status != NKikimrScheme::EStatus::StatusAccepted) {
             return errorResult(status, reason);
         }

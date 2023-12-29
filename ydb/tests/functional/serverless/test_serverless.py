@@ -48,7 +48,7 @@ CLUSTER_CONFIG = dict(
     },
     enforce_user_token_requirement=True,
     default_user_sid='user@builtin',
-    extra_feature_flags=['enable_exclusive_dynamic_nodes']
+    extra_feature_flags=['enable_serverless_exclusive_dynamic_nodes']
 )
 
 

@@ -255,7 +255,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
     Y_UNIT_TEST(TestServerlessComputeResourcesMode) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableExclusiveDynamicNodes(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableServerlessExclusiveDynamicNodes(true));
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
@@ -359,7 +359,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
     Y_UNIT_TEST(TestServerlessComputeResourcesModeValidation) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableExclusiveDynamicNodes(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableServerlessExclusiveDynamicNodes(true));
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
@@ -440,7 +440,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
     Y_UNIT_TEST(TestServerlessComputeResourcesModeFeatureFlag) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableExclusiveDynamicNodes(false));
+        TTestEnv env(runtime, TTestEnvOptions().EnableServerlessExclusiveDynamicNodes(false));
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
@@ -504,7 +504,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                 ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED
                 Name: "ServerLess0"
             )",
-            {{ TEvSchemeShard::EStatus::StatusPreconditionFailed, "Unsupported: feature flag EnableExclusiveDynamicNodes is off" }}
+            {{ TEvSchemeShard::EStatus::StatusPreconditionFailed, "Unsupported: feature flag EnableServerlessExclusiveDynamicNodes is off" }}
         );
     }
 }

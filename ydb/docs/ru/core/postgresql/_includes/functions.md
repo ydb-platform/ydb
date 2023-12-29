@@ -716,12 +716,10 @@ starts_with('alphabet', 'alph') → true
 ||string_to_array ( string text, delimiter text [, null_string text ] ) → text[]|
 Splits the string at occurrences of delimiter and forms the resulting fields into a text array. If delimiter is NULL, each character in the string will become a separate element in the array. If delimiter is an empty string, then the string is treated as a single field. If null_string is supplied and is not NULL, fields matching that string are replaced by NULL.|
 ```sql
-string_to_array('xx~~yy~~zz', '~~', 'yy') → {xx,NULL,zz}
 ```||
 ||string_to_table ( string text, delimiter text [, null_string text ] ) → setof text|
 Splits the string at occurrences of delimiter and returns the resulting fields as a set of text rows. If delimiter is NULL, each character in the string will become a separate row of the result. If delimiter is an empty string, then the string is treated as a single field. If null_string is supplied and is not NULL, fields matching that string are replaced by NULL. (NOT SUPPORTED)|
 ```sql
-#string_to_table('xx~^~yy~^~zz', '~^~', 'yy') → [xx,NULL,zz]
 ```||
 ||to_ascii ( string text ) → text  
 to_ascii ( string text, encoding name ) → text  

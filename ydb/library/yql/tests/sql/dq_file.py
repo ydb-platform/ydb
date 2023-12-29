@@ -52,6 +52,12 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
                     for data in r['Write']:
                         if sort and 'Data' in data:
                             data['Data'] = sorted(data['Data'])
+                        if 'Ref' in data:
+                            data['Ref'] = []
+                            data['Truncated'] = True
+                        if 'Data' in data and len(data['Data']) == 0:
+                            del data['Data']
+                # return res # TODO: uncomment it in future
 
             program_sql = os.path.join(DATA_PATH, suite, '%s.sql' % case)
             with codecs.open(program_sql, encoding='utf-8') as program_file_descr:

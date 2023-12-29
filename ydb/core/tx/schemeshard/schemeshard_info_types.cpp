@@ -1503,6 +1503,7 @@ void TAggregatedStats::UpdateTableStats(const TPathId& pathId, const TPartitionS
         oldStats.RangeReadRows = 0;
     }
     TableStats[pathId].RowCount += (newStats.RowCount - oldStats.RowCount);
+    TableStats[pathId].DataSize += (newStats.DataSize - oldStats.DataSize);
 }
 
 void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState) {

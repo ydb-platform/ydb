@@ -273,9 +273,6 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         }
 
     } else if (isColumnTable) {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "PersistSingleStats: ColumnTable rec.GetColumnTables() size=" 
-            << rec.GetColumnTables().size());
-
         auto columnTable = Self->ColumnTables.TakeVerified(pathId);
         oldAggrStats = columnTable->GetStats().Aggregated;
         columnTable->UpdateShardStats(shardIdx, newStats);

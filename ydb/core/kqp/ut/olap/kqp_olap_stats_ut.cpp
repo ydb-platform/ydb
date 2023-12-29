@@ -10,8 +10,9 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpOlapStats) {
-    constexpr size_t inserted_rows = 2;
+    constexpr size_t inserted_rows = 1000;
     constexpr size_t tables_in_store = 400;
+    constexpr size_t size_single_table = 13152;
 
     const TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
@@ -59,6 +60,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         const auto& description = describeResult.GetTableDescription();
 
         UNIT_ASSERT_VALUES_EQUAL(inserted_rows, description.GetTableRows());
+        UNIT_ASSERT_VALUES_EQUAL(size_single_table, description.GetTableSize());
     }
 
     Y_UNIT_TEST(AddRowsTableStore) {
@@ -95,6 +97,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         const auto& description = describeResult.GetTableDescription();
 
         UNIT_ASSERT_VALUES_EQUAL(inserted_rows, description.GetTableRows());
+        UNIT_ASSERT_VALUES_EQUAL(size_single_table, description.GetTableSize());
     }
 
     Y_UNIT_TEST(AddRowsSomeTablesStore) {
@@ -134,6 +137,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
             const auto& description = describeResult.GetTableDescription();
 
             UNIT_ASSERT_VALUES_EQUAL(inserted_rows, description.GetTableRows());
+            UNIT_ASSERT_VALUES_EQUAL(size_single_table, description.GetTableSize());
         }
     }
 }

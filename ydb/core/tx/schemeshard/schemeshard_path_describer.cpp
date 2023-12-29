@@ -910,8 +910,6 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
     TPath path = Params.HasPathId()
         ? TPath::Init(pathId, Self)
         : TPath::Resolve(pathStr, Self);
-
-
     {
         TPath::TChecker checks = path.Check();
         checks
@@ -997,7 +995,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             DescribeOlapStore(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeColumnTable:
-            DescribeColumnTable(pathId, base);
+            DescribeColumnTable(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypePersQueueGroup:
             DescribePersQueueGroup(base->PathId, base);

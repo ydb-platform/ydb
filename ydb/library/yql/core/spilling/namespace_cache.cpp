@@ -3,6 +3,7 @@
 #include "storage/storage.h"
 #include "util/generic/buffer.h"
 #include "ydb/library/actors/util/rc_buf.h"
+#include "ydb/library/yql/utils/rope_over_buffer.h"
 
 #include <limits>
 #include <optional>
@@ -71,12 +72,9 @@ std::optional<XXH32_hash_t> readRopeFromFile(TRope& rope, TAtomicSharedPtr<ISpil
         }
         bytesRead += sizeof(blobSize);
 
-
-        // auto buffer = std::shared_ptr<char[]>(new char[size]);
+        auto blobPtr = std::shared_ptr<char[]>(new char[blobSize]);
         // https://a.yandex-team.ru/arcadia/contrib/ydb/library/yql/providers/dq/task_runner/tasks_runner_pipe.cpp?rev=r13156942#L89
-        TRcBuf blob;
-        blob.reserve(blobSize);
-        readRes = spillDataFile->Read(offset, blob.UnsafeGetDataMut(), blobSize);
+        readRes = spillDataFile->Read(offset, blobPtr.get(), blobSize);
         if (readRes < 0) {
             YQL_LOG(ERROR) << "Read failed" << Endl;
             isFailed = true;
@@ -84,9 +82,9 @@ std::optional<XXH32_hash_t> readRopeFromFile(TRope& rope, TAtomicSharedPtr<ISpil
         }
 
         XXH32_update(state, &blobSize, sizeof(blobSize));
-        XXH32_update(state, blob.GetData(), blobSize);
+        XXH32_update(state, blobPtr.get(), blobSize);
 
-        rope.Insert(rope.End(), TRope(std::move(blob)));
+        rope.Insert(rope.End(), MakeReadOnlyRope(blobPtr, blobPtr.get(), blobSize));
         bytesRead += blobSize;
     }
     

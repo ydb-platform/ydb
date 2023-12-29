@@ -159,6 +159,7 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
         for (ui32 i = 0; i < iters; i++) {
             ftrl = session->Load(TString("Test"), TString("test" + std::to_string(i)));
         }
+        const auto val = ftrl.GetValue();
         end = std::chrono::steady_clock::now();
         execTime = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
         CTEST << "Execution time for " << iters << " load calls (microseconds): " << execTime << Endl;

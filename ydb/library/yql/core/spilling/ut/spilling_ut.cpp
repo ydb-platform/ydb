@@ -29,19 +29,16 @@ constexpr bool IsVerbose = true;
 #define CTEST (IsVerbose ? Cerr : Cnull)
 
 
-// TRope CreateContiguousRope(TString s, size_t sliceSize) {
-//     TRope res;
-//     for (size_t i = 0; i < s.size(); ) {
-//         size_t len = std::min(sliceSize, s.size() - i);
-//         if (i % 2) {
-//             res.Insert(res.End(), TRope(MakeIntrusive<TRopeStringBackend>(s.substr(i, len))));
-//         } else {
-//             res.Insert(res.End(), TRope(s.substr(i, len)));
-//         }
-//         i += len;
-//     }
-//     return res;
-// }
+TRope CreateRope(int content, size_t chunks, size_t chunkSize) {
+    TRope rope;
+
+    for (size_t i = 0; i < chunks; ++i) {
+        auto blobPtr = std::shared_ptr<char[]>(new char[chunkSize]);
+        memset(blobPtr.get(), content, chunkSize);
+        rope.Insert(rope.End(), MakeReadOnlyRope(blobPtr, blobPtr.get(), chunkSize));
+    }
+    return rope;
+}
 
 Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
 
@@ -78,11 +75,7 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
         CTEST << "Mem usage before ropes prepare (MB): " << mi.RSS / (1024 * 1024) << Endl;
         std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
         for (ui32 i = 0; i < iters; i++) {
-            TBuffer buf(ropeSize);
-            buf.Resize(ropeSize);
-            memset(buf.Data(), i+1, ropeSize);
-            ropes1.emplace_back(std::move(buf.Data()));
-            memset(buf.Data(), i+1, ropeSize);
+            ropes1.emplace_back(std::move(CreateRope(i+1, 1, ropeSize)));
         }
         mi = NMemInfo::GetMemInfo();
         CTEST << "Mem usage after ropes prepare (MB): " << mi.RSS / (1024 * 1024) << Endl;
@@ -141,10 +134,7 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
         const ui32 ropeSize = 1024*1024;
         const ui32 iters = 1000;
         for (ui32 i = 0; i < iters; i++) {
-            TBuffer buf(ropeSize);
-            buf.Resize(ropeSize);
-            memset(buf.Data(), i+1, ropeSize );
-            TRope rope(std::move(buf.Data()));
+            TRope rope = CreateRope(i+1, 1, ropeSize);
             ftr = session->Save(TString("Test"), TString("test" + std::to_string(i)), std::move(rope));
         }
         std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
@@ -213,13 +203,10 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
 
         NThreading::TFuture<TOperationResults> ftr;
         std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-        const ui32 bufSize = 1024*1024;
+        const ui32 ropeSize = 1024*1024;
         const ui32 iters = 1000;
         for (ui32 i = 0; i < iters; i++) {
-            TBuffer buf(bufSize);
-            buf.Resize(bufSize);
-            memset(buf.Data(), i+1, bufSize );
-            TRope rope(std::move(buf.Data()));
+            TRope rope = CreateRope(i+1, 1, ropeSize);
             ftr = session->Save(TString("Test"), TString("test" + std::to_string(i)), std::move(rope));
         }
         std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
@@ -263,13 +250,10 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
             NThreading::TFuture<TOperationResults> ftr;
             std::chrono::steady_clock::time_point begin =
                 std::chrono::steady_clock::now();
-            const ui32 bufSize = 1024 * 1024;
+            const ui32 ropeSize = 1024 * 1024;
             const ui32 iters = 1000;
             for (ui32 i = 0; i < iters; i++) {
-              TBuffer buf(bufSize);
-              buf.Resize(bufSize);
-              memset(buf.Data(), i + 1, bufSize );
-              TRope rope(std::move(buf.Data()));
+              TRope rope = CreateRope(i+1, 1, ropeSize);
               ftr = session->Save(TString("Test"),
                                   TString("test" + std::to_string(i)),
                                   std::move(rope));
@@ -337,16 +321,13 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
 
         NThreading::TFuture<TOperationResults> ftr;
         std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-        const ui32 bufSize = 1024*1024;
+        const ui32 ropeSize = 1024*1024;
         const ui32 iters = 1000;
         auto res = session->OpenStream(TString("Test"), TString("Stream1"));
         auto st1 = std::move(res.first);
         CTEST << "Stream size before save: " << st1->Size() << Endl;
         for (ui32 i = 0; i < iters; i++) {
-            TBuffer buf(bufSize);
-            buf.Resize(bufSize);
-            memset(buf.Data(), i+1, bufSize );
-            TRope rope(std::move(buf.Data()));
+            TRope rope = CreateRope(i+1, 1, ropeSize);
             ftr = st1->Save(std::move(rope));
         }
         CTEST << "Stream size after save: " << st1->Size() << Endl;        

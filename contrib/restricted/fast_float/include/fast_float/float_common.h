@@ -134,7 +134,7 @@ using parse_options = parse_options_t<char>;
 #define FASTFLOAT_NEON 1
 #endif
 
-#if defined(FASTFLOAT_SSE2) || defined(FASTFLOAT_ARM64)
+#if defined(FASTFLOAT_SSE2) || defined(FASTFLOAT_NEON)
 #define FASTFLOAT_HAS_SIMD 1
 #endif
 
@@ -173,7 +173,7 @@ using parse_options = parse_options_t<char>;
 // rust style `try!()` macro, or `?` operator
 #define FASTFLOAT_TRY(x) { if (!(x)) return false; }
 
-#define FASTFLOAT_ENABLE_IF(...) typename std::enable_if<(__VA_ARGS__), int>::type = 0
+#define FASTFLOAT_ENABLE_IF(...) typename std::enable_if<(__VA_ARGS__), int>::type
 
 
 namespace fast_float {
@@ -184,6 +184,20 @@ fastfloat_really_inline constexpr bool cpp20_and_in_constexpr() {
 #else
   return false;
 #endif
+}
+
+template <typename T>
+fastfloat_really_inline constexpr bool is_supported_float_type() {
+  return std::is_same<T, float>::value || std::is_same<T, double>::value;
+}
+
+template <typename UC>
+fastfloat_really_inline constexpr bool is_supported_char_type() {
+  return
+    std::is_same<UC, char>::value ||
+    std::is_same<UC, wchar_t>::value ||
+    std::is_same<UC, char16_t>::value ||
+    std::is_same<UC, char32_t>::value;
 }
 
 // Compares two ASCII strings in a case insensitive manner.
@@ -234,7 +248,7 @@ int leading_zeroes_generic(uint64_t input_num, int last_bit = 0) {
     if(input_num & uint64_t(            0xff00)) { input_num >>=  8; last_bit |=  8; }
     if(input_num & uint64_t(              0xf0)) { input_num >>=  4; last_bit |=  4; }
     if(input_num & uint64_t(               0xc)) { input_num >>=  2; last_bit |=  2; }
-    if(input_num & uint64_t(               0x2)) { input_num >>=  1; last_bit |=  1; }
+    if(input_num & uint64_t(               0x2)) { /* input_num >>=  1; */ last_bit |=  1; }
     return 63 - last_bit;
 }
 
@@ -674,6 +688,69 @@ constexpr char32_t const * str_const_inf<char32_t>()
 {
     return U"infinity";
 }
+
+
+template <typename = void>
+struct int_luts {
+  static constexpr uint8_t chdigit[] = {
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 255, 255, 255, 255, 255, 255,
+    255, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+    25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 255, 255, 255, 255, 255,
+    255, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+    25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255
+  };
+
+  static constexpr size_t maxdigits_u64[] = {
+    64, 41, 32, 28, 25, 23, 22, 21,
+    20, 19, 18, 18, 17, 17, 16, 16,
+    16, 16, 15, 15, 15, 15, 14, 14,
+    14, 14, 14, 14, 14, 13, 13, 13,
+    13, 13, 13
+  };
+
+  static constexpr uint64_t min_safe_u64[] = {
+    9223372036854775808ull, 12157665459056928801ull, 4611686018427387904, 7450580596923828125, 4738381338321616896,
+    3909821048582988049, 9223372036854775808ull, 12157665459056928801ull, 10000000000000000000ull, 5559917313492231481,
+    2218611106740436992, 8650415919381337933, 2177953337809371136, 6568408355712890625, 1152921504606846976, 
+    2862423051509815793, 6746640616477458432, 15181127029874798299ull, 1638400000000000000, 3243919932521508681,
+    6221821273427820544, 11592836324538749809ull, 876488338465357824, 1490116119384765625, 2481152873203736576,
+    4052555153018976267, 6502111422497947648, 10260628712958602189ull, 15943230000000000000ull, 787662783788549761,
+    1152921504606846976, 1667889514952984961, 2386420683693101056, 3379220508056640625, 4738381338321616896
+  };
+};
+
+template <typename T>
+constexpr uint8_t int_luts<T>::chdigit[];
+
+template <typename T>
+constexpr size_t int_luts<T>::maxdigits_u64[];
+
+template <typename T>
+constexpr uint64_t int_luts<T>::min_safe_u64[];
+
+template <typename UC>
+fastfloat_really_inline
+constexpr uint8_t ch_to_digit(UC c) { return int_luts<>::chdigit[static_cast<unsigned char>(c)]; }
+
+fastfloat_really_inline
+constexpr size_t max_digits_u64(int base) { return int_luts<>::maxdigits_u64[base - 2]; }
+
+// If a u64 is exactly max_digits_u64() in length, this is
+// the value below which it has definitely overflowed. 
+fastfloat_really_inline
+constexpr uint64_t min_safe_u64(int base) { return int_luts<>::min_safe_u64[base - 2]; }
+
 } // namespace fast_float
 
 #endif

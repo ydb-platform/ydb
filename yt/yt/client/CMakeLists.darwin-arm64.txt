@@ -167,6 +167,7 @@ target_sources(yt-yt-client PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/client/queue_client/common.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/queue_client/config.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/queue_client/consumer_client.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/client/queue_client/helpers.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/queue_client/partition_reader.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/queue_client/queue_rowset.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/ypath/rich.cpp

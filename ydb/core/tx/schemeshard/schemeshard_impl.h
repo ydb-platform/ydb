@@ -270,6 +270,7 @@ public:
     bool EnablePQConfigTransactionsAtSchemeShard = false;
     bool EnableStatistics = false;
     bool EnableTablePgTypes = false;
+    bool EnableServerlessExclusiveDynamicNodes = false;
 
     TShardDeleter ShardDeleter;
 

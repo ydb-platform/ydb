@@ -1014,11 +1014,11 @@ protected:
                     data);
                 return;
             case EUtf8Check::ThrowOnFail:
-                THROW_ERROR_EXCEPTION("String field got non UTF-8 value (Path: %v, Value: %v)",
-                    YPathStack_.GetHumanReadablePath(),
-                    data)
+                THROW_ERROR_EXCEPTION("String field got non UTF-8 value (Path: %v)",
+                    YPathStack_.GetHumanReadablePath())
                     << TErrorAttribute("ypath", YPathStack_.GetPath())
-                    << TErrorAttribute("proto_field", fieldFullName);
+                    << TErrorAttribute("proto_field", fieldFullName)
+                    << TErrorAttribute("non_utf8_string", data);
         }
     }
 };

@@ -930,6 +930,7 @@ private:
 
         int arrowDictionaryIdCounter = 0;
         std::vector<flatbuffers::Offset<org::apache::arrow::flatbuf::Field>> fieldOffsets;
+        fieldOffsets.reserve(TypedColumns_.size());
 
         for (const auto& typedColumn : TypedColumns_) {
             auto optionalColumnSchema = FindColumnSchema(*typedColumn.Column);

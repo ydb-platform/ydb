@@ -4,6 +4,7 @@
 #include <google/protobuf/any.pb.h>
 #include <google/protobuf/duration.pb.h>
 #include <google/protobuf/empty.pb.h>
+#include <google/protobuf/struct.pb.h>
 #include <google/protobuf/timestamp.pb.h>
 #include <google/protobuf/wrappers.pb.h>
 
@@ -52,6 +53,9 @@ bool IsCustomMessage(const google::protobuf::Descriptor* message) {
     if (message->full_name() == google::protobuf::Empty::descriptor()->full_name()) {
         return false;
     }
+    if (message->full_name() == google::protobuf::Struct::descriptor()->full_name()) {
+        return false;
+    } 
     if (message->full_name() == google::protobuf::Timestamp::descriptor()->full_name()) {
         return false;
     }

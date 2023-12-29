@@ -3,11 +3,10 @@
 ### Общие флаги для команд
 
 * `-f, --filename <filename.yaml>` — считать input из файла, `-` для STDIN. Для команд принимающих n файлов (прим. resolve) можно указать несколько раз, тип файла будет определён по полю metadata
-* `-k, --directory <dir>` — считать input из директории
 * `--output-directory <dir>` — сдампить/порезолвить файлы в директорию
-* `-o, --output <json-stream|json|yaml>` — изменить формат вывода, по-умолчанию yaml
-* `-s, --strip-metadata` — выкинуть поле metadata из вывода
-* `-a, --all` — расширяет вывод команд до всей конфигурации (см. продвинутое конфигурирование)
+* `--strip-metadata` — выкинуть поле metadata из вывода
+* `--all` — расширяет вывод команд до всей конфигурации (см. продвинутое конфигурирование)
+* `--allow-unknown-fields` — позволяет игнорировать неизвестные поля в конфигурации
 
 
 ```bash
@@ -21,8 +20,6 @@
 {{ ydb-cli }} admin config fetch
 # Получить все текущие конфигурационные файлы кластера
 {{ ydb-cli }} admin config fetch --all
-# Получить метаинформацию о конфигурациях кластера
-{{ ydb-cli }} admin config describe
 # Сгенерировать все возможные конечные конфигурации для dynconfig.yaml
 {{ ydb-cli }} admin config resolve --all -f dynconfig.yaml
 # Сгенерировать конечную конфигурацию для dynconfig.yaml при лейблах tenant=/Root/test и canary=true
@@ -30,15 +27,15 @@
 # Сгенерировать конечную конфигурацию для dynconfig.yaml для лейблов с узла 1003
 {{ ydb-cli }} admin config resolve -f dynconfig.yaml --node-id 1003
 # Получить все временные конфигурации кластера
-{{ ydb-cli }} admin config volatile fetch --all --output-directory <dir>
+{{ ydb-cli }} admin volatile-config fetch --all --output-directory <dir>
 # Получить временную конфигурацию с id 1 с кластера
-{{ ydb-cli }} admin config volatile fetch --id 1
+{{ ydb-cli }} admin volatile-config fetch --id 1
 # Применить временную конфигурацию volatile.yaml на кластер
-{{ ydb-cli }} admin config volatile add -f volatile.yaml
+{{ ydb-cli }} admin volatile-config add -f volatile.yaml
 # Удалить временные конфигурации с id 1 и 3 на кластере
-{{ ydb-cli }} admin config volatile drop --id 1 --id 3
+{{ ydb-cli }} admin volatile-config drop --id 1 --id 3
 # Удалить все временные конфигурации на кластере
-{{ ydb-cli }} admin config volatile drop --all
+{{ ydb-cli }} admin volatile-config drop --all
 ```
 
 ## Сценарии

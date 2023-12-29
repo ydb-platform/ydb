@@ -30,7 +30,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    datashard_ut_tracing.cpp
+    datashard_ut_trace.cpp
 )
 
 REQUIREMENTS(ram:32)

@@ -1,9 +1,10 @@
 #include "defs.h"
-#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
+#include "datashard_ut_read_table.h"
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
@@ -16,8 +17,9 @@ namespace NKikimr {
 using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
 using namespace Tests;
+using namespace NDataShardReadTableTest;
 
-Y_UNIT_TEST_SUITE(TDataShardTracing) {
+Y_UNIT_TEST_SUITE(TDataShardTrace) {
 
     class FakeWilsonUploader : public TActorBootstrapped<FakeWilsonUploader> {
         public:
@@ -167,7 +169,18 @@ Y_UNIT_TEST_SUITE(TDataShardTracing) {
         std::unordered_map<TString, Trace> Traces;
     };
 
-    Y_UNIT_TEST(TestTraceDistributedUpsert) {
+    void SplitTable(TTestActorRuntime &runtime, Tests::TServer::TPtr server, ui64 splitKey) {
+        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
+        auto senderSplit = runtime.AllocateEdgeActor();
+        auto tablets = GetTableShards(server, senderSplit, "/Root/table-1");
+        UNIT_ASSERT(tablets.size() == 1);
+        ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", tablets.at(0), splitKey);
+        WaitTxNotification(server, senderSplit, txId);
+        tablets = GetTableShards(server, senderSplit, "/Root/table-1");
+        UNIT_ASSERT(tablets.size() == 2);
+    }
+
+    std::tuple<TTestActorRuntime&, Tests::TServer::TPtr, TActorId> TestCreateServer() {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -180,27 +193,39 @@ Y_UNIT_TEST_SUITE(TDataShardTracing) {
 
         InitRoot(server, sender);
 
-        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
-        policy->KeepEraseMarkers = true;
+        return {runtime, server, sender};
+    }
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1, false, policy.Get());
+    void CheckTxHasWriteLog(std::reference_wrapper<FakeWilsonUploader::Span> txSpan) {
+        auto writeLogSpan = txSpan.get().FindOne("Tablet.WriteLog");
+        UNIT_ASSERT(writeLogSpan);
+        auto writeLogEntrySpan = writeLogSpan->get().FindOne("Tablet.WriteLog.LogEntry");
+        UNIT_ASSERT(writeLogEntrySpan);
+    }
+
+    void CheckTxHasDatashardUnits(std::reference_wrapper<FakeWilsonUploader::Span> txSpan, ui8 count) {
+        auto executeSpan = txSpan.get().FindOne("Tablet.Transaction.Execute");
+        UNIT_ASSERT(executeSpan);
+        auto unitSpans = executeSpan->get().FindAll("Datashard.Unit");
+        UNIT_ASSERT_EQUAL(count, unitSpans.size());
+    }
+
+    void CheckExecuteHasDatashardUnits(std::reference_wrapper<FakeWilsonUploader::Span> executeSpan, ui8 count) {
+        auto unitSpans = executeSpan.get().FindAll("Datashard.Unit");
+        UNIT_ASSERT_EQUAL(count, unitSpans.size());
+    }
+
+    Y_UNIT_TEST(TestTraceDistributedUpsert) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
     
         FakeWilsonUploader *uploader = new FakeWilsonUploader();
         TActorId uploaderId = runtime.Register(uploader, 0);
         runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId, 0); 
         runtime.SimulateSleep(TDuration::Seconds(10));
 
-        // Split shard at key 5
-        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
-        {
-            auto senderSplit = runtime.AllocateEdgeActor();
-            auto tablets = GetTableShards(server, senderSplit, "/Root/table-1");
-            UNIT_ASSERT(tablets.size() == 1);
-            ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", tablets.at(0), 5);
-            WaitTxNotification(server, senderSplit, txId);
-            tablets = GetTableShards(server, senderSplit, "/Root/table-1");
-            UNIT_ASSERT(tablets.size() == 2);
-        }
+        SplitTable(runtime, server, 5);
 
         NWilson::TTraceId traceId = NWilson::TTraceId::NewTraceId(15, 4095);
         ExecSQL(
@@ -224,72 +249,44 @@ Y_UNIT_TEST_SUITE(TDataShardTracing) {
         auto dsTxSpans = deSpan->get().FindAll("Datashard.Transaction");
         UNIT_ASSERT_EQUAL(2, dsTxSpans.size()); // Two shards, each executes a user transaction.
 
-        auto checkTxHasWriteLog = [](std::reference_wrapper<FakeWilsonUploader::Span> txSpan) {
-            auto writeLogSpan = txSpan.get().FindOne("Tablet.WriteLog");
-            UNIT_ASSERT(writeLogSpan);
-            auto writeLogEntrySpan = writeLogSpan->get().FindOne("Tablet.WriteLog.LogEntry");
-            UNIT_ASSERT(writeLogEntrySpan);
-        };
-
-        auto checkTxHasDatashardUnits = [](std::reference_wrapper<FakeWilsonUploader::Span> txSpan, ui8 count) {
-            auto executeSpan = txSpan.get().FindOne("Tablet.Transaction.Execute");
-            UNIT_ASSERT(executeSpan);
-            auto unitSpans = executeSpan->get().FindAll("Datashard.Unit");
-            UNIT_ASSERT_EQUAL(count, unitSpans.size());
-        };
-
         for (auto dsTxSpan : dsTxSpans) {
             auto tabletTxs = dsTxSpan.get().FindAll("Tablet.Transaction");
             UNIT_ASSERT_EQUAL(2, tabletTxs.size()); // Each shard executes a proposal tablet tx and a progress tablet tx.
 
             auto propose = tabletTxs[0];
-            checkTxHasWriteLog(propose);
-            checkTxHasDatashardUnits(propose, 3);
+            CheckTxHasWriteLog(propose);
+            CheckTxHasDatashardUnits(propose, 3);
 
             auto progress = tabletTxs[1];
-            checkTxHasWriteLog(progress); 
-            checkTxHasDatashardUnits(progress, 11); 
+            CheckTxHasWriteLog(progress); 
+            CheckTxHasDatashardUnits(progress, 11); 
         }
+        
+        std::string canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) , "
+        "(LiteralExecuter) , (DataExecuter -> [(WaitForTableResolve) , (RunTasks) , (Datashard.Transaction -> "
+        "[(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , "
+        "(Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])]) , (Tablet.Transaction -> [(Tablet.Transaction.Execute -> "
+        "[(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , "
+        "(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> "
+        "[(Tablet.WriteLog.LogEntry)])])]) , (Datashard.Transaction -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> "
+        "[(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])]) , "
+        "(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , "
+        "(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , "
+        "(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])])])])])";
+        UNIT_ASSERT_VALUES_EQUAL(canon, trace.ToString());
     }
 
-    void SplitTable() {
+    Y_UNIT_TEST(TestTraceDistributedSelect) {
+        auto [runtime, server, sender] = TestCreateServer();
 
-    }
-
-    Y_UNIT_TEST(TestTraceDestributedSelect) {
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
-
-        Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
-
-        auto sender = runtime.AllocateEdgeActor();
-
-        InitRoot(server, sender);
-
-        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
-        policy->KeepEraseMarkers = true;
-
-        CreateShardedTable(server, sender, "/Root", "table-1", 1, false, policy.Get());
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
     
         FakeWilsonUploader *uploader = new FakeWilsonUploader();
         TActorId uploaderId = runtime.Register(uploader, 0);
         runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId, 0); 
         runtime.SimulateSleep(TDuration::Seconds(10));
 
-        // Split shard at key 5
-        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
-        {
-            auto senderSplit = runtime.AllocateEdgeActor();
-            auto tablets = GetTableShards(server, senderSplit, "/Root/table-1");
-            UNIT_ASSERT(tablets.size() == 1);
-            ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", tablets.at(0), 5);
-            WaitTxNotification(server, senderSplit, txId);
-            tablets = GetTableShards(server, senderSplit, "/Root/table-1");
-            UNIT_ASSERT(tablets.size() == 2);
-        }
+        SplitTable(runtime, server, 5);
 
         ExecSQL(
             server,
@@ -340,32 +337,18 @@ Y_UNIT_TEST_SUITE(TDataShardTracing) {
 
         FakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
 
-        Cout << trace.ToString() << Endl;
-
         auto deSpan = trace.Root.BFSFindOne("DataExecuter");
         UNIT_ASSERT(deSpan);
 
         auto dsTxSpans = deSpan->get().FindAll("Datashard.Transaction");
         UNIT_ASSERT_EQUAL(2, dsTxSpans.size()); // Two shards, each executes a user transaction.
 
-        auto checkTxHasWriteLog = [](std::reference_wrapper<FakeWilsonUploader::Span> txSpan) {
-            auto writeLogSpan = txSpan.get().FindOne("Tablet.WriteLog");
-            UNIT_ASSERT(writeLogSpan);
-            auto writeLogEntrySpan = writeLogSpan->get().FindOne("Tablet.WriteLog.LogEntry");
-            UNIT_ASSERT(writeLogEntrySpan);
-        };
-
-        auto checkExecuteHasDatashardUnits = [](std::reference_wrapper<FakeWilsonUploader::Span> executeSpan, ui8 count) {
-            auto unitSpans = executeSpan.get().FindAll("Datashard.Unit");
-            UNIT_ASSERT_EQUAL(count, unitSpans.size());
-        };
-
         for (auto dsTxSpan : dsTxSpans) {
             auto tabletTxs = dsTxSpan.get().FindAll("Tablet.Transaction");
             UNIT_ASSERT_EQUAL(1, tabletTxs.size());
 
             auto propose = tabletTxs[0];
-            checkTxHasWriteLog(propose);
+            CheckTxHasWriteLog(propose);
 
             // Blobs are loaded from BS.
             UNIT_ASSERT_EQUAL(2, propose.get().FindAll("Tablet.Transaction.Wait").size());
@@ -375,10 +358,61 @@ Y_UNIT_TEST_SUITE(TDataShardTracing) {
             auto executeSpans = propose.get().FindAll("Tablet.Transaction.Execute");
             UNIT_ASSERT_EQUAL(3, executeSpans.size());
 
-            checkExecuteHasDatashardUnits(executeSpans[0], 3);
-            checkExecuteHasDatashardUnits(executeSpans[1], 1);
-            checkExecuteHasDatashardUnits(executeSpans[2], 3);
+            CheckExecuteHasDatashardUnits(executeSpans[0], 3);
+            CheckExecuteHasDatashardUnits(executeSpans[1], 1);
+            CheckExecuteHasDatashardUnits(executeSpans[2], 3);
         }
+        
+        std::string canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) "
+        ", (LiteralExecuter) , (DataExecuter -> [(WaitForTableResolve) , (WaitForSnapshot) , (RunTasks) , "
+        "(Datashard.Transaction -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , "
+        "(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
+        "(Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
+        "(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> "
+        "[(Tablet.WriteLog.LogEntry)])])]) , (Datashard.Transaction -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> "
+        "[(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
+        "(Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
+        "(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> "
+        "[(Tablet.WriteLog.LogEntry)])])])])])";
+        UNIT_ASSERT_VALUES_EQUAL(canon, trace.ToString());
+    }
+
+    Y_UNIT_TEST(TestTraceWriteImmediateOnShard) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        auto opts = TShardedTableOptions().Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}});
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+
+        FakeWilsonUploader *uploader = new FakeWilsonUploader();
+        TActorId uploaderId = runtime.Register(uploader, 0);
+        runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId, 0); 
+        runtime.SimulateSleep(TDuration::Seconds(10));
+
+        NWilson::TTraceId traceId = NWilson::TTraceId::NewTraceId(15, 4095);
+        const ui32 rowCount = 3;
+        ui64 txId = 100;
+        Write(runtime, sender, shards[0], tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED, std::move(traceId));
+
+        uploader->BuildTraceTrees();
+
+        UNIT_ASSERT_EQUAL(1, uploader->Traces.size());
+
+        FakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
+        
+        auto wtSpan = trace.Root.BFSFindOne("Datashard.WriteTransaction");
+        UNIT_ASSERT(wtSpan);
+        
+        auto tabletTxs = wtSpan->get().FindAll("Tablet.Transaction");
+        UNIT_ASSERT_EQUAL(1, tabletTxs.size());
+        auto writeTx = tabletTxs[0];
+
+        CheckTxHasWriteLog(writeTx); 
+        CheckTxHasDatashardUnits(writeTx, 5); 
+
+        std::string canon = "(Datashard.WriteTransaction -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> "
+        "[(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> "
+        "[(Tablet.WriteLog.LogEntry)])])])";
+        UNIT_ASSERT_VALUES_EQUAL(canon, trace.ToString());
     }
 }
 

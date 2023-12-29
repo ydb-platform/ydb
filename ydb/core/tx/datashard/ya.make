@@ -311,5 +311,5 @@ RECURSE_FOR_TESTS(
     ut_upload_rows
     ut_volatile
     ut_write
-    ut_tracing
+    ut_trace
 )

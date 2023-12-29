@@ -20,6 +20,7 @@ target_link_libraries(ydb-core-tablet PUBLIC
   cpp-deprecated-enum_codegen
   library-cpp-yson
   ydb-core-base
+  graph-shard-protos
   ydb-core-mon
   ydb-core-mon_alloc
   ydb-core-node_whiteboard

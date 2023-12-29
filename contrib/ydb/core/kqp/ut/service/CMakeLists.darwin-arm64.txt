@@ -19,6 +19,7 @@ target_link_libraries(contrib-ydb-core-kqp-ut-service PUBLIC
   yutil
   cpp-testing-unittest_main
   ydb-core-kqp
+  contrib-libs-fmt
   cpp-threading-local_executor
   kqp-ut-common
   yql-sql-pg

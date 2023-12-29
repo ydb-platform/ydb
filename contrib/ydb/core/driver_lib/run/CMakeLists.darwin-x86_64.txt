@@ -58,6 +58,8 @@ target_link_libraries(run PUBLIC
   ydb-core-formats
   fq-libs-init
   fq-libs-logs
+  core-graph-service
+  core-graph-shard
   ydb-core-grpc_services
   core-grpc_services-base
   core-grpc_services-auth_processor

@@ -33,6 +33,7 @@ target_link_libraries(ydb-core-viewer PUBLIC
   core-blobstorage-base
   blobstorage-vdisk-common
   core-client-server
+  core-graph-api
   ydb-core-grpc_services
   core-grpc_services-local_rpc
   ydb-core-health_check
@@ -79,6 +80,7 @@ target_link_libraries(ydb-core-viewer.global PUBLIC
   core-blobstorage-base
   blobstorage-vdisk-common
   core-client-server
+  core-graph-api
   ydb-core-grpc_services
   core-grpc_services-local_rpc
   ydb-core-health_check

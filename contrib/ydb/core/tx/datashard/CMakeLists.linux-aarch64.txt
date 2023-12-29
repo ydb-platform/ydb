@@ -124,6 +124,7 @@ target_link_libraries(core-tx-datashard PUBLIC
   cpp-string_utils-quote
   ydb-core-actorlib_impl
   ydb-core-base
+  ydb-core-change_exchange
   ydb-core-engine
   core-engine-minikql
   ydb-core-formats
@@ -399,6 +400,7 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   cpp-string_utils-quote
   ydb-core-actorlib_impl
   ydb-core-base
+  ydb-core-change_exchange
   ydb-core-engine
   core-engine-minikql
   ydb-core-formats

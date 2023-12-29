@@ -648,7 +648,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 Y_ABORT_UNLESS(res);
                 
                 if (!MainCycleStarted) {
-                    StartWorking(ctx);
+                    Self.InitialAllocationCompleted(ctx);
                 }
             };
 
@@ -1245,13 +1245,16 @@ public:
         for (auto& writer : TabletWriters) {
             writer->StartWorking(ctx);
         }
+        TestStartTime = TActivationContext::Monotonic();
+        UpdateWakeupQueue(ctx);
     }
 
     void InitialAllocationCompleted(const TActorContext& ctx) {
         WorkersInInitialState--;
-        if (!WorkersInInitialState)  {
+        if (!WorkersInInitialState) {
             if (DelayAfterInitialWrite) {
-                ctx.Schedule(TDuration::Seconds(DelayAfterInitialWrite), new TEvents::TEvWakeup);
+                ctx.Schedule(TDuration::Seconds(DelayAfterInitialWrite),
+                        new TEvents::TEvWakeup(DELAY_AFTER_INITIAL_WRITE));
             } else {
                 StartWorkers(ctx);
             }
@@ -1261,11 +1264,9 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         Become(&TLogWriterLoadTestActor::StateFunc);
         EarlyStop = false;
-        TestStartTime = TActivationContext::Monotonic();
         for (auto& writer : TabletWriters) {
             writer->Bootstrap(ctx);
         }
-        UpdateWakeupQueue(ctx);
         HandleUpdateQuantile(ctx);
     }
 
@@ -1392,7 +1393,12 @@ public:
                             str << "Passed/Total, sec";
                         }
                         TABLED() {
-                            str << (TActivationContext::Monotonic() - TestStartTime).Seconds() << " / ";
+                            if (TestStartTime != TMonotonic()) {
+                                str << (TActivationContext::Monotonic() - TestStartTime).Seconds();
+                            } else {
+                                str << "0";
+                            }
+                            str << " / ";
                             if (TestDuration.Defined()) {
                                 str << TestDuration->Seconds();
                             } else {

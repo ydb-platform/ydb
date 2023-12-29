@@ -704,9 +704,9 @@
     ],
     "test.test[expr-to_sorted_set_vartuple_key-default.txt-Debug]": [
         {
-            "checksum": "845bb393b8fa37e931d04b3524f2a174",
-            "size": 1072,
-            "uri": "https://{canondata_backend}/937458/ca874ae4a90e1527826d17c1da5f3d3dad325887/resource.tar.gz#test.test_expr-to_sorted_set_vartuple_key-default.txt-Debug_/opt.yql_patched"
+            "checksum": "09cceea60fe27f728d3abf3a7d6f645b",
+            "size": 1202,
+            "uri": "https://{canondata_backend}/1775319/bba92b3b1258858b918e2263cd320f202272dd31/resource.tar.gz#test.test_expr-to_sorted_set_vartuple_key-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[expr-to_sorted_set_vartuple_key-default.txt-Plan]": [

@@ -17,6 +17,8 @@ $d = AsDict(
     AsTuple($d2, 32)
 );
 
-select $d,DictKeys($d),DictPayloads($d),DictItems($d);
+select ListSort(ListFlatten(ListMap(DictItems($d), ($x) -> {return ListMap(DictItems($x.0), ($y) -> {return ($y, $x.1)})}))),
+    ListSort(ListFlatten(ListMap(DictKeys($d), ($x) -> {return DictItems($x)}))),
+    ListSort(DictPayloads($d));
 select DictLookup($d,$d1), DictLookup($d,$d3);
 select DictContains($d,$d1), DictContains($d,$d3);

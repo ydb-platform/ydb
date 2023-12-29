@@ -830,9 +830,9 @@
     ],
     "test.test[expr-to_hashed_set_tuple_key-default.txt-Debug]": [
         {
-            "checksum": "4b482c7a9718737e93f292224f0058a8",
-            "size": 3867,
-            "uri": "https://{canondata_backend}/1937150/9114d99ba08350b54158d617466d8f9e5a0e5c73/resource.tar.gz#test.test_expr-to_hashed_set_tuple_key-default.txt-Debug_/opt.yql_patched"
+            "checksum": "09580be4488126ae905792eff96e73d7",
+            "size": 4498,
+            "uri": "https://{canondata_backend}/1889210/ff6f980768ecc0b4a6b2acc4f8ba9204881c47be/resource.tar.gz#test.test_expr-to_hashed_set_tuple_key-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[expr-to_hashed_set_tuple_key-default.txt-Plan]": [

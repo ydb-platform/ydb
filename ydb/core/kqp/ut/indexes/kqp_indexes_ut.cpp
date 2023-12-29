@@ -2396,6 +2396,74 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
+    void CheckUpsertNonEquatableType(bool notNull) {
+        auto kqpSetting = NKikimrKqp::TKqpSetting();
+        kqpSetting.SetName("_KqpYqlSyntaxVersion");
+        kqpSetting.SetValue("1");
+
+        auto settings = TKikimrSettings()
+                .SetKqpSettings({kqpSetting});
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString createTableSql = R"(
+            CREATE TABLE `TableWithJson` (
+                id Int64,
+                name Utf8,
+                slug Json %s,
+                parent_id Int64,
+                PRIMARY KEY (id),
+                INDEX json_parent_id_index GLOBAL ON (parent_id, id) COVER (name, slug)
+            );
+        )";
+
+        createTableSql = Sprintf(createTableSql.data(), notNull ? "NOT NULL" : "");
+
+        {
+            auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        const TString query = R"(
+            UPSERT INTO `TableWithJson` (
+                id,
+                name,
+                slug,
+                parent_id
+            )
+            VALUES (
+                1,
+                'Q',
+                JSON(@@"dispenser"@@),
+                666
+            );
+        )";
+
+        auto result = session.ExecuteDataQuery(
+                query,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+            .ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        {
+            const auto& yson = ReadTablePartToYson(session, "/Root/TableWithJson");
+            const TString expected = R"([[[1];["Q"];["\"dispenser\""];[666]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        {
+            const auto& yson = ReadTablePartToYson(session, "/Root/TableWithJson/json_parent_id_index/indexImplTable");
+            const TString expected = R"([[[666];[1];["Q"];["\"dispenser\""]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CheckUpsertNonEquatableType, NotNull) {
+        CheckUpsertNonEquatableType(NotNull);
+    }
+
     Y_UNIT_TEST(UniqAndNoUniqSecondaryIndexWithCover) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()

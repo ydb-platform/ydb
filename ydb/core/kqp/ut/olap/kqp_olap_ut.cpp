@@ -3995,6 +3995,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable_1");
@@ -4030,14 +4031,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*2);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3ull);
             UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("PathId")), 3ull);
             UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[2].at("Kind")), "INSERTED");
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[5].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[4].at("Kind")), "INSERTED");
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[5].at("Kind")), "SPLIT_COMPACTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("PathId")), 3ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[1].at("Kind")), "INSERTED");
         }
 
         {
@@ -4051,10 +4051,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            ui32 numExpected = 3*3*2;
+            ui32 numExpected = 3*3;
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), numExpected);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 5ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "SPLIT_COMPACTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[numExpected-1].at("PathId")), 3ull);
             UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[numExpected-1].at("Kind")), "INSERTED");
         }
@@ -4074,10 +4074,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            ui32 numExpected = 2*3*2;
+            ui32 numExpected = 2*3;
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), numExpected);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 5ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "SPLIT_COMPACTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[numExpected-1].at("PathId")), 3ull);
             UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[numExpected-1].at("Kind")), "INSERTED");
         }

@@ -10,6 +10,7 @@ SET(sql_grammar ${antlr_output}/SQLv1.g)
 
 SET(ANTLR_PACKAGE_NAME NSQLv1Generated)
 SET(PROTOBUF_HEADER_PATH ydb/library/yql/parser/proto_ast/gen/v1_proto_split)
+SET(PROTOBUF_SUFFIX_PATH .pb.main.h)
 
 SET(LEXER_PARSER_NAMESPACE NALPAnsi)
 

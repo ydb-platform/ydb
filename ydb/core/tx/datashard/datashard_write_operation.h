@@ -86,6 +86,9 @@ public:
     NMiniKQL::IEngineFlat* GetEngine() {
         return EngineBay.GetEngine();
     }
+    NMiniKQL::TEngineHost* GetEngineHost() {
+        return EngineBay.GetEngineHost();
+    }
     void DestroyEngine() {
         EngineBay.DestroyEngine();
     }

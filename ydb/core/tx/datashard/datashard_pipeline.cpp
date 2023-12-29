@@ -1580,7 +1580,7 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         return writeOp;
     }
 
-    writeOp->ExtractKeys();
+    writeTx->ExtractKeys(true);
 
     switch (rec.txmode()) {
         case NKikimrDataEvents::TEvWrite::MODE_PREPARE:

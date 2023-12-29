@@ -33,6 +33,9 @@ size_t TBaseLabel::RegisterStaticMemoryLabel(const char* name, bool hasSensor) {
 
 }
 
+std::mutex TActiveTransactionTracker::ActiveSetMutex;
+std::map<void*, TString> TActiveTransactionTracker::ActiveSet;
+
 }
 }
 

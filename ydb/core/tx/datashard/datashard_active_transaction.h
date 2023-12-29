@@ -385,6 +385,12 @@ public:
         , ScanSnapshotId(0)
         , ScanTask(0)
     {
+        {
+            std::unique_lock<std::mutex> lock(NActors::NMemory::TActiveTransactionTracker::ActiveSetMutex);
+            NActors::NMemory::TActiveTransactionTracker::ActiveSet[this] = TStringBuilder()
+                << op.GetGlobalTxId() << " " << op.GetTxId() << " " << op.GetKind() << " " << op.GetStep();
+        }
+
         NActors::NMemory::TLabel<MemoryLabelActiveTransactionCount>::Add(1);
         TrackMemory();
     }
@@ -393,6 +399,11 @@ public:
     {
         UntrackMemory();
         NActors::NMemory::TLabel<MemoryLabelActiveTransactionCount>::Sub(1);
+
+        {
+            std::unique_lock<std::mutex> lock(NActors::NMemory::TActiveTransactionTracker::ActiveSetMutex);
+            NActors::NMemory::TActiveTransactionTracker::ActiveSet.erase(this);
+        }
     }
 
     void FillTxData(TValidatedDataTx::TPtr dataTx);

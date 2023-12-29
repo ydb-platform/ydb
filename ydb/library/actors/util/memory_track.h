@@ -1,6 +1,8 @@
 #pragma once
 
+#include <mutex>
 #include <vector>
+#include <map>
 
 #include <util/system/type_name.h>
 #include <util/thread/singleton.h>
@@ -286,6 +288,12 @@ struct TAlloc<TType, nullptr>
     struct rebind {
         typedef TAlloc<U> other;
     };
+};
+
+struct TActiveTransactionTracker
+{
+    static std::mutex ActiveSetMutex;
+    static std::map<void*, TString> ActiveSet;
 };
 
 }

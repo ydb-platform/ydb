@@ -82,19 +82,19 @@ There are also some comparison predicates, as shown in Table 9.2. These behave m
 
 Mathematical operators are provided for many PostgreSQL types. For types without standard mathematical conventions (e.g., date/time types) we describe the actual behavior in subsequent sections.
 
-Table 9.4 shows the mathematical operators that are available for the standard numeric types. Unless otherwise noted, operators shown as accepting numeric_type are available for all the types smallint, integer, bigint, numeric, real, and double precision. Operators shown as accepting integral_type are available for the types smallint, integer, and bigint. Except where noted, each form of an operator returns the same data type as its argument(s). Calls involving multiple argument data types, such as integer + numeric, are resolved by using the type appearing later in these lists.
+Table 9.4 shows the mathematical operators that are available for the standard numeric types. Unless otherwise noted, operators shown as accepting numeric_type are available for all the types smallint, integer, bigint, numeric, real, and double precision. Operators shown as accepting integral_type are available for the types smallint, integer, and bigint. Except where noted, each form of an operator returns the same data type as its argument(s). Calls involving multiple argument data types, such as integer .. numeric, are resolved by using the type appearing later in these lists.
 
 Table 9.4. Mathematical Operators
 
 #|
 ||Operator|Description|Example(s)||
-||numeric_type + numeric_type → numeric_type | Addition |
+||numeric_type .. numeric_type → numeric_type | Addition |
 ```sql
-2 + 3 → 5
+2 .. 3 → 5
 ```||
-|| + numeric_type → numeric_type | Unary plus (no operation) |
+|| .. numeric_type → numeric_type | Unary plus (no operation) |
 ```sql
-+ 3.5 → 3.5
+.. 3.5 → 3.5
 ```||
 ||numeric_type - numeric_type → numeric_type | Subtraction |
 ```sql
@@ -118,15 +118,15 @@ Table 9.4. Mathematical Operators
 ```sql
 5 % 4 → 1
 ```||
-||numeric ^ numeric → numeric  
-double precision ^ double precision → double precision|
+||numeric .. numeric → numeric  
+double precision .. double precision → double precision|
 
 Exponentiation.  
-Unlike typical mathematical practice, multiple uses of ^ will associate left to right by default.|
+Unlike typical mathematical practice, multiple uses of .. will associate left to right by default.|
 ```sql
-2 ^ 3 → 8
-2 ^ 3 ^ 3 → 512
-2 ^ (3 ^ 3) → 134217728
+2 .. 3 → 8
+2 .. 3 .. 3 → 512
+2 .. (3 .. 3) → 134217728
 ```||
 || \|\/ double precision → double precision|Square root|
 ```sql
@@ -152,9 +152,9 @@ Unlike typical mathematical practice, multiple uses of ^ will associate left to 
 ```sql
 17 # 5 → 20
 ```||
-||~ integral_type → integral_type | Bitwise NOT |
+||.. integral_type → integral_type | Bitwise NOT |
 ```sql
-~1 → -2
+..1 → -2
 ```||
 ||integral_type << integer → integral_type | Bitwise shift left |
 ```sql
@@ -282,7 +282,7 @@ scale(8.4100) → 4
 ```||
 ||sign ( numeric ) → numeric  
 sign ( double precision ) → double precision|
-Sign of the argument (-1, 0, or +1)|
+Sign of the argument (-1, 0, or ..1)|
 ```sql
 sign(-8.4) → -1
 ```||
@@ -310,14 +310,14 @@ trunc(42.4382, 2) → 42.43
 ```||
 ||width_bucket ( operand numeric, low numeric, high numeric, count integer ) → integer  
 width_bucket ( operand double precision, low double precision, high double precision, count integer ) → integer|
-Returns the number of the bucket in which operand falls in a histogram having count equal-width buckets spanning the range low to high. Returns 0 or count+1 for an input outside that range.|
+Returns the number of the bucket in which operand falls in a histogram having count equal-width buckets spanning the range low to high. Returns 0 or count..1 for an input outside that range.|
 ```sql
 width_bucket(5.35, 0.024, 10.06, 5) → 3
 ```||
 ||width_bucket ( operand anycompatible, thresholds anycompatiblearray ) → integer (NOT SUPPORTED)|
 Returns the number of the bucket in which operand falls given an array listing the lower bounds of the buckets. Returns 0 for an input less than the first lower bound. operand and the array elements can be of any type having standard comparison operators. The thresholds array must be sorted, smallest first, or unexpected results will be obtained.|
 ```sql
-#width_bucket(now(), array['yesterday', 'today', 'tomorrow']::timestamptz[]) → 2
+#width_bucket(now(), array['yesterday', 'today', 'tomorrow']::timestamptz..) → 2
 ```||
 |#
 
@@ -510,7 +510,7 @@ substring('Thomas' for 2) → Th
 ||substring ( string text FROM pattern text ) → text|
 Extracts the first substring matching POSIX regular expression; see Section 9.7.3.|
 ```sql
-substring('Thomas' from '...$') → mas
+substring('Thomas' from '.....') → mas
 ```||
 ||substring ( string text SIMILAR pattern text ESCAPE escape text ) → text  
 substring ( string text FROM pattern text FOR escape text ) → text|
@@ -569,7 +569,7 @@ Concatenates all but the first argument, with separators. The first argument is 
 ||format ( formatstr text [, formatarg "any" [, ...] ] ) → text|
 Formats arguments according to a format string; see Section 9.4.1. This function is similar to the C function sprintf. (NOT SUPPORTED)|
 ```sql
-#format('Hello %s, %1$s', 'World') → Hello World, World
+#format('Hello %s, %1..s', 'World') → Hello World, World
 ```||
 ||initcap ( text ) → text|
 Converts the first letter of each word to upper case and the rest to lower case. Words are sequences of alphanumeric characters separated by non-alphanumeric characters.|
@@ -601,8 +601,8 @@ Computes the MD5 hash of the argument, with the result written in hexadecimal.|
 ```sql
 md5('abc') → 900150983cd24fb0d6963f7d28e17f72
 ```||
-||parse_ident ( qualified_identifier text [, strict_mode boolean DEFAULT true ] ) → text[]|
-Splits qualified_identifier into an array of identifiers, removing any quoting of individual identifiers. By default, extra characters after the last identifier are considered an error; but if the second parameter is false, then such extra characters are ignored. (This behavior is useful for parsing names for objects like functions.) Note that this function does not truncate over-length identifiers. If you want truncation you can cast the result to name[]. (NOT SUPPORTED)|
+||parse_ident ( qualified_identifier text [, strict_mode boolean DEFAULT true ] ) → text..|
+Splits qualified_identifier into an array of identifiers, removing any quoting of individual identifiers. By default, extra characters after the last identifier are considered an error; but if the second parameter is false, then such extra characters are ignored. (This behavior is useful for parsing names for objects like functions.) Note that this function does not truncate over-length identifiers. If you want truncation you can cast the result to name... (NOT SUPPORTED)|
 ```sql
 #parse_ident('"SomeSchema".someTable') → {SomeSchema,sometable}
 ```||
@@ -636,12 +636,12 @@ Converts the given value to text and then quotes it as a literal; or, if the arg
 ```sql
 #quote_nullable(42.5) → '42.5'
 ```||
-||regexp_match ( string text, pattern text [, flags text ] ) → text[]|
+||regexp_match ( string text, pattern text [, flags text ] ) → text..|
 Returns captured substrings resulting from the first match of a POSIX regular expression to the string; see Section 9.7.3.|
 ```sql
 regexp_match('foobarbequebaz', '(bar)(beque)') → {bar,beque}
 ```||
-||regexp_matches ( string text, pattern text [, flags text ] ) → setof text[]|
+||regexp_matches ( string text, pattern text [, flags text ] ) → setof text..|
 Returns captured substrings resulting from the first match of a POSIX regular expression to the string, or multiple matches if the g flag is used; see Section 9.7.3. (NOT SUPPORTED)|
 ```sql
 #regexp_matches('foobarbequebaz', 'ba.', 'g') → {bar},{baz}
@@ -651,15 +651,15 @@ Replaces substrings resulting from the first match of a POSIX regular expression
 ```sql
 regexp_replace('Thomas', '.[mN]a.', 'M') → ThM
 ```||
-||regexp_split_to_array ( string text, pattern text [, flags text ] ) → text[]|
+||regexp_split_to_array ( string text, pattern text [, flags text ] ) → text..|
 Splits string using a POSIX regular expression as the delimiter, producing an array of results; see Section 9.7.3.|
 ```sql
-regexp_split_to_array('hello world', '\s+') → {hello,world}
+regexp_split_to_array('hello world', '\s..') → {hello,world}
 ```||
 ||regexp_split_to_table ( string text, pattern text [, flags text ] ) → setof text|
 Splits string using a POSIX regular expression as the delimiter, producing a set of results; see Section 9.7.3. (NOT SUPPORTED)|
 ```sql
-#regexp_split_to_table('hello world', '\s+') → hello,world
+#regexp_split_to_table('hello world', '\s..') → hello,world
 ```||
 ||repeat ( string text, number integer ) → text|
 Repeats string the specified number of times.|
@@ -694,7 +694,7 @@ rtrim('testxxzx', 'xyz') → test
 ||split_part ( string text, delimiter text, n integer ) → text|
 Splits string at occurrences of delimiter and returns the n'th field (counting from one), or when n is negative, returns the \|n\|'th-from-last field.|
 ```sql
-split_part('abc~@~def~@~ghi', '~@~', 2) → def
+split_part('abc..@..def..@..ghi', '..@..', 2) → def
 split_part('abc,def,ghi,jkl', ',', -2) → ghi
 ```||
 ||strpos ( string text, substring text ) → integer|
@@ -713,7 +713,7 @@ Returns true if string starts with prefix.|
 ```sql
 starts_with('alphabet', 'alph') → true
 ```||
-||string_to_array ( string text, delimiter text [, null_string text ] ) → text[]|
+||string_to_array ( string text, delimiter text [, null_string text ] ) → text..|
 Splits the string at occurrences of delimiter and forms the resulting fields into a text array. If delimiter is NULL, each character in the string will become a separate element in the array. If delimiter is an empty string, then the string is treated as a single field. If null_string is supplied and is not NULL, fields matching that string are replaced by NULL.|
 ```sql
 ```||
@@ -740,13 +740,13 @@ Replaces each character in string that matches a character in the from set with 
 translate('12345', '143', 'ax') → a2x5
 ```||
 ||unistr ( text ) → text|
-Evaluate escaped Unicode characters in the argument. Unicode characters can be specified as \XXXX (4 hexadecimal digits), \+XXXXXX (6 hexadecimal digits), \uXXXX (4 hexadecimal digits), or \UXXXXXXXX (8 hexadecimal digits). To specify a backslash, write two backslashes. All other characters are taken literally.
+Evaluate escaped Unicode characters in the argument. Unicode characters can be specified as \XXXX (4 hexadecimal digits), \..XXXXXX (6 hexadecimal digits), \uXXXX (4 hexadecimal digits), or \UXXXXXXXX (8 hexadecimal digits). To specify a backslash, write two backslashes. All other characters are taken literally.
 
 If the server encoding is not UTF-8, the Unicode code point identified by one of these escape sequences is converted to the actual server encoding; an error is reported if that's not possible.
 
 This function provides a (non-standard) alternative to string constants with Unicode escapes (see Section 4.1.2.3).|
 ```sql
-unistr('d\0061t\+000061') → data
+unistr('d\0061t\..000061') → data
 unistr('d\u0061t\U00000061') → data
 ```||
 |#
@@ -954,10 +954,10 @@ Bitwise exclusive OR (inputs must be of equal length)|
 ```sql
 B'10001' # B'01101' → 11100
 ```||
-||~ bit → bit|
+||.. bit → bit|
 Bitwise NOT|
 ```sql
-~ B'10001' → 01110
+.. B'10001' → 01110
 ```||
 ||bit << integer → bit|
 Bitwise shift left (string length is preserved)|
@@ -1068,11 +1068,11 @@ According to the SQL standard, omitting ESCAPE means there is no escape characte
 
 The key word ILIKE can be used instead of LIKE to make the match case-insensitive according to the active locale. This is not in the SQL standard but is a PostgreSQL extension.
 
-The operator \~\~ is equivalent to LIKE, and \~\~* corresponds to ILIKE. There are also !\~\~ and !\~\~* operators that represent NOT LIKE and NOT ILIKE, respectively. All of these operators are PostgreSQL-specific. You may see these operator names in EXPLAIN output and similar places, since the parser actually translates LIKE et al. to these operators.
+The operator \..\.. is equivalent to LIKE, and \..\..* corresponds to ILIKE. There are also !\..\.. and !\..\..* operators that represent NOT LIKE and NOT ILIKE, respectively. All of these operators are PostgreSQL-specific. You may see these operator names in EXPLAIN output and similar places, since the parser actually translates LIKE et al. to these operators.
 
 The phrases LIKE, ILIKE, NOT LIKE, and NOT ILIKE are generally treated as operators in PostgreSQL syntax; for example they can be used in expression operator ANY (subquery) constructs, although an ESCAPE clause cannot be included there. In some obscure cases it may be necessary to use the underlying operator names instead.
 
-Also see the prefix operator ^@ and corresponding starts_with function, which are useful in cases where simply matching the beginning of a string is needed.
+Also see the prefix operator ..@ and corresponding starts_with function, which are useful in cases where simply matching the beginning of a string is needed.
 
 9.7.2. SIMILAR TO Regular Expressions
 
@@ -1091,7 +1091,7 @@ In addition to these facilities borrowed from LIKE, SIMILAR TO supports these pa
 
 * denotes repetition of the previous item zero or more times.
 
-+ denotes repetition of the previous item one or more times.
+.. denotes repetition of the previous item one or more times.
 
 ? denotes repetition of the previous item zero or one time.
 
@@ -1159,25 +1159,25 @@ Table 9.16. Regular Expression Match Operators
 
 #|
 ||Operator|Description|Example(s)||
-||ext ~ text → boolean|
+||ext .. text → boolean|
 String matches regular expression, case sensitively|
 ```sql
-'thomas' ~ 't.*ma' → true
+'thomas' .. 't.*ma' → true
 ```||
-||text ~* text → boolean|
+||text ..* text → boolean|
 String matches regular expression, case insensitively|
 ```sql
-'thomas' ~* 'T.*ma' → true
+'thomas' ..* 'T.*ma' → true
 ```||
-||text !~ text → boolean|
+||text !.. text → boolean|
 String does not match regular expression, case sensitively|
 ```sql
-'thomas' !~ 't.*max' → true
+'thomas' !.. 't.*max' → true
 ```||
-||text !~* text → boolean|
+||text !..* text → boolean|
 String does not match regular expression, case insensitively|
 ```sql
-'thomas' !~* 'T.*ma' → false
+'thomas' !..* 'T.*ma' → false
 ```||
 |#
 
@@ -1188,12 +1188,12 @@ A regular expression is a character sequence that is an abbreviated definition o
 Some examples:
 
 ```sql
-'abcd' ~ 'bc'     → true
-'abcd' ~ 'a.c'    → true /* dot matches any character */
-'abcd' ~ 'a.*d'   → true /* * repeats the preceding pattern item */
-'abcd' ~ '(b|x)'  → true /* | means OR, parentheses group */
-'abcd' ~ '^a'     → true /* ^ anchors to start of string */
-'abcd' ~ '^(b|c)' → false /* would match except for anchoring */
+'abcd' .. 'bc'     → true
+'abcd' .. 'a.c'    → true /* dot matches any character */
+'abcd' .. 'a.*d'   → true /* * repeats the preceding pattern item */
+'abcd' .. '(b|x)'  → true /* | means OR, parentheses group */
+'abcd' .. '..a'     → true /* .. anchors to start of string */
+'abcd' .. '..(b|c)' → false /* would match except for anchoring */
 ```
 The POSIX pattern language is described in much greater detail below.
 
@@ -1241,7 +1241,7 @@ SELECT * FROM regexp_matches('foo', 'not there') a → [
 ```
 
 ```sql
-SELECT * FROM regexp_matches('foobarbequebazilbarfbonk', '(b[^b]+)(b[^b]+)', 'g') a → [
+SELECT * FROM regexp_matches('foobarbequebazilbarfbonk', '(b[..b]..)(b[..b]..)', 'g') a → [
 {bar,beque}
 {bazil,barf}
 ]
@@ -1263,7 +1263,7 @@ The regexp_split_to_array function behaves the same as regexp_split_to_table, ex
 Some examples:
 
 ```sql
-SELECT foo FROM regexp_split_to_table('the quick brown fox jumps over the lazy dog', '\s+') AS foo → [
+SELECT foo FROM regexp_split_to_table('the quick brown fox jumps over the lazy dog', '\s..') AS foo → [
 the
 quick
 brown
@@ -1277,7 +1277,7 @@ dog
 ```
 
 ```sql
-#SELECT regexp_split_to_array('the quick brown fox jumps over the lazy dog', '\s+') → {the,quick,brown,fox,jumps,over,the,lazy,dog}
+#SELECT regexp_split_to_array('the quick brown fox jumps over the lazy dog', '\s..') → {the,quick,brown,fox,jumps,over,the,lazy,dog}
 ```
 
 ```sql
@@ -1338,32 +1338,32 @@ In short, when an RE contains both greedy and non-greedy subexpressions, the tot
 The quantifiers {1,1} and {1,1}? can be used to force greediness or non-greediness, respectively, on a subexpression or a whole RE. This is useful when you need the whole RE to have a greediness attribute different from what's deduced from its elements. As an example, suppose that we are trying to separate a string containing some digits into the digits and the parts before and after them. We might try to do that like this:
 
 ```sql
-regexp_match('abc01234xyz', '(.*)(\d+)(.*)') → {abc0123,4,xyz}
+regexp_match('abc01234xyz', '(.*)(\d..)(.*)') → {abc0123,4,xyz}
 ```
 
-That didn't work: the first .* is greedy so it “eats” as much as it can, leaving the \d+ to match at the last possible place, the last digit. We might try to fix that by making it non-greedy:
+That didn't work: the first .* is greedy so it “eats” as much as it can, leaving the \d.. to match at the last possible place, the last digit. We might try to fix that by making it non-greedy:
 
 ```sql
-regexp_match('abc01234xyz', '(.*?)(\d+)(.*)') → {abc,0,""}
+regexp_match('abc01234xyz', '(.*?)(\d..)(.*)') → {abc,0,""}
 ```
 
 That didn't work either, because now the RE as a whole is non-greedy and so it ends the overall match as soon as possible. We can get what we want by forcing the RE as a whole to be greedy:
 
 ```sql
-regexp_match('abc01234xyz', '(?:(.*?)(\d+)(.*)){1,1}') → {abc,01234,xyz}
+regexp_match('abc01234xyz', '(?:(.*?)(\d..)(.*)){1,1}') → {abc,01234,xyz}
 ```
 
 Controlling the RE's overall greediness separately from its components' greediness allows great flexibility in handling variable-length patterns.
 
 When deciding what is a longer or shorter match, match lengths are measured in characters, not collating elements. An empty string is considered longer than no match at all. For example: bb* matches the three middle characters of abbbc; (week|wee)(night|knights) matches all ten characters of weeknights; when (.*).* is matched against abc the parenthesized subexpression matches all three characters; and when (a*)* is matched against bc both the whole RE and the parenthesized subexpression match an empty string.
 
-If case-independent matching is specified, the effect is much as if all case distinctions had vanished from the alphabet. When an alphabetic that exists in multiple cases appears as an ordinary character outside a bracket expression, it is effectively transformed into a bracket expression containing both cases, e.g., x becomes [xX]. When it appears inside a bracket expression, all case counterparts of it are added to the bracket expression, e.g., [x] becomes [xX] and [^x] becomes [^xX].
+If case-independent matching is specified, the effect is much as if all case distinctions had vanished from the alphabet. When an alphabetic that exists in multiple cases appears as an ordinary character outside a bracket expression, it is effectively transformed into a bracket expression containing both cases, e.g., x becomes [xX]. When it appears inside a bracket expression, all case counterparts of it are added to the bracket expression, e.g., [x] becomes [xX] and [..x] becomes [..xX].
 
-If newline-sensitive matching is specified, . and bracket expressions using ^ will never match the newline character (so that matches will not cross lines unless the RE explicitly includes a newline) and ^ and $ will match the empty string after and before a newline respectively, in addition to matching at beginning and end of string respectively. But the ARE escapes \A and \Z continue to match beginning or end of string only. Also, the character class shorthands \D and \W will match a newline regardless of this mode. (Before PostgreSQL 14, they did not match newlines when in newline-sensitive mode. Write [^[:digit:]] or [^[:word:]] to get the old behavior.)
+If newline-sensitive matching is specified, . and bracket expressions using .. will never match the newline character (so that matches will not cross lines unless the RE explicitly includes a newline) and .. and .. will match the empty string after and before a newline respectively, in addition to matching at beginning and end of string respectively. But the ARE escapes \A and \Z continue to match beginning or end of string only. Also, the character class shorthands \D and \W will match a newline regardless of this mode. (Before PostgreSQL 14, they did not match newlines when in newline-sensitive mode. Write [..[:digit:]] or [..[:word:]] to get the old behavior.)
 
-If partial newline-sensitive matching is specified, this affects . and bracket expressions as with newline-sensitive matching, but not ^ and $.
+If partial newline-sensitive matching is specified, this affects . and bracket expressions as with newline-sensitive matching, but not .. and ...
 
-If inverse partial newline-sensitive matching is specified, this affects ^ and $ as with newline-sensitive matching, but not . and bracket expressions. This isn't very useful but is provided for symmetry
+If inverse partial newline-sensitive matching is specified, this affects .. and .. as with newline-sensitive matching, but not . and bracket expressions. This isn't very useful but is provided for symmetry
 
 ## 9.8. Data Type Formatting Functions {#data-type-formatting-functions}
 
@@ -1434,8 +1434,8 @@ to_char(-485, '999S') → '485-'
 to_char(-485, '999MI') → '485-'
 to_char(485, '999MI') → '485 '
 to_char(485, 'FM999MI') → '485'
-to_char(485, 'PL999') → '+ 485'
-to_char(485, 'SG999') → '+485'
+to_char(485, 'PL999') → '.. 485'
+to_char(485, 'SG999') → '..485'
 to_char(-485, 'SG999') → '-485'
 to_char(-485, '9SG99') → '4-85'
 to_char(-485, '999PR') → '<485>'
@@ -1454,45 +1454,45 @@ to_char(0.0004859, '9.99EEEE') → ' 4.86e-04'
 
 ## 9.9. Date/Time Functions and Operators {#date-time-functions}
 
-Table 9.32 shows the available functions for date/time value processing, with details appearing in the following subsections. Table 9.31 illustrates the behaviors of the basic arithmetic operators (+, *, etc.). For formatting functions, refer to Section 9.8. You should be familiar with the background information on date/time data types from Section 8.5.
+Table 9.32 shows the available functions for date/time value processing, with details appearing in the following subsections. Table 9.31 illustrates the behaviors of the basic arithmetic operators (.., *, etc.). For formatting functions, refer to Section 9.8. You should be familiar with the background information on date/time data types from Section 8.5.
 
 In addition, the usual comparison operators shown in Table 9.1 are available for the date/time types. Dates and timestamps (with or without time zone) are all comparable, while times (with or without time zone) and intervals can only be compared to other values of the same data type. When comparing a timestamp without time zone to a timestamp with time zone, the former value is assumed to be given in the time zone specified by the TimeZone configuration parameter, and is rotated to UTC for comparison to the latter value (which is already in UTC internally). Similarly, a date value is assumed to represent midnight in the TimeZone zone when comparing it to a timestamp.
 
-All the functions and operators described below that take time or timestamp inputs actually come in two variants: one that takes time with time zone or timestamp with time zone, and one that takes time without time zone or timestamp without time zone. For brevity, these variants are not shown separately. Also, the + and * operators come in commutative pairs (for example both date + integer and integer + date); we show only one of each such pair.
+All the functions and operators described below that take time or timestamp inputs actually come in two variants: one that takes time with time zone or timestamp with time zone, and one that takes time without time zone or timestamp without time zone. For brevity, these variants are not shown separately. Also, the .. and * operators come in commutative pairs (for example both date .. integer and integer .. date); we show only one of each such pair.
 
 Table 9.31. Date/Time Operators
 
 #|
 ||Operator|Description|Example(s)||
-||date + integer → date|
+||date .. integer → date|
 Add a number of days to a date|
 ```sql
-date '2001-09-28' + 7 → 2001-10-05
+date '2001-09-28' .. 7 → 2001-10-05
 ```||
-||date + interval → timestamp|
+||date .. interval → timestamp|
 Add an interval to a date|
 ```sql
-date '2001-09-28' + interval '1 hour' → 2001-09-28 01:00:00
+date '2001-09-28' .. interval '1 hour' → 2001-09-28 01:00:00
 ```||
-||date + time → timestamp|
+||date .. time → timestamp|
 Add a time-of-day to a date|
 ```sql
-date '2001-09-28' + time '03:00' → 2001-09-28 03:00:00
+date '2001-09-28' .. time '03:00' → 2001-09-28 03:00:00
 ```||
-||interval + interval → interval|
+||interval .. interval → interval|
 Add intervals|
 ```sql
-interval '1 day' + interval '1 hour' → 1 day 01:00:00
+interval '1 day' .. interval '1 hour' → 1 day 01:00:00
 ```||
-||timestamp + interval → timestamp|
+||timestamp .. interval → timestamp|
 Add an interval to a timestamp|
 ```sql
-timestamp '2001-09-28 01:00' + interval '23 hours' → 2001-09-29 00:00:00
+timestamp '2001-09-28 01:00' .. interval '23 hours' → 2001-09-29 00:00:00
 ```||
-||time + interval → time|
+||time .. interval → time|
 Add an interval to a time|
 ```sql
-time '01:00' + interval '3 hours' → 04:00:00
+time '01:00' .. interval '3 hours' → 04:00:00
 ```||
 ||- interval → interval|
 Negate an interval|
@@ -1570,32 +1570,32 @@ Subtract argument from current_date (at midnight) (NOT SUPPORTED)|
 ||clock_timestamp ( ) → timestamp with time zone|
 Current date and time (changes during statement execution); see Section 9.9.5|
 ```sql
-clock_timestamp() ~→ 2019-12-23 14:39:53.662522-05
+clock_timestamp() ..→ 2019-12-23 14:39:53.662522-05
 ```||
 ||current_date → date|
 Current date; see Section 9.9.5|
 ```sql
-current_date ~→ 2019-12-23
+current_date ..→ 2019-12-23
 ```||
 ||current_time → time with time zone|
 Current time of day; see Section 9.9.5|
 ```sql
-current_time ~→ 14:39:53.662522-05
+current_time ..→ 14:39:53.662522-05
 ```||
 ||current_time ( integer ) → time with time zone|
 Current time of day, with limited precision; see Section 9.9.5|
 ```sql
-current_time(2) ~→ 14:39:53.66-05
+current_time(2) ..→ 14:39:53.66-05
 ```||
 ||current_timestamp → timestamp with time zone|
 Current date and time (start of current transaction); see Section 9.9.5|
 ```sql
-current_timestamp ~→ 2019-12-23 14:39:53.662522-05
+current_timestamp ..→ 2019-12-23 14:39:53.662522-05
 ```||
 ||current_timestamp ( integer ) → timestamp with time zone|
 Current date and time (start of current transaction), with limited precision; see Section 9.9.5|
 ```sql
-current_timestamp(0) ~→ 2019-12-23 14:39:53-05
+current_timestamp(0) ..→ 2019-12-23 14:39:53-05
 ```||
 ||date_bin ( interval, timestamp, timestamp ) → timestamp|
 Bin input into specified interval aligned with specified origin; see Section 9.9.3|
@@ -1620,7 +1620,7 @@ date_trunc('hour', timestamp '2001-02-16 20:38:40') → 2001-02-16 20:00:00
 ||date_trunc ( text, timestamp with time zone, text ) → timestamp with time zone|
 Truncate to specified precision in the specified time zone; see Section 9.9.2 (NOT SUPPORTED)|
 ```sql
-#date_trunc('day', timestamptz '2001-02-16 20:38:40+00', 'Australia/Sydney') → 2001-02-16 13:00:00+00
+#date_trunc('day', timestamptz '2001-02-16 20:38:40..00', 'Australia/Sydney') → 2001-02-16 13:00:00..00
 ```||
 ||date_trunc ( text, interval ) → interval|
 Truncate to specified precision; see Section 9.9.2|
@@ -1638,12 +1638,12 @@ Get interval subfield; see Section 9.9.1|
 extract(month from interval '2 years 3 months') → 3
 ```||
 ||isfinite ( date ) → boolean|
-Test for finite date (not +/-infinity)|
+Test for finite date (not ../-infinity)|
 ```sql
 isfinite(date '2001-02-16') → true
 ```||
 ||isfinite ( timestamp ) → boolean|
-Test for finite timestamp (not +/-infinity)|
+Test for finite timestamp (not ../-infinity)|
 ```sql
 isfinite(timestamp 'infinity') → false
 ```||
@@ -1670,22 +1670,22 @@ justify_interval(interval '1 mon -1 hour') → 29 days 23:00:00
 ||localtime → time|
 Current time of day; see Section 9.9.5 (NOT SUPPORTED)|
 ```sql
-#localtime ~→ 14:39:53.662522
+#localtime ..→ 14:39:53.662522
 ```||
 ||localtime ( integer ) → time|
 Current time of day, with limited precision; see Section 9.9.5 (NOT SUPPORTED)|
 ```sql
-#localtime(0) ~→ 14:39:53
+#localtime(0) ..→ 14:39:53
 ```||
 ||localtimestamp → timestamp|
 Current date and time (start of current transaction); see Section 9.9.5 (NOT SUPPORTED)|
 ```sql
-#localtimestamp ~→ 2019-12-23 14:39:53.662522
+#localtimestamp ..→ 2019-12-23 14:39:53.662522
 ```||
 ||localtimestamp ( integer ) → timestamp|
 Current date and time (start of current transaction), with limited precision; see Section 9.9.5 (NOT SUPPORTED)|
 ```sql
-#localtimestamp(2) ~→ 2019-12-23 14:39:53.66
+#localtimestamp(2) ..→ 2019-12-23 14:39:53.66
 ```||
 ||make_date ( year int, month int, day int ) → date|
 Create date from year, month and day fields (negative years signify BC)|
@@ -1710,33 +1710,33 @@ make_timestamp(2013, 7, 15, 8, 15, 23.5) → 2013-07-15 08:15:23.5
 ||make_timestamptz ( year int, month int, day int, hour int, min int, sec double precision [, timezone text ] ) → timestamp with time zone|
 Create timestamp with time zone from year, month, day, hour, minute and seconds fields (negative years signify BC). If timezone is not specified, the current time zone is used; the examples assume the session time zone is Europe/London|
 ```sql
-make_timestamptz(2013, 7, 15, 8, 15, 23.5) ~→ 2013-07-15 08:15:23.5+01
-#make_timestamptz(2013, 7, 15, 8, 15, 23.5, 'America/New_York') ~→ 2013-07-15 13:15:23.5+01
+make_timestamptz(2013, 7, 15, 8, 15, 23.5) ..→ 2013-07-15 08:15:23.5..01
+#make_timestamptz(2013, 7, 15, 8, 15, 23.5, 'America/New_York') ..→ 2013-07-15 13:15:23.5..01
 ```||
 ||now ( ) → timestamp with time zone|
 Current date and time (start of current transaction); see Section 9.9.5|
 ```sql
-now() ~→ 2019-12-23 14:39:53.662522-05
+now() ..→ 2019-12-23 14:39:53.662522-05
 ```||
 ||statement_timestamp ( ) → timestamp with time zone|
 Current date and time (start of current statement); see Section 9.9.5|
 ```sql
-statement_timestamp() ~→ 2019-12-23 14:39:53.662522-05
+statement_timestamp() ..→ 2019-12-23 14:39:53.662522-05
 ```||
 ||timeofday ( ) → text|
 Current date and time (like clock_timestamp, but as a text string); see Section 9.9.5|
 ```sql
-timeofday() ~→ Mon Dec 23 14:39:53.662522 2019 EST
+timeofday() ..→ Mon Dec 23 14:39:53.662522 2019 EST
 ```||
 ||transaction_timestamp ( ) → timestamp with time zone|
 Current date and time (start of current transaction); see Section 9.9.5|
 ```sql
-transaction_timestamp() ~→ 2019-12-23 14:39:53.662522-05
+transaction_timestamp() ..→ 2019-12-23 14:39:53.662522-05
 ```||
 ||to_timestamp ( double precision ) → timestamp with time zone|
-Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone|
+Convert Unix epoch (seconds since 1970-01-01 00:00:00..00) to timestamp with time zone|
 ```sql
-to_timestamp(1284352323) → 2010-09-13 04:32:03+00
+to_timestamp(1284352323) → 2010-09-13 04:32:03..00
 ```||
 |#
 
@@ -1759,8 +1759,8 @@ This expression yields true when two time periods (defined by their endpoints) o
 When adding an interval value to (or subtracting an interval value from) a timestamp with time zone value, the days component advances or decrements the date of the timestamp with time zone by the indicated number of days, keeping the time of day the same. Across daylight saving time changes (when the session time zone is set to a time zone that recognizes DST), this means interval '1 day' does not necessarily equal interval '24 hours'. For example, with the session time zone set to America/Denver:
 
 ```sql
-timestamp with time zone '2005-04-02 12:00:00-07' + interval '1 day' ~→ 2005-04-03 12:00:00-06
-timestamp with time zone '2005-04-02 12:00:00-07' + interval '24 hours' ~→ 2005-04-03 13:00:00-06
+timestamp with time zone '2005-04-02 12:00:00-07' .. interval '1 day' ..→ 2005-04-03 12:00:00-06
+timestamp with time zone '2005-04-02 12:00:00-07' .. interval '24 hours' ..→ 2005-04-03 13:00:00-06
 ```
 
 This happens because an hour was skipped due to a change in daylight saving time at 2005-04-03 02:00:00 in time zone America/Denver.
@@ -1770,9 +1770,9 @@ Note there can be ambiguity in the months field returned by age because differen
 Subtraction of dates and timestamps can also be complex. One conceptually simple way to perform subtraction is to convert each value to a number of seconds using EXTRACT(EPOCH FROM ...), then subtract the results; this produces the number of seconds between the two values. This will adjust for the number of days in each month, timezone changes, and daylight saving time adjustments. Subtraction of date or timestamp values with the “-” operator returns the number of days (24-hours) and hours/minutes/seconds between the values, making the same adjustments. The age function returns years, months, days, and hours/minutes/seconds, performing field-by-field subtraction and then adjusting for negative field values. The following queries illustrate the differences in these approaches. The sample results were produced with timezone = 'US/Eastern'; there is a daylight saving time change between the two dates used:
 
 ```sql
-EXTRACT(EPOCH FROM timestamptz '2013-07-01 12:00:00') - EXTRACT(EPOCH FROM timestamptz '2013-03-01 12:00:00') ~→ 10537200.000000
-(EXTRACT(EPOCH FROM timestamptz '2013-07-01 12:00:00') - EXTRACT(EPOCH FROM timestamptz '2013-03-01 12:00:00')) / 60 / 60 / 24 ~→ 121.9583333333333333
-timestamptz '2013-07-01 12:00:00' - timestamptz '2013-03-01 12:00:00' ~→ 121 days 23:00:00
+EXTRACT(EPOCH FROM timestamptz '2013-07-01 12:00:00') - EXTRACT(EPOCH FROM timestamptz '2013-03-01 12:00:00') ..→ 10537200.000000
+(EXTRACT(EPOCH FROM timestamptz '2013-07-01 12:00:00') - EXTRACT(EPOCH FROM timestamptz '2013-03-01 12:00:00')) / 60 / 60 / 24 ..→ 121.9583333333333333
+timestamptz '2013-07-01 12:00:00' - timestamptz '2013-03-01 12:00:00' ..→ 121 days 23:00:00
 age(timestamptz '2013-07-01 12:00:00', timestamptz '2013-03-01 12:00:00') → 4 mons
 ```
 
@@ -1837,7 +1837,7 @@ EXTRACT(EPOCH FROM INTERVAL '5 days 3 hours') → 442800.000000
 You can convert an epoch value back to a timestamp with time zone with to_timestamp:
 
 ```sql
-to_timestamp(982384720.12) → 2001-02-17 04:38:40.12+00
+to_timestamp(982384720.12) → 2001-02-17 04:38:40.12..00
 ```
 Beware that applying to_timestamp to an epoch extracted from a date or timestamp value could produce a misleading result: the result will effectively assume that the original value had been given in UTC, which might not be the case.
 
@@ -1956,7 +1956,7 @@ EXTRACT(YEAR FROM TIMESTAMP '2001-02-16 20:38:40') → 2001
 ```
 
 Note
-When the input value is +/-Infinity, extract returns +/-Infinity for monotonically-increasing fields (epoch, julian, year, isoyear, decade, century, and millennium). For other fields, NULL is returned. PostgreSQL versions before 9.6 returned zero for all cases of infinite input.
+When the input value is ../-Infinity, extract returns ../-Infinity for monotonically-increasing fields (epoch, julian, year, isoyear, decade, century, and millennium). For other fields, NULL is returned. PostgreSQL versions before 9.6 returned zero for all cases of infinite input.
 
 The extract function is primarily intended for computational processing. For formatting date/time values for display, see Section 9.8.
 
@@ -2006,10 +2006,10 @@ A time zone cannot be specified when processing timestamp without time zone or i
 Examples (assuming the local time zone is America/New_York):
 
 ```sql
-date_trunc('hour', TIMESTAMP '2001-02-16 20:38:40') ~→ 2001-02-16 20:00:00
-date_trunc('year', TIMESTAMP '2001-02-16 20:38:40') ~→ 2001-01-01 00:00:00
-date_trunc('day', TIMESTAMP WITH TIME ZONE '2001-02-16 20:38:40+00') ~→ 2001-02-16 00:00:00-05
-#date_trunc('day', TIMESTAMP WITH TIME ZONE '2001-02-16 20:38:40+00', 'Australia/Sydney') ~→ 2001-02-16 08:00:00-05
+date_trunc('hour', TIMESTAMP '2001-02-16 20:38:40') ..→ 2001-02-16 20:00:00
+date_trunc('year', TIMESTAMP '2001-02-16 20:38:40') ..→ 2001-01-01 00:00:00
+date_trunc('day', TIMESTAMP WITH TIME ZONE '2001-02-16 20:38:40..00') ..→ 2001-02-16 00:00:00-05
+#date_trunc('day', TIMESTAMP WITH TIME ZONE '2001-02-16 20:38:40..00', 'Australia/Sydney') ..→ 2001-02-16 08:00:00-05
 date_trunc('hour', INTERVAL '3 days 02:47:33') → 3 days 02:00:00
 ```
 
@@ -2045,7 +2045,7 @@ Table 9.33. AT TIME ZONE Variants
 ||timestamp without time zone AT TIME ZONE zone → timestamp with time zone|
 Converts given time stamp without time zone to time stamp with time zone, assuming the given value is in the named time zone.|
 ```sql
-#timestamp '2001-02-16 20:38:40' at time zone 'America/Denver' → 2001-02-17 03:38:40+00
+#timestamp '2001-02-16 20:38:40' at time zone 'America/Denver' → 2001-02-17 03:38:40..00
 ```||
 ||timestamp with time zone AT TIME ZONE zone → timestamp without time zone|
 Converts given time stamp with time zone to time stamp without time zone, as the time would appear in that zone.|
@@ -2055,7 +2055,7 @@ Converts given time stamp with time zone to time stamp without time zone, as the
 ||time with time zone AT TIME ZONE zone → time with time zone|
 Converts given time with time zone to a new time zone. Since no date is supplied, this uses the currently active UTC offset for the named destination zone.|
 ```sql
-#time with time zone '05:34:17-05' at time zone 'UTC' → 10:34:17+00
+#time with time zone '05:34:17-05' at time zone 'UTC' → 10:34:17..00
 ```||
 |#
 
@@ -2064,9 +2064,9 @@ In these expressions, the desired time zone zone can be specified either as a te
 Examples (assuming the current TimeZone setting is America/Los_Angeles):
 
 ```sql
-#TIMESTAMP '2001-02-16 20:38:40' AT TIME ZONE 'America/Denver' ~→ 2001-02-16 19:38:40-08
-#TIMESTAMP WITH TIME ZONE '2001-02-16 20:38:40-05' AT TIME ZONE 'America/Denver' ~→ 2001-02-16 18:38:40
-#TIMESTAMP '2001-02-16 20:38:40' AT TIME ZONE 'Asia/Tokyo' AT TIME ZONE 'America/Chicago' ~→ 2001-02-16 05:38:40
+#TIMESTAMP '2001-02-16 20:38:40' AT TIME ZONE 'America/Denver' ..→ 2001-02-16 19:38:40-08
+#TIMESTAMP WITH TIME ZONE '2001-02-16 20:38:40-05' AT TIME ZONE 'America/Denver' ..→ 2001-02-16 18:38:40
+#TIMESTAMP '2001-02-16 20:38:40' AT TIME ZONE 'Asia/Tokyo' AT TIME ZONE 'America/Chicago' ..→ 2001-02-16 05:38:40
 ```
 
 The first example adds a time zone to a value that lacks it, and displays the value using the current TimeZone setting. The second example shifts the time stamp with time zone value to the specified time zone, and returns the value without a time zone. This allows storage and display of values different from the current TimeZone setting. The third example converts Tokyo time to Chicago time.
@@ -2096,11 +2096,11 @@ CURRENT_TIME, CURRENT_TIMESTAMP, LOCALTIME, and LOCALTIMESTAMP can optionally ta
 Some examples:
 
 ```sql
-CURRENT_TIME ~→ 14:39:53.662522-05
-CURRENT_DATE ~→ 2019-12-23
-CURRENT_TIMESTAMP ~→ 2019-12-23 14:39:53.662522-05
-CURRENT_TIMESTAMP(2) ~→ 2019-12-23 14:39:53.66-05
-#LOCALTIMESTAMP ~→ 2019-12-23 14:39:53.662522
+CURRENT_TIME ..→ 14:39:53.662522-05
+CURRENT_DATE ..→ 2019-12-23
+CURRENT_TIMESTAMP ..→ 2019-12-23 14:39:53.662522-05
+CURRENT_TIMESTAMP(2) ..→ 2019-12-23 14:39:53.66-05
+#LOCALTIMESTAMP ..→ 2019-12-23 14:39:53.662522
 ```
 
 Since these functions return the start time of the current transaction, their values do not change during the transaction. This is considered a feature: the intent is to allow a single transaction to have a consistent notion of the “current” time, so that multiple modifications within the same transaction bear the same time stamp.
@@ -2164,15 +2164,15 @@ Table 9.35. Geometric Operators
 
 #|
 ||Operator|Description|Example(s)||
-||geometric_type + point → geometric_type|
+||geometric_type .. point → geometric_type|
 Adds the coordinates of the second point to those of each point of the first argument, thus performing translation. Available for point, box, path, circle.|
 ```sql
-box '(1,1),(0,0)' + point '(2,0)' → (3,1),(2,0)
+box '(1,1),(0,0)' .. point '(2,0)' → (3,1),(2,0)
 ```||
-||path + path → path|
+||path .. path → path|
 Concatenates two open paths (returns NULL if either path is closed).|
 ```sql
-path '[(0,0),(1,1)]' + path '[(2,2),(3,3),(4,4)]' → [(0,0),(1,1),(2,2),(3,3),(4,4)]
+path '[(0,0),(1,1)]' .. path '[(2,2),(3,3),(4,4)]' → [(0,0),(1,1),(2,2),(3,3),(4,4)]
 ```||
 ||geometric_type - point → geometric_type|
 Subtracts the coordinates of the second point from those of each point of the first argument, thus performing translation. Available for point, box, path, circle.|
@@ -2281,15 +2281,15 @@ Does first object not extend below second? Available for box, polygon, circle.|
 ```sql
 box '(3,3),(0,0)' |&> box '(2,2),(0,0)' → true
 ```||
-||box <^ box → boolean|
+||box <.. box → boolean|
 Is first object below second (allows edges to touch)?|
 ```sql
-box '((1,1),(0,0))' <^ box '((2,2),(1,1))' → true
+box '((1,1),(0,0))' <.. box '((2,2),(1,1))' → true
 ```||
-||box >^ box → boolean|
+||box >.. box → boolean|
 Is first object above second (allows edges to touch)?|
 ```sql
-box '((2,2),(1,1))' >^ box '((1,1),(0,0))' → true
+box '((2,2),(1,1))' >.. box '((1,1),(0,0))' → true
 ```||
 ||geometric_type ?# geometric_type → boolean|
 Do these objects intersect? Available for these pairs of types: (box, box), (lseg, box), (lseg, lseg), (lseg, line), (line, box), (line, line), (path, path).|
@@ -2330,20 +2330,20 @@ Are lines parallel?|
 ```sql
 lseg '[(-1,0),(1,0)]' ?|| lseg '[(-1,2),(1,2)]' → true
 ```||
-||geometric_type ~= geometric_type → boolean|
+||geometric_type ..= geometric_type → boolean|
 Are these objects the same? Available for point, box, polygon, circle.|
 ```sql
-polygon '((0,0),(1,1))' ~= polygon '((1,1),(0,0))' → true
+polygon '((0,0),(1,1))' ..= polygon '((1,1),(0,0))' → true
 ```||
 |#
 
 [a] “Rotating” a box with these operators only moves its corner points: the box is still considered to have sides parallel to the axes. Hence the box's size is not preserved, as a true rotation would do.
 
 Caution
-Note that the “same as” operator, ~=, represents the usual notion of equality for the point, box, polygon, and circle types. Some of the geometric types also have an = operator, but = compares for equal areas only. The other scalar comparison operators (<= and so on), where available for these types, likewise compare areas.
+Note that the “same as” operator, ..=, represents the usual notion of equality for the point, box, polygon, and circle types. Some of the geometric types also have an = operator, but = compares for equal areas only. The other scalar comparison operators (<= and so on), where available for these types, likewise compare areas.
 
 Note
-Before PostgreSQL 14, the point is strictly below/above comparison operators point <<\| point and point \|>> point were respectively called <^ and >^. These names are still available, but are deprecated and will eventually be removed.
+Before PostgreSQL 14, the point is strictly below/above comparison operators point <<\| point and point \|>> point were respectively called <.. and >... These names are still available, but are deprecated and will eventually be removed.
 
 Table 9.36. Geometric Functions
 
@@ -2564,10 +2564,10 @@ Does either subnet contain or equal the other?|
 inet '192.168.1/24' && inet '192.168.1.80/28' → true
 inet '192.168.1/24' && inet '192.168.2.0/28' → false
 ```||
-||~ inet → inet|
+||.. inet → inet|
 Computes bitwise NOT.|
 ```sql
-~ inet '192.168.1.6' → 63.87.254.249
+.. inet '192.168.1.6' → 63.87.254.249
 ```||
 ||inet & inet → inet|
 Computes bitwise AND.|
@@ -2579,15 +2579,15 @@ Computes bitwise OR.|
 ```sql
 inet '192.168.1.6' | inet '0.0.0.255' → 192.168.1.255
 ```||
-||inet + bigint → inet|
+||inet .. bigint → inet|
 Adds an offset to an address.|
 ```sql
-inet '192.168.1.6' + 25 → 192.168.1.31
+inet '192.168.1.6' .. 25 → 192.168.1.31
 ```||
-||bigint + inet → inet|
+||bigint .. inet → inet|
 Adds an offset to an address. (NOT SUPPORTED)|
 ```sql
-#200 + inet '::ffff:fff0:1' → ::ffff:255.240.0.201
+#200 .. inet '::ffff:fff0:1' → ::ffff:255.240.0.201
 ```||
 ||inet - bigint → inet|
 Subtracts an offset from an address.|
@@ -2681,7 +2681,7 @@ text(inet '192.168.1.5') → 192.168.1.5/32
 Tip
 The abbrev, host, and text functions are primarily intended to offer alternative display formats for IP addresses.
 
-The MAC address types, macaddr and macaddr8, support the usual comparison operators shown in Table 9.1 as well as the specialized functions shown in Table 9.40. In addition, they support the bitwise logical operators ~, & and | (NOT, AND and OR), just as shown above for IP addresses.
+The MAC address types, macaddr and macaddr8, support the usual comparison operators shown in Table 9.1 as well as the specialized functions shown in Table 9.40. In addition, they support the bitwise logical operators .., & and | (NOT, AND and OR), just as shown above for IP addresses.
 
 Table 9.40. MAC Address Functions
 
@@ -2761,13 +2761,13 @@ xmlelement ( NAME name [, XMLATTRIBUTES ( attvalue [ AS attname ] [, ...] ) ] [,
 ```sql
 #xmlelement(name foo) → <foo/>
 #xmlelement(name foo, xmlattributes('xyz' as bar)) → <foo bar="xyz"/>
-#xmlelement(name foo, xmlattributes(current_date as bar), 'cont', 'ent') ~→ <foo bar="2007-01-26">content</foo>
+#xmlelement(name foo, xmlattributes(current_date as bar), 'cont', 'ent') ..→ <foo bar="2007-01-26">content</foo>
 ```
 
 Element and attribute names that are not valid XML names are escaped by replacing the offending characters by the sequence _xHHHH_, where HHHH is the character's Unicode codepoint in hexadecimal notation. For example:
 
 ```sql
-#xmlelement(name "foo$bar", xmlattributes('xyz' as "a&b")) → <foo_x0024_bar a_x0026_b="xyz"/>
+#xmlelement(name "foo..bar", xmlattributes('xyz' as "a&b")) → <foo_x0024_bar a_x0026_b="xyz"/>
 ```
 
 An explicit attribute name need not be specified if the attribute value is a column reference, in which case the column's name will be used as the attribute name by default. In other cases, the attribute must be given an explicit name. So this example is valid:
@@ -2840,12 +2840,12 @@ To process values of data type xml, PostgreSQL offers the functions xpath and xp
 
 9.15.3.1. Xpath
 
-xpath ( xpath text, xml xml [, nsarray text[] ] ) → xml[] (NOT SUPPORTED)
+xpath ( xpath text, xml xml [, nsarray text.. ] ) → xml.. (NOT SUPPORTED)
 
 
 9.15.3.2. Xpath_exists
 
-xpath_exists ( xpath text, xml xml [, nsarray text[] ] ) → boolean
+xpath_exists ( xpath text, xml xml [, nsarray text.. ] ) → boolean
 
 The function xpath_exists is a specialized form of the xpath function. Instead of returning the individual XML values that satisfy the XPath 1.0 expression, this function returns a Boolean indicating whether the query was satisfied or not (specifically, whether it produced any value other than an empty node-set). This function is equivalent to the XMLEXISTS predicate, except that it also offers support for a namespace mapping argument.
 
@@ -2918,14 +2918,14 @@ Extracts JSON object field with the given key, as text.|
 ```sql
 '{"a":1,"b":2}'::json ->> 'b' → 2
 ```||
-||json #> text[] → json  
-jsonb #> text[] → jsonb|
+||json #> text.. → json  
+jsonb #> text.. → jsonb|
 Extracts JSON sub-object at the specified path, where path elements can be either field keys or array indexes. (NOT SUPPORTED)|
 ```sql
 #'{"a": {"b": ["foo","bar"]}}'::json #> '{a,b,1}' → "bar"
 ```||
-||json #>> text[] → text  
-jsonb #>> text[] → text|
+||json #>> text.. → text  
+jsonb #>> text.. → text|
 Extracts JSON sub-object at the specified path as text. (NOT SUPPORTED)|
 ```sql
 #'{"a": {"b": ["foo","bar"]}}'::json #>> '{a,b,1}' → bar
@@ -2957,12 +2957,12 @@ Does the text string exist as a top-level key or array element within the JSON v
 '{"a":1, "b":2}'::jsonb ? 'b' → true
 '["a", "b", "c"]'::jsonb ? 'b' → true
 ```||
-||jsonb ?\| text[] → boolean|
+||jsonb ?\| text.. → boolean|
 Do any of the strings in the text array exist as top-level keys or array elements?|
 ```sql
 '{"a":1, "b":2, "c":3}'::jsonb ?| array['b', 'd'] → true
 ```||
-||jsonb ?& text[] → boolean|
+||jsonb ?& text.. → boolean|
 Do all of the strings in the text array exist as top-level keys or array elements?|
 ```sql
 '["a", "b", "c"]'::jsonb ?& array['a', 'b'] → true
@@ -2987,17 +2987,17 @@ Deletes a key (and its value) from a JSON object, or matching string value(s) fr
 '{"a": "b", "c": "d"}'::jsonb - 'a' → {"c": "d"}
 '["a", "b", "c", "b"]'::jsonb - 'b' → ["a", "c"]
 ```||
-||jsonb - text[] → jsonb|
+||jsonb - text.. → jsonb|
 Deletes all matching keys or array elements from the left operand. (NOT SUPPORTED)|
 ```sql
-#'{"a": "b", "c": "d"}'::jsonb - '{a,c}'::text[] → {}
+#'{"a": "b", "c": "d"}'::jsonb - '{a,c}'::text.. → {}
 ```||
 ||jsonb - integer → jsonb|
 Deletes the array element with specified index (negative integers count from the end). Throws an error if JSON value is not an array.|
 ```sql
 '["a", "b"]'::jsonb - 1 → ["a"]
 ```||
-||jsonb #- text[] → jsonb|
+||jsonb #- text.. → jsonb|
 Deletes the field or array element at the specified path, where path elements can be either field keys or array indexes.|
 ```sql
 '["a", {"b":1}]'::jsonb #- '{1,b}' → ["a", {}]
@@ -3005,12 +3005,12 @@ Deletes the field or array element at the specified path, where path elements ca
 ||jsonb @? jsonpath → boolean|
 Does JSON path return any item for the specified JSON value?|
 ```sql
-'{"a":[1,2,3,4,5]}'::jsonb @? '$.a[*] ? (@ > 2)' → true
+'{"a":[1,2,3,4,5]}'::jsonb @? '...a[*] ? (@ > 2)' → true
 ```||
 ||jsonb @@ jsonpath → boolean|
 Returns the result of a JSON path predicate check for the specified JSON value. Only the first item of the result is taken into account. If the result is not Boolean, then NULL is returned.|
 ```sql
-'{"a":[1,2,3,4,5]}'::jsonb @@ '$.a[*] > 2' → true
+'{"a":[1,2,3,4,5]}'::jsonb @@ '...a[*] > 2' → true
 ```||
 |#
 
@@ -3033,7 +3033,7 @@ Converts any SQL value to json or jsonb. Arrays and composites are converted rec
 ||array_to_json ( anyarray [, boolean ] ) → json|
 Converts an SQL array to a JSON array. The behavior is the same as to_json except that line feeds will be added between top-level array elements if the optional boolean parameter is true.|
 ```sql
-array_to_json('{{1,5},{99,100}}'::int[]) → [[1,5],[99,100]]
+array_to_json('{{1,5},{99,100}}'::int..) → [[1,5],[99,100]]
 ```||
 ||row_to_json ( record [, boolean ] ) → json|
 Converts an SQL composite value to a JSON object. The behavior is the same as to_json except that line feeds will be added between top-level elements if the optional boolean parameter is true. (NOT SUPPORTED)|
@@ -3052,15 +3052,15 @@ Builds a JSON object out of a variadic argument list. By convention, the argumen
 ```sql
 #json_build_object('foo', 1, 2, row(3,'bar')) → {"foo" : 1, "2" : {"f1":3,"f2":"bar"}}
 ```||
-||json_object ( text[] ) → json  
-jsonb_object ( text[] ) → jsonb|
+||json_object ( text.. ) → json  
+jsonb_object ( text.. ) → jsonb|
 Builds a JSON object out of a text array. The array must have either exactly one dimension with an even number of members, in which case they are taken as alternating key/value pairs, or two dimensions such that each inner array has exactly two elements, which are taken as a key/value pair. All values are converted to JSON strings.|
 ```sql
 json_object('{a, 1, b, "def", c, 3.5}') → {"a" : "1", "b" : "def", "c" : "3.5"}
 json_object('{{a, 1}, {b, "def"}, {c, 3.5}}') → {"a" : "1", "b" : "def", "c" : "3.5"}
 ```||
-||json_object ( keys text[], values text[] ) → json  
-jsonb_object ( keys text[], values text[] ) → jsonb|
+||json_object ( keys text.., values text.. ) → json  
+jsonb_object ( keys text.., values text.. ) → jsonb|
 This form of json_object takes keys and values pairwise from separate text arrays. Otherwise it is identical to the one-argument form.|
 ```sql
 json_object('{a,b}', '{1,2}') → {"a" : "1", "b" : "2"}
@@ -3097,7 +3097,7 @@ jsonb_array_length ( jsonb ) → integer|
 Returns the number of elements in the top-level JSON array.|
 ```sql
 json_array_length('[1,2,3,{"f1":1,"f2":[5,6]},4]') → 5
-jsonb_array_length('[]') → 0
+jsonb_array_length('..') → 0
 ```||
 ||json_each ( json ) → setof record ( key text, value json )  
 jsonb_each ( jsonb ) → setof record ( key text, value jsonb )|
@@ -3118,14 +3118,14 @@ a,foo
 b,bar
 ]
 ```||
-||json_extract_path ( from_json json, VARIADIC path_elems text[] ) → json  
-jsonb_extract_path ( from_json jsonb, VARIADIC path_elems text[] ) → jsonb|
+||json_extract_path ( from_json json, VARIADIC path_elems text.. ) → json  
+jsonb_extract_path ( from_json jsonb, VARIADIC path_elems text.. ) → jsonb|
 Extracts JSON sub-object at the specified path. (This is functionally equivalent to the #> operator, but writing the path out as a variadic list can be more convenient in some cases.) (NOT SUPPORTED)|
 ```sql
 #json_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"foo"}}', 'f4', 'f6') → "foo"
 ```||
-||json_extract_path_text ( from_json json, VARIADIC path_elems text[] ) → text  
-jsonb_extract_path_text ( from_json jsonb, VARIADIC path_elems text[] ) → text|
+||json_extract_path_text ( from_json json, VARIADIC path_elems text.. ) → text  
+jsonb_extract_path_text ( from_json jsonb, VARIADIC path_elems text.. ) → text|
 Extracts JSON sub-object at the specified path as text. (This is functionally equivalent to the #>> operator.) (NOT SUPPORTED)|
 ```sql
 #json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"foo"}}', 'f4', 'f6') → foo
@@ -3161,7 +3161,7 @@ While the example below uses a constant JSON value, typical use would be to refe
 
 ```sql
 #CREATE TYPE subrowtype as (d int, e text); 
-#CREATE type myrowtype as (a int, b text[], c subrowtype);
+#CREATE type myrowtype as (a int, b text.., c subrowtype);
 #SELECT * FROM json_populate_record(null::myrowtype, '{"a": 1, "b": ["2", "a b"], "c": {"d": 4, "e": "a b c"}, "x": "foo"}') → 1,{2,"a b"},(4,"a b c")
 ```||
 ||json_populate_recordset ( base anyelement, from_json json ) → setof anyelement  
@@ -3179,7 +3179,7 @@ jsonb_to_record ( jsonb ) → record|
 Expands the top-level JSON object to a row having the composite type defined by an AS clause. (As with all functions returning record, the calling query must explicitly define the structure of the record with an AS clause.) The output record is filled from fields of the JSON object, in the same way as described above for json[b]_populate_record. Since there is no input record value, unmatched columns are always filled with nulls. (NOT SUPPORTED)|
 ```sql
 #CREATE TYPE myrowtype as (a int, b text);
-#SELECT * FROM json_to_record('{"a":1,"b":[1,2,3],"c":[1,2,3],"e":"bar","r": {"a": 123, "b": "a b c"}}') as x(a int, b text, c int[], d text, r myrowtype) → 1,[1,2,3],{1,2,3},(123,"a b c")
+#SELECT * FROM json_to_record('{"a":1,"b":[1,2,3],"c":[1,2,3],"e":"bar","r": {"a": 123, "b": "a b c"}}') as x(a int, b text, c int.., d text, r myrowtype) → 1,[1,2,3],{1,2,3},(123,"a b c")
 ```||
 ||json_to_recordset ( json ) → setof record  
 jsonb_to_recordset ( jsonb ) → setof record|
@@ -3190,19 +3190,19 @@ Expands the top-level JSON array of objects to a set of rows having the composit
 2,
 ]
 ```||
-||jsonb_set ( target jsonb, path text[], new_value jsonb [, create_if_missing boolean ] ) → jsonb|
+||jsonb_set ( target jsonb, path text.., new_value jsonb [, create_if_missing boolean ] ) → jsonb|
 Returns target with the item designated by path replaced by new_value, or with new_value added if create_if_missing is true (which is the default) and the item designated by path does not exist. All earlier steps in the path must exist, or the target is returned unchanged. As with the path oriented operators, negative integers that appear in the path count from the end of JSON arrays. If the last path step is an array index that is out of range, and create_if_missing is true, the new value is added at the beginning of the array if the index is negative, or at the end of the array if it is positive.|
 ```sql
 jsonb_set('[{"f1":1,"f2":null},2,null,3]', '{0,f1}', '[2,3,4]', false) → [{"f1": [2, 3, 4], "f2": null}, 2, null, 3]
 #jsonb_set('[{"f1":1,"f2":null},2]', '{0,f3}', '[2,3,4]') → [{"f1": 1, "f2": null, "f3": [2, 3, 4]}, 2]
 ```||
-||jsonb_set_lax ( target jsonb, path text[], new_value jsonb [, create_if_missing boolean [, null_value_treatment text ]] ) → jsonb|
+||jsonb_set_lax ( target jsonb, path text.., new_value jsonb [, create_if_missing boolean [, null_value_treatment text ]] ) → jsonb|
 If new_value is not NULL, behaves identically to jsonb_set. Otherwise behaves according to the value of null_value_treatment which must be one of 'raise_exception', 'use_json_null', 'delete_key', or 'return_target'. The default is 'use_json_null'.|
 ```sql
 #jsonb_set_lax('[{"f1":1,"f2":null},2,null,3]', '{0,f1}', null) → [{"f1": null, "f2": null}, 2, null, 3]
 jsonb_set_lax('[{"f1":99,"f2":null},2]', '{0,f3}', null, true, 'return_target') → [{"f1": 99, "f2": null}, 2]
 ```||
-||jsonb_insert ( target jsonb, path text[], new_value jsonb [, insert_after boolean ] ) → jsonb|
+||jsonb_insert ( target jsonb, path text.., new_value jsonb [, insert_after boolean ] ) → jsonb|
 Returns target with new_value inserted. If the item designated by the path is an array element, new_value will be inserted before that item if insert_after is false (which is the default), or after it if insert_after is true. If the item designated by the path is an object field, new_value will be inserted only if the object does not already contain that key. All earlier steps in the path must exist, or the target is returned unchanged. As with the path oriented operators, negative integers that appear in the path count from the end of JSON arrays. If the last path step is an array index that is out of range, the new value is added at the beginning of the array if the index is negative, or at the end of the array if it is positive.|
 ```sql
 #jsonb_insert('{"a": [0,1,2]}', '{a, 1}', '"new_value"') → {"a": [0, "new_value", 1, 2]}
@@ -3217,17 +3217,17 @@ json_strip_nulls('[{"f1":1, "f2":null}, 2, null, 3]') → [{"f1":1},2,null,3]
 ||jsonb_path_exists ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → boolean|
 Checks whether the JSON path returns any item for the specified JSON value. If the vars argument is specified, it must be a JSON object, and its fields provide named values to be substituted into the jsonpath expression. If the silent argument is specified and is true, the function suppresses the same errors as the @? and @@ operators do.|
 ```sql
-jsonb_path_exists('{"a":[1,2,3,4,5]}', '$.a[*] ? (@ >= $min && @ <= $max)', '{"min":2, "max":4}', false) → true
+jsonb_path_exists('{"a":[1,2,3,4,5]}', '...a[*] ? (@ >= ..min && @ <= ..max)', '{"min":2, "max":4}', false) → true
 ```||
 ||jsonb_path_match ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → boolean|
 Returns the result of a JSON path predicate check for the specified JSON value. Only the first item of the result is taken into account. If the result is not Boolean, then NULL is returned. The optional vars and silent arguments act the same as for jsonb_path_exists.|
 ```sql
-jsonb_path_match('{"a":[1,2,3,4,5]}', 'exists($.a[*] ? (@ >= $min && @ <= $max))', '{"min":2, "max":4}', false) → true
+jsonb_path_match('{"a":[1,2,3,4,5]}', 'exists(...a[*] ? (@ >= ..min && @ <= ..max))', '{"min":2, "max":4}', false) → true
 ```||
 ||jsonb_path_query ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → setof jsonb|
 Returns all JSON items returned by the JSON path for the specified JSON value. The optional vars and silent arguments act the same as for jsonb_path_exists.|
 ```sql
-SELECT * FROM jsonb_path_query('{"a":[1,2,3,4,5]}', '$.a[*] ? (@ >= $min && @ <= $max)', '{"min":2, "max":4}', false) as a → [
+SELECT * FROM jsonb_path_query('{"a":[1,2,3,4,5]}', '...a[*] ? (@ >= ..min && @ <= ..max)', '{"min":2, "max":4}', false) as a → [
 2
 3
 4
@@ -3236,12 +3236,12 @@ SELECT * FROM jsonb_path_query('{"a":[1,2,3,4,5]}', '$.a[*] ? (@ >= $min && @ <=
 ||jsonb_path_query_array ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → jsonb|
 Returns all JSON items returned by the JSON path for the specified JSON value, as a JSON array. The optional vars and silent arguments act the same as for jsonb_path_exists.|
 ```sql
-jsonb_path_query_array('{"a":[1,2,3,4,5]}', '$.a[*] ? (@ >= $min && @ <= $max)', '{"min":2, "max":4}', false) → [2, 3, 4]
+jsonb_path_query_array('{"a":[1,2,3,4,5]}', '...a[*] ? (@ >= ..min && @ <= ..max)', '{"min":2, "max":4}', false) → [2, 3, 4]
 ```||
 ||jsonb_path_query_first ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → jsonb|
 Returns the first JSON item returned by the JSON path for the specified JSON value. Returns NULL if there are no results. The optional vars and silent arguments act the same as for jsonb_path_exists.|
 ```sql
-jsonb_path_query_first('{"a":[1,2,3,4,5]}', '$.a[*] ? (@ >= $min && @ <= $max)', '{"min":2, "max":4}', false) → 2
+jsonb_path_query_first('{"a":[1,2,3,4,5]}', '...a[*] ? (@ >= ..min && @ <= ..max)', '{"min":2, "max":4}', false) → 2
 ```||
 ||jsonb_path_exists_tz ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → boolean  
 jsonb_path_match_tz ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → boolean  
@@ -3250,7 +3250,7 @@ jsonb_path_query_array_tz ( target jsonb, path jsonpath [, vars jsonb [, silent 
 jsonb_path_query_first_tz ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → jsonb|
 These functions act like their counterparts described above without the _tz suffix, except that these functions support comparisons of date/time values that require timezone-aware conversions. The example below requires interpretation of the date-only value 2015-08-02 as a timestamp with time zone, so the result depends on the current TimeZone setting. Due to this dependency, these functions are marked as stable, which means these functions cannot be used in indexes. Their counterparts are immutable, and so can be used in indexes; but they will throw errors if asked to make such comparisons. (NOT SUPPORTED)|
 ```sql
-#jsonb_path_exists_tz('["2015-08-01 12:00:00-05"]', '$[*] ? (@.datetime() < "2015-08-02".datetime())', '{}', false) → true
+#jsonb_path_exists_tz('["2015-08-01 12:00:00-05"]', '..[*] ? (@.datetime() < "2015-08-02".datetime())', '{}', false) → true
 ```||
 ||jsonb_pretty ( jsonb ) → text|
 Converts the given JSON value to pretty-printed, indented text.|
@@ -3281,7 +3281,7 @@ JSON query functions and operators pass the provided path expression to the path
 
 A path expression consists of a sequence of elements allowed by the jsonpath data type. The path expression is normally evaluated from left to right, but you can use parentheses to change the order of operations. If the evaluation is successful, a sequence of JSON items is produced, and the evaluation result is returned to the JSON query function that completes the specified computation.
 
-To refer to the JSON value being queried (the context item), use the $ variable in the path expression. It can be followed by one or more accessor operators, which go down the JSON structure level by level to retrieve sub-items of the context item. Each operator that follows deals with the result of the previous evaluation step.
+To refer to the JSON value being queried (the context item), use the .. variable in the path expression. It can be followed by one or more accessor operators, which go down the JSON structure level by level to retrieve sub-items of the context item. Each operator that follows deals with the result of the previous evaluation step.
 
 For example, suppose you have some JSON data from a GPS tracker that you would like to parse, such as:
 
@@ -3303,16 +3303,16 @@ For example, suppose you have some JSON data from a GPS tracker that you would l
 }
 To retrieve the available track segments, you need to use the .key accessor operator to descend through surrounding JSON objects:
 
-$.track.segments
+...track.segments
 To retrieve the contents of an array, you typically use the [*] operator. For example, the following path will return the location coordinates for all the available track segments:
 
-$.track.segments[*].location
-To return the coordinates of the first segment only, you can specify the corresponding subscript in the [] accessor operator. Recall that JSON array indexes are 0-relative:
+...track.segments[*].location
+To return the coordinates of the first segment only, you can specify the corresponding subscript in the .. accessor operator. Recall that JSON array indexes are 0-relative:
 
-$.track.segments[0].location
+...track.segments[0].location
 The result of each path evaluation step can be processed by one or more jsonpath operators and methods listed in Section 9.16.2.2. Each method name must be preceded by a dot. For example, you can get the size of an array:
 
-$.track.segments.size()
+...track.segments.size()
 More examples of using jsonpath operators and methods within path expressions appear below in Section 9.16.2.2.
 
 When defining a path, you can also use one or more filter expressions that work similarly to the WHERE clause in SQL. A filter expression begins with a question mark and provides a condition in parentheses:
@@ -3324,26 +3324,26 @@ The functions and operators that can be used in filter expressions are listed in
 
 For example, suppose you would like to retrieve all heart rate values higher than 130. You can achieve this using the following expression:
 
-$.track.segments[*].HR ? (@ > 130)
+...track.segments[*].HR ? (@ > 130)
 To get the start times of segments with such values, you have to filter out irrelevant segments before returning the start times, so the filter expression is applied to the previous step, and the path used in the condition is different:
 
-$.track.segments[*] ? (@.HR > 130)."start time"
+...track.segments[*] ? (@.HR > 130)."start time"
 You can use several filter expressions in sequence, if required. For example, the following expression selects start times of all segments that contain locations with relevant coordinates and high heart rate values:
 
-$.track.segments[*] ? (@.location[1] < 13.4) ? (@.HR > 130)."start time"
+...track.segments[*] ? (@.location[1] < 13.4) ? (@.HR > 130)."start time"
 Using filter expressions at different nesting levels is also allowed. The following example first filters all segments by location, and then returns high heart rate values for these segments, if available:
 
-$.track.segments[*] ? (@.location[1] < 13.4).HR ? (@ > 130)
+...track.segments[*] ? (@.location[1] < 13.4).HR ? (@ > 130)
 You can also nest filter expressions within each other:
 
-$.track ? (exists(@.segments[*] ? (@.HR > 130))).segments.size()
+...track ? (exists(@.segments[*] ? (@.HR > 130))).segments.size()
 This expression returns the size of the track if it contains any segments with high heart rate values, or an empty sequence otherwise.
 
 PostgreSQL's implementation of the SQL/JSON path language has the following deviations from the SQL/JSON standard:
 
 A path expression can be a Boolean predicate, although the SQL/JSON standard allows predicates only in filters. This is necessary for implementation of the @@ operator. For example, the following jsonpath expression is valid in PostgreSQL:
 
-$.track.segments[*].HR < 70
+...track.segments[*].HR < 70
 There are minor differences in the interpretation of regular expression patterns used in like_regex filters, as described in Section 9.16.2.3.
 
 9.16.2.1. Strict And Lax Modes
@@ -3362,16 +3362,16 @@ The queried JSON data contain nested arrays. In this case, only the outermost ar
 
 For example, when querying the GPS data listed above, you can abstract from the fact that it stores an array of segments when using the lax mode:
 
-lax $.track.segments.location
+lax ...track.segments.location
 In the strict mode, the specified path must exactly match the structure of the queried JSON document to return an SQL/JSON item, so using this path expression will cause an error. To get the same result as in the lax mode, you have to explicitly unwrap the segments array:
 
-strict $.track.segments[*].location
+strict ...track.segments[*].location
 The .\*\* accessor can lead to surprising results when using the lax mode. For instance, the following query selects every HR value twice:
 
-lax $.\*\*.HR
+lax ...\*\*.HR
 This happens because the .\*\* accessor selects both the segments array and each of its elements, while the .HR accessor automatically unwraps arrays when using the lax mode. To avoid surprising results, we recommend using the .\*\* accessor only in the strict mode. The following query selects each HR value just once:
 
-strict $.\*\*.HR
+strict ...\*\*.HR
 
 9.16.2.2. SQL/JSON Path Operators And Methods
 
@@ -3381,85 +3381,85 @@ Table 9.48. jsonpath Operators and Methods
 
 #|
 ||Operator/Method|Description|Example(s)||
-||number + number → number|
+||number .. number → number|
 Addition|
 ```sql
-jsonb_path_query_array('[2]', '$[0] + 3', '{}', false) → [5]
+jsonb_path_query_array('[2]', '..[0] .. 3', '{}', false) → [5]
 ```||
-||\+ number → number|
+||\.. number → number|
 Unary plus (no operation); unlike addition, this can iterate over multiple values|
 ```sql
-jsonb_path_query_array('{"x": [2,3,4]}', '+ $.x', '{}', false) → [2, 3, 4]
+jsonb_path_query_array('{"x": [2,3,4]}', '.. ...x', '{}', false) → [2, 3, 4]
 ```||
 ||number - number → number|
 Subtraction|
 ```sql
-jsonb_path_query_array('[2]', '7 - $[0]', '{}', false) → [5]
+jsonb_path_query_array('[2]', '7 - ..[0]', '{}', false) → [5]
 ```||
 ||\- number → number|
 Negation; unlike subtraction, this can iterate over multiple values|
 ```sql
-jsonb_path_query_array('{"x": [2,3,4]}', '- $.x', '{}', false) → [-2, -3, -4]
+jsonb_path_query_array('{"x": [2,3,4]}', '- ...x', '{}', false) → [-2, -3, -4]
 ```||
 ||number * number → number|
 Multiplication|
 ```sql
-jsonb_path_query_array('[4]', '2 * $[0]', '{}', false) → [8]
+jsonb_path_query_array('[4]', '2 * ..[0]', '{}', false) → [8]
 ```||
 ||number / number → number|
 Division|
 ```sql
-jsonb_path_query_array('[8.5]', '$[0] / 2', '{}', false) → [4.2500000000000000]
+jsonb_path_query_array('[8.5]', '..[0] / 2', '{}', false) → [4.2500000000000000]
 ```||
 ||number % number → number|
 Modulo (remainder)|
 ```sql
-jsonb_path_query_array('[32]', '$[0] % 10', '{}', false) → [2]
+jsonb_path_query_array('[32]', '..[0] % 10', '{}', false) → [2]
 ```||
 ||value . type() → string|
 Type of the JSON item (see json_typeof)|
 ```sql
-jsonb_path_query_array('[1, "2", {}]', '$[*].type()', '{}', false) → ["number", "string", "object"]
+jsonb_path_query_array('[1, "2", {}]', '..[*].type()', '{}', false) → ["number", "string", "object"]
 ```||
 ||value . size() → number|
 Size of the JSON item (number of array elements, or 1 if not an array)|
 ```sql
-jsonb_path_query_array('{"m": [11, 15]}', '$.m.size()', '{}', false) → [2]
+jsonb_path_query_array('{"m": [11, 15]}', '...m.size()', '{}', false) → [2]
 ```||
 ||value . double() → number|
 Approximate floating-point number converted from a JSON number or string|
 ```sql
-jsonb_path_query_array('{"len": "1.9"}', '$.len.double() * 2', '{}', false) → [3.8]
+jsonb_path_query_array('{"len": "1.9"}', '...len.double() * 2', '{}', false) → [3.8]
 ```||
 ||number . ceiling() → number|
 Nearest integer greater than or equal to the given number|
 ```sql
-jsonb_path_query_array('{"h": 1.3}', '$.h.ceiling()', '{}', false) → [2]
+jsonb_path_query_array('{"h": 1.3}', '...h.ceiling()', '{}', false) → [2]
 ```||
 ||number . floor() → number|
 Nearest integer less than or equal to the given number|
 ```sql
-jsonb_path_query_array('{"h": 1.7}', '$.h.floor()', '{}', false) → [1]
+jsonb_path_query_array('{"h": 1.7}', '...h.floor()', '{}', false) → [1]
 ```||
 ||number . abs() → number|
 Absolute value of the given number|
 ```sql
-jsonb_path_query_array('{"z": -0.3}', '$.z.abs()', '{}', false) → [0.3]
+jsonb_path_query_array('{"z": -0.3}', '...z.abs()', '{}', false) → [0.3]
 ```||
 ||string . datetime() → datetime_type (see note)|
 Date/time value converted from a string (NOT SUPPORTED)|
 ```sql
-#jsonb_path_query_array('["2015-8-1", "2015-08-12"]', '$[*] ? (@.datetime() < "2015-08-2".datetime())', '{}', false) → ["2015-8-1"]
+#jsonb_path_query_array('["2015-8-1", "2015-08-12"]', '..[*] ? (@.datetime() < "2015-08-2".datetime())', '{}', false) → ["2015-8-1"]
 ```||
 ||string . datetime(template) → datetime_type (see note)|
 Date/time value converted from a string using the specified to_timestamp template (NOT SUPPORTED)|
 ```sql
-#jsonb_path_query_array('["12:30", "18:40"]', '$[*].datetime("HH24:MI")', '{}', false) → ["12:30:00", "18:40:00"]
+#jsonb_path_query_array('["12:30", "18:40"]', '..[*].datetime("HH24:MI")', '{}', false) → ["12:30:00", "18:40:00"]
 ```||
 ||object . keyvalue() → array|
 The object's key-value pairs, represented as an array of objects containing three fields: "key", "value", and "id"; "id" is a unique identifier of the object the key-value pair belongs to|
 ```sql
-jsonb_path_query_array('{"x": "20", "y": 32}', '$.keyvalue()', '{}', false) → [{"id": 0, "key": "x", "value": "20"}, {"id": 0, "key": "y", "value": 32}]
+jsonb_path_query_array('{"x": "20", "y": 32}', '...keyvalue()', '{}', false) → [{"id": 0, "key": "x", "value": "20"}, {"id": 0, "key": "y", "value": 32}]
 ```||
 |#
 
@@ -3483,102 +3483,102 @@ Table 9.49. jsonpath Filter Expression Elements
 ||value == value → boolean|
 Equality comparison (this, and the other comparison operators, work on all JSON scalar values)|
 ```sql
-jsonb_path_query_array('[1, "a", 1, 3]', '$[*] ? (@ == 1)', '{}', false) → [1, 1]
-jsonb_path_query_array('[1, "a", 1, 3]', '$[*] ? (@ == "a")', '{}', false) → ["a"]
+jsonb_path_query_array('[1, "a", 1, 3]', '..[*] ? (@ == 1)', '{}', false) → [1, 1]
+jsonb_path_query_array('[1, "a", 1, 3]', '..[*] ? (@ == "a")', '{}', false) → ["a"]
 ```||
 ||value != value → boolean  
 value <> value → boolean|
 Non-equality comparison|
 ```sql
-jsonb_path_query_array('[1, 2, 1, 3]', '$[*] ? (@ != 1)', '{}', false) → [2, 3]
-jsonb_path_query_array('["a", "b", "c"]', '$[*] ? (@ <> "b")', '{}', false) → ["a", "c"]
+jsonb_path_query_array('[1, 2, 1, 3]', '..[*] ? (@ != 1)', '{}', false) → [2, 3]
+jsonb_path_query_array('["a", "b", "c"]', '..[*] ? (@ <> "b")', '{}', false) → ["a", "c"]
 ```||
 ||value < value → boolean|
 Less-than comparison|
 ```sql
-jsonb_path_query_array('[1, 2, 3]', '$[*] ? (@ < 2)', '{}', false) → [1]
+jsonb_path_query_array('[1, 2, 3]', '..[*] ? (@ < 2)', '{}', false) → [1]
 ```||
 ||value <= value → boolean|
 Less-than-or-equal-to comparison|
 ```sql
-jsonb_path_query_array('["a", "b", "c"]', '$[*] ? (@ <= "b")', '{}', false) → ["a", "b"]
+jsonb_path_query_array('["a", "b", "c"]', '..[*] ? (@ <= "b")', '{}', false) → ["a", "b"]
 ```||
 ||value > value → boolean|
 Greater-than comparison|
 ```sql
-jsonb_path_query_array('[1, 2, 3]', '$[*] ? (@ > 2)', '{}', false) → [3]
+jsonb_path_query_array('[1, 2, 3]', '..[*] ? (@ > 2)', '{}', false) → [3]
 ```||
 ||value >= value → boolean|
 Greater-than-or-equal-to comparison|
 ```sql
-jsonb_path_query_array('[1, 2, 3]', '$[*] ? (@ >= 2)', '{}', false) → [2, 3]
+jsonb_path_query_array('[1, 2, 3]', '..[*] ? (@ >= 2)', '{}', false) → [2, 3]
 ```||
 ||true → boolean|
 JSON constant true|
 ```sql
-jsonb_path_query_array('[{"name": "John", "parent": false}, {"name": "Chris", "parent": true}]', '$[*] ? (@.parent == true)', '{}', false) → [{"name": "Chris", "parent": true}]
+jsonb_path_query_array('[{"name": "John", "parent": false}, {"name": "Chris", "parent": true}]', '..[*] ? (@.parent == true)', '{}', false) → [{"name": "Chris", "parent": true}]
 ```||
 ||false → boolean|
 JSON constant false|
 ```sql
-jsonb_path_query_array('[{"name": "John", "parent": false}, {"name": "Chris", "parent": true}]', '$[*] ? (@.parent == false)', '{}', false) → [{"name": "John", "parent": false}]
+jsonb_path_query_array('[{"name": "John", "parent": false}, {"name": "Chris", "parent": true}]', '..[*] ? (@.parent == false)', '{}', false) → [{"name": "John", "parent": false}]
 ```||
 ||null → value|
 JSON constant null (note that, unlike in SQL, comparison to null works normally)|
 ```sql
-jsonb_path_query_array('[{"name": "Mary", "job": null}, {"name": "Michael", "job": "driver"}]', '$[*] ? (@.job == null) .name', '{}', false) → ["Mary"]
+jsonb_path_query_array('[{"name": "Mary", "job": null}, {"name": "Michael", "job": "driver"}]', '..[*] ? (@.job == null) .name', '{}', false) → ["Mary"]
 ```||
 ||boolean && boolean → boolean|
 Boolean AND|
 ```sql
-jsonb_path_query_array('[1, 3, 7]', '$[*] ? (@ > 1 && @ < 5)', '{}', false) → [3]
+jsonb_path_query_array('[1, 3, 7]', '..[*] ? (@ > 1 && @ < 5)', '{}', false) → [3]
 ```||
 ||boolean \|\| boolean → boolean|
 Boolean OR|
 ```sql
-jsonb_path_query_array('[1, 3, 7]', '$[*] ? (@ < 1 || @ > 5)', '{}', false) → [7]
+jsonb_path_query_array('[1, 3, 7]', '..[*] ? (@ < 1 || @ > 5)', '{}', false) → [7]
 ```||
 ||! boolean → boolean|
 Boolean NOT|
 ```sql
-jsonb_path_query_array('[1, 3, 7]', '$[*] ? (!(@ < 5))', '{}', false) → [7]
+jsonb_path_query_array('[1, 3, 7]', '..[*] ? (!(@ < 5))', '{}', false) → [7]
 ```||
 ||boolean is unknown → boolean|
 Tests whether a Boolean condition is unknown.|
 ```sql
-jsonb_path_query_array('[-1, 2, 7, "foo"]', '$[*] ? ((@ > 0) is unknown)', '{}', false) → ["foo"]
+jsonb_path_query_array('[-1, 2, 7, "foo"]', '..[*] ? ((@ > 0) is unknown)', '{}', false) → ["foo"]
 ```||
 ||string like_regex string [ flag string ] → boolean|
 Tests whether the first operand matches the regular expression given by the second operand, optionally with modifications described by a string of flag characters (see Section 9.16.2.3).|
 ```sql
-jsonb_path_query_array('["abc", "abd", "aBdC", "abdacb", "babc"]', '$[*] ? (@ like_regex "^ab.*c")', '{}', false) → ["abc", "abdacb"]
-jsonb_path_query_array('["abc", "abd", "aBdC", "abdacb", "babc"]', '$[*] ? (@ like_regex "^ab.*c" flag "i")', '{}', false) → ["abc", "aBdC", "abdacb"]
+jsonb_path_query_array('["abc", "abd", "aBdC", "abdacb", "babc"]', '..[*] ? (@ like_regex "..ab.*c")', '{}', false) → ["abc", "abdacb"]
+jsonb_path_query_array('["abc", "abd", "aBdC", "abdacb", "babc"]', '..[*] ? (@ like_regex "..ab.*c" flag "i")', '{}', false) → ["abc", "aBdC", "abdacb"]
 ```||
 ||string starts with string → boolean|
 Tests whether the second operand is an initial substring of the first operand.|
 ```sql
-jsonb_path_query_array('["John Smith", "Mary Stone", "Bob Johnson"]', '$[*] ? (@ starts with "John")', '{}', false) → ["John Smith"]
+jsonb_path_query_array('["John Smith", "Mary Stone", "Bob Johnson"]', '..[*] ? (@ starts with "John")', '{}', false) → ["John Smith"]
 ```||
 ||exists ( path_expression ) → boolean|
 Tests whether a path expression matches at least one SQL/JSON item. Returns unknown if the path expression would result in an error; the second example uses this to avoid a no-such-key error in strict mode.|
 ```sql
-jsonb_path_query_array('{"x": [1, 2], "y": [2, 4]}', 'strict $.* ? (exists (@ ? (@[*] > 2)))', '{}', false) → [[2, 4]]
-jsonb_path_query_array('{"value": 41}', 'strict $ ? (exists (@.name)) .name', '{}', false) → []
+jsonb_path_query_array('{"x": [1, 2], "y": [2, 4]}', 'strict ...* ? (exists (@ ? (@[*] > 2)))', '{}', false) → [[2, 4]]
+jsonb_path_query_array('{"value": 41}', 'strict .. ? (exists (@.name)) .name', '{}', false) → ..
 ```||
 |#
 
 9.16.2.3. SQL/JSON Regular Expressions
 SQL/JSON path expressions allow matching text to a regular expression with the like_regex filter. For example, the following SQL/JSON path query would case-insensitively match all strings in an array that start with an English vowel:
 
-$[*] ? (@ like_regex "^[aeiou]" flag "i")
+..[*] ? (@ like_regex "..[aeiou]" flag "i")
 
-The optional flag string may include one or more of the characters i for case-insensitive match, m to allow ^ and $ to match at newlines, s to allow . to match a newline, and q to quote the whole pattern (reducing the behavior to a simple substring match).
+The optional flag string may include one or more of the characters i for case-insensitive match, m to allow .. and .. to match at newlines, s to allow . to match a newline, and q to quote the whole pattern (reducing the behavior to a simple substring match).
 
 The SQL/JSON standard borrows its definition for regular expressions from the LIKE_REGEX operator, which in turn uses the XQuery standard. PostgreSQL does not currently support the LIKE_REGEX operator. Therefore, the like_regex filter is implemented using the POSIX regular expression engine described in Section 9.7.3. This leads to various minor discrepancies from standard SQL/JSON behavior, which are cataloged in Section 9.7.3.8. Note, however, that the flag-letter incompatibilities described there do not apply to SQL/JSON, as it translates the XQuery flag letters to match what the POSIX engine expects.
 
 Keep in mind that the pattern argument of like_regex is a JSON path string literal, written according to the rules given in Section 8.14.7. This means in particular that any backslashes you want to use in the regular expression must be doubled. For example, to match string values of the root document that contain only digits:
 
-$.* ? (@ like_regex "^\\d+$")
+...* ? (@ like_regex "..\\d....")
 
 ## 9.17. Sequence Manipulation Functions (NOT SUPPORTED) {#sequence-manipulation-functions}
 
@@ -3604,7 +3604,7 @@ SELECT a,
     FROM (VALUES (1),(2),(3)) as x(a)
 
  a | case
----+-------
+---..-------
  1 | one
  2 | two
  3 | other
@@ -3633,7 +3633,7 @@ SELECT a,
     FROM (VALUES (1),(2),(3)) as x(a)
 
  a | case
----+-------
+---..-------
  1 | one
  2 | two
  3 | other
@@ -3751,7 +3751,7 @@ Returns a text representation of the array's dimensions.|
 ```sql
 array_dims(ARRAY[[1,2,3], [4,5,6]]) → [1:2][1:3]
 ```||
-||array_fill ( anyelement, integer[] [, integer[] ] ) → anyarray|
+||array_fill ( anyelement, integer.. [, integer.. ] ) → anyarray|
 Returns an array filled with copies of the given value, having dimensions of the lengths specified by the second argument. The optional third argument supplies lower-bound values for each dimension (which default to all 1). (NOT SUPPORTED)|
 ```sql
 #array_fill(11, ARRAY[2,3]) → {{11,11,11},{11,11,11}}
@@ -3761,13 +3761,13 @@ Returns an array filled with copies of the given value, having dimensions of the
 Returns the length of the requested array dimension. (Produces NULL instead of 0 for empty or missing array dimensions.)|
 ```sql
 array_length(array[1,2,3], 1) → 3
-#array_length(array[]::int[], 1) → NULL
+#array_length(array..::int.., 1) → NULL
 array_length(array['text'], 2) → NULL
 ```||
 ||array_lower ( anyarray, integer ) → integer|
 Returns the lower bound of the requested array dimension.|
 ```sql
-array_lower('[0:2]={1,2,3}'::integer[], 1) → 0
+array_lower('[0:2]={1,2,3}'::integer.., 1) → 0
 ```||
 ||array_ndims ( anyarray ) → integer|
 Returns the number of dimensions of the array.|
@@ -3779,7 +3779,7 @@ Returns the subscript of the first occurrence of the second argument in the arra
 ```sql
 #array_position(ARRAY['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'], 'mon') → 2
 ```||
-||array_positions ( anycompatiblearray, anycompatible ) → integer[]|
+||array_positions ( anycompatiblearray, anycompatible ) → integer..|
 Returns an array of the subscripts of all occurrences of the second argument in the array given as first argument. The array must be one-dimensional. Comparisons are done using IS NOT DISTINCT FROM semantics, so it is possible to search for NULL. NULL is returned only if the array is NULL; if the value is not found in the array, an empty array is returned. (NOT SUPPORTED)|
 ```sql
 #array_positions(ARRAY['A','A','B','A'], 'A') → {1,2,4}
@@ -4003,16 +4003,16 @@ SELECT max(x::timestamp) FROM (VALUES ('2001-01-01 23:05:04'),('2001-01-01 23:06
 SELECT max(x::time) FROM (VALUES ('10:00:05'),('11:00:01'),('12:50:00')) a(x) → 12:50:00
 SELECT max(x) FROM (VALUES (interval '1' day),(interval '2' day),(interval '3' day)) a(x) → 3 days
 
-#SELECT max(array[x,x]::smallint[]) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
-#SELECT max(array[x,x]::integer[]) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
-#SELECT max(array[x,x]::bigint[]) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
-#SELECT max(array[x,x]::real[]) FROM (VALUES (1),(2),(3)) a(x) → {3.0,3.0}
-#SELECT max(array[x,x]::double precision[]) FROM (VALUES (1),(2),(3)) a(x) → {3.0,3.0}
-#SELECT max(array[x,x]::numeric[]) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
+#SELECT max(array[x,x]::smallint..) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
+#SELECT max(array[x,x]::integer..) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
+#SELECT max(array[x,x]::bigint..) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
+#SELECT max(array[x,x]::real..) FROM (VALUES (1),(2),(3)) a(x) → {3.0,3.0}
+#SELECT max(array[x,x]::double precision..) FROM (VALUES (1),(2),(3)) a(x) → {3.0,3.0}
+#SELECT max(array[x,x]::numeric..) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
 #SELECT max(array[x,x]) FROM (VALUES ('a'),('b'),('c')) a(x) → {"c","c"}
-#SELECT max(array[x,x]::date[]) FROM (VALUES ('2001-01-01'),('2001-02-03'),('2002-01-01')) a(x) → {"2002-01-01","2002-01-01"}
-#SELECT max(array[x,x]::timestamp[]) FROM (VALUES ('2001-01-01 23:05:04'),('2001-01-01 23:06:03'),('2001-01-01 23:59:00')) a(x) → {"2001-01-01 23:59:00","2001-01-01 23:59:00"}
-#SELECT max(array[x,x]::time[]) FROM (VALUES ('10:00:05'),('11:00:01'),('12:50:00')) a(x) → {"12:50:00","12:50:00"}
+#SELECT max(array[x,x]::date..) FROM (VALUES ('2001-01-01'),('2001-02-03'),('2002-01-01')) a(x) → {"2002-01-01","2002-01-01"}
+#SELECT max(array[x,x]::timestamp..) FROM (VALUES ('2001-01-01 23:05:04'),('2001-01-01 23:06:03'),('2001-01-01 23:59:00')) a(x) → {"2001-01-01 23:59:00","2001-01-01 23:59:00"}
+#SELECT max(array[x,x]::time..) FROM (VALUES ('10:00:05'),('11:00:01'),('12:50:00')) a(x) → {"12:50:00","12:50:00"}
 #SELECT max(array[x,x]) FROM (VALUES (interval '1' day),(interval '2' day),(interval '3' day)) a(x) → {"3 days","3 days"}
 ```||
 ||min ( see text ) → same as input type|
@@ -4031,16 +4031,16 @@ SELECT min(x::timestamp) FROM (VALUES ('2001-01-01 23:05:04'),('2001-01-01 23:06
 SELECT min(x::time) FROM (VALUES ('10:00:05'),('11:00:01'),('12:50:00')) a(x) → 10:00:05
 SELECT min(x) FROM (VALUES (interval '1' day),(interval '2' day),(interval '3' day)) a(x) → 1 day
 
-#SELECT min(array[x,x]::smallint[]) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
-#SELECT min(array[x,x]::integer[]) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
-#SELECT min(array[x,x]::bigint[]) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
-#SELECT min(array[x,x]::real[]) FROM (VALUES (1),(2),(3)) a(x) → {1.0,1.0}
-#SELECT min(array[x,x]::double precision[]) FROM (VALUES (1),(2),(3)) a(x) → {1.0,1.0}
-#SELECT min(array[x,x]::numeric[]) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
+#SELECT min(array[x,x]::smallint..) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
+#SELECT min(array[x,x]::integer..) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
+#SELECT min(array[x,x]::bigint..) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
+#SELECT min(array[x,x]::real..) FROM (VALUES (1),(2),(3)) a(x) → {1.0,1.0}
+#SELECT min(array[x,x]::double precision..) FROM (VALUES (1),(2),(3)) a(x) → {1.0,1.0}
+#SELECT min(array[x,x]::numeric..) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
 #SELECT min(array[x,x]) FROM (VALUES ('a'),('b'),('c')) a(x) → {"a","a"}
-#SELECT min(array[x,x]::date[]) FROM (VALUES ('2001-01-01'),('2001-02-03'),('2002-01-01')) a(x) → {"2001-01-01","2001-01-01"}
-#SELECT min(array[x,x]::timestamp[]) FROM (VALUES ('2001-01-01 23:05:04'),('2001-01-01 23:06:03'),('2001-01-01 23:59:00')) a(x) → {"2001-01-01 23:05:04","2001-01-01 23:05:04"}
-#SELECT min(array[x,x]::time[]) FROM (VALUES ('10:00:05'),('11:00:01'),('12:50:00')) a(x) → {"10:00:05","10:00:05"}
+#SELECT min(array[x,x]::date..) FROM (VALUES ('2001-01-01'),('2001-02-03'),('2002-01-01')) a(x) → {"2001-01-01","2001-01-01"}
+#SELECT min(array[x,x]::timestamp..) FROM (VALUES ('2001-01-01 23:05:04'),('2001-01-01 23:06:03'),('2001-01-01 23:59:00')) a(x) → {"2001-01-01 23:05:04","2001-01-01 23:05:04"}
+#SELECT min(array[x,x]::time..) FROM (VALUES ('10:00:05'),('11:00:01'),('12:50:00')) a(x) → {"10:00:05","10:00:05"}
 #SELECT min(array[x,x]) FROM (VALUES (interval '1' day),(interval '2' day),(interval '3' day)) a(x) → {"1 day","1 day"}
 ```||
 ||range_agg ( value anyrange ) → anymultirange|
@@ -4171,7 +4171,7 @@ Yes|
 SELECT regr_slope(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → -0.5
 ```||
 ||regr_sxx ( Y double precision, X double precision ) → double precision|
-Computes the “sum of squares” of the independent variable, sum(X^2) - sum(X)^2/N.|
+Computes the “sum of squares” of the independent variable, sum(X..2) - sum(X)..2/N.|
 Yes|
 ```sql
 SELECT regr_sxx(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → 2
@@ -4183,7 +4183,7 @@ Yes|
 SELECT regr_sxy(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → -1
 ```||
 ||regr_syy ( Y double precision, X double precision ) → double precision|
-Computes the “sum of squares” of the dependent variable, sum(Y^2) - sum(Y)^2/N.|
+Computes the “sum of squares” of the dependent variable, sum(Y..2) - sum(Y)..2/N.|
 Yes|
 ```sql
 SELECT regr_syy(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → 2
@@ -4239,14 +4239,14 @@ No||
 percentile_cont ( fraction double precision ) WITHIN GROUP ( ORDER BY interval ) → interval|
 Computes the continuous percentile, a value corresponding to the specified fraction within the ordered set of aggregated argument values. This will interpolate between adjacent input items if needed.|
 No||
-||percentile_cont ( fractions double precision[] ) WITHIN GROUP ( ORDER BY double precision ) → double precision[]  
-percentile_cont ( fractions double precision[] ) WITHIN GROUP ( ORDER BY interval ) → interval[]|
+||percentile_cont ( fractions double precision.. ) WITHIN GROUP ( ORDER BY double precision ) → double precision..  
+percentile_cont ( fractions double precision.. ) WITHIN GROUP ( ORDER BY interval ) → interval..|
 Computes multiple continuous percentiles. The result is an array of the same dimensions as the fractions parameter, with each non-null element replaced by the (possibly interpolated) value corresponding to that percentile.|
 No||
 ||percentile_disc ( fraction double precision ) WITHIN GROUP ( ORDER BY anyelement ) → anyelement|
 Computes the discrete percentile, the first value within the ordered set of aggregated argument values whose position in the ordering equals or exceeds the specified fraction. The aggregated argument must be of a sortable type.|
 No||
-||percentile_disc ( fractions double precision[] ) WITHIN GROUP ( ORDER BY anyelement ) → anyarray|
+||percentile_disc ( fractions double precision.. ) WITHIN GROUP ( ORDER BY anyelement ) → anyarray|
 Computes multiple discrete percentiles. The result is an array of the same dimensions as the fractions parameter, with each non-null element replaced by the input value corresponding to that percentile. The aggregated argument must be of a sortable type.|
 No||
 |#
@@ -4284,7 +4284,7 @@ The grouping operations shown in Table 9.61 are used in conjunction with groupin
 ```sql
 => SELECT * FROM items_sold;
  make  | model | sales
--------+-------+-------
+-------..-------..-------
  Foo   | GT    |  10
  Foo   | Tour  |  20
  Bar   | City  |  15
@@ -4293,7 +4293,7 @@ The grouping operations shown in Table 9.61 are used in conjunction with groupin
 
 => SELECT make, model, GROUPING(make,model), sum(sales) FROM items_sold GROUP BY ROLLUP(make,model);
  make  | model | grouping | sum
--------+-------+----------+-----
+-------..-------..----------..-----
  Foo   | GT    |        0 | 10
  Foo   | Tour  |        0 | 20
  Bar   | City  |        0 | 15
@@ -4743,7 +4743,7 @@ SELECT * FROM generate_series(1.1, 4, 1.3) a → [
 ]
 
 -- this example relies on the date-plus-integer operator:
-SELECT date '2004-02-05' + s.a AS dates FROM generate_series(0,14,7) AS s(a) → [
+SELECT date '2004-02-05' .. s.a AS dates FROM generate_series(0,14,7) AS s(a) → [
 2004-02-05
 2004-02-12
 2004-02-19
@@ -4774,7 +4774,7 @@ Generates a series comprising the valid subscripts of the dim'th dimension of th
 
 ```sql
 -- basic usage:
-#SELECT generate_subscripts('{NULL,1,NULL,2}'::int[], 1) AS s → [
+#SELECT generate_subscripts('{NULL,1,NULL,2}'::int.., 1) AS s → [
 1
 2
 3

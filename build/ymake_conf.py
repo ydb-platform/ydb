@@ -1048,7 +1048,7 @@ class GnuToolchainOptions(ToolchainOptions):
 
         self.os_sdk_local = False
 
-        if build.target.is_apple and to_bool(preset('APPLE_SDK_LOCAL'), default=False):
+        if build.host.is_apple and build.target.is_apple and to_bool(preset('APPLE_SDK_LOCAL'), default=False):
             self.os_sdk_local = True
 
         if self.os_sdk == 'local':

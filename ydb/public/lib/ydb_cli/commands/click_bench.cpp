@@ -409,7 +409,7 @@ void TClickBenchCommandInit::Config(TConfig& config) {
             " Options: row, column\n"
             "row - use row-based storage engine;\n"
             "column - use column-based storage engine.")
-        .DefaultValue("row").StoreResult(&StoreType);
+        .DefaultValue("column").StoreResult(&StoreType);
 };
 
 int TClickBenchCommandInit::Run(TConfig& config) {

@@ -669,9 +669,9 @@
     ],
     "test.test[compute_range-tuples_compare-default.txt-Debug]": [
         {
-            "checksum": "962da2716dd68cffc53234286a48d7c7",
-            "size": 4596,
-            "uri": "https://{canondata_backend}/995452/3862ff9a9bced9f226a84891d10e8a5df01e3ec0/resource.tar.gz#test.test_compute_range-tuples_compare-default.txt-Debug_/opt.yql"
+            "checksum": "1214969b596fc6210776601e78bd0c24",
+            "size": 4603,
+            "uri": "https://{canondata_backend}/1784117/8b994472d7c14f553ca7722e774cd8684ad93d6a/resource.tar.gz#test.test_compute_range-tuples_compare-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[compute_range-tuples_compare-default.txt-Plan]": [

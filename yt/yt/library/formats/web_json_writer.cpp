@@ -158,7 +158,7 @@ TStringBuf GetSimpleYqlTypeName(ESimpleLogicalValueType type)
 
 void SerializeAsYqlType(TFluentAny fluent, const TLogicalTypePtr& type)
 {
-     auto serializeStruct = [] (TFluentList fluentList, const TStructLogicalTypeBase& structType) {
+    auto serializeStruct = [] (TFluentList fluentList, const TStructLogicalTypeBase& structType) {
         fluentList
             .Item().Value("StructType")
             .Item().DoListFor(structType.GetFields(), [] (TFluentList innerFluentList, const TStructField& field) {

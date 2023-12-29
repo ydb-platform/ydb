@@ -1638,7 +1638,7 @@ void ValidateDynamicTableConstraints(const TTableSchema& schema)
     }
 
     if (schema.GetKeyColumnCount() == std::ssize(schema.Columns())) {
-       THROW_ERROR_EXCEPTION("There must be at least one non-key column");
+        THROW_ERROR_EXCEPTION("There must be at least one non-key column");
     }
 
     if (schema.GetKeyColumnCount() > MaxKeyColumnCountInDynamicTable) {

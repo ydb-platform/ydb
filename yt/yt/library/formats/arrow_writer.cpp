@@ -823,7 +823,7 @@ void SerializeColumn(
     if (IsIntegralType(simpleType)) {
         SerializeIntegerColumn(typedColumn, simpleType, context);
     } else if (simpleType == ESimpleLogicalValueType::Interval) {
-         SerializeIntegerColumn(typedColumn, simpleType, context);
+        SerializeIntegerColumn(typedColumn, simpleType, context);
     }  else if (simpleType == ESimpleLogicalValueType::Date) {
         SerializeDateColumn(typedColumn, context);
     } else if (simpleType == ESimpleLogicalValueType::Datetime) {

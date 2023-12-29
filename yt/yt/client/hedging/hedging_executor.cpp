@@ -61,10 +61,11 @@ void THedgingExecutor::OnFinishRequest(
     clientInfo.Counter->ExternalPenalty.Update(NProfiling::CpuDurationToDuration(externalPenalty));
 }
 
-THedgingExecutor::TEntry::TEntry(NApi::IClientPtr client,
-                                 NProfiling::TCpuDuration initialPenalty,
-                                 TCounterPtr counter,
-                                 TString clusterName)
+THedgingExecutor::TEntry::TEntry(
+    NApi::IClientPtr client,
+    NProfiling::TCpuDuration initialPenalty,
+    TCounterPtr counter,
+    TString clusterName)
     : Client(std::move(client))
     , ClusterName(std::move(clusterName))
     , AdaptivePenalty(0)
@@ -72,8 +73,7 @@ THedgingExecutor::TEntry::TEntry(NApi::IClientPtr client,
     , ExternalPenalty(0)
     , BanUntil(Max<NProfiling::TCpuInstant>())
     , Counter(std::move(counter))
-{
-}
+{ }
 
 ////////////////////////////////////////////////////////////////////////////////
 

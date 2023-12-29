@@ -33,7 +33,7 @@ TEST_P(TErasureStabilityTest, TErasureStabilityTest)
 
     auto* codec = FindCodec(std::get<0>(params));
     if (!codec) {
-       return;
+        return;
     }
 
     std::vector<TSharedRef> dataParts;

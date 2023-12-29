@@ -18,7 +18,7 @@ namespace {
         const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
         {
             Touched[groupId].insert(pageId);
-            if (Has[groupId].contains(pageId)) {
+            if (Loaded[groupId].contains(pageId)) {
                 return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
             }
             return nullptr;
@@ -27,7 +27,7 @@ namespace {
         static void LoadTouched(IPages& env, bool clearHas) {
             auto touchEnv = dynamic_cast<TTouchEnv*>(&env);
             if (touchEnv) {
-                auto &has = touchEnv->Has;
+                auto &has = touchEnv->Loaded;
                 auto &touched = touchEnv->Touched;
 
                 if (clearHas) {
@@ -40,7 +40,7 @@ namespace {
             }
         }
 
-        TMap<TGroupId, TSet<TPageId>> Has;
+        TMap<TGroupId, TSet<TPageId>> Loaded;
         TMap<TGroupId, TSet<TPageId>> Touched;
     };
 
@@ -174,7 +174,7 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(node.GetKeysCount() + 1, children.size());
         for (TRecIdx i : xrange(node.GetKeysCount() + 1)) {
             UNIT_ASSERT_EQUAL(node.GetChild(i), children[i]);
-            TShortChild shortChild{children[i].PageId, children[i].RowsCount, children[i].DataSize};
+            TShortChild shortChild{children[i].PageId, children[i].RowCount, children[i].DataSize};
             UNIT_ASSERT_EQUAL(node.GetShortChild(i), shortChild);
         }
     }
@@ -314,7 +314,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
             writer.AddKey(deserialized.GetCells());
         }
         for (auto &c : children) {
-            c.ErasedRowsCount = 0;
+            c.ErasedRowCount = 0;
             writer.AddChild(c);
         }
 
@@ -359,7 +359,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexNode) {
             writer.AddKey(deserialized.GetCells());
         }
         for (auto &c : children) {
-            c.ErasedRowsCount = 0;
+            c.ErasedRowCount = 0;
             writer.AddChild(c);
         }
 
@@ -594,7 +594,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
 
         Dump(*result, builder.GroupInfo, pager.Back());
         
-        UNIT_ASSERT_VALUES_EQUAL(result->LevelsCount, 3);
+        UNIT_ASSERT_VALUES_EQUAL(result->LevelCount, 3);
         
         auto checkKeys = [&](TPageId pageId, const TVector<TString>& keys) {
             CheckKeys(pageId, keys, builder.GroupInfo, pager.Back());
@@ -644,9 +644,9 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
 
         TBtreeIndexMeta expected{{9, 0, 0, 0}, 3, 1550};
         for (auto c : children) {
-            expected.RowsCount += c.RowsCount;
+            expected.RowCount += c.RowCount;
             expected.DataSize += c.DataSize;
-            expected.ErasedRowsCount += c.ErasedRowsCount;
+            expected.ErasedRowCount += c.ErasedRowCount;
         }
         UNIT_ASSERT_EQUAL_C(*result, expected, "Got " + result->ToString());
     }
@@ -1094,7 +1094,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
 
         Cerr << DumpPart(part, 1) << Endl;
 
-        UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelsCount, levels);
+        UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, levels);
 
         CheckSeekRowId<TTestEnv>(part);
         CheckSeekRowId<TTouchEnv>(part);
@@ -1156,7 +1156,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     }
 
     void AssertEqual(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message) {
-        AssertEqual(part, bTree.Has, flat.Has, message);
+        AssertEqual(part, bTree.Loaded, flat.Loaded, message);
         AssertEqual(part, bTree.Touched, flat.Touched, message);
     }
 
@@ -1211,7 +1211,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
         Cerr << DumpPart(part, 1) << Endl;
 
-        UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelsCount, levels);
+        UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, levels);
 
         auto tags = TVector<TTag>();
         for (auto c : eggs.Scheme->Cols) {

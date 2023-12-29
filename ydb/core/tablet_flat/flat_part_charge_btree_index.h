@@ -35,7 +35,7 @@ public:
 
         const auto& meta = Part->IndexPages.BTreeGroups[0];
 
-        if (Y_UNLIKELY(row1 >= meta.RowsCount)) {
+        if (Y_UNLIKELY(row1 >= meta.RowCount)) {
             return { true, true }; // already out of bounds, nothing to precharge
         }
         if (Y_UNLIKELY(row1 > row2)) {
@@ -43,8 +43,8 @@ public:
         }
 
         TVector<TBtreeIndexNode> level, nextLevel(Reserve(2));
-        for (ui32 high = 0; high < meta.LevelsCount && ready; high++) {
-            if (high == 0) {
+        for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
+            if (height == 0) {
                 ready &= TryLoadNode(meta.PageId, nextLevel);
             } else {
                 for (ui32 i : xrange<ui32>(level.size())) {
@@ -52,7 +52,7 @@ public:
                     if (i == 0) {
                         from = level[i].Seek(row1);
                     }
-                    if (i + 1 == level.size() && row2 < meta.RowsCount) {
+                    if (i + 1 == level.size() && row2 < meta.RowCount) {
                         to = level[i].Seek(row2);
                     }
                     for (TRecIdx j : xrange(from, to + 1)) {
@@ -70,7 +70,7 @@ public:
             return {false, false};
         }
 
-        if (meta.LevelsCount == 0) {
+        if (meta.LevelCount == 0) {
             ready &= HasDataPage(meta.PageId, { });
         } else {
             for (ui32 i : xrange<ui32>(level.size())) {
@@ -78,7 +78,7 @@ public:
                 if (i == 0) {
                     from = level[i].Seek(row1);
                 }
-                if (i + 1 == level.size() && row2 < meta.RowsCount) {
+                if (i + 1 == level.size() && row2 < meta.RowCount) {
                     to = level[i].Seek(row2);
                 }
                 for (TRecIdx j : xrange(from, to + 1)) {
@@ -103,8 +103,8 @@ public:
 
         const auto& meta = Part->IndexPages.BTreeGroups[0];
 
-        if (Y_UNLIKELY(row1 >= meta.RowsCount)) {
-            row1 = meta.RowsCount - 1; // start from the last row
+        if (Y_UNLIKELY(row1 >= meta.RowCount)) {
+            row1 = meta.RowCount - 1; // start from the last row
         }
         if (Y_UNLIKELY(row1 < row2)) {
             row2 = row1; // will not go further than row1
@@ -112,8 +112,8 @@ public:
 
         // level contains nodes in reverse order
         TVector<TBtreeIndexNode> level, nextLevel(Reserve(2));
-        for (ui32 high = 0; high < meta.LevelsCount && ready; high++) {
-            if (high == 0) {
+        for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
+            if (height == 0) {
                 ready &= TryLoadNode(meta.PageId, nextLevel);
             } else {
                 for (ui32 i : xrange<ui32>(level.size())) {
@@ -121,7 +121,7 @@ public:
                     if (i == 0) {
                         from = level[i].Seek(row1);
                     }
-                    if (i + 1 == level.size() && row2 < meta.RowsCount) {
+                    if (i + 1 == level.size() && row2 < meta.RowCount) {
                         to = level[i].Seek(row2);
                     }
                     for (TRecIdx j = from + 1; j > to; j--) {
@@ -139,7 +139,7 @@ public:
             return {false, false};
         }
 
-        if (meta.LevelsCount == 0) {
+        if (meta.LevelCount == 0) {
             ready &= HasDataPage(meta.PageId, { });
         } else {
             for (ui32 i : xrange<ui32>(level.size())) {
@@ -147,7 +147,7 @@ public:
                 if (i == 0) {
                     from = level[i].Seek(row1);
                 }
-                if (i + 1 == level.size() && row2 < meta.RowsCount) {
+                if (i + 1 == level.size() && row2 < meta.RowCount) {
                     to = level[i].Seek(row2);
                 }
                 for (TRecIdx j = from + 1; j > to; j--) {

@@ -83,10 +83,10 @@ void TLoader::StageParseMeta() noexcept
                 for (const auto &meta : history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
                     NPage::TBtreeIndexMeta converted{{
                         meta.GetRootPageId(), 
-                        meta.GetRowsCount(), 
+                        meta.GetRowCount(), 
                         meta.GetDataSize(), 
-                        meta.GetErasedRowsCount()}, 
-                        meta.GetLevelsCount(), 
+                        meta.GetErasedRowCount()}, 
+                        meta.GetLevelCount(), 
                         meta.GetIndexSize()};
                     (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
                 }

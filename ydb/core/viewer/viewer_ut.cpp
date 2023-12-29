@@ -2,6 +2,7 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/helpers/selfping_actor.h>
+#include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
 #include <util/stream/null.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
@@ -291,6 +292,19 @@ Y_UNIT_TEST_SUITE(Viewer) {
         nodeId++;
     }
 
+    void ChangeVDiskStateResponse(TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev, NKikimrWhiteboard::EFlag diskSpace, ui64 used, ui64 limit) {
+        auto& pbRecord = (*ev)->Get()->Record;
+        auto state = pbRecord.add_vdiskstateinfo();
+        state->mutable_vdiskid()->set_vdisk(0);
+        state->mutable_vdiskid()->set_groupid(0);
+        state->mutable_vdiskid()->set_groupgeneration(1);
+        state->set_diskspace(diskSpace);
+        state->set_vdiskstate(NKikimrWhiteboard::EVDiskState::OK);
+        state->set_nodeid(0);
+        state->set_allocatedsize(used);
+        state->set_availablesize(limit - used);
+    }
+
     void ChangeDescribeSchemeResult(TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, int tabletsTotal) {
         auto record = (*ev)->Get()->MutableRecord();
         auto params = record->mutable_pathdescription()->mutable_domaindescription()->mutable_processingparams();
@@ -515,5 +529,75 @@ Y_UNIT_TEST_SUITE(Viewer) {
     Y_UNIT_TEST(SelectStringWithNoBase64Encoding)
     {
         QueryTest("select \"Hello\"", false, "Hello");
+    }
+
+    void StorageSpaceTest(const TString& withValue, const NKikimrWhiteboard::EFlag diskSpace, const ui64 used, const ui64 limit, const bool isExpectingGroup) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("with", withValue);
+        httpReq.CgiParameters.emplace("version", "v2");
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/storage", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            Y_UNUSED(ev);
+            if (ev->GetTypeRewrite() == TEvWhiteboard::EvVDiskStateResponse) {
+                auto *x = reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
+                ChangeVDiskStateResponse(x, diskSpace, used, limit);
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
+        Ctest << "json result: " << jsonResult << Endl;
+        NJson::TJsonValue json;
+        try {
+            NJson::ReadJsonTree(jsonResult, &json, true);
+        }
+        catch (yexception ex) {
+            Ctest << ex.what() << Endl;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().contains("StorageGroups"), isExpectingGroup);
+    }
+
+    Y_UNIT_TEST(StorageGroupOutputWithoutFilterNoDepends)
+    {
+        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Green, 10, 100, true);
+        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Red, 90, 100, true);
+    }
+
+    Y_UNIT_TEST(StorageGroupOutputWithSpaceCheckDependsOnVDiskSpaceStatus)
+    {
+        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 10, 100, false);
+        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Red, 10, 100, true);
+    }
+
+    Y_UNIT_TEST(StorageGroupOutputWithSpaceCheckDependsOnUsage)
+    {
+        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 70, 100, false);
+        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 80, 100, true);
+        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 90, 100, true);
     }
 }

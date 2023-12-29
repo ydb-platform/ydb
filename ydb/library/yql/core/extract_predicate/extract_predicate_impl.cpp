@@ -430,8 +430,8 @@ TExprNode::TPtr ExpandTupleBinOp(const TExprNode& node, TExprContext& ctx) {
     if (node.IsCallable({"<=", ">="})) {
         return ctx.Builder(node.Pos())
             .Callable("Or")
-                .Add(0, ctx.RenameNode(node, "=="))
-                .Add(1, ctx.RenameNode(node, node.IsCallable("<=") ? "<" : ">"))
+                .Add(0, ctx.RenameNode(node, node.IsCallable("<=") ? "<" : ">"))
+                .Add(1, ctx.RenameNode(node, "=="))
             .Seal()
             .Build();
     }
@@ -1542,15 +1542,15 @@ TMaybe<TRangeBoundHint> CompareBounds(
             return Nothing();
         }
         if (auto cmp = TryCompareColumns(hint1.Columns[i], hint2.Columns[i])) {
-            if ((cmp < 0) == min) {
+            if (cmp == 0) {
+                continue;
+            } else if ((cmp < 0) == min) {
                 hint = hint1;
             } else {
                 hint = hint2;
             }
 
-            if (cmp != 0) {
-                break;
-            }
+            break;
         } else {
             return Nothing();
         }
@@ -1599,7 +1599,7 @@ TMaybe<TRangeHint> RangeHintExtend(const TMaybe<TRangeHint>& hint1, size_t hint1
     }
 }
 
-bool IsValid(const TRangeBoundHint& left, const TRangeBoundHint& right, bool acceptExclusivePoint = true) {
+bool IsValid(const TRangeBoundHint& left, const TRangeBoundHint& right) {
     for (size_t i = 0; ; ++i) {
         if (i >= left.Columns.size() || i >= right.Columns.size()) {
             // ok, we have +-inf and sure that it's valid
@@ -1608,15 +1608,12 @@ bool IsValid(const TRangeBoundHint& left, const TRangeBoundHint& right, bool acc
         auto cmp = TryCompareColumns(left.Columns[i], right.Columns[i]);
         if (!cmp) {
             return false;
-        } else {
-            if (*cmp < 0) {
-                return true;
-            } else if (*cmp > 0) {
-                return false;
-            }
+        } else if (*cmp < 0) {
+            return true;
+        } else if (*cmp > 0) {
+            return false;
         }
     }
-    return acceptExclusivePoint || left.Inclusive || right.Inclusive;
 }
 
 TMaybe<TRangeHint> RangeHintUnion(const TRangeHint& hint1, const TRangeHint& hint2) {
@@ -1630,11 +1627,33 @@ TMaybe<TRangeHint> RangeHintUnion(const TRangeHint& hint1, const TRangeHint& hin
     if (!left || !right || !intersection) {
         return Nothing();
     }
-    if (IsValid(intersection->Left, intersection->Right, false)) {
-        return TRangeHint{.Left = std::move(*left), .Right = std::move(*right)};
-    } else {
-        return Nothing();
+
+    { // check if there is no gap between ranges
+        for (size_t i = 0; ; ++i) {
+            bool leftFinished = i >= intersection->Left.Columns.size();
+            bool rightFinished = i >= intersection->Right.Columns.size();
+            if (leftFinished || rightFinished) {
+                if (leftFinished && intersection->Left.Inclusive) {
+                    break;
+                }
+                if (rightFinished && intersection->Right.Inclusive) {
+                    break;
+                }
+                return {};
+            }
+
+            auto cmp = TryCompareColumns(intersection->Left.Columns[i], intersection->Right.Columns[i]);
+            if (!cmp) {
+                return {};
+            } else if (*cmp < 0) {
+                break;
+            } else if (*cmp > 0) {
+                return {};
+            }
+        }
     }
+
+    return TRangeHint{.Left = std::move(*left), .Right = std::move(*right)};
 }
 
 TMaybe<TRangeHint> RangeHintUnion(const TMaybe<TRangeHint>& hint1, const TMaybe<TRangeHint>& hint2) {

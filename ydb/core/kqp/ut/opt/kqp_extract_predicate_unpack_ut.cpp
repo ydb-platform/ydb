@@ -16,6 +16,13 @@ void PrepareTablesToUnpack(TSession session) {
             Value String,
             PRIMARY KEY (Key, Fk)
         );
+        CREATE TABLE `/Root/ComplexKeyNotNull` (
+            Key Int32 NOT NULL,
+            Fk Int32 NOT NULL,
+            Value String,
+            PRIMARY KEY (Key, Fk)
+        );
+
         CREATE TABLE `/Root/UintComplexKey` (
             Key UInt64,
             Fk Int64,
@@ -58,6 +65,14 @@ void PrepareTablesToUnpack(TSession session) {
     auto result2 = session.ExecuteDataQuery(R"(
         REPLACE INTO `/Root/ComplexKey` (Key, Fk, Value) VALUES
             (null, null, "NullValue"),
+            (1, 101, "Value1"),
+            (2, 102, "Value1"),
+            (2, 103, "Value3"),
+            (3, 103, "Value2"),
+            (4, 104, "Value2"),
+            (5, 105, "Value3");
+
+        REPLACE INTO `/Root/ComplexKeyNotNull` (Key, Fk, Value) VALUES
             (1, 101, "Value1"),
             (2, 102, "Value1"),
             (2, 103, "Value3"),
@@ -293,13 +308,24 @@ Y_UNIT_TEST(ComplexRange) {
     TestRange(
         R"(
             SELECT Key, Fk, Value FROM `/Root/ComplexKey`
+            WHERE (Key, Fk) >= (4, 104);
+        )",
+        R"([
+            [[4];[104];["Value2"]];
+            [[5];[105];["Value3"]]
+        ])",
+        2);
+
+    TestRange(
+        R"(
+            SELECT Key, Fk, Value FROM `/Root/ComplexKeyNotNull`
             WHERE (Key, Fk) >= (1, 101) AND (Key, Fk) < (4, 104);
         )",
         R"([
-            [[1];[101];["Value1"]];
-            [[2];[102];["Value1"]];
-            [[2];[103];["Value3"]];
-            [[3];[103];["Value2"]]
+            [1;101;["Value1"]];
+            [2;102;["Value1"]];
+            [2;103;["Value3"]];
+            [3;103;["Value2"]]
         ])",
         4);
 
@@ -314,6 +340,16 @@ Y_UNIT_TEST(ComplexRange) {
         1,
         2);
 
+    TestRange(
+        R"(
+            SELECT Key, Fk, Value FROM `/Root/ComplexKey`
+            WHERE (Key < 2) OR (Key = 2 AND Fk > 102)
+        )",
+        R"([
+            [[1];[101];["Value1"]];[[2];[103];["Value3"]]
+        ])",
+        2,
+        2);
 }
 
 Y_UNIT_TEST(SqlIn) {

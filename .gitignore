@@ -40,3 +40,35 @@ __pycache__/
 
 # KDevelop IDE
 *.kdev4
+
+# Other symlinks
+contrib/python/protobuf/py3/google.protobuf.internal._api_implementation.reg3.cpp
+contrib/python/protobuf/py3/google.protobuf.pyext._message.reg3.cpp
+contrib/tools/python3/src/Modules/_sqlite/_sqlite3.reg3.cpp
+contrib/tools/ragel6/all_cd.cpp
+contrib/tools/ragel6/all_cs.cpp
+contrib/tools/ragel6/all_fs.cpp
+contrib/tools/ragel6/all_go.cpp
+contrib/tools/ragel6/all_ml.cpp
+contrib/tools/ragel6/all_other.cpp
+contrib/tools/ragel6/all_r.cpp
+library/python/runtime_py3/__res.pyx.cpp
+library/python/runtime_py3/__res.reg3.cpp
+library/python/runtime_py3/sitecustomize.pyx.cpp
+library/python/runtime_py3/sitecustomize.reg3.cpp
+library/python/symbols/module/library.python.symbols.module.syms.reg3.cpp
+util/all_datetime.cpp
+util/all_digest.cpp
+util/all_folder.cpp
+util/all_generic.cpp
+util/all_memory.cpp
+util/all_network.cpp
+util/all_random.cpp
+util/all_stream.cpp
+util/all_string.cpp
+util/all_system_1.cpp
+util/all_system_2.cpp
+util/all_thread.cpp
+util/all_util.cpp
+util/charset/all_charset.cpp
+

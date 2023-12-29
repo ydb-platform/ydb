@@ -71,6 +71,9 @@ std::optional<XXH32_hash_t> readRopeFromFile(TRope& rope, TAtomicSharedPtr<ISpil
         }
         bytesRead += sizeof(blobSize);
 
+
+        // auto buffer = std::shared_ptr<char[]>(new char[size]);
+        // https://a.yandex-team.ru/arcadia/contrib/ydb/library/yql/providers/dq/task_runner/tasks_runner_pipe.cpp?rev=r13156942#L89
         TRcBuf blob;
         blob.reserve(blobSize);
         readRes = spillDataFile->Read(offset, blob.UnsafeGetDataMut(), blobSize);

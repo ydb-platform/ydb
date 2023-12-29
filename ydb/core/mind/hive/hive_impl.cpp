@@ -1552,7 +1552,7 @@ void THive::DeleteTablet(TTabletId tabletId) {
         }
         const i64 tabletsTotalDiff = -1 - (tablet.Followers.size());
         UpdateCounterTabletsTotal(tabletsTotalDiff);
-        UpdateTabletsTotalByDomain(tabletsTotalDiff, tablet.ObjectDomain);
+        UpdateDomainTabletsTotal(tablet.ObjectDomain, tabletsTotalDiff);
         Tablets.erase(it);
     }
 }
@@ -1585,17 +1585,17 @@ void THive::KillNode(TNodeId nodeId, const TActorId& local) {
     Execute(CreateKillNode(nodeId, local));
 }
 
-void THive::UpdateTabletsTotalByDomain(i64 tabletsTotalDiff, const TSubDomainKey& objectDomain) {
+void THive::UpdateDomainTabletsTotal(const TSubDomainKey& objectDomain, i64 tabletsTotalDiff) {
     if (objectDomain) {
-        TabletsTotalByDomain[objectDomain] += tabletsTotalDiff;
+        Domains[objectDomain].TabletsTotal += tabletsTotalDiff;
     }
 }
 
-void THive::UpdateTabletsAliveByDomain(i64 tabletsAliveDiff, const TSubDomainKey& objectDomain, const TSubDomainKey& tabletNodeDomain) {
+void THive::UpdateDomainTabletsAlive(const TSubDomainKey& objectDomain, i64 tabletsAliveDiff, const TSubDomainKey& tabletNodeDomain) {
     if (objectDomain) {
-        TabletsAliveByDomain[objectDomain] += tabletsAliveDiff;
-        if (objectDomain == tabletNodeDomain) {
-            TabletsAliveInObjectDomainByDomain[objectDomain] += tabletsAliveDiff;
+        Domains[objectDomain].TabletsAlive += tabletsAliveDiff;
+        if (tabletNodeDomain == objectDomain) {
+            Domains[objectDomain].TabletsAliveInObjectDomain += tabletsAliveDiff;
         }
     }
 }

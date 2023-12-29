@@ -490,18 +490,18 @@ public:
                 out << "<td>-</td>";
                 out << "<td>-</td>";
             }
-            if (Self->TabletsTotalByDomain[domainKey] > 0) {
-                out << "<td>" << std::round(Self->TabletsAliveInObjectDomainByDomain[domainKey] * 100.0 / Self->TabletsTotalByDomain[domainKey]) << "%"
-                    << " (" << Self->TabletsAliveInObjectDomainByDomain[domainKey] << " of " << Self->TabletsTotalByDomain[domainKey] << ")" << "</td>";
+            if (domainInfo.TabletsTotal > 0) {
+                out << "<td>" << std::round(domainInfo.TabletsAliveInObjectDomain * 100.0 / domainInfo.TabletsTotal) << "%"
+                    << " (" << domainInfo.TabletsAliveInObjectDomain << " of " << domainInfo.TabletsTotal << ")" << "</td>";
 
-                const ui64 tabletsAliveInOtherDomains = Self->TabletsAliveByDomain[domainKey] - Self->TabletsAliveInObjectDomainByDomain[domainKey];
-                out << "<td>" << std::round(tabletsAliveInOtherDomains * 100.0 / Self->TabletsTotalByDomain[domainKey]) << "%"
-                    << " (" << tabletsAliveInOtherDomains << " of " << Self->TabletsTotalByDomain[domainKey] << ")" << "</td>";
+                const ui64 tabletsAliveInOtherDomains = domainInfo.TabletsAlive - domainInfo.TabletsAliveInObjectDomain;
+                out << "<td>" << std::round(tabletsAliveInOtherDomains * 100.0 / domainInfo.TabletsTotal) << "%"
+                    << " (" << tabletsAliveInOtherDomains << " of " << domainInfo.TabletsTotal << ")" << "</td>";
             } else {
                 out << "<td>-</td>";
                 out << "<td>-</td>";
             }
-            out << "<td>" << Self->TabletsTotalByDomain[domainKey] << "</td>";
+            out << "<td>" << domainInfo.TabletsTotal << "</td>";
             out << "</tr>";
         }
         out << "</tbody>";

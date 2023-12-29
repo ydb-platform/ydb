@@ -713,10 +713,8 @@ public:
         ui64 tabletsTotal = 0;
         for (auto it = Self->Tablets.begin(); it != Self->Tablets.end(); ++it) {
             ++tabletsTotal;
-            Self->UpdateTabletsTotalByDomain(+1, it->second.ObjectDomain);
             for (const TTabletInfo& follower : it->second.Followers) {
                 ++tabletsTotal;
-                Self->UpdateTabletsTotalByDomain(+1, it->second.ObjectDomain);
                 if (follower.IsLeader()) {
                     follower.AsLeader();
                 } else {

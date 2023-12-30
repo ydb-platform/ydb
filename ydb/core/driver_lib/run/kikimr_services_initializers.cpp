@@ -832,7 +832,13 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         if (tracing.HasAuthConfig() && Factories && Factories->WilsonGrpcSignerFactory) {
             grpcSigner = Factories->WilsonGrpcSignerFactory(tracing.GetAuthConfig());
         }
-        auto wilsonUploader = NWilson::CreateWilsonUploader(tracing.GetHost(), tracing.GetPort(), tracing.GetRootCA(), tracing.GetServiceName(), std::move(grpcSigner));
+        auto wilsonUploader = NWilson::WilsonUploaderParams {
+            .Host = tracing.GetHost(),
+            .Port = static_cast<ui16>(tracing.GetPort()),
+            .RootCA = tracing.GetRootCA(),
+            .ServiceName = tracing.GetServiceName(),
+            .GrpcSigner = std::move(grpcSigner),
+        }.CreateUploader();
         setup->LocalServices.emplace_back(
             NWilson::MakeWilsonUploaderId(),
             TActorSetupCmd(wilsonUploader, TMailboxType::ReadAsFilled, appData->BatchPoolId));

@@ -53,12 +53,12 @@ namespace NWilson {
             bool WakeupScheduled = false;
 
         public:
-            TWilsonUploader(TString host, ui16 port, TString rootCA, TString serviceName, std::unique_ptr<IGrpcSigner> grpcSigner)
-                : Host(std::move(host))
-                , Port(std::move(port))
-                , RootCA(std::move(rootCA))
-                , ServiceName(std::move(serviceName))
-                , GrpcSigner(std::move(grpcSigner))
+            TWilsonUploader(WilsonUploaderParams params)
+                : Host(std::move(params.Host))
+                , Port(std::move(params.Port))
+                , RootCA(std::move(params.RootCA))
+                , ServiceName(std::move(params.ServiceName))
+                , GrpcSigner(std::move(params.GrpcSigner))
             {}
 
             ~TWilsonUploader() {
@@ -196,8 +196,12 @@ namespace NWilson {
 
     } // anonymous
 
-    IActor *CreateWilsonUploader(TString host, ui16 port, TString rootCA, TString serviceName, std::unique_ptr<IGrpcSigner> grpcSigner) {
-        return new TWilsonUploader(std::move(host), port, std::move(rootCA), std::move(serviceName), std::move(grpcSigner));
+    IActor* CreateWilsonUploader(WilsonUploaderParams params) {
+        return new TWilsonUploader(std::move(params));
+    }
+
+    IActor* WilsonUploaderParams::CreateUploader() && {
+        return CreateWilsonUploader(std::move(*this));
     }
 
 } // NWilson

@@ -25,6 +25,16 @@ namespace NWilson {
         return NActors::TActorId(0, TStringBuf("WilsonUpload", 12));
     }
 
-    NActors::IActor *CreateWilsonUploader(TString host, ui16 port, TString rootCA, TString serviceName, std::unique_ptr<IGrpcSigner> grpcSigner);
+    struct WilsonUploaderParams {
+        TString Host;
+        ui16 Port;
+        TString RootCA;
+        TString ServiceName;
+        std::unique_ptr<IGrpcSigner> GrpcSigner;
+
+        NActors::IActor* CreateUploader() &&;
+    };
+
+    NActors::IActor* CreateWilsonUploader(WilsonUploaderParams params);
 
 } // NWilson

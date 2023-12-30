@@ -10,6 +10,9 @@ void TPortionMeta::FillBatchInfo(const NArrow::TFirstLastSpecialKeys& primaryKey
         ReplaceKeyEdges = primaryKeys.BuildAccordingToSchemaVerified(indexInfo.GetReplaceKey());
         IndexKeyStart = ReplaceKeyEdges->GetFirst();
         IndexKeyEnd = ReplaceKeyEdges->GetLast();
+        AFL_VERIFY(IndexKeyStart);
+        AFL_VERIFY(IndexKeyEnd);
+        AFL_VERIFY (*IndexKeyStart < *IndexKeyEnd)("start", IndexKeyStart->ToString())("end", IndexKeyEnd->ToString());
     }
 
     {
@@ -49,6 +52,9 @@ bool TPortionMeta::DeserializeFromProto(const NKikimrTxColumnShard::TIndexPortio
         ReplaceKeyEdges = std::make_shared<NArrow::TFirstLastSpecialKeys>(portionMeta.GetPrimaryKeyBorders(), indexInfo.GetReplaceKey());
         IndexKeyStart = ReplaceKeyEdges->GetFirst();
         IndexKeyEnd = ReplaceKeyEdges->GetLast();
+        AFL_VERIFY(IndexKeyStart);
+        AFL_VERIFY(IndexKeyEnd);
+        AFL_VERIFY (*IndexKeyStart < *IndexKeyEnd)("start", IndexKeyStart->ToString())("end", IndexKeyEnd->ToString());
     }
 
     if (portionMeta.HasRecordSnapshotMin()) {

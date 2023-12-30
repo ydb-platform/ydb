@@ -65,8 +65,8 @@ bool ValidateInputTypes(TExprNode& node, TExprContext& ctx) {
     return true;
 }
 
-TExprNodePtr WrapWithPgCast(TExprNodePtr&& node, ui32 targetTypeId, TContext& ctx) {
-    return ctx.Expr.Builder(node->Pos())
+TExprNodePtr WrapWithPgCast(TExprNodePtr&& node, ui32 targetTypeId, TExprContext& ctx) {
+    return ctx.Builder(node->Pos())
         .Callable("PgCast")
             .Add(0, std::move(node))
             .Callable(1, "PgType")
@@ -320,12 +320,12 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
                 const auto& fargTypes = (*procPtr)->ArgTypes;
                 for (size_t i = 0; i < argTypes.size(); ++i) {
                     if (IsCastRequired(argTypes[i], fargTypes[i])) {
-                        children[i+3] = WrapWithPgCast(std::move(children[i+3]), fargTypes[i], ctx);
+                        children[i+3] = WrapWithPgCast(std::move(children[i+3]), fargTypes[i], ctx.Expr);
                     }
                 }
                 output = ctx.Expr.NewCallable(input->Pos(), "PgResolvedCall", std::move(children));
             } else if (const auto* typePtr = std::get_if<const NPg::TTypeDesc*>(&procOrType)) {
-                output = WrapWithPgCast(std::move(children[2]), (*typePtr)->TypeId, ctx);
+                output = WrapWithPgCast(std::move(children[2]), (*typePtr)->TypeId, ctx.Expr);
             } else {
                 Y_UNREACHABLE();
             }
@@ -562,16 +562,16 @@ IGraphTransformer::TStatus PgOpWrapper(const TExprNode::TPtr& input, TExprNode::
             switch(oper.Kind) {
                 case NPg::EOperKind::LeftUnary:
                     if (IsCastRequired(argTypes[0], oper.RightType)) {
-                        children[1] = WrapWithPgCast(std::move(children[1]), oper.RightType, ctx);
+                        children[1] = WrapWithPgCast(std::move(children[1]), oper.RightType, ctx.Expr);
                     }
                     break;
 
                 case NYql::NPg::EOperKind::Binary:
                     if (IsCastRequired(argTypes[0], oper.LeftType)) {
-                        children[1] = WrapWithPgCast(std::move(children[1]), oper.LeftType, ctx);
+                        children[1] = WrapWithPgCast(std::move(children[1]), oper.LeftType, ctx.Expr);
                     }
                     if (IsCastRequired(argTypes[1], oper.RightType)) {
-                        children[2] = WrapWithPgCast(std::move(children[2]), oper.RightType, ctx);
+                        children[2] = WrapWithPgCast(std::move(children[2]), oper.RightType, ctx.Expr);
                     }
                     break;
 
@@ -756,7 +756,7 @@ IGraphTransformer::TStatus PgAggWrapper(const TExprNode::TPtr& input, TExprNode:
     for (ui32 i = 0; i < argTypes.size(); ++i, ++argIdx) {
         if (IsCastRequired(argTypes[i], aggDesc.ArgTypes[i])) {
             auto& argNode = input->ChildRef(argIdx);
-            argNode = WrapWithPgCast(std::move(argNode), aggDesc.ArgTypes[i], ctx);
+            argNode = WrapWithPgCast(std::move(argNode), aggDesc.ArgTypes[i], ctx.Expr);
             needRetype = true;
         }
     }
@@ -4263,7 +4263,7 @@ IGraphTransformer::TStatus PgValuesListWrapper(const TExprNode::TPtr& input, TEx
             if (item->GetTypeAnn()->Cast<TPgExprType>()->GetId() == commonTypes[j]) {
                 rowValues.push_back(item);
             } else {
-                rowValues.push_back(WrapWithPgCast(std::move(item), commonTypes[j], ctx));
+                rowValues.push_back(WrapWithPgCast(std::move(item), commonTypes[j], ctx.Expr));
             }
         }
         resultValues.push_back(ctx.Expr.NewList(value->Pos(), std::move(rowValues)));
@@ -4583,7 +4583,7 @@ IGraphTransformer::TStatus PgArrayWrapper(const TExprNode::TPtr& input, TExprNod
         if (argTypes[i] == elemType) {
             castArrayElems.push_back(child);
         } else {
-            castArrayElems.push_back(WrapWithPgCast(std::move(child), elemType, ctx));
+            castArrayElems.push_back(WrapWithPgCast(std::move(child), elemType, ctx.Expr));
         }
     }
     output = ctx.Expr.NewCallable(input->Pos(), "PgArray", std::move(castArrayElems));
@@ -4699,7 +4699,7 @@ IGraphTransformer::TStatus PgLikeWrapper(const TExprNode::TPtr& input, TExprNode
         if (argTypes[i] != textTypeId) {
             if (argTypes[i] == NPg::UnknownOid) {
                 auto& argNode = input->ChildRef(i);
-                argNode = WrapWithPgCast(std::move(argNode), textTypeId, ctx);
+                argNode = WrapWithPgCast(std::move(argNode), textTypeId, ctx.Expr);
                 return IGraphTransformer::TStatus::Repeat;
             }
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
@@ -4768,7 +4768,7 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
     if (itemTypePg && inputTypePg && itemTypePg != inputTypePg) {
         if (inputTypePg == NPg::UnknownOid) {
 
-            input->ChildRef(0) = WrapWithPgCast(std::move(input->Child(0)), itemTypePg, ctx);
+            input->ChildRef(0) = WrapWithPgCast(std::move(input->Child(0)), itemTypePg, ctx.Expr);
             return IGraphTransformer::TStatus::Repeat;
         }
         if (itemTypePg == NPg::UnknownOid) {

@@ -370,7 +370,7 @@ TEST(TSerializationTest, Array)
 
 TEST(TSerializationTest, Tuple)
 {
-    auto original = std::make_tuple<int, TString, size_t>(43, "TString", 343U);
+    auto original = std::tuple<int, TString, size_t>(43, "TString", 343U);
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::ListFragment);
 }
@@ -378,9 +378,9 @@ TEST(TSerializationTest, Tuple)
 TEST(TSerializationTest, VectorOfTuple)
 {
     std::vector<std::tuple<int, TString, size_t>> original{
-        std::make_tuple<int, TString, size_t>(43, "First", 343U),
-        std::make_tuple<int, TString, size_t>(0, "Second", 7U),
-        std::make_tuple<int, TString, size_t>(2323, "Third", 9U)
+        std::tuple<int, TString, size_t>(43, "First", 343U),
+        std::tuple<int, TString, size_t>(0, "Second", 7U),
+        std::tuple<int, TString, size_t>(2323, "Third", 9U)
     };
 
     TestSerializationDeserialization(original);

@@ -55,19 +55,19 @@ INSTANTIATE_TEST_SUITE_P(
     TErasureStabilityTest,
     TErasureStabilityTest,
     ::testing::Values(
-        std::make_tuple(
+        std::tuple(
             ECodec::IsaReedSolomon_3_3,
             std::vector<unsigned char>{59, 252, 207}),
-        std::make_tuple(
+        std::tuple(
             ECodec::ReedSolomon_6_3,
             std::vector<unsigned char>{194, 8, 51}),
-        std::make_tuple(
+        std::tuple(
             ECodec::JerasureLrc_12_2_2,
             std::vector<unsigned char>{194, 201, 87, 67}),
-        std::make_tuple(
+        std::tuple(
             ECodec::IsaLrc_12_2_2,
             std::vector<unsigned char>{194, 201, 104, 219}),
-        std::make_tuple(
+        std::tuple(
             ECodec::IsaReedSolomon_6_3,
             std::vector<unsigned char>{194, 60, 234})));
 

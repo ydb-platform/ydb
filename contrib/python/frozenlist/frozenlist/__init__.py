@@ -5,7 +5,7 @@ from collections.abc import MutableSequence
 from functools import total_ordering
 from typing import Type
 
-__version__ = "1.4.0"
+__version__ = "1.4.1"
 
 __all__ = ("FrozenList", "PyFrozenList")  # type: Tuple[str, ...]
 
@@ -86,10 +86,10 @@ class FrozenList(MutableSequence):
 PyFrozenList = FrozenList
 
 
-try:
-    from ._frozenlist import FrozenList as CFrozenList  # type: ignore
-
-    if not NO_EXTENSIONS:  # pragma: no cover
+if not NO_EXTENSIONS:
+    try:
+        from ._frozenlist import FrozenList as CFrozenList  # type: ignore
+    except ImportError:  # pragma: no cover
+        pass
+    else:
         FrozenList = CFrozenList  # type: ignore
-except ImportError:  # pragma: no cover
-    pass

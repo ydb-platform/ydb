@@ -525,7 +525,7 @@ private:
         while (!state->Batches.empty() && !state->Promises.empty()) {
             const auto& batch = state->Batches.front();
             const auto& promise = state->Promises.front();
-            toFulfill.push_back(std::make_tuple(batch, promise));
+            toFulfill.push_back(std::tuple(batch, promise));
             state->Batches.pop_front();
             state->Promises.pop_front();
             state->BatchesRowCount -= batch.RowCount;

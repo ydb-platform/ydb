@@ -62,7 +62,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
     switch (simpleType) {
         case ESimpleLogicalValueType::Null:
         case ESimpleLogicalValueType::Void:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_Null,
                 org::apache::arrow::flatbuf::CreateNull(*flatbufBuilder)
                     .Union());
@@ -75,7 +75,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
         case ESimpleLogicalValueType::Uint16:
         case ESimpleLogicalValueType::Int32:
         case ESimpleLogicalValueType::Uint32:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_Int,
                 org::apache::arrow::flatbuf::CreateInt(
                     *flatbufBuilder,
@@ -84,7 +84,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
                     .Union());
 
         case ESimpleLogicalValueType::Interval:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_Int,
                 org::apache::arrow::flatbuf::CreateInt(
                     *flatbufBuilder,
@@ -93,7 +93,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
                     .Union());
 
         case ESimpleLogicalValueType::Date:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_Date,
                 org::apache::arrow::flatbuf::CreateDate(
                     *flatbufBuilder,
@@ -101,7 +101,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
                     .Union());
 
         case ESimpleLogicalValueType::Datetime:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_Date,
                 org::apache::arrow::flatbuf::CreateDate(
                     *flatbufBuilder,
@@ -109,7 +109,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
                     .Union());
 
         case ESimpleLogicalValueType::Timestamp:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_Timestamp,
                 org::apache::arrow::flatbuf::CreateTimestamp(
                     *flatbufBuilder,
@@ -117,7 +117,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
                     .Union());
 
         case ESimpleLogicalValueType::Double:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_FloatingPoint,
                 org::apache::arrow::flatbuf::CreateFloatingPoint(
                     *flatbufBuilder,
@@ -125,7 +125,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
                     .Union());
 
         case ESimpleLogicalValueType::Float:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_FloatingPoint,
                 org::apache::arrow::flatbuf::CreateFloatingPoint(
                     *flatbufBuilder,
@@ -133,20 +133,20 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
                     .Union());
 
         case ESimpleLogicalValueType::Boolean:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_Bool,
                 org::apache::arrow::flatbuf::CreateBool(*flatbufBuilder)
                     .Union());
 
         case ESimpleLogicalValueType::String:
         case ESimpleLogicalValueType::Any:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_Binary,
                 org::apache::arrow::flatbuf::CreateBinary(*flatbufBuilder)
                     .Union());
 
         case ESimpleLogicalValueType::Utf8:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_Utf8,
                 org::apache::arrow::flatbuf::CreateUtf8(*flatbufBuilder)
                     .Union());
@@ -872,7 +872,7 @@ auto SerializeRecordBatch(
 
     auto totalSize = context->CurrentBodyOffset;
 
-    return std::make_tuple(
+    return std::tuple(
         recordBatchOffset,
         totalSize,
         [context = std::move(context)] (TMutableRef dstRef) {

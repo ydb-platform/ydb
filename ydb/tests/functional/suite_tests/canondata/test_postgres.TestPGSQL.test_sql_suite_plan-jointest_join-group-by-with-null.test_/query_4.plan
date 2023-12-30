@@ -12,6 +12,11 @@
                         "Node Type": "Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 12
+                                    }
+                                ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
@@ -27,6 +32,11 @@
                                         "Node Type": "TopSort",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 10
+                                                    }
+                                                ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
                                                 "TopSortBy": "argument.t1.q2"
@@ -48,9 +58,22 @@
                                                             {
                                                                 "Aggregation": "{_yql_agg_0: COUNT(item.t2.q1,state._yql_agg_0)}",
                                                                 "GroupBy": "item.t1.q2",
+                                                                "Inputs": [
+                                                                    {
+                                                                        "InternalOperatorId": 1
+                                                                    }
+                                                                ],
                                                                 "Name": "Aggregate"
                                                             },
                                                             {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "ExternalPlanNodeId": 8
+                                                                    },
+                                                                    {
+                                                                        "Other": "ConstantExpression"
+                                                                    }
+                                                                ],
                                                                 "Name": "LeftJoin (MapJoin)"
                                                             }
                                                         ],
@@ -65,6 +88,7 @@
                                                                         "Node Type": "TableFullScan",
                                                                         "Operators": [
                                                                             {
+                                                                                "Inputs": [],
                                                                                 "Name": "TableFullScan",
                                                                                 "ReadColumns": [
                                                                                     "q1",
@@ -102,6 +126,11 @@
                                                                                         "Node Type": "Limit",
                                                                                         "Operators": [
                                                                                             {
+                                                                                                "Inputs": [
+                                                                                                    {
+                                                                                                        "ExternalPlanNodeId": 2
+                                                                                                    }
+                                                                                                ],
                                                                                                 "Limit": "10",
                                                                                                 "Name": "Limit"
                                                                                             }
@@ -117,10 +146,16 @@
                                                                                                         "Node Type": "Limit-TableFullScan",
                                                                                                         "Operators": [
                                                                                                             {
+                                                                                                                "Inputs": [
+                                                                                                                    {
+                                                                                                                        "InternalOperatorId": 1
+                                                                                                                    }
+                                                                                                                ],
                                                                                                                 "Limit": "10",
                                                                                                                 "Name": "Limit"
                                                                                                             },
                                                                                                             {
+                                                                                                                "Inputs": [],
                                                                                                                 "Name": "TableFullScan",
                                                                                                                 "ReadColumns": [
                                                                                                                     "q1",

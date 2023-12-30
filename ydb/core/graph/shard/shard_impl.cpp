@@ -77,20 +77,23 @@ void TGraphShard::Handle(TEvSubDomain::TEvConfigure::TPtr& ev) {
 }
 
 void TGraphShard::Handle(TEvGraph::TEvSendMetrics::TPtr& ev) {
-    BLOG_TRACE("Handle TEvGraph::TEvSendMetrics from " << ev->Sender);
     TInstant now = TInstant::Seconds(TActivationContext::Now().Seconds()); // 1 second resolution
+    BLOG_TRACE("Handle TEvGraph::TEvSendMetrics from " << ev->Sender << " now is " << now << " md.timestamp is " << MetricsData.Timestamp);
     if (StartTimestamp == TInstant()) {
         StartTimestamp = now;
     }
     if (now != MetricsData.Timestamp) {
         if (MetricsData.Timestamp != TInstant()) {
+            BLOG_TRACE("Executing TxStoreMetrics");
             ExecuteTxStoreMetrics(std::move(MetricsData));
         }
+        BLOG_TRACE("Updating md.timestamp to " << now);
         MetricsData.Timestamp = now;
         MetricsData.Values.clear();
     }
     if ((now - StartTimestamp) > DURATION_CLEAR_TRIGGER && (now - ClearTimestamp) < DURATION_CLEAR_PERIOD) {
         ClearTimestamp = now;
+        BLOG_TRACE("Executing TxClearData");
         ExecuteTxClearData();
     }
     for (const auto& metric : ev->Get()->Record.GetMetrics()) {

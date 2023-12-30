@@ -133,6 +133,7 @@ TRACING_SCHEMA = dict(
         port=dict(type="integer"),
         root_ca=dict(type="string"),
         service_name=dict(type="string"),
+        auth_config=dict(type="object"),
     ),
     required=[
         "host",

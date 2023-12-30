@@ -1,30 +1,33 @@
-#include "engines/reader/read_context.h"
+#include "blobs_reader/actor.h"
 #include "blobs_reader/events.h"
 #include "blobs_reader/read_coordinator.h"
-#include "blobs_reader/actor.h"
+#include "engines/reader/read_context.h"
 #include "resource_subscriber/actor.h"
 
-#include <ydb/core/tx/columnshard/columnshard__scan.h>
-#include <ydb/core/tx/columnshard/columnshard__index_scan.h>
-#include <ydb/core/tx/columnshard/columnshard__stats_scan.h>
-#include <ydb/core/tx/columnshard/columnshard__read_base.h>
+#include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/core/formats/arrow/converter.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/tablet_flat/flat_row_celled.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
+#include <ydb/core/tx/columnshard/columnshard__index_scan.h>
+#include <ydb/core/tx/columnshard/columnshard__read_base.h>
+#include <ydb/core/tx/columnshard/columnshard__scan.h>
+#include <ydb/core/tx/columnshard/columnshard__stats_scan.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
-#include <ydb/core/formats/arrow/converter.h>
-#include <ydb/core/tablet_flat/flat_row_celled.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
-#include <ydb/core/actorlib_impl/long_timer.h>
-#include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/tracing/usage/tracing.h>
+
+#include <util/generic/noncopyable.h>
 #include <ydb/library/chunks_limiter/chunks_limiter.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/services/metadata/request/common.h>
-#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <util/generic/noncopyable.h>
+
+#include <tuple>
 
 namespace NKikimr::NColumnShard {
 
@@ -253,7 +256,7 @@ private:
         if (CurrentLastReadKey) {
             NOlap::NIndexedReader::TSortableBatchPosition pNew(result.GetLastReadKey(), 0, result.GetLastReadKey()->schema()->field_names(), {}, false);
             NOlap::NIndexedReader::TSortableBatchPosition pOld(CurrentLastReadKey, 0, CurrentLastReadKey->schema()->field_names(), {}, false);
-            AFL_VERIFY(pOld < pNew);
+            AFL_VERIFY(pOld < pNew)("old", pOld.DebugJson().GetStringRobust())("new", pNew.DebugJson().GetStringRobust());
         }
         CurrentLastReadKey = result.GetLastReadKey();
         
@@ -656,6 +659,9 @@ PrepareStatsReadMetadata(ui64 tabletId, const NOlap::TReadDescription& read, con
         return out;
     }
     THashMap<ui64, THashSet<ui64>> portionsInUse;
+    const auto predStatSchema = [](const std::shared_ptr<NOlap::TPortionInfo>& l, const std::shared_ptr<NOlap::TPortionInfo>& r) {
+        return std::tuple(l->GetPathId(), l->GetPortionId()) < std::tuple(r->GetPathId(), r->GetPortionId());
+    };
     for (auto&& filter : read.PKRangesFilter) {
         const ui64 fromPathId = *filter.GetPredicateFrom().Get<arrow::UInt64Array>(0, 0, 1);
         const ui64 toPathId = *filter.GetPredicateTo().Get<arrow::UInt64Array>(0, 0, Max<ui64>());
@@ -671,6 +677,7 @@ PrepareStatsReadMetadata(ui64 tabletId, const NOlap::TReadDescription& read, con
                     }
                 }
             }
+            std::sort(out->IndexPortions.begin(), out->IndexPortions.end(), predStatSchema);
         } else if (read.TableName.EndsWith(NOlap::TIndexInfo::STORE_INDEX_STATS_TABLE)) {
             auto pathInfos = logsIndex->GetTables(fromPathId, toPathId);
             for (auto&& pathInfo: pathInfos) {
@@ -680,6 +687,7 @@ PrepareStatsReadMetadata(ui64 tabletId, const NOlap::TReadDescription& read, con
                     }
                 }
             }
+            std::sort(out->IndexPortions.begin(), out->IndexPortions.end(), predStatSchema);
         }
     }
 

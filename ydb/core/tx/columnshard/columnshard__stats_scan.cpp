@@ -77,7 +77,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
         NArrow::Append<arrow::UInt64Type>(*builders[6], r->GetChunkIdx());
         NArrow::Append<arrow::StringType>(*builders[7], ReadMetadata->GetColumnNameDef(r->GetColumnId()).value_or("undefined"));
         NArrow::Append<arrow::UInt32Type>(*builders[8], r->GetColumnId());
-        std::string blobIdString = r->BlobRange.ToString();
+        std::string blobIdString = r->BlobRange.BlobId.ToStringLegacy();
         NArrow::Append<arrow::StringType>(*builders[9], blobIdString);
         NArrow::Append<arrow::UInt64Type>(*builders[10], r->BlobRange.Offset);
         NArrow::Append<arrow::UInt64Type>(*builders[11], r->BlobRange.Size);

@@ -544,7 +544,9 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         i64 totalTasks = 0;
         for (const auto& stage : stages) {
-            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
+            if (stage.GetMapSafe().contains("Stats")) {
+                totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
+            }
         }
         UNIT_ASSERT_VALUES_EQUAL(totalTasks, 2);
     }

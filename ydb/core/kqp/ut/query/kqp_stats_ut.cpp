@@ -175,10 +175,8 @@ void MultiTxStatsFull(
     UNIT_ASSERT(res.PlanJson);
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(*res.PlanJson, &plan, true);
-    auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangeScan");
-    if (!node.IsDefined()) {
-        node = FindPlanNodeByKv(plan, "Node Type", "TopSort-Filter-TableRangeScan");
-    }
+    Cout << plan;
+    auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort");
     UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 2);
 }
 
@@ -395,7 +393,7 @@ Y_UNIT_TEST(StatsProfile) {
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
 
-    auto node1 = FindPlanNodeByKv(plan, "Node Type", "Aggregate-TableFullScan");
+    auto node1 = FindPlanNodeByKv(plan, "Node Type", "Aggregate");
     UNIT_ASSERT_EQUAL(node1.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 2);
 
     //auto node2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate");

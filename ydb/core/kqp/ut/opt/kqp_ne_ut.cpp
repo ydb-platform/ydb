@@ -2073,7 +2073,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
                     NJson::TJsonValue plan;
                     NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                    auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
+                    auto node = FindPlanNodeByKv(plan, "Node Type", "TableFullScan");
                     UNIT_ASSERT(node.IsDefined());
 
                     TStringBuilder readLimitValue;

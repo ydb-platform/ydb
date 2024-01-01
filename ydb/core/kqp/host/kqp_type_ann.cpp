@@ -196,6 +196,34 @@ bool CalcKeyColumnsCount(TExprContext& ctx, const TPositionHandle pos, const TSt
     return true;
 }
 
+TStatus AnnotateReturningList(
+    const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
+    const TKikimrTablesData& tablesData, bool withSystemColumns)
+{
+    if (!EnsureArgsCount(*node, 3, ctx)) {
+        return TStatus::Error;
+    }
+
+    const auto& columns = node->ChildPtr(TKqlReturningList::idx_Columns);
+    if (!EnsureTupleOfAtoms(*columns, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto table = ResolveTable(node->Child(TKqlReturningList::idx_Table), ctx, cluster, tablesData);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, TCoAtomList(columns), withSystemColumns);
+    if (!rowType) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TListExprType>(rowType));
+
+    return TStatus::Ok;
+}
+
 TStatus AnnotateReadTable(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
@@ -613,7 +641,7 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
 TStatus AnnotateInsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData)
 {
-    if (!EnsureArgsCount(*node, 4, ctx)) {
+    if (!EnsureArgsCount(*node, 5, ctx)) {
         return TStatus::Error;
     }
 
@@ -694,7 +722,7 @@ TStatus AnnotateUpdateRows(const TExprNode::TPtr& node, TExprContext& ctx, const
         return TStatus::Error;
     }
 
-    if (!EnsureMaxArgsCount(*node, 4, ctx)) {
+    if (!EnsureMaxArgsCount(*node, 5, ctx)) {
         return TStatus::Error;
     }
 
@@ -1904,6 +1932,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpSinkEffect::Match(input.Get())) {
                 return AnnotateKqpSinkEffect(input, ctx);
+            }
+
+            if (TKqlReturningList::Match(input.Get())) {
+                return AnnotateReturningList(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
             }
 
             return dqTransformer->Transform(input, output, ctx);

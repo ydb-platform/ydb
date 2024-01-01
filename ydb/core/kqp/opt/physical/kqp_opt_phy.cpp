@@ -122,12 +122,28 @@ public:
 
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTable));
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpLookupTable));
+
+        AddHandler(3, &TKqlUpsertRows::Match, HNDL(RewriteReturningUpsert));
+
+        AddHandler(4, &TKqlReturningList::Match, HNDL(BuildReturning));
 #undef HNDL
 
         SetGlobal(1u);
     }
 
 protected:
+    TMaybeNode<TExprBase> BuildReturning(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpBuildReturning(node, ctx, KqpCtx);
+        DumpAppliedRule("BuildReturning", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteReturningUpsert(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpRewriteReturningUpsert(node, ctx, KqpCtx);
+        DumpAppliedRule("RewriteReturningUpsert", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
     TMaybeNode<TExprBase> BuildReadTableStage(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildReadTableStage(node, ctx, KqpCtx);
         DumpAppliedRule("BuildReadTableStage", node.Ptr(), output.Ptr(), ctx);

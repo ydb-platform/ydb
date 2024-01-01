@@ -67,6 +67,15 @@
             "Match": {"Type": "Callable", "Name": "KiReadTableList!"}
         },
         {
+            "Name": "TKiReturningList",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiReturningList!"},
+            "Children": [
+                {"Index": 0, "Name": "Update", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"}
+            ]
+        },
+        {
             "Name": "TKiWriteTable",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KiWriteTable!"},
@@ -77,8 +86,7 @@
                 {"Index": 3, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 4, "Name": "Mode", "Type": "TCoAtom"},
                 {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"},
-                {"Index": 6, "Name": "ReturningColumns", "Type": "TCoAtomList"},
-                {"Index": 7, "Name": "ReturningStar", "Type": "TCoAtom"}
+                {"Index": 6, "Name": "ReturningColumns", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -91,8 +99,7 @@
                 {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Filter", "Type": "TCoLambda"},
                 {"Index": 4, "Name": "Update", "Type": "TCoLambda"},
-                {"Index": 5, "Name": "ReturningColumns", "Type": "TCoAtomList"},
-                {"Index": 6, "Name": "ReturningStar", "Type": "TCoAtom"}
+                {"Index": 5, "Name": "ReturningColumns", "Type": "TCoAtomList"}
             ]
         },
         {

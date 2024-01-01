@@ -69,8 +69,20 @@ enum class TKqpPhyUpsertIndexMode {
 };
 
 NYql::NNodes::TMaybeNode<NYql::NNodes::TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode,
-    const NYql::NNodes::TExprBase& inputRows, const NYql::NNodes::TCoAtomList& inputColumns,
-    const NYql::TKikimrTableDescription& table, const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings, 
+    const NYql::NNodes::TExprBase& inputRows,
+    const NYql::NNodes::TCoAtomList& inputColumns,
+    const NYql::NNodes::TCoAtomList& returningColumns,
+
+    const NYql::TKikimrTableDescription& table, const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings,
     NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+
+
+struct TDictAndKeysResult {
+    NYql::NNodes::TDqPhyPrecompute DictPrecompute;
+    NYql::NNodes::TDqPhyPrecompute KeysPrecompute;
+};
+
+TDictAndKeysResult PrecomputeDictAndKeys(const TCondenseInputResult& condenseResult, NYql::TPositionHandle pos,
+    NYql::TExprContext& ctx);
 
 } // NKikimr::NKqp::NOpt

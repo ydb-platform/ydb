@@ -225,6 +225,16 @@
             "Builder": {"Generate": "None"}
         },
         {
+            "Name": "TKqlReturningList",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqlReturningList"},
+            "Children": [
+                {"Index": 0, "Name": "Update", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 2, "Name": "Table", "Type": "TKqpTable"}
+            ]
+        },
+        {
             "Name": "TKqlTableEffect",
             "Base": "TKqlEffectBase",
             "Match": {"Type": "CallableBase"},
@@ -247,7 +257,8 @@
             "Base": "TKqlUpsertRowsBase",
             "Match": {"Type": "Callable", "Name": "KqlUpsertRows"},
             "Children": [
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 3, "Name": "ReturningColumns", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {
@@ -255,7 +266,8 @@
             "Base": "TKqlUpsertRowsBase",
             "Match": {"Type": "Callable", "Name": "KqlUpsertRowsIndex"},
             "Children": [
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 3, "Name": "ReturningColumns", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {
@@ -282,7 +294,8 @@
             "Children": [
                 {"Index": 1, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "OnConflict", "Type": "TCoAtom", "Description": "'abort or 'revert"}
+                {"Index": 3, "Name": "OnConflict", "Type": "TCoAtom", "Description": "'abort or 'revert"},
+                {"Index": 4, "Name": "ReturningColumns", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -291,7 +304,8 @@
             "Match": {"Type": "CallableBase"},
             "Children": [
                 {"Index": 1, "Name": "Input", "Type": "TExprBase"},
-                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"}
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "ReturningColumns", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -304,7 +318,7 @@
             "Base": "TKqlUpdateRowsBase",
             "Match": {"Type": "Callable", "Name": "TKqlUpdateRowsIndex"},
             "Children": [
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {

@@ -455,7 +455,7 @@ TMaybe<TCondenseInputResult> CheckUniqueConstraint(const TExprBase& inputRows, c
 } // namespace
 
 TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, const TExprBase& inputRows,
-    const TCoAtomList& inputColumns, const TKikimrTableDescription& table, 
+    const TCoAtomList& inputColumns, const TCoAtomList& returningColumns, const TKikimrTableDescription& table,
     const TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings, TPositionHandle pos, TExprContext& ctx)
 {
     switch (mode) {
@@ -516,6 +516,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         .Table(BuildTableMeta(table, pos, ctx))
         .Input(tableUpsertRows)
         .Columns(inputColumns)
+        .ReturningColumns(returningColumns)
         .Settings(settings)
         .Done();
 
@@ -743,6 +744,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 .Table(tableNode)
                 .Input(upsertIndexRows)
                 .Columns(BuildColumnsList(indexTableColumns, pos, ctx))
+                .ReturningColumns<TCoAtomList>().Build()
                 .Done();
 
             effects.emplace_back(indexUpsert);
@@ -763,7 +765,7 @@ TExprBase KqpBuildUpsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, upsert.Table().Path());
 
     auto effects = KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode::Upsert, upsert.Input(), upsert.Columns(),
-        table, upsert.Settings(), upsert.Pos(), ctx);
+        upsert.ReturningColumns(), table, upsert.Settings(), upsert.Pos(), ctx);
 
     if (!effects) {
         return node;

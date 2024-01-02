@@ -323,6 +323,63 @@ TDuration TColumnShard::GetControllerStatsReportInterval() {
     return NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval(TSettings::DefaultStatsReportInterval);
 }
 
+void TColumnShard::FillTxTableStats(::NKikimrTableStats::TTableStats* tableStats) const {
+    tableStats->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOAD].Get());
+    tableStats->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_OUT_OF_SPACE].Get());
+    tableStats->SetInFlightTxCount(Executor()->GetStats().TxInFly);
+}
+
+void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
+    ev->Record.SetShardState(2); // NKikimrTxDataShard.EDatashardState.Ready
+    ev->Record.SetGeneration(Executor()->Generation());
+    ev->Record.SetRound(StatsReportRound++);
+    ev->Record.SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
+    ev->Record.SetStartTime(StartTime().MilliSeconds());
+    if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {
+        resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
+    }
+    auto* tabletStats = ev->Record.MutableTableStats();
+    FillTxTableStats(tabletStats);
+    if (TablesManager.HasPrimaryIndex()) {
+        const auto& indexStats = TablesManager.MutablePrimaryIndex().GetTotalStats();
+        ConfigureStats(indexStats, tabletStats);
+    }
+}
+
+void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
+    if (!TablesManager.HasPrimaryIndex()) {
+        return;
+    }
+    const auto& tablesIndexStats = TablesManager.MutablePrimaryIndex().GetStats();
+    LOG_S_DEBUG("There are stats for " << tablesIndexStats.size() << " tables");
+    for(const auto& [tableLocalID, columnStats] : tablesIndexStats) {
+        if (!columnStats) {
+            LOG_S_ERROR("SendPeriodicStats: empty stats");
+            continue;
+        }
+
+        auto* periodicTableStats = ev->Record.AddTables();
+        periodicTableStats->SetDatashardId(TabletID());
+        periodicTableStats->SetTableLocalId(tableLocalID);
+        
+        periodicTableStats->SetShardState(2); // NKikimrTxDataShard.EDatashardState.Ready
+        periodicTableStats->SetGeneration(Executor()->Generation());
+        periodicTableStats->SetRound(StatsReportRound++);
+        periodicTableStats->SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
+        periodicTableStats->SetStartTime(StartTime().MilliSeconds());
+        
+        if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {
+            resourceMetrics->Fill(*periodicTableStats->MutableTabletMetrics());
+        }
+
+        auto* tableStats = periodicTableStats->MutableTableStats();
+        FillTxTableStats(tableStats);
+        ConfigureStats(*columnStats, tableStats);
+
+        LOG_S_TRACE("Add stats for table, tableLocalID=" << tableLocalID);
+    }
+}
+
 void TColumnShard::SendPeriodicStats() {
     LOG_S_DEBUG("Send periodic stats.");
 
@@ -338,7 +395,6 @@ void TColumnShard::SendPeriodicStats() {
         LOG_S_TRACE("Skip send periodic stats: report interavl = " << StatsReportInterval);
         return;
     }
-    StatsReportInterval = GetControllerStatsReportInterval();
     LastStatsReport = now;
 
     if (!StatsReportPipe) {
@@ -348,64 +404,10 @@ void TColumnShard::SendPeriodicStats() {
     }
 
     auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), OwnerPathId);
-    {
-        ev->Record.SetShardState(2); // NKikimrTxDataShard.EDatashardState.Ready
-        ev->Record.SetGeneration(Executor()->Generation());
-        ev->Record.SetRound(StatsReportRound++);
-        ev->Record.SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
-        ev->Record.SetStartTime(StartTime().MilliSeconds());
 
-        if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {
-            resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
-        }
-
-        auto* tabletStats = ev->Record.MutableTableStats();
-        tabletStats->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOAD].Get());
-        tabletStats->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_OUT_OF_SPACE].Get());
-        tabletStats->SetInFlightTxCount(Executor()->GetStats().TxInFly);
-
-        if (TablesManager.HasPrimaryIndex()) {
-            const auto& indexStats = TablesManager.MutablePrimaryIndex().GetTotalStats();
-            ConfigureStats(indexStats, tabletStats);
-        }
-    }
-
-    if (TablesManager.HasPrimaryIndex()) {
-        const auto& tablesIndexStats = TablesManager.MutablePrimaryIndex().GetStats();
-
-        LOG_S_INFO("There are stats for " << tablesIndexStats.size() << " tables");
-
-        for(const auto& [tableLocalID, columnStats] : tablesIndexStats) {
-            if (!columnStats) {
-                LOG_S_ERROR("SendPeriodicStats: empty stats");
-                continue;
-            }
-            auto* periodicTableStats = ev->Record.AddTables();
-
-            periodicTableStats->SetDatashardId(TabletID());
-            periodicTableStats->SetTableLocalId(tableLocalID);
-            
-            periodicTableStats->SetShardState(2); // NKikimrTxDataShard.EDatashardState.Ready
-            periodicTableStats->SetGeneration(Executor()->Generation());
-            periodicTableStats->SetRound(StatsReportRound++);
-            periodicTableStats->SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
-            periodicTableStats->SetStartTime(StartTime().MilliSeconds());
-
-            if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {
-                resourceMetrics->Fill(*periodicTableStats->MutableTabletMetrics());
-            }
-
-            auto* tableStats = periodicTableStats->MutableTableStats();
-
-            tableStats->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOAD].Get());
-            tableStats->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_OUT_OF_SPACE].Get());
-            tableStats->SetInFlightTxCount(Executor()->GetStats().TxInFly);
-
-            ConfigureStats(*columnStats, tableStats);
-
-            LOG_S_TRACE("Add stats for table, tableLocalID=" << tableLocalID);
-        }
-    }
+    FillOlapStats(ctx, ev);
+    FillColumnTableStats(ctx, ev);
+    
     NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
 }
 

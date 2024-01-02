@@ -31,6 +31,8 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
     };
 
     Y_UNIT_TEST(AddRowsTableStandalone) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TOlapStatsController>();
+        
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
 
@@ -40,9 +42,6 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
 
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
         testHelper.CreateTable(testTable);
-
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TOlapStatsController>();
-
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             
@@ -67,6 +66,8 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
     }
 
     Y_UNIT_TEST(AddRowsTableInTableStore) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TOlapStatsController>();
+
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
 
@@ -79,8 +80,6 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/TableStoreTest/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
         testHelper.CreateTable(testTable);
-
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TOlapStatsController>();
 
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
@@ -104,6 +103,8 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
     }
 
     Y_UNIT_TEST(AddRowsSomeTablesInTableStore) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TOlapStatsController>();
+
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
 
@@ -115,8 +116,6 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         testHelper.CreateTable(testTableStore);
 
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
-
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TOlapStatsController>();
 
         for(size_t t=0; t<tables_in_store; t++) {
             TTestHelper::TColumnTable testTable;

@@ -393,7 +393,7 @@ private:
     TDuration MaxReadStaleness = TDuration::Minutes(5); // TODO: Make configurable?
     const TDuration PeriodicWakeupActivationPeriod;
     TDuration FailActivationDelay = TDuration::Seconds(1);
-    TDuration StatsReportInterval;
+    const TDuration StatsReportInterval;
     TInstant LastAccessTime;
     TInstant LastStatsReport;
 
@@ -484,8 +484,12 @@ private:
     void UpdateIndexCounters();
     void UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage);
     ui64 MemoryUsage() const;
+
     void SendPeriodicStats();
+    void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
+    void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
     void ConfigureStats(const NOlap::TColumnEngineStats& indexStats, ::NKikimrTableStats::TTableStats * tabletStats);
+    void FillTxTableStats(::NKikimrTableStats::TTableStats* tableStats) const;
 
     static TDuration GetControllerPeriodicWakeupActivationPeriod();
     static TDuration GetControllerStatsReportInterval();

@@ -260,19 +260,31 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         newAggrStats = olapStore->GetStats().Aggregated;
         updateSubdomainInfo = true;
 
-        const auto tables = rec.GetColumnTables();
+        const auto tables = rec.GetTables();
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "OLAP store contains " << tables.size() << " tables.");
+
         for(const auto& table : tables) {
             const TPartitionStats newTableStats = PrepareStats(ctx, table);
 
             const TPathId tablePathId = TPathId(TOwnerId(pathId.OwnerId), TLocalPathId(table.GetTableLocalId()));
 
             if (Self->ColumnTables.contains(tablePathId)) {
+                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "add stats for exists table with pathId=" << tablePathId);
+
                 auto columnTable = Self->ColumnTables.TakeVerified(tablePathId);
                 columnTable->UpdateTableStats(tablePathId, newTableStats);
+            } else {
+                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "failed add stats for table with pathId=" << tablePathId);
             }
         }
 
     } else if (isColumnTable) {
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "PersistSingleStats: ColumnTable rec.GetColumnTables() size=" 
+            << rec.GetTables().size());
+
         auto columnTable = Self->ColumnTables.TakeVerified(pathId);
         oldAggrStats = columnTable->GetStats().Aggregated;
         columnTable->UpdateShardStats(shardIdx, newStats);

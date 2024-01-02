@@ -70,6 +70,7 @@ struct TSettings {
     static constexpr ui32 MAX_INDEXATIONS_TO_SKIP = 16;
     static constexpr TDuration GuaranteeIndexationInterval = TDuration::Seconds(10);
     static constexpr TDuration DefaultPeriodicWakeupActivationPeriod = TDuration::Seconds(60);
+    static constexpr TDuration DefaultStatsReportInterval = TDuration::Seconds(10);
     static constexpr i64 GuaranteeIndexationStartBytesLimit = (i64)5 * 1024 * 1024 * 1024;
 
     TControlWrapper BlobWriteGrouppingEnabled;
@@ -392,7 +393,7 @@ private:
     TDuration MaxReadStaleness = TDuration::Minutes(5); // TODO: Make configurable?
     const TDuration PeriodicWakeupActivationPeriod;
     TDuration FailActivationDelay = TDuration::Seconds(1);
-    TDuration StatsReportInterval = TDuration::Seconds(10);
+    TDuration StatsReportInterval;
     TInstant LastAccessTime;
     TInstant LastStatsReport;
 
@@ -484,7 +485,11 @@ private:
     void UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage);
     ui64 MemoryUsage() const;
     void SendPeriodicStats();
-    void ConfigureStats(::NKikimrTableStats::TTableStats * tabletStats);
+    void ConfigureStats(const NOlap::TColumnEngineStats& indexStats, ::NKikimrTableStats::TTableStats * tabletStats);
+
+    static TDuration GetControllerPeriodicWakeupActivationPeriod();
+    static TDuration GetControllerStatsReportInterval();
+    
 public:
     const std::shared_ptr<NOlap::IStoragesManager>& GetStoragesManager() const {
         return StoragesManager;

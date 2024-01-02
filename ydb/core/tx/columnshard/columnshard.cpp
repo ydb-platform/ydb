@@ -293,7 +293,7 @@ void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage&
     metrics->TryUpdate(ctx);
 }
 
-void TColumnShard::ConfigureStats(::NKikimrTableStats::TTableStats * tabletStats) {
+void TColumnShard::ConfigureStats(const NOlap::TColumnEngineStats& indexStats, ::NKikimrTableStats::TTableStats * tabletStats) {
     tabletStats->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOAD].Get());
     tabletStats->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_OUT_OF_SPACE].Get());
     tabletStats->SetInFlightTxCount(Executor()->GetStats().TxInFly);
@@ -302,7 +302,6 @@ void TColumnShard::ConfigureStats(::NKikimrTableStats::TTableStats * tabletStats
         return;
     }
 
-    const auto& indexStats = TablesManager.MutablePrimaryIndex().GetTotalStats();
     NOlap::TSnapshot lastIndexUpdate = TablesManager.GetPrimaryIndexSafe().LastUpdate();
     auto activeIndexStats = indexStats.Active(); // data stats excluding inactive and evicted
 
@@ -324,17 +323,30 @@ void TColumnShard::ConfigureStats(::NKikimrTableStats::TTableStats * tabletStats
     tabletStats->SetLastUpdateTime(lastIndexUpdate.GetPlanStep());
 }
 
+TDuration TColumnShard::GetControllerPeriodicWakeupActivationPeriod() {
+    return NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod(TSettings::DefaultPeriodicWakeupActivationPeriod);
+}
+
+TDuration TColumnShard::GetControllerStatsReportInterval() {
+    return NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval(TSettings::DefaultStatsReportInterval);
+}
+
 void TColumnShard::SendPeriodicStats() {
+    LOG_S_DEBUG("Send periodic stats.");
+
     if (!CurrentSchemeShardId || !OwnerPathId) {
         LOG_S_DEBUG("Disabled periodic stats at tablet " << TabletID());
         return;
     }
 
     const TActorContext& ctx = ActorContext();
-    TInstant now = TAppData::TimeProvider->Now();
+    const TInstant now = TAppData::TimeProvider->Now();
+
     if (LastStatsReport + StatsReportInterval > now) {
+        LOG_S_TRACE("Skip send periodic stats: report interavl = " << StatsReportInterval);
         return;
     }
+    StatsReportInterval = GetControllerStatsReportInterval();
     LastStatsReport = now;
 
     if (!StatsReportPipe) {
@@ -356,19 +368,21 @@ void TColumnShard::SendPeriodicStats() {
         }
 
         auto* tabletStats = ev->Record.MutableTableStats();
-        
-        ConfigureStats(tabletStats);
+        const auto& indexStats = TablesManager.MutablePrimaryIndex().GetTotalStats();
+        ConfigureStats(indexStats, tabletStats);
     }
 
     if (TablesManager.HasPrimaryIndex()) {
         const auto& tablesIndexStats = TablesManager.MutablePrimaryIndex().GetStats();
+
+        LOG_S_INFO("There are stats for " << tablesIndexStats.size() << " tables");
 
         for(const auto& [tableLocalID, columnStats] : tablesIndexStats) {
             if (!columnStats) {
                 LOG_S_ERROR("SendPeriodicStats: empty stats");
                 continue;
             }
-            auto* periodicTableStats = ev->Record.AddColumnTables();
+            auto* periodicTableStats = ev->Record.AddTables();
 
             periodicTableStats->SetDatashardId(TabletID());
             periodicTableStats->SetTableLocalId(tableLocalID);
@@ -384,8 +398,9 @@ void TColumnShard::SendPeriodicStats() {
             }
 
             auto* tabletStats = periodicTableStats->MutableTableStats();
+            ConfigureStats(*columnStats, tabletStats);
 
-            ConfigureStats(tabletStats);
+            LOG_S_TRACE("Add stats for table, tableLocalID=" << tableLocalID);
         }
     }
     NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());

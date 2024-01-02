@@ -807,7 +807,7 @@ message TEvPeriodicTableStats {
 
     optional bool IsDstSplit = 13;
 
-    repeated TEvPeriodicTableStats ColumnTables = 14;
+    repeated TEvPeriodicTableStats Tables = 14;
 }
 
 message TSerializedRowColumnsScheme {

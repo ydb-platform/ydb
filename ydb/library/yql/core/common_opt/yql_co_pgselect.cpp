@@ -1737,7 +1737,7 @@ TExprNode::TPtr BuildProjectionLambda(TPositionHandle pos, const TExprNode::TPtr
                         }
                     } else {
                         auto type = x->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-                        Y_ENSURE(type->GetSize() == finalType->GetSize());
+                        Y_ENSURE(type);
 
                         for (const auto& item : type->GetItems()) {
                             TStringBuf column = item->GetName();

@@ -1,17 +1,18 @@
+
 #include "general_compaction.h"
-#include "compaction/column_portion_chunk.h"
+
 #include "compaction/column_cursor.h"
+#include "compaction/column_portion_chunk.h"
 #include "compaction/merge_context.h"
 #include "compaction/merged_column.h"
 #include "counters/general.h"
 
+#include <ydb/core/formats/arrow/simple_builder/array.h>
+#include <ydb/core/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 #include <ydb/core/tx/columnshard/splitter/rb_splitter.h>
-#include <ydb/core/formats/arrow/simple_builder/array.h>
-#include <ydb/core/formats/arrow/simple_builder/filler.h>
-#include "../reader/read_filter_merger.h"
 
 namespace NKikimr::NOlap::NCompaction {
 

@@ -112,8 +112,8 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         std::map<std::string, std::vector<TColumnPortionResult>> columnChunks;
         ui32 batchIdx = 0;
         for (auto&& batchResult : batchResults) {
-            const ui32 portionRecordsCountLimit = batchResult->num_rows() / (batchResult->num_rows() / 10000 + 1) + 1;
-            TColumnMergeContext context(columnId, resultSchema, portionRecordsCountLimit, 50 * 1024 * 1024, columnInfo, SaverContext);
+            const ui32 portionRecordsCountLimit = batchResult->num_rows() / (batchResult->num_rows() / GetSplitSettings().GetExpectedRecordsCountOnPage() + 1) + 1;
+            TColumnMergeContext context(columnId, resultSchema, portionRecordsCountLimit, GetSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo, SaverContext);
             TMergedColumn mColumn(context);
 
             auto columnPortionIdx = batchResult->GetColumnByName(portionIdFieldName);
@@ -177,8 +177,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
             }
             batchSlices.emplace_back(portionColumns, schemaDetails, context.Counters.SplitterCounters, GetSplitSettings());
         }
-
-        TSimilarSlicer slicer(4 * 1024 * 1024);
+        TSimilarSlicer slicer(GetSplitSettings().GetExpectedPortionSize());
         auto packs = slicer.Split(batchSlices);
 
         ui32 recordIdx = 0;

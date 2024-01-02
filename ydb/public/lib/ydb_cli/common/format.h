@@ -105,13 +105,16 @@ private:
     void PrintPrettyTable(const NJson::TJsonValue& plan);
     void PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table);
     void PrintJson(const TString& plan);
+    void PrintSimplifyJson(const NJson::TJsonValue& plan);
     TString JsonToString(const NJson::TJsonValue& jsonValue);
 
-    void SplitJoinsPlan(NJson::TJsonValue& plan);
+    void SplitPlanInTree(NJson::TJsonValue& plan);
     void SimplifyQueryPlan(NJson::TJsonValue& plan);
     TVector<NJson::TJsonValue> RemoveRedundantNodes(NJson::TJsonValue& plan, const THashSet<TString>& redundantNodes);
     THashMap<TString, NJson::TJsonValue> ExtractPrecomputes(NJson::TJsonValue& planJson);
     void ResolvePrecomputeLinks(NJson::TJsonValue& planJson, const THashMap<TString, NJson::TJsonValue>& precomputes);
+    void DeleteSplitNodes(NJson::TJsonValue& planJson);
+
 
 private:
     EOutputFormat Format;

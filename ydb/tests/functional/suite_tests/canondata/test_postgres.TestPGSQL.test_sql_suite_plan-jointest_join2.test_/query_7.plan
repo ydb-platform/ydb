@@ -12,6 +12,11 @@
                         "Node Type": "Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 16
+                                    }
+                                ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
@@ -27,10 +32,23 @@
                                         "Node Type": "Limit-LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Limit": "1001",
                                                 "Name": "Limit"
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 14
+                                                    },
+                                                    {
+                                                        "Other": "ConstantExpression"
+                                                    }
+                                                ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
@@ -46,6 +64,7 @@
                                                         "Node Type": "ConstantExpr",
                                                         "Operators": [
                                                             {
+                                                                "Inputs": [],
                                                                 "Iterator": "precompute_0_0",
                                                                 "Name": "Iterator"
                                                             }
@@ -73,10 +92,20 @@
                                                                         "Node Type": "Filter-TableRangeScan-ConstantExpr",
                                                                         "Operators": [
                                                                             {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "InternalOperatorId": 1
+                                                                                    }
+                                                                                ],
                                                                                 "Name": "Filter",
                                                                                 "Predicate": "Exist(item.y1)"
                                                                             },
                                                                             {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "InternalOperatorId": 2
+                                                                                    }
+                                                                                ],
                                                                                 "Name": "TableRangeScan",
                                                                                 "ReadColumns": [
                                                                                     "y1",
@@ -85,6 +114,7 @@
                                                                                 "Table": "postgres_jointest/join2.test_plan/y"
                                                                             },
                                                                             {
+                                                                                "Inputs": [],
                                                                                 "Iterator": "precompute_1_0",
                                                                                 "Name": "Iterator"
                                                                             }
@@ -116,19 +146,12 @@
                 "Plans": [
                     {
                         "CTE Name": "precompute_0_0",
-                        "Node Type": "Aggregate-Filter-Limit",
+                        "Node Type": "Aggregate",
                         "Operators": [
                             {
                                 "Input": "precompute_0_0",
+                                "Inputs": [],
                                 "Name": "PartitionByKey"
-                            },
-                            {
-                                "Name": "Filter",
-                                "Predicate": "Exist(item.x1)"
-                            },
-                            {
-                                "Limit": "1",
-                                "Name": "Limit"
                             }
                         ],
                         "PlanNodeId": 6
@@ -155,10 +178,16 @@
                                         "Node Type": "Filter-TableFullScan",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Name": "Filter",
                                                 "Predicate": "Exist(item.x2)"
                                             },
                                             {
+                                                "Inputs": [],
                                                 "Name": "TableFullScan",
                                                 "ReadColumns": [
                                                     "x1",

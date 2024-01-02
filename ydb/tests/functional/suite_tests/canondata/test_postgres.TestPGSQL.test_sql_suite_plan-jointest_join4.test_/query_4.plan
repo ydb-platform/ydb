@@ -12,6 +12,11 @@
                         "Node Type": "Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 16
+                                    }
+                                ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
@@ -27,11 +32,24 @@
                                         "Node Type": "TopSort-LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
                                                 "TopSortBy": "row.name"
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 14
+                                                    },
+                                                    {
+                                                        "Other": "ConstantExpression"
+                                                    }
+                                                ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
@@ -55,6 +73,14 @@
                                                                         "Node Type": "LeftJoin (MapJoin)",
                                                                         "Operators": [
                                                                             {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "ExternalPlanNodeId": 8
+                                                                                    },
+                                                                                    {
+                                                                                        "Other": "ConstantExpression"
+                                                                                    }
+                                                                                ],
                                                                                 "Name": "LeftJoin (MapJoin)"
                                                                             }
                                                                         ],
@@ -92,9 +118,15 @@
                                                                                                                             {
                                                                                                                                 "Aggregation": "{_yql_agg_0: Inc(state._yql_agg_0)}",
                                                                                                                                 "GroupBy": "item.a",
+                                                                                                                                "Inputs": [
+                                                                                                                                    {
+                                                                                                                                        "InternalOperatorId": 1
+                                                                                                                                    }
+                                                                                                                                ],
                                                                                                                                 "Name": "Aggregate"
                                                                                                                             },
                                                                                                                             {
+                                                                                                                                "Inputs": [],
                                                                                                                                 "Name": "TableFullScan",
                                                                                                                                 "ReadColumns": [
                                                                                                                                     "a"
@@ -130,6 +162,7 @@
                                                                                         "Node Type": "TableFullScan",
                                                                                         "Operators": [
                                                                                             {
+                                                                                                "Inputs": [],
                                                                                                 "Name": "TableFullScan",
                                                                                                 "ReadColumns": [
                                                                                                     "code"
@@ -164,6 +197,7 @@
                                                         "Node Type": "TableFullScan",
                                                         "Operators": [
                                                             {
+                                                                "Inputs": [],
                                                                 "Name": "TableFullScan",
                                                                 "ReadColumns": [
                                                                     "a",

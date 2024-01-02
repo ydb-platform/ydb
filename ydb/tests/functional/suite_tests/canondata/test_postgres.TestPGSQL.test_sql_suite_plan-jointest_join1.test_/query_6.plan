@@ -12,6 +12,11 @@
                         "Node Type": "Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 8
+                                    }
+                                ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
@@ -27,14 +32,32 @@
                                         "Node Type": "TopSort-InnerJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
                                                 "TopSortBy": "argument.J1_TBL.i"
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 2
+                                                    },
+                                                    {
+                                                        "Other": "ConstantExpression"
+                                                    }
+                                                ],
                                                 "Name": "InnerJoin (MapJoin)"
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 6
+                                                    }
+                                                ],
                                                 "Name": "Filter",
                                                 "Predicate": "Exist(item.i)"
                                             }
@@ -59,6 +82,7 @@
                                                                         "Node Type": "TableFullScan",
                                                                         "Operators": [
                                                                             {
+                                                                                "Inputs": [],
                                                                                 "Name": "TableFullScan",
                                                                                 "ReadColumns": [
                                                                                     "k"
@@ -90,6 +114,7 @@
                                                         "Node Type": "TableFullScan",
                                                         "Operators": [
                                                             {
+                                                                "Inputs": [],
                                                                 "Name": "TableFullScan",
                                                                 "ReadColumns": [
                                                                     "i",

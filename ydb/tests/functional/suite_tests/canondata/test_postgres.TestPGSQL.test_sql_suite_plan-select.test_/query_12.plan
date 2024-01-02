@@ -12,6 +12,11 @@
                         "Node Type": "Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 2
+                                    }
+                                ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
@@ -27,17 +32,36 @@
                                         "Node Type": "Limit-InnerJoin (MapJoin)-Filter-TableFullScan",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Limit": "1001",
                                                 "Name": "Limit"
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 2
+                                                    },
+                                                    {
+                                                        "Other": "ConstantExpression"
+                                                    }
+                                                ],
                                                 "Name": "InnerJoin (MapJoin)"
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 3
+                                                    }
+                                                ],
                                                 "Name": "Filter",
                                                 "Predicate": "Exist(item.stringu1) And Exist(item.unique1)"
                                             },
                                             {
+                                                "Inputs": [],
                                                 "Name": "TableFullScan",
                                                 "ReadColumns": [
                                                     "even",

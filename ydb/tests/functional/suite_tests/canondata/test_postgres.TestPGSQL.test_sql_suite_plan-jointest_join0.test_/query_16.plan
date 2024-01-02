@@ -12,9 +12,19 @@
                         "Node Type": "Aggregate-Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "InternalOperatorId": 1
+                                    }
+                                ],
                                 "Name": "Aggregate"
                             },
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 10
+                                    }
+                                ],
                                 "Limit": "1",
                                 "Name": "Limit"
                             }
@@ -30,13 +40,34 @@
                                         "Node Type": "Aggregate-Filter-FullJoin (JoinDict)",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Name": "Aggregate"
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 8
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 2
+                                                    }
+                                                ],
                                                 "Name": "Filter",
                                                 "Predicate": "Nth.unique2 == 42"
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 8
+                                                    },
+                                                    {
+                                                        "ExternalPlanNodeId": 4
+                                                    }
+                                                ],
                                                 "Name": "FullJoin (JoinDict)"
                                             }
                                         ],
@@ -63,6 +94,7 @@
                                                                         "Node Type": "TableFullScan",
                                                                         "Operators": [
                                                                             {
+                                                                                "Inputs": [],
                                                                                 "Name": "TableFullScan",
                                                                                 "ReadColumns": [
                                                                                     "unique2"
@@ -106,6 +138,7 @@
                                                                         "Node Type": "TableFullScan",
                                                                         "Operators": [
                                                                             {
+                                                                                "Inputs": [],
                                                                                 "Name": "TableFullScan",
                                                                                 "ReadColumns": [
                                                                                     "unique2"

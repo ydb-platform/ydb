@@ -12,6 +12,11 @@
                         "Node Type": "Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 8
+                                    }
+                                ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
@@ -27,11 +32,24 @@
                                         "Node Type": "TopSort-LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
                                                 "TopSortBy": ""
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 6
+                                                    },
+                                                    {
+                                                        "Other": "ConstantExpression"
+                                                    }
+                                                ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
@@ -55,9 +73,18 @@
                                                                         "Node Type": "LeftJoin (MapJoin)-TableFullScan",
                                                                         "Operators": [
                                                                             {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "InternalOperatorId": 1
+                                                                                    },
+                                                                                    {
+                                                                                        "Other": "ConstantExpression"
+                                                                                    }
+                                                                                ],
                                                                                 "Name": "LeftJoin (MapJoin)"
                                                                             },
                                                                             {
+                                                                                "Inputs": [],
                                                                                 "Name": "TableFullScan",
                                                                                 "ReadColumns": [
                                                                                     "q1",
@@ -90,6 +117,7 @@
                                                         "Node Type": "ConstantExpr",
                                                         "Operators": [
                                                             {
+                                                                "Inputs": [],
                                                                 "Iterator": "[{x: 1}]",
                                                                 "Name": "Iterator"
                                                             }

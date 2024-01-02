@@ -4922,9 +4922,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_GetValue) {
-        // Should be fixed after Arrow kernel implementation for JSON_VALUE
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
@@ -4941,9 +4938,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_GetValue_ToString) {
-        // Should be fixed after Arrow kernel implementation for JSON_VALUE
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_VALUE(jsonval, "$.col1" RETURNING String), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
@@ -4960,9 +4954,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_GetValue_ToInt) {
-        // Should be fixed after Arrow kernel implementation for JSON_VALUE
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int), JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) FROM `/Root/tableWithNulls`
@@ -5027,9 +5018,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_Exists) {
-        // Should be fixed after Arrow kernel implementation for JSON_EXISTS
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_EXISTS(jsonval, "$.col1"), JSON_EXISTS(jsondoc, "$.col1") FROM `/Root/tableWithNulls`

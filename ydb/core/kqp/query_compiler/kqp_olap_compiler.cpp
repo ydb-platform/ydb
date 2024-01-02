@@ -402,6 +402,33 @@ const TTypedColumn ConvertJsonValueToColumn(const TKqpOlapJsonValue& jsonValueCa
     return {command->GetColumn().GetId(), ctx.ConvertToBlockType(type)};
 }
 
+const TTypedColumn CompileJsonExists(const TKqpOlapJsonExists& jsonExistsCallable, TKqpOlapCompileContext& ctx) {
+    Y_ABORT_UNLESS(NKikimr::NSsa::RuntimeVersion >= 3, "JSON_EXISTS pushdown is supported starting from the v3 of SSA runtime.");
+
+    const auto columnId = GetOrCreateColumnId(jsonExistsCallable.Column(), ctx);
+    const auto pathId = GetOrCreateColumnId(jsonExistsCallable.Path(), ctx);
+
+    auto *const command = ctx.CreateAssignCmd();
+    auto *const jsonExistsFunc = command->MutableFunction();
+
+    jsonExistsFunc->AddArguments()->SetId(columnId);
+    jsonExistsFunc->AddArguments()->SetId(pathId);
+
+    jsonExistsFunc->SetFunctionType(TProgram::YQL_KERNEL);
+    const auto type = ctx.ExprCtx().MakeType<TOptionalExprType>(ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
+    const auto idx = ctx.AddYqlKernelJsonExists(
+        jsonExistsCallable.Column(),
+        jsonExistsCallable.Path(),
+        type);
+    jsonExistsFunc->SetKernelIdx(idx);
+
+    if constexpr (NSsa::RuntimeVersion >= 4U) {
+        return {ConvertSafeCastToColumn(command->GetColumn().GetId(), "Uint8", ctx), ctx.ConvertToBlockType(type)};
+    } else {
+        return {command->GetColumn().GetId(), ctx.ConvertToBlockType(type)};
+    }
+}
+
 ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx) {
     if (auto maybeData = node.Maybe<TCoDataCtor>()) {
         return ConvertValueToColumn(maybeData.Cast(), ctx);
@@ -421,6 +448,10 @@ ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx) {
 
     if (auto maybeJsonValue = node.Maybe<TKqpOlapJsonValue>()) {
         return ConvertJsonValueToColumn(maybeJsonValue.Cast(), ctx).Id;
+    }
+
+    if (const auto maybeJsonExists = node.Maybe<TKqpOlapJsonExists>()) {
+        return CompileJsonExists(maybeJsonExists.Cast(), ctx).Id;
     }
 
     YQL_ENSURE(false, "Unknown node in OLAP comparison compiler: " << node.Ref().Content());
@@ -644,33 +675,6 @@ const TTypedColumn CompileExists(const TKqpOlapFilterExists& exists, TKqpOlapCom
         return {ConvertSafeCastToColumn(notCommand->GetColumn().GetId(), "Uint8", ctx), ctx.ConvertToBlockType(type)};
     } else {
         return {notCommand->GetColumn().GetId(), type};
-    }
-}
-
-const TTypedColumn CompileJsonExists(const TKqpOlapJsonExists& jsonExistsCallable, TKqpOlapCompileContext& ctx) {
-    Y_ABORT_UNLESS(NKikimr::NSsa::RuntimeVersion >= 3, "JSON_EXISTS pushdown is supported starting from the v3 of SSA runtime.");
-
-    const auto columnId = GetOrCreateColumnId(jsonExistsCallable.Column(), ctx);
-    const auto pathId = GetOrCreateColumnId(jsonExistsCallable.Path(), ctx);
-
-    auto *const command = ctx.CreateAssignCmd();
-    auto *const jsonExistsFunc = command->MutableFunction();
-
-    jsonExistsFunc->AddArguments()->SetId(columnId);
-    jsonExistsFunc->AddArguments()->SetId(pathId);
-
-    jsonExistsFunc->SetFunctionType(TProgram::YQL_KERNEL);
-    const auto type = ctx.ExprCtx().MakeType<TOptionalExprType>(ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
-    const auto idx = ctx.AddYqlKernelJsonExists(
-        jsonExistsCallable.Column(),
-        jsonExistsCallable.Path(),
-        type);
-    jsonExistsFunc->SetKernelIdx(idx);
-
-    if constexpr (NSsa::RuntimeVersion >= 4U) {
-        return {ConvertSafeCastToColumn(command->GetColumn().GetId(), "Uint8", ctx), ctx.ConvertToBlockType(type)};
-    } else {
-        return {command->GetColumn().GetId(), ctx.ConvertToBlockType(type)};
     }
 }
 

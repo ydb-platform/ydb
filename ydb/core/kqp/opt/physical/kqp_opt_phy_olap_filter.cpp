@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
+#include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/providers/common/pushdown/collection.h>
 #include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
@@ -483,8 +484,10 @@ TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap,
 TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, TExprContext& ctx, TPositionHandle pos)
 {
     if constexpr (NSsa::RuntimeVersion >= 4U) {
-        if (const auto node = YqlCoalescePushdown(coalesce, ctx)) {
-            return node;
+        if (!FindNode(coalesce.Ptr(), [](const TExprNode::TPtr& node) { return TCoJsonValue::Match(node.Get()); })) {
+            if (const auto node = YqlCoalescePushdown(coalesce, ctx)) {
+                return node;
+            }
         }
     }
 

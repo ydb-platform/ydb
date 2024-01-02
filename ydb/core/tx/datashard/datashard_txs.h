@@ -85,16 +85,13 @@ public:
     TTxProposeTransactionBase(TDataShard *self,
                               TEvDataShard::TEvProposeTransaction::TPtr &&ev,
                               TInstant receivedAt, ui64 tieBreakerIndex,
-                              bool delayed);
+                              bool delayed,
+                              NWilson::TSpan &&datashardTransactionSpan);
 
     bool Execute(NTabletFlatExecutor::TTransactionContext &txc,
                  const TActorContext &ctx) override;
     void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_PROPOSE; }
-
-    NWilson::TTraceId GetTraceId() const noexcept {
-        return ProposeTransactionSpan.GetTraceId();
-    }
 
 private:
     bool SyncSchemeOnFollower(TOutputOpData::TResultPtr &result,
@@ -113,18 +110,20 @@ protected:
     bool Acked;
     bool Rescheduled = false;
     bool WaitComplete = false;
-    NWilson::TSpan ProposeTransactionSpan;
+    NWilson::TSpan DatashardTransactionSpan;
 };
 
 class TDataShard::TTxWrite: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxWrite(TDataShard* ds, NEvents::TDataEvents::TEvWrite::TPtr ev, TInstant receivedAt, ui64 tieBreakerIndex, bool delayed);
+    TTxWrite(TDataShard* ds,
+             NEvents::TDataEvents::TEvWrite::TPtr ev,
+             TInstant receivedAt,
+             ui64 tieBreakerIndex,
+             bool delayed,
+             NWilson::TSpan &&datashardTransactionSpan);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     
-    NWilson::TTraceId GetTraceId() const noexcept {
-        return ProposeTransactionSpan.GetTraceId();
-    }
 protected:
     TOperation::TPtr Op;
     NEvents::TDataEvents::TEvWrite::TPtr Ev;
@@ -136,7 +135,7 @@ protected:
     bool Acked;
     bool Rescheduled = false;
     bool WaitComplete = false;
-    NWilson::TSpan ProposeTransactionSpan;
+    NWilson::TSpan DatashardTransactionSpan;
 };
 
 class TDataShard::TTxReadSet : public NTabletFlatExecutor::TTransactionBase<TDataShard> {

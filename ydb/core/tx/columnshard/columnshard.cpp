@@ -294,14 +294,6 @@ void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage&
 }
 
 void TColumnShard::ConfigureStats(const NOlap::TColumnEngineStats& indexStats, ::NKikimrTableStats::TTableStats * tabletStats) {
-    tabletStats->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOAD].Get());
-    tabletStats->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_OUT_OF_SPACE].Get());
-    tabletStats->SetInFlightTxCount(Executor()->GetStats().TxInFly);
-
-    if (!TablesManager.HasPrimaryIndex()) {
-        return;
-    }
-
     NOlap::TSnapshot lastIndexUpdate = TablesManager.GetPrimaryIndexSafe().LastUpdate();
     auto activeIndexStats = indexStats.Active(); // data stats excluding inactive and evicted
 
@@ -368,8 +360,14 @@ void TColumnShard::SendPeriodicStats() {
         }
 
         auto* tabletStats = ev->Record.MutableTableStats();
-        const auto& indexStats = TablesManager.MutablePrimaryIndex().GetTotalStats();
-        ConfigureStats(indexStats, tabletStats);
+        tabletStats->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOAD].Get());
+        tabletStats->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_OUT_OF_SPACE].Get());
+        tabletStats->SetInFlightTxCount(Executor()->GetStats().TxInFly);
+
+        if (TablesManager.HasPrimaryIndex()) {
+            const auto& indexStats = TablesManager.MutablePrimaryIndex().GetTotalStats();
+            ConfigureStats(indexStats, tabletStats);
+        }
     }
 
     if (TablesManager.HasPrimaryIndex()) {
@@ -397,8 +395,13 @@ void TColumnShard::SendPeriodicStats() {
                 resourceMetrics->Fill(*periodicTableStats->MutableTabletMetrics());
             }
 
-            auto* tabletStats = periodicTableStats->MutableTableStats();
-            ConfigureStats(*columnStats, tabletStats);
+            auto* tableStats = periodicTableStats->MutableTableStats();
+
+            tableStats->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOAD].Get());
+            tableStats->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_OUT_OF_SPACE].Get());
+            tableStats->SetInFlightTxCount(Executor()->GetStats().TxInFly);
+
+            ConfigureStats(*columnStats, tableStats);
 
             LOG_S_TRACE("Add stats for table, tableLocalID=" << tableLocalID);
         }

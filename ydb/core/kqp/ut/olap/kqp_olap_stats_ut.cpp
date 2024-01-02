@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
             return TDuration::MilliSeconds(10);
         }
         TDuration GetStatsReportInterval(const TDuration /*defaultValue*/) const override {
-            return TDuration::MilliSeconds(400);
+            return TDuration::MilliSeconds(10);
         }
     };
 

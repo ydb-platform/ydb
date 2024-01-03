@@ -48,6 +48,11 @@ static void FillAggregatedStats(NKikimrSchemeOp::TPathDescription& pathDescripti
     FillTableMetrics(pathDescription.MutableTabletMetrics(), stats.Aggregated);
 }
 
+static void FillTableStats(NKikimrSchemeOp::TPathDescription& pathDescription, const TPartitionStats& stats) {
+    FillTableStats(pathDescription.MutableTableStats(), stats);
+    FillTableMetrics(pathDescription.MutableTabletMetrics(), stats);
+}
+
 void TPathDescriber::FillPathDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElement::TPtr pathEl, TPathElement::EPathSubType subType) {
     FillChildDescr(descr, pathEl);
 
@@ -369,6 +374,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
 
 void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl) {
     const TOlapStoreInfo::TPtr storeInfo = *Self->OlapStores.FindPtr(pathId);
+
     Y_ABORT_UNLESS(storeInfo, "OlapStore not found");
     Y_UNUSED(pathEl);
 
@@ -387,7 +393,7 @@ void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl
 }
 
 void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr pathEl) {
-    const auto tableInfo = Self->ColumnTables.GetVerified(pathId);
+    const auto tableInfo = Self->ColumnTables.GetVerified(pathId);    
     Y_UNUSED(pathEl);
 
     auto* pathDescription = Result->Record.MutablePathDescription();
@@ -406,6 +412,9 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
         *description->MutableSchema() = presetProto.GetSchema();
         if (description->HasSchemaPresetVersionAdj()) {
             description->MutableSchema()->SetVersion(description->GetSchema().GetVersion() + description->GetSchemaPresetVersionAdj());
+        }
+        if (tableInfo->GetStats().TableStats.contains(pathId)) {
+            FillTableStats(*pathDescription, tableInfo->GetStats().TableStats.at(pathId));
         }
     }
 }

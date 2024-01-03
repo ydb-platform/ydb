@@ -2544,6 +2544,10 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(SqlToYql("use plato; select key between symmetric and and and from Input;").IsOk());
         UNIT_ASSERT(SqlToYql("use plato; select key between and and and from Input;").IsOk());
     }
+
+    Y_UNIT_TEST(StringContains) {
+        UNIT_ASSERT(SqlToYql("select contains('subkeys', 'key');").IsOk());
+    }
 }
 
 Y_UNIT_TEST_SUITE(ExternalFunction) {

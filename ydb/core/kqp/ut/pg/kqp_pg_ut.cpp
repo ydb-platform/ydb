@@ -3529,7 +3529,8 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                     SELECT * FROM PgTable WHERE key = 'a';
                 )");
                 auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetIssues().ToString().Contains("invalid input syntax for type integer: \"a\""));
             }
         }
 
@@ -3608,6 +3609,127 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             UNIT_ASSERT(result.GetIssues().ToString().Contains("invalid byte sequence for encoding \"UTF8\": 0x00"));
         }
     }
+
+    Y_UNIT_TEST(NoSelectFullScan) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE pgbench_accounts(aid    int not null,bid int,abalance int,filler char(84), primary key (aid))
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                INSERT INTO pgbench_accounts (aid, bid, abalance, filler) VALUES
+                    (1, 1, 10, '                                                                                    '::char),
+                    (2, 1, 20, '                                                                                    '::char),
+                    (3, 1, 30, '                                                                                    '::char),
+                    (4, 1, 40, '
+                                               '::char),
+                    (5, 1, 50, '                                                                                    '::char),
+                    (6, 1, 60, '                                                                                    '::char),
+                    (7, 1, 70, '                                                                                    '::char),
+                    (8, 1, 80, '                                                                                    '::char),
+                    (9, 1, 90, '                                                                                    '::char),
+                    (10, 1, 100, '                                                                                    '::char)
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto tc = kikimr.GetTableClient();
+            TStreamExecScanQuerySettings settings;
+            settings.Explain(true);
+            auto it = tc.StreamExecuteScanQuery(R"(
+                --!syntax_pg
+                SELECT abalance FROM pgbench_accounts WHERE aid = 7 OR aid = 3 ORDER BY abalance;
+            )", settings).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            auto res = CollectStreamResult(it);
+            UNIT_ASSERT(res.PlanJson);
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(*res.PlanJson, &plan, true);
+            UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+            auto fullScan = FindPlanNodeByKv(plan, "Node Type", "Filter-TableFullScan");
+            UNIT_ASSERT_C(!fullScan.IsDefined(), "got fullscan, expected lookup");
+            auto lookup = FindPlanNodeByKv(plan, "Node Type", "TableLookup");
+            UNIT_ASSERT_C(lookup.IsDefined(), "no Table Lookup in plan");
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT abalance FROM pgbench_accounts WHERE aid = 7 OR aid = 3 ORDER BY abalance;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                ["30"];["70"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+        {
+            auto tc = kikimr.GetTableClient();
+            TStreamExecScanQuerySettings settings;
+            settings.Explain(true);
+            auto it = tc.StreamExecuteScanQuery(R"(
+                --!syntax_pg
+                SELECT abalance FROM pgbench_accounts WHERE aid = 7 OR aid < 3 ORDER BY abalance;
+            )", settings).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            auto res = CollectStreamResult(it);
+            UNIT_ASSERT(res.PlanJson);
+            Cerr << res.PlanJson << Endl;
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(*res.PlanJson, &plan, true);
+            UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+            auto fullScan = FindPlanNodeByKv(plan, "Node Type", "Filter-TableFullScan");
+            UNIT_ASSERT_C(!fullScan.IsDefined(), "got fullscan, expected lookup");
+            auto lookup = FindPlanNodeByKv(plan, "Node Type", "TableRangeScan");
+            UNIT_ASSERT_C(lookup.IsDefined(), "no Table Range Scan in plan");
+        }
+        {
+            auto tc = kikimr.GetTableClient();
+            TStreamExecScanQuerySettings settings;
+            settings.Explain(true);
+            auto it = tc.StreamExecuteScanQuery(R"(
+                --!syntax_pg
+                SELECT abalance FROM pgbench_accounts WHERE aid > 4 AND aid < 3;
+            )", settings).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            auto res = CollectStreamResult(it);
+            UNIT_ASSERT(res.PlanJson);
+            Cerr << res.PlanJson << Endl;
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(*res.PlanJson, &plan, true);
+            UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+            auto fullScan = FindPlanNodeByKv(plan, "Node Type", "Filter-TableFullScan");
+            UNIT_ASSERT_C(!fullScan.IsDefined(), "got fullscan, expected lookup");
+            auto lookup = FindPlanNodeByKv(plan, "Node Type", "TableRangeScan");
+            UNIT_ASSERT_C(lookup.IsDefined(), "no Table Range Scan in plan");
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT abalance FROM pgbench_accounts WHERE aid > 4 AND aid < 3;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+   }
 }
 
 } // namespace NKqp

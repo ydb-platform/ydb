@@ -35,7 +35,6 @@ Parameter name | Parameter description
 `--min-partitions` | Minimum number of shards for tables. Default: 40.
 `--partition-size` | Maximum size of one shard (the `AUTO_PARTITIONING_PARTITION_SIZE_MB` setting). Default: 2000.
 `--auto-partition` | Enabling/disabling auto-sharding. Possible values: 0 or 1. Default: 1.
-`--max-first-key` | Maximum value of the primary key of the table. Default: $2^{64} — 1$.
 `--len` | The size of the rows in bytes that are inserted into the table as values. Default: 8.
 `--cols` | Number of columns in the table. Default: 2 counting Key.
 `--int-cols` | Number of first columns in the table that will have the `Uint64` type; subsequent columns will have the `String` type. Default: 1.
@@ -123,7 +122,6 @@ Parameter name | Short name | Parameter description
 `--operation-timeout` | - | [Operation timeout in milliseconds](../../best_practices/timeouts.md).
 `--cancel-after` | - | [Timeout for canceling an operation in milliseconds](../../best_practices/timeouts.md).
 `--window` | - | Statistics collection window in seconds. Default: 1.
-`--max-first-key` | - | Maximum value of the primary key of the table. Default: $2^{64} - 1$.
 `--cols` | - | Number of columns in the table. Default: 2 counting Key.
 `--int-cols` | - | Number of first columns in the table that will have the `Uint64` type; subsequent columns will have the `String` type. Default: 1.
 `--key-cols` | - | Number of first columns in the table included in the key. Default: 1.

@@ -1,6 +1,8 @@
 #include "meta.h"
-#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+
 #include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap {
@@ -10,6 +12,9 @@ void TPortionMeta::FillBatchInfo(const NArrow::TFirstLastSpecialKeys& primaryKey
         ReplaceKeyEdges = primaryKeys.BuildAccordingToSchemaVerified(indexInfo.GetReplaceKey());
         IndexKeyStart = ReplaceKeyEdges->GetFirst();
         IndexKeyEnd = ReplaceKeyEdges->GetLast();
+        AFL_VERIFY(IndexKeyStart);
+        AFL_VERIFY(IndexKeyEnd);
+        AFL_VERIFY(*IndexKeyStart <= *IndexKeyEnd)("start", IndexKeyStart->DebugString())("end", IndexKeyEnd->DebugString());
     }
 
     {
@@ -49,6 +54,9 @@ bool TPortionMeta::DeserializeFromProto(const NKikimrTxColumnShard::TIndexPortio
         ReplaceKeyEdges = std::make_shared<NArrow::TFirstLastSpecialKeys>(portionMeta.GetPrimaryKeyBorders(), indexInfo.GetReplaceKey());
         IndexKeyStart = ReplaceKeyEdges->GetFirst();
         IndexKeyEnd = ReplaceKeyEdges->GetLast();
+        AFL_VERIFY(IndexKeyStart);
+        AFL_VERIFY(IndexKeyEnd);
+        AFL_VERIFY (*IndexKeyStart <= *IndexKeyEnd)("start", IndexKeyStart->DebugString())("end", IndexKeyEnd->DebugString());
     }
 
     if (portionMeta.HasRecordSnapshotMin()) {

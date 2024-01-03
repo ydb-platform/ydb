@@ -9,6 +9,6 @@ select
   row_number() over w as row,
   value
 from $input
-window w as (partition by key_hundred order by key)
-order by key_hundred, key
+window w as (partition by key_hundred order by key, value)
+order by key_hundred, key, value
 ;

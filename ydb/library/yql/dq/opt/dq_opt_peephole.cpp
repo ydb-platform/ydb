@@ -513,16 +513,18 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
 
     auto streamToDict = [&ctx](const TExprBase& input, const TExprNode::TPtr& keySelector) {
         return Build<TCoSqueezeToDict>(ctx, input.Pos())
-            .Stream(input)
+            .Stream<TCoToFlow>()
+                .Input(input)
+                .Build()
             .KeySelector(keySelector)
             .PayloadSelector()
                 .Args({"item"})
                 .Body("item")
                 .Build()
             .Settings()
-                .Add<TCoAtom>().Build("Hashed")
-                .Add<TCoAtom>().Build("Many")
-                .Add<TCoAtom>().Build("Compact")
+                .Add<TCoAtom>().Build("Hashed", TNodeFlags::Default)
+                .Add<TCoAtom>().Build("Many", TNodeFlags::Default)
+                .Add<TCoAtom>().Build("Compact", TNodeFlags::Default)
                 .Build()
             .Done();
     };

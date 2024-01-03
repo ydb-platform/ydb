@@ -128,6 +128,9 @@ inline EKafkaErrors ConvertErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode code) 
             return EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
         case Ydb::PersQueue::ErrorCode::ErrorCode::ACCESS_DENIED:
             return EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
+        case Ydb::PersQueue::ErrorCode::ErrorCode::SET_OFFSET_ERROR_COMMIT_TO_FUTURE:
+        case Ydb::PersQueue::ErrorCode::ErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST:
+            return EKafkaErrors::OFFSET_OUT_OF_RANGE;
         default:
             return EKafkaErrors::UNKNOWN_SERVER_ERROR;
     }

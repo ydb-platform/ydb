@@ -1716,24 +1716,34 @@ TExprNode::TPtr BuildProjectionLambda(TPositionHandle pos, const TExprNode::TPtr
                     .Seal();
                     listBuilder.Seal();
                 };
+
+                auto addAtomToListWithCast = [&addAtomToList] (TExprNodeBuilder& listBuilder, TExprNode* x,
+                                                           const TTypeAnnotationNode* expectedTypeNode) -> void {
+                    auto actualType = x->GetTypeAnn()->Cast<TPgExprType>();
+                    Y_ENSURE(expectedTypeNode);
+                    const auto expectedType = expectedTypeNode->Cast<TPgExprType>();
+
+                    if (actualType == expectedType) {
+                        addAtomToList(listBuilder, x);
+                        return;
+                    }
+                    listBuilder.Add(0, x->HeadPtr());
+                    listBuilder.Callable(1, "PgCast")
+                        .Apply(0, x->TailPtr())
+                            .With(0, "row")
+                        .Seal()
+                        .Callable(1, "PgType")
+                            .Atom(0, NPg::LookupType(expectedType->GetId()).Name)
+                            .Seal();
+                    listBuilder.Seal();
+                };
+
                 for (const auto& x : result->Tail().Children()) {
                     if (x->HeadPtr()->IsAtom()) {
                         if (!emitPgStar) {
-                            auto actualType = x->GetTypeAnn()->Cast<TPgExprType>();
-                            Y_ENSURE(actualType);
                             const auto& columnName = x->Child(0)->Content();
-                            const auto expectedTypeNode = finalType->FindItemType(columnNamesMap[columnName]);
-                            Y_ENSURE(expectedTypeNode);
-                            const auto expectedType = expectedTypeNode->Cast<TPgExprType>();
-
-                            if (actualType != expectedType) {
-                                auto body = GetLambdaBody(x->Tail());
-                                Y_ENSURE(1 == body.size());
-                                x->Tail().TailRef() = NTypeAnnImpl::WrapWithPgCast(std::move(body[0]), expectedType->GetId(), ctx);
-                            }
-
                             auto listBuilder = parent.List(index++);
-                            addAtomToList(listBuilder, x.Get());
+                            addAtomToListWithCast(listBuilder, x.Get(), finalType->FindItemType(columnNamesMap[columnName]));
                         }
                     } else {
                         auto type = x->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();

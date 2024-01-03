@@ -11248,6 +11248,13 @@
             "uri": "https://{canondata_backend}/1817427/5ebfc414781230f90b896d4ed143ea00cf4c7aaa/resource.tar.gz#test_sql2yql.test_pg-select_columnref2_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-select_common_type_unionall]": [
+        {
+            "checksum": "992e12b42430a148ca76fed33019fb1e",
+            "size": 3003,
+            "uri": "https://{canondata_backend}/1942525/d22736fea21606e7d6b21c102064ca223b0970cd/resource.tar.gz#test_sql2yql.test_pg-select_common_type_unionall_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-select_except]": [
         {
             "checksum": "cac3d5cfed3614a0b9fb31b09591d765",

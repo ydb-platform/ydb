@@ -203,7 +203,7 @@ void ITransaction::AdvanceConsumer(
     }
 
     // TODO(achulkov2): Support consumers from any cluster.
-    auto subConsumerClient = CreateSubConsumerClient(GetClient(), consumerPath.GetPath(), queuePhysicalPath);
+    auto subConsumerClient = CreateSubConsumerClient(GetClient(), /*queueClient*/ nullptr, consumerPath.GetPath(), queuePhysicalPath);
     return subConsumerClient->Advance(MakeStrong(this), partitionIndex, oldOffset, newOffset);
 }
 

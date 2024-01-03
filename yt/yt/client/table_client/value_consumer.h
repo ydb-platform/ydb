@@ -82,7 +82,7 @@ class TBuildingValueConsumer
     : public TValueConsumerBase
 {
 public:
-   TBuildingValueConsumer(
+    TBuildingValueConsumer(
         TTableSchemaPtr schema,
         NLogging::TLogger logger,
         bool convertNullToEntity,

@@ -54,7 +54,7 @@ class CookieJar(AbstractCookieJar):
 
     MAX_TIME = datetime.datetime.max.replace(tzinfo=datetime.timezone.utc)
 
-    MAX_32BIT_TIME = datetime.datetime.utcfromtimestamp(2 ** 31 - 1)
+    MAX_32BIT_TIME = datetime.datetime(2038, 1, 19, 3, 14, 7)
 
     def __init__(
         self,

@@ -1607,10 +1607,10 @@ INSTANTIATE_TEST_SUITE_P(
     Test,
     TFairShareSchedulerTest,
     ::testing::Values(
-        std::make_tuple(1, 5, 1, FSWorkTime),
-        std::make_tuple(1, 7, 3, FSWorkTime),
-        std::make_tuple(5, 7, 1, FSWorkTime),
-        std::make_tuple(5, 7, 3, FSWorkTime)
+        std::tuple(1, 5, 1, FSWorkTime),
+        std::tuple(1, 7, 3, FSWorkTime),
+        std::tuple(5, 7, 1, FSWorkTime),
+        std::tuple(5, 7, 3, FSWorkTime)
         ));
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -62,31 +62,31 @@ INSTANTIATE_TEST_SUITE_P(
     TFarmHashTest,
     TFarmHashTest,
     ::testing::Values(
-        std::make_tuple(
+        std::tuple(
             MakeUnversionedInt64Value(12345678, /*id*/ 0, EValueFlags::None),
             MakeUnversionedUint64Value(42, /*id*/ 1, EValueFlags::Aggregate),
             18329046069279503950ULL,
             17355217915646310598ULL,
             16453323425893019626ULL),
-        std::make_tuple(
+        std::tuple(
             MakeUnversionedUint64Value(12345678, /*id*/ 1, EValueFlags::Aggregate),
             MakeUnversionedBooleanValue(true, /*id*/ 2, EValueFlags::Aggregate),
             18329046069279503950ULL,
             10105606910506535461ULL,
             10502610411105654667ULL),
-        std::make_tuple(
+        std::tuple(
             MakeUnversionedDoubleValue(42.0, /*id*/ 2, EValueFlags::Aggregate),
             MakeUnversionedStringValue("0", /*id*/ 3, EValueFlags::None),
             6259286942292166412ULL,
             15198969275252572735ULL,
             12125805494429148155ULL),
-        std::make_tuple(
+        std::tuple(
             MakeUnversionedBooleanValue(false, /*id*/ 3, EValueFlags::Aggregate),
             MakeUnversionedStringValue("", /*id*/ 4, EValueFlags::None),
             0ULL,
             11160318154034397263ULL,
             10248854568006048452ULL),
-        std::make_tuple(
+        std::tuple(
             MakeUnversionedStringValue("abc", /*id*/ 4, EValueFlags::None),
             MakeUnversionedInt64Value(-1000000, /*id*/ 5, EValueFlags::None),
             2640714258260161385ULL,

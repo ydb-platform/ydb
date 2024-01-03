@@ -1,7 +1,0 @@
-GO_LIBRARY()
-
-LICENSE(MIT)
-
-SRCS(arm.go)
-
-END()

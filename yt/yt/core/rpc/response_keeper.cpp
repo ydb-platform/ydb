@@ -297,7 +297,7 @@ private:
 
         auto result = DoFindRequest(id, isRetry);
         if (!result) {
-            EmplaceOrCrash(PendingResponses_, std::make_pair(id, NewPromise<TSharedRefArray>()));
+            EmplaceOrCrash(PendingResponses_, std::pair(id, NewPromise<TSharedRefArray>()));
         }
         return result;
     }

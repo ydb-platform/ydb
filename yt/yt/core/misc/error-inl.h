@@ -31,6 +31,13 @@ inline constexpr TErrorCode::operator int() const
 
 template <class E>
 requires std::is_enum_v<E>
+constexpr TErrorCode::operator E() const
+{
+    return static_cast<E>(Value_);
+}
+
+template <class E>
+requires std::is_enum_v<E>
 constexpr bool operator == (TErrorCode lhs, E rhs)
 {
     return static_cast<int>(lhs) == static_cast<int>(rhs);

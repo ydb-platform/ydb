@@ -436,8 +436,8 @@ TEST(TValidateLogicalTypeTest, TestTaggedType)
     auto taggedVariant = TaggedLogicalType(
         "tag",
         VariantTupleLogicalType({
-             SimpleLogicalType(ESimpleLogicalValueType::Boolean),
-             SimpleLogicalType(ESimpleLogicalValueType::String),
+            SimpleLogicalType(ESimpleLogicalValueType::Boolean),
+            SimpleLogicalType(ESimpleLogicalValueType::String),
         })
     );
 

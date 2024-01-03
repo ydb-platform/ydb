@@ -88,7 +88,7 @@ std::tuple<TSharedRef, TMutableRef> SerializeRowStreamBlockEnvelope(
 
     YT_VERIFY(current == block.End());
 
-    return std::make_tuple(std::move(block), payloadRef);
+    return std::tuple(std::move(block), payloadRef);
 }
 
 TSharedRef DeserializeRowStreamBlockEnvelope(

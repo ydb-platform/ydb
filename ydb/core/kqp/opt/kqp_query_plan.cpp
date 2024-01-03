@@ -515,17 +515,23 @@ private:
     }
 
     TString DescribeValue(const NKikimr::NClient::TValue& value) {
-        auto str = value.GetDataText();
-        switch (value.GetType().GetData().GetScheme()) {
-        case NScheme::NTypeIds::Utf8:
-        case NScheme::NTypeIds::Json:
-        case NScheme::NTypeIds::String:
-        case NScheme::NTypeIds::String4k:
-        case NScheme::NTypeIds::String2m:
-            return "«" + str + "»";
-        default:
-            return str;
+        if (value.GetType().GetKind() == NKikimrMiniKQL::ETypeKind::Data) {
+            auto str = value.GetDataText();
+            switch (value.GetType().GetData().GetScheme()) {
+            case NScheme::NTypeIds::Utf8:
+            case NScheme::NTypeIds::Json:
+            case NScheme::NTypeIds::String:
+            case NScheme::NTypeIds::String4k:
+            case NScheme::NTypeIds::String2m:
+                return "«" + str + "»";
+            default:
+                return str;
+            }
         }
+        if (value.GetType().GetKind() == NKikimrMiniKQL::ETypeKind::Pg) {
+            return value.GetPgText();
+        }
+        Y_ENSURE(false, TStringBuilder() << "unexpected NKikimrMiniKQL::ETypeKind: " << ETypeKind_Name(value.GetType().GetKind()));
     }
 
     void Visit(const TKqpReadRangesSourceSettings& sourceSettings, TQueryPlanNode& planNode) {

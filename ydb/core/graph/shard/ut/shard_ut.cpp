@@ -18,12 +18,23 @@ Y_DECLARE_OUT_SPEC(, std::vector<TInstant>, stream, value) {
         if (it != value.begin()) {
             stream << ',';
         }
-        stream << it->GetValue();
+        stream << it->Seconds();
     }
     stream << ']';
 }
 
 Y_DECLARE_OUT_SPEC(, std::vector<double>, stream, value) {
+    stream << '[';
+    for (auto it = value.begin(); it != value.end(); ++it) {
+        if (it != value.begin()) {
+            stream << ',';
+        }
+        stream << *it;
+    }
+    stream << ']';
+}
+
+Y_DECLARE_OUT_SPEC(, std::vector<std::vector<double>>, stream, value) {
     stream << '[';
     for (auto it = value.begin(); it != value.end(); ++it) {
         if (it != value.begin()) {
@@ -40,75 +51,209 @@ using namespace Tests;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(GraphShard) {
-    Y_UNIT_TEST(DownsampleFixed) {
-        std::vector<TInstant> sourceData = {
-            TInstant::FromValue( 1 ),
-            TInstant::FromValue( 2 ),
-            TInstant::FromValue( 3 ),
-            TInstant::FromValue( 4 ),
-            TInstant::FromValue( 5 ),
-            TInstant::FromValue( 6 ),
-            TInstant::FromValue( 7 ),
-            TInstant::FromValue( 8 ),
-            TInstant::FromValue( 9 ),
-            TInstant::FromValue( 10 )
+    Y_UNIT_TEST(NormalizeAndDownsample1) {
+        NGraph::TBaseBackend::TMetricsValues values;
+        values.Timestamps = {
+            TInstant::Seconds( 100 ),
+            TInstant::Seconds( 200 ),
+            TInstant::Seconds( 300 ),
+            TInstant::Seconds( 400 ),
+            TInstant::Seconds( 500 ),
+            TInstant::Seconds( 600 ),
+            TInstant::Seconds( 700 ),
+            TInstant::Seconds( 800 ),
+            TInstant::Seconds( 900 ),
+            TInstant::Seconds( 1000 )
         };
+        values.Values.push_back({1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+        values.Values.push_back({1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+
         {
-            std::vector<TInstant> targetData = NGraph::TMemoryBackend::Downsample(sourceData, 10);
-            Ctest << targetData << Endl;
-            std::vector<TInstant> canonData = {
-                TInstant::FromValue( 1 ),
-                TInstant::FromValue( 2 ),
-                TInstant::FromValue( 3 ),
-                TInstant::FromValue( 4 ),
-                TInstant::FromValue( 5 ),
-                TInstant::FromValue( 6 ),
-                TInstant::FromValue( 7 ),
-                TInstant::FromValue( 8 ),
-                TInstant::FromValue( 9 ),
-                TInstant::FromValue( 10 )
+            NGraph::TBaseBackend::NormalizeAndDownsample(values, 10);
+            Ctest << values.Timestamps << Endl;
+            Ctest << values.Values << Endl;
+            std::vector<TInstant> canonTimestamps = {
+                TInstant::Seconds( 100 ),
+                TInstant::Seconds( 200 ),
+                TInstant::Seconds( 300 ),
+                TInstant::Seconds( 400 ),
+                TInstant::Seconds( 500 ),
+                TInstant::Seconds( 600 ),
+                TInstant::Seconds( 700 ),
+                TInstant::Seconds( 800 ),
+                TInstant::Seconds( 900 ),
+                TInstant::Seconds( 1000 )
             };
-            UNIT_ASSERT(targetData == canonData);
-        }
-        {
-            std::vector<TInstant> targetData = NGraph::TMemoryBackend::Downsample(sourceData, 5);
-            Ctest << targetData << Endl;
-            std::vector<TInstant> canonData = {
-                TInstant::FromValue( 1 ),
-                TInstant::FromValue( 3 ),
-                TInstant::FromValue( 5 ),
-                TInstant::FromValue( 7 ),
-                TInstant::FromValue( 9 )
-            };
-            UNIT_ASSERT(targetData == canonData);
-        }
-        {
-            std::vector<TInstant> targetData = NGraph::TMemoryBackend::Downsample(sourceData, 1);
-            Ctest << targetData << Endl;
-            std::vector<TInstant> canonData = { TInstant::FromValue( 1 ) };
-            UNIT_ASSERT(targetData == canonData);
+            std::vector<double> canonValues = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+            UNIT_ASSERT(values.Timestamps == canonTimestamps);
+            UNIT_ASSERT(values.Values.size() == 2);
+            UNIT_ASSERT(values.Values[0] == canonValues);
+            UNIT_ASSERT(values.Values[1] == canonValues);
         }
     }
 
-    Y_UNIT_TEST(DownsampleFloat) {
-        std::vector<double> sourceData = {1,2,3,4,5, 6, 7, 8, 9, 10};
+    Y_UNIT_TEST(NormalizeAndDownsample2) {
+        NGraph::TBaseBackend::TMetricsValues values;
+        values.Timestamps = {
+            TInstant::Seconds( 100 ),
+            TInstant::Seconds( 200 ),
+            TInstant::Seconds( 300 ),
+            TInstant::Seconds( 400 ),
+            TInstant::Seconds( 500 ),
+            TInstant::Seconds( 510 ),
+            TInstant::Seconds( 520 ),
+            TInstant::Seconds( 530 ),
+            TInstant::Seconds( 540 ),
+            TInstant::Seconds( 550 ),
+            TInstant::Seconds( 560 ),
+            TInstant::Seconds( 570 ),
+            TInstant::Seconds( 580 ),
+            TInstant::Seconds( 590 ),
+            TInstant::Seconds( 600 )
+        };
+        values.Values.push_back({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15});
+
         {
-            std::vector<double> targetData = NGraph::TMemoryBackend::Downsample(sourceData, 10);
-            Ctest << targetData << Endl;
-            std::vector<double> canonData = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-            UNIT_ASSERT(targetData == canonData);
+            NGraph::TBaseBackend::NormalizeAndDownsample(values, 10);
+            Ctest << values.Timestamps << Endl;
+            Ctest << values.Values << Endl;
+            std::vector<TInstant> canonTimestamps = {
+                TInstant::Seconds( 100 ),
+                TInstant::Seconds( 200 ),
+                TInstant::Seconds( 300 ),
+                TInstant::Seconds( 400 ),
+                TInstant::Seconds( 500 ),
+                TInstant::Seconds( 520 ),
+                TInstant::Seconds( 540 ),
+                TInstant::Seconds( 560 ),
+                TInstant::Seconds( 580 ),
+                TInstant::Seconds( 600 )
+            };
+            std::vector<double> canonValues = {1, 2, 3, 4, 5, 6.5, 8.5, 10.5, 12.5, 14.5};
+            UNIT_ASSERT(values.Timestamps == canonTimestamps);
+            UNIT_ASSERT(values.Values.size() == 1);
+            UNIT_ASSERT(values.Values[0] == canonValues);
         }
+    }
+
+    Y_UNIT_TEST(NormalizeAndDownsample3) {
+        NGraph::TBaseBackend::TMetricsValues values;
+        values.Timestamps = {
+            TInstant::Seconds( 100 ),
+            TInstant::Seconds( 200 ),
+            TInstant::Seconds( 300 ),
+            TInstant::Seconds( 400 ),
+            TInstant::Seconds( 500 ),
+            TInstant::Seconds( 510 ),
+            TInstant::Seconds( 520 ),
+            TInstant::Seconds( 530 ),
+            TInstant::Seconds( 540 ),
+            TInstant::Seconds( 550 ),
+            TInstant::Seconds( 560 ),
+            TInstant::Seconds( 570 ),
+            TInstant::Seconds( 580 ),
+            TInstant::Seconds( 590 ),
+            TInstant::Seconds( 600 )
+        };
+        values.Values.push_back({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15});
+
         {
-            std::vector<double> targetData = NGraph::TMemoryBackend::Downsample(sourceData, 5);
-            Ctest << targetData << Endl;
-            std::vector<double> canonData = {1.5, 3.5, 5.5, 7.5, 9.5};
-            UNIT_ASSERT(targetData == canonData);
+            NGraph::TBaseBackend::NormalizeAndDownsample(values, 6);
+            Ctest << values.Timestamps << Endl;
+            Ctest << values.Values << Endl;
+            std::vector<TInstant> canonTimestamps = {
+                TInstant::Seconds( 100 ),
+                TInstant::Seconds( 200 ),
+                TInstant::Seconds( 300 ),
+                TInstant::Seconds( 400 ),
+                TInstant::Seconds( 500 ),
+                TInstant::Seconds( 600 )
+            };
+            std::vector<double> canonValues = {1, 2, 3, 4, 5, 10.5};
+            UNIT_ASSERT(values.Timestamps == canonTimestamps);
+            UNIT_ASSERT(values.Values.size() == 1);
+            UNIT_ASSERT(values.Values[0] == canonValues);
         }
+    }
+
+    Y_UNIT_TEST(NormalizeAndDownsample4) {
+        NGraph::TBaseBackend::TMetricsValues values;
+        values.Timestamps = {
+            TInstant::Seconds( 100 ),
+            TInstant::Seconds( 200 ),
+            TInstant::Seconds( 300 ),
+            TInstant::Seconds( 400 ),
+            TInstant::Seconds( 500 ),
+            TInstant::Seconds( 510 ),
+            TInstant::Seconds( 520 ),
+            TInstant::Seconds( 530 ),
+            TInstant::Seconds( 540 ),
+            TInstant::Seconds( 550 ),
+            TInstant::Seconds( 560 ),
+            TInstant::Seconds( 570 ),
+            TInstant::Seconds( 580 ),
+            TInstant::Seconds( 590 ),
+            TInstant::Seconds( 600 )
+        };
+        values.Values.push_back({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15});
+
         {
-            std::vector<double> targetData = NGraph::TMemoryBackend::Downsample(sourceData, 1);
-            Ctest << targetData << Endl;
-            std::vector<double> canonData = {5.5};
-            UNIT_ASSERT(targetData == canonData);
+            NGraph::TBaseBackend::NormalizeAndDownsample(values, 3);
+            Ctest << values.Timestamps << Endl;
+            Ctest << values.Values << Endl;
+            std::vector<TInstant> canonTimestamps = {
+                TInstant::Seconds( 100 ),
+                TInstant::Seconds( 350 ),
+                TInstant::Seconds( 600 )
+            };
+            std::vector<double> canonValues = {1, 3, 10};
+            UNIT_ASSERT(values.Timestamps == canonTimestamps);
+            UNIT_ASSERT(values.Values.size() == 1);
+            UNIT_ASSERT(values.Values[0] == canonValues);
+        }
+    }
+
+    Y_UNIT_TEST(NormalizeAndDownsample5) {
+        NGraph::TBaseBackend::TMetricsValues values;
+        values.Timestamps = {
+            TInstant::Seconds( 100 ),
+            TInstant::Seconds( 200 ),
+            TInstant::Seconds( 300 ),
+            TInstant::Seconds( 400 ),
+            TInstant::Seconds( 500 ),
+            TInstant::Seconds( 510 ),
+            TInstant::Seconds( 520 ),
+            TInstant::Seconds( 530 ),
+            TInstant::Seconds( 540 ),
+            TInstant::Seconds( 550 ),
+            TInstant::Seconds( 560 ),
+            TInstant::Seconds( 570 ),
+            TInstant::Seconds( 580 ),
+            TInstant::Seconds( 590 ),
+            TInstant::Seconds( 600 )
+        };
+        values.Values.push_back({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, NAN, 12, NAN, 14, 15});
+
+        {
+            NGraph::TBaseBackend::NormalizeAndDownsample(values, 10);
+            Ctest << values.Timestamps << Endl;
+            Ctest << values.Values << Endl;
+            std::vector<TInstant> canonTimestamps = {
+                TInstant::Seconds( 100 ),
+                TInstant::Seconds( 200 ),
+                TInstant::Seconds( 300 ),
+                TInstant::Seconds( 400 ),
+                TInstant::Seconds( 500 ),
+                TInstant::Seconds( 520 ),
+                TInstant::Seconds( 540 ),
+                TInstant::Seconds( 560 ),
+                TInstant::Seconds( 580 ),
+                TInstant::Seconds( 600 )
+            };
+            std::vector<double> canonValues = {1, 2, 3, 4, 5, 6.5, 8.5, 10, 12, 14.5};
+            UNIT_ASSERT(values.Timestamps == canonTimestamps);
+            UNIT_ASSERT(values.Values.size() == 1);
+            UNIT_ASSERT(values.Values[0] == canonValues);
         }
     }
 

@@ -5,54 +5,99 @@
 namespace NKikimr {
 namespace NGraph {
 
-template<>
-std::vector<TInstant> TMemoryBackend::Downsample<TInstant>(const std::vector<TInstant>& data, size_t maxPoints) {
-    if (data.size() <= maxPoints) {
-        return data;
+void TBaseBackend::NormalizeAndDownsample(TMetricsValues& values, size_t maxPoints) {
+    if (values.Timestamps.size() <= maxPoints) {
+        return;
     }
-    std::vector<TInstant> result;
-    double coeff = (double)maxPoints / data.size();
-    result.resize(maxPoints);
-    size_t ltrg = maxPoints;
-    for (size_t src = 0; src < data.size(); ++src) {
-        size_t trg = floor(coeff * src);
-        if (trg != ltrg) {
-            result[trg] = data[src]; // we expect sorted data so we practically use min() here
-            ltrg = trg;
+
+    TMetricsValues result;
+    result.Timestamps.resize(maxPoints);
+    result.Values.resize(values.Values.size());
+    for (auto& values : result.Values) {
+        values.resize(maxPoints);
+    }
+
+    size_t srcSize = values.Timestamps.size();
+    size_t trgSize = result.Timestamps.size();
+    TInstant frontTs = values.Timestamps.front();
+    TInstant backTs = values.Timestamps.back();
+    TDuration distanceTs = backTs - frontTs;
+    // normalize timestamps
+    size_t src = 0;
+    size_t trg = 0;
+    size_t trgSrc = 0;
+    size_t trgRest = trgSize - 1;
+    while (src < srcSize && trg < trgSize) {
+        TInstant expected = frontTs + TDuration::Seconds((trg - trgSrc) * distanceTs.Seconds() / trgRest);
+        if (expected < values.Timestamps[src]) {
+            result.Timestamps[trg] = values.Timestamps[src];
+            frontTs = values.Timestamps[src];
+            distanceTs = backTs - frontTs;
+            trgSrc = trg;
+            trgRest = trgSize - trg - 1;
+            ++src;
+            ++trg;
+        } else if (expected == values.Timestamps[src]) {
+            result.Timestamps[trg] = values.Timestamps[src];
+            ++src;
+            ++trg;
+        } else if (expected > values.Timestamps[src]) {
+            result.Timestamps[trg] = expected;
+            ++trg;
+            do {
+                ++src;
+                if (src >= srcSize) {
+                    break;
+                }
+            } while (values.Timestamps[src] < expected);
         }
     }
-    return result;
+    // aggregate values
+    for (size_t numVal = 0; numVal < result.Values.size(); ++numVal) {
+        double accm = NAN; // avg impl
+        long cnt = 0;
+        const std::vector<double>& srcValues(values.Values[numVal]);
+        std::vector<double>& trgValues(result.Values[numVal]);
+        size_t trgPos = 0;
+        for (size_t srcPos = 0; srcPos < srcValues.size(); ++srcPos) {
+            double srcValue = srcValues[srcPos];
+            if (!isnan(srcValue)) {
+                if (isnan(accm)) { // avg impl
+                    accm = srcValue;
+                    cnt = 1;
+                } else {
+                    accm += srcValue;
+                    cnt += 1;
+                }
+            }
+            if (values.Timestamps[srcPos] >= result.Timestamps[trgPos]) {
+                if (isnan(accm)) { // avg impl
+                    trgValues[trgPos] = NAN;
+                } else {
+                    trgValues[trgPos] = accm / cnt;
+                }
+                ++trgPos;
+                accm = NAN;
+                cnt = 0;
+            }
+        }
+    }
+    values = std::move(result);
 }
 
-template<>
-std::vector<double> TMemoryBackend::Downsample<double>(const std::vector<double>& data, size_t maxPoints) {
-    if (data.size() <= maxPoints) {
-        return data;
+void TBaseBackend::FillResult(TMetricsValues& values, const NKikimrGraph::TEvGetMetrics& get, NKikimrGraph::TEvMetricsResult& result) {
+    if (get.HasMaxPoints() && values.Timestamps.size() > get.GetMaxPoints()) {
+        NormalizeAndDownsample(values, get.GetMaxPoints());
     }
-    std::vector<double> result;
-    double coeff = (double)maxPoints / data.size();
-    result.resize(maxPoints);
-    size_t ltrg = 0;
-    long cnt = 0;
-    for (size_t src = 0; src < data.size(); ++src) {
-        if (isnan(data[src])) {
-            continue;
-        }
-        size_t trg = floor(coeff * src);
-        if (trg != ltrg && cnt > 0) {
-            if (cnt > 1) {
-                result[ltrg] /= cnt;
-            }
-            cnt = 0;
-        }
-        result[trg] += data[src];
-        ++cnt;
-        ltrg = trg;
+    result.Clear();
+    auto time = result.MutableTime();
+    time->Reserve(values.Timestamps.size());
+    for (const TInstant t : values.Timestamps) {
+        time->Add(t.Seconds());
     }
-    if (cnt > 1) {
-        result[ltrg] /= cnt;
+    for (std::vector<double>& values : values.Values) {
+        result.AddData()->MutableValues()->Add(values.begin(), values.end());
     }
-    return result;
 }
 
 void TMemoryBackend::StoreMetrics(TMetricsData&& data) {
@@ -93,37 +138,20 @@ void TMemoryBackend::GetMetrics(const NKikimrGraph::TEvGetMetrics& get, NKikimrG
         }
         indexes.push_back(idx);
     }
-    std::vector<TInstant> timestamps;
-    std::vector<std::vector<double>> values;
-    values.resize(indexes.size());
+    TMetricsValues metricValues;
+    metricValues.Values.resize(indexes.size());
     for (auto it = itLeft; it != itRight; ++it) {
-        timestamps.push_back(it->Timestamp);
+        metricValues.Timestamps.push_back(it->Timestamp);
         for (size_t num = 0; num < indexes.size(); ++num) {
             size_t idx = indexes[num];
             if (idx < it->Values.size()) {
-                values[num].push_back(it->Values[idx]);
+                metricValues.Values[num].push_back(it->Values[idx]);
             } else {
-                values[num].push_back(NAN);
+                metricValues.Values[num].push_back(NAN);
             }
         }
     }
-    if (get.HasMaxPoints() && timestamps.size() > get.GetMaxPoints()) {
-        timestamps = Downsample(timestamps, get.GetMaxPoints());
-        BLOG_TRACE("GetMetrics timestamps=" << timestamps.size());
-        for (std::vector<double>& values : values) {
-            values = Downsample(values, get.GetMaxPoints());
-            BLOG_TRACE("GetMetrics values=" << values.size());
-        }
-    }
-    result.Clear();
-    auto time = result.MutableTime();
-    time->Reserve(timestamps.size());
-    for (const TInstant t : timestamps) {
-        time->Add(t.Seconds());
-    }
-    for (std::vector<double>& values : values) {
-        result.AddData()->MutableValues()->Add(values.begin(), values.end());
-    }
+    FillResult(metricValues, get, result);
 }
 
 void TMemoryBackend::ClearData(TInstant cutline, TInstant& newStartTimestamp) {
@@ -173,49 +201,32 @@ bool TLocalBackend::GetMetrics(NTabletFlatExecutor::TTransactionContext& txc, co
             metricIdx[itMetricIdx->second] = nMetric;
         }
     }
-    std::vector<TInstant> timestamps;
-    std::vector<std::vector<double>> values;
+    TMetricsValues metricValues;
     auto rowset = db.Table<Schema::MetricsValues>().GreaterOrEqual(minTime).LessOrEqual(maxTime).Select();
     if (!rowset.IsReady()) {
         return false;
     }
     ui64 lastTime = 0;
-    values.resize(get.MetricsSize());
+    metricValues.Values.resize(get.MetricsSize());
     while (!rowset.EndOfSet()) {
         ui64 time = rowset.GetValue<Schema::MetricsValues::Timestamp>();
         if (time != lastTime) {
             lastTime = time;
-            timestamps.push_back(TInstant::Seconds(time));
-            for (auto& vals : values) {
+            metricValues.Timestamps.push_back(TInstant::Seconds(time));
+            for (auto& vals : metricValues.Values) {
                 vals.emplace_back(NAN);
             }
         }
         ui64 id = rowset.GetValue<Schema::MetricsValues::Id>();
         auto itIdx = metricIdx.find(id);
         if (itIdx != metricIdx.end()) {
-            values.back()[itIdx->second] = rowset.GetValue<Schema::MetricsValues::Value>();
+            metricValues.Values.back()[itIdx->second] = rowset.GetValue<Schema::MetricsValues::Value>();
         }
         if (!rowset.Next()) {
             return false;
         }
     }
-    if (get.HasMaxPoints() && timestamps.size() > get.GetMaxPoints()) {
-        timestamps = TMemoryBackend::Downsample(timestamps, get.GetMaxPoints());
-        BLOG_TRACE("GetMetrics timestamps=" << timestamps.size());
-        for (std::vector<double>& values : values) {
-            values = TMemoryBackend::Downsample(values, get.GetMaxPoints());
-            BLOG_TRACE("GetMetrics values=" << values.size());
-        }
-    }
-    result.Clear();
-    auto time = result.MutableTime();
-    time->Reserve(timestamps.size());
-    for (const TInstant t : timestamps) {
-        time->Add(t.Seconds());
-    }
-    for (std::vector<double>& values : values) {
-        result.AddData()->MutableValues()->Add(values.begin(), values.end());
-    }
+    FillResult(metricValues, get, result);
     return true;
 }
 

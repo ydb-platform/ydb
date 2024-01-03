@@ -883,7 +883,8 @@ private:
 };
 
 class TForgetScriptExecutionOperationQueryActor : public TQueryBase {
-    static constexpr i64 MAX_NUMBER_ROWS_IN_BATCH = 10000;
+    static constexpr i64 MAX_NUMBER_ROWS_IN_BATCH = 100000;
+    static constexpr TDuration MINIMAL_DEADLINE_TIME = TDuration::Seconds(1);
 
     struct TResultSetDescription {
         i64 MaxRowId;
@@ -894,7 +895,7 @@ public:
     TForgetScriptExecutionOperationQueryActor(const TString& executionId, const TString& database, TInstant operationDeadline)
         : ExecutionId(executionId)
         , Database(database)
-        , Deadline(GetDeadline(operationDeadline))
+        , Deadline(operationDeadline - MINIMAL_DEADLINE_TIME)
     {}
 
     void OnRunQuery() override {
@@ -1028,13 +1029,6 @@ private:
             return false;
         }
         return true;
-    }
-
-    static TInstant GetDeadline(TInstant operationDeadline) {
-        if (TInstant::Now() >= operationDeadline) {
-            return operationDeadline;
-        }
-        return TInstant::Now() + (operationDeadline - TInstant::Now()) / 2;
     }
 
 private:

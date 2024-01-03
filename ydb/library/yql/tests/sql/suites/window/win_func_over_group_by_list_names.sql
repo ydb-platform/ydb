@@ -21,7 +21,7 @@ select
 from $data
 group by region, SUBSTRING(name,0,1) as prefix
 -- how to use single avg_age?
-window w1 as (partition by region order by avg(age) desc)
+window w1 as (partition by region order by avg(age) desc, prefix)
 --window w1 as (order by avg(age) desc)
-order by region, avg_age desc
+order by region, avg_age desc, prefix
 ;

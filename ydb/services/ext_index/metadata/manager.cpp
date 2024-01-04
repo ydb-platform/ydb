@@ -90,16 +90,4 @@ NModifications::TOperationParsingResult TManager::DoBuildPatchFromSettings(const
     }
 }
 
-NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus TManager::DoPrepare(NKqpProto::TKqpSchemeOperation& /*schemeOperation*/, const NYql::TObjectSettingsImpl& /*settings*/,
-    const NMetadata::IClassBehaviour::TPtr& /*manager*/, NMetadata::NModifications::IOperationsManager::TInternalModificationContext& /*context*/) const {
-    return NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus::Fail(
-        "Prepare operations for CS_EXT_INDEX objects are not supported");
-}
-
-NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus> TManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& /*schemeOperation*/,
-        const ui32 /*nodeId*/, const NMetadata::IClassBehaviour::TPtr& /*manager*/, const IOperationsManager::TExternalModificationContext& /*context*/) const {
-    return NThreading::MakeFuture(NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus::Fail(
-        "Execution of prepare operations for CS_EXT_INDEX objects is not supported"));
-}
-
 }

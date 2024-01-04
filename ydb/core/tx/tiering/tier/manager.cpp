@@ -67,16 +67,4 @@ void TTiersManager::DoPrepareObjectsBeforeModification(std::vector<TTierConfig>&
     TActivationContext::Register(new TTierPreparationActor(std::move(patchedObjects), controller, context));
 }
 
-NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus TTiersManager::DoPrepare(NKqpProto::TKqpSchemeOperation& /*schemeOperation*/, const NYql::TObjectSettingsImpl& /*settings*/,
-    const NMetadata::IClassBehaviour::TPtr& /*manager*/, NMetadata::NModifications::IOperationsManager::TInternalModificationContext& /*context*/) const {
-    return NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus::Fail(
-        "Prepare operations for TIER objects are not supported");
-}
-
-NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus> TTiersManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& /*schemeOperation*/,
-        const ui32 /*nodeId*/, const NMetadata::IClassBehaviour::TPtr& /*manager*/, const IOperationsManager::TExternalModificationContext& /*context*/) const {
-    return NThreading::MakeFuture(NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus::Fail(
-        "Execution of prepare operations for TIER objects is not supported"));
-}
-
 }

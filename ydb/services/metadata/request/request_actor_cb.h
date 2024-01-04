@@ -26,15 +26,15 @@ private:
     static void OnInternalResult(const NThreading::TFuture<TResponse>& f, typename IExternalController<TDialogPolicy>::TPtr externalController) {
         if (!f.HasValue() || f.HasException()) {
             ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot receive result on initialization";
-            externalController->OnRequestFailed("cannot receive result from future");
+            externalController->OnRequestFailed(Ydb::StatusIds::INTERNAL_ERROR, "cannot receive result from future");
             return;
         }
         TResponse response = f.GetValue();
         if (!TOperatorChecker<TResponse>::IsSuccess(response)) {
             AFL_ERROR(NKikimrServices::METADATA_PROVIDER)("event", "unexpected reply")("response", response.DebugString());
-            NYql::TIssues issue;
-            NYql::IssuesFromMessage(response.operation().issues(), issue);
-            externalController->OnRequestFailed(issue.ToString());
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(response.operation().issues(), issues);
+            externalController->OnRequestFailed(response.operation().status(), issues.ToString());
             return;
         }
         externalController->OnRequestResult(std::move(response));
@@ -74,14 +74,14 @@ public:
     virtual void OnRequestResult(typename TCurrentDialogPolicy::TResponse&& result) override {
         TConclusion<typename TNextController::TDialogPolicy::TRequest> nextRequest = BuildNextRequest(std::move(result));
         if (!nextRequest) {
-            OnRequestFailed(nextRequest.GetErrorMessage());
+            OnRequestFailed(nextRequest.GetStatus(), nextRequest.GetErrorMessage());
         } else {
             TYDBOneRequestSender<typename TNextController::TDialogPolicy> req(*nextRequest, UserToken, NextController);
             req.Start();
         }
     }
-    virtual void OnRequestFailed(const TString& errorMessage) override final {
-        NextController->OnRequestFailed(errorMessage);
+    virtual void OnRequestFailed(Ydb::StatusIds::StatusCode status, const TString& errorMessage) override final {
+        NextController->OnRequestFailed(status, errorMessage);
     }
     IChainController(const NACLib::TUserToken& userToken, std::shared_ptr<TNextController> nextController)
         : NextController(nextController)
@@ -149,8 +149,8 @@ public:
         ActorId.Send(ActorId, new TEvRequestResult<TDialogPolicy>(std::move(result)));
         ActorId.Send(ActorId, new TEvRequestFinished);
     }
-    virtual void OnRequestFailed(const TString& errorMessage) override {
-        ActorId.Send(ActorId, new TEvRequestFailed(errorMessage));
+    virtual void OnRequestFailed(Ydb::StatusIds::StatusCode status, const TString& errorMessage) override {
+        ActorId.Send(ActorId, new TEvRequestFailed(status, errorMessage));
     }
 };
 
@@ -165,7 +165,7 @@ public:
     virtual void OnRequestResult(typename TDialogPolicy::TResponse&&) override {
     }
 
-    virtual void OnRequestFailed(const TString& errorMessage) override {
+    virtual void OnRequestFailed(Ydb::StatusIds::StatusCode /*status*/, const TString& errorMessage) override {
         ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot close session with id: " << SessionContext->GetSessionId() << ", reason: " << errorMessage;
     }
 };
@@ -201,8 +201,8 @@ public:
         CloseSession();
     }
 
-    virtual void OnRequestFailed(const TString& errorMessage) override {
-        ExternalController->OnRequestFailed(errorMessage);
+    virtual void OnRequestFailed(Ydb::StatusIds::StatusCode status, const TString& errorMessage) override {
+        ExternalController->OnRequestFailed(status, errorMessage);
         CloseSession();
     }
 };

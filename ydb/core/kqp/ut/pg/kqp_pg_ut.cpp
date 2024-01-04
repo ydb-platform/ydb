@@ -1232,13 +1232,13 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto result = db.ExecuteQuery(R"(
                 INSERT INTO t SELECT 1 as columnC, 2 as columnA;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());    
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
         {
             auto result = db.ExecuteQuery(R"(
                 INSERT INTO t (columnA, columnB) SELECT 2 as columnB, 4 as columnA;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());    
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
         {
             auto result = db.ExecuteQuery(R"(
@@ -1283,7 +1283,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto result = db.ExecuteQuery(R"(
                 INSERT INTO movies (id, title) VALUES (1, 'movie1'), (4, 'movie4');
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());    
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
         {
             auto result = db.ExecuteQuery(R"(
@@ -1438,7 +1438,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(ReturningTypeAnn) {
+    Y_UNIT_TEST(Returning) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
 
         auto client = kikimr.GetTableClient();
@@ -1448,7 +1448,13 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             --!syntax_pg
             CREATE TABLE ReturningTable (
             key serial PRIMARY KEY,
-            value int4))");
+            value int4);
+
+            CREATE TABLE ReturningTableExtraValue (
+            key serial PRIMARY KEY,
+            value int4,
+            value2 int4 default 2);
+            )");
 
         auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
         UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
@@ -1460,30 +1466,35 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             )");
 
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT(!result.IsSuccess());
-            UNIT_ASSERT(result.GetIssues().ToString(true) == "{ <main>: Error: Type annotation, code: 1030 subissue: { <main>:1:1: Error: At function: KiWriteTable! subissue: { <main>:1:1: Error: It is not allowed to use returning } } }");
+            UNIT_ASSERT(result.IsSuccess());
+
+            CompareYson(R"([["1"]])", FormatResultSetYson(result.GetResultSet(0)));
         }
 
         {
             const auto query = Q_(R"(
                 --!syntax_pg
                 INSERT INTO ReturningTable (value) VALUES(2) RETURNING key, value;
+                INSERT INTO ReturningTableExtraValue (value) VALUES(3) RETURNING key, value;
             )");
 
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT(!result.IsSuccess());
-            UNIT_ASSERT(result.GetIssues().ToString(true) == "{ <main>: Error: Type annotation, code: 1030 subissue: { <main>:1:1: Error: At function: KiWriteTable! subissue: { <main>:1:1: Error: It is not allowed to use returning } } }");
+            UNIT_ASSERT(result.IsSuccess());
+            CompareYson(R"([["2";"2"]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([["1";"3"]])", FormatResultSetYson(result.GetResultSet(1)));
         }
 
         {
             const auto query = Q_(R"(
                 --!syntax_pg
                 INSERT INTO ReturningTable (value) VALUES(2) RETURNING *;
+                INSERT INTO ReturningTableExtraValue (value) VALUES(4) RETURNING *;
             )");
 
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT(!result.IsSuccess());
-            UNIT_ASSERT(result.GetIssues().ToString(true) == "{ <main>: Error: Type annotation, code: 1030 subissue: { <main>:1:1: Error: At function: KiWriteTable! subissue: { <main>:1:1: Error: It is not allowed to use returning } } }");
+            UNIT_ASSERT(result.IsSuccess());
+            CompareYson(R"([["3";"2"]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([["2";"4";"2"]])", FormatResultSetYson(result.GetResultSet(1)));
         }
 
         {
@@ -1494,7 +1505,41 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(!result.IsSuccess());
-            UNIT_ASSERT(result.GetIssues().ToString(true) == "{ <main>: Error: Type annotation, code: 1030 subissue: { <main>:1:1: Error: At function: KiWriteTable! subissue: { <main>:1:1: Error: Column not found: fake } } }");
+            Cerr << result.GetIssues().ToString(true) << Endl;
+            UNIT_ASSERT(result.GetIssues().ToString(true) == "{ <main>: Error: Type annotation, code: 1030 subissue: { <main>:1:1: Error: At function: DataQueryBlocks, At function: TKiDataQueryBlock, At function: KiReturningList! subissue: { <main>:1:1: Error: Column not found: fake } } }");
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                UPDATE ReturningTable SET  value = 3 where key = 1 RETURNING *;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            CompareYson(R"([["1";"3"]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                UPDATE ReturningTableExtraValue SET  value2 = 3 where key = 2 RETURNING *;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            CompareYson(R"([["2";"4";"3"]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                UPDATE ReturningTableExtraValue SET  value2 = 3 where key = 2 RETURNING *;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            CompareYson(R"([["2";"4";"3"]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
@@ -2908,7 +2953,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto result = db.ExecuteQuery(R"(
                 INSERT INTO movies VALUES (1, 'movie1'), (4, 'movie4');
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());    
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
         {
             auto result = db.ExecuteQuery(R"(

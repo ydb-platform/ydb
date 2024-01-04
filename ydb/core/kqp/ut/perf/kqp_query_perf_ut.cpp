@@ -174,11 +174,13 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         NJson::ReadJsonTree(stats.query_plan(), &plan, true);
 
         auto stages = FindPlanStages(plan);
-        UNIT_ASSERT_VALUES_EQUAL(stages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stages.size(), 2);
 
         i64 totalTasks = 0;
         for (const auto& stage : stages) {
-            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
+            if (stage.GetMapSafe().contains("Stats")) {
+                totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
+            }
         }
 
         UNIT_ASSERT_VALUES_EQUAL(totalTasks, 1);
@@ -224,11 +226,13 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         NJson::ReadJsonTree(stats.query_plan(), &plan, true);
 
         auto stages = FindPlanStages(plan);
-        UNIT_ASSERT_VALUES_EQUAL(stages.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(stages.size(), 4);
 
         i64 totalTasks = 0;
         for (const auto& stage : stages) {
-            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
+            if (stage.GetMapSafe().contains("Stats")) {
+                totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
+            }
         }
         UNIT_ASSERT_VALUES_EQUAL(totalTasks, 3);
     }
@@ -269,11 +273,13 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         NJson::ReadJsonTree(stats.query_plan(), &plan, true);
 
         auto stages = FindPlanStages(plan);
-        UNIT_ASSERT_VALUES_EQUAL(stages.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stages.size(), 3);
 
         i64 totalTasks = 0;
         for (const auto& stage : stages) {
-            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
+            if (stage.GetMapSafe().contains("Stats")) {
+                totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
+            }
         }
         UNIT_ASSERT_VALUES_EQUAL(totalTasks, 2);
     }

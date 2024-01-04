@@ -18,6 +18,11 @@
                                 "Node Type": "Limit",
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "ExternalPlanNodeId": 10
+                                            }
+                                        ],
                                         "Limit": "10",
                                         "Name": "Limit"
                                     }
@@ -33,6 +38,11 @@
                                                 "Node Type": "TopSort",
                                                 "Operators": [
                                                     {
+                                                        "Inputs": [
+                                                            {
+                                                                "ExternalPlanNodeId": 8
+                                                            }
+                                                        ],
                                                         "Limit": "10",
                                                         "Name": "TopSort",
                                                         "TopSortBy": "argument.Count0"
@@ -49,6 +59,14 @@
                                                                 "Node Type": "Union",
                                                                 "Operators": [
                                                                     {
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "ExternalPlanNodeId": 6
+                                                                            },
+                                                                            {
+                                                                                "ExternalPlanNodeId": 4
+                                                                            }
+                                                                        ],
                                                                         "Name": "Union"
                                                                     }
                                                                 ],
@@ -68,9 +86,15 @@
                                                                                     {
                                                                                         "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1),_yql_agg_2: MIN(item.URL,state._yql_agg_2),_yql_agg_3: MIN(item.Title,state._yql_agg_3)}",
                                                                                         "GroupBy": "item.SearchPhrase",
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 1
+                                                                                            }
+                                                                                        ],
                                                                                         "Name": "Aggregate"
                                                                                     },
                                                                                     {
+                                                                                        "Inputs": [],
                                                                                         "Name": "TableFullScan",
                                                                                         "ReadColumns": [
                                                                                             "SearchPhrase",
@@ -271,6 +295,11 @@
                                                                                     {
                                                                                         "Aggregation": "{_yql_agg_1: Inc(state._yql_agg_1)}",
                                                                                         "GroupBy": "item.SearchPhrase",
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "ExternalPlanNodeId": 2
+                                                                                            }
+                                                                                        ],
                                                                                         "Name": "Aggregate"
                                                                                     }
                                                                                 ],
@@ -291,9 +320,15 @@
                                                                                                     {
                                                                                                         "Aggregation": "state",
                                                                                                         "GroupBy": "",
+                                                                                                        "Inputs": [
+                                                                                                            {
+                                                                                                                "InternalOperatorId": 1
+                                                                                                            }
+                                                                                                        ],
                                                                                                         "Name": "Aggregate"
                                                                                                     },
                                                                                                     {
+                                                                                                        "Inputs": [],
                                                                                                         "Name": "TableFullScan",
                                                                                                         "ReadColumns": [
                                                                                                             "SearchPhrase",

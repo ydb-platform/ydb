@@ -11,4 +11,4 @@ select
   sum(age) over w1 as sum1
 from $data
 window w1 as (partition by SUBSTRING(name,0,1) as prefix order by name)
-order by prefix, region;
+order by prefix, region, name;

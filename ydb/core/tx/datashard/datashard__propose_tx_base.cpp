@@ -14,18 +14,17 @@ namespace NDataShard {
 TDataShard::TTxProposeTransactionBase::TTxProposeTransactionBase(TDataShard *self,
                                                                         TEvDataShard::TEvProposeTransaction::TPtr &&ev,
                                                                         TInstant receivedAt, ui64 tieBreakerIndex,
-                                                                        bool delayed)
-    : TBase(self, std::move(ev->TraceId))
+                                                                        bool delayed,
+                                                                        NWilson::TSpan &&datashardTransactionSpan)
+    : TBase(self, datashardTransactionSpan.GetTraceId())
     , Ev(std::move(ev))
     , ReceivedAt(receivedAt)
     , TieBreakerIndex(tieBreakerIndex)
     , Kind(static_cast<EOperationKind>(Ev->Get()->GetTxKind()))
     , TxId(Ev->Get()->GetTxId())
     , Acked(!delayed)
-    , ProposeTransactionSpan(TWilsonKqp::ProposeTransaction, TxSpan.GetTraceId(), "ProposeTransaction", NWilson::EFlags::AUTO_END)
-{
-    ProposeTransactionSpan.Attribute("Shard", std::to_string(self->TabletID()));
-}
+    , DatashardTransactionSpan(std::move(datashardTransactionSpan))
+{ }
 
 bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransactionContext &txc,
                                                            const TActorContext &ctx)
@@ -60,9 +59,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                 TActorId target = Op ? Op->GetTarget() : Ev->Sender;
                 ui64 cookie = Op ? Op->GetCookie() : Ev->Cookie;
 
-                if (ProposeTransactionSpan) {
-                    ProposeTransactionSpan.EndOk();
-                }
+                DatashardTransactionSpan.EndOk();
                 ctx.Send(target, result.Release(), 0, cookie);
 
                 return true;
@@ -76,17 +73,14 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                 Ev = nullptr;
                 return true;
             }
-
-            TOperation::TPtr op = Self->Pipeline.BuildOperation(Ev, ReceivedAt, TieBreakerIndex, txc, ctx, ProposeTransactionSpan.GetTraceId());
+            
+            TOperation::TPtr op = Self->Pipeline.BuildOperation(Ev, ReceivedAt, TieBreakerIndex, txc, ctx, std::move(DatashardTransactionSpan));
 
             // Unsuccessful operation parse.
             if (op->IsAborted()) {
                 LWTRACK(ProposeTransactionParsed, op->Orbit, false);
                 Y_ABORT_UNLESS(op->Result());
-
-                if (ProposeTransactionSpan) {
-                    ProposeTransactionSpan.EndError("Unsuccessful operation parse");
-                }
+                op->OperationSpan.EndError("Unsuccessful operation parse");
                 ctx.Send(op->GetTarget(), op->Result().Release());
                 return true;
             }
@@ -165,10 +159,6 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
 void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxProposeTransactionBase::Complete at " << Self->TabletID());
-
-    if (ProposeTransactionSpan) {
-        ProposeTransactionSpan.End();
-    }
 
     if (Op) {
         Y_ABORT_UNLESS(!Op->GetExecutionPlan().empty());

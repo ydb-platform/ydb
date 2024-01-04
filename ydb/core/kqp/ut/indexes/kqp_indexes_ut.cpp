@@ -249,10 +249,10 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
             auto indexTableAccess = CountPlanNodesByKv(plan, "Table", "tg/tg_index/indexImplTable");
             UNIT_ASSERT_VALUES_EQUAL(indexTableAccess, 1);
 
-            auto filterOnIndex = CountPlanNodesByKv(plan, "Node Type", "Limit-Filter-TableRangeScan");
+            auto filterOnIndex = CountPlanNodesByKv(plan, "Node Type", "Limit-Filter");
             UNIT_ASSERT_VALUES_EQUAL(filterOnIndex, 1);
 
-            auto limitFilterNode = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TableRangeScan");
+            auto limitFilterNode = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter");
             auto val = FindPlanNodes(limitFilterNode, "Limit");
             UNIT_ASSERT_VALUES_EQUAL(val.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(val[0], "11");

@@ -8,6 +8,8 @@ private:
     YDB_READONLY(TAtomicCounter, FilteredRecordsCount, 0);
     YDB_READONLY(TAtomicCounter, Compactions, 0);
     YDB_ACCESSOR(std::optional<TDuration>, GuaranteeIndexationInterval, TDuration::Zero());
+    YDB_ACCESSOR(std::optional<TDuration>, PeriodicWakeupActivationPeriod, std::nullopt);
+    YDB_ACCESSOR(std::optional<TDuration>, StatsReportInterval, std::nullopt);
     YDB_ACCESSOR(std::optional<ui64>, GuaranteeIndexationStartBytesLimit, 0);
     YDB_ACCESSOR(std::optional<TDuration>, OptimizerFreshnessCheckDuration, TDuration::Zero());
     EOptimizerCompactionWeightControl CompactionControl = EOptimizerCompactionWeightControl::Force;
@@ -16,6 +18,12 @@ protected:
     virtual bool DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) override;
     virtual TDuration GetGuaranteeIndexationInterval(const TDuration defaultValue) const override {
         return GuaranteeIndexationInterval.value_or(defaultValue);
+    }
+    TDuration GetPeriodicWakeupActivationPeriod(const TDuration defaultValue) const override {
+        return PeriodicWakeupActivationPeriod.value_or(defaultValue);
+    }
+    TDuration GetStatsReportInterval(const TDuration defaultValue) const override {
+        return StatsReportInterval.value_or(defaultValue);
     }
     virtual ui64 GetGuaranteeIndexationStartBytesLimit(const ui64 defaultValue) const override {
         return GuaranteeIndexationStartBytesLimit.value_or(defaultValue);

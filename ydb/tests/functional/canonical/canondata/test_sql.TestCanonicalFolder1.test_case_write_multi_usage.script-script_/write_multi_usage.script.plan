@@ -60,10 +60,16 @@
                                                 "PlanNodeId": 5,
                                                 "Operators": [
                                                     {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
                                                         "Name": "Limit",
                                                         "Limit": "1001"
                                                     },
                                                     {
+                                                        "Inputs": [],
                                                         "ReadLimit": "1001",
                                                         "ReadRanges": [
                                                             "Name (-\u221e, +\u221e)"
@@ -88,6 +94,11 @@
                                 ],
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "ExternalPlanNodeId": 6
+                                            }
+                                        ],
                                         "Name": "Limit",
                                         "Limit": "1001"
                                     }
@@ -114,10 +125,16 @@
                                                 "PlanNodeId": 1,
                                                 "Operators": [
                                                     {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
                                                         "Name": "Limit",
                                                         "Limit": "1001"
                                                     },
                                                     {
+                                                        "Inputs": [],
                                                         "ReadLimit": "1001",
                                                         "ReadRanges": [
                                                             "Group (-\u221e, +\u221e)",
@@ -146,6 +163,11 @@
                                 ],
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "ExternalPlanNodeId": 2
+                                            }
+                                        ],
                                         "Name": "Limit",
                                         "Limit": "1001"
                                     }
@@ -210,10 +232,16 @@
                                 "PlanNodeId": 10,
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 1
+                                            }
+                                        ],
                                         "Name": "Upsert",
                                         "Table": "base_write_multi_usage_script_script/Temp"
                                     },
                                     {
+                                        "Inputs": [],
                                         "Iterator": "precompute_0_1",
                                         "Name": "Iterator"
                                     }
@@ -234,10 +262,16 @@
                                 "PlanNodeId": 8,
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 1
+                                            }
+                                        ],
                                         "Name": "Delete",
                                         "Table": "base_write_multi_usage_script_script/Input1"
                                     },
                                     {
+                                        "Inputs": [],
                                         "Iterator": "precompute_0_0",
                                         "Name": "Iterator"
                                     }
@@ -278,6 +312,7 @@
                                                 "PlanNodeId": 1,
                                                 "Operators": [
                                                     {
+                                                        "Inputs": [],
                                                         "ReadRange": [
                                                             "Group (2)",
                                                             "Name (-\u221e, +\u221e)"

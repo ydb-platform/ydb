@@ -66,8 +66,8 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
         UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
 
         const auto& stagePlan = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0];
-        UNIT_ASSERT_VALUES_EQUAL(stagePlan["Node Type"].GetStringSafe(), "Stage-Source");
-        const auto& sourceOp = stagePlan["Operators"].GetArraySafe()[0];
+        UNIT_ASSERT_VALUES_EQUAL(stagePlan["Node Type"].GetStringSafe(), "Stage");
+        const auto& sourceOp = stagePlan["Plans"][0]["Operators"].GetArraySafe()[0];
         UNIT_ASSERT_VALUES_EQUAL(sourceOp["ExternalDataSource"].GetStringSafe(), "external_data_source");
         UNIT_ASSERT_VALUES_EQUAL(sourceOp["Format"].GetStringSafe(), "json_each_row");
         UNIT_ASSERT_VALUES_EQUAL(sourceOp["Name"].GetStringSafe(), "Parse from external data source");
@@ -150,10 +150,11 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
         UNIT_ASSERT_VALUES_EQUAL(sinkOp["ExternalDataSource"].GetStringSafe(), "write_data_source");
         UNIT_ASSERT_VALUES_EQUAL(sinkOp["Compression"].GetStringSafe(), "gzip");
 
-        const auto& readStagePlan = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0];
-        UNIT_ASSERT_VALUES_EQUAL(readStagePlan["Node Type"].GetStringSafe(), "Limit-Source");
-        const auto& sourceOp = readStagePlan["Operators"].GetArraySafe()[1];
+        const auto& readStagePlan = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0];
+        UNIT_ASSERT_VALUES_EQUAL(readStagePlan["Node Type"].GetStringSafe(), "Source");
+        const auto& sourceOp = readStagePlan["Operators"].GetArraySafe()[0];
         UNIT_ASSERT_VALUES_EQUAL(sourceOp["ExternalDataSource"].GetStringSafe(), "read_data_source");
+
         UNIT_ASSERT_VALUES_EQUAL(sourceOp["RowsLimitHint"].GetStringSafe(), "10");
         UNIT_ASSERT_VALUES_EQUAL(sourceOp["ReadColumns"].GetArraySafe()[0].GetStringSafe(), "key");
         UNIT_ASSERT_VALUES_EQUAL(sourceOp["ReadColumns"].GetArraySafe()[1].GetStringSafe(), "value");

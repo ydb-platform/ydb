@@ -12,9 +12,19 @@
                         "Node Type": "Aggregate-Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "InternalOperatorId": 1
+                                    }
+                                ],
                                 "Name": "Aggregate"
                             },
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 14
+                                    }
+                                ],
                                 "Limit": "1",
                                 "Name": "Limit"
                             }
@@ -30,9 +40,22 @@
                                         "Node Type": "Aggregate-LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Name": "Aggregate"
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 12
+                                                    },
+                                                    {
+                                                        "Other": "ConstantExpression"
+                                                    }
+                                                ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
@@ -56,9 +79,22 @@
                                                                         "Node Type": "InnerJoin (MapJoin)-Filter",
                                                                         "Operators": [
                                                                             {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "InternalOperatorId": 1
+                                                                                    },
+                                                                                    {
+                                                                                        "Other": "ConstantExpression"
+                                                                                    }
+                                                                                ],
                                                                                 "Name": "InnerJoin (MapJoin)"
                                                                             },
                                                                             {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "ExternalPlanNodeId": 6
+                                                                                    }
+                                                                                ],
                                                                                 "Name": "Filter",
                                                                                 "Predicate": "Exist(item.thousand)"
                                                                             }
@@ -83,6 +119,7 @@
                                                                                                         "Node Type": "TableFullScan",
                                                                                                         "Operators": [
                                                                                                             {
+                                                                                                                "Inputs": [],
                                                                                                                 "Name": "TableFullScan",
                                                                                                                 "ReadColumns": [
                                                                                                                     "hundred",
@@ -117,6 +154,7 @@
                                                                                         "Node Type": "TableFullScan",
                                                                                         "Operators": [
                                                                                             {
+                                                                                                "Inputs": [],
                                                                                                 "Name": "TableFullScan",
                                                                                                 "ReadColumns": [
                                                                                                     "hundred",
@@ -155,6 +193,7 @@
                                                         "Node Type": "TableRangeScan",
                                                         "Operators": [
                                                             {
+                                                                "Inputs": [],
                                                                 "Name": "TableRangeScan",
                                                                 "ReadColumns": [
                                                                     "hundred",

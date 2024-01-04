@@ -12,6 +12,11 @@
                         "Node Type": "Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 4
+                                    }
+                                ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
@@ -27,11 +32,27 @@
                                         "Node Type": "TopSort-Sort",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 2
+                                                    },
+                                                    {
+                                                        "ExternalPlanNodeId": 2
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
                                                 "TopSortBy": ""
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 2
+                                                    }
+                                                ],
                                                 "Name": "Sort",
                                                 "SortBy": "row.salary"
                                             }
@@ -50,6 +71,7 @@
                                                         "Node Type": "TableFullScan",
                                                         "Operators": [
                                                             {
+                                                                "Inputs": [],
                                                                 "Name": "TableFullScan",
                                                                 "ReadColumns": [
                                                                     "depname",

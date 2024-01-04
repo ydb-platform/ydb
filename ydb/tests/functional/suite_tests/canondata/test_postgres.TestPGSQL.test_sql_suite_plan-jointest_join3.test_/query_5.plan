@@ -12,6 +12,11 @@
                         "Node Type": "Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 24
+                                    }
+                                ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
@@ -28,25 +33,45 @@
                                         "Node Type": "Limit-InnerJoin (MapJoin)-ConstantExpr-Filter-TablePointLookup-ConstantExpr",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Limit": "1001",
                                                 "Name": "Limit"
                                             },
                                             {
                                                 "Inputs": [
-                                                    2,
-                                                    3
+                                                    {
+                                                        "InternalOperatorId": 3
+                                                    },
+                                                    {
+                                                        "Other": "ConstantExpression"
+                                                    }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
                                             },
                                             {
+                                                "Inputs": [],
                                                 "Name": "ToFlow",
                                                 "ToFlow": "precompute_3_0"
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 4
+                                                    }
+                                                ],
                                                 "Name": "Filter",
                                                 "Predicate": "Exist(item.k)"
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 5
+                                                    }
+                                                ],
                                                 "Name": "TablePointLookup",
                                                 "ReadColumns": [
                                                     "k"
@@ -54,6 +79,7 @@
                                                 "Table": "postgres_jointest/join3.test_plan/parent"
                                             },
                                             {
+                                                "Inputs": [],
                                                 "Iterator": "precompute_4_0",
                                                 "Name": "Iterator"
                                             }
@@ -77,19 +103,12 @@
                 "Plans": [
                     {
                         "CTE Name": "precompute_3_0",
-                        "Node Type": "Aggregate-Filter-Limit",
+                        "Node Type": "Aggregate",
                         "Operators": [
                             {
                                 "Input": "precompute_3_0",
+                                "Inputs": [],
                                 "Name": "PartitionByKey"
-                            },
-                            {
-                                "Name": "Filter",
-                                "Predicate": "Exist(item.p_1.k)"
-                            },
-                            {
-                                "Limit": "1",
-                                "Name": "Limit"
                             }
                         ],
                         "PlanNodeId": 20
@@ -116,6 +135,14 @@
                                         "Node Type": "LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 14
+                                                    },
+                                                    {
+                                                        "Other": "ConstantExpression"
+                                                    }
+                                                ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
@@ -131,6 +158,7 @@
                                                         "Node Type": "ConstantExpr",
                                                         "Operators": [
                                                             {
+                                                                "Inputs": [],
                                                                 "Iterator": "precompute_1_0",
                                                                 "Name": "Iterator"
                                                             }
@@ -158,10 +186,20 @@
                                                                         "Node Type": "Filter-TablePointLookup-ConstantExpr",
                                                                         "Operators": [
                                                                             {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "InternalOperatorId": 1
+                                                                                    }
+                                                                                ],
                                                                                 "Name": "Filter",
                                                                                 "Predicate": "Exist(item.k)"
                                                                             },
                                                                             {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "InternalOperatorId": 2
+                                                                                    }
+                                                                                ],
                                                                                 "Name": "TablePointLookup",
                                                                                 "ReadColumns": [
                                                                                     "k"
@@ -169,6 +207,7 @@
                                                                                 "Table": "postgres_jointest/join3.test_plan/child"
                                                                             },
                                                                             {
+                                                                                "Inputs": [],
                                                                                 "Iterator": "precompute_2_0",
                                                                                 "Name": "Iterator"
                                                                             }
@@ -201,19 +240,12 @@
                 "Plans": [
                     {
                         "CTE Name": "precompute_1_0",
-                        "Node Type": "Aggregate-Filter-Limit",
+                        "Node Type": "Aggregate",
                         "Operators": [
                             {
                                 "Input": "precompute_1_0",
+                                "Inputs": [],
                                 "Name": "PartitionByKey"
-                            },
-                            {
-                                "Name": "Filter",
-                                "Predicate": "Exist(item.k)"
-                            },
-                            {
-                                "Limit": "1",
-                                "Name": "Limit"
                             }
                         ],
                         "PlanNodeId": 6
@@ -241,6 +273,11 @@
                                         "Node Type": "TablePointLookup-ConstantExpr",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Name": "TablePointLookup",
                                                 "ReadColumns": [
                                                     "k",
@@ -249,6 +286,7 @@
                                                 "Table": "postgres_jointest/join3.test_plan/parent"
                                             },
                                             {
+                                                "Inputs": [],
                                                 "Iterator": "precompute_0_0",
                                                 "Name": "Iterator"
                                             }

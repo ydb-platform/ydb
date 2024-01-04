@@ -18,6 +18,11 @@
                                 "Node Type": "Limit",
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "ExternalPlanNodeId": 6
+                                            }
+                                        ],
                                         "Limit": "10",
                                         "Name": "Limit"
                                     }
@@ -33,6 +38,11 @@
                                                 "Node Type": "TopSort",
                                                 "Operators": [
                                                     {
+                                                        "Inputs": [
+                                                            {
+                                                                "ExternalPlanNodeId": 4
+                                                            }
+                                                        ],
                                                         "Limit": "10",
                                                         "Name": "TopSort",
                                                         "TopSortBy": "argument.Count0"
@@ -55,6 +65,11 @@
                                                                     {
                                                                         "Aggregation": "{_yql_agg_0: COUNT(item.UserID,state._yql_agg_0)}",
                                                                         "GroupBy": "",
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "ExternalPlanNodeId": 2
+                                                                            }
+                                                                        ],
                                                                         "Name": "Aggregate"
                                                                     }
                                                                 ],
@@ -76,13 +91,24 @@
                                                                                     {
                                                                                         "Aggregation": "state",
                                                                                         "GroupBy": "",
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 1
+                                                                                            }
+                                                                                        ],
                                                                                         "Name": "Aggregate"
                                                                                     },
                                                                                     {
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 2
+                                                                                            }
+                                                                                        ],
                                                                                         "Name": "Filter",
                                                                                         "Predicate": "item.MobilePhoneModel != \"\""
                                                                                     },
                                                                                     {
+                                                                                        "Inputs": [],
                                                                                         "Name": "TableFullScan",
                                                                                         "ReadColumns": [
                                                                                             "MobilePhone",

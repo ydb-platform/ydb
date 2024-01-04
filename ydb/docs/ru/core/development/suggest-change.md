@@ -239,8 +239,6 @@ Pull Request может быть замержен после получения 
 ```
 # Предполагается, что ваша активная ветка является вашей веткой разработки
 gh repo sync your_github_login/ydb -s ydb-platform/ydb
-git checkout main
-git pull
-git checkout <your_dev_branch>
+git fetch origin main:main
 git rebase main
 ```

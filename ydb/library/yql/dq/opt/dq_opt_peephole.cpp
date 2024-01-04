@@ -511,11 +511,9 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
         rightKeySelector = BuildDictKeySelector(ctx, joinDict.Pos(), rightKeys, keyTypeItems, castKeyRight);
     }
 
-    auto streamToDict = [&ctx](const TExprBase& input, const TExprNode::TPtr& keySelector) {
+    const auto streamToDict = [&ctx](const TExprBase& input, const TExprNode::TPtr& keySelector) {
         return Build<TCoSqueezeToDict>(ctx, input.Pos())
-            .Stream<TCoToFlow>()
-                .Input(input)
-                .Build()
+            .Stream(TCoIterator::Match(input.Raw()) ? TExprBase(ctx.RenameNode(input.Ref(), TCoToFlow::CallableName())) : input)
             .KeySelector(keySelector)
             .PayloadSelector()
                 .Args({"item"})

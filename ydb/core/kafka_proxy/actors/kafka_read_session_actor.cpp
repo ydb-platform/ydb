@@ -468,6 +468,8 @@ void TKafkaReadSessionActor::HandleAuthOk(NGRpcProxy::V1::TEvPQProxy::TEvAuthRes
         FullPathToConverter[t.TopicNameConverter->GetSecondaryPath()] = t.TopicNameConverter;
         // savnik: metering mode
     }
+
+    Send(Context->ConnectionId, new TEvKafka::TEvReadSessionInfo(GroupId));
     
     for (auto& [topicName, topicInfo] : TopicsInfo) {
         topicInfo.PipeClient = CreatePipeClient(topicInfo.TabletID, ctx);
@@ -503,7 +505,7 @@ void TKafkaReadSessionActor::RegisterBalancerSession(const TString& topic, const
 
     auto& req = request->Record;
     req.SetSession(Session);
-    req.SetClientNode(Context->ClientId);
+    req.SetClientNode(Context->KafkaClient);
     ActorIdToProto(pipe, req.MutablePipeClient());
     req.SetClientId(GroupId);
 

@@ -1,15 +1,16 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
-#include "ydb/core/kafka_proxy/kafka_metrics.h"
 #include <ydb/core/base/ticket_parser.h>
+#include "ydb/core/kafka_proxy/kafka_metrics.h"
 #include <ydb/core/persqueue/fetch_request_actor.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/user_info.h>
 #include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 
-#include "kafka_fetch_actor.h"
 #include "actors.h"
+#include "kafka_fetch_actor.h"
 
 
 namespace NKafka {
@@ -60,6 +61,7 @@ void TKafkaFetchActor::PrepareFetchRequestData(const size_t topicIndex, TVector<
         partPQRequest.Partition = partKafkaRequest.Partition;
         partPQRequest.Offset = partKafkaRequest.FetchOffset;
         partPQRequest.MaxBytes = partKafkaRequest.PartitionMaxBytes;
+        partPQRequest.ClientId = Context->GroupId.Empty() ? NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER : Context->GroupId;
     }
 }
 
@@ -86,7 +88,7 @@ size_t TKafkaFetchActor::CheckTopicIndex(const NKikimr::TEvPQ::TEvFetchResponse:
     Y_DEBUG_ABORT_UNLESS(topicIt != TopicIndexes.end());
 
     if (topicIt == TopicIndexes.end()) {
-        KAFKA_LOG_CRIT("Fetch actor: Received unexpected TEvFetchResponse. Ignoring. Expect malformed/incompled fetch reply.");
+        KAFKA_LOG_ERROR("Fetch actor: Received unexpected TEvFetchResponse. Ignoring. Expect malformed/incompled fetch reply.");
         return std::numeric_limits<size_t>::max();
     }
 

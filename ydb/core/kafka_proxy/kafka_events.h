@@ -29,6 +29,7 @@ struct TEvKafka {
         EvKillReadSession,
         EvCommitedOffsetsResponse,
         EvCreateTopicsResponse,
+        EvReadSessionInfo,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -163,6 +164,14 @@ struct TEvKafka {
         : Delta(delta)
         , Labels(labels)
         {}
+    };
+
+    struct TEvReadSessionInfo : public TEventLocal<TEvReadSessionInfo, EvReadSessionInfo> {
+        TEvReadSessionInfo(const TString& groupId)
+        : GroupId(groupId)
+        {}
+
+        TString GroupId;
     };
 
     struct TEvKillReadSession : public TEventLocal<TEvKillReadSession, EvKillReadSession> {};

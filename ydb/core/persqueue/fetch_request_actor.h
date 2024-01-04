@@ -7,13 +7,15 @@ namespace NKikimr::NPQ {
 
 struct TPartitionFetchRequest {
     TString Topic;
+    TString ClientId;
     ui32 Partition;
     ui64 Offset;
     ui64 MaxBytes;
     ui64 ReadTimestampMs;
     
-    TPartitionFetchRequest(const TString& topic, ui32 partition, ui64 offset, ui64 maxBytes, ui64 readTimestampMs = 0)
+    TPartitionFetchRequest(const TString& topic, const TString& clientId, ui32 partition, ui64 offset, ui64 maxBytes, ui64 readTimestampMs = 0)
         : Topic(topic)
+        , ClientId(clientId)
         , Partition(partition)
         , Offset(offset)
         , MaxBytes(maxBytes)

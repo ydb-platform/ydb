@@ -27,12 +27,13 @@ struct TContext {
     const NKikimrConfig::TKafkaProxyConfig& Config;
 
     TActorId ConnectionId;
-    TString ClientId;
+    TString KafkaClient;
 
 
     EAuthSteps AuthenticationStep = EAuthSteps::WAIT_HANDSHAKE;
     TString SaslMechanism;
 
+    TString GroupId;
     TString DatabasePath;
     TString FolderId;
     TString CloudId;

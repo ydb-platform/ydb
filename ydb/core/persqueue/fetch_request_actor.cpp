@@ -159,7 +159,6 @@ public:
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "Handle SchemeCache response");
         auto& result = ev->Get()->Request;
-
         for (const auto& entry : result->ResultSet) {
             auto path = CanonizePath(NKikimr::JoinPath(entry.Path));
             switch (entry.Status) {
@@ -361,6 +360,7 @@ public:
         const auto& part = req.Partition;
         const auto& maxBytes = req.MaxBytes;
         const auto& readTimestampMs = req.ReadTimestampMs;
+        const auto& clientId = req.ClientId;
         auto it = TopicInfo.find(CanonizePath(topic));
         Y_ABORT_UNLESS(it != TopicInfo.end());
         if (it->second.PartitionToTablet.find(part) == it->second.PartitionToTablet.end()) {
@@ -388,7 +388,7 @@ public:
         partReq->SetTopic(topic);
         partReq->SetPartition(part);
         auto read = partReq->MutableCmdRead();
-        read->SetClientId(NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER);
+        read->SetClientId(clientId);
         read->SetOffset(offset);
         read->SetCount(1000000);
         read->SetTimeoutMs(0);
@@ -405,6 +405,7 @@ public:
                                 << " while waiting from " << CurrentCookie << " and requested tablet is " << FetchRequestCurrentReadTablet);
             return;
         }
+
 
         if (FetchRequestBytesLeft >= (ui32)record.ByteSize())
             FetchRequestBytesLeft -= (ui32)record.ByteSize();

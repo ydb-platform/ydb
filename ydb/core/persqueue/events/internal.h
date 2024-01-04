@@ -487,6 +487,12 @@ struct TEvPQ {
         : MaxSize(maxSize)
         {}
 
+         TEvChangeCacheConfig(const TString& topicName, ui32 maxSize)
+        : TopicName(topicName)
+        , MaxSize(maxSize)
+        {}
+
+        TString TopicName;
         ui32 MaxSize;
     };
 

@@ -1344,6 +1344,7 @@ message TTableServiceConfig {
     optional TIteratorReadsRetrySettings IteratorReadsRetrySettings = 41;
     optional bool PredicateExtract20 = 44 [default = false];
     optional TIteratorReadQuotaSettings IteratorReadQuotaSettings = 45;
+    optional uint64 ExtractPredicateRangesLimit = 54 [default = 10000];
 };
 
 // Config describes immediate controls and allows

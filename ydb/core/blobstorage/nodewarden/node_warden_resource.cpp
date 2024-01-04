@@ -16,7 +16,8 @@ void TNodeWarden::RegisterPendingActor(const TActorId& actorId) {
 }
 
 void TNodeWarden::EnqueuePendingMessage(TAutoPtr<IEventHandle> ev) {
-    ev = IEventHandle::Forward(ev, ev->GetForwardOnNondeliveryRecipient());
+    const TActorId recipient = ev->GetForwardOnNondeliveryRecipient();
+    ev = IEventHandle::Forward(std::move(ev), recipient);
     const auto it = PendingMessageQ.find(ev->Recipient);
     if (it != PendingMessageQ.end()) {
         it->second.emplace_back(ev.Release());

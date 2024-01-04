@@ -230,12 +230,6 @@ bool THttpRequest::DoReply(const TReplyParams& p) {
 
         const TDuration parseTime = TInstant::Now() - StartTime_;
         RLOG_SQS_BASE_DEBUG(*Parent_->ActorSystem_, "Parse time: [" << parseTime.MilliSeconds() << "ms]");
-        RLOG_SQS_BASE_INFO(
-                *Parent_->ActorSystem_,
-                "Start request. User [" << UserName_ << "] Queue [" << QueueName_ << "], Cloud [" << AccountName_
-                       << "], Folder [" << FolderId_ << "] Action [" << ActionToString(Action_)
-                       << "] IP [" << SourceAddress_ << "]"
-        );
 
         if (!Parent_->Config.GetYandexCloudMode() && UserName_.empty()) {
             WriteResponse(p, MakeErrorXmlResponse(NErrors::MISSING_PARAMETER, Parent_->AggregatedUserCounters_.Get(), "No user name was provided."));

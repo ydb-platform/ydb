@@ -111,6 +111,15 @@ namespace NActors {
                 Location = ni.Location;
                 return *this;
             }
+
+            friend bool operator ==(const TNodeInfo& x, const TNodeInfo& y) {
+                return x.Address == y.Address && x.Host == y.Host && x.ResolveHost == y.ResolveHost && x.Port == y.Port
+                    && x.Location == y.Location;
+            }
+
+            friend bool operator !=(const TNodeInfo& x, const TNodeInfo& y) {
+                return !(x == y);
+            }
         };
 
         TMap<ui32, TNodeInfo> StaticNodeTable;

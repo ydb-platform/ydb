@@ -8,6 +8,8 @@
 #include <library/cpp/actors/interconnect/interconnect_impl.h>
 #include <library/cpp/actors/interconnect/interconnect_address.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
 
 #include <ydb/library/services/services.pb.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -207,6 +209,10 @@ public:
             HFunc(TEvNodeBroker::TEvNodesInfo, Handle);
             HFunc(TEvPrivate::TEvUpdateEpoch, Handle);
             HFunc(NMon::TEvHttpInfo, Handle);
+            hFunc(TEvents::TEvUnsubscribe, Handle);
+
+            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
         }
     }
 
@@ -239,6 +245,11 @@ private:
     void Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev, const TActorContext &ctx);
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx);
 
+    void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr ev);
+    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev);
+
+    void Handle(TEvents::TEvUnsubscribe::TPtr ev);
+
 private:
     TIntrusivePtr<TTableNameserverSetup> StaticConfig;
     std::array<TDynamicConfigPtr, DOMAINS_COUNT> DynamicConfigs;
@@ -250,6 +261,7 @@ private:
     // Domain -> Epoch ID.
     THashMap<ui32, ui64> EpochUpdates;
     ui32 ResolvePoolId;
+    THashSet<TActorId> StaticNodeChangeSubscribers;
 };
 
 } // NNodeBroker

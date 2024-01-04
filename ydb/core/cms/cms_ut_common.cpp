@@ -511,6 +511,10 @@ static void SetupServices(TTestActorRuntime &runtime,
     runtime.GetAppData().DisableCheckingSysNodesCms = true;
     runtime.GetAppData().BootstrapConfig = TFakeNodeWhiteboardService::BootstrapConfig;
 
+    NKikimrCms::TCmsConfig cmsConfig;
+    cmsConfig.MutableSentinelConfig()->SetEnable(false);
+    runtime.GetAppData().DefaultCmsConfig = MakeHolder<NKikimrCms::TCmsConfig>(cmsConfig);
+
     if (!runtime.IsRealThreads()) {
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvLocalRecoveryDone,
@@ -533,7 +537,6 @@ static void SetupServices(TTestActorRuntime &runtime,
 TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
         : TTestBasicRuntime(options.NodeCount, options.DataCenterCount, false)
         , CmsId(MakeCmsID(0))
-        , CmsTabletActor(TActorId())
 {
     TFakeNodeWhiteboardService::Config.MutableResponse()->SetSuccess(true);
     TFakeNodeWhiteboardService::Config.MutableResponse()->ClearStatus();
@@ -545,9 +548,9 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
 
     GenerateExtendedInfo(*this, config, options.VDisks, 4, options.Tenants, options.UseMirror3dcErasure);
 
-    SetObserverFunc([](TTestActorRuntimeBase&,
-                                    TAutoPtr<IEventHandle> &event) -> auto {
+    SetObserverFunc([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
         if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigRequest
+            || event->Type == TEvBlobStorage::EvControllerConfigRequest
             || event->GetTypeRewrite() == TEvConfigsDispatcher::EvGetConfigRequest) {
             auto fakeId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(event->Recipient.NodeId());
             if (event->Recipient != fakeId)
@@ -555,14 +558,6 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
         }
 
         return TTestActorRuntime::EEventAction::PROCESS;
-    });
-
-    SetRegistrationObserverFunc([&CmsTabletActor = CmsTabletActor](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
-        if (TypeName(*runtime.FindActor(actorId)) == "NKikimr::NCms::TCms") {
-            CmsTabletActor = actorId;
-        }
-
-        runtime.DefaultRegistrationObserver(runtime, parentId, actorId);
     });
 
     using namespace NMalloc;
@@ -585,6 +580,7 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
     NKikimrCms::TCmsConfig cmsConfig;
     cmsConfig.MutableTenantLimits()->SetDisabledNodesRatioLimit(0);
     cmsConfig.MutableClusterLimits()->SetDisabledNodesRatioLimit(0);
+    cmsConfig.MutableSentinelConfig()->SetEnable(false);
     SetCmsConfig(cmsConfig);
 
     // Need to allow restart state storage nodes

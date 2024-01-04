@@ -129,8 +129,8 @@ public:
             target->Shutdown(ctx);
         }
 
-        for (auto& x : TVector<TActorId>{TargetDiscoverer, TenantResolver, YdbProxy}) {
-            if (auto actorId = std::exchange(x, {})) {
+        for (auto* x : TVector<TActorId*>{&TargetDiscoverer, &TenantResolver, &YdbProxy}) {
+            if (auto actorId = std::exchange(*x, {})) {
                 ctx.Send(actorId, new TEvents::TEvPoison());
             }
         }

@@ -866,6 +866,9 @@ static bool ConsiderAsDropped(const TPath& path) {
     if (path.IsCdcStream()) {
         return false;
     }
+    if (path.IsReplication()) {
+        return false;
+    }
 
     return true;
 }

@@ -22,6 +22,7 @@ SRCS(
     gc_quorum_3dc.cpp
     group_reconfiguration.cpp
     incorrect_queries.cpp
+    index_restore_get.cpp
     main.cpp
     mirror3of4.cpp
     sanitize_groups.cpp

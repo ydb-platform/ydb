@@ -33,10 +33,10 @@ static constexpr ui32 MAX_SOURCE_ID_LENGTH = 2048;
 
 struct TPartitionInfo {
     TPartitionInfo(const TActorId& actor, TMaybe<TPartitionKeyRange>&& keyRange,
-            const bool initDone, const TTabletCountersBase& baseline)
+            const TTabletCountersBase& baseline)
         : Actor(actor)
         , KeyRange(std::move(keyRange))
-        , InitDone(initDone)
+        , InitDone(false)
     {
         Baseline.Populate(baseline);
     }
@@ -641,12 +641,8 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
             Partitions.emplace(partitionId,
                 TPartitionInfo(ctx.Register(CreatePartitionActor(partitionId, TopicConverter, Config, true, ctx)),
                 GetPartitionKeyRange(Config, partition),
-                true,
                 *Counters
             ));
-
-            // InitCompleted is true because this partition is empty
-            ++PartitionsInited; //newly created partition is empty and ready to work
         }
     }
 
@@ -688,8 +684,7 @@ void TPersQueue::ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
         }
 
         Y_VERIFY(TopicName.size(), "Need topic name here");
-        CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TopicName, TabletID(),
-                                                    cacheSize));
+        ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(TopicName, cacheSize));
     } else {
         //Y_VERIFY(TopicName == Config.GetTopicName(), "Changing topic name is not supported");
         TopicPath = Config.GetTopicPath();
@@ -845,7 +840,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
             cacheSize = Config.GetCacheSize();
 
         Y_VERIFY(TopicName.size(), "Need topic name here");
-        CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TopicName, TabletID(), cacheSize));
+        ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(TopicName, cacheSize));
     } else if (read.GetStatus() == NKikimrProto::NODATA) {
         LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " no config, start with empty partitions and default config");
     } else {
@@ -860,7 +855,6 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         Partitions.emplace(partitionId, TPartitionInfo(
             ctx.Register(CreatePartitionActor(partitionId, TopicConverter, Config, false, ctx)),
             GetPartitionKeyRange(Config, partition),
-            false,
             *Counters
         ));
     }
@@ -1177,7 +1171,7 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
     ++PartitionsInited;
     Y_VERIFY(ConfigInited);//partitions are inited only after config
 
-    if (PartitionsInited == Partitions.size()) {
+    if (!InitCompleted && PartitionsInited == Partitions.size()) {
         OnInitComplete(ctx);
     }
 
@@ -2346,6 +2340,7 @@ void TPersQueue::CreatedHook(const TActorContext& ctx)
 {
 
     IsServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
+    CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TabletID()));
 
     ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(ctx.SelfID.NodeId()));
 }
@@ -3323,10 +3318,7 @@ void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
                            std::forward_as_tuple(partitionId),
                            std::forward_as_tuple(actorId,
                                                  GetPartitionKeyRange(config, partition),
-                                                 true,
                                                  *Counters));
-
-        ++PartitionsInited;
     }
 }
 
@@ -3396,6 +3388,7 @@ void TPersQueue::OnInitComplete(const TActorContext& ctx)
 {
     SignalTabletActive(ctx);
     TryStartTransaction(ctx);
+    InitCompleted = true;
 }
 
 ui64 TPersQueue::GetAllowedStep() const

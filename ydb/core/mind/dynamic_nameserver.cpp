@@ -137,6 +137,11 @@ void TDynamicNameserver::Bootstrap(const TActorContext &ctx)
     for (auto &pr : dinfo->Domains)
         RequestEpochUpdate(pr.first, 1, ctx);
 
+    Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
+        NKikimrConsole::TConfigItem::NameserviceConfigItem,
+        SelfId()
+    ));
+
     Become(&TDynamicNameserver::StateFunc);
 }
 
@@ -351,6 +356,9 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvListNodes::TPtr &ev,
         }
     }
     ListNodesQueue.push_back(ev->Sender);
+    if (ev->Get()->SubscribeToStaticNodeChanges) {
+        StaticNodeChangeSubscribers.insert(ev->Sender);
+    }
 }
 
 void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TActorContext &ctx)
@@ -429,6 +437,29 @@ void TDynamicNameserver::Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev, const TAct
         RequestEpochUpdate(domain, epoch, ctx);
 }
 
+void TDynamicNameserver::Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr /*ev*/)
+{}
+
+void TDynamicNameserver::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev) {
+    auto& record = ev->Get()->Record;
+    if (record.HasConfig()) {
+        if (const auto& config = record.GetConfig(); config.HasNameserviceConfig()) {
+            auto newStaticConfig = BuildNameserverTable(config.GetNameserviceConfig());
+            if (StaticConfig->StaticNodeTable != newStaticConfig->StaticNodeTable) {
+                StaticConfig = std::move(newStaticConfig);
+                for (const auto& subscriber : StaticNodeChangeSubscribers) {
+                    TActivationContext::Send(new IEventHandle(SelfId(), subscriber, new TEvInterconnect::TEvListNodes));
+                }
+            }
+        }
+    }
+    Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
+}
+
+void TDynamicNameserver::Handle(TEvents::TEvUnsubscribe::TPtr ev) {
+    StaticNodeChangeSubscribers.erase(ev->Sender);
+}
+
 IActor *CreateDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup> &setup, ui32 poolId) {
     return new TDynamicNameserver(setup, poolId);
 }
@@ -436,6 +467,25 @@ IActor *CreateDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup> &setu
 IActor *CreateDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup> &setup,
         const NKikimrNodeBroker::TNodeInfo &node, const TDomainsInfo &domains, ui32 poolId) {
     return new TDynamicNameserver(setup, node, domains, poolId);
+}
+
+TIntrusivePtr<TTableNameserverSetup> BuildNameserverTable(const NKikimrConfig::TStaticNameserviceConfig& nsConfig) {
+    auto table = MakeIntrusive<TTableNameserverSetup>();
+    for (const auto &node : nsConfig.GetNode()) {
+        const ui32 nodeId = node.GetNodeId();
+        const TString host = node.HasHost() ? node.GetHost() : TString();
+        const ui32 port = node.GetPort();
+        const TString resolveHost = node.HasInterconnectHost() ?  node.GetInterconnectHost() : host;
+        const TString addr = resolveHost ? TString() : node.GetAddress();
+        TNodeLocation location;
+        if (node.HasWalleLocation()) {
+            location = TNodeLocation(node.GetWalleLocation());
+        } else if (node.HasLocation()) {
+            location = TNodeLocation(node.GetLocation());
+        }
+        table->StaticNodeTable[nodeId] = TTableNameserverSetup::TNodeInfo(addr, host, resolveHost, port, location);
+    }
+    return table;
 }
 
 } // NNodeBroker

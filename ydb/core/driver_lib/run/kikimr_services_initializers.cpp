@@ -625,31 +625,12 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         const TActorId resolverId = NDnsResolver::MakeDnsResolverActorId();
         const TActorId nameserviceId = GetNameserviceActorId();
 
-        ui32 numNodes = 0;
+        TIntrusivePtr<TTableNameserverSetup> table = NNodeBroker::BuildNameserverTable(nsConfig);
+
+        const ui32 numNodes = table->StaticNodeTable.size();
         TSet<TString> dataCenters;
-
-        TIntrusivePtr<TTableNameserverSetup> table(new TTableNameserverSetup());
-        for (const auto &node : nsConfig.GetNode()) {
-            const ui32 nodeId = node.GetNodeId();
-            const TString host = node.HasHost() ? node.GetHost() : TString();
-            const ui32 port = node.GetPort();
-
-            const TString resolveHost = node.HasInterconnectHost() ?
-                node.GetInterconnectHost() : host;
-
-            // Use ip address only when dns host not specified
-            const TString addr = resolveHost ? TString() : node.GetAddress();
-
-            TNodeLocation location;
-            if (node.HasWalleLocation()) {
-                location = TNodeLocation(node.GetWalleLocation());
-            } else if (node.HasLocation()) {
-                location = TNodeLocation(node.GetLocation());
-            }
-            table->StaticNodeTable[nodeId] = TTableNameserverSetup::TNodeInfo(addr, host, resolveHost, port, location);
-
-            ++numNodes;
-            dataCenters.insert(location.GetDataCenterId());
+        for (const auto& [nodeId, info] : table->StaticNodeTable) {
+            dataCenters.insert(info.Location.GetDataCenterId());
         }
 
         NDnsResolver::TOnDemandDnsResolverOptions resolverOptions;
@@ -756,14 +737,15 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 icCommon->InitWhiteboard = [whiteboardId](ui16 port, TActorSystem *actorSystem) {
                     actorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint("ic", Sprintf(":%d", port)));
                 };
-                icCommon->UpdateWhiteboard = [whiteboardId](const TString& peer, bool connected, bool green, bool yellow,
-                        bool orange, bool red, TActorSystem *actorSystem) {
-                    actorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvNodeStateUpdate(
-                        peer, connected,
-                        green ? NKikimrWhiteboard::EFlag::Green :
-                        yellow ? NKikimrWhiteboard::EFlag::Yellow :
-                        orange ? NKikimrWhiteboard::EFlag::Orange :
-                        red ? NKikimrWhiteboard::EFlag::Red : NKikimrWhiteboard::EFlag()));
+                icCommon->UpdateWhiteboard = [whiteboardId](const TWhiteboardSessionStatus& data) {
+                    data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvNodeStateUpdate(
+                        data.Peer, data.Connected,
+                        data.Green ? NKikimrWhiteboard::EFlag::Green :
+                        data.Yellow ? NKikimrWhiteboard::EFlag::Yellow :
+                        data.Orange ? NKikimrWhiteboard::EFlag::Orange :
+                        data.Red ? NKikimrWhiteboard::EFlag::Red : NKikimrWhiteboard::EFlag()));
+                    data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvClockSkewUpdate(
+                        data.PeerId, data.ClockSkew));
                 };
             }
 

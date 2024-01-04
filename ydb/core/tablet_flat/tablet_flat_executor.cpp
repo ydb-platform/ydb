@@ -56,6 +56,10 @@ namespace NFlatExecutorSetup {
     void ITablet::ReadOnlyLeaseDropped() {
         // nothing by default
     }
+
+    void ITablet::OnFollowersCountChanged() {
+        // nothing by default
+    }
 }
 
 }}

@@ -1,6 +1,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
@@ -162,8 +163,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         }
     }
 
-    Y_UNIT_TEST(SplitWithReboots) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS(SplitWithReboots) {
+        T t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TVector<ui64> mainTabletIds;
 
@@ -208,8 +209,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         });
     }
 
-    Y_UNIT_TEST(MergeWithReboots) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS(MergeWithReboots) {
+        T t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TVector<ui64> mainTabletIds;
 

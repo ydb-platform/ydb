@@ -1557,9 +1557,16 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
-        const auto initialStatus = expectedStatus == Ydb::StatusIds::PRECONDITION_FAILED
-            ? expectedStatus
-            : Ydb::StatusIds::SUCCESS;
+        auto initialStatus = Ydb::StatusIds::SUCCESS;
+        switch (expectedStatus) {
+        case Ydb::StatusIds::BAD_REQUEST:
+        case Ydb::StatusIds::PRECONDITION_FAILED:
+            initialStatus = expectedStatus;
+            break;
+        default:
+            break;
+        }
+
         TestImport(runtime, schemeshardId, ++id, dbName, Sprintf(request.data(), port), userSID, initialStatus);
         env.TestWaitNotification(runtime, id, schemeshardId);
 
@@ -2234,6 +2241,26 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               }
             }
         )", Ydb::StatusIds::CANCELLED);
+    }
+
+    Y_UNIT_TEST(ShouldFailOnNonUniqDestinationPaths) {
+        TTestBasicRuntime runtime;
+
+        auto unusedTestData = THashMap<TString, TString>();
+        Run(runtime, std::move(unusedTestData), R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "a"
+                destination_path: "/MyRoot/Table"
+              }
+              items {
+                source_prefix: "b"
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", Ydb::StatusIds::BAD_REQUEST);
     }
 
     void CancelShouldSucceed(TDelayFunc delayFunc) {

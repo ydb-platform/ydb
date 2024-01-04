@@ -735,14 +735,25 @@ void TExecutor::FollowerAuxUpdate(TString upd) {
     }
 }
 
-void TExecutor::FollowerAttached() {
-    HadFollowerAttached = true;
+void TExecutor::FollowerAttached(ui32 totalFollowers) {
+    Stats->FollowersCount = totalFollowers;
     NeedFollowerSnapshot = true;
 
     if (CurrentStateFunc() != &TThis::StateWork)
         return;
 
     MakeLogSnapshot();
+
+    Owner->OnFollowersCountChanged();
+}
+
+void TExecutor::FollowerDetached(ui32 totalFollowers) {
+    Stats->FollowersCount = totalFollowers;
+
+    if (CurrentStateFunc() != &TThis::StateWork)
+        return;
+
+    Owner->OnFollowersCountChanged();
 }
 
 void TExecutor::FollowerSyncComplete() {

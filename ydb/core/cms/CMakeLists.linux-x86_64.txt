@@ -122,10 +122,10 @@ target_link_libraries(ydb-core-cms.global PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(ydb-core-cms.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/cms/f13dea7eff082ee71bdf3de5a8cf9130.cpp
+  ${CMAKE_BINARY_DIR}/ydb/core/cms/bd4d435f1ed53f0a770942051e28a441.cpp
 )
 resources(ydb-core-cms.global
-  ${CMAKE_BINARY_DIR}/ydb/core/cms/f13dea7eff082ee71bdf3de5a8cf9130.cpp
+  ${CMAKE_BINARY_DIR}/ydb/core/cms/bd4d435f1ed53f0a770942051e28a441.cpp
   INPUTS
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/index.html
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/cms.css
@@ -159,6 +159,102 @@ resources(ydb-core-cms.global
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/gear.svg
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/require.min.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/jquery.min.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/base/browser/ui/codicons/codicon/codicon.ttf
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/base/worker/workerMain.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/abap/abap.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/apex/apex.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/azcli/azcli.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/bat/bat.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/bicep/bicep.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/cameligo/cameligo.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/clojure/clojure.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/coffee/coffee.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/cpp/cpp.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/csharp/csharp.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/csp/csp.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/css/css.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/dart/dart.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/dockerfile/dockerfile.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/ecl/ecl.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/elixir/elixir.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/fsharp/fsharp.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/go/go.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/graphql/graphql.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/handlebars/handlebars.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/hcl/hcl.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/html/html.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/ini/ini.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/java/java.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/javascript/javascript.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/julia/julia.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/kotlin/kotlin.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/less/less.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/lexon/lexon.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/liquid/liquid.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/lua/lua.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/m3/m3.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/markdown/markdown.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/mips/mips.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/msdax/msdax.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/mysql/mysql.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/objective-c/objective-c.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/pascal/pascal.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/pascaligo/pascaligo.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/perl/perl.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/pgsql/pgsql.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/php/php.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/postiats/postiats.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/powerquery/powerquery.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/powershell/powershell.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/pug/pug.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/python/python.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/qsharp/qsharp.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/r/r.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/razor/razor.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/redis/redis.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/redshift/redshift.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/restructuredtext/restructuredtext.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/ruby/ruby.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/rust/rust.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/sb/sb.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/scala/scala.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/scheme/scheme.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/scss/scss.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/shell/shell.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/solidity/solidity.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/sophia/sophia.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/sparql/sparql.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/sql/sql.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/st/st.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/swift/swift.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/systemverilog/systemverilog.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/tcl/tcl.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/twig/twig.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/typescript/typescript.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/vb/vb.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/xml/xml.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/basic-languages/yaml/yaml.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/editor/editor.main.css
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/editor/editor.main.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.de.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.es.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.fr.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.it.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.ja.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.ko.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.ru.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.zh-cn.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.zh-tw.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/language/css/cssMode.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/language/css/cssWorker.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/language/html/htmlMode.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/language/html/htmlWorker.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/language/json/jsonMode.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/language/json/jsonWorker.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/language/typescript/tsMode.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/language/typescript/tsWorker.js
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/monaco-editor/vs/loader.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/main.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/configs_dispatcher_main.js
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/ui/ext/question-circle.svg
@@ -205,6 +301,102 @@ resources(ydb-core-cms.global
   cms/ui/ext/gear.svg
   cms/ui/ext/require.min.js
   cms/ui/ext/jquery.min.js
+  cms/ui/ext/monaco-editor/vs/base/browser/ui/codicons/codicon/codicon.ttf
+  cms/ui/ext/monaco-editor/vs/base/worker/workerMain.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/abap/abap.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/apex/apex.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/azcli/azcli.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/bat/bat.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/bicep/bicep.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/cameligo/cameligo.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/clojure/clojure.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/coffee/coffee.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/cpp/cpp.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/csharp/csharp.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/csp/csp.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/css/css.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/dart/dart.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/dockerfile/dockerfile.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/ecl/ecl.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/elixir/elixir.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/fsharp/fsharp.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/go/go.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/graphql/graphql.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/handlebars/handlebars.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/hcl/hcl.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/html/html.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/ini/ini.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/java/java.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/javascript/javascript.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/julia/julia.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/kotlin/kotlin.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/less/less.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/lexon/lexon.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/liquid/liquid.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/lua/lua.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/m3/m3.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/markdown/markdown.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/mips/mips.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/msdax/msdax.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/mysql/mysql.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/objective-c/objective-c.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/pascal/pascal.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/pascaligo/pascaligo.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/perl/perl.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/pgsql/pgsql.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/php/php.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/postiats/postiats.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/powerquery/powerquery.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/powershell/powershell.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/pug/pug.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/python/python.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/qsharp/qsharp.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/r/r.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/razor/razor.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/redis/redis.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/redshift/redshift.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/restructuredtext/restructuredtext.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/ruby/ruby.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/rust/rust.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/sb/sb.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/scala/scala.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/scheme/scheme.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/scss/scss.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/shell/shell.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/solidity/solidity.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/sophia/sophia.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/sparql/sparql.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/sql/sql.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/st/st.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/swift/swift.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/systemverilog/systemverilog.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/tcl/tcl.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/twig/twig.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/typescript/typescript.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/vb/vb.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/xml/xml.js
+  cms/ui/ext/monaco-editor/vs/basic-languages/yaml/yaml.js
+  cms/ui/ext/monaco-editor/vs/editor/editor.main.css
+  cms/ui/ext/monaco-editor/vs/editor/editor.main.js
+  cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.de.js
+  cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.es.js
+  cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.fr.js
+  cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.it.js
+  cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.ja.js
+  cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.js
+  cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.ko.js
+  cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.ru.js
+  cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.zh-cn.js
+  cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.zh-tw.js
+  cms/ui/ext/monaco-editor/vs/language/css/cssMode.js
+  cms/ui/ext/monaco-editor/vs/language/css/cssWorker.js
+  cms/ui/ext/monaco-editor/vs/language/html/htmlMode.js
+  cms/ui/ext/monaco-editor/vs/language/html/htmlWorker.js
+  cms/ui/ext/monaco-editor/vs/language/json/jsonMode.js
+  cms/ui/ext/monaco-editor/vs/language/json/jsonWorker.js
+  cms/ui/ext/monaco-editor/vs/language/typescript/tsMode.js
+  cms/ui/ext/monaco-editor/vs/language/typescript/tsWorker.js
+  cms/ui/ext/monaco-editor/vs/loader.js
   cms/ui/main.js
   cms/ui/configs_dispatcher_main.js
   cms/ui/ext/question-circle.svg

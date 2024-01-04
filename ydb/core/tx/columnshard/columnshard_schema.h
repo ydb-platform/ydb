@@ -591,19 +591,57 @@ struct Schema : NIceDb::Schema {
         db.Table<IndexColumns>().Key(index, row.Granule, row.ColumnId, row.PlanStep, row.TxId, row.Portion, row.Chunk).Delete();
     }
 
+    class TLoadCounters: public NColumnShard::TCommonCountersOwner {
+    private:
+        using TBase = NColumnShard::TCommonCountersOwner;
+        NMonitoring::TDynamicCounters::TCounterPtr PortionsCount;
+        NMonitoring::TDynamicCounters::TCounterPtr BrokenPortionsCount;
+    public:
+        TLoadCounters()
+            : TBase("InitShard")
+        {
+            PortionsCount = TBase::GetDeriviative("Portions/Count");
+            BrokenPortionsCount = TBase::GetDeriviative("BrokenPortions/Count");
+        }
+
+        void OnPortionLoad() const {
+            PortionsCount->Add(1);
+        }
+
+        void OnPortionSkip() const {
+            BrokenPortionsCount->Add(1);
+        }
+    };
+
     static bool IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, ui32 index,
                                   const std::function<void(const TColumnRecord&)>& callback) {
         auto rowset = db.Table<IndexColumns>().Prefix(index).Select();
-        if (!rowset.IsReady())
+        if (!rowset.IsReady()) {
             return false;
+        }
 
+        TLoadCounters counters;
+        THashSet<ui64> portionIds;
         while (!rowset.EndOfSet()) {
             TColumnRecord row;
             row.Granule = rowset.GetValue<IndexColumns::Granule>();
+            row.Portion = rowset.GetValue<IndexColumns::Portion>();
+            if (row.Granule == 0) {
+                if (portionIds.insert(row.Portion).second) {
+                    counters.OnPortionSkip();
+                }
+                if (!rowset.Next()) {
+                    return false;
+                }
+                continue;
+            } else {
+                if (portionIds.insert(row.Portion).second) {
+                    counters.OnPortionLoad();
+                }
+            }
             row.ColumnId = rowset.GetValue<IndexColumns::ColumnIdx>();
             row.PlanStep = rowset.GetValue<IndexColumns::PlanStep>();
             row.TxId = rowset.GetValue<IndexColumns::TxId>();
-            row.Portion = rowset.GetValue<IndexColumns::Portion>();
             row.Chunk = rowset.GetValue<IndexColumns::Chunk>();
             row.XPlanStep = rowset.GetValue<IndexColumns::XPlanStep>();
             row.XTxId = rowset.GetValue<IndexColumns::XTxId>();
@@ -618,8 +656,9 @@ struct Schema : NIceDb::Schema {
 
             callback(row);
 
-            if (!rowset.Next())
+            if (!rowset.Next()) {
                 return false;
+            }
         }
         return true;
     }

@@ -52,6 +52,7 @@ namespace {
             }
 
             ui32 json = 0;
+            ui32 mustRestoreFirst = 0;
             TLogoBlobID from, to;
             TString errorExplanation;
             if (!params.Has("from")) {
@@ -73,9 +74,12 @@ namespace {
                     return generateError("Failed to parse json parameter -- must be an integer");
                 }
             }
+            if (params.Has("mustRestoreFirst") && !TryFromString(params.Get("mustRestoreFirst"), mustRestoreFirst)) {
+                return generateError("Failed to parse mustRestoreFirst parameter -- must be an integer");
+            }
 
             const ui64 cookie = ++LastCookie;
-            auto query = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, from, to, false, TInstant::Max(), true);
+            auto query = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, from, to, mustRestoreFirst, TInstant::Max(), true);
             SendToBSProxy(SelfId(), groupId, query.release(), cookie);
             RequestsInFlight[cookie] = {ev->Sender, ev->Cookie, ev->Get()->SubRequestId, json};
         }

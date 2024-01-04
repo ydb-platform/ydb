@@ -1,0 +1,32 @@
+Libidn AUTHORS -- Information about the authors.
+Copyright (C) 2002-2022 Simon Josefsson
+See the end for copying conditions.
+
+Simon Josefsson <simon@josefsson.org>
+Designed and implemented libidn.
+
+Thomas Jacob <jacob@internet24.de>
+Contributed TLD support.
+
+Oliver Hitz <oliver@net-track.ch>
+Contributed Java implementation.
+
+Stefan Larsson <stefan@larsson.nu>
+Optimized Java implementation.  Added Maven support.
+
+Alexander Gnauck <gnauck@ag-software.de>
+Contributed C# port.
+
+Adam Strzelecki <ono@java.pl>
+Contributed Windows Visual Studio project files.
+
+Tim Ruehsen <tim.ruehsen@gmx.de>
+Added fuzzing and OSS-Fuzz integration.
+Fixed bugs and performance issues found by fuzzing.
+Modernized GTK-Doc build.
+Fixed build issues.
+
+----------------------------------------------------------------------
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.

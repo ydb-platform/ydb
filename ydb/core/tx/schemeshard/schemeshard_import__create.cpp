@@ -172,10 +172,17 @@ private:
 
     template <typename TSettings>
     bool FillItems(TImportInfo::TPtr importInfo, const TSettings& settings, TString& explain) {
+        THashSet<TString> dstPaths;
+
         importInfo->Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
-            const auto& item = settings.items(itemIdx);
-            const TPath path = TPath::Resolve(item.destination_path(), Self);
+            const auto& dstPath = settings.items(itemIdx).destination_path();
+            if (!dstPaths.insert(dstPath).second) {
+                explain = TStringBuilder() << "Duplicate destination_path: " << dstPath;
+                return false;
+            }
+
+            const TPath path = TPath::Resolve(dstPath, Self);
             {
                 TPath::TChecker checks = path.Check();
                 checks
@@ -204,7 +211,7 @@ private:
                 }
             }
 
-            importInfo->Items.emplace_back(item.destination_path());
+            importInfo->Items.emplace_back(dstPath);
         }
 
         return true;

@@ -1,0 +1,8152 @@
+2022-06-25  Simon Josefsson  <simon@josefsson.org>
+
+	version 1.41
+	* NEWS: Record release date.
+
+	Add header include.
+
+	Revert back to using assert to silence codacity.
+
+	maint: Don't dist generated cyclo output.
+
+	Rewrite tst_symbols to avoid warnings.
+
+	Fix typo.
+
+	Use https URLs.
+
+	tst_symbols: Rewrite to use utils.c infrastructure, for consistency.
+
+	cicd: Fix standalone tests.
+
+	cicd: Fix standalone tests.
+
+	cicd: Fix standalone tests.
+
+	maint: Regenerate NEWS hash.
+
+	Use https URLs.
+
+	Ensure idn.1 version number is updated.
+
+	cicd: Fix salsa git URL.
+
+	maint: Update README-release.
+
+	Bump LT_REVISION for new release.
+
+	tst_version: Improve debug output.
+
+	Bump STRINGPREP_VERSION for 1.41.
+
+	Add version number related self-checks.
+
+2022-06-20  Simon Josefsson  <simon@josefsson.org>
+
+	maint: post-release administrivia
+	* NEWS: Add header line for next release.
+	* .prev-version: Record previous version.
+	* cfg.mk (old_NEWS_hash): Auto-update.
+
+	version 1.40
+	* NEWS: Record release date.
+
+	Bump STRINGPREP_VERSION and add regression check.
+
+	maint: post-release administrivia
+	* NEWS: Add header line for next release.
+	* .prev-version: Record previous version.
+	* cfg.mk (old_NEWS_hash): Auto-update.
+
+	version 1.39
+	* NEWS: Record release date.
+
+	doc: Add NEWS blurb.
+
+	Require HAVE_LANGINFO_CODESET for stringprep_locale_charset.
+
+	Update gnulib files.
+
+2022-02-20  Simon Josefsson  <simon@josefsson.org>
+
+	maint: Fix syntax-check after NEWS copyright update.
+
+	Update copyright years.
+
+	cicd: Fix ArchLinux package installs and replace CentOS:8 with AlmaLinux:8.
+
+	Update gnulib.
+
+2021-11-22  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib.
+
+2021-11-19  Simon Josefsson  <simon@josefsson.org>
+
+	maint: Use UTF-8 instead of ISO-8859-1 encoding.
+
+2021-10-28  Simon Josefsson  <simon@josefsson.org>
+
+	doc: Relicense old getaddrinfo specification.
+	Reported by Andrej Shadura.
+
+2021-10-13  Simon Josefsson  <simon@josefsson.org>
+
+	doc: Fix typo.
+
+2021-09-24  Simon Josefsson  <simon@josefsson.org>
+
+	doc: Mention minor fixes.
+
+	cicd: Fix debian10.
+
+	maint: Use AM_V_GEN.
+
+	maint: Don't use GNU make extensions.
+
+	maint: Don't use GNU make extensions.
+
+2021-09-23  Simon Josefsson  <simon@josefsson.org>
+
+	cicd: Fix pages rule.
+
+2021-09-22  Simon Josefsson  <simon@josefsson.org>
+
+	cicd: Debian11.
+
+	Update gnulib.
+
+	maint: Java JAR archive no longer included in source tarball.
+
+2021-09-19  Simon Josefsson  <simon@josefsson.org>
+
+	maint: Add .gitignore's.
+
+	maint. Use gnulib in submodule.
+
+2021-09-18  Simon Josefsson  <simon@josefsson.org>
+
+	doc: Really add fdl-1.3.texi.
+
+2021-09-10  Simon Josefsson  <simon@josefsson.org>
+
+	doc: Include copy of fdl, because it is a license.  Improve texi.
+
+2021-09-03  Simon Josefsson  <simon@josefsson.org>
+
+	maint: Remove trailing blanks.
+
+	maint: Fix typos.
+
+	maint: Indent code.
+
+	Use new gnulib indent rules.
+
+2021-07-22  Simon Josefsson  <simon@josefsson.org>
+
+	maint: post-release administrivia
+	* NEWS: Add header line for next release.
+	* .prev-version: Record previous version.
+	* cfg.mk (old_NEWS_hash): Auto-update.
+
+	version 1.38
+	* NEWS: Record release date.
+
+	Bump STRINGPREP_VERSION.
+
+	Bump LT_VERSION.
+
+	build: Rebuild cyclo-libidn.html when version changes.
+
+	Update.
+
+2021-07-21  Simon Josefsson  <simon@josefsson.org>
+
+	build: Fix --disable-tld builds.
+
+	Simplify building of gdoc-generated man/texi outputs.
+
+	Rebuild GTK-DOC HTML/PDF outputs on version number changes.
+
+	doc: Rebuild idn.1 when version number changes.
+
+	build: Fix --disable-tld builds.
+
+2021-07-20  Simon Josefsson  <simon@josefsson.org>
+
+	cicd: Add pages.
+
+	doc: Improve GTK-DOC manual.
+
+	cicd: Fix Ubuntu 12.04 builds.
+
+	Improve GTK-DOC manual.
+
+	Fix build errors related to doc/idn--help.texi.
+
+2021-05-23  Simon Josefsson  <simon@josefsson.org>
+
+	doc: Fix release process.
+
+2021-05-21  Simon Josefsson  <simon@josefsson.org>
+
+	doc: Improve HACKING instructions.
+
+2021-05-17  Simon Josefsson  <simon@josefsson.org>
+
+	Bootstrap cache.
+
+2021-05-15  Simon Josefsson  <simon@josefsson.org>
+
+	Ignore more.
+
+	maint: post-release administrivia
+	* NEWS: Add header line for next release.
+	* .prev-version: Record previous version.
+	* cfg.mk (old_NEWS_hash): Auto-update.
+
+	version 1.37
+	* NEWS: Record release date.
+
+	Add.
+
+	Use gnulib's bootstrap.
+
+	Drop old unused WERROR_CFLAGS usage.
+
+2021-05-10  Simon Josefsson  <simon@josefsson.org>
+
+	Improve URLs.
+
+2021-01-17  Simon Josefsson  <simon@josefsson.org>
+
+	Fix links for git and valgrind.
+
+2021-01-15  Simon Josefsson  <simon@josefsson.org>
+
+	Fix self check for --disable-tld.
+
+2021-01-12  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+	Doc fixes.
+
+	Don't dist ps/html/pdf.  Drop custom css.
+
+	Improve ./configure summary output.
+
+	Use gnulib langinfo module.
+
+	More ./configure summary output.
+
+	Use AM_GNU_GETTEXT_VERSION to get intl.m4 too.
+
+	Ignore more.
+
+	Disable some complex gnulib self-tests that add lots of dependencies and fail on mingw.
+
+	Drop second gnulib tests directory since only one is supported.
+
+	Require more recent automake and gtk-doc.
+
+	Fix .gitignore.
+
+	doc: Fix JDK dependency for Fedora.
+
+	Drop warning stuff covered by manywarnings.m4 now.
+
+	Disable VLA from gettext.
+
+	Remove autopoint-generated files that are in gnulib too.
+
+	Drop.
+
+	Update autoconf archive macros.
+
+	Prefer gnulib's M4 files over autopoint.
+
+	Modernize autoconf usage.
+
+	Use AM_GNU_GETTEXT_REQUIRE_VERSION.
+
+	Update gnulib files.
+
+	Modernize configure.ac.
+
+	Require autoconf 2.64 for newer gnulib.
+
+	Avoid including copyright info in idn example.
+
+	Fix manual copyright years.
+
+	Fix syntax-check.
+
+	Update copyright years.
+
+	Improve HACKING.
+
+2020-12-26  Simon Josefsson  <simon@josefsson.org>
+
+	Drop obsolete PGP key from AUTHORS.
+
+	Revert last patch, clearly src/ was being built before doc/.
+
+	Build doc/ after src/ so that src/idn exists for help2man of doc/idn.1.
+
+	Fix recommended package installs.
+
+	Drop .gitlab-ci.yml.
+
+2020-10-26  Simon Josefsson  <simon@josefsson.org>
+
+	Doc fix.
+
+	Sync with TP.
+
+	Fix typos, inspired by codespell.
+
+2020-07-23  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+2020-07-22  Simon Josefsson  <simon@josefsson.org>
+
+	Update for 1.36.
+
+	Release fixes.
+
+	Version 1.36.
+
+	Sync with TP.
+
+	Update gnulib files.
+
+2020-06-11  Simon Josefsson  <simon@josefsson.org>
+
+	Fix build error on Mac OS X 10.5, Solaris 11 and AIX.
+	Reported by Bruno Haible <bruno@clisp.org>.
+
+2020-06-10  Simon Josefsson  <simon@josefsson.org>
+
+	Ignore libtool.m4 for syntax-check.
+
+	Drop gnulib version-etc-tests, causes linker problems.
+
+	Add libtool files to VC to be able to work around libtool bugs.
+	Files taken from libunistring which contain some fixes to
+	solve Solaris 11 builds, reported by Bruno Haible in
+	https://lists.gnu.org/archive/html/help-libidn/2020-05/msg00016.html
+
+	Update gnulib files.
+
+	Sync with TP.
+
+2020-05-31  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+2020-05-18  Simon Josefsson  <simon@josefsson.org>
+
+	Move fuzz-coverage rule to gmake-only cfg.mk.  Fixes native AIX make.
+	Reported by Bruno Haible <bruno@clisp.org>.
+
+	Re-order so that tests/ is done before fuzz/.
+
+2020-05-18  Bruno Haible  <bruno@clisp.org>
+
+	Reduce the impact of Gnulib test failures.
+	* Makefile.am (SUBDIRS): Move gltests and lib/gltests after tests.
+
+2020-05-18  Simon Josefsson  <simon@josefsson.org>
+
+	Suggest to use --help when invalid command-line parameter was used.
+
+	Don't use old-style quotes.
+	Reported by Bruno Haible <bruno@clisp.org>.
+
+2020-05-17  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+	tld: Add U+00EF to .nl TLD table.
+	Reported by Trond Haugen <trond.haugen@norid.no>.
+
+	Update name/email on request.
+
+	Doc fix.
+
+	Doc fix.
+
+	Add build-dep on dblatex for gtkdoc-mkpdf.
+
+	Add build-dep on autopoint.
+
+	Sync with TP.
+
+2020-05-01  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Update file copyrights in fuzz/
+
+2020-04-30  Simon Josefsson  <simon@josefsson.org>
+
+	Fix ICONV error string.  Suggested by Benno Schulenberg.
+
+	Restore pre-processor indentation.
+
+2020-04-29  Simon Josefsson  <simon@josefsson.org>
+
+	Simplify CI rules.
+
+	Debian git package is now git rather than git-core.
+
+	Install build deps.
+
+	Add GitLab CI rules.
+
+2020-04-28  Simon Josefsson  <simon@josefsson.org>
+
+	Fix NEWS.
+
+	Bump versions.
+
+	Ignore more.
+
+	Re-enable valgrind tests for developers.
+
+	Indent code.
+
+	Fix syntax-checks.
+
+	Bump copyright years.
+
+	Update gnulib files.
+
+	Fix libidn.jar building with non-gcj.
+
+	Provide local copies of autoconf-archive Java M4's.
+
+	Update copyright years.
+
+2019-05-24  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Fix tests, adding gltests/test-once.c
+
+	Fix build failure in csharp/
+
+	Update gnulib files
+
+2018-07-10  Miroslav Lichvar  <mlichvar@redhat.com>
+
+	Fix unlikely memory leak in idna_to_unicode_4z4z
+
+2018-07-06  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Check codepoint validity in punycode_decode() and punycode_decode()
+	These functions were able to generate invalid unicode values resp.
+	invalid punycode. This is undocumented/unexpected behavior that can
+	lead to security vulns.
+
+	Reported-by: Mike Schiffman (Farsight Security, Inc.)
+
+2018-05-11  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Update HACKING
+
+	Update release date in NEWS
+
+	Amend po/Makevars to survive 'make distcheck'
+
+	Disable valgrind tests for 'make distcheck' and by default
+
+	Remove fuzz corpora from tarball
+
+	Sync with TP.
+
+	Sync with TP.
+
+	Sync with TP.
+
+	Fix indentation
+
+	Update fuzzer corpora
+
+	Update fuzz/ stuff
+
+	Drop gcj since upstream dropped it
+
+2018-05-09  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Prepare release
+
+	Add release script
+
+	Update Windows build to libiconv-1.15
+
+	Sync with TP.
+
+2018-04-02  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Add missing gnulib files
+
+2018-04-01  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Remove gcc/clang specific -Wno-vla option
+	Reported-by: Dennis Clarke
+
+2018-03-31  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Make code C89 compliant
+
+	Remove TESTS_VALGRIND code from fuzz/main.c
+
+	Update for release
+
+	Increase library revision
+
+	Remove autogenerated limits.h
+
+	Update AUTHORS
+
+	Update NEWS
+
+	Sync with TP.
+
+	Update gnulib
+
+2018-01-30  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Remove -Werror from CFLAGS
+	Newer compilers have more warnings enabled by default which
+	maybe break compilation with -Werror.
+	(But -Werror is good for developer-controlled testing.)
+	E.g. build broke with clang and --disable-nls configure flag.
+
+	Reported-by: Rupert Gallagher
+
+2018-01-09  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Fix cfg.mk, update .gitignore
+
+	Bootstrap: Properly generate gtk-doc.make
+
+	Remove gtk-doc.make from repo
+
+	Bootstrap: Create gtk-doc.make
+
+2018-01-08  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Remove m4/gtk-doc.m4 from repo
+
+2018-01-05  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Auto-generate build-aux/config.rpath
+
+	.gitignore: Add build-aux/config.rpath
+
+	Fix bootstrap to work without build-aux/config.rpath
+
+	configure.ac: Only use AM_SILENT_RULES if available
+
+2018-01-04  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Test for GTK_DOC_CHECK in configure.ac
+
+	Remove old and unneeded GTK-DOC files
+
+	Remove auto-generated file build-aux/config.rpath
+
+2017-11-03  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	* lib/nfkc.c (combine_hangul): Fix integer overflow
+	Found by OSS-Fuzz. Has no impact.
+
+2017-10-04  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	lib/punycode.c (decode_digit): Really fix integer overflow
+	The fix in commit e9e81b8063b095b02cf104bb992fa9bf9515b9d8
+	was incomplete.
+
+	Reported-by: Christian Weisgerber
+
+2017-10-04  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	* src/Makefile.am: Fix rule for parallel builds
+
+2017-09-01  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	lib/punycode.c (decode_digit): Fix integer overflow
+	This fix is a backport from libidn2 and addresses
+	CVE-2017-14062.
+
+2017-07-18  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Update fuzzer test corpora
+
+2017-07-16  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Fix slowness issue in idna.c/idna_to_unicode_internal()
+	This has been found by oss-fuzz.
+	A 316 byte input needed >25s to be run by libidn_tounicode_fuzzer().
+	Normal should be 1000+ runs per second.
+
+2017-07-14  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Fix distcheck
+
+	Update .gitignore
+
+	Update fuzzer corpora
+
+	Add CTRL-C handling for run-clang.sh
+
+	Limit fuzzers to 1024 bytes input
+
+2017-07-12  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Fix slowness issue in stringprep_profile()
+
+	Remove libidn_error_fuzzer (really)
+
+	Remove libidn_error_fuzzer, not worth fuzzing
+
+	Update stringprep fuzz corpora
+
+2017-07-11  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Fix C++ building for fuzz targets
+
+	Revert "Switch to C build for oss-fuzz target"
+	This reverts commit eff373983d8b02271960c1f26913a5f01baa2c86.
+
+	Switch to C build for oss-fuzz target
+
+2017-07-10  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Fix run-clang.sh
+
+	Remove gnulib code from fuzz-coverage report
+
+	Add libidn_error_fuzzer
+
+2017-07-08  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Update fuzz corpora
+
+	Remove CXXFLAGS from fuzz/README.md
+
+2017-06-30  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Update fuzzer corpora and support scripts
+
+	Fix compilation with -Werror and --enable-gcc-warnings
+
+	Extend stringprep fuzzer + corpora
+
+2017-06-30  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Speed up stringprep
+	Fuzzing gave me a corpus which was extremly slow to process with
+	stringprep_profile(). 3926 bytes took ~1.4 billion CPU cycles, most
+	time spent in stringprep_apply_table_to_string().
+
+	The problem was that already processed bytes were processed again.
+	After fixing the same test corpus now takes ~19.5 million CPU cycles.
+	That is a speedup by ~70x.
+
+	Still much time is spent in _g_utf8_normalize_wc(), mabe worth a
+	look as well.
+
+2017-06-30  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Fix NULL ptr access in nfkc.c/g_utf8_normalize()
+
+	Remove unused code from nfkc.c/g_utf8_strlen()
+
+	Increase code coverage of fuzzer targets
+
+	Fix NULL ptr access in stringprep_ucs4_nfkc_normalize(), foudn by fuzzing
+
+2017-06-29  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Increase speed of stringprep by ~20x
+
+2017-06-28  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	New fuzzer target libidn_stringprep_fuzzer
+
+2017-06-24  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Add make target 'fuzz-coverage'
+
+	New fuzzer target libidn_tounicode_fuzzer
+
+	Improved libidn_toascii_fuzzer
+
+	C++ needs explicit pointer cast
+
+	Adjust include dir in fuzz/Makefile.am
+
+	Build java and csharp only if configured
+
+	New configure flag --disable-doc
+
+2017-06-23  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Add initial OSS-Fuzz testing
+
+2017-06-21  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Add --enable-ubsan configure flag to enable UB Sanitizer
+
+	Add --enable-asan configure flag to enable Address Sanitizer
+
+2017-02-01  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Fix -Wformat warnings
+
+	Increase value for -Wframe-larger-than (gcc-7)
+
+	Update intprops.h for gcc-7 compatibility
+
+2016-07-22  Simon Josefsson  <simon@josefsson.org>
+
+	Mention OpenJDK.  Suggested by Guus.
+
+2016-07-20  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Sync with TP.
+
+	Bump versions.
+
+	Update for 1.33.
+
+	Version 1.33.
+
+	Doc fix.
+
+	Ignore more.
+
+	Update gnulib files.
+
+	Update gl override patches.
+
+2016-01-14  Simon Josefsson  <simon@josefsson.org>
+
+	Ignore more.
+
+	Doc fix.
+
+	Really fix bug when reading \00 inputs.
+
+	Sync with TP.
+
+	Bump copyright notices.
+
+	Update gnulib files.
+
+	Add.
+
+	stringprep_utf8_nfkc_normalize: Reject invalid UTF8 instead of crashing.
+	Also add regression self check.  Reported by Hanno Böck.
+
+	Fix memory leak in last fix.
+
+	Add.
+
+	Fix out-of-bounds stack read.  Report and patch by Hanno Böck.
+
+	Add regression check for Hanno Böck's stack OOB issue.
+
+2015-08-10  Simon Josefsson  <simon@josefsson.org>
+
+	Ignore more.
+
+	Doc.
+
+	idn: Use getline instead of fgets with fixed-size buffer.
+	Fixes out-of-bounds read, reported by Hanno Böck.
+
+	Dropped valgrind suppressions file, should no longer be needed.
+
+	Bump SO version.
+
+	Improve.
+
+	Bump version.
+
+2015-08-01  Simon Josefsson  <simon@josefsson.org>
+
+	Update for 1.32.
+
+	Version 1.32.
+
+	Reorder AM_PROG_AR to silence autoreconf.  Drop AC_PROG_LIBTOOL.
+
+	libidn: Fix crash in idna_to_unicode_8z8z and idna_to_unicode_8zlz.
+
+	Add regression check for malformed UTF-8 crash, reported by Adam Sampson.
+
+	Update gnulib files.
+
+	Bump versions.
+
+	Update for 1.31.
+
+2015-07-08  Simon Josefsson  <simon@josefsson.org>
+
+	Update for 1.30.
+
+	Version 1.31.
+
+	Add.
+
+	Update gnulib files.
+
+	Add.
+
+	Sync with TP.
+
+	libidn: stringprep_utf8_to_ucs4 now rejects invalid UTF-8. CVE-2015-2059
+
+	Fix broken encoding (ISO-8859-1 vs UTF-8) of this file.
+
+2015-07-07  Simon Josefsson  <simon@josefsson.org>
+
+	Use LOG_COMPILER instead of TEST_ENVIRONMENT, for valgrind.
+
+	Bump versions.  Doc fix.
+
+2015-07-07  Alessandro Ghedini  <alessandro@ghedini.me>
+
+	Use strdup() to duplicate a buffer
+	This apparently fixes the "Invalid read of size 4" error from valgrind
+	that was reported at https://bugs.debian.org/724069
+
+2015-07-07  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2015-03-02  Simon Josefsson  <simon@josefsson.org>
+
+	Version 1.30.
+
+	Ignore more.
+
+	Ignore more.
+
+	Sync gdoc.
+
+	Add.
+
+	Sync with TP.
+
+	Bump gettext to 0.19.3. Use LT_INIT instead of AC_LIBTOOL_WIN32_DLL.
+
+	Update OpenPGP key.
+
+	Update copyright years.
+
+	Update gnulib files.
+
+	Add.
+
+	Reimport punycode.h and punycode.c from punycode-spec.gz, and clarifying the changes.
+
+2014-11-27  Simon Josefsson  <simon@josefsson.org>
+
+	Bump version.
+
+2014-08-10  Simon Josefsson  <simon@josefsson.org>
+
+	Update for 1.29.
+
+	Update for 1.27.
+
+	Version 1.29.
+
+	Ignore more.
+
+	Sync with TP.
+
+	More copyright year updates.
+
+	Update PGP key.
+
+	Update copyright years.
+
+	Update gnulib files.
+
+2013-10-24  Simon Josefsson  <simon@josefsson.org>
+
+	Don't build csharp code when building Windows binaries.
+
+	Use libiconv 1.14.
+
+	Update gnulib files.
+
+	Bump versions.
+
+	Mark internal variable "g_utf8_skip" as static.
+	Reported by Thomas Dineen <tdineen@ix.netcom.com>.
+
+	Flush stdout to simplify for tools that buffer too heavily.
+	Tiny patch from Hugh Daschbach <hugh@ccss.com>.
+
+2013-07-10  Simon Josefsson  <simon@josefsson.org>
+
+	Version 1.28.
+
+	Java doc fix.
+
+	Fix last commit.
+
+	Add.
+
+	Fix -a and -u logic mixup.
+
+	Ignore more.
+
+	Sync with TP.
+
+2013-07-09  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+	Add all classes.
+
+	Ignore more.
+
+2013-07-08  Simon Josefsson  <simon@josefsson.org>
+
+	Bump gettext to 0.18.3 to work better with modern automake.
+
+	Fix for recent automake.
+
+	Add.
+
+	Update gnulib files.
+
+2013-06-06  Simon Josefsson  <simon@josefsson.org>
+
+	Generated.
+
+	Dist RangeSet.java.
+
+	Include RangeSet.class in jar file, otherwise compilation fails.
+
+2013-06-05  Simon Josefsson  <simon@josefsson.org>
+
+	Prevent tool from crashing when stringprep_utf8_to_locale doesn't work.
+	Reported by Jeffrey Frey <frey@udel.edu>.
+
+	Update for 1.26.
+
+	Bump versions.
+
+	Ignore more.
+
+	Version 1.27.
+
+	Add.
+
+	Add NEWS blurbs.
+
+	Fix syntax-check nits.
+
+	Update copyright years.
+
+	Sync with TP.
+
+	Update gnulib files.
+
+	Fix .gitignore for new java stuff.
+
+2013-06-05  stela  <stela@lysator.liu.se>
+
+	Added missing copyright headers. Describe how to use caliper benchmarks with jenkins/hudson + caliper-ci.
+
+	Upgraded (test) dependencies and mvn plugins to latest versions
+
+	Avoid using deprecared junit classes
+
+	First do simplistic check if input is all within common pass-through ranges. Speeds up common inputs up to about 25%.
+
+	Eliminate length-calculations, minor cleanups
+
+	Optimize search for head-range, don't binary-search past end-index of highest character
+
+	Optimize search for head-range, don't binary-search past end-index of highest character
+
+	First check most significant gap (exists if it contains the letter "a") in the ranges, often provides fast-fail
+
+	Filter using RangeSet, reverse loops order
+
+	normalizeNFKC pre-allocates output, pre-calculate fixed input length
+
+	Replaced all contains methods with RangeSet operations.
+	Made resourceprep faster, others slightly slower. Less redundant code to maintain/optimize later though
+
+	Added RangeSet implementation used for stringprep-table-contains lookups. Made nodeprep twice as fast, nameprep slightly faster, overall 20-40% faster.
+
+	If tested text characters all below char to match (out of sorted set), abort as remaining higher chars won't be matched either
+
+	Don't do redundant StringBuilder length() or charAt() calls when doing contains-checks
+
+	Do character-replacement lookups through binary search instead of linear search
+
+	Replace synchronized StringBuffer with faster unsynchronized StringBuilder
+
+	Added caliper tests for common types of stringprep operations. Allows use of jenkins + caliper-ci to produce nice graphs of improvements per release.
+
+	Revert from fast StringBuilder to slow StringBuffer for now just to establish a performance baseline.
+
+	Added test cases converted from C version. Avoid reading first character of empty strings, happened when a zero width space is converted to nothing.
+
+	Change comments from stringbuffer to StringBuilder as well
+
+	Make example3/4/5.c compile on Ubuntu 12.04 LTS, cast %ld printf arguments
+
+	Make example.c compile on Ubuntu 12.04 LTS, cast %ld printf arguments
+
+	Replace needlessly synchronized StringBuffer with StringBuilder everywhere, benchmarked to result in roughly 4x stringprep speedup
+
+	Make maven build with new directory structure.
+	Added maven configuration to at least avoid warnings when building and make build reproducible
+
+	Use standard maven directory structure, but still allow building with make.
+	Moved java sources into java/src/main/java instead of plain "java".
+	Created empty src/test/java for future unit test cases.
+	Moved code-generation and test classes into src/util/java instead of "misc"
+	Adapted make files for changed paths
+
+	Use standard maven directory structure, but still allow building with make.
+	Moved java sources into java/src/main/java instead of plain "java".
+	Created empty src/test/java for future unit test cases.
+	Moved code-generation and test classes into src/util/java instead of "misc"
+	Adapted make files for changed paths
+
+2012-12-12  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	Update gnulib files.
+
+2012-12-11  Simon Josefsson  <simon@josefsson.org>
+
+	Fix release rules.
+
+	More release dependencies.
+
+	Version 1.26.
+
+2012-12-10  Simon Josefsson  <simon@josefsson.org>
+
+	java: Permit usage by Apache projects.
+
+	Note additional dependencies.
+
+	Improve gendocs.sh usage.
+
+2012-12-09  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Fix mem leak.
+
+	Ignore more.
+
+	Check for out-of-bounds read (trigger with in={'f','o','o'} and inlen=3).
+
+	Silence warning.
+
+	Update gnulib files.
+
+2012-11-22  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+2012-09-18  Simon Josefsson  <simon@josefsson.org>
+
+	Use modern gdoc.mk.
+
+	Silence clang warning in library.
+
+	Add.
+
+	Improve tld self-test.
+
+	Sync with TP.
+
+	Update gnulib files.
+
+2012-08-09  Simon Josefsson  <simon@josefsson.org>
+
+	Rename win32/ to windows/.
+
+	Update gnulib files.
+
+2012-08-02  Simon Josefsson  <simon@josefsson.org>
+
+	Mention i18n update.
+
+	Sync with TP.
+
+	Silence syntax-check.
+
+	Update gnulib files.
+
+	libidn, idna_to_ascii: Propagate error on malloc failure.
+	Reported and tiny patch by Sarat Chandra Addepalli <s.addepalli@samsung.com>.
+
+2012-05-31  Simon Josefsson  <simon@josefsson.org>
+
+	Use https URLs.
+
+2012-05-28  Simon Josefsson  <simon@josefsson.org>
+
+	Update for 1.25.
+
+2012-05-25  Simon Josefsson  <simon@josefsson.org>
+
+	Improve debug output from version comparisons.
+
+2012-05-23  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	Fix release rules.
+
+	Version 1.25.
+
+	Fix.
+
+2012-05-22  Simon Josefsson  <simon@josefsson.org>
+
+	Use devhelp2 format.
+
+	Push to git after doing gnupload.
+
+	Sync with TP.
+
+	Update gnulib files.
+
+	Revert "Fix version controlled build of libidn with automake 1.12."
+	This reverts commit cf725246a5585d56ccb14c46bfe2a163342ff21f.
+
+2012-05-16  Simon Josefsson  <simon@josefsson.org>
+
+	Fix valgrind wording.
+
+2012-05-10  Nitin A Kamble  <nitin.a.kamble@intel.com>
+
+	Fix version controlled build of libidn with automake 1.12.
+
+2012-04-27  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Remove ChangeLog, it is generated.
+
+	Ignore more.
+
+	Mention release tools.
+
+	Update gnulib files.
+
+	Sync with TP.
+
+	Fix compiler warning about unused fgets return value.
+
+	Ignore more.
+
+	Add valgrind suppressions file.
+
+2012-04-10  Simon Josefsson  <simon@josefsson.org>
+
+	Dummy defines for _GL_ATTRIBUTE_CONST and _GL_ATTRIBUTE_PURE.
+	Reported by Bartosz Brachaczek <b.brachaczek@gmail.com>
+	in <https://lists.gnu.org/archive/html/help-libidn/2012-04/msg00000.html>.
+
+2012-03-06  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2012-02-08  Simon Josefsson  <simon@josefsson.org>
+
+	Typos.
+
+2012-01-10  Simon Josefsson  <simon@josefsson.org>
+
+	Drop files.
+
+	Bump versions.
+
+	Update for 1.24.
+
+	Update for 1.23.
+
+	Generated.
+
+	Version 1.24.
+
+2012-01-09  Simon Josefsson  <simon@josefsson.org>
+
+	Fix markup.
+
+	Sync intro texts.
+
+	Also dist COPYING* files.
+
+	Update gnulib files.
+
+	tst_pr29: Print more debug info.
+
+	libidn: Add 'const' keyword to 'stringprep_ucs4_nfkc_normalize' function.
+
+2012-01-08  Simon Josefsson  <simon@josefsson.org>
+
+	Fix typo.
+
+	libidn: Fix potential infloop in pr29 code.
+	Reported by Jon Nelson <jnelson@jamponi.net> in
+	<http://lists.gnu.org/archive/html/help-libidn/2012-01/msg00008.html>.
+
+	Fix.
+
+	Cleanup copyright info.
+
+	Update gnulib files.
+
+	Relicense libraries from LGPLv2+ to dual-GPLv2+|LGPLv3+.
+
+2012-01-05  Simon Josefsson  <simon@josefsson.org>
+
+	Put strlen calls in its own line, to simplify valgrind output analysis.
+
+	Update gnulib files.
+
+	Rename README-alpha to HACKING and include it in tarballs.
+
+	Print whether libiconv was found.
+
+2012-01-03  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2012-01-02  Simon Josefsson  <simon@josefsson.org>
+
+	Remove stale translation.
+
+	Update FSF copyright years.
+
+	Update copyright years.
+
+2011-12-27  Simon Josefsson  <simon@josefsson.org>
+
+	Mention gnulib in THANKS.
+
+	Update key.
+
+	Sync glib NFKC code and improve copyright/license statements.
+
+	Sync with TP.
+
+	Update gnulib files.
+
+	Give credit.
+
+	Fix parallel MinGW-builds (no deps for libidn-X.def).  Clean libidn-X.def.
+	Reported by René Berber <r.berber@computer.org>.
+
+2011-11-30  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2011-11-28  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	Update gnulib files.  Drop unistd/getopt workaround.
+
+2011-11-25  Simon Josefsson  <simon@josefsson.org>
+
+	Generated.
+
+	Fix release rule.
+
+	Version 1.23.
+
+	Use copyright ranges in man pages.
+
+	Add necessary -I's when building lib/gltests/.  Reported by Bruno Haible.
+
+	Disable non-working binary-io self-tests.  Reported by Bruno Haible.
+
+	Get ssize_t from sys/types.h instead of unistd.h.  Reported by Bruno Haible.
+
+	Drop update-copyright-tests module due to bugs.
+
+	Fix valgrind.
+
+2011-11-22  Simon Josefsson  <simon@josefsson.org>
+
+	Use csharpexec from gnulib to run .NET binaries.
+
+2011-11-21  Simon Josefsson  <simon@josefsson.org>
+
+	Don't hard code perl path in gdoc.
+
+	Use -no-install instead of -static.
+
+	Ignore some recent warnings.
+
+	Fix warnings.
+
+	Add.
+
+	Ignore gnulib self-tests under Wine.
+
+	Use separate build trees for Windows 32 and 64 bit.
+
+	Create Windows binaries during release.
+
+	Fix links in generated cyclo output.
+
+	Use silent build rules.
+
+	Update GTK-DOC infrastructure.
+
+	Update release rules.
+
+	Update gnulib files.
+
+2011-11-16  Simon Josefsson  <simon@josefsson.org>
+
+	Doc fix.
+
+2011-10-19  Simon Josefsson  <simon@josefsson.org>
+
+	Doc fix.
+
+	idn-free.h: Protect prototypes with 'extern "C"' marker.
+	Reported by Bittner Ede <bittner.ede@euronetrt.hu>.
+
+2011-10-01  Simon Josefsson  <simon@josefsson.org>
+
+	Mention TLD URL patch.
+
+2011-10-01  Thomas Jacob  <jacob@internet24.de>
+
+	Moved extra TLD tables to github
+
+2011-08-13  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+2011-05-05  Simon Josefsson  <simon@josefsson.org>
+
+	Add some pre-release rules.
+
+	Update translations.
+
+	Sync with TP.
+
+2011-05-04  Simon Josefsson  <simon@josefsson.org>
+
+	Update for 1.22.
+
+	Bump versions.
+
+	Generated.
+
+	Version 1.22.
+
+	dev: Ran clang-analyze on the code.
+	Fixed some dead assignments/initializations.
+
+	Doc fix.
+
+2011-05-03  Simon Josefsson  <simon@josefsson.org>
+
+	libidn: Fix memory leak when idna_to_ascii_4i fails.
+	Reported by and tiny patch from Olga Limburg <olimburg@gmail.com>.
+
+	Update gnulib files.
+
+2011-05-01  Simon Josefsson  <simon@josefsson.org>
+
+	Improve coverage rule names.  Drop mingw rules (see win32/libidn4win.mk).
+
+2011-04-28  Simon Josefsson  <simon@josefsson.org>
+
+	libidn: Add -liconv as static library requirement in libidn.pc, for MinGW.
+	Reported by Volker Grabsch <vog@notjusthosting.com>.
+
+2011-04-25  Simon Josefsson  <simon@josefsson.org>
+
+	Document --disable-valgrind-tests.
+	Suggested by Guido Trentalancia <guido@trentalancia.com>.
+
+2011-04-24  Simon Josefsson  <simon@josefsson.org>
+
+	Update for 1.21.
+
+	Fix.
+
+	build: Really distribute win32/libidn4win.mk.
+
+	Bump version.
+
+	Generated.
+
+	Version 1.21.
+
+	Demand newer gettext in order to get newer M4 files.
+	Reported by Dagobert Michelsen <dam@opencsw.org> in
+	<http://thread.gmane.org/gmane.comp.lib.gnulib.bugs/25522>.
+
+	libidn4win.mk: Add license and generalize it.
+
+	Update gnulib files and fix syntax check warnings.
+
+2011-03-21  Simon Josefsson  <simon@josefsson.org>
+
+	Define LIBIDN_BUILDING.
+	Tiny patch from Waqas Hussain <waqas20@gmail.com>.
+
+2011-03-05  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2011-03-01  Simon Josefsson  <simon@josefsson.org>
+
+	Update for 1.20.
+
+	Bump versions.
+
+	Fix release type.
+
+	Generated.
+
+	Version 1.20.
+
+	Bump copyright years.
+
+	idn: Only print license blurb on interactive use.
+	Reported by "Andrew O. Shadoura" <bugzilla@tut.by> and Roman Mamedov
+	<rm@romanrm.ru> in <http://bugs.debian.org/615947> and
+	<http://bugs.debian.org/615949> respectively.
+
+	Disable build rules for no longer generated files.
+
+	Sync with TP.
+
+	Bump copyright years.
+
+	Fix ToUnicode case-insensitivity bug.
+	Debian BTS #610617 reported by Stepan Golosunov <stepan@golosunov.pp.ru>.
+
+	Add.
+
+	Sync with TP.
+
+	Fix syntax-check warnings.
+
+	Update gnulib files.
+
+2011-01-30  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2010-10-27  Simon Josefsson  <simon@josefsson.org>
+
+	Ignore more.
+
+	Avoid some warnings to make it build with modern gcc on amd64.
+
+2010-09-30  Simon Josefsson  <simon@josefsson.org>
+
+	Avoid syntax-check warning.
+
+	Update gnulib files.
+
+2010-05-27  Simon Josefsson  <simon@josefsson.org>
+
+	Doc fix.
+
+2010-05-24  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	Update announce.txt for 1.19.
+
+2010-05-22  Simon Josefsson  <simon@josefsson.org>
+
+	Improve.
+
+	Dist API PDF manual.
+
+	Generated.
+
+	Version 1.19.
+
+2010-05-20  Simon Josefsson  <simon@josefsson.org>
+
+	Update GTK-DOC files to enable PDF manual.
+
+	Add.
+
+	Update gnulib files, use new valgrind-tests module.
+
+2010-05-17  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2010-04-25  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Update gnulib files.
+
+2010-04-21  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2010-04-19  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2010-04-13  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2010-04-12  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Fix syntax-check warnings.
+
+	Fix syntax-check warnings.
+
+	Update gnulib files.
+
+2010-03-30  Simon Josefsson  <simon@josefsson.org>
+
+	Sync valgrind.m4.
+
+	Drop code (could never have worked anyway).
+
+	Update gnulib files.
+
+2010-03-26  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2010-03-24  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+	Fix typos.  Drop @acronym use.
+
+	Add.
+
+	Update gnulib files.
+
+2010-03-18  Simon Josefsson  <simon@josefsson.org>
+
+	Add review-diff.  Move announce file to use consistent filenames.
+
+	Drop self-tests with C++ code in them.
+
+	Drop self-tests with C++ code in them.
+
+	Mention gengetopt.
+
+2010-03-12  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+	Reorder to avoid bootstrap warnings.
+
+	Update gnulib files.
+
+2010-03-09  Simon Josefsson  <simon@josefsson.org>
+
+	Explain deprecated libtool usage.
+
+	Revert "Don't use deprecated libtool functions." AC_PROG_LIBTOOL is required on older systems (e.g., latest Ubuntu LTS).
+	This reverts commit bb239c491ba93a9d2cecf81b53855ecc46d86140.
+
+	Revert "Reorder." AC_PROG_LIBTOOL is required on older systems (e.g., latest Ubuntu LTS).
+	This reverts commit e085f872f2de2e9c33fa4b8c1df559584f375641.
+
+	Reorder.
+
+	Don't use deprecated libtool functions.
+
+2010-03-08  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2010-02-24  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Bump versions.
+
+	Update gnulib files.
+
+2010-02-16  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2010-02-15  Simon Josefsson  <simon@josefsson.org>
+
+	Generated.
+
+	Release to ftp.gnu.org.
+
+	Bump versions.
+
+	Version 1.18.
+
+	Add.
+
+	Put forgotten symbols under old namespace.
+	Suggested by Marco d'Itri <md@linux.it> in
+	<http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=561291>.
+
+	Update gnulib files.
+
+2010-02-05  Simon Josefsson  <simon@josefsson.org>
+
+	Generated.
+
+	Version 1.17.
+
+	Make this an alpha release.
+
+	Sync with TP.
+
+	Add.
+
+	Fix GTK-DOC syntax.  Unfortunately this looses some information.
+
+	Clarify.
+
+	Another test for MinGW builds.
+
+	Don't use a libtool helper library, to hopefully make MinGW builds work.
+
+	Simplify.
+
+	Check if this makes MinGW builds work better.
+
+	Drop EXEEXT, to see if MinGW builds improve.
+
+2010-02-03  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Bump copyright years.
+
+	Bump copyright years.
+
+	Bump copyright years.
+
+	Add.
+
+	Bump libtool version to indicated "added" symbols.
+
+	Bump copyright years.
+
+	Bump shared library version tag on "new" symbols.
+
+	Make sure all symbols are exported.  Add self test to catch regressions.
+	See <http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=561291> and
+	<http://lists.gnu.org/archive/html/help-libidn/2010-02/msg00000.html>
+	for background.
+
+	Update gnulib files.
+
+2010-01-12  Simon Josefsson  <simon@josefsson.org>
+
+	Improve syntax-check exception stuff.
+
+	Update gnulib files.
+
+	Check patch.
+
+	Fix valgrind.m4.
+
+	Update gnulib files.
+
+	Touch.
+
+	Touch.
+
+	Bump versions.
+
+	Update copyright.
+
+	Sync with TP.
+
+	Fix syntax-check rules.
+
+	Don't use exit(1).
+
+	Add.
+
+	Add.
+
+	Commit cyclo/.
+
+	Generated.
+
+	Version 1.16.
+
+	Add workaround for Wine open failure.
+
+	Add workaround for Wine dup2 failure.
+
+	Update gnulib files.
+
+2010-01-09  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2010-01-08  Simon Josefsson  <simon@josefsson.org>
+
+	Touch.
+
+	Add comment.
+
+	Update gnulib files.
+
+2010-01-07  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2009-12-26  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2009-12-19  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2009-12-16  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Update gnulib files.
+
+	Update gnulib files.
+
+2009-11-18  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2009-11-06  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2009-10-19  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2009-10-08  Simon Josefsson  <simon@josefsson.org>
+
+	Fix link error on mingw.
+
+	Update gnulib files.
+
+2009-09-22  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Update gnulib files.
+
+	Add Maven pom.xml file.
+
+2009-09-07  Simon Josefsson  <simon@josefsson.org>
+
+	Note about OS/2 port.
+
+2009-08-20  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2009-08-18  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2009-08-14  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2009-08-07  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2009-08-04  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+	Update gnulib files.
+
+2009-07-29  Simon Josefsson  <simon@josefsson.org>
+
+	Typo.
+
+2009-07-22  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2009-06-17  Simon Josefsson  <simon@josefsson.org>
+
+	Typo.
+
+2009-06-16  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2009-06-11  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+2009-06-08  Simon Josefsson  <simon@josefsson.org>
+
+	Add version number to manual title.
+
+	Generated.
+
+	Bump versions.
+
+	Chmod +x.
+
+	Generated.
+
+	Version 1.15.
+
+	Fix.
+
+	Fix.
+
+2009-06-05  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Update gnulib files.
+
+2009-06-02  Simon Josefsson  <simon@josefsson.org>
+
+	Fix some java warnings.
+
+2009-06-01  Simon Josefsson  <simon@josefsson.org>
+
+	Check stack usage in library.
+
+	Update gnulib files.
+
+2009-05-29  Simon Josefsson  <simon@josefsson.org>
+
+	Use c_strcasecmp instead of strcasecmp. Reported by Guenter Knauf <gk@gknw.de>.
+
+2009-05-28  Simon Josefsson  <simon@josefsson.org>
+
+	Improve warning handling.
+
+	Update gnulib files.
+
+2009-05-27  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2009-05-20  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Update gnulib files.
+
+2009-05-11  Simon Josefsson  <simon@josefsson.org>
+
+	Fix syntax-check.
+
+	Upgrade gtk-doc files.
+
+2009-05-08  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+	Make -Werror more optional.
+
+2009-05-07  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+2009-05-05  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Add.
+
+2009-05-03  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2009-04-27  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+	Update gnulib files.
+
+2009-04-24  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	rm.
+
+	Fix syntax-checks.
+
+	Fix for modern git.
+
+	Add modules, for syntax-check.
+
+	Fix warnings.
+
+	Syntax check fixes.
+
+	Syntax check fixes.
+
+	Syntax check fixes.
+
+	Update gnulib files.
+
+2009-04-23  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Update gnulib files.
+
+	Improve texinfo section names.
+
+2009-04-17  Simon Josefsson  <simon@josefsson.org>
+
+	AM_PROG_GCJ needs to be called unconditionally.  Sigh. Otherwise you get this error: conditional "am__fastdepGCJ" was never defined.
+
+2009-04-14  Simon Josefsson  <simon@josefsson.org>
+
+	Fix java detection.
+
+	Bump version.
+
+	Don't use assert keyword to avoid compilation error.
+
+	Bump versions.
+
+	Update gnulib files.
+
+2009-04-03  Simon Josefsson  <simon@josefsson.org>
+
+	Generated.
+
+	Version 1.14.
+
+	Use --output-def.
+
+	Update gnulib files.
+
+2009-04-01  Simon Josefsson  <simon@josefsson.org>
+
+	Assume locale.h.
+
+2009-03-25  Simon Josefsson  <simon@josefsson.org>
+
+	Copy cyclo chart to webdir.
+
+	Update gnulib files.
+
+2009-03-23  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Add.
+
+	Don't crash in memcmp if stringprep_utf8_to_locale returns NULL. Reported by Dagobert Michelsen <dam@opencsw.org> in <http://thread.gmane.org/gmane.comp.gnu.libidn.general/192>.
+
+2009-03-19  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2009-03-06  Simon Josefsson  <simon@josefsson.org>
+
+	Bump version.
+
+	Generated.
+
+	Version 1.13.
+
+	Add credits.
+
+	Don't use warnings unless we are using GCC.
+
+	Fix.
+
+	Add.
+
+	Update gnulib files.
+
+2009-03-04  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Clarify.
+
+	Namespace discussion.
+
+	Update gnulib files.
+
+	Fix.
+
+	Finish API visibility markup.  Now passes self tests.
+
+	Fix.
+
+	Add.
+
+	Mark visibility of API functions.
+
+	Ignore decorators.
+
+	Improve decorators.
+
+	Add symbol visibility markup.
+
+	Update gnulib files.
+
+2009-03-03  Simon Josefsson  <simon@josefsson.org>
+
+	Remove.
+
+	Use visibility module.
+
+	Add.
+
+	Typo.
+
+	More debug info.
+
+	Debug output about version script.
+
+	Use gnulib ld-version-script module.  Re-add use of -export-symbols-regex for other platforms.
+
+2009-03-02  Simon Josefsson  <simon@josefsson.org>
+
+	Add license.  Use v1.0 in name.
+
+	Add.
+
+	Use a linker version script.
+
+	Update gnulib files.
+
+2009-02-24  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2009-02-10  Simon Josefsson  <simon@josefsson.org>
+
+	Don't remove idn_cmd.c and idn_cmd.h on distclean, use maintainer-clean instead. Reported by "Sisyphus" <sisyphus1@optusnet.com.au> in <http://thread.gmane.org/gmane.comp.gnu.libidn.general/178>.
+
+2009-02-09  Simon Josefsson  <simon@josefsson.org>
+
+	Document the idn_free function.
+
+	Bump version.
+
+	Drop emit_bug_reporting_address, it is now provided by gnulib version-etc.
+
+2009-02-06  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2009-01-23  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	Generated.
+
+	Version 1.12.
+
+	Add.
+
+	Update PGP key.
+
+	Sync with TP.
+
+	Sync with TP.
+
+2009-01-22  Simon Josefsson  <simon@josefsson.org>
+
+	idn: Add new --no-tld to resolve broken --tld parameter. Reported by Christian Hammers <ch@lathspell.de> in http://thread.gmane.org/gmane.comp.gnu.libidn.general/162
+
+	Fix.
+
+	Use gdoc's -pkg-name.
+
+	Add -pkg-name parameter.
+
+	Update gnulib files.
+
+	Cleanup.
+
+	Bump copyright years.
+
+	Update --help output per new GNU coding standards.
+
+2009-01-19  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+	Bump copyright years for man pages.
+
+2009-01-17  Simon Josefsson  <simon@josefsson.org>
+
+	Touch.
+
+	Bump copyright years.
+
+	Update PGP key.
+
+	Bump copyright years.
+
+	Update gnulib files.
+
+	Update gnulib files.
+
+2009-01-05  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+	Update.
+
+2008-12-11  Simon Josefsson  <simon@josefsson.org>
+
+	Fix comment.
+
+	Fix warning initialization.
+
+	Add warning flag.
+
+	Update gnulib files.  Fix warning.
+
+2008-12-02  Simon Josefsson  <simon@josefsson.org>
+
+	Fix java jar path.
+
+	Improve JavaDoc output.
+
+	Update gnulib files.
+
+	Update gnulib files.
+
+2008-11-29  Simon Josefsson  <simon@josefsson.org>
+
+	Fix
+
+	Fix javadoc pointer.
+
+2008-11-17  Simon Josefsson  <simon@josefsson.org>
+
+	Rewrite warning initializations.
+
+	Update gnulib files.
+
+	Simplify warning handling.
+
+	Make configure slightly faster.
+
+	Disable -Wunreachable-code.
+
+	Fix warnings.
+
+	Fix warnings.
+
+	Fix warnings.
+
+	Fix vla warnings.
+
+	Fix warnings.
+
+	Make it easier to read warning settings.
+
+	Update gnulib files.
+
+2008-11-13  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Fix warning.
+
+	Enable warnings.  Fix warnings.
+
+	Fix warnings.
+
+2008-11-12  Simon Josefsson  <simon@josefsson.org>
+
+	Add URL field.
+
+	Use external macros for shared operations.
+
+	Remove linker script message.
+
+	Update gnulib files.
+
+	Update gnulib files.  Use warnings module.
+
+	Neatify.
+
+2008-11-04  Simon Josefsson  <simon@josefsson.org>
+
+	Use GFDLv1.3+ as license.
+
+	Update gnulib files.  Use GFDLv1.3+ for manual.
+
+2008-11-03  Simon Josefsson  <simon@josefsson.org>
+
+	Fix Javadoc comments on important classes.
+
+2008-10-30  Simon Josefsson  <simon@josefsson.org>
+
+	The -DLIBIDN_BUILDING Windows hack is no longer needed.
+
+2008-10-29  Simon Josefsson  <simon@josefsson.org>
+
+	Disable man pages.
+
+	Fix typo.
+
+	Modernize doxygen configuration.
+
+2008-10-28  Simon Josefsson  <simon@josefsson.org>
+
+	Use coverage rules from gnulib.
+
+	Update gnulib files.
+
+	Bump versions.
+
+	Generated.
+
+	Version 1.11.
+
+	Use white background.
+
+	Fix.
+
+	Update gnulib files.
+
+	Sync with gnutls.
+
+	Generalize coverage rules.
+
+	Increase code coverage.
+
+	Increase code coverage.
+
+	Increase code coverage in self-tests.
+
+	Increase code coverage.
+
+	Increase code coverage.
+
+	Fix web-coverage rule.
+
+	Fix release target.  Add web-coverage targets.
+
+2008-10-27  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Revert gnulib avoid of strdup.
+
+	Add coverage rules.
+
+	Re-add lost copyright headers for C# port.
+
+	Update gnulib files.
+
+2008-10-22  Simon Josefsson  <simon@josefsson.org>
+
+	Re-license under GPLv3.
+
+	Replace - with \- in man page output in more places.
+
+	Reduce code duplication.
+
+	Add.
+
+	Use GPLv3.  Clarify copyright and license.  Use GAP for man page license.
+
+2008-10-21  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Fix mingw32 rule.
+
+	Add.
+
+	Use STRINGPREP_VERSION instead of PACKAGE_VERSION for MSVS builds.
+
+	Change win32 files.
+
+	Extracted from gen-win32-headers.pl.
+
+	Rm.
+
+	Avoid perl dependency on Windows.
+
+	Cleanups, preparing for Win32 fixes.
+
+	Cleanups, preparing for Win32 fixes.
+
+	Fix last commit.
+
+	Don't use substition for stringprep.h header file.
+
+	Update gnulib files.
+
+2008-10-13  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+	Update gnulib files.
+
+	Rename doc/prmgt/ to doc/cyclo/.
+
+	Add.
+
+	Update gnulib files.
+
+2008-10-07  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Add prmgt/.
+
+	Remove accidentally added files.
+
+	Update gnulib files.
+
+	Use pmccabe2html.
+
+	Update gnulib files.
+
+2008-09-30  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2008-09-29  Simon Josefsson  <simon@josefsson.org>
+
+	Need AC_CONFIG_MACRO_DIR too, to avoid libtool warnings, sigh.
+
+2008-09-26  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Sync with TP.
+
+	Update gnulib files.
+
+2008-09-23  Simon Josefsson  <simon@josefsson.org>
+
+	Enable automake warnings.
+
+	Add.
+
+	Say 'or later' wrt licenses.
+
+	Improve cosmetics.
+
+	Minor cosmetic fixes.
+
+	Add.
+
+	Add AC_COPYRIGHT.
+
+	Support a WARN_CFLAGS to trigger compiler warnings.
+
+2008-09-22  Simon Josefsson  <simon@josefsson.org>
+
+	Touch.
+
+	Update gnulib files.
+
+2008-09-18  Simon Josefsson  <simon@josefsson.org>
+
+	Remove final references to GPLv2.
+
+	Assume strdup.
+
+	Add.
+
+	Update gnulib files.
+
+2008-09-12  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2008-09-02  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2008-08-29  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+	Don't store negativa values in a size_t.
+
+2008-08-27  Simon Josefsson  <simon@josefsson.org>
+
+	Sync.
+
+	Improve.
+
+	Sync.
+
+	Mention krb5 profile.
+
+	Add "or later" clauses when talking about license versions Suggested by karl@freefriends.org (Karl Berry).
+
+	Move maintainer targets from Makefile.am to cfg.mk.
+
+	Use git2cl directly.
+
+	Typo.
+
+	Split release target.
+
+	Generalize release target.
+
+	Create a copy of released files.
+
+	Copy all of javadoc.
+
+	Fix typo.
+
+	Dist more.
+
+	Bump versions.
+
+	Generated.
+
+	Version 1.10.
+
+	Add.
+
+	Declare strverscmp.
+
+	Fix warnings.
+
+2008-08-26  Simon Josefsson  <simon@josefsson.org>
+
+	Remove freshmeat-submit template, no longer used.
+
+	Rename .cvscopying to .clcopying.
+
+	Update gnulib files.
+
+	Add generated files because perl 5.10 breaks gen-unicode-tables.pl.
+
+	Sync with TP.
+
+	idn: accept -n as short form for --nfkc. Before '-k' was used as the short form, but all documentation has said '-n'.  We now accept both short forms, and -n remains the documented short form.  Reported by John McGowan <jmcgowan@inch.com> in <http://lists.gnu.org/archive/html/help-libidn/2008-08/msg00000.html>.
+
+2008-08-21  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2008-08-20  Simon Josefsson  <simon@josefsson.org>
+
+	Don't try to add tar in www dir.
+
+	Add.
+
+	Update gnulib files.
+
+	Fix URLs.
+
+	Fix URLs.
+
+2008-08-18  Simon Josefsson  <simon@josefsson.org>
+
+	Don't put releases in www directory, after discussion with Savannah admins.
+
+2008-08-06  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2008-07-07  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Sync with TP.
+
+	Bump versions.
+
+2008-07-01  Simon Josefsson  <simon@josefsson.org>
+
+	Generated.
+
+	Add gltests/ directories.
+
+	Generated.
+
+	Version 1.9.
+
+	Add.
+
+	Fix.
+
+	Sync with TP.
+
+	Update gnulib files.
+
+2008-06-18  Simon Josefsson  <simon@josefsson.org>
+
+	Work around C# compiler bug.
+
+2008-06-17  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2008-06-10  Simon Josefsson  <simon@josefsson.org>
+
+	Remove more text.
+
+2008-06-02  Simon Josefsson  <simon@josefsson.org>
+
+	Drop invariant sections.
+
+2008-05-30  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2008-05-19  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2008-05-12  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Update gnulib files.
+
+2008-04-28  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+	Add.
+
+	Use singularis STRING. Suggested by Benno Schulenberg <coordinator@translationproject.org>.
+
+	Don't gettext error code.
+
+	Don't gettextize debug messages.
+
+2008-04-24  Simon Josefsson  <simon@josefsson.org>
+
+	idn: fix error message when NFKC fails. Reported by Benno Schulenberg <coordinator@translationproject.org>.
+
+	Bump versions.
+
+2008-04-23  Simon Josefsson  <simon@josefsson.org>
+
+	Generated.
+
+	Version 1.8.
+
+	Add.
+
+	Add.
+
+	Update gnulib files.
+
+2008-04-13  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	Add.
+
+	Sync with TP.
+
+	Move translations to *.po.in to avoid merge conflicts. This allows us to avoid --no-location as well.
+
+2008-04-10  Simon Josefsson  <simon@josefsson.org>
+
+	Generated.
+
+	Version 1.7.
+
+	Update gnulib files.
+
+2008-04-07  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2008-04-02  Simon Josefsson  <simon@josefsson.org>
+
+	Need dummy unistd.h for native Win32 builds. Reported by Adam Strzelecki <ono@java.pl>.
+
+2008-04-01  Simon Josefsson  <simon@josefsson.org>
+
+	Fix syntax-check warnings.
+
+	Mention idn --nfkc.
+
+	Update gnulib files.
+
+2008-03-27  Simon Josefsson  <simon@josefsson.org>
+
+	Add --nfkc parameter to idn tool.
+
+	Need @menu for Windows installation @node.
+
+2008-03-25  Simon Josefsson  <simon@josefsson.org>
+
+	Need config.rpath workaround here.
+
+	Update gnulib files, reverts local GNUmakefile hack.
+
+2008-03-20  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+	Make windows installation instructions a separate node, for easy referencing.
+
+	Fix.
+
+	Update gnulib files.
+
+2008-03-19  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	Generated.
+
+	Version 1.6.
+
+	Note that libidn is a GNU project.
+
+	Update GTK-DOC build system.
+
+	Dist Visual Studio files.
+
+	Sync with TP.
+
+	Sync with TP.
+
+	Add license statements on files.
+
+	Add native Visual Studio port, contributed by Adam Strzelecki.
+
+	Add.
+
+	Doc fix.  Clarify difference between domain label and domain name.
+
+2008-03-18  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2008-03-12  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+	Add.
+
+	Remove non-free portions of RFC, leaving un-copyrightable material. Also add some quotes from earlier e-mails about licensing on this.
+
+2008-03-10  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+2008-02-25  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2008-02-19  Simon Josefsson  <simon@josefsson.org>
+
+	Bump.
+
+	Bump versions.
+
+	Fix release target.
+
+	Generated.
+
+	Version 1.5.
+
+	Sync with TP.
+
+	Sync with TP.
+
+	Fix charset info.
+
+	Fix encoding.
+
+	Update gnulib files.
+
+	Add link.
+
+	Don't include wchar.h, we don't need it. Reported by Mike Frysinger <vapier@gentoo.org>, see <http://thread.gmane.org/gmane.comp.gnu.libidn.general/118>.
+
+2008-02-06  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Brace expansion is not POSIX portable.
+
+2008-02-03  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2008-01-24  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+	Sync with TP.
+
+	Fix.
+
+2008-01-15  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Update gnulib files.
+
+	Update gnulib files.
+
+	Add.
+
+	Back-port from josefsson.org.
+
+	Fix markup.
+
+	Mention v1.0 as milestone.
+
+	Add.
+
+	Add.
+
+	Sync with TP.
+
+	Fix markup.
+
+	Add 'On Label Separators' section.  Add @documentencoding.
+
+	Re-add config.rpath hack.
+
+	Update gnulib files.
+
+2008-01-10  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+	Bump versions.
+
+	Sync with TP.
+
+2008-01-09  Simon Josefsson  <simon@josefsson.org>
+
+	Generated.
+
+	Version 1.4.
+
+	Typos.
+
+	Update gnulib files.
+
+	Add progname gnulib module.
+
+	Fix --help and --version
+
+	Fix --help and --version
+
+	Fix.
+
+	Add.
+
+	Use gnulib version-etc for --version.
+
+	Bump copyright years.
+
+	Add 2008 to copyright years.
+
+2008-01-02  Simon Josefsson  <simon@josefsson.org>
+
+	Nicify --version output by changing AC_INIT project name.
+
+	Add version-etc gnulib module.
+
+	Add.
+
+	Add.
+
+	Update gnulib files.
+
+	Add.
+
+	Sync with TP.
+
+2007-12-20  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Use .exe suffix for C# tool, required by Mono.
+
+	Update gnulib files.
+
+	Generalize.
+
+2007-12-11  Simon Josefsson  <simon@josefsson.org>
+
+	Don't copy *.sig until it exists.
+
+	Bump versions.
+
+	Generated.
+
+	Version 1.3.
+
+	Reorder release target.
+
+	Reorder.
+
+	Remove config.rpath hack.
+
+	Update gnulib files.
+
+	Update gnulib files.
+
+	Add.
+
+	Use gettext 0.17.
+
+2007-10-29  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+	Update gnulib files.
+
+2007-10-28  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2007-10-19  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
+2007-10-13  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Add.
+
+	Add.
+
+	Sync with TP.
+
+	Update gnulib files.
+
+2007-10-08  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Typo.
+
+	Fix install section.
+
+	Add.
+
+	Bump versions.
+
+	Use GPLv3 in top-level gnulib files.
+
+	Update gnulib files.
+
+2007-10-01  Simon Josefsson  <simon@josefsson.org>
+
+	Generated.
+
+	Fix git-tag -l in release target.
+
+	Version 1.2.
+
+	Add.
+
+	Remove README-alpha.
+
+	Also upload to ftp.gnu.org.
+
+	Add.
+
+	Add.
+
+	Re-order to avoid autoreconf warning.
+
+	Remove sv.
+
+	Sync with TP.
+
+	Remove (not part of translation project).
+
+	Bump versions.
+
+	Update gnulib files.
+
+	Update gnulib files.
+
+	Remove unused .cvsignore's.
+
+2007-09-01  Simon Josefsson  <simon@josefsson.org>
+
+	Generated.
+
+	Version 1.1.
+
+	Add.
+
+	Sync with TP.
+
+	Wrap.
+
+	Bump versions.
+
+	Add.
+
+	Add.
+
+2007-08-31  Simon Josefsson  <simon@josefsson.org>
+
+	Drop gnits mode.
+
+	Define LIBIDN_BUILDING, for Windows hack in stringprep.h.in. Inspired by report and patch by "Christian Ehrlicher" <Ch.Ehrlicher@gmx.de>, see <http://lists.gnu.org/archive/html/help-libidn/2007-08/msg00003.html>.
+
+	Mark variables with __declspec(import) on Windows. Inspired by report and patch by "Christian Ehrlicher" <Ch.Ehrlicher@gmx.de>, see <http://lists.gnu.org/archive/html/help-libidn/2007-08/msg00003.html>.
+
+	Avoid using #include_next in idn-int.h when looking for stdint.h. Reported by Remko van der Vossen <wich@stack.nl> in <http://thread.gmane.org/gmane.comp.gnu.libidn.general/65>, this tiny patch was suggested by Bruno Haible in <http://permalink.gmane.org/gmane.comp.lib.gnulib.bugs/10602>.
+
+	Update gnulib files.
+
+2007-07-31  Simon Josefsson  <simon@josefsson.org>
+
+	Generated.
+
+	Add.
+
+	Sync with TP.
+
+	Fix.
+
+	Sync with libidn.texi.
+
+	Fix intro.
+
+	Fix gpl/lgpl filenames.
+
+	Version 1.0.
+
+	Add.
+
+	Update PGP key.
+
+	Bump versions.
+
+	Fix.
+
+	Update license to GPLv3.
+
+	Update, sync with libidn.texi.
+
+	Clarify license versions.
+
+	Relicense examples/* to GPLv3.
+
+	Relicense src/ and tests/ stuff to GPLv3.
+
+	Relicense Makefile.am and configure.ac to GPLv3.
+
+	Clarify licenses.
+
+	Use GPLv3.
+
+	Update gnulib files.
+
+	Update gnulib files.
+
+2007-06-04  Simon Josefsson  <jas@mocca.josefsson.org>
+
+	Bump versions.
+
+2007-05-31  Simon Josefsson  <jas@mocca.josefsson.org>
+
+	Add year 2007.
+
+	Generated.
+
+	Version 0.6.14.
+
+	Add.
+
+	Add.
+
+	Cvs to git changes.
+
+	Use git instead of cvs.
+
+	Bump versions.
+
+	Add.
+
+2007-05-31  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.6.13.
+
+	Install libidn-components.png in infodir, fixes broken image in the info manual.
+
+	Add.
+
+	Fix image filename.
+
+	*** empty log message ***
+
+	Rename @image files so that they are prefixed with $PROJECT, so they can be installed in $infodir without collisions.
+
+	Add.
+
+	Sync with TP.
+
+	Fix.
+
+	Add.
+
+	Update.
+
+2007-05-30  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	Add.
+
+	Typo.
+
+	Clarify license of C# port.
+
+	Clarify license of java/csharp implementation.
+
+2007-04-25  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Version 0.6.12.
+
+	Sync with TP.
+
+2007-04-24  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Use AM_JAVACFLAGS instead of JAVACFLAGS.  See <http://ftp.gnu.org/gnu/Manuals/automake-1.7.2/html_node/automake_78.html>. Tiny patch from Petteri Räty <betelgeuse@gentoo.org>.
+
+2007-04-19  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Add.
+
+	Update.
+
+2007-04-02  Simon Josefsson  <simon@josefsson.org>
+
+	Fix typo.
+
+2007-03-13  Simon Josefsson  <simon@josefsson.org>
+
+	0.6.11.
+
+	0.6.10.
+
+	0.6.9.
+
+	Bump versions.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.6.11.
+
+	Fix path to csharpcomp.
+
+	Add.
+
+	Dist more.
+
+	Fix tests.
+
+	fix
+
+	*** empty log message ***
+
+	Fix typo.
+
+	Don't wait for newline from user (breaks batch usage).  Fix typo.
+
+	Don't wait for return from user (breaks batch usage).
+
+	Fix namespace.
+
+	Update, from Alexander Gnauck <gnauck@ag-software.de>.
+
+	Remove.
+
+	Generate generated files.
+
+	AppendLine isn't supported by cscc, use Append+\n.
+
+	Add code to generate tables, from Alexander Gnauck <gnauck@ag-software.de>.
+
+	Update.
+
+2007-03-09  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+	Bump versions.
+
+	Revert.
+
+	Update.
+
+	*** empty log message ***
+
+	Update gnulib.
+
+	Update.
+
+	Use build-aux.
+
+2007-02-24  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2007-02-06  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+2007-02-05  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Update.
+
+	Add.
+
+	Update.
+
+2007-01-25  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+2007-01-04  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.6.10.
+
+	Add.
+
+	Bump copyright years (also add older years which I forgot to add earlier).
+
+	Update PGP key.
+
+2007-01-03  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+2006-12-28  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Update.
+
+2006-12-26  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2006-12-10  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+2006-11-30  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Sync with TP.
+
+	Version 0.6.9.
+
+	*** empty log message ***
+
+	Add.
+
+	Remove.
+
+	Bump tool versions.
+
+	Update.
+
+2006-11-16  Simon Josefsson  <simon@josefsson.org>
+
+	Re-add test, with fixed code that doesn't use Java 1.5 syntax. Suggested by "Stephane Mikaty" <mikaty@ecircle-ag.com>.
+
+	Revert (didn't compile).
+
+2006-11-15  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	New self-test to test for ToIDNA regression regarding non-ascii dot-delimiters.  Tiny patch from "Stephane Mikaty" <mikaty@ecircle-ag.com>.
+
+	Fix non-ascii dot in strings, tiny patch from "Stephane Mikaty" <mikaty@ecircle-ag.com>.
+
+	Add.
+
+	Update.
+
+2006-10-31  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	Update.
+
+2006-10-26  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2006-10-20  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2006-10-18  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.6.8.
+
+	Sync with TP.
+
+	Add.
+
+	Assume locale.h and setlocale.
+
+	Build lib/gl/ earlier.
+
+	*** empty log message ***
+
+	Build gl/ first.
+
+	Add stdint module to lib/.
+
+	Remove.
+
+	Ignore all of lib/gl/.
+
+	Move libtool init, to avoid warnings.
+
+	Add strverscmp.
+
+	Rewrite using strverscmp, to fix some corner-cases.
+
+	Use iconvme from gnulib.
+
+	Ignore strdup.h.
+
+	Add.
+
+	*** empty log message ***
+
+	Separate gnulib directories.  Also update gnulib files.
+
+2006-10-17  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2006-10-14  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2006-10-02  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2006-09-27  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	Add.
+
+2006-09-25  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+2006-09-21  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+2006-09-14  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+2006-09-13  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Version 0.6.7.
+
+	Add.
+
+	Sync with TP.
+
+	Update.
+
+2006-09-12  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Add.
+
+	For C99 stdint.h platforms, create a dummy idn-int.h that include stdint.h, reported by Paul Howarth <paul@city-fan.org>.
+
+	Bump versions.
+
+	Add.
+
+	Move the index to the end.
+
+	Fix refs.
+
+	Update.
+
+2006-09-04  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+	Fix.
+
+	Add lgpl and gpl from gnulib.
+
+2006-08-30  Simon Josefsson  <simon@josefsson.org>
+
+	Use gnupload from gnulib.
+
+	Update.
+
+	Update.
+
+2006-08-28  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+2006-08-23  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.6.6.
+
+	Update.
+
+	Update.
+
+	Add.
+
+2006-08-19  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+2006-08-09  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+	Add.
+
+	Update.
+
+2006-07-14  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Update.
+
+2006-07-11  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+	Fix texi2dvi -I's.
+
+2006-07-10  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+2006-07-07  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Use gnulib stdint module instead of AX_CREATE_STDINT_H.
+
+	Bump version.
+
+	Fix gendocs.sh run.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.6.5.
+
+	Update.
+
+	Add.
+
+	Add.
+
+	Update to doxygen 1.4.7.
+
+	Add.
+
+	Need libintl too, for gettext, reported by Kirill Ponomarew <krion@voodoo.bawue.com>.
+
+	Update.
+
+	Bump versions.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.6.4.
+
+	Fix valgrind test.
+
+	Check if running valgrind works.
+
+2006-07-06  Simon Josefsson  <simon@josefsson.org>
+
+	Need -I for texi2dvi too.
+
+	Fix paths.
+
+	Add.
+
+	Update.
+
+	Fix.
+
+	Simplify valgrind usage.
+
+	Check for valgrind.
+
+2006-06-27  Simon Josefsson  <simon@josefsson.org>
+
+	Use GNU-style warnings.
+
+	Fix man output, sync.
+
+2006-06-22  Simon Josefsson  <simon@josefsson.org>
+
+	Use AC_LIBTOOL_WIN32_DLL.
+
+2006-06-16  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2006-06-10  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+2006-06-09  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2006-06-07  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+	Update.
+
+	Update.
+
+2006-06-01  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	When printing size_t, use %lu and cast the value to unsigned long, based on report from Joe Orton <jorton@redhat.com>.
+
+	Sync with TP.
+
+	Add.
+
+	Include config.h, to make NLS work, tiny patch from Joe Orton <jorton@redhat.com>.
+
+2006-05-16  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+2006-05-05  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+2006-05-04  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Run tests under valgrind, if present.
+
+2006-04-26  Simon Josefsson  <simon@josefsson.org>
+
+	Typo.
+
+	Update.
+
+2006-04-17  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2006-03-14  Simon Josefsson  <simon@josefsson.org>
+
+	Fix title.
+
+2006-03-11  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	fix
+
+	Add.
+
+2006-03-10  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2006-03-08  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	*** empty log message ***
+
+	Typo.
+
+	Generated.
+
+	Version 0.6.3.
+
+	Add.
+
+	Bump versions.
+
+	Update.
+
+	Update.
+
+2006-03-07  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2006-03-03  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+	Fix update-po rule.
+
+	Update.
+
+	Update.
+
+	Doc fix.
+
+	Stylistic fix.
+
+	Update.
+
+	Remove indent.
+
+2006-02-17  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2006-02-16  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Fix.
+
+	Fix.
+
+	Fix. Add mingw32 target.
+
+2006-02-15  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+2006-02-14  Simon Josefsson  <simon@josefsson.org>
+
+	Rename.
+
+	Fix.
+
+	Fix.
+
+	Fix.
+
+	Fix.
+
+	Remove.
+
+	Add.
+
+2006-02-11  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib.
+
+2006-02-07  Simon Josefsson  <simon@josefsson.org>
+
+	0.6.2.
+
+	*** empty log message ***
+
+	Fix includes, for make dist.
+
+	Fix -I's again, for make dist.
+
+	Fix @verbatiminclude's, for make dist.
+
+	Fix -I's, for make dist.
+
+	Add -I for examples.
+
+	Fix years.
+
+	Generated.
+
+	Version 0.6.2.
+
+	Add.
+
+	Update.
+
+	Sync with TP.
+
+	Update.
+
+2006-02-05  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2006-02-03  Simon Josefsson  <simon@josefsson.org>
+
+	Fix objdir != srcdir, tiny patch from Bernard Leak <bernard@brenda-arkle.demon.co.uk>.
+
+	Add.
+
+	Fix objdir != srcdir, tiny patch from Bernard Leak <bernard@brenda-arkle.demon.co.uk>.
+
+2006-01-27  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+	Bump versions.
+
+	Fix 'make distcheck'.
+
+2006-01-26  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+2006-01-24  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2006-01-20  Simon Josefsson  <simon@josefsson.org>
+
+	0.6.1.
+
+	*** empty log message ***
+
+	Version 0.6.1.
+
+	Add.
+
+	Sync with TP.
+
+	Add.
+
+	Fix mingw32 builds.
+
+	Fix make check on mingw32.
+
+2006-01-12  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2006-01-11  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+	Fix copyright years.
+
+	Add.
+
+	Update PGP key.
+
+	Fix path to csharpcomp.sh.
+
+	Add.
+
+	*** empty log message ***
+
+	Fix.
+
+	Update.
+
+2006-01-09  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+	Update.
+
+	Print USC4 code point numbers too.
+
+2005-12-23  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2005-12-22  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2005-12-12  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2005-12-03  Simon Josefsson  <simon@josefsson.org>
+
+	0.6.0.
+
+	Bump version.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.6.0.
+
+	Add.
+
+	Fix.
+
+	Fix.
+
+	Csharp test is in gnulib now, remove it.
+
+	Add.
+
+2005-12-02  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+	Add C# notes.
+
+	Fix message.
+
+	Use csharpcomp-script from gnulib.
+
+	Don't specify any C# compile flags (fixes distcheck).
+
+	Sync with TP.
+
+	Add.
+
+	Dist MSVS stuff.
+
+	Add MSVSC project files.
+
+	Add.
+
+	Use GPL for the port.
+
+	Fix.
+
+	*** empty log message ***
+
+	Fix csharpcomp location.
+
+	Fix.
+
+	Add.
+
+	Fix.
+
+	Fix message.
+
+2005-12-01  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Add.
+
+	Add C# tests.
+
+	Remove.
+
+	Fix.
+
+	Add 2005.
+
+	Add.
+
+	Add.
+
+	Use gnulib, for csharpcomp.
+
+	Add.
+
+	C# fixes.
+
+	Add C# port, from Alexander Gnauck <gnauck@ag-software.de>.
+
+	Bump version.
+
+2005-11-04  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Add.
+
+	Use -no-undefined for libtool, for cygwin, tiny patch from "Yaakov S (Cygwin Ports)" <yselkowitz@users.sourceforge.net>.
+
+2005-10-26  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2005-10-24  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	(pr29_8z): Fix memory leak.
+
+2005-10-23  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	*** empty log message ***
+
+	Generated.
+
+	Mention Suse on IBM OpenPower.
+
+	Fix.
+
+	Add.
+
+	Version 0.5.20.
+
+	Sync with TP.
+
+	Add.
+
+	Add.
+
+	Install pr29.h.
+
+2005-10-22  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+2005-10-07  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+2005-10-01  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2005-09-22  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+2005-09-20  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+2005-09-19  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+	Bump versions.
+
+	Use gnupload.
+
+	0.5.19.
+
+	*** empty log message ***
+
+	Update.
+
+	Version 0.5.19.
+
+	Add.
+
+	Update.
+
+	Use --no-location, to minimize CVS diff's.
+
+	*** empty log message ***
+
+2005-09-15  Simon Josefsson  <simon@josefsson.org>
+
+	Add (to fix gtk-doc makefile bug).
+
+	Fix dependency.
+
+2005-09-13  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+	Sync with TP.
+
+	Fix wget usage.
+
+	Sync with TP.
+
+	Sync with TP.
+
+2005-09-12  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+	Fix dependencies.
+
+	*** empty log message ***
+
+	Fix.
+
+	*** empty log message ***
+
+	Call gjdoc directly.
+
+	Replace javadoc with gjdoc.
+
+	Dist files generated by gjdoc instead.
+
+	Add.
+
+	Add.
+
+2005-09-10  Simon Josefsson  <simon@josefsson.org>
+
+	Use HAVE_LOCALE_H.
+
+	Add.
+
+	Update.
+
+	Add.
+
+	Fix header/setlocale checks.
+
+	Check for locale.h.
+
+	Fix setlocale test.
+
+	Check for setlocale.
+
+2005-09-09  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Use modern nl_langinfo test.
+
+	Simplify nl_langinfo test.
+
+	Fix #include's.
+
+	Let's assume unistd.h and errno.h (in fact, we already did in the source code and nobody complained).
+
+	Update PGP key.
+
+	Add.
+
+	Update gnulib.
+
+2005-07-16  Simon Josefsson  <simon@josefsson.org>
+
+	Fix typo.
+
+	Bump versions.
+
+	Add.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.5.18.
+
+	Add.
+
+	Link to help-libidn.
+
+	Add.
+
+	Update.
+
+	Simplify.
+
+2005-07-15  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+2005-06-24  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Use 'sed 1q' instead of 'head -n 1', more portable.
+
+	Add 2005 to man page copyrights.
+
+	Fix head usage (really!!).
+
+	Fix license.
+
+	Bump versions.
+
+	Add.
+
+	Fix use of head.
+
+	New upstream release.
+
+2005-06-15  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+	Fix address in license.
+
+2005-06-12  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	fix
+
+	Turn 'head -1' into 'head -n -1', tiny patch from Carsten Lohrke <current@myrealbox.com>.
+
+2005-06-05  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2005-05-26  Simon Josefsson  <simon@josefsson.org>
+
+	0.5.17.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.5.17.
+
+	Fix sectioning.
+
+	Fix.
+
+	Sync with gnulib.
+
+	Update FSF address in license.  Fix copyrights.
+
+	Add.
+
+2005-05-18  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2005-05-12  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+2005-05-11  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2005-05-08  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	0.5.16.
+
+2005-05-06  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Version 0.5.16.
+
+	Sync with TP.
+
+	Add.
+
+	Use 'const' for static data, tiny patch from Joe Orton <jorton@redhat.com>.
+
+2005-04-16  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+2005-04-15  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	Add.
+
+	Sync with TP.
+
+2005-04-06  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+2005-03-19  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.5.15.
+
+	Fix.
+
+	Add.
+
+	Sync with libc; fix license and fix arithmetic overflow.
+
+	Fix license.
+
+	Bump versions.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.5.14.
+
+	Ramblings.
+
+	Sync with TP.
+
+2005-03-12  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2005-03-01  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2005-02-27  Simon Josefsson  <simon@josefsson.org>
+
+	Include the specification first, to verify it is standalone. Doc fix.
+
+2005-02-24  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2005-02-16  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Reorder chronologically.
+
+2005-02-13  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Add.
+
+2005-02-11  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2005-02-07  Simon Josefsson  <simon@josefsson.org>
+
+	Sort (should be sorted chronologically..).
+
+	Bump versions.
+
+	Add.
+
+2005-01-30  Simon Josefsson  <simon@josefsson.org>
+
+	Fix last commit, reported by Linus Nordberg <linus@nordberg.se>.
+
+	Fix srcdir != objdir when bootstrapping from CVS, patch from Linus Nordberg <linus@nordberg.se> (tiny change).
+
+	Fix.
+
+	Remove hack, fixed in gtk-doc CVS.
+
+2005-01-29  Simon Josefsson  <simon@josefsson.org>
+
+	0.5.13.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.5.13.
+
+	Update.
+
+	Need dummy gnulib module again.
+
+2005-01-28  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Move iconvme to lib, since linking gnulib in lib doesn't work due to program_name symbol.
+
+	Update.
+
+	Typo.
+
+2005-01-27  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Add, reported by Simon Walter <simon@nethinks.com>.
+
+2005-01-20  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2005-01-18  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+	Remove.
+
+	Define JAVAROOT unconditionally, because automake barf otherwise.
+
+2005-01-16  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Add.
+
+	Add.
+
+	Mention gettext requirement, suggested by Linus Nordberg <linus@nordberg.se>.
+
+2005-01-05  Simon Josefsson  <simon@josefsson.org>
+
+	Warn strongly about missing iconv.
+
+	Update.
+
+	No need to use dummy gnulib module, no system has iconvme.
+
+	Add.
+
+	Link with gnulib (only LGPL files).
+
+	Use iconv_string from gnulib.
+
+	Add iconvme from gnulib.
+
+2005-01-02  Simon Josefsson  <simon@josefsson.org>
+
+	Add copyright for year 2005.
+
+	Add.
+
+	Update.
+
+2005-01-01  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+	Bump versions.
+
+	Add.
+
+2004-12-04  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.5.12.
+
+	Add.
+
+	Update.
+
+2004-12-01  Simon Josefsson  <simon@josefsson.org>
+
+	Doc fix, from Oliver Hitz <oliver@net-track.ch>.
+
+2004-11-30  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2004-11-29  Simon Josefsson  <simon@josefsson.org>
+
+	More PR29.
+
+2004-11-23  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	Add.
+
+2004-11-22  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Fixed two bugs: allowUnassigned not respected properly, buggy prohibited code points check. Argument checks added. RFC3920 nodeprep and resourceprep added, suggested by Matt Tucker. Convenience methods with allowUnassigned set to false added. From Oliver Hitz <oliver@net-track.ch>.
+
+	Add table C.1.1 and C.2.1, from Oliver Hitz <oliver@net-track.ch>.
+
+2004-11-21  Simon Josefsson  <simon@josefsson.org>
+
+	Make sure all man pages follow 'foo -- purpose of foo' format, even if there is no purpose description available, from Shishi.
+
+	Add.
+
+	*** empty log message ***
+
+	Sync with TP.
+
+	Version 0.5.11.
+
+	Add.
+
+	Add 'DO NOT MODIFY' warning to generated man pages.
+
+	Add.
+
+	Doc fix.
+
+	Add.
+
+	Doc fix.
+
+	Doc fix.
+
+	For man pages, don't use line breaking formatting codes ("\n.I foo\n") but rather inline commands ("\fIfoo\fP").
+
+	Doc fix.
+
+	Skip leading whitespace in function purpose. Print function purpose in man pages, if available.
+
+	Add.
+
+	Update.
+
+2004-11-18  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2004-11-17  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2004-11-16  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+2004-11-09  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Update.
+
+2004-11-08  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.5.10.
+
+	No need for stringprep.h.
+
+	Cosmetic fix.
+
+	Typo.
+
+	Sync with TP.
+
+	Simplify EXTRA_DIST.
+
+	Add.
+
+	Use Libtool's -export-symbols-regex.
+
+	Add.
+
+	Cosmetic fix.
+
+	Add copyright header for me.
+
+2004-11-07  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Fix.
+
+	Add.
+
+	Update PGP key.
+
+	Bump versions.
+
+	Add.
+
+	*** empty log message ***
+
+	Generated.
+
+	Fix release target.
+
+	Version 0.5.9.
+
+	Sync with TP.
+
+	*** empty log message ***
+
+	Simplify.
+
+	Fix SUBDIRS order, because GTK-DOC need components.png.
+
+	Fix.
+
+	Fix.
+
+	Add.
+
+	Update.
+
+2004-10-28  Simon Josefsson  <simon@josefsson.org>
+
+	Support -include, from GnuTLS.
+
+2004-10-27  Simon Josefsson  <simon@josefsson.org>
+
+	Doc fix.
+
+2004-10-25  Simon Josefsson  <simon@josefsson.org>
+
+	Fix man output.
+
+	Doc fix.
+
+	Doc fix.
+
+	Use @code, not @var, for constants in texinfo output. Fix newlines in man output.
+
+	Use # instead of & for types.
+
+	Add image.
+
+	Run gtkdocize.
+
+	Sync with TP.
+
+	(update-po): Fix.
+
+	Add.
+
+2004-10-24  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Fix.
+
+	(DISTCHECK_CONFIGURE_FLAGS): Add --enable-gtk-doc.
+
+	Align GTK-DOC build infrastructure with GTK-DOC official recommendations.
+
+	*** empty log message ***
+
+	Sync with TP.
+
+2004-10-16  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+2004-10-15  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+2004-10-13  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+	Update.
+
+2004-10-12  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Fix.
+
+	Improve readability.
+
+	Bump versions.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.5.8.
+
+	Add.
+
+	Add coment to generated files to say that they are generated, reported by "Gisle Vanem" <giva@bgnett.no>.
+
+	Distribute BidiMirroring-3.2.0.txt, reported by "Gisle Vanem" <giva@bgnett.no>.
+
+	Bump versions.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.5.7.
+
+	Add.
+
+2004-10-11  Simon Josefsson  <simon@josefsson.org>
+
+	Generated.
+
+	Sync with TP.
+
+2004-10-05  Simon Josefsson  <simon@josefsson.org>
+
+	Update Gnulib.
+
+2004-10-04  Simon Josefsson  <simon@josefsson.org>
+
+	Generated.
+
+	Bump versions.
+
+2004-10-03  Simon Josefsson  <simon@josefsson.org>
+
+	Use EXIT_SUCCESS and EXIT_FAILURE.
+
+2004-10-02  Simon Josefsson  <simon@josefsson.org>
+
+	Update PGP key.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.5.6.
+
+	Use *strerror.
+
+	Fix indent.
+
+	Fix.
+
+	Reorder.
+
+	Fix.
+
+	Don't link with gnulib.
+
+	Revert, don't use strdup.
+
+	Simplify translation strings.
+
+	Add.
+
+	Fix.
+
+	Typo.
+
+	Indent.
+
+	Use error.
+
+	Add error from gnulib (slightly modified to avoid unlocked-io.h).
+
+	Add.
+
+	*** empty log message ***
+
+	(DEFS): Add LOCALEDIR.
+
+	Setup gettext properly.
+
+	Add.
+
+	Fix.
+
+	Add idna_strerror, pr29_strerror, punycode_strerror, stringprep_strerror, and tld_strerror, suggested by Daniel Stenberg <daniel@haxx.se>. Make idn.c use them. Rename TLD_NOTLD to TLD_NO_TLD.
+
+2004-09-29  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+	Update.
+
+	Use new GNULib.
+
+	Specify gl_LGPL for new gnulib-tool.
+
+2004-09-26  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	Use Lesser GNULib.
+
+2004-09-22  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2004-09-13  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	*** empty log message ***
+
+	Clean more.
+
+	Version 0.5.5.
+
+	Generated.
+
+	*** empty log message ***
+
+	(POURL): Fix.
+
+	Sync with TP.
+
+	Add.
+
+2004-09-05  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	(g_utf8_skip): Hide variable, using "static".
+
+2004-09-02  Simon Josefsson  <simon@josefsson.org>
+
+	Move. Fix ack.
+
+2004-08-25  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2004-08-23  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+2004-08-18  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Fix.
+
+2004-08-17  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Bump version.
+
+2004-08-10  Simon Josefsson  <simon@josefsson.org>
+
+	Shut up 'uno' by fixing array boundary.
+
+2004-08-08  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Add.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.5.4.
+
+2004-08-06  Simon Josefsson  <simon@josefsson.org>
+
+	Sync with TP.
+
+	Fix.
+
+	Fix.
+
+	Fix.
+
+	(update-po): Add.
+
+	Sync with TP.
+
+	Bump version.
+
+	Add.
+
+	Update.
+
+2004-08-05  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Version 0.5.3.
+
+	Generated.
+
+	Add.
+
+	Add.
+
+	Fix crash, tiny patch by Andreas Schwab reported by Stephan Kulow <coolo@suse.de>.
+
+2004-08-01  Simon Josefsson  <simon@josefsson.org>
+
+	Use PR29_* error mnemonics, instead of hard coded integers.
+
+	Cosmetic fix.
+
+2004-07-29  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Update.
+
+2004-07-14  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+	Bump version.
+
+	Bump versions.
+
+	Add.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.5.2.
+
+	Add.
+
+	Fix.
+
+	Bump version.
+
+	Add.
+
+	Add.
+
+	(install-jar): Make DESTDIR compatible, patch from Oliver Hitz <oliver@net-track.ch> based on report by Benjamin Reed <ranger@befunk.com>.
+
+2004-07-13  Simon Josefsson  <simon@josefsson.org>
+
+	Doc fix.
+
+	Use setlocale, reported by Robert Scheck <libidn@robert-scheck.de>.
+
+	Add.
+
+2004-07-09  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Mention pr29.h.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.5.1.
+
+	Use autobuild.
+
+	Add.
+
+	Call setlocale to make iconv work, reported by Robert Scheck <libidn@robert-scheck.de>.
+
+2004-07-02  Simon Josefsson  <simon@josefsson.org>
+
+	Update getopt.
+
+	Add.
+
+	*** empty log message ***
+
+	Fix.
+
+	*** empty log message ***
+
+	*** empty log message ***
+
+	Add.
+
+	Update getopt module.  Now work on, e.g., uClibc systems which uses GNU Libc header files, but do not implement getopt_long.
+
+2004-06-29  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Add.
+
+2004-06-26  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	Add.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.5.0.
+
+	*** empty log message ***
+
+	Fix.
+
+	Fix.
+
+	(HTML_OBJECTS): Add libidn-pr29.html.
+
+	Add PR29.
+
+	*** empty log message ***
+
+	Add doc.
+
+	Don't use wildcards for GDOC_SRC.
+
+	Bump versions.
+
+	Use 'static'.
+
+	Typo.
+
+	*** empty log message ***
+
+	Add PR29 functions.
+
+2004-06-25  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Add.
+
+2004-06-12  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Add Esperanto translation, from Edmund GRIMLEY EVANS <edmundo@rano.org>, via the translation project.
+
+2004-06-11  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	Fix release target.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.4.9.
+
+	Work around automake limitation (cannot have instal-data-local target in a conditional).
+
+2004-06-09  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2004-06-08  Simon Josefsson  <simon@josefsson.org>
+
+	Cosmetic fix, sync with libc.
+
+2004-06-07  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Create libidn.jar link.
+
+2004-06-06  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2004-06-03  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Use versioned *.jar.
+
+2004-06-02  Simon Josefsson  <simon@josefsson.org>
+
+	Versionize *.jar filename.
+
+2004-06-01  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Dist HTMLs.
+
+	Add JavaDoc links.
+
+	Copy javadoc files.
+
+	Bump versions.
+
+	*** empty log message ***
+
+	*** empty log message ***
+
+	Fix.
+
+	Add javadoc.
+
+	Distribute libidn.jar, suggested by Oliver Hitz.
+
+	Add.
+
+	Add java/.
+
+	Build doc/java/Makefile.
+
+	Find javadoc.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.4.8.
+
+	Add.
+
+	Don't use GNU make specific 'override', from Oliver Hitz.
+
+	Dist *.java, suggested by Oliver Hitz.
+
+2004-05-31  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Bump versions.
+
+	*** empty log message ***
+
+	Version 0.4.7.
+
+	Generated.
+
+	Fix.
+
+	Markup fix.
+
+	(Java API): Fix.
+
+	Markup fixes.
+
+	Remove (moved to doc/libidn.texi).
+
+	(Introduction): Mention Java port. (Downloading and Installing): Mention --enable-java. (Java API): Add, taken from java/README.html and java/README.UNICODE by Oliver Hitz.
+
+	Revert, I don't want to require gcj for CVS builds.
+
+	Dist libidn.jar (this seem to be the norm among Java libraries?).
+
+	Add.
+
+	*** empty log message ***
+
+	Build more.
+
+	Improve JAVA port, from Oliver Hitz <oliver@net-track.ch>.
+
+2004-05-26  Simon Josefsson  <simon@josefsson.org>
+
+	Fixes.
+
+2004-05-25  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Bump versions.
+
+2004-05-24  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Version 0.4.6.
+
+	Generated.
+
+	Add.
+
+	(include_HEADERS): Install idn-free.h, reported by Daniel Stenberg <daniel-curl@haxx.se>.
+
+2004-05-21  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	Update.
+
+	*** empty log message ***
+
+	Version 0.4.5.
+
+	Generated.
+
+	Bump copyright years on man pages.
+
+	Bump so version.
+
+	(HIGNORE): Add idn-free.h.
+
+	(stringprep): Move declaration of temporary variable to start of scope.
+
+	Add.
+
+	(idna_to_unicode_4z4z): There was no double free, remove my modification.
+
+	Add.
+
+	(idna_to_ascii_4i, idna_to_unicode_4z4z): Fix memory leak when memory allocation fails.  From Ulrich Drepper <drepper@redhat.com>, but modified to fix double free and incorrect 'if' condition.
+
+	Add.
+
+	(stringprep): Fix memory leak when memory allocation fails.  From Ulrich Drepper <drepper@redhat.com>.
+
+	Doc fix.
+
+	Back port of (some) changes by Ulrich Drepper <drepper@redhat.com>. (idna_to_unicode_internal): Fix memory leaks when memory allocation fails.  Deallocate utf8in on failure. (idna_to_unicode_44i): Don't free, done in idna_to_unicode_internal. (idna_to_ascii_4z): Fix memory leak when memory allocation fails.
+
+	Add.
+
+	Add idn_free, suggested by "Gisle Vanem" <gvanem@broadpark.no>.
+
+2004-04-30  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	(idna_to_ascii_lz): Doc fix, reported by Joe Orton <jorton@redhat.com>.
+
+	Add NFKC test vectors from pr-29.html. Fix debug output.
+
+	Add.
+
+	Fix ucs4print debugging output.
+
+2004-04-29  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Update SASLPrep test vectors.
+
+	Bump versions.
+
+	*** empty log message ***
+
+	Version 0.4.4.
+
+	Generated.
+
+	Add.
+
+	Add.
+
+	Use -no-install to avoid libtool wrapper script, tiny patch from Joe Orton <jorton@redhat.com>.
+
+	Add.
+
+	Update.
+
+	Add.
+
+	Add iSCSI test vectors to catch recent bugs.
+
+	(stringprep_iscsi_prohibit): For start==0, use end!=1.
+
+	(stringprep_iscsi): Add C_1_1, C_2_1, and C_7 (after reading newly published RFC 3722).
+
+2004-04-24  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Add, by Laurentiu Buzdugan <lbuz@rolix.org> via translation project.
+
+2004-04-23  Simon Josefsson  <simon@josefsson.org>
+
+	Rename variable to avoid silly shadowing warnings.
+
+	*** empty log message ***
+
+	Move utils.c and utils.h into a separate library.
+
+	*** empty log message ***
+
+	Split out common stuff into utils.c and utils.h.
+
+	Fix warnings.
+
+2004-04-22  Simon Josefsson  <simon@josefsson.org>
+
+	Require modern autoconf.
+
+	Bump versions.
+
+	Indent.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.4.3.
+
+	Add.
+
+	Add.
+
+	(Tld_table): Mark "name" and "version" as const.
+
+	Add.
+
+	Add SASLprep test vectors (would catch the C.2.1 bug).
+
+	(stringprep_find_character_in_table): Fix end-of-table test, to handle valid uses of start=0 (as in table C.2.1).
+
+2004-04-21  Simon Josefsson  <simon@josefsson.org>
+
+	Update PGP key.
+
+2004-04-18  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Drop -R lib flag, suggested by Martin Waitz <tali@debian.org>.
+
+2004-04-16  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2004-04-15  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2004-04-14  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2004-04-12  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2004-04-11  Simon Josefsson  <simon@josefsson.org>
+
+	Fix versions.
+
+2004-04-09  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Add, from Elros Cyriatan <cyriatan@fastmail.fm> via Translation Project.
+
+2004-04-05  Simon Josefsson  <simon@josefsson.org>
+
+	Use new API, tiny patch from "Gisle Vanem" <giva@bgnett.no>.
+
+2004-03-28  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Add German translation, from Roland Illig <roland.illig@gmx.de> via translation project.
+
+2004-03-23  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2004-03-20  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Use TAB instead of \t, suggested by Jørgen Thomsen <jth@jth.net>.
+
+	Bump versions.
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.4.2.
+
+	Inform about Java.
+
+	Update.
+
+	Remove most of libc stuff (has been integrated in libc CVS).
+
+	Fix.
+
+	Add.
+
+	Fix.
+
+	Add.
+
+	Add.
+
+	Add.
+
+	Fix.
+
+2004-03-19  Simon Josefsson  <simon@josefsson.org>
+
+	Add, from GNU Autoconf Macro Archive.
+
+	*** empty log message ***
+
+	Add, from Oliver Hitz <oliver@net-track.ch>.
+
+	(noinst_JAVA): Only include Punycode*.java for now.
+
+	Add infrastructure for Java code, and add Punycode, from Oliver Hitz <oliver@net-track.ch>.
+
+	*** empty log message ***
+
+2004-03-16  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Add.
+
+	Add, from Morten Bo Johansen <mojo@mbjnet.dk> via Translation Project.
+
+2004-03-14  Simon Josefsson  <simon@josefsson.org>
+
+	Update.
+
+	*** empty log message ***
+
+	Add.
+
+	Fix.
+
+	Ack Unicode, Inc.
+
+	Dist COPYING.UCD.
+
+	Add.
+
+	Add.
+
+	Add, from Michel Robitaille <robitail@IRO.UMontreal.CA> via Translation Project.
+
+	Add.
+
+	Add.
+
+	Add, from Aleksandar Jelenak <jelenak@netlinkplus.net> via Translation Project.
+
+2004-03-13  Simon Josefsson  <simon@josefsson.org>
+
+	Add URLs.
+
+	Add.
+
+	Add no.tld.
+
+	Add, from Thomas Jacob <jacob@internet24.de>.
+
+	Fix.
+
+	Add.
+
+2004-03-10  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Add.
+
+	Add Polish translation, from Jakub Bogusz <qboosh@pld-linux.org>.
+
+	Add.
+
+2004-03-09  Simon Josefsson  <simon@josefsson.org>
+
+	Build lib/ before po/.
+
+	Bump versions.
+
+2004-03-08  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Generated.
+
+	Version 0.4.1.
+
+	Fix warning.
+
+	Fix.
+
+	Generated.
+
+	(idn_LDADD): Add LTLIBINTL.
+
+	Add.
+
+	Generated.
+
+	Fix.
+
+	Cosmetic fix.
+
+	Add.
+
+	Translation markup.
+
+	*** empty log message ***
+
+	*** empty log message ***
+
+	Fix.
+
+	Gettextiscate.
+
+	Add.
+
+	*** empty log message ***
+
+	Add gettext.h. Define LOCALEDIR (for gettext).
+
+	Add.
+
+	*** empty log message ***
+
+	Remove, added by gettextize.
+
+	Gettextiscate.
+
+	Add.
+
+	Fix.
+
+	Fix IDNA_DLOPEN_ERROR.
+
+	(stringprep_convert): Don't copy input.  Check for malloc failures. From Ulrich Drepper <drepper@redhat.com>, via libidn integration in libc.
+
+	Invoke setlocale (LC_ALL, "").
+
+	Add.
+
+	(stringprep_locale_charset_slow): Remove. (stringprep_locale_charset) [_LIBC]: Define to nl_langinfo(CODESET). (stringprep_locale_charset) [!_LIBC]: Don't cache charset.  Remove broken setlocale hack.  All based on discussion with Ulrich Drepper <drepper@redhat.com>, during libidn integration in libc.
+
+	(Idna_rc): Doc fix IDNA_DLOPEN_ERROR.
+
+	Fix.
+
+	Add.
+
+	Fix warning, tiny patch by Ulrich Drepper <drepper@redhat.com> from libidn integration in libc.
+
+	(Idna_rc): Add IDNA_DLOPEN_ERROR error code, for libidn part of libc.
+
+	(Stringprep_profiles): Mark 'name' as 'const'.  Tiny patch to libidn in libc by Ulrich Drepper <drepper@redhat.com>.
+
+	Add.
+
+	Dist libc/idn-stub.c and libc/libidn.texi.
+
+	Update, from libc-alpha post.
+
+	Add, from libc-alpha post.
+
+	Sync libc-alpha post.
+
+	Update.
+
+	Sync.
+
+2004-03-07  Simon Josefsson  <simon@josefsson.org>
+
+	Fix comment.
+
+	Add.
+
+	Fix version requirements.
+
+	Fix texinfo requirement.
+
+2004-03-05  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	(stringprep_saslprep): Fix typo; make sure non-ASCII space characters are prohibited.
+
+2004-03-01  Simon Josefsson  <simon@josefsson.org>
+
+	Mention tldchk.berlios.de, suggested by Thomas Jacob <jacob@internet24.de>.
+
+2004-02-28  Simon Josefsson  <simon@josefsson.org>
+
+	Don't install tld.h if --disable-tld.
+
+	Bump versions.
+
+	Add.
+
+	*** empty log message ***
+
+	Version 0.4.0.
+
+	Always include errno.h (C89).
+
+	Indent.
+
+	Mention TLD.
+
+	Handle draft-hoffman-idn-reg-*.txt tables better.
+
+	Add headers. Fix typos and comments.
+
+	Add copying conditions.
+
+	Add, from Stephane Bortzmeyer <bortzmeyer@nic.fr>.
+
+	Don't document Tld_table* for now.
+
+	(_tld_checkchar): Use new Tld_table API.
+
+	(Tld_table): Change valid definition.
+
+	Use new API.
+
+	Fix.
+
+	Improve Troubleshooting.
+
+2004-02-27  Simon Josefsson  <simon@josefsson.org>
+
+	Cosmetic fix.
+
+	(tld_check_4): Don't write to NULL errpos, from Thomas Jacob <jacob@internet24.de>.
+
+2004-02-18  Simon Josefsson  <simon@josefsson.org>
+
+	Typo.
+
+	Use hex in output.
+
+	Add comment.
+
+	Parse tables conforming to draft-hoffman-idn-reg.
+
+	Add.
+
+	Fix typos.
+
+	Fix autoconf stuff, suggested by Stephane Bortzmeyer <bortzmeyer@nic.fr>.
+
+2004-02-15  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+2004-02-14  Simon Josefsson  <simon@josefsson.org>
+
+	Doc fix.
+
+	Fix.
+
+2004-02-12  Simon Josefsson  <simon@josefsson.org>
+
+	Fix. Indent.
+
+	(tld_get_z): Allocate correct amount, from Thomas Jacob <jacob@internet24.de>.
+
+2004-02-11  Simon Josefsson  <simon@josefsson.org>
+
+	Fix title.
+
+	Add.
+
+2004-02-10  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Fix warning.
+
+	Fix TLD debug.
+
+	TLD check correct string.
+
+	Fix warning.
+
+	TLD fix.
+
+	Fix include, from Thomas Jacob <jacob@internet24.de>.
+
+2004-02-09  Simon Josefsson  <simon@josefsson.org>
+
+	Mention example5.
+
+	Sync libidn text.
+
+	Sync text.
+
+	Fix introduction.
+
+	Typo.
+
+	TLD fixes.
+
+	Add.
+
+	Add example 5.
+
+	(_tld_checkchar): Binary search, from jacob@internet24.de.
+
+	Remove.
+
+	Indent.
+
+	Whitespace.
+
+	Doc fix.
+
+	Hide tld_tables.
+
+	(tld_get_z): Support any charset (renamed from tld_get_8z).
+
+	Typo.
+
+	Typo.
+
+2004-02-08  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	(tld_get_8z): Add.
+
+	*** empty log message ***
+
+	Add.
+
+	Doc fix.
+
+	Fix.
+
+2004-02-07  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Add.
+
+	Add.
+
+	Indent.
+
+	Fix indent.
+
+2004-02-06  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Fix.
+
+	Rewrite.
+
+	Fix "include".
+
+	Add.
+
+	Fix.
+
+	Rename TLD_ILLEGAL to TLD_INVALID.
+
+	Rename TLD_ILLEGAL to TLD_INVALID.
+
+	Fix.
+
+	Add.
+
+	Update idn command line.
+
+	Move around.
+
+	Fix stringprep profiles.
+
+	TLD typo.
+
+	Make --tld the default.
+
+	Support --tld. Make sure output is hold in "p". Fix error messages.
+
+	TLD fix.
+
+	Fix.
+
+	Fix.
+
+	Add.
+
+	Typos.
+
+	Fix.
+
+	Doc fix.
+
+	Add.
+
+	Typo.
+
+	Add.
+
+	Doc fix.
+
+	Use new API.
+
+	(tld_default_table): Add. (tld_get_table): Fix.
+
+	Typo.
+
+	Typo.
+
+	Revert.
+
+	Change semantics if tld_get_table.
+
+	Typo.
+
+	Typos.
+
+	Use new API.
+
+	Rename tld_check_*.
+
+	Rename tld_check_*. Doc fix.
+
+	Rename tld_gettld_* to tld_get_*.
+
+	Use new API. (tld_get_table): Rewrite.
+
+	Use new API.
+
+	Fix Tld_table.
+
+	Reorder.
+
+	Use new API.
+
+	Don't export tld_checkchar. Rename tld_finddomain to tld_get_table. Fixes.
+
+	Fix.
+
+	Indent.
+
+	Fix acks.
+
+	Add.
+
+	Add.
+
+	Update.
+
+	*** empty log message ***
+
+	Add.
+
+	Add TLD.
+
+	Fix.
+
+	Fix.
+
+	Update introduction. Add TLD. Fix autoconf example. Remove Kerberos 5 macro documentation.
+
+	Doc fix.
+
+	Fix.
+
+	Add TLD.
+
+	Bump versions.
+
+	Add.
+
+	Make it possible to exclude TLD.
+
+	Add --disable-tld.
+
+	Build doc/tld/Makefile.
+
+	*** empty log message ***
+
+	Add tst_tld.
+
+	Add --tld.
+
+	Add.
+
+	Fix Tld_table.
+
+	TLD code fix.
+
+	*** empty log message ***
+
+	TLD fixes.
+
+	TLD typos.
+
+	TLD fix.
+
+	Add, from Thomas Jacob <jacob@internet24.de>.
+
+	Fixes.
+
+	Add, from Thomas Jacob <jacob@internet24.de>.
+
+	TLD fixes.
+
+	Print to stdout.
+
+	TLD fixes.
+
+	Add tld/.
+
+	Fix.
+
+	Add copying conditions.
+
+	Add, from Thomas Jacob <jacob@internet24.de>.
+
+2004-02-04  Simon Josefsson  <simon@josefsson.org>
+
+	Typo.
+
+2004-02-01  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Fix.
+
+	Add.
+
+	*** empty log message ***
+
+	Build components.pdf too.
+
+	Add components.fig.
+
+2004-01-31  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Fix, reported by nisse@lysator.liu.se (Niels Möller).
+
+2004-01-22  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	Fix release target.
+
+	Upstream sync.
+
+	*** empty log message ***
+
+	Version 0.3.7.
+
+	Add release target.
+
+	*** empty log message ***
+
+	Fix.
+
+	Remove ugly maintainance hacks.
+
+	Typo.
+
+	Update copyright years.
+
+	Add.
+
+	Add.
+
+	Mention '--'.
+
+2004-01-21  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Fix iSCSI profile name.
+
+	Add alias 'iSCSI'.
+
+2004-01-18  Simon Josefsson  <simon@josefsson.org>
+
+	Use FDL 1.2.
+
+	Fix warning.
+
+2004-01-14  Simon Josefsson  <simon@josefsson.org>
+
+	Don't use AC_LIBTOOL_TAGS, too experimental.
+
+2004-01-10  Simon Josefsson  <simon@josefsson.org>
+
+	Fix idn.1 depends.
+
+	Dist texinfo.css.
+
+	Sync with texinfo.
+
+	Remove DocBook.
+
+	Add.
+
+	Remove DocBook stuff.
+
+	Rename libidn.css to texinfo.css.
+
+	Fix.
+
+	Fix.
+
+	Use CSS for HTML.
+
+	Add.
+
+2004-01-06  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Bump versions.
+
+	.
+
+	*** empty log message ***
+
+	Version 0.3.6.
+
+	Add.
+
+	Fix license header.
+
+	Add.
+
+2004-01-01  Simon Josefsson  <simon@josefsson.org>
+
+	Fix, to use ax_... verbatim from upstream.
+
+	Remove (not used by ax_... any more).
+
+	Apply local fixes.
+
+	Sync with upstream version 1.4.
+
+2003-12-30  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Allow autoconf 2.57.
+
+2003-12-18  Simon Josefsson  <simon@josefsson.org>
+
+	Encode file in ASCII.
+
+2003-12-16  Simon Josefsson  <simon@josefsson.org>
+
+	Replace non-ASCII with Texinfo accents.
+
+	Add Troubleshooting discussion for idn tool. Suggested by "Jan-Hendrik Heuing" <jh@netfielders.de> and Kai Schaetzl <kai@conactive.com>.
+
+2003-12-15  Simon Josefsson  <simon@josefsson.org>
+
+	Pass data on command line. Update error enum's. Fix.
+
+	Remove (see doc/libidn.texi instead).
+
+	Fix.
+
+	Bump versions.
+
+	.
+
+	*** empty log message ***
+
+	Version 0.3.5.
+
+	*** empty log message ***
+
+	Use @finalout.
+
+	Add.
+
+	Remove DocBook HTML targets (I'm tired of updating the random filenames in the Makefile).
+
+	Set charset cookie. Use @section instead of @majorheading for DocBook. Add real examples to idn section.
+
+	Sync with Texinfo CVS.
+
+	Add.
+
+	Update DocBook HTML target.
+
+2003-12-11  Simon Josefsson  <simon@josefsson.org>
+
+	Rename IDNA_CONTAINS_LDH to IDNA_CONTAINS_NON_LDH.  Reported by Graydon Hoare <graydon@redhat.com>.
+
+2003-12-10  Simon Josefsson  <simon@josefsson.org>
+
+	Check for autoconf 2.59 and automake 1.8.
+
+	Mention versions.
+
+2003-12-04  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+2003-12-03  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2003-11-27  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Simplify gengetopt building. Use AM_CPPFLAGS, not *_CPPFLAGS.
+
+	Print instructions.  Suggested by Kai Schaetzl <kai@conactive.com>.
+
+2003-11-26  Simon Josefsson  <simon@josefsson.org>
+
+	Typo.
+
+	Add.
+
+	Update Invoking idn.
+
+	Make -a the default.
+
+	Update Invoking idn.
+
+	Add.
+
+	Support strings passed on command line instead of on stdin. Suggested by Kai Schaetzl <kai@conactive.com>.
+
+	Add todo.
+
+2003-11-25  Simon Josefsson  <simon@josefsson.org>
+
+	Disable fortran etc libtool checks.
+
+2003-11-23  Simon Josefsson  <simon@josefsson.org>
+
+	Add --docbook.
+
+	Sync with texinfo.
+
+2003-11-20  Simon Josefsson  <simon@josefsson.org>
+
+	Fix GREETING.
+
+2003-11-11  Simon Josefsson  <simon@josefsson.org>
+
+	TeX improvements.  From Nikos Mavroyanopoulos <nmav@gnutls.org>.
+
+	Use AM_MAKEINFOHTMLFLAGS (with CVS automake) instead of explicit libidn.html target.
+
+2003-11-10  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2003-11-09  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Update DocBook HTML destinations.
+
+	Remove.
+
+	Remove unused ps_TEXINFOS and pdf_TEXINFOS.
+
+	Remove example source code to texinfo conversion (@verbatiminclude is used directly on the source code instead).
+
+	Use @verbatiminclude for examples.
+
+	Use *_CPPFLAGS instead of obsolete INCLUDES.
+
+	Replace AM_CONFIG_HEADER with AC_CONFIG_HEADERS.
+
+	Autoupdate suggested changes: quote AC_INIT parameters, and replace AC_TRY_RUN with AC_RUN_IFELSE.
+
+	Enable warnings.
+
+	*** empty log message ***
+
+	Use automake 1.7a idiom for elisp files.
+
+	Remove m4/ as it is not needed with automake 1.7a.
+
+	Bump versions.
+
+	Use proper -o directory for gendocs.sh.
+
+	.
+
+	*** empty log message ***
+
+	Version 0.3.4.
+
+	Fix memory leak.
+
+2003-11-07  Simon Josefsson  <simon@josefsson.org>
+
+	Remove libtool bug workaround.
+
+2003-11-05  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Fix date.
+
+	Fix bad UTF-8.
+
+2003-11-02  Simon Josefsson  <simon@josefsson.org>
+
+	Mkdir HTML.
+
+	Cleanup.
+
+	Dist gtk-doc.m4.
+
+2003-11-01  Simon Josefsson  <simon@josefsson.org>
+
+	Update expiry date on PGP key.
+
+	*** empty log message ***
+
+	*** empty log message ***
+
+	Rename.
+
+	Use my old cleaned up Makefile.
+
+	Don't break on first 'make'.
+
+	Make 'dist' work.
+
+	Remove (replaced by doc/reference/).
+
+	Add.
+
+	*** empty log message ***
+
+	Add, based on GTK-DOC example Makefile.am.
+
+	Add reference/.
+
+	Remove GTK-DOC subdir reference/ (moved to doc/).
+
+	Build GTK-DOC Makefile in doc/reference instead of reference/.
+
+	Use GTK_DOC_CHECK macro for gtk-doc checks.
+
+	Add.
+
+	Use GTK-DOC conditional.
+
+	Rebuild Makefile after rebuilding Makefile.gdoc.
+
+	Set GDOC_MAN_EXTRA_ARGS.
+
+	Add GDOC_TEXI_EXTRA_ARGS, GDOC_MAN_EXTRA_ARGS.
+
+	GDOC framework cleanup.
+
+	Create texinfo for whole sources files too.
+
+	Add -man parameters (move to Makefile.am?).
+
+	Just touch doc/Makefile.gdoc.
+
+	Mark Makefile.gdoc as BUILT_SOURCES.
+
+	Bootstrap doc/Makefile.gdoc.
+
+	(Makefile.gdoc): Depend on ../configure for bootstrapping.
+
+	*** empty log message ***
+
+	*** empty log message ***
+
+	Remove.
+
+	Mkdir.
+
+	Update docbook HTMLs.
+
+	Use gdoc @include's.
+
+	Don't build in man/. Build idn.1 man page here. Move man page dist targets from man/. Use Makefile.gdoci to generate man pages and texinfo.
+
+	Add, initial version.
+
+	Don't generate doc/man/Makefile.
+
+2003-10-31  Simon Josefsson  <simon@josefsson.org>
+
+	Move unicode utility functions from stringprep to own chapter. Replace API documentation with @include'd GDOC generated version.
+
+	Generate more API manuals with gdoc. Replace phony libidn-db.html with real targets. Update libidn-db.html files.
+
+	*** empty log message ***
+
+	Don't use @code for @deftypefun function name.
+
+	(punycode_encode): Rename parameter to match punycode.h (and more importantly, to make gdoc function properly).
+
+	Doc fixes.
+
+	(dump_function): Handle parameters that look like 'char *foo[]'.
+
+	Fix rule expansions.
+
+	Dist gdoc and generated API texi's. Generate API doc. Fix dependencies.
+
+	Sync from GSSLib.
+
+	Mention more tools.
+
+	Add.
+
+	Fix doc generating commands.
+
+	Fix HTML dir move.
+
+	Fix outdir rm.
+
+	Fix outdir rm.
+
+	Don't remove $outdir (might contain CVS/).
+
+	TAR fixes. Add DocBook/Doxygen/GTK-DOC.
+
+	Add (taken from Texinfo CVS).
+
+	*** empty log message ***
+
+	Add docbook targets.
+
+	Look for docbook tools.
+
+2003-10-29  Simon Josefsson  <simon@josefsson.org>
+
+	Dist libc/getaddrinfo-idn.txt.
+
+	Add AC_CONFIG_AUX_DIR(.) for broken CVS libtoolize.
+
+	Add.
+
+2003-10-28  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Add.
+
+2003-10-24  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Add.
+
+	Fix.
+
+2003-10-19  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Fix.
+
+	Add warning in comment.
+
+	Character set fixes.
+
+	Fix.
+
+	Bump versions.
+
+	Add comment.
+
+2003-10-18  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	.
+
+	*** empty log message ***
+
+	Version 0.3.3.
+
+	Add.
+
+	Add.
+
+	Revert to old elisp automake idiom.
+
+	Add.
+
+	(struct Stringprep_table, struct Stringprep_profiles): Use 'const'. (stringprep_4i, stringprep_4zi, stringprep, stringprep_profile): Likewise.
+
+	(stringprep_find_character_in_table): Mark parameter as 'const'. (stringprep_find_string_in_table): Likewise. (stringprep_apply_table_to_string): Likewise. (stringprep_4i, stringprep_4zi_1, stringprep_4zi, stringprep): Likewise.
+
+	(stringprep_profile): Fix warning.
+
+	Fix warnings.
+
+	Indent.
+
+	Remove stringprep_generic documentation.
+
+	Remove stringprep_generic.
+
+	Mark table elements as 'const'.
+
+	(stringprep_apply_table_to_string): Remove 'name' parameter. (stringprep_4i): Likewise.
+
+	(stringprep_profiles): Remove "generic". Indent.
+
+	(struct Stringprep_table): Remove 'name'. (stringprep_profiles, stringprep_rfc3454_A_1,stringprep_rfc3454_B_1) (stringprep_rfc3454_B_2, stringprep_rfc3454_B_3) (stringprep_rfc3454_C_1_1, stringprep_rfc3454_C_1_2) (stringprep_rfc3454_C_2_1, stringprep_rfc3454_C_2_2) (stringprep_rfc3454_C_3, stringprep_rfc3454_C_4) (stringprep_rfc3454_C_5, stringprep_rfc3454_C_6) (stringprep_rfc3454_C_7, stringprep_rfc3454_C_8) (stringprep_rfc3454_C_9, stringprep_rfc3454_D_1) (stringprep_rfc3454_D_2) (stringprep_nameprep) (stringprep_saslprep, stringprep_plain,stringprep_trace) (stringprep_kerberos5) (stringprep_xmpp_nodeprep, stringprep_xmpp_resourceprep) (stringprep_xmpp_nodeprep_prohibit) (stringprep_iscsi): Mark as 'const'. (stringprep_generic, stringprep_generic): Remove.
+
+2003-10-17  Simon Josefsson  <simon@josefsson.org>
+
+	Indent.
+
+	Fix memory leak.
+
+	Fix #include for man pages.
+
+	Fix.
+
+	Sync 'idn -h'.
+
+	Fix.
+
+	Include cleanup.  We assume C89, use <...> for headers we use, and use "..." for headers we implement.
+
+2003-10-16  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Fix gengetopt building.
+
+	Add.
+
+	Use less negations for --quiet, reported by Oden Eriksson <oden.eriksson@kvikkjokk.net>.
+
+	Fix gengetopt built source files. Use new automake Emacs Lisp targets.
+
+	Use current version number in examples.
+
+	Update so version.
+
+	Add.
+
+	Include parameter names in prototypes, for GTK-DOC.
+
+	Doc fix.
+
+	Fix typo.
+
+	Fix.
+
+	Removed.
+
+	Make #include's explicit.
+
+	Make #include's explicit. Fix warnings.
+
+	Remove internal.h.
+
+	Doc fix.
+
+	Make #include's explicit.
+
+	Make #include's explicit.
+
+	Fix.
+
+	Make #include's explicit.
+
+	Fix typo.
+
+	Sync with latest draft, but change return types to 'int' to be backwards compatible.
+
+	Sync with latest draft, but change return types to 'int' to be backwards compatible.
+
+	Remove DMALLOC stuff.
+
+	Fix warnings.
+
+	Typo.
+
+	Simplify debug prints.
+
+	Add.
+
+	(idna_to_unicode_internal): Handle reallocating larger utf8in after stringprep error STRINGPREP_TOO_SMALL_BUFFER. (idna_to_unicode_44i): Let new logic in idna_to_unicode_internal() replace BUFSIZ alloc.
+
+	(stringprep_profile): Loop around stringprep return STRINGPREP_TOO_SMALL_BUFFER and increase buffer size.
+
+	(stringprep): Check return value from stringprep_ucs4_to_utf8.  Don't use goto.
+
+	(stringprep): Loop around stringprep_4i error STRINGPREP_TOO_SMALL_BUFFER and increase buffer size. (stringprep_apply_table_to_string): Don't dereference possibly unallocated memory just to do pointer arithmetic.
+
+	Check malloc return value.
+
+	Check malloc return code.
+
+	Add.
+
+	Doc fox. Add stringprep_4i and stringprep_4zi.
+
+	Doc fix.
+
+	Add stringprep_4i.3, stringprep_4zi.3.
+
+	Doc fix.
+
+	(stringprep_4i, stringprep_4zi): Add.
+
+	(stringprep1): Don't zero terminate.  Rename to stringprep_4i and export it. (stringprep_4zi_1): Add.  Calls stringprep_4i, then zero terminate. (stringprep_4zi): Add.  New API. (stringprep): Use stringprep_4zi_1.
+
+	Fix typo.
+
+	(stringprep): Split core part into stringprep1. (stringprep1): New, simplified version of core part.
+
+2003-10-15  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Remove generic. Add trace.
+
+	Print UCS-4 instead of UTF-8 in debug output for --stringprep.
+
+	Add.
+
+	Fix UCS-4 output in --stringprep. Print debug output even with --idna-to-ascii. Fix error message.
+
+2003-10-12  Simon Josefsson  <simon@josefsson.org>
+
+	Clarify alternative approaches.
+
+	Fix.
+
+2003-10-11  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2003-10-10  Simon Josefsson  <simon@josefsson.org>
+
+	Revert typo.
+
+	Fix so version comment (matches libtool manual).
+
+	Fix.
+
+	Add.
+
+	Remove 'generic' (should not be exposed). Add 'trace'.
+
+2003-10-09  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2003-10-08  Simon Josefsson  <simon@josefsson.org>
+
+	Bump versions.
+
+	Fix doxygen generation.
+
+2003-10-07  Simon Josefsson  <simon@josefsson.org>
+
+	.
+
+	*** empty log message ***
+
+	Version 0.3.2.
+
+	Remove --rsyncable for now, Debian (stable) gzip do not support it.
+
+	TAR_OPTION crashes tar in Debian, comment out for now.
+
+	Add.
+
+	Doc fix.
+
+	Add.
+
+	Add.
+
+2003-10-06  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	(stringprep_profile): Mark 'in' as 'const'.
+
+2003-10-03  Simon Josefsson  <simon@josefsson.org>
+
+	Fix comment.
+
+2003-10-02  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Add.
+
+	Add trace profile (SASL ANONYMOS).
+
+	Bump versions.
+
+	Cosmetic fixes.
+
+	Fix.
+
+	.
+
+	Perl 5.8.1 fix.
+
+	*** empty log message ***
+
+	Version 0.3.1.
+
+	Fix NFKC, from Noah Levitt <nlevitt@columbia.edu> via bugzilla.gnome.org bug 123421.
+
+2003-09-28  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Add.
+
+	Add.
+
+	Indent.
+
+	Fix.
+
+	Fix indent target.
+
+	Add indent rule.
+
+	Indent.
+
+	Fix.  Add indent target.
+
+2003-09-26  Simon Josefsson  <simon@josefsson.org>
+
+	Fix Hangul patch.
+
+	Fix typo.
+
+	Add.
+
+	Sync with GLIB for Unicode stuff.
+
+	Fix typo.
+
+2003-09-25  Simon Josefsson  <simon@josefsson.org>
+
+	Update test vectors.
+
+	Fix debug messages.
+
+	Add.
+
+	(DOTP): New. (idna_to_unicode_4z4z): Use it. (idna_to_ascii_4z): Use it. Make root label handling explicit.
+
+	Add.
+
+	(decompose_hangul, combine_hangul): New. (combine, _g_utf8_normalize_wc): Use them. Adds support for algorithmic composition of Hangul Syllables, adapted from a patch written by Noah Levitt <nlevitt@columbia.edu> for GLIB, discussed in <http://bugzilla.gnome.org/show_bug.cgi?id=100456> and available from <http://bugzilla.gnome.org/showattachment.cgi?attach_id=18915>.
+
+	Fix.
+
+	Add.
+
+	*** empty log message ***
+
+	(idna_to_ascii_4z): Output "" instead of "." on input "".  (Some religions claim "" should fail though.)
+
+2003-09-23  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Doc fix.
+
+	(punycode-shutdown): New.
+
+	(idna-to-ascii-parameters, idna-to-unicode-parameters): Add --usestd3asciirules. (idna-shutdown): New.
+
+	Bump versions.
+
+	Fix.
+
+	Fix.
+
+	.
+
+	*** empty log message ***
+
+	Version 0.3.0.
+
+	Fix.
+
+	Add.
+
+	Fix.
+
+2003-09-22  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	(stringprep_saslprep): Prohibit inappropriate for canonical representation characters.
+
+2003-09-14  Simon Josefsson  <simon@josefsson.org>
+
+	Dist libc/Banner.
+
+	Create idna.h without dependency on idn-int.h.
+
+	Fix memory leak.
+
+	Fix memory leaks.
+
+	Fix greeting message.
+
+	Copy Banner.
+
+	Add.
+
+2003-09-13  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Cast.
+
+	Fix.
+
+	Simplify #include mess.
+
+	Remove cruft.
+
+	Fix.
+
+	Remove dummy.c.
+
+	Doc fix.
+
+	Doc fix.
+
+	Doc fix.
+
+	Doc fix.
+
+	Doc fix.
+
+	Doc fix.
+
+2003-09-12  Simon Josefsson  <simon@josefsson.org>
+
+	Fix RFC compatibility.
+
+	Typedef Punycode_status. Use 'int' instead of 'enum' for return codes.
+
+	Use 'int' instead of 'enum' for return code.
+
+	Bump versions.
+
+	Rename stringprep_generic_* to stringprep_rfc3454_*.
+
+	*** empty log message ***
+
+	Rename stringprep_generic.c to rfc3454.c. Add to BUILT_SOURCES.
+
+	Write to rfc3454.c. Rename variables to stringprep_rfc3454_* from stringprep_generic_*.
+
+	Remove, merged into ../lib/*.c.
+
+	Doc fix.
+
+	Fix.
+
+	Fix update-api.
+
+	Doc fix.
+
+	Indent.
+
+	Use 'int' instead of 'enum's.
+
+	Typedef Stringprep_rc, Stringprep_profile_flags, and Stringprep_profile_steps. Use 'int' instead of 'enum's (i.e., revert 0.2.3 changes).
+
+	Add.
+
+	Remove obsolete.c.
+
+	Remove obsolete headers.
+
+	Use int instead of enum's.
+
+	Typedef Idna_rc and Idna_flags. Use int instead of enum's.
+
+	Fix path to sources. Fix HIGNORE.
+
+	Workaround -I problem.
+
+	Against glibc 2.3.2.
+
+	Add.
+
+	Remove unused m4's.
+
+	Add (from gl/).
+
+	Don't use strdup.
+
+	Remove gl/.
+
+	Fix.
+
+	Remove checks for memset and strdup; we assume C89, so memset exists, and we no longer use strdup. Remove gl/.
+
+	Ported to Mac OS X / Darwin.
+
+	*** empty log message ***
+
+	Use libtool.
+
+	Make LDADD libtool friendly.
+
+	Add.
+
+	Build man pages.
+
+	Move.
+
+	Fix.
+
+	Add.
+
+	Typo.
+
+	[_LIBC]: Define ICONV_CONST.
+
+	Use modern API.
+
+	Export modern API.
+
+	Update.
+
+	GLIBC 2.3.2 sync.
+
+2003-09-02  Simon Josefsson  <simon@josefsson.org>
+
+	Revert.
+
+2003-08-26  Simon Josefsson  <simon@josefsson.org>
+
+	Update key.
+
+	Add examples/README.
+
+	Fixes.
+
+	Fix cvs2cl parameters.
+
+	Use $() instead of @@.
+
+	Do some tests that work.
+
+	Fix URL.
+
+	Bump versions.
+
+	Fix cvs2cl parameters.
+
+	Ignore errors on www update.
+
+	Update paths.
+
+	.
+
+	Revert.
+
+	Fix.
+
+	*** empty log message ***
+
+	Version 0.2.3.
+
+	*** empty log message ***
+
+	Add tabs, for Makefile.maint check.
+
+	Replace release target with Makefile.maint etc.
+
+	Add.
+
+2003-08-25  Simon Josefsson  <simon@josefsson.org>
+
+	Doc fix.
+
+	Add.
+
+	Really call ToUnicode instead of ToASCII.  Reported by Trond Haugen <trond.haugen@uninett.no>.
+
+2003-08-21  Simon Josefsson  <simon@josefsson.org>
+
+	Add port.
+
+	Dist getopt.h.
+
+	Link with gl stuff.
+
+2003-08-20  Simon Josefsson  <simon@josefsson.org>
+
+	Fix warning message.
+
+	Group portability stuff together.
+
+	Fix -I paths.
+
+	Distcheck fixes.
+
+	Fix paths.
+
+	Fix paths (for distcheck).
+
+	Fix directory build order, for gtk-doc.
+
+	Update paths to source code.
+
+	Move obsolete functions into separate file.
+
+	Fixes.
+
+	Build doc after src, for help2man on idn.
+
+	*** empty log message ***
+
+	Add EXTRA_DISTs.
+
+	Add gl, lib, src, tests and examples to SUBDIRS. Add gl/m4 to ACLOCAL_AMFLAGS. Remove rules that are moved into lib/, src/, tests/ and examples/.
+
+	Split up files into sub-directories.
+
+	Move gdoc to doc/.
+
+	*** empty log message ***
+
+	*** empty log message ***
+
+	Move documentation and specifications into doc/ and doc/specifications/.
+
+	Move portability utilities into gl/.
+
+	Move library into lib/.
+
+	Move tests into tests/.
+
+	Move applications into src/.
+
+	Move examples into examples/.
+
+2003-08-13  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Fix doc.
+
+	Remove unused function.
+
+	Fix warnings.
+
+	Bump versions.
+
+	Add.
+
+	Use enum types where appropriate.
+
+	Doc fixes.
+
+	Fix.
+
+	Use enum/size_t/ssize_t where appropriate. Doc fix.
+
+	Replace int with proper enum, where appropriate.
+
+	Typo.
+
+	Add FreeBSD 4.8.
+
+	*** empty log message ***
+
+	Version 0.2.2.
+
+	Fix.
+
+	Fix release target.
+
+	Fix release target.
+
+	Add.
+
+	Typo.
+
+	Indent.
+
+	Revert to RFC code: use punycode_status.
+
+	Revert to RFC code: use punycode_uint and enum punycode_status. However, we do continue to use size_t to promote use of sizeof() by application writers.  We return punycode_bad_input if a size_t value exceeds the largest punycode_uint, since the code presumably cannot handle that.  If size_t is smaller than punycode_uint, it seems unlikely that an application could be able to pass a string that is longer than SIZE_MAX anyway, but should it happen the worst that occur is that the punycode code will only see the beginning of the string, which isn't unreasonable on a platform with a small SIZE_MAX.
+
+	Define and use punycode_uint.
+
+2003-08-08  Simon Josefsson  <simon@josefsson.org>
+
+	(stringprep_locale_charset): Improve docstring.
+
+2003-08-01  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2003-07-31  Simon Josefsson  <simon@josefsson.org>
+
+	Replace gnudist with gnuftp.
+
+	Add.
+
+	Encode -u output in locale charset, suggested by Adam M. Costello.
+
+2003-07-11  Simon Josefsson  <simon@josefsson.org>
+
+	Rewrite to get LGPL code.
+
+	Revert, to get LGPL code.
+
+	Install but don't distribute idn-int.h.
+
+	*** empty log message ***
+
+	Dist m4's.
+
+	Replace AC_REPLACE_OBJ with gnulib.
+
+	Bump versions.
+
+	Add.
+
+	Use BUILT_SOURCES for idn_cmd.* and idn-int.h, and don't include idn-int.h in the distribution.
+
+2003-07-08  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Look in sys/types.h too, for cygwin.
+
+2003-07-06  Simon Josefsson  <simon@josefsson.org>
+
+	Don't use () when talking about the name of a function.
+
+2003-07-04  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Version 0.2.1.
+
+	Create idn_cmd.* in srcdir.
+
+	Add.
+
+	Bump versions.
+
+	Add.
+
+	Fix last commit.
+
+	Add.
+
+	Handle empty labels, tiny patch based on suggestion by Marcos Sanz/Denic <sanz@denic.de>.
+
+2003-07-02  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Ignore .cvs*.
+
+	Add legal information to ChangeLog.
+
+	Add.
+
+	Add.
+
+	Indent.
+
+	(stringprep_convert): Use ICONV_CONST.  Tiny patch suggested by Robert Norris <rob@cataclysm.cx>.
+
+	Add.
+
+2003-06-24  Simon Josefsson  <simon@josefsson.org>
+
+	Gengetopt 2.10 or later is required.
+
+	Don't distclean idn_cmd.*, just maintainer-clean them.
+
+2003-06-19  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Version 0.2.0.
+
+	Distclean idn-int.h (really!).
+
+	Install and distclean idn-int.h properly.
+
+	Distclean idn-int.h.
+
+	Remove idn-int.h.
+
+	Add woody armv4l.
+
+	Bump so version.
+
+	Tested on debian-sparc64.
+
+	Ignore idn-int.h.
+
+	Build e.g. idn before doc/idn.1 is built.
+
+	GTK-DOC doesn't like enum return types.
+
+	Add.
+
+	Copy manual from right place.
+
+	Add.
+
+	*** empty log message ***
+
+	Remove obsolete test (we break backwards compatibility).
+
+	Fix.
+
+2003-06-18  Simon Josefsson  <simon@josefsson.org>
+
+	Indent.
+
+	Fix typo.
+
+	Not needed (new API backwards compatible).
+
+	Use uint32_t instead of unsigned long.
+
+	Fix.
+
+	Revert to RFC, but use uint32_t and size_t.
+
+	Revert last change.
+
+	Fixes.
+
+	Remove old interfaces.
+
+	Use modern API.
+
+	Fix warnings.
+
+	Use uint32_t instead of unsigned long. New functions idna_to_ascii_4i, idna_to_unicode_44i, idna_to_ascii_4z, idna_to_ascii_8z, idna_to_ascii_lz, idna_to_unicode_4z4z, idna_to_unicode_8z4z, idna_to_unicode_8z8z, idna_to_unicode_8zlz, idna_to_unicode_lzlz.
+
+	Fix.
+
+	Fix.
+
+	Include stddef.h and idn-int.h. Add IDNA flags. Add new IDNA entry points.
+
+	Add.
+
+	Bump version.
+
+	Change unsigned long to uint32_t.
+
+	Change unsigned long to uint32_t. Fix enum definitions.
+
+	Remove inttypes/stdint, idn-int.h is used now.
+
+	Add old API tests.
+
+	*** empty log message ***
+
+	Fix.
+
+	Move manual to doc/.
+
+	Don't use gdoc.
+
+	Use uint32_t instead of unsigned long.
+
+	Get m4's from m4/. Add tst_o*'s. Regenerate ChangeLog only for releases.
+
+	Include internal.h for uint32_t and use it.
+
+	Change unsigned long to uint32_t. Use enum punycode_status return type. Sync with RFC (after indent).
+
+	Include stddef and idn-int.h. Add RFC compatibility enum punycode_status elements. Change return type to enum punycode_status. Use uint32_t instead of unsigned long.
+
+	*** empty log message ***
+
+	New idn-int.h for portable fixed size integers. Create m4/ and move iconv.m4 to it.
+
+2003-06-12  Simon Josefsson  <simon@josefsson.org>
+
+	Remove GNU make specific idiom.
+
+2003-06-07  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Version 0.1.15.
+
+	Add.
+
+	Bump version.
+
+	Remove DRAFT stuff (moved to separate branch).
+
+	Add. Fix.
+
+	Handle non-zero terminated inputs.  Tiny patch suggested by Thiago Macieira.
+
+	Add.
+
+2003-06-04  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Check array bounds, tiny patch from Joe Hildebrand.
+
+2003-06-02  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+2003-05-28  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Add.
+
+2003-05-10  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Version 0.1.14.
+
+	*** empty log message ***
+
+	Add.
+
+	Bind process-environment correctly.
+
+2003-05-09  Simon Josefsson  <simon@josefsson.org>
+
+	Copy doxygen docs.
+
+	Unrealted, mistakenly added.
+
+	Add.
+
+	Add UTF-8 tests.
+
+	Use process-environment instead of utility env. Default values of punycode-program, punycode-to-ascii-parameters, punycode-to-unicode-parameters changed, and punycode-environment added. Use separate error strings. Handle when idn is not installed.
+
+	Use process-environment instead of utility env. Default values of idna-program, idna-to-ascii-parameters, idna-to-unicode-parameters changed, and idna-environment added. Use separate error strings.
+
+	Update Emacs Lisp API. Fix toc.
+
+	Add.
+
+2003-05-07  Simon Josefsson  <simon@josefsson.org>
+
+	Handle when idn is not installed.
+
+2003-05-06  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2003-04-23  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Fix NEWS entry of last release (API/ABI compatibility).
+
+	Add.
+
+2003-04-20  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2003-04-16  Simon Josefsson  <simon@josefsson.org>
+
+	Mention devices it runs on.
+
+2003-03-28  Simon Josefsson  <simon@josefsson.org>
+
+	Fix bad UTF-8. Self test for bad UTF-8.
+
+2003-03-27  Simon Josefsson  <simon@josefsson.org>
+
+	Text fixes.
+
+	Fix -DDRAFT output.
+
+2003-03-26  Simon Josefsson  <simon@josefsson.org>
+
+	Dist contrib/doxygen/.
+
+	Mention doxygen.
+
+	Build contrib/doxygen/Doxyfile.
+
+	Add unmodified doxygen configuration file, for future "diff"s.
+
+	Use PDF hyperlinks.
+
+	Add -doxygen.
+
+	Add \mainpage for doxygen.
+
+	Mention doxygen.
+
+	Add doxygen template.
+
+2003-03-23  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Bump versions.
+
+	Ignore draft.*xml in ChangeLog.
+
+	Fix debug prints.
+
+2003-03-22  Simon Josefsson  <simon@josefsson.org>
+
+	Fix sec cons.
+
+	Cosmetic fixes.
+
+	Add IDNA stuff. Ack punycode.
+
+	Fixes for -DDRAFT.
+
+	Support -DDRAFT.
+
+	Editorial fixes. Sync stringprep table. Fix references.
+
+2003-03-13  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Version 0.1.13.
+
+	Sync ANNOUNCE.
+
+	Bump so version.
+
+	Add.
+
+	Add lingos.
+
+	Doc fix.
+
+	Dist Java stuff.
+
+	Doc fix.
+
+	Mention Java API.
+
+	Add java/.
+
+	Add JAVA API proof of concept.
+
+	Tested on more platforms.
+
+2003-03-12  Simon Josefsson  <simon@josefsson.org>
+
+	Fix mem leak.
+
+	Fix mem leak.
+
+	Ignore errors instead of using missing for gengetopt.
+
+	Ignore errors instead of using missing for gengetopt. Bump version.
+
+	Add platform.
+
+	Spec update.
+
+2003-03-10  Simon Josefsson  <simon@josefsson.org>
+
+	Cvs2cl ignore contrib.
+
+	Use cvs2cl's new --FSF.
+
+	Text fix.
+
+	Text fixes. Remove ASCII incompatible encodings.
+
+2003-03-09  Simon Josefsson  <simon@josefsson.org>
+
+	Use UTF-8 by default. Text fixes. Change ascii and sjis charsets.
+
+	Don't reset data. Use iconv charsets.
+
+2003-03-08  Simon Josefsson  <simon@josefsson.org>
+
+	Cleanup.
+
+	Fix text.
+
+	Fix charset.
+
+	Fix text.
+
+	Make charset selection clearer.
+
+	Fix HTML, based on Martin Duerst's suggestions.
+
+	Use valid HTML.
+
+	Add.
+
+	Sync with RFC.
+
+	Add.
+
+	Replace drafts with RFCs.
+
+2003-03-07  Simon Josefsson  <simon@josefsson.org>
+
+	Mention more prereqs.
+
+	Remove gtk-doc trigger for obsolete functions.
+
+	Move appendix last. Cleanup @copying.
+
+	Dist FAQ and contrib/web/idn.php.
+
+	Add. Move todo list to TODO.
+
+	Add, taken from README.
+
+2003-03-06  Simon Josefsson  <simon@josefsson.org>
+
+	ANNOUNCE sync.
+
+	Cleanup.
+
+	Update questions and answers.
+
+	Moved faq from file README.
+
+	Move faq to file FAQ. Add donation info. Update todo's.
+
+	Security fix.
+
+	Add forgotten 0.1.12 items.
+
+	Typo.
+
+	Add debug.
+
+	Remove.
+
+	*** empty log message ***
+
+	Version 0.1.12.
+
+	Remove stringprep_*.h. Document stringprep in idn.
+
+	Add.
+
+	Fix ace.
+
+	Add errors.
+
+	Support stringprep.
+
+	Ignore gengetopt errors.
+
+	Remove.
+
+	Add -s and -p for stringprep.
+
+	Mention stringprep API changes.
+
+	Add stringprep_profile().
+
+	Cosmetic fix.
+
+	Deprecate stringprep_*.h.
+
+	Add.
+
+2003-03-04  Simon Josefsson  <simon@josefsson.org>
+
+	Fixup.
+
+2003-03-02  Simon Josefsson  <simon@josefsson.org>
+
+	Fix typo.
+
+	Reorder.  Add errors.
+
+	Fix.
+
+	Add examples.
+
+	Fix ct. Add example.
+
+	Add example.
+
+	Fix.
+
+	Fix.
+
+	Examples.
+
+	Fix typos.
+
+	Move examples to bottom.
+
+	Add examples.
+
+	Bug reporting.
+
+	Fixes.
+
+	Charset fixes.
+
+	Mention idn.php.
+
+	Add.
+
+	Add.
+
+2003-03-01  Simon Josefsson  <simon@josefsson.org>
+
+	Check for gengetopt.
+
+	Use GENGETOPT.
+
+	Add glibc 2.3.2.
+
+	Bump version.
+
+	Update to libc 2.3.2.
+
+2003-02-28  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2003-02-27  Simon Josefsson  <simon@josefsson.org>
+
+	Copying conditions.
+
+	Add SASLprep.
+
+	Add SASL profile.
+
+	Test SASL profile.
+
+	Don't byte compile elisp. Cleanup EXTRA_DIST.
+
+	Add copyright.
+
+	Add.
+
+	Don't ack self.
+
+2003-02-26  Simon Josefsson  <simon@josefsson.org>
+
+	Cleanup extra dist.
+
+	Make idn.c depend on idn_cmd.*.
+
+	Ignore getopt.h.
+
+	Doc fix.
+
+	Reorder acks. Add function and variable index.
+
+	Fix TOC.
+
+	*** empty log message ***
+
+	Version 0.1.11.
+
+	Distcheck fixes.
+
+	Document Emacs API.
+
+	*** empty log message ***
+
+	Bump versions. Look for help2man.
+
+	Build idn.1 man page.
+
+	Document idn.
+
+	Mention todo.
+
+	Build idna.el.
+
+	Elisp interface for IDNA.
+
+	Add keywords.
+
+	Fix doc.
+
+	*** empty log message ***
+
+	Add automake elisp check.
+
+	Add punycode.el.
+
+	Elisp interface for punycode.
+
+	Fix gengetopt invocation.
+
+	Print help on usage error. Minor cleanup.
+
+	Fix package/version name.
+
+	Shorten line <80ch.
+
+	*** empty log message ***
+
+	Add.
+
+	Link with getopt if system doesn't have getopt_long(). Build idn.ggo.
+
+	Build idn.
+
+	Add command line option specification for idn.c.
+
+	Add command line interface to library.
+
+2003-02-25  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2003-02-21  Simon Josefsson  <simon@josefsson.org>
+
+	NFKC XMPP resourceprep.
+
+	NFKC XMPP nodeprep.
+
+	*** empty log message ***
+
+	Version 0.1.10.
+
+	Distribute libidn-stringprep-iscsi.html.
+
+	Doc fix.
+
+	Deprecate idna_*_to_ace() and idna_*ace_to_*(). Add idna_to_ascii_from_*() and idna_to_unicode_*_from_*().
+
+	Make release project independent.
+
+	Add.
+
+	Add iSCSI profile.
+
+	Add.
+
+	Bump versions.
+
+	Add.
+
+	Distribute contrib/*.
+
+	Describe contents of contrib/.
+
+	Add Stephane Bortzmeyer's python interface.
+
+	Install punycode.h.
+
+	Install idna.h, tiny patch from Stephane Bortzmeyer.
+
+2003-02-20  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Version 0.1.9.
+
+	Include stringprep_plain.sgml.
+
+	Add libidn-stringprep-plain.html.
+
+	*** empty log message ***
+
+	Fix last commit.
+
+	Mention stringprep_plain.h.
+
+	Add stringprep_plain.
+
+	Don't case fold XMPP resources.
+
+	Really fix XMPP definition.
+
+	Add stringprep_plain.h.
+
+	Bump versions.
+
+	Sync ANNOUNCE.
+
+	Mention SASL "plain".
+
+	Add.
+
+	Remove broken XMPP tests. Add SASL test.
+
+	Add.
+
+	Include stringprep_plain.h.
+
+	Add stringprep_plain for SASL ANONYMOUS plain profile.
+
+	Fix XMPP definition.
+
+	New file.
+
+2003-02-19  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	Add.
+
+	Don't normalize or map ASCII space for XMPP nodeprep.  Tiny patch from Travis Shirk <TShirk@jabber.com>.
+
+2003-02-18  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+2003-02-15  Simon Josefsson  <simon@josefsson.org>
+
+	Make sure decoded punycode data is zero terminated.
+
+	Fix memory leak.
+
+	Fix memory leaks. Waste less memory.
+
+	Fix memory leak.
+
+2003-02-14  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Fix typo.
+
+	Fix maplen calculation.
+
+	Fix gcc warnings.
+
+	Change STRINGPREP_MAX_MAP_CHARS to 4 to waste less space.
+
+	*** empty log message ***
+
+	Version 0.1.8.
+
+	GTK-DOC fix.
+
+	Update port status.
+
+	Use = instead of == as test operator.
+
+2003-02-13  Simon Josefsson  <simon@josefsson.org>
+
+	Use size_t for string lengths.
+
+	Revert missing-noreturn fix.
+
+	Use size_t for string lengths.
+
+	Condition GTK-DOC and disable by default.
+
+	*** empty log message ***
+
+	Remove.
+
+	Cleanup gtk-doc build.
+
+	Zero terminate XMPP array.
+
+	Bump version (both shared library and package).
+
+	Add.
+
+	Fix CFLAGS warnings.
+
+	Fix CFLAGS warnings. Use official IDNA ACE prefix.
+
+2003-02-12  Simon Josefsson  <simon@josefsson.org>
+
+	Cleanups for including as appendix in draft.
+
+	Add preliminary version.
+
+	Don't optimize prohibited output tables (better trace logs).
+
+	More self tests. More debug info.
+
+	More debug output.
+
+	Official results.
+
+	*** empty log message ***
+
+	Improve release target.
+
+	Add release target.
+
+	*** empty log message ***
+
+	Version 0.1.7.
+
+	Fix IDNA ACE prefix.
+
+	Use official IDNA prefix.
+
+2003-02-11  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Add upload target.
+
+	Use new IDNA ACE prefix.
+
+	Update.
+
+	Version 0.1.6.
+
+	Add my computation.
+
+	Chose IDNA prefix based on my computation.
+
+2003-02-09  Simon Josefsson  <simon@josefsson.org>
+
+	Fix header.
+
+	Fix.
+
+	Add.
+
+	Indent.
+
+	Don't run configure.
+
+	Fix cvs2cl.
+
+2003-02-07  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Reorder.
+
+	Reorder.
+
+	Add build instructions.
+
+	Fix.
+
+	Generated.
+
+	Add XMPP.
+
+	Include xmpp.
+
+	Add.
+
+	Update (from ANNOUNCE).
+
+	Use table C.8 for bidi prohibited instead of C.9.
+
+	Support XMPP.
+
+	Add.
+
+	Fix.
+
+	Name fix.
+
+2003-02-05  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+2003-01-31  Simon Josefsson  <simon@josefsson.org>
+
+	Indent.
+
+	Indent.
+
+	Indent.
+
+2003-01-30  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+	Typo.
+
+2003-01-29  Simon Josefsson  <simon@josefsson.org>
+
+	Mention libc.
+
+2003-01-28  Simon Josefsson  <simon@josefsson.org>
+
+	Typo.
+
+	Really ignore netdb.h.
+
+	*** empty log message ***
+
+	Release 0.1.5.
+
+	Dist libc/*.
+
+	Ignore netdb.h.
+
+	Fix.
+
+	Fix.
+
+	Add.
+
+	Libidn as libc add-on.
+
+	*** empty log message ***
+
+	Return new error code IDNA_ICONV_ERROR instead of crashing when character set conversion fails.
+
+	Fix prototype.  Move unused parameter unless LOCALE_WORKS.
+
+	Work from within GNU Libc.
+
+2003-01-27  Simon Josefsson  <simon@josefsson.org>
+
+	Add ack.
+
+	Point to THANKS for more acks.
+
+	Fix possible memory corruption.  Noncopyrightable patch from Waldo Bastian <bastian@kde.org>.
+
+	*** empty log message ***
+
+2003-01-20  Simon Josefsson  <simon@josefsson.org>
+
+	Change bug email address.
+
+2003-01-18  Simon Josefsson  <simon@josefsson.org>
+
+	Generate ChangeLog with --no-times.
+
+2003-01-15  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Release 0.1.4.
+
+	Fix functions on bad platforms.
+
+	Add comment.
+
+	Test step 5 in ToASCII.
+
+	Fix ToASCII().
+
+	Fix copyright.
+
+	Fix dir entry.
+
+	Use automake's ps and pdf texinfo targets. Remove txt texinfo target.
+
+	EXTRA_DIST lgplg.texi. Disable GTK-DOC for distcheck builds (doesn't work).
+
+	Add uninstall target. Fix distcheck builds.
+
+	Add acknowledgements, lgpl.
+
+	*** empty log message ***
+
+	Comment cleanup.
+
+	*** empty log message ***
+
+	Improve texinfo manual.
+
+	Add doc.
+
+	Add.
+
+	Remove API documentation.
+
+	*** empty log message ***
+
+	Release 0.1.3.
+
+	Add texinfo manual.
+
+	Fix for texinfiscation.
+
+	Doc fixes.
+
+2003-01-08  Simon Josefsson  <simon@josefsson.org>
+
+	Add.
+
+	*** empty log message ***
+
+	Release 0.1.2.
+
+	Fix.
+
+	IDNA high-level API.
+
+	Add.
+
+	*** empty log message ***
+
+	Release 0.1.1.
+
+	dist dummy.c.
+
+	Run configure.
+
+	Fix.
+
+	Add templates. Don't parse internal.h
+
+	Add ANNOUNCE text.
+
+	Add.
+
+	Doc fix.
+
+	Doc fix.
+
+	Add GTK-DOC documentation.
+
+	Dummy GTK-DOC C file with documentation for #define macros.
+
+	GTK-DOC fixes.
+
+	Add GTK-DOC documentation.
+
+	*** empty log message ***
+
+	Add GTK-DOC documentation.
+
+	Add API Reference Manual.
+
+2003-01-05  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Release 0.1.0.
+
+	Fix ChangeLog in distcheck.
+
+	Fix.
+
+	Add.
+
+	Check idna_to_unicode().
+
+	Fix.
+
+	Check decoding.
+
+	Add.
+
+2003-01-04  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+2003-01-03  Simon Josefsson  <simon@josefsson.org>
+
+	Rename.
+
+	Fix.
+
+	Build IDNA.
+
+	Rename.
+
+	Fix.
+
+	Add unfinished old IDNA stuff.
+
+	Rename and fix.
+
+	Rename.
+
+	Add.
+
+	Rename.
+
+	Rename libstringprep.pc.in to libidn.pc.in.
+
+2003-01-02  Simon Josefsson  <simon@josefsson.org>
+
+	Use rfc3454.txt instead of draft-hoffman-stringprep-07.txt.
+
+2002-12-27  Simon Josefsson  <simon@josefsson.org>
+
+	Fix.
+
+2002-12-26  Simon Josefsson  <simon@josefsson.org>
+
+	Cleanup.
+
+	Initiate name change for savannah project registration.
+
+	Fixes.
+
+	Fix.
+
+	Add.
+
+	Fix.
+
+	Fix.
+
+2002-12-19  Simon Josefsson  <simon@josefsson.org>
+
+	Add punycode. Use "unsigned long" for Unicode code points. Copying condition fixes. Fixes.
+
+2002-12-14  Simon Josefsson  <simon@josefsson.org>
+
+	Make sure ChangeLog is regenerated.
+
+2002-12-13  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	*** empty log message ***
+
+	Release 0.0.8.
+
+	Portability fixes.
+
+	Link with libiconv.
+
+2002-12-10  Simon Josefsson  <simon@josefsson.org>
+
+	Don't use uint32_t in one odd place.
+
+	*** empty log message ***
+
+	Flawfinder.
+
+	Fix.
+
+	Remove comma on last enum entry.
+
+2002-12-09  Simon Josefsson  <simon@josefsson.org>
+
+	Fix memory leak.
+
+	Suggest dmalloc.
+
+	Use dmalloc.  Fix memory leak when bidi fails.
+
+	Check version.
+
+	*** empty log message ***
+
+	Release 0.0.7 (version 0.0.6 was abandoned).
+
+	*** empty log message ***
+
+	Release 0.0.6.
+
+	Check all upper string case mapping.
+
+	Apply table until it can't be applied any longer.
+
+2002-12-07  Simon Josefsson  <simon@josefsson.org>
+
+	Add nameprep vector.
+
+	Cosmetic fix.
+
+	Fix printf() format warnings. Fix bidi table for loop (affected only nameprep).
+
+	*** empty log message ***
+
+	Release 0.0.5.
+
+	Add memset.c, an AC_LIBOBJ.
+
+	An AC_LIBOBJ, from gnulib.
+
+	Indent.
+
+	Use new types.
+
+	Fixes.
+
+	Fix bidi code and add self tests.
+
+	Clean up internal profiling definitions.
+
+2002-12-06  Simon Josefsson  <simon@josefsson.org>
+
+	Fix typo.
+
+	*** empty log message ***
+
+	Release 0.0.4.
+
+	Add unassigned code point handling, and self test.
+
+	Don't modify constant string during debug.
+
+2002-12-05  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	Don't use *_fast().
+
+	Don't use $< (GNU specific).
+
+2002-12-03  Simon Josefsson  <simon@josefsson.org>
+
+	Portability fixes.
+
+	Simplify the #include-mess. (NULL wasn't found on alpha-unknown-netbsd1.6)
+
+2002-11-30  Simon Josefsson  <simon@josefsson.org>
+
+	Add --enable-maintainer-mode.
+
+	*** empty log message ***
+
+	*** empty log message ***
+
+	Release 0.0.3.
+
+	Add replacement strdup.c for system's without it. Increment shared library version. Trim autoconf tests.
+
+	Added copying conditions. Added more API documentation.
+
+	Add copying conditions.
+
+	Add copying conditions and public key.
+
+2002-11-30  Simon Josefsson  <simon@josefsson.org>
+
+	Export stringprep_utf8_to_unichar.
+	Rename stringprep_utf8_to_ucs4_fast to stringprep_utf8_to_ucs4 to
+	clean up API (old entry maintained for binary backwards compatibility
+	though).
+
+	Indent.
+
+	Add sign make target.
+
+2002-11-29  Simon Josefsson  <simon@josefsson.org>
+
+	indent
+
+	improve debugging output
+
+	pass CFLAGS directly
+
+2002-11-14  Simon Josefsson  <simon@josefsson.org>
+
+	*** empty log message ***
+
+	AC_PROG_RANLIB obsoleted by libtool.
+
+	Use autoreconf.
+
+2002-11-07  Simon Josefsson  <simon@josefsson.org>
+
+	improve comment
+
+	add dependency
+
+	*** empty log message ***
+
+	Release 0.0.2.
+
+	Remove unused variable.
+
+	Fix memory leak.
+
+	Add NFKC self test.
+
+2002-11-06  Simon Josefsson  <simon@josefsson.org>
+
+	Cosmetic fixes.
+
+	Add.
+
+	Explain why GLIB is not used.
+
+	*** empty log message ***
+
+	Build fixes.
+
+	Add example. Add toutf8.c. Check if OS has locale functions. Add -R to pkg-config info file. Moved profile variables to profile.c from header files.
+
+	*** empty log message ***
+
+2002-11-05  Simon Josefsson  <simon@josefsson.org>
+
+	Initial version.

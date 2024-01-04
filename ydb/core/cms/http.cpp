@@ -134,13 +134,31 @@ private:
             type = "text/html";
         }
 
+        bool cached = false;
+        if (filename.StartsWith("cms/ui/ext/monaco-editor/")) {
+            cached = true;
+            if (filename.EndsWith(".css")) {
+                type = "text/css; charset=utf-8";
+            } else if (filename.EndsWith(".js")) {
+                type = "application/javascript; charset=utf-8";
+            }
+        }
+
         TStringStream response;
         response << "HTTP/1.1 200 Ok\r\n";
         response << "Content-Type: " << type << "\r\n";
         response << "Content-Length: " << blob.size() << "\r\n";
+        if (cached) {
+            response << "Cache-Control: public, max-age=31536000, immutable\r\n";
+        }
         response << "\r\n";
         response.Write(blob.data(), blob.size());
         ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+    }
+
+    static bool IsHiddenHeader(const TString& headerName) {
+        return stricmp(headerName.data(), "Authorization") == 0
+            || stricmp(headerName.data(), "X-Ya-Service-Ticket") == 0;
     }
 
     static TString DumpRequest(const NMonitoring::IMonHttpRequest& request) {
@@ -152,7 +170,7 @@ private:
 
         result << " Headers {";
         for (const auto& header : request.GetHeaders()) {
-            if (stricmp(header.Name().data(), "Authorization") == 0) {
+            if (IsHiddenHeader(header.Name())) {
                 continue;
             }
 
@@ -202,7 +220,6 @@ private:
                                                           NMon::IEvHttpInfoRes::EContentType::Custom));
             return;
         }
-
         ReplyWithFile(ev, ctx, TString{msg->Request.GetPathInfo()});
     }
 

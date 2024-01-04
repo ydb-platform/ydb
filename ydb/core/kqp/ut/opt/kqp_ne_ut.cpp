@@ -3737,7 +3737,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
         appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForDataQueries(true);
         appConfig.MutableTableServiceConfig()->SetEnableSequentialReads(true);
-        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
@@ -3758,6 +3757,15 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(R"([[[101u];[1]]])", FormatResultSetYson(result.GetResultSet(0)));
         }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT Key, Data FROM `/Root/EightShard` ORDER BY Key LIMIT 1;
+            )", TTxControl::BeginTx(TTxSettings::OnlineRO(TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[101u];[1]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
     }
 
     Y_UNIT_TEST(DqSourceLocksEffects) {

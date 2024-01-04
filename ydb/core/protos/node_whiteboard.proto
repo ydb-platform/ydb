@@ -81,6 +81,11 @@ message TEvTabletStateResponse {
     optional bytes Packed5 = 5;
 }
 
+message TNodeClockSkew {
+    optional uint32 PeerNodeId = 1;
+    optional int64 ClockSkewUs = 2;
+}
+
 message TNodeStateInfo {
     optional string PeerName = 1;
     optional bool Connected = 2;
@@ -306,6 +311,8 @@ message TSystemStateInfo {
     optional uint64 MemoryUsedInAlloc = 29;
     optional double MaxDiskUsage = 30;
     optional NActorsInterconnect.TNodeLocation Location = 31;
+    optional int64 MaxClockSkewWithPeerUs = 32; // a positive value means the peer is ahead in time; a negative value means it's behind
+    optional uint32 MaxClockSkewPeerId = 33;
 }
 
 message TEvSystemStateRequest {

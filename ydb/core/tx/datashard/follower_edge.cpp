@@ -39,7 +39,7 @@ std::tuple<TRowVersion, bool, ui64> TDataShard::CalculateFollowerReadEdge() cons
 bool TDataShard::PromoteFollowerReadEdge(TTransactionContext& txc) {
     Y_VERIFY(!IsFollower());
 
-    if (IsMvccEnabled()) {
+    if (IsMvccEnabled() && HasFollowers()) {
         auto [version, repeatable, waitStep] = CalculateFollowerReadEdge();
 
         if (waitStep) {
@@ -77,7 +77,7 @@ public:
 bool TDataShard::PromoteFollowerReadEdge() {
     Y_VERIFY(!IsFollower());
 
-    if (IsMvccEnabled()) {
+    if (IsMvccEnabled() && HasFollowers()) {
         auto [currentEdge, currentRepeatable] = SnapshotManager.GetFollowerReadEdge();
         auto [nextEdge, nextRepeatable, waitStep] = CalculateFollowerReadEdge();
 
@@ -93,6 +93,16 @@ bool TDataShard::PromoteFollowerReadEdge() {
     }
 
     return false;
+}
+
+void TDataShard::OnFollowersCountChanged() {
+    if (HasFollowers()) {
+        PromoteFollowerReadEdge();
+    }
+}
+
+bool TDataShard::HasFollowers() const {
+    return Executor()->GetStats().FollowersCount > 0;
 }
 
 } // namespace NKikimr::NDataShard

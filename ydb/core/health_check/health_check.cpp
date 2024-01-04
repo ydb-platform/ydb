@@ -113,6 +113,7 @@ public:
         TabletState,
         SystemTabletState,
         OverloadState,
+        SyncState,
     };
 
     struct TTenantInfo {
@@ -488,7 +489,7 @@ public:
 
     TTabletRequestsState TabletRequests;
 
-    TDuration Timeout = TDuration::MilliSeconds(10000);
+    TDuration Timeout = TDuration::MilliSeconds(20000);
     static constexpr TStringBuf STATIC_STORAGE_POOL_NAME = "static";
 
     bool IsSpecificDatabaseFilter() {
@@ -1304,17 +1305,20 @@ public:
             if (tablet.Database == databaseId) {
                 context.Location.mutable_compute()->clear_tablet();
                 auto& protoTablet = *context.Location.mutable_compute()->mutable_tablet();
-                if (tablet.IsUnresponsive || tablet.MaxResponseTime >= TDuration::MilliSeconds(1000)) {
+                auto timeoutMs = Timeout.MilliSeconds();
+                auto orangeTimeout = timeoutMs / 2;
+                auto yellowTimeout = timeoutMs / 10;
+                if (tablet.IsUnresponsive || tablet.MaxResponseTime >= TDuration::MilliSeconds(yellowTimeout)) {
                     if (tablet.Type != TTabletTypes::Unknown) {
                         protoTablet.set_type(TTabletTypes::EType_Name(tablet.Type));
                     }
                     protoTablet.add_id(ToString(tabletId));
                     if (tablet.IsUnresponsive) {
                         context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet is unresponsive", ETags::SystemTabletState);
-                    } else if (tablet.MaxResponseTime >= TDuration::MilliSeconds(5000)) {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "System tablet response time is over 5000ms", ETags::SystemTabletState);
-                    } else if (tablet.MaxResponseTime >= TDuration::MilliSeconds(1000)) {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "System tablet response time is over 1000ms", ETags::SystemTabletState);
+                    } else if (tablet.MaxResponseTime >= TDuration::MilliSeconds(orangeTimeout)) {
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, TStringBuilder() << "System tablet response time is over " << orangeTimeout << "ms", ETags::SystemTabletState);
+                    } else if (tablet.MaxResponseTime >= TDuration::MilliSeconds(yellowTimeout)) {
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "System tablet response time is over " << yellowTimeout << "ms", ETags::SystemTabletState);
                     }
                 }
             }
@@ -2206,6 +2210,42 @@ public:
         }
     }
 
+    const TDuration MAX_CLOCKSKEW_RED_ISSUE_TIME = TDuration::MicroSeconds(25000);
+    const TDuration MAX_CLOCKSKEW_YELLOW_ISSUE_TIME = TDuration::MicroSeconds(5000);
+
+    void FillNodesSyncStatus(TOverallStateContext& context) {
+        long maxClockSkewUs = 0;
+        TNodeId maxClockSkewPeerId = 0;
+        TNodeId maxClockSkewNodeId = 0;
+        for (auto& [nodeId, nodeSystemState] : MergedNodeSystemState) {
+            if (abs(nodeSystemState->GetMaxClockSkewWithPeerUs()) > maxClockSkewUs) {
+                maxClockSkewUs = abs(nodeSystemState->GetMaxClockSkewWithPeerUs());
+                maxClockSkewPeerId = nodeSystemState->GetMaxClockSkewPeerId();
+                maxClockSkewNodeId = nodeId;
+            }
+        }
+        if (!maxClockSkewNodeId) {
+            return;
+        }
+
+        TSelfCheckResult syncContext;
+        syncContext.Type = "NODES_SYNC";
+        FillNodeInfo(maxClockSkewNodeId, syncContext.Location.mutable_node());
+        FillNodeInfo(maxClockSkewPeerId, syncContext.Location.mutable_peer());
+
+        TDuration maxClockSkewTime = TDuration::MicroSeconds(maxClockSkewUs);
+        if (maxClockSkewTime > MAX_CLOCKSKEW_RED_ISSUE_TIME) {
+            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "The nodes have a time discrepancy of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
+        } else if (maxClockSkewTime > MAX_CLOCKSKEW_YELLOW_ISSUE_TIME) {
+            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "The nodes have a time discrepancy of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
+        } else {
+            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+        }
+
+        context.UpdateMaxStatus(syncContext.GetOverallStatus());
+        context.AddIssues(syncContext.IssueRecords);
+    }
+
     void FillResult(TOverallStateContext context) {
         if (IsSpecificDatabaseFilter()) {
             FillDatabaseResult(context, FilterDatabase, DatabaseState[FilterDatabase]);
@@ -2214,6 +2254,7 @@ public:
                 FillDatabaseResult(context, path, state);
             }
         }
+        FillNodesSyncStatus(context);
         if (DatabaseState.empty()) {
             Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());
             TSelfCheckResult tabletContext;
@@ -2268,9 +2309,9 @@ public:
 
     void TruncateIssuesIfBeyondLimit(Ydb::Monitoring::SelfCheckResult& result, ui64 byteLimit) {
         auto truncateStatusPriority = {
-            Ydb::Monitoring::StatusFlag::BLUE, 
-            Ydb::Monitoring::StatusFlag::YELLOW, 
-            Ydb::Monitoring::StatusFlag::ORANGE, 
+            Ydb::Monitoring::StatusFlag::BLUE,
+            Ydb::Monitoring::StatusFlag::YELLOW,
+            Ydb::Monitoring::StatusFlag::ORANGE,
             Ydb::Monitoring::StatusFlag::RED
         };
         for (Ydb::Monitoring::StatusFlag::Status truncateStatus: truncateStatusPriority) {
@@ -2339,7 +2380,7 @@ public:
             id << Ydb::Monitoring::StatusFlag_Status_Name(issue->status());
             id << '-' << TSelfCheckResult::crc16(issue->message());
             issue->set_id(id.Str());
-        } 
+        }
 
         for (TActorId pipe : PipeClients) {
             NTabletPipe::CloseClient(SelfId(), pipe);

@@ -1,0 +1,28 @@
+Libidn README -- Important introductory notes.
+Copyright (C) 2002-2022 Simon Josefsson
+See the end for copying conditions.
+
+Libidn is a package for internationalized string handling based on the
+Stringprep, Punycode, IDNA2003 and TLD specifications.  Libidn is a
+GNU project.  See the file COPYING for licensing information.
+
+The IDNA2003 specifications have been superseded by IDNA2008 which is
+implemented by Libidn2 <https://www.gnu.org/software/libidn/#libidn2>,
+and the only reasonable use of the libidn library today is to support
+the historic IDNA2003 behaviour or to use Stringprep profiles.  Please
+try to migrate to libidn2 wherever possible.
+
+If you obtained this file as part of a "git clone", then see the
+HACKING file.  If this file came to you as part of a tar archive, then
+see the file INSTALL for compilation and installation instructions.
+
+If you need help to use Libidn, or wish to help others, you are
+invited to join our mailing list help-libidn@gnu.org, see
+<https://lists.gnu.org/mailman/listinfo/help-libidn>.
+
+For more information, see <https://www.gnu.org/software/libidn/>.
+
+----------------------------------------------------------------------
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.

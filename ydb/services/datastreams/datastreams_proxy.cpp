@@ -1830,8 +1830,9 @@ namespace NKikimr::NDataStreams::V1 {
                 Uint128ToDecimalString(range.End));
             awsShard->mutable_sequence_number_range()->set_starting_sequence_number(
                 std::to_string(StartEndOffsetsPerPartition[shard.GetPartitionId()].first));
-            awsShard->mutable_sequence_number_range()->set_ending_sequence_number(
-                std::to_string(StartEndOffsetsPerPartition[shard.GetPartitionId()].second));
+            //TODO: fill it only for closed partitions
+            //awsShard->mutable_sequence_number_range()->set_ending_sequence_number(
+            //    std::to_string(StartEndOffsetsPerPartition[shard.GetPartitionId()].second));
             awsShard->set_shard_id(GetShardName(shard.GetPartitionId()));
         }
         if (LeftToRead > 0) {

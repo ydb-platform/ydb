@@ -53,6 +53,7 @@ SRCS(
     viewer_request.h
     viewer.cpp
     viewer.h
+    viewer_probes.cpp
     wb_aggregate.cpp
     wb_aggregate.h
     wb_filter.cpp

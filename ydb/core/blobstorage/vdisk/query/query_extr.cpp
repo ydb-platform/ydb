@@ -125,7 +125,8 @@ namespace NKikimr {
                     NMatrix::TVectorType missingParts = mustHave - actuallyHave;
 
                     // If we don't have something locally we return NOT_YET unless that blob is going to be collected
-                    auto status = IsBlobDeleted(query->LogoBlobID, Merger) ? NKikimrProto::NODATA :
+                    auto status = mustHave.Empty() ? NKikimrProto::NODATA : // we do not have any parts of this blob
+                        IsBlobDeleted(query->LogoBlobID, Merger) ? NKikimrProto::NODATA :
                         missingParts.Empty() ? NKikimrProto::OK : NKikimrProto::NOT_YET;
 
                     // Add result

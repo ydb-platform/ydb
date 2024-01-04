@@ -1,0 +1,63 @@
+plugins {
+{% if targets|selectattr("app_main_class") -%}
+    `application`
+{% else -%}
+    `java-library`
+{% endif -%}
+{% if targets|selectattr('publish') -%}
+    `maven-publish`
+    `signing`
+{% endif -%}
+}
+
+{% if targets|selectattr('publish') -%}
+group = "{{ targets[0].publish_group }}"
+version = project.properties["version"]
+{% endif -%}
+
+repositories {
+    mavenCentral()
+}
+
+{% if targets|selectattr("app_main_class") -%}
+application {
+{% for target in targets|selectattr("app_main_class") -%}
+    mainClass.set("{{ target.app_main_class }}")
+{% endfor -%}
+}
+
+{% endif -%}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+dependencies{
+{% for target in targets -%}
+{% if target.junit5_test -%}
+    testImplementation("org.junit.jupiter:junit-jupiter:5.8.2")
+
+    api("org.apache.commons:commons-math3:3.6.1")
+
+    api("com.google.guava:guava:31.0.1-jre")
+{% endif -%}
+{% for library in target.consumer_classpath -%}
+{% if targets|selectattr("app_main_class") -%}
+    implementation({{ library }})
+{% elif target.isTest -%}
+    testImplementation({{ library }})
+{% else -%}
+    api({{ library }})
+{% endif -%}
+{% endfor -%}
+{% endfor -%}
+}
+
+{% if targets|selectattr("junit5_test") -%}
+tasks.named<Test>("test") {
+    useJUnitPlatform()
+}
+{% endif -%}
+{% if targets|selectattr('publish') -%}
+{% include 'publish.gradle.kts' -%}
+{% endif -%}

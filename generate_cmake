@@ -175,21 +175,20 @@ if __name__ == "__main__":
     root_folder = os.getcwd()
 
     if ymake_binary_path is None:
-        ymake_binary_path = ydb_bin_folder_path + "/ymake"
-        download_binary(root_folder, "ymake", ymake_binary_path)
+        ymake_binary_path = root_folder + "/ya tool ymake"
 
     if yexport_binary_path is None:
-        yexport_binary_path = ydb_bin_folder_path + "/yexport"
-        download_binary(root_folder, "yexport", yexport_binary_path)
-
-    rmtree(ydb_tmp_folder_path)
-    shutil.copytree(root_folder, ydb_tmp_folder_path)
+        libiconv_path="contrib/libs/libiconv/dynamic"
+        compile_libiconv_command = f"{root_folder}/ya make -r {libiconv_path}"
+        print("Compliling libiconv...")
+        subprocess.check_output(compile_libiconv_command, shell=True)
+        yexport_binary_path = f"LD_LIBRARY_PATH={libiconv_path} {root_folder}/ya tool yexport"
 
     platforms = [
-        ("linux-x86_64", "default-linux-x86_64"),
-        ("linux-aarch64", "default-linux-aarch64"),
+        # ("linux-x86_64", "default-linux-x86_64"),
+        # ("linux-aarch64", "default-linux-aarch64"),
         ("darwin-x86_64", "default-darwin-x86_64"),
-        ("windows-x86_64", "default-win-x86_64"),
+        #("windows-x86_64", "default-win-x86_64"),
     ]
 
     generate_graph_for_platform_commands = []
@@ -208,7 +207,7 @@ if __name__ == "__main__":
         # In original script there are targets kikimr/docs/ru/docs_oss ydb ydb/tests/oss/launch library/cpp/actors tools/rescompiler/bin
         generate_graph_command = f'{ymake_binary_path} --build-root "{ydb_tmp_folder_path}" --config "{dump_export_path}"\
             --plugins-root "{plugins_folder_path}" --xs --xx --sem-graph --keep-going\
-            ydb ydb/tests/oss/launch library/cpp/actors tools/rescompiler/bin > {graph_export_path}'
+            ydb ydb/tests/oss/launch tools/rescompiler/bin > {graph_export_path}'
         print(f"Generate graph command {generate_graph_command}")
 
         generate_graph_for_platform_commands.append((platform, generate_graph_command))
@@ -231,13 +230,15 @@ if __name__ == "__main__":
         for error in errors_for_platform[index]:
             print(error, file=sys.stderr)
 
-        sys.exit(1)
+        # sys.exit(1)
 
-    yexport_command = f"{yexport_binary_path} --export-root \"{ydb_tmp_folder_path}\" --target YDB \
-            --semantic-graph \"{ydb_metadata_folder_path + '/sem.linux-x86_64.json'}\" --platforms linux-x86_64 \
-            --semantic-graph \"{ydb_metadata_folder_path + '/sem.linux-aarch64.json'}\" --platforms linux-aarch64 \
-            --semantic-graph \"{ydb_metadata_folder_path + '/sem.darwin-x86_64.json'}\" --platforms darwin-x86_64 \
-            --semantic-graph \"{ydb_metadata_folder_path + '/sem.windows-x86_64.json'}\" --platforms windows-x86_64"
+#    yexport_command = f"{yexport_binary_path} --export-root \"{ydb_tmp_folder_path}\" --target YDB \
+#            --semantic-graph \"{ydb_metadata_folder_path + '/sem.linux-x86_64.json'}\" --platforms linux-x86_64 \
+#            --semantic-graph \"{ydb_metadata_folder_path + '/sem.linux-aarch64.json'}\" --platforms linux-aarch64 \
+#            --semantic-graph \"{ydb_metadata_folder_path + '/sem.darwin-x86_64.json'}\" --platforms darwin-x86_64 \
+#            --semantic-graph \"{ydb_metadata_folder_path + '/sem.windows-x86_64.json'}\" --platforms windows-x86_64"
+    yexport_command = f"{yexport_binary_path} --export-root \"{root_folder}\" --target YDB \
+            --semantic-graph \"{ydb_metadata_folder_path + '/sem.darwin-x86_64.json'}\" --platforms darwin-x86_64"
     print(f"yexport command {yexport_command}")
 
     yexport_output = subprocess.check_output(
@@ -247,6 +248,8 @@ if __name__ == "__main__":
     if debug:
         print("yexport output")
         print(yexport_output)
+
+    sys.exit(0)
 
     rsync_command = f'rsync --recursive --delete  --perms\
         --exclude .git --exclude contrib --exclude library/cpp/actors\

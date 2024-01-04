@@ -54,12 +54,6 @@ public:
             *versionCounter->GetCounter("version", false) = 1;
         }
 
-        // TODO(t1mursadykov): Add role for static nodes with sys tablets only
-        if (AppData(ctx)->DynamicNameserviceConfig) {
-            if (SelfId().NodeId() <= AppData(ctx)->DynamicNameserviceConfig->MaxStaticNodeId)
-                ctx.Send(ctx.SelfID, new TEvWhiteboard::TEvSystemStateAddRole("Storage"));
-        }
-
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
         ProcessStats.Fill(getpid());
         if (ProcessStats.CGroupMemLim != 0) {
@@ -386,6 +380,16 @@ protected:
         return modified;
     }
 
+    void SetRole(TStringBuf roleName) {
+        for (const auto& role : SystemStateInfo.GetRoles()) {
+            if (role == roleName) {
+                return;
+            }
+        }
+        SystemStateInfo.AddRoles(TString(roleName));
+        SystemStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
+    }
+
     STRICT_STFUNC(StateFunc,
         HFunc(TEvWhiteboard::TEvTabletStateUpdate, Handle);
         HFunc(TEvWhiteboard::TEvTabletStateRequest, Handle);
@@ -459,6 +463,7 @@ protected:
         if (CheckedMerge(pDiskStateInfo, ev->Get()->Record) >= 100) {
             pDiskStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
         }
+        SetRole("Storage");
     }
 
     void Handle(TEvWhiteboard::TEvVDiskStateUpdate::TPtr &ev, const TActorContext &ctx) {
@@ -561,6 +566,7 @@ protected:
             SystemStateInfo.ClearTenants();
             SystemStateInfo.AddTenants(ev->Get()->Tenant);
             SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+            SetRole("Tenant");
         }
     }
 

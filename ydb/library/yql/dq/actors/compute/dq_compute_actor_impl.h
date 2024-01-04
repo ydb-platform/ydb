@@ -1593,7 +1593,8 @@ protected:
                         .Alloc = TaskRunner ? TaskRunner->GetAllocatorPtr() : nullptr,
                         .MemoryQuotaManager = MemoryLimits.MemoryQuotaManager,
                         .SourceSettings = (!settings.empty() ? settings.at(inputIndex) : nullptr),
-                        .Arena = Task.GetArena()
+                        .Arena = Task.GetArena(),
+                        .TraceId = ComputeActorSpan.GetTraceId()
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create source " << inputDesc.GetSource().GetType() << ": " << ex.what();
@@ -1623,7 +1624,8 @@ protected:
                             .TypeEnv = typeEnv,
                             .HolderFactory = holderFactory,
                             .ProgramBuilder = *transform.ProgramBuilder,
-                            .Alloc = TaskRunner->GetAllocatorPtr()
+                            .Alloc = TaskRunner->GetAllocatorPtr(),
+                            .TraceId = ComputeActorSpan.GetTraceId()
                         });
                 } catch (const std::exception& ex) {
                     throw yexception() << "Failed to create input transform " << inputDesc.GetTransform().GetType() << ": " << ex.what();

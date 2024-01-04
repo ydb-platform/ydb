@@ -364,7 +364,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         }
         
         std::string canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) "
-        ", (LiteralExecuter) , (DataExecuter -> [(WaitForTableResolve) , (WaitForSnapshot) , (RunTasks) , "
+        ", (LiteralExecuter) , (DataExecuter -> [(WaitForTableResolve) , (WaitForSnapshot) , (ComputeActor) , (RunTasks) , "
         "(Datashard.Transaction -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , "
         "(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
         "(Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
@@ -374,6 +374,68 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         "(Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) , "
         "(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> "
         "[(Tablet.WriteLog.LogEntry)])])])])])";
+        UNIT_ASSERT_VALUES_EQUAL(canon, trace.ToString());
+    }
+
+    Y_UNIT_TEST(TestTraceDistributedSelectViaReadActors) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+
+        FakeWilsonUploader* uploader = new FakeWilsonUploader();
+        TActorId uploaderId = runtime.Register(uploader, 0);
+        runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId, 0);
+        runtime.SimulateSleep(TDuration::Seconds(10));
+
+        SplitTable(runtime, server, 5);
+
+        ExecSQL(
+            server,
+            sender,
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500), (7, 700), (9, 900);",
+            true,
+            Ydb::StatusIds::SUCCESS
+        );
+
+        ExecSQL(
+            server,
+            sender,
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 100), (4, 300), (6, 500), (8, 700), (10, 900);",
+            true,
+            Ydb::StatusIds::SUCCESS
+        );
+
+        NWilson::TTraceId traceId = NWilson::TTraceId::NewTraceId(15, 4095);
+
+        ExecSQL(
+            server,
+            sender,
+            "SELECT * FROM `/Root/table-1`;",
+            true,
+            Ydb::StatusIds::SUCCESS,
+            std::move(traceId)
+        );
+
+        uploader->BuildTraceTrees();
+
+        UNIT_ASSERT_EQUAL(1, uploader->Traces.size());
+
+        FakeWilsonUploader::Trace& trace = uploader->Traces.begin()->second;
+
+        auto readActorSpan = trace.Root.BFSFindOne("ReadActor");
+        UNIT_ASSERT(readActorSpan);
+
+        auto dsReads = readActorSpan->get().FindAll("DataShard.Read"); // Read actor sends EvRead to each shard.
+        UNIT_ASSERT_EQUAL(dsReads.size(), 2);
+
+        std::string canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) , "
+            "(DataExecuter -> [(WaitForTableResolve) , (WaitForShardsResolve) , (WaitForSnapshot) , (ComputeActor) , "
+            "(RunTasks) , (KqpNode.SendTasks) , (ComputeActor -> [(ReadActor -> [(WaitForShardsResolve) , "
+            "(DataShard.Read -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , "
+            "(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])]) , "
+            "(ReadIterator.ReadOperation)]) , (DataShard.Read -> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> "
+            "[(Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog -> "
+            "[(Tablet.WriteLog.LogEntry)])]) , (ReadIterator.ReadOperation)])])])])])";
         UNIT_ASSERT_VALUES_EQUAL(canon, trace.ToString());
     }
 

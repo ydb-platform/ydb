@@ -1691,7 +1691,7 @@ TExprNode::TPtr BuildProjectionLambda(TPositionHandle pos, const TExprNode::TPtr
 
     TMap<TStringBuf, TStringBuf> columnNamesMap;
     for (size_t i = 0; i < nodeColumnOrder.size(); ++i) {
-	columnNamesMap[setItemColumnOrder[i]] = nodeColumnOrder[i];
+        columnNamesMap[setItemColumnOrder[i]] = nodeColumnOrder[i];
     }
 
     return ctx.Builder(pos)

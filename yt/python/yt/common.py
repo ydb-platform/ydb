@@ -430,11 +430,15 @@ def _pretty_format_attribute(name, value, attribute_length_limit):
         value = json.dumps(value, indent=2)
         value = value.replace("\n", "\n" + " " * (15 + 1 + 4))
     else:
-        if isinstance(value, string_types):
-            value = to_native_str(value)
+        # YsonStringProxy attribute formatting.
+        if hasattr(value, "_bytes"):
+            value = value._bytes
         else:
-            value = str(value)
-        value = _pretty_format_escape(value)
+            if isinstance(value, string_types):
+                value = to_native_str(value)
+            else:
+                value = str(value)
+            value = _pretty_format_escape(value)
         if attribute_length_limit is not None and len(value) > attribute_length_limit:
             value = value[:attribute_length_limit] + "...message truncated..."
     return " " * 4 + "%-15s %s" % (name, value)

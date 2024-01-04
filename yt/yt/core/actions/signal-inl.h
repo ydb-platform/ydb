@@ -165,7 +165,7 @@ bool TSingleShotCallbackList<TResult(TArgs...)>::Fire(TCallArgs&&... args)
         if (Fired_.load(std::memory_order::acquire)) {
             return false;
         }
-        Args_ = std::make_tuple(std::forward<TCallArgs>(args)...);
+        Args_ = std::tuple(std::forward<TCallArgs>(args)...);
         callbacks.swap(Callbacks_);
         Fired_.store(true, std::memory_order::release);
     }

@@ -209,7 +209,7 @@ bool TResourceTracker::ProcessThread(TString tid, TResourceTracker::TThreadInfo*
                 auto tokens = SplitString(line, "\t");
 
                 if (tokens.size() < 2) {
-                   continue;
+                    continue;
                 }
 
                 if (tokens[0] == "Name:") {

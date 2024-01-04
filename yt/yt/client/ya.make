@@ -141,6 +141,7 @@ SRCS(
     queue_client/common.cpp
     queue_client/config.cpp
     queue_client/consumer_client.cpp
+    queue_client/helpers.cpp
     queue_client/partition_reader.cpp
     queue_client/queue_rowset.cpp
 

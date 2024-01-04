@@ -193,7 +193,7 @@ std::vector<std::pair<ui32, ui32>> GetTimestampIndexRanges(
             ++upperTimestampIndex;
         }
 
-        indexRanges.push_back(std::make_pair(lowerTimestampIndex, upperTimestampIndex));
+        indexRanges.push_back(std::pair(lowerTimestampIndex, upperTimestampIndex));
     }
     return indexRanges;
 }

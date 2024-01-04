@@ -1160,6 +1160,98 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         });
     }
 
+    Y_UNIT_TEST(DdlSecret) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+
+        enum EEx {
+            Empty,
+            IfExists,
+            IfNotExists,
+        };
+
+        auto executeSql = [&](const TString& sql, bool expectSuccess) {
+            Cerr << "Execute SQL:\n" << sql << Endl;
+
+            auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+            if (expectSuccess) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            UNIT_ASSERT(result.GetResultSets().empty());
+        };
+
+        auto checkCreate = [&](bool expectSuccess, EEx exMode, int nameSuffix) {
+            UNIT_ASSERT_UNEQUAL(exMode, EEx::IfExists);
+            const TString ifNotExistsStatement = exMode == EEx::IfNotExists ? "IF NOT EXISTS" : "";
+            const TString sql = fmt::format(R"sql(
+                CREATE OBJECT {if_not_exists} my_secret_{name_suffix} (TYPE SECRET) WITH (value="qwerty");
+                )sql",
+                "if_not_exists"_a = ifNotExistsStatement,
+                "name_suffix"_a = nameSuffix
+            );
+
+            executeSql(sql, expectSuccess);
+        };
+
+        auto checkAlter = [&](bool expectSuccess, int nameSuffix) {
+            const TString sql = fmt::format(R"sql(
+                ALTER OBJECT my_secret_{name_suffix} (TYPE SECRET) SET value = "abcde";
+                )sql",
+                "name_suffix"_a = nameSuffix
+            );
+
+            executeSql(sql, expectSuccess);
+        };
+
+        auto checkUpsert = [&](bool expectSuccess, int nameSuffix) {
+            const TString sql = fmt::format(R"sql(
+                UPSERT OBJECT my_secret_{name_suffix} (TYPE SECRET) WITH value = "edcba";
+                )sql",
+                "name_suffix"_a = nameSuffix
+            );
+
+            executeSql(sql, expectSuccess);
+        };
+
+        auto checkDrop = [&](bool expectSuccess, EEx exMode, int nameSuffix) {
+            UNIT_ASSERT_UNEQUAL(exMode, EEx::IfNotExists);
+            const TString ifExistsStatement = exMode == EEx::IfExists ? "IF EXISTS" : "";
+            const TString sql = fmt::format(R"sql(
+                DROP OBJECT {if_exists} my_secret_{name_suffix} (TYPE SECRET);
+                )sql",
+                "if_exists"_a = ifExistsStatement,
+                "name_suffix"_a = nameSuffix
+            );
+
+            executeSql(sql, expectSuccess);
+        };
+
+        checkCreate(true, EEx::Empty, 0);
+        checkCreate(false, EEx::Empty, 0);
+        checkAlter(true, 0);
+        checkAlter(false, 2); // not exists
+        checkDrop(true, EEx::Empty, 0);
+        checkDrop(true, EEx::Empty, 0); // we don't check object existence
+
+        checkCreate(true, EEx::IfNotExists, 1);
+        checkCreate(true, EEx::IfNotExists, 1);
+        checkDrop(true, EEx::IfExists, 1);
+        checkDrop(true, EEx::IfExists, 1);
+
+        checkUpsert(true, 2);
+        checkCreate(false, EEx::Empty, 2); // already exists
+        checkUpsert(true, 2);
+    }
+
     Y_UNIT_TEST(DdlCache) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);

@@ -1,6 +1,7 @@
 #include <cmath>
 #include <library/cpp/svnversion/svnversion.h>
 #include <util/system/info.h>
+#include <util/system/hostname.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mon_alloc/stats.h>
 #include <ydb/library/actors/core/actor.h>
@@ -9,7 +10,6 @@
 #include <ydb/library/actors/core/process_stats.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/nameservice.h>
-#include "tablet_counters.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/util/tuples.h>
 
@@ -45,6 +45,7 @@ public:
         TIntrusivePtr<::NMonitoring::TDynamicCounters> introspectionGroup = tabletsGroup->GetSubgroup("type", "introspection");
         TabletIntrospectionData.Reset(NTracing::CreateTraceCollection(introspectionGroup));
 
+        SystemStateInfo.SetHost(FQDNHostName());
         SystemStateInfo.SetNumberOfCpus(NSystemInfo::NumberOfCpus());
         auto version = GetProgramRevision();
         if (!version.empty()) {

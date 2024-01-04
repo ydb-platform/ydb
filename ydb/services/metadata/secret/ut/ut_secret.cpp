@@ -152,11 +152,14 @@ Y_UNIT_TEST_SUITE(Secret) {
         }
     };
 
-    Y_UNIT_TEST(Simple) {
+    void SimpleImpl(bool useQueryService) {
         TPortManager pm;
 
         ui32 grpcPort = pm.GetPort();
         ui32 msgbPort = pm.GetPort();
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
 
         Tests::TServerSettings serverSettings(msgbPort);
         serverSettings.Port = msgbPort;
@@ -164,7 +167,8 @@ Y_UNIT_TEST_SUITE(Secret) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetEnableOlapSchemaOperations(true);
+            .SetEnableOlapSchemaOperations(true)
+            .SetAppConfig(appConfig);
         ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -185,6 +189,8 @@ Y_UNIT_TEST_SUITE(Secret) {
             Cerr << "Initialization finished" << Endl;
 
             Tests::NCS::THelper lHelper(*server);
+            lHelper.SetUseQueryService(useQueryService);
+
             lHelper.StartSchemaRequest("CREATE OBJECT secret1 (TYPE SECRET) WITH value = `100`");
             lHelper.StartSchemaRequest("UPSERT OBJECT secret1_1 (TYPE SECRET) WITH value = `100`");
             lHelper.StartSchemaRequest("UPSERT OBJECT secret1_1 (TYPE SECRET) WITH value = `200`");
@@ -235,11 +241,22 @@ Y_UNIT_TEST_SUITE(Secret) {
         }
     }
 
-    Y_UNIT_TEST(Validation) {
+    Y_UNIT_TEST(Simple) {
+        SimpleImpl(false);
+    }
+
+    Y_UNIT_TEST(SimpleQueryService) {
+        SimpleImpl(true);
+    }
+
+    void ValidationImpl(bool useQueryService) {
         TPortManager pm;
 
         ui32 grpcPort = pm.GetPort();
         ui32 msgbPort = pm.GetPort();
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
 
         Tests::TServerSettings serverSettings(msgbPort);
         serverSettings.Port = msgbPort;
@@ -247,7 +264,8 @@ Y_UNIT_TEST_SUITE(Secret) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetEnableOlapSchemaOperations(true);
+            .SetEnableOlapSchemaOperations(true)
+            .SetAppConfig(appConfig);
         ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -265,6 +283,8 @@ Y_UNIT_TEST_SUITE(Secret) {
             Cerr << "Initialization finished" << Endl;
 
             Tests::NCS::THelper lHelper(*server);
+            lHelper.SetUseQueryService(useQueryService);
+
             lHelper.StartSchemaRequest("CREATE OBJECT secret-1 (TYPE SECRET) WITH value = `100`", false);
             lHelper.StartSchemaRequest("ALTER OBJECT secret1 (TYPE SECRET) SET value = `abcde`", false);
             lHelper.StartSchemaRequest("CREATE OBJECT secret1 (TYPE SECRET) WITH value = `100`");
@@ -281,11 +301,22 @@ Y_UNIT_TEST_SUITE(Secret) {
         }
     }
 
-    Y_UNIT_TEST(Deactivated) {
+    Y_UNIT_TEST(Validation) {
+        ValidationImpl(false);
+    }
+
+    Y_UNIT_TEST(ValidationQueryService) {
+        ValidationImpl(true);
+    }
+
+    void DeactivatedImpl(bool useQueryService) {
         TPortManager pm;
 
         ui32 grpcPort = pm.GetPort();
         ui32 msgbPort = pm.GetPort();
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
 
         Tests::TServerSettings serverSettings(msgbPort);
         serverSettings.Port = msgbPort;
@@ -293,7 +324,8 @@ Y_UNIT_TEST_SUITE(Secret) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(false)
-            .SetEnableOlapSchemaOperations(true);
+            .SetEnableOlapSchemaOperations(true)
+            .SetAppConfig(appConfig);
         ;
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -311,8 +343,18 @@ Y_UNIT_TEST_SUITE(Secret) {
             Cerr << "Initialization finished" << Endl;
 
             Tests::NCS::THelper lHelper(*server);
+            lHelper.SetUseQueryService(useQueryService);
+
             lHelper.StartSchemaRequest("CREATE OBJECT secret1 (TYPE SECRET) WITH value = `100`", false);
         }
+    }
+
+    Y_UNIT_TEST(Deactivated) {
+        DeactivatedImpl(false);
+    }
+
+    Y_UNIT_TEST(DeactivatedQueryService) {
+        DeactivatedImpl(true);
     }
 }
 }

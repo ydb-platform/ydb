@@ -11248,6 +11248,41 @@
             "uri": "https://{canondata_backend}/1817427/5ebfc414781230f90b896d4ed143ea00cf4c7aaa/resource.tar.gz#test_sql2yql.test_pg-select_columnref2_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-select_common_type_except]": [
+        {
+            "checksum": "0d1bf4c2c7f850d7da3be3cff2f50575",
+            "size": 603,
+            "uri": "https://{canondata_backend}/1942173/ffb77843091f03e2b382ff14da1c2da73f8b4493/resource.tar.gz#test_sql2yql.test_pg-select_common_type_except_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg-select_common_type_exceptall]": [
+        {
+            "checksum": "5ac3061c0cc63513780b2ef34e9bf6bf",
+            "size": 722,
+            "uri": "https://{canondata_backend}/1942173/ffb77843091f03e2b382ff14da1c2da73f8b4493/resource.tar.gz#test_sql2yql.test_pg-select_common_type_exceptall_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg-select_common_type_intersect]": [
+        {
+            "checksum": "7846d73431641dee91093d888d57e02b",
+            "size": 1289,
+            "uri": "https://{canondata_backend}/1942173/ffb77843091f03e2b382ff14da1c2da73f8b4493/resource.tar.gz#test_sql2yql.test_pg-select_common_type_intersect_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg-select_common_type_intersectall]": [
+        {
+            "checksum": "4458491f5544130e6b2f7eb8e4c9b690",
+            "size": 653,
+            "uri": "https://{canondata_backend}/1942173/ffb77843091f03e2b382ff14da1c2da73f8b4493/resource.tar.gz#test_sql2yql.test_pg-select_common_type_intersectall_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg-select_common_type_union]": [
+        {
+            "checksum": "38a98294ecefaa5a2536b22408ef4b60",
+            "size": 811,
+            "uri": "https://{canondata_backend}/1942173/ffb77843091f03e2b382ff14da1c2da73f8b4493/resource.tar.gz#test_sql2yql.test_pg-select_common_type_union_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-select_common_type_unionall]": [
         {
             "checksum": "992e12b42430a148ca76fed33019fb1e",

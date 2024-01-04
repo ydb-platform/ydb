@@ -1683,7 +1683,18 @@ TExprNode::TPtr BuildCrossJoinsBetweenGroups(TPositionHandle pos, const TExprNod
     return ctx.NewCallable(pos, "EquiJoin", std::move(args));
 }
 
-TExprNode::TPtr BuildProjectionLambda(TPositionHandle pos, const TExprNode::TPtr& result, bool subLink, bool emitPgStar, TExprContext& ctx) {
+TExprNode::TPtr BuildProjectionLambda(TPositionHandle pos, const TExprNode::TPtr& result, const TStructExprType* finalType,
+    const TColumnOrder& nodeColumnOrder, const TColumnOrder& setItemColumnOrder,
+    bool subLink, bool emitPgStar, TExprContext& ctx) {
+
+    YQL_ENSURE(nodeColumnOrder.size() == setItemColumnOrder.size());
+    TMap<TStringBuf, TStringBuf> columnNamesMap;
+    if (!emitPgStar) {
+        for (size_t i = 0; i < nodeColumnOrder.size(); ++i) {
+            columnNamesMap[setItemColumnOrder[i]] = nodeColumnOrder[i];
+        }
+    }
+
     return ctx.Builder(pos)
         .Lambda()
             .Param("row")
@@ -1705,26 +1716,68 @@ TExprNode::TPtr BuildProjectionLambda(TPositionHandle pos, const TExprNode::TPtr
                     .Seal();
                     listBuilder.Seal();
                 };
+
+                auto addAtomToListWithCast = [&addAtomToList] (TExprNodeBuilder& listBuilder, TExprNode* x,
+                                                           const TTypeAnnotationNode* expectedTypeNode) -> void {
+                    auto actualType = x->GetTypeAnn()->Cast<TPgExprType>();
+                    Y_ENSURE(expectedTypeNode);
+                    const auto expectedType = expectedTypeNode->Cast<TPgExprType>();
+
+                    if (actualType == expectedType) {
+                        addAtomToList(listBuilder, x);
+                        return;
+                    }
+                    listBuilder.Add(0, x->HeadPtr());
+                    listBuilder.Callable(1, "PgCast")
+                        .Apply(0, x->TailPtr())
+                            .With(0, "row")
+                        .Seal()
+                        .Callable(1, "PgType")
+                            .Atom(0, NPg::LookupType(expectedType->GetId()).Name)
+                            .Seal();
+                    listBuilder.Seal();
+                };
+
                 for (const auto& x : result->Tail().Children()) {
                     if (x->HeadPtr()->IsAtom()) {
                         if (!emitPgStar) {
+                            const auto& columnName = x->Child(0)->Content();
                             auto listBuilder = parent.List(index++);
-                            addAtomToList(listBuilder, x.Get());
+                            addAtomToListWithCast(listBuilder, x.Get(), finalType->FindItemType(columnNamesMap[columnName]));
                         }
                     } else {
                         auto type = x->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                        Y_ENSURE(type);
+
                         for (const auto& item : type->GetItems()) {
                             TStringBuf column = item->GetName();
                             auto columnName = subLink ? column : NTypeAnnImpl::RemoveAlias(column);
+
                             auto listBuilder = parent.List(index++);
                             if (overrideColumns.contains(columnName)) {
+                                // we never get here while processing SELECTs,
+                                // so no need to add PgCasts due to query combining with UNION ALL et al
                                 addAtomToList(listBuilder, overrideColumns[columnName]);
                             } else {
                                 listBuilder.Atom(0, columnName);
-                                listBuilder.Callable(1, "Member")
-                                    .Arg(0, "row")
-                                    .Atom(1, column);
-                                listBuilder.Seal();
+
+                                const auto expectedType = finalType->FindItemType(columnNamesMap[columnName]);
+                                if (item->GetItemType() == expectedType) {
+                                    listBuilder.Callable(1, "Member")
+                                        .Arg(0, "row")
+                                        .Atom(1, column)
+                                    .Seal();
+                                } else {
+                                    listBuilder.Callable(1, "PgCast")
+                                        .Callable(0, "Member")
+                                            .Arg(0, "row")
+                                            .Atom(1, column)
+                                        .Seal()
+                                        .Callable(1, "PgType")
+                                            .Atom(0, NPg::LookupType(expectedType->Cast<TPgExprType>()->GetId()).Name)
+                                        .Seal()
+                                    .Seal();
+                                }
                             }
                         }
                     }
@@ -3159,7 +3212,9 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             }
         } else {
             YQL_ENSURE(result);
-            TExprNode::TPtr projectionLambda = BuildProjectionLambda(node->Pos(), result, subLinkId.Defined(), emitPgStar, ctx);
+            auto finalType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            Y_ENSURE(finalType);
+            TExprNode::TPtr projectionLambda = BuildProjectionLambda(node->Pos(), result, finalType, *order, *childOrder, subLinkId.Defined(), emitPgStar, ctx);
             TExprNode::TPtr projectionArg = projectionLambda->Head().HeadPtr();
             TExprNode::TPtr projectionRoot = projectionLambda->TailPtr();
             TVector<TString> inputAliases;

@@ -305,7 +305,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                 })));
     }
 
-    return AllSucceeded(futures)
+    return AllSucceeded(std::move(futures))
         .Apply(
             BIND([=, this, this_ = MakeStrong(this)] {
                 auto req = Proxy_.CommitTransaction();

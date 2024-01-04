@@ -87,15 +87,15 @@ void Deserialize(TOperation& operation, NYTree::IAttributeDictionaryPtr attribut
         using T = std::remove_reference_t<decltype(field)>;
         if constexpr (std::is_same_v<T, NYson::TYsonString>) {
             if (auto value = attributes->FindYson(name)) {
-               field = std::move(value);
-               attributes->Remove(name);
+                field = std::move(value);
+                attributes->Remove(name);
             } else {
                 field = {};
             }
         } else {
             using TValue = typename TOptionalTraits<T>::TValue;
             if (auto value = attributes->FindAndRemove<TValue>(name)) {
-               field = std::move(value);
+                field = std::move(value);
             } else {
                 field.reset();
             }

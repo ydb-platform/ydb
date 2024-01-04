@@ -1049,6 +1049,7 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
 
     if (ColumnNames) {
         TColumnFilter::TIndexes columnFilterIndexes;
+        columnFilterIndexes.reserve(ColumnNames->size());
         for (const auto& name : *ColumnNames) {
             auto optionalIndex = nameTable->FindId(name);
             if (!optionalIndex) {

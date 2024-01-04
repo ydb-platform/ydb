@@ -1,3 +1,0 @@
-RECURSE(
-    ch-gen-col
-)

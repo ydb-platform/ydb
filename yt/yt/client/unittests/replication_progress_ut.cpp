@@ -61,31 +61,31 @@ INSTANTIATE_TEST_SUITE_P(
     TUpdateReplicationProgressTest,
     TUpdateReplicationProgressTest,
     ::testing::Values(
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[];timestamp=0}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[];timestamp=0}];upper_key=[<type=max>#]}"),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[];timestamp=1u}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[];timestamp=1u}];upper_key=[<type=max>#]}"),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[1];timestamp=0}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[];timestamp=0}];upper_key=[<type=max>#]}"),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[1];timestamp=1}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[1];timestamp=1u}];upper_key=[<type=max>#]}"),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[1];timestamp=1}];upper_key=[2]}",
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[1];timestamp=1};{lower_key=[2];timestamp=0}];upper_key=[<type=max>#]}"),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0}];upper_key=[2]}",
             "{segments=[{lower_key=[1];timestamp=1}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[1];timestamp=1}];upper_key=[2]}"),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[2];timestamp=2}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[1];timestamp=1};{lower_key=[3];timestamp=3}];upper_key=[4]}",
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[1];timestamp=1};{lower_key=[2];timestamp=2};{lower_key=[3];timestamp=3};{lower_key=[4];timestamp=2}];upper_key=[<type=max>#]}")
@@ -121,47 +121,47 @@ INSTANTIATE_TEST_SUITE_P(
     TCompareReplicationProgressTest,
     TCompareReplicationProgressTest,
     ::testing::Values(
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[];timestamp=0}];upper_key=[<type=max>#]}",
             true),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}",
             false),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=0};];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}",
             false),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1}];upper_key=[1]}",
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[1];timestamp=2}];upper_key=[<type=max>#]}",
             true),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[2];timestamp=1};{lower_key=[4];timestamp=2}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[1];timestamp=0};{lower_key=[3];timestamp=1}];upper_key=[4]}",
             true),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=0}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[];timestamp=1}];upper_key=[1]}",
             true),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[1];timestamp=1};{lower_key=[2];timestamp=0}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[1];timestamp=1};{lower_key=[2];timestamp=0}];upper_key=[<type=max>#]}",
             true),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[1];timestamp=0}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=0}];upper_key=[<type=max>#]}",
             true),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[2];timestamp=0}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=0}];upper_key=[<type=max>#]}",
             true),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[2];timestamp=0}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[];timestamp=1};{lower_key=[3];timestamp=0}];upper_key=[<type=max>#]}",
             false),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[1];timestamp=0}];upper_key=[<type=max>#]}",
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[1];timestamp=1}];upper_key=[<type=max>#]}",
             false)
@@ -201,26 +201,26 @@ INSTANTIATE_TEST_SUITE_P(
     TGatherReplicationProgressTest,
     TGatherReplicationProgressTest,
     ::testing::Values(
-        std::make_tuple(
+        std::tuple(
             std::vector<const char*>{
                 "{segments=[{lower_key=[];timestamp=0}];upper_key=[1]}",
                 "{segments=[{lower_key=[1];timestamp=1}];upper_key=[2]}"
             },
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[1];timestamp=1}];upper_key=[2]}"),
-        std::make_tuple(
+        std::tuple(
             std::vector<const char*>{
                 "{segments=[{lower_key=[];timestamp=0}];upper_key=[1]}",
                 "{segments=[{lower_key=[0];timestamp=0}];upper_key=[2]}"
             },
             "{segments=[{lower_key=[];timestamp=0}];upper_key=[2]}"),
-        std::make_tuple(
+        std::tuple(
             std::vector<const char*>{
                 "{segments=[{lower_key=[];timestamp=0}];upper_key=[1]}",
                 "{segments=[{lower_key=[1];timestamp=1}];upper_key=[2]}",
                 "{segments=[{lower_key=[2];timestamp=1}];upper_key=[3]}"
             },
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[1];timestamp=1}];upper_key=[3]}"),
-        std::make_tuple(
+        std::tuple(
             std::vector<const char*>{
                 "{segments=[{lower_key=[];timestamp=0}];upper_key=[1]}",
                 "{segments=[{lower_key=[1];timestamp=0}];upper_key=[2]}",
@@ -283,7 +283,7 @@ INSTANTIATE_TEST_SUITE_P(
     TScatterReplicationProgressTest,
     TScatterReplicationProgressTest,
     ::testing::Values(
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0}];upper_key=[<type=max>#]}",
             "[[]; [1]]",
             "[<type=max>#]",
@@ -291,7 +291,7 @@ INSTANTIATE_TEST_SUITE_P(
                 "{segments=[{lower_key=[];timestamp=0}];upper_key=[1]}",
                 "{segments=[{lower_key=[1];timestamp=0}];upper_key=[<type=max>#]}"
             }),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0}];upper_key=[<type=max>#]}",
             "[[]; [1]]",
             "[2]",
@@ -299,7 +299,7 @@ INSTANTIATE_TEST_SUITE_P(
                 "{segments=[{lower_key=[];timestamp=0}];upper_key=[1]}",
                 "{segments=[{lower_key=[1];timestamp=0}];upper_key=[2]}"
             }),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[1];timestamp=1}];upper_key=[2]}",
             "[[]; [1]]",
             "[2]",
@@ -307,7 +307,7 @@ INSTANTIATE_TEST_SUITE_P(
                 "{segments=[{lower_key=[];timestamp=0}];upper_key=[1]}",
                 "{segments=[{lower_key=[1];timestamp=1}];upper_key=[2]}"
             }),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[2];timestamp=1};{lower_key=[4];timestamp=0}];upper_key=[6]}",
             "[[1]; [3]]",
             "[5]",
@@ -315,7 +315,7 @@ INSTANTIATE_TEST_SUITE_P(
                 "{segments=[{lower_key=[1];timestamp=0};{lower_key=[2];timestamp=1}];upper_key=[3]}",
                 "{segments=[{lower_key=[3];timestamp=1};{lower_key=[4];timestamp=0}];upper_key=[5]}",
             }),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[2];timestamp=1};{lower_key=[4];timestamp=0}];upper_key=[6]}",
             "[[1]; [4]]",
             "[6]",
@@ -323,7 +323,7 @@ INSTANTIATE_TEST_SUITE_P(
                 "{segments=[{lower_key=[1];timestamp=0};{lower_key=[2];timestamp=1}];upper_key=[4]}",
                 "{segments=[{lower_key=[4];timestamp=0}];upper_key=[6]}"
             }),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[2];timestamp=1};{lower_key=[4];timestamp=0}];upper_key=[6]}",
             "[[3]; [4]]",
             "[5]",
@@ -331,7 +331,7 @@ INSTANTIATE_TEST_SUITE_P(
                 "{segments=[{lower_key=[3];timestamp=1}];upper_key=[4]}",
                 "{segments=[{lower_key=[4];timestamp=0}];upper_key=[5]}"
             }),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[2];timestamp=1};{lower_key=[4];timestamp=0}];upper_key=[6]}",
             "[[1]; [2]; [3]; [4]; [5]]",
             "[6]",
@@ -374,31 +374,31 @@ INSTANTIATE_TEST_SUITE_P(
     TReplicationProgressTimestampForKeyTest,
     TReplicationProgressTimestampForKeyTest,
     ::testing::Values(
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}",
             "[1]",
             1),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[1];timestamp=1}];upper_key=[<type=max>#]}",
             "[]",
             std::nullopt),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1}];upper_key=[1]}",
             "[1]",
             std::nullopt),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1}];upper_key=[1]}",
             "[2]",
             std::nullopt),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[1];timestamp=1}];upper_key=[<type=max>#]}",
             "[1]",
             1),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=0};{lower_key=[1];timestamp=1};{lower_key=[2];timestamp=2};];upper_key=[<type=max>#]}",
             "[1]",
             1),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1};{lower_key=[2];timestamp=2};];upper_key=[<type=max>#]}",
             "[1]",
             1)
@@ -431,16 +431,16 @@ INSTANTIATE_TEST_SUITE_P(
     TReplicationProgressSerialization,
     TReplicationProgressSerialization,
     ::testing::Values(
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}",
             "{Segments: [<[], 1>], UpperKey: [0#<Max>]}"),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2}];upper_key=[<type=max>#]}",
             "{Segments: [<[], 1>, <[0#1], 2>], UpperKey: [0#<Max>]}"),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2};{lower_key=[2];timestamp=3}];upper_key=[<type=max>#]}",
             "{Segments: [<[], 1>, <[0#1], 2>, <[0#2], 3>], UpperKey: [0#<Max>]}"),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2};{lower_key=[2];timestamp=3};{lower_key=[3];timestamp=4};{lower_key=[4];timestamp=5};"
             "{lower_key=[5];timestamp=6};{lower_key=[6];timestamp=7};{lower_key=[7];timestamp=8};{lower_key=[8];timestamp=9}];upper_key=[<type=max>#]}",
             "{Segments: [<[], 1>, <[0#1], 2>, <[0#2], 3>, <[0#3], 4>, <[0#4], 5>, <[0#5], 6>, <[0#6], 7>, <[0#7], 8>, <[0#8], 9>], UpperKey: [0#<Max>]}")
@@ -481,52 +481,52 @@ INSTANTIATE_TEST_SUITE_P(
     TReplicationProgressProjectedSerialization,
     TReplicationProgressProjectedSerialization,
     ::testing::Values(
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}",
             "[0]",
             "[1]",
             "{Segments: [<[], 1>], UpperKey: [0#<Max>]}"),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1}];upper_key=[<type=max>#]}",
             "[0]",
             "[<type=max>#]",
             "{Segments: [<[], 1>], UpperKey: [0#<Max>]}"),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2}];upper_key=[<type=max>#]}",
             "[0]",
             "[1]",
             "{Segments: [<[], 1>, <[0#1], 2>], UpperKey: [0#<Max>]}"),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2}];upper_key=[<type=max>#]}",
             "[1]",
             "[2]",
             "{Segments: [<[], 1>, <[0#1], 2>], UpperKey: [0#<Max>]}"),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2}];upper_key=[<type=max>#]}",
             "[1]",
             "[<type=max>#]",
             "{Segments: [<[], 1>, <[0#1], 2>], UpperKey: [0#<Max>]}"),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2};{lower_key=[2];timestamp=3}];upper_key=[<type=max>#]}",
             "[]",
             "[1]",
             "{Segments: [<[], 1>, <[0#1], 2>, ...], UpperKey: [0#<Max>]}"),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2};{lower_key=[2];timestamp=3}];upper_key=[<type=max>#]}",
             "[1]",
             "[2]",
             "{Segments: [<[], 1>, <[0#1], 2>, <[0#2], 3>], UpperKey: [0#<Max>]}"),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2};{lower_key=[2];timestamp=3}];upper_key=[<type=max>#]}",
             "[2]",
             "[3]",
             "{Segments: [<[], 1>, ..., <[0#2], 3>], UpperKey: [0#<Max>]}"),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2};{lower_key=[2];timestamp=3}];upper_key=[<type=max>#]}",
             "[2]",
             "[<type=max>#]",
             "{Segments: [<[], 1>, ..., <[0#2], 3>], UpperKey: [0#<Max>]}"),
-        std::make_tuple(
+        std::tuple(
             "{segments=[{lower_key=[];timestamp=1};{lower_key=[1];timestamp=2};{lower_key=[2];timestamp=3};{lower_key=[3];timestamp=4};{lower_key=[4];timestamp=5};"
             "{lower_key=[5];timestamp=6};{lower_key=[6];timestamp=7};{lower_key=[7];timestamp=8};{lower_key=[8];timestamp=9}];upper_key=[<type=max>#]}",
             "[5]",

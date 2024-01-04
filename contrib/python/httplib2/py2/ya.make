@@ -1,18 +1,15 @@
-# Edited to peerdir certifi, dispatch between py2 and py3, remove
-# certs.txt.
-
 PY2_LIBRARY()
 
+VERSION(0.22.0)
+
 LICENSE(MIT)
-
-VERSION(0.20.4)
-
-NO_LINT()
 
 PEERDIR(
     contrib/python/certifi
     contrib/python/pyparsing
 )
+
+NO_LINT()
 
 PY_SRCS(
     TOP_LEVEL

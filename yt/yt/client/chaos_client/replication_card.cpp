@@ -537,7 +537,7 @@ std::optional<TTimestamp> FindReplicationProgressTimestampForKey(
         progress.Segments.end(),
         key,
         [&] (const auto& /*key*/, const auto& segment) {
-           return CompareValueRanges(key, segment.LowerKey.Elements()) < 0;
+            return CompareValueRanges(key, segment.LowerKey.Elements()) < 0;
         });
     YT_VERIFY(it > progress.Segments.begin());
 

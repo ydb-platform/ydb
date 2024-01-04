@@ -46,7 +46,7 @@ bool operator != (const TProtocolVersion& lhs, const TProtocolVersion& rhs)
 
 void FormatValue(TStringBuilderBase* builder, TProtocolVersion version, TStringBuf /*spec*/)
 {
-   builder->AppendFormat("%v.%v", version.Major, version.Minor);
+    builder->AppendFormat("%v.%v", version.Major, version.Minor);
 }
 
 TString ToString(TProtocolVersion version)

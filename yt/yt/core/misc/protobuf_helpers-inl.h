@@ -331,7 +331,7 @@ typename std::enable_if_t<!std::is_trivial_v<TValue>> SetPairValueImpl(TProtoPai
 template <class TProtoPair, class TValue>
 typename std::enable_if_t<std::is_trivial_v<TValue>> SetPairValueImpl(TProtoPair& pair, const TValue& value)
 {
-   pair->set_value(value);
+    pair->set_value(value);
 }
 
 template <class TSerializedArray, class T, class E, E Min, E Max>

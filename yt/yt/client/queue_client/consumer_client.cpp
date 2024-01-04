@@ -1,4 +1,7 @@
 #include "consumer_client.h"
+
+#include "common.h"
+#include "helpers.h"
 #include "private.h"
 
 #include <yt/yt/client/table_client/config.h>
@@ -40,11 +43,21 @@ static const auto& Logger = QueueClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static constexpr TStringBuf YTConsumerMetaColumnName = "meta";
+
+static const TTableSchemaPtr YTConsumerWithoutMetaTableSchema = New<TTableSchema>(std::vector<TColumnSchema>{
+    TColumnSchema("queue_cluster", EValueType::String, ESortOrder::Ascending).SetRequired(true),
+    TColumnSchema("queue_path", EValueType::String, ESortOrder::Ascending).SetRequired(true),
+    TColumnSchema("partition_index", EValueType::Uint64, ESortOrder::Ascending).SetRequired(true),
+    TColumnSchema("offset", EValueType::Uint64).SetRequired(true),
+}, /*strict*/ true, /*uniqueKeys*/ true);
+
 static const TTableSchemaPtr YTConsumerTableSchema = New<TTableSchema>(std::vector<TColumnSchema>{
     TColumnSchema("queue_cluster", EValueType::String, ESortOrder::Ascending).SetRequired(true),
     TColumnSchema("queue_path", EValueType::String, ESortOrder::Ascending).SetRequired(true),
     TColumnSchema("partition_index", EValueType::Uint64, ESortOrder::Ascending).SetRequired(true),
     TColumnSchema("offset", EValueType::Uint64).SetRequired(true),
+    TColumnSchema("meta", EValueType::Any).SetRequired(false),
 }, /*strict*/ true, /*uniqueKeys*/ true);
 
 static const TTableSchemaPtr BigRTConsumerTableSchema = New<TTableSchema>(std::vector<TColumnSchema>{
@@ -52,26 +65,57 @@ static const TTableSchemaPtr BigRTConsumerTableSchema = New<TTableSchema>(std::v
     TColumnSchema("Offset", EValueType::Uint64),
 }, /*strict*/ true, /*uniqueKeys*/ true);
 
+////////////////////////////////////////////////////////////////////////////////
+
+struct TConsumerMeta
+    : public NYTree::TYsonStructLite
+{
+    std::optional<i64> CumulativeDataWeight;
+    std::optional<ui64> OffsetTimestamp;
+
+    REGISTER_YSON_STRUCT_LITE(TConsumerMeta);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("cumulative_data_weight", &TThis::CumulativeDataWeight)
+            .Optional();
+        registrar.Parameter("offset_timestamp", &TThis::OffsetTimestamp)
+            .Optional();
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TGenericConsumerClient
     : public ISubConsumerClient
 {
 public:
     TGenericConsumerClient(
-        TYPath path,
+        IClientPtr consumerClusterClient,
+        IClientPtr queueClusterClient,
+        TYPath consumerPath,
+        std::optional<TCrossClusterReference> queueRef,
         TUnversionedOwningRow rowPrefix,
         TStringBuf partitionIndexColumnName,
         TStringBuf offsetColumnName,
         bool decrementOffset,
-        const TTableSchemaPtr& tableSchema)
-        : Path_(std::move(path))
+        const TTableSchemaPtr& consumerTableSchema,
+        const TTableSchemaPtr& queueTableSchema)
+        : ConsumerClusterClient_(std::move(consumerClusterClient))
+        , QueueClusterClient_(std::move(queueClusterClient))
+        , ConsumerPath_(std::move(consumerPath))
+        , QueueRef_(std::move(queueRef))
         , RowPrefix_(std::move(rowPrefix))
         , PartitionIndexColumnName_(std::move(partitionIndexColumnName))
         , OffsetColumnName_(std::move(offsetColumnName))
-        , TableSchema_(tableSchema)
-        , NameTable_(TNameTable::FromSchema(*TableSchema_))
-        , PartitionIndexColumnId_(NameTable_->GetId(PartitionIndexColumnName_))
-        , OffsetColumnId_(NameTable_->GetId(OffsetColumnName_))
+        , ConsumerTableSchema_(consumerTableSchema)
+        , ConsumerNameTable_(TNameTable::FromSchema(*ConsumerTableSchema_))
+        , QueueTableSchema_(queueTableSchema)
+        , PartitionIndexColumnId_(ConsumerNameTable_->GetId(PartitionIndexColumnName_))
+        , OffsetColumnId_(ConsumerNameTable_->GetId(OffsetColumnName_))
+        , MetaColumnId_(ConsumerNameTable_->FindId(YTConsumerMetaColumnName))
         , SubConsumerColumnFilter_{PartitionIndexColumnId_, OffsetColumnId_}
+        , RowBuffer_(New<TRowBuffer>())
         , DecrementOffset_(decrementOffset)
     {
         if (RowPrefix_.GetCount() == 0) {
@@ -83,7 +127,7 @@ public:
                 if (index != 0) {
                     builder.AppendString(", ");
                 }
-                builder.AppendFormat("[%v]", TableSchema_->Columns()[index].Name());
+                builder.AppendFormat("[%v]", ConsumerTableSchema_->Columns()[index].Name());
             }
             builder.AppendString(") = (");
             for (int index = 0; index < RowPrefix_.GetCount(); ++index) {
@@ -99,7 +143,7 @@ public:
     }
 
     void Advance(
-        const ITransactionPtr& transaction,
+        const ITransactionPtr& consumerTransaction,
         int partitionIndex,
         std::optional<i64> oldOffset,
         i64 newOffset) const override
@@ -117,7 +161,7 @@ public:
             options.RetentionConfig = New<TRetentionConfig>();
             options.RetentionConfig->MaxDataVersions = 1;
 
-            auto partitionRowset = WaitFor(transaction->VersionedLookupRows(Path_, NameTable_, keyRowsBuilder.Build(), options))
+            auto partitionRowset = WaitFor(consumerTransaction->VersionedLookupRows(ConsumerPath_, ConsumerNameTable_, keyRowsBuilder.Build(), options))
                 .ValueOrThrow()
                 .Rowset;
             const auto& rows = partitionRowset->GetRows();
@@ -128,7 +172,7 @@ public:
             THROW_ERROR_EXCEPTION_UNLESS(
                 std::ssize(partitionRowset->GetRows()) <= 1,
                 "The table for consumer %Qv should contain at most one row for partition %v when an old offset is specified",
-                Path_,
+                ConsumerPath_,
                 partitionIndex);
 
             i64 currentOffset = 0;
@@ -148,7 +192,7 @@ public:
 
                 YT_LOG_DEBUG(
                     "Read current offset (Consumer: %v, PartitionIndex: %v, Offset: %v, Timestamp: %v)",
-                    Path_,
+                    ConsumerPath_,
                     partitionIndex,
                     currentOffset,
                     offsetTimestamp);
@@ -159,11 +203,11 @@ public:
                     EErrorCode::ConsumerOffsetConflict,
                     "Offset conflict at partition %v of consumer %v: expected offset %v, found offset %v",
                     partitionIndex,
-                    Path_,
+                    ConsumerPath_,
                     *oldOffset,
                     currentOffset)
                         << TErrorAttribute("partition", partitionIndex)
-                        << TErrorAttribute("consumer", Path_)
+                        << TErrorAttribute("consumer", ConsumerPath_)
                         << TErrorAttribute("expected_offset", *oldOffset)
                         << TErrorAttribute("current_offset", currentOffset)
                         << TErrorAttribute("current_offset_timestamp", offsetTimestamp);
@@ -187,19 +231,36 @@ public:
         } else {
             rowBuilder.AddValue(MakeUnversionedUint64Value(newOffset, OffsetColumnId_));
         }
-        rowsBuilder.AddRow(rowBuilder.GetRow());
+
+        std::optional<TYsonString> metaYsonString;
+        if (MetaColumnId_) {
+            auto metaValue = MakeUnversionedNullValue(*MetaColumnId_);
+            if (QueueRef_ && QueueClusterClient_) {
+                auto meta = GetConsumerMeta(partitionIndex, newOffset);
+                if (meta) {
+                    metaYsonString = ConvertToYsonString(*meta);
+                    metaValue = MakeUnversionedAnyValue(metaYsonString->AsStringBuf(), *MetaColumnId_);
+                }
+            } else {
+                YT_LOG_DEBUG("Consumer meta was not calculated due to unknown queue path or cluster client");
+            }
+
+            rowBuilder.AddValue(std::move(metaValue));
+        }
+
+        rowsBuilder.AddRow(RowBuffer_->CaptureRow(rowBuilder.GetRow()));
 
         YT_LOG_DEBUG(
             "Advancing consumer offset (Path: %v, Partition: %v, Offset: %v -> %v)",
-            Path_,
+            ConsumerPath_,
             partitionIndex,
             oldOffset,
             newOffset);
-        transaction->WriteRows(Path_, NameTable_, rowsBuilder.Build());
+        consumerTransaction->WriteRows(ConsumerPath_, ConsumerNameTable_, rowsBuilder.Build());
+        RowBuffer_->Clear();
     }
 
     TFuture<std::vector<TPartitionInfo>> CollectPartitions(
-        const IClientPtr& client,
         int expectedPartitionCount,
         bool withLastConsumeTime = false) const override
     {
@@ -211,14 +272,13 @@ public:
             "[%v], [%v] from [%v] where ([%v] between 0 and %v) and (%v)",
             PartitionIndexColumnName_,
             OffsetColumnName_,
-            Path_,
+            ConsumerPath_,
             PartitionIndexColumnName_,
             expectedPartitionCount - 1,
             RowPrefixCondition_);
         return BIND(
             &TGenericConsumerClient::DoCollectPartitions,
             MakeStrong(this),
-            client,
             selectQuery,
             withLastConsumeTime)
             .AsyncVia(GetCurrentInvoker())
@@ -238,7 +298,6 @@ public:
     }
 
     TFuture<std::vector<TPartitionInfo>> CollectPartitions(
-        const IClientPtr& client,
         const std::vector<int>& partitionIndexes,
         bool withLastConsumeTime) const override
     {
@@ -246,14 +305,13 @@ public:
             "[%v], [%v] from [%v] where ([%v] in (%v)) and (%v)",
             PartitionIndexColumnName_,
             OffsetColumnName_,
-            Path_,
+            ConsumerPath_,
             PartitionIndexColumnName_,
             JoinSeq(",", partitionIndexes),
             RowPrefixCondition_);
         return BIND(
             &TGenericConsumerClient::DoCollectPartitions,
             MakeStrong(this),
-            client,
             selectQuery,
             withLastConsumeTime)
             .AsyncVia(GetCurrentInvoker())
@@ -280,21 +338,20 @@ public:
             }));
     }
 
-    TFuture<TCrossClusterReference> FetchTargetQueue(const IClientPtr& client) const override
+    TFuture<TCrossClusterReference> FetchTargetQueue() const override
     {
-        return client->GetNode(Path_ + "/@target_queue")
+        return ConsumerClusterClient_->GetNode(ConsumerPath_ + "/@target_queue")
             .Apply(BIND([] (const TYsonString& ysonString) {
                 return TCrossClusterReference::FromString(ConvertTo<TString>(ysonString));
             }));
     }
 
     TFuture<TPartitionStatistics> FetchPartitionStatistics(
-        const IClientPtr& client,
-        const TYPath& queue,
+        const TYPath& queuePath,
         int partitionIndex) const override
     {
-        return client->GetNode(queue + "/@tablets")
-            .Apply(BIND([queue, partitionIndex] (const TYsonString& ysonString) -> TPartitionStatistics {
+        return QueueClusterClient_->GetNode(queuePath + "/@tablets")
+            .Apply(BIND([queuePath, partitionIndex] (const TYsonString& ysonString) -> TPartitionStatistics {
                 auto tabletList = ConvertToNode(ysonString)->AsList();
 
                 for (const auto& tablet : tabletList->GetChildren()) {
@@ -309,24 +366,31 @@ public:
                     }
                 }
 
-                THROW_ERROR_EXCEPTION("Queue %Qv has no tablet with index %v", queue, partitionIndex);
+                THROW_ERROR_EXCEPTION("Queue %v has no tablet with index %v", queuePath, partitionIndex);
             }));
     }
 
 private:
-    const TYPath Path_;
+    const IClientPtr ConsumerClusterClient_;
+    const IClientPtr QueueClusterClient_;
+    const TYPath ConsumerPath_;
+    const std::optional<TCrossClusterReference> QueueRef_;
     const TUnversionedOwningRow RowPrefix_;
     //! A condition of form ([ColumnName0], [ColumnName1], ...) = (RowPrefix_[0], RowPrefix_[1], ...)
     //! defining this subconsumer.
     TString RowPrefixCondition_;
     const TStringBuf PartitionIndexColumnName_;
     const TStringBuf OffsetColumnName_;
-    const TTableSchemaPtr& TableSchema_;
-    const TNameTablePtr NameTable_;
+    const TTableSchemaPtr ConsumerTableSchema_;
+    const TNameTablePtr ConsumerNameTable_;
+    const TTableSchemaPtr QueueTableSchema_;
     const int PartitionIndexColumnId_;
     const int OffsetColumnId_;
+    const std::optional<int> MetaColumnId_;
     //! A column filter consisting of PartitionIndexColumnName_ and OffsetColumnName_.
     const TColumnFilter SubConsumerColumnFilter_;
+
+    TRowBufferPtr RowBuffer_;
 
     // COMPAT(achulkov2): Remove this once we drop support for legacy BigRT consumers.
     //! Controls whether the offset is decremented before being written to the offset table.
@@ -335,7 +399,6 @@ private:
     bool DecrementOffset_ = false;
 
     std::vector<TPartitionInfo> DoCollectPartitions(
-        const IClientPtr& client,
         const TString& selectQuery,
         bool withLastConsumeTime) const
     {
@@ -345,7 +408,7 @@ private:
 
         TSelectRowsOptions selectRowsOptions;
         selectRowsOptions.ReplicaConsistency = EReplicaConsistency::Sync;
-        auto selectRowsResult = WaitFor(client->SelectRows(selectQuery, selectRowsOptions))
+        auto selectRowsResult = WaitFor(ConsumerClusterClient_->SelectRows(selectQuery, selectRowsOptions))
             .ValueOrThrow();
 
         // Note that after table construction table schema may have changed.
@@ -419,9 +482,9 @@ private:
         options.RetentionConfig->MaxDataVersions = 1;
         options.ReplicaConsistency = EReplicaConsistency::Sync;
 
-        auto versionedRowset = WaitFor(client->VersionedLookupRows(
-            Path_,
-            NameTable_,
+        auto versionedRowset = WaitFor(ConsumerClusterClient_->VersionedLookupRows(
+            ConsumerPath_,
+            ConsumerNameTable_,
             builder.Build(),
             options))
             .ValueOrThrow()
@@ -439,11 +502,72 @@ private:
 
         return result;
     }
+
+    std::optional<TConsumerMeta> GetConsumerMeta(
+        int partitionIndex,
+        i64 offset) const
+    {
+        if (!QueueRef_ || !QueueClusterClient_ || !QueueTableSchema_) {
+            return {};
+        }
+
+        auto params = TCollectPartitionRowInfoParams{
+            .HasCumulativeDataWeightColumn = static_cast<bool>(QueueTableSchema_->FindColumn(CumulativeDataWeightColumnName)),
+            .HasTimestampColumn = static_cast<bool>(QueueTableSchema_->FindColumn(TimestampColumnName)),
+        };
+
+        std::vector<std::pair<int, i64>> tabletAndRowIndices = {{partitionIndex, offset}};
+        if (offset > 0) {
+            tabletAndRowIndices.push_back({partitionIndex, offset - 1});
+        }
+
+        auto partitionRowInfos = CollectPartitionRowInfos(
+            QueueRef_->Path,
+            QueueClusterClient_,
+            std::move(tabletAndRowIndices),
+            params,
+            Logger);
+
+        auto partitionIt = partitionRowInfos.find(partitionIndex);
+        if (partitionIt == partitionRowInfos.end()) {
+            YT_LOG_DEBUG("Failed to collect row info for partition (Path: %v, PartitionIndex: %v)",
+                QueueRef_->Path,
+                partitionIndex);
+            return {};
+        }
+
+        TConsumerMeta meta;
+
+        auto partitionRowIt = partitionIt->second.find(offset);
+        if (partitionRowIt != partitionIt->second.end()) {
+            meta.OffsetTimestamp = partitionRowIt->second.Timestamp;
+        } else {
+            YT_LOG_DEBUG("Failed to collect consumer offset timestamp (Path: %v, PartitionIndex: %v, Offset: %v)",
+                QueueRef_->Path,
+                partitionIndex,
+                offset);
+        }
+
+        if (offset > 0) {
+            auto partitionRowIt = partitionIt->second.find(offset - 1);
+            if (partitionRowIt != partitionIt->second.end()) {
+                meta.CumulativeDataWeight = partitionRowIt->second.CumulativeDataWeight;
+            } else {
+                YT_LOG_DEBUG("Failed to collect consumer cumulative data weight (Path: %v, PartitionIndex: %v, Offset: %v)",
+                    QueueRef_->Path,
+                    partitionIndex,
+                    offset - 1);
+            }
+        }
+
+        return meta;
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 ISubConsumerClientPtr CreateBigRTConsumerClient(
+    const IClientPtr& client,
     const TYPath& path,
     const TTableSchema& schema)
 {
@@ -454,12 +578,16 @@ ISubConsumerClientPtr CreateBigRTConsumerClient(
 
     if (schema == *BigRTConsumerTableSchema) {
         return New<TGenericConsumerClient>(
+            client,
+            client,
             path,
+            /*queuePath*/ std::nullopt,
             TUnversionedOwningRow(),
             "ShardId",
             "Offset",
             /*decrementOffset*/ true,
-            BigRTConsumerTableSchema);
+            BigRTConsumerTableSchema,
+            /*queueTableSchema*/ nullptr);
     } else {
         THROW_ERROR_EXCEPTION("Table schema is not recognized as a valid BigRT consumer schema")
             << TErrorAttribute("expected_schema", *BigRTConsumerTableSchema)
@@ -475,7 +603,7 @@ ISubConsumerClientPtr CreateBigRTConsumerClient(
         .ValueOrThrow();
     auto schema = tableInfo->Schemas[ETableSchemaKind::Primary];
 
-    return CreateBigRTConsumerClient(path, *schema);
+    return CreateBigRTConsumerClient(client, path, *schema);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -484,79 +612,98 @@ class TYTConsumerClient
     : public IConsumerClient
 {
 public:
-    explicit TYTConsumerClient(TYPath path)
-        : Path_(std::move(path))
+    explicit TYTConsumerClient(const IClientPtr& consumerClusterClient, TYPath consumerPath, TTableSchemaPtr consumerTableSchema)
+        : ConsumerClusterClient_(consumerClusterClient)
+        , ConsumerPath_(std::move(consumerPath))
+        , ConsumerTableSchema_(std::move(consumerTableSchema))
     { }
 
-    ISubConsumerClientPtr GetSubConsumerClient(const TCrossClusterReference& queue) const override
+    ISubConsumerClientPtr GetSubConsumerClient(const IClientPtr& queueClusterClient, const TCrossClusterReference& queueRef) const override
     {
         TUnversionedOwningRowBuilder builder;
-        builder.AddValue(MakeUnversionedStringValue(queue.Cluster, QueueClusterColumnId_));
-        builder.AddValue(MakeUnversionedStringValue(queue.Path, QueuePathColumnId_));
+        builder.AddValue(MakeUnversionedStringValue(queueRef.Cluster, QueueClusterColumnId_));
+        builder.AddValue(MakeUnversionedStringValue(queueRef.Path, QueuePathColumnId_));
         auto row = builder.FinishRow();
 
+        TTableSchemaPtr queueTableSchema;
+        if (queueClusterClient) {
+            auto queueTableInfo = WaitFor(queueClusterClient->GetTableMountCache()->GetTableInfo(queueRef.Path))
+                .ValueOrThrow();
+            queueTableSchema = queueTableInfo->Schemas[ETableSchemaKind::Primary];
+        }
+
         auto subConsumerClient = New<TGenericConsumerClient>(
-            Path_,
+            ConsumerClusterClient_,
+            queueClusterClient,
+            ConsumerPath_,
+            std::optional<TCrossClusterReference>{queueRef},
             std::move(row),
             "partition_index",
             "offset",
             /*decrementOffset*/ false,
-            YTConsumerTableSchema);
+            ConsumerTableSchema_,
+            queueTableSchema);
 
         return subConsumerClient;
     }
 
 private:
-    const TYPath Path_;
+    const IClientPtr ConsumerClusterClient_;
+    const TYPath ConsumerPath_;
+    TTableSchemaPtr ConsumerTableSchema_;
 
-    static const TNameTablePtr NameTable_;
+    static const TNameTablePtr ConsumerNameTable_;
     static const int QueueClusterColumnId_;
     static const int QueuePathColumnId_;
 };
 
-const TNameTablePtr TYTConsumerClient::NameTable_ = TNameTable::FromSchema(*YTConsumerTableSchema);
-const int TYTConsumerClient::QueueClusterColumnId_ = TYTConsumerClient::NameTable_->GetId("queue_cluster");
-const int TYTConsumerClient::QueuePathColumnId_ = TYTConsumerClient::NameTable_->GetId("queue_path");
+const TNameTablePtr TYTConsumerClient::ConsumerNameTable_ = TNameTable::FromSchema(*YTConsumerTableSchema);
+const int TYTConsumerClient::QueueClusterColumnId_ = TYTConsumerClient::ConsumerNameTable_->GetId("queue_cluster");
+const int TYTConsumerClient::QueuePathColumnId_ = TYTConsumerClient::ConsumerNameTable_->GetId("queue_path");
 
 ////////////////////////////////////////////////////////////////////////////////
 
 IConsumerClientPtr CreateConsumerClient(
-    const TYPath& path,
-    const TTableSchema& schema)
+    const IClientPtr& consumerClusterClient,
+    const TYPath& consumerPath,
+    const TTableSchema& consumerSchema)
 {
-    if (!schema.IsUniqueKeys()) {
+    if (!consumerSchema.IsUniqueKeys()) {
         THROW_ERROR_EXCEPTION("Consumer schema must have unique keys, schema does not")
-            << TErrorAttribute("actual_schema", schema);
+            << TErrorAttribute("actual_schema", consumerSchema);
     }
 
-    if (schema == *YTConsumerTableSchema) {
-        return New<TYTConsumerClient>(path);
+    if (consumerSchema == *YTConsumerTableSchema) {
+        return New<TYTConsumerClient>(consumerClusterClient, consumerPath, YTConsumerTableSchema);
+    } else if (consumerSchema == *YTConsumerWithoutMetaTableSchema) {
+        return New<TYTConsumerClient>(consumerClusterClient, consumerPath, YTConsumerWithoutMetaTableSchema);
     } else {
         THROW_ERROR_EXCEPTION("Table schema is not recognized as a valid consumer schema")
             << TErrorAttribute("expected_schema", *YTConsumerTableSchema)
-            << TErrorAttribute("actual_schema", schema);
+            << TErrorAttribute("actual_schema", consumerSchema);
     }
 }
 
 IConsumerClientPtr CreateConsumerClient(
-    const IClientPtr& client,
-    const TYPath& path)
+    const IClientPtr& consumerClusterClient,
+    const TYPath& consumerPath)
 {
-    auto tableInfo = WaitFor(client->GetTableMountCache()->GetTableInfo(path))
+    auto tableInfo = WaitFor(consumerClusterClient->GetTableMountCache()->GetTableInfo(consumerPath))
         .ValueOrThrow();
     auto schema = tableInfo->Schemas[ETableSchemaKind::Primary];
 
-    return CreateConsumerClient(path, *schema);
+    return CreateConsumerClient(consumerClusterClient, consumerPath, *schema);
 }
 
 ISubConsumerClientPtr CreateSubConsumerClient(
-    const IClientPtr& client,
+    const IClientPtr& consumerClusterClient,
+    const IClientPtr& queueClusterClient,
     const TYPath& consumerPath,
     TRichYPath queuePath)
 {
     auto queueCluster = queuePath.GetCluster();
     if (!queueCluster) {
-        if (auto clientCluster = client->GetClusterName()) {
+        if (auto clientCluster = consumerClusterClient->GetClusterName()) {
             queueCluster = *clientCluster;
         }
     }
@@ -572,7 +719,7 @@ ISubConsumerClientPtr CreateSubConsumerClient(
     queueRef.Cluster = *queueCluster;
     queueRef.Path = queuePath.GetPath();
 
-    return CreateConsumerClient(client, consumerPath)->GetSubConsumerClient(queueRef);
+    return CreateConsumerClient(consumerClusterClient, consumerPath)->GetSubConsumerClient(queueClusterClient, queueRef);
 }
 
 const TTableSchemaPtr& GetConsumerSchema()

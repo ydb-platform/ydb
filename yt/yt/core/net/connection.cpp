@@ -213,7 +213,7 @@ public:
 
     void SetResult() override
     {
-        ResultPromise_.Set(std::make_pair(Position_, RemoteAddress_));
+        ResultPromise_.Set(std::pair(Position_, RemoteAddress_));
     }
 
     TFuture<std::pair<size_t, TNetworkAddress>> ToFuture() const
@@ -1179,7 +1179,7 @@ std::pair<IConnectionPtr, IConnectionPtr> CreateConnectionPair(const IPollerPtr&
 
         auto first = New<TFDConnection>(fds[0], address0, address1, poller);
         auto second = New<TFDConnection>(fds[1], address1, address0, poller);
-        return std::make_pair(std::move(first), std::move(second));
+        return std::pair(std::move(first), std::move(second));
     } catch (...) {
         YT_VERIFY(TryClose(fds[0], false));
         YT_VERIFY(TryClose(fds[1], false));

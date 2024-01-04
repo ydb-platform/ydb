@@ -613,7 +613,7 @@ public:
     }
 
 private:
-     bool Finished_ = false;
+    bool Finished_ = false;
 };
 
 template <>

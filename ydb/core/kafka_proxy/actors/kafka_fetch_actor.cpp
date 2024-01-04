@@ -174,7 +174,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         record.TimestampDelta = lastTimestamp - baseTimestamp;
 
         record.Length = record.Size(TKafkaRecord::MessageMeta::PresentVersions.Max) - SizeOfZeroVarint;
-        KAFKA_LOG_D("Fetch actor: Record info. Value: " << record.DataChunk.GetData() << ", OffsetDelta: " << record.OffsetDelta << 
+        KAFKA_LOG_D("Fetch actor: Record info. OffsetDelta: " << record.OffsetDelta << 
             ", TimestampDelta: " << record.TimestampDelta << ", Length: " << record.Length);
     }
 

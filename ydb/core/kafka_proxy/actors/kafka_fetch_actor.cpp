@@ -16,7 +16,7 @@
 namespace NKafka {
 
 static constexpr size_t SizeOfZeroVarint = 1;
-static constexpr size_t BatchFirstTwoFildsSize = 12;
+static constexpr size_t BatchFirstTwoFieldsSize = 12;
 static constexpr size_t KafkaMagic = 2;
 
 NActors::IActor* CreateKafkaFetchActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TFetchRequestData>& message) {
@@ -186,7 +186,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
     recordsBatch.BaseSequence = baseSequense;
     //recordsBatch.Attributes https://kafka.apache.org/documentation/#recordbatch
 
-    recordsBatch.BatchLength = recordsBatch.Size(TKafkaRecordBatch::MessageMeta::PresentVersions.Max) - BatchFirstTwoFildsSize;
+    recordsBatch.BatchLength = recordsBatch.Size(TKafkaRecordBatch::MessageMeta::PresentVersions.Max) - BatchFirstTwoFieldsSize;
     KAFKA_LOG_D("Fetch actor: RecordBatch info. BaseOffset: " << recordsBatch.BaseOffset << ", LastOffsetDelta: " << recordsBatch.LastOffsetDelta << 
         ", BaseTimestamp: " << recordsBatch.BaseTimestamp << ", MaxTimestamp: " << recordsBatch.MaxTimestamp << 
         ", BaseSequence: " << recordsBatch.BaseSequence << ", BatchLength: " << recordsBatch.BatchLength);

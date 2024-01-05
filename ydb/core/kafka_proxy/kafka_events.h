@@ -211,17 +211,11 @@ struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResp
 struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffsetsResponse, EvTopicOffsetsResponse> 
                            , public NKikimr::NGRpcProxy::V1::TEvPQProxy::TLocalResponseBase
 {
-    enum EStatus {
-        OK,
-        ERROR,
-        UNKNOWN_TOPIC,
-    };
-
     TEvCommitedOffsetsResponse()
     {}
 
     TString TopicName;
-    EStatus Status;
+    EKafkaErrors Status;
     std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, ui32>>> PartitionIdToOffsets;
 };
 

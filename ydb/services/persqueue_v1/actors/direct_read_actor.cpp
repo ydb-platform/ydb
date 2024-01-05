@@ -154,7 +154,7 @@ void TDirectReadSessionActor::Die(const TActorContext& ctx) {
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, LOG_PREFIX << " proxy is DEAD");
     ctx.Send(GetPQReadServiceActorID(), new TEvPQProxy::TEvSessionDead(Cookie));
     ctx.Send(NPQ::MakePQDReadCacheServiceActorId(), new TEvPQProxy::TEvDirectReadDataSessionDead(Session));
-
+    TRlHelpers::PassAway(SelfId());
     TActorBootstrapped<TDirectReadSessionActor>::Die(ctx);
 }
 

@@ -53,7 +53,7 @@ protected:
     };
 
     void Bootstrap(const TActorId selfId, const NActors::TActorContext& ctx);
-    void PassAway(const TActorId selfId);
+    void PassAway(const TActorId selfId); //savnik а где он вызывается в текущих акторах, которые наследуют этот класс?
 
     bool IsQuotaRequired() const;
     bool IsQuotaInflight() const;

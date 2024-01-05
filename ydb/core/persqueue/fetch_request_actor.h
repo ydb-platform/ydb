@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/persqueue/pq_rl_helpers.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/aclib/aclib.h>
 
@@ -31,10 +32,11 @@ struct TFetchRequestSettings {
     TMaybe<NACLib::TUserToken> User;
     ui64 MaxWaitTimeMs;
     ui64 TotalMaxBytes;
+    TRlContext RlCtx;
 
     ui64 RequestId = 0;
     TFetchRequestSettings(
-            const TString& database, const TVector<TPartitionFetchRequest>& partitions, ui64 maxWaitTimeMs, ui64 totalMaxBytes,
+            const TString& database, const TVector<TPartitionFetchRequest>& partitions, ui64 maxWaitTimeMs, ui64 totalMaxBytes, TRlContext rlCtx,
             const TMaybe<NACLib::TUserToken>& user = {}, ui64 requestId = 0
     )
         : Database(database)
@@ -42,6 +44,7 @@ struct TFetchRequestSettings {
         , User(user)
         , MaxWaitTimeMs(maxWaitTimeMs)
         , TotalMaxBytes(totalMaxBytes)
+        , RlCtx(rlCtx)
         , RequestId(requestId)
     {}
 };

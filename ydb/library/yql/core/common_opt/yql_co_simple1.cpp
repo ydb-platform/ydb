@@ -4665,6 +4665,16 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["IsDistinctFrom"] = std::bind(&OptimizeDistinctFrom<false>, _1, _2);
 
     map["StartsWith"] = map["EndsWith"] = map["StringContains"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg || node->Tail().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+            TExprNodeList converted;
+            for (auto& child : node->ChildrenList()) {
+                const bool isPg = child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg;
+                converted.emplace_back(ctx.WrapByCallableIf(isPg, "FromPg", std::move(child)));
+            }
+            YQL_CLOG(DEBUG, Core) << "Converting Pg strings to YQL strings in " << node->Content();
+            return ctx.ChangeChildren(*node, std::move(converted));
+        }
+
         if (node->Tail().IsCallable("String") && node->Tail().Head().Content().empty()) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " with empty string in second argument";
             if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {

@@ -63,7 +63,12 @@ enum EJoinKind: ui32
     LeftJoin,
     RightJoin,
     OuterJoin,
-    Other
+    LeftOnly,
+    RightOnly,
+    LeftSemi,
+    RightSemi,
+    Cross,
+    Exclusion
 };
 
 EJoinKind ConvertToJoinKind(const TString& joinString);

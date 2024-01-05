@@ -1,6 +1,6 @@
 #include "helpers.h"
 
-#include <yt/yt/ytlib/api/native/client.h>
+#include <yt/yt/client/api/client.h>
 
 #include <yt/yt/client/table_client/helpers.h>
 

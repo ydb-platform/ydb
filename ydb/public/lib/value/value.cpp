@@ -1,7 +1,6 @@
 #include "value.h"
 
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
 
@@ -431,20 +430,6 @@ TString TValue::GetDataText() const {
     }
 
     return TStringBuilder() << "\"<unknown type "  << Type.GetData().GetScheme() << ">\"";
-}
-
-TString TValue::GetPgText() const {
-    Y_ASSERT(Type.GetKind() == NKikimrMiniKQL::ETypeKind::Pg);
-    if (Value.HasNullFlagValue()) {
-        return TString("null");
-    }
-    if (Value.HasText()) {
-        return Value.GetText();
-    }
-    auto pgType = Type.GetPg();
-    auto convertResult = NPg::PgNativeTextFromNativeBinary(Value.GetBytes(), NPg::TypeDescFromPgTypeId(pgType.Getoid()));
-    Y_ENSURE(!convertResult.Error, convertResult.Error);
-    return convertResult.Str;
 }
 
 template <> TString TValue::GetTypeText<TFormatCxx>(const TFormatCxx& format) const {

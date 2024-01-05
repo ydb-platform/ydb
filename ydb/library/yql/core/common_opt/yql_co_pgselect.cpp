@@ -1688,11 +1688,10 @@ TExprNode::TPtr BuildProjectionLambda(TPositionHandle pos, const TExprNode::TPtr
     bool subLink, bool emitPgStar, TExprContext& ctx) {
 
     YQL_ENSURE(nodeColumnOrder.size() == setItemColumnOrder.size());
+
     TMap<TStringBuf, TStringBuf> columnNamesMap;
-    if (!emitPgStar) {
-        for (size_t i = 0; i < nodeColumnOrder.size(); ++i) {
-            columnNamesMap[setItemColumnOrder[i]] = nodeColumnOrder[i];
-        }
+    for (size_t i = 0; i < nodeColumnOrder.size(); ++i) {
+        columnNamesMap[setItemColumnOrder[i]] = nodeColumnOrder[i];
     }
 
     return ctx.Builder(pos)
@@ -1743,7 +1742,9 @@ TExprNode::TPtr BuildProjectionLambda(TPositionHandle pos, const TExprNode::TPtr
                         if (!emitPgStar) {
                             const auto& columnName = x->Child(0)->Content();
                             auto listBuilder = parent.List(index++);
-                            addAtomToListWithCast(listBuilder, x.Get(), finalType->FindItemType(columnNamesMap[columnName]));
+                            const auto expectedType = finalType->FindItemType(columnNamesMap[columnName]);
+                            Y_ENSURE(expectedType);
+                            addAtomToListWithCast(listBuilder, x.Get(), expectedType);
                         }
                     } else {
                         auto type = x->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
@@ -1762,6 +1763,7 @@ TExprNode::TPtr BuildProjectionLambda(TPositionHandle pos, const TExprNode::TPtr
                                 listBuilder.Atom(0, columnName);
 
                                 const auto expectedType = finalType->FindItemType(columnNamesMap[columnName]);
+                                Y_ENSURE(expectedType);
                                 if (item->GetItemType() == expectedType) {
                                     listBuilder.Callable(1, "Member")
                                         .Arg(0, "row")

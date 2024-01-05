@@ -27,14 +27,14 @@ namespace {
         static void LoadTouched(IPages& env, bool clearHas) {
             auto touchEnv = dynamic_cast<TTouchEnv*>(&env);
             if (touchEnv) {
-                auto &has = touchEnv->Loaded;
+                auto &loaded = touchEnv->Loaded;
                 auto &touched = touchEnv->Touched;
 
                 if (clearHas) {
-                    has.clear();
+                    loaded.clear();
                 }
                 for (const auto &g : touched) {
-                    has[g.first].insert(g.second.begin(), g.second.end());
+                    loaded[g.first].insert(g.second.begin(), g.second.end());
                 }
                 touched.clear();
             }
@@ -1013,28 +1013,30 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     void CheckSeekKey(const TPartStore& part, const TKeyCellDefaults *keyDefaults) {
         for (bool reverse : {false, true}) {
             for (ESeek seek : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
-                for (ui32 keyId : xrange(0u, static_cast<ui32>(part.Stat.Rows) + 2)) {
-                    TVector<TCell> key{TCell::Make(keyId / 7), TCell::Make(keyId % 7)};
+                for (ui32 firstCell : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                    for (ui32 secondCell : xrange<ui32>(0, 12)) {
+                        TVector<TCell> key{TCell::Make(firstCell), TCell::Make(secondCell)};
 
-                    while (true) {
-                        TEnv env;
-                        TPartBtreeIndexIt bTree(&part, &env, { });
-                        TPartIndexIt flat(&part, &env, { });
+                        while (true) {
+                            TEnv env;
+                            TPartBtreeIndexIt bTree(&part, &env, { });
+                            TPartIndexIt flat(&part, &env, { });
 
-                        TStringBuilder message = TStringBuilder() << (reverse ?  "SeekKeyReverse<" : "SeekKey<") << typeid(TEnv).name() << ">(" << seek << ") ";
-                        for (auto c : key) {
-                            message << c.AsValue<ui32>() << " ";
+                            TStringBuilder message = TStringBuilder() << (reverse ?  "SeekKeyReverse<" : "SeekKey<") << typeid(TEnv).name() << ">(" << seek << ") ";
+                            for (auto c : key) {
+                                message << c.AsValue<ui32>() << " ";
+                            }
+                            
+                            EReady bTreeReady = SeekKey(bTree, env, seek, reverse, key, keyDefaults, message);
+                            EReady flatReady = SeekKey(flat, env, seek, reverse, key, keyDefaults, message);
+                            UNIT_ASSERT_VALUES_EQUAL_C(bTreeReady, key.empty() ? flatReady : EReady::Data, "Can't be exhausted");
+                            AssertEqual(bTree, bTreeReady, flat, flatReady, message, !key.empty());
+
+                            if (!key) {
+                                break;
+                            }
+                            key.pop_back();
                         }
-                        
-                        EReady bTreeReady = SeekKey(bTree, env, seek, reverse, key, keyDefaults, message);
-                        EReady flatReady = SeekKey(flat, env, seek, reverse, key, keyDefaults, message);
-                        UNIT_ASSERT_VALUES_EQUAL_C(bTreeReady, key.empty() ? flatReady : EReady::Data, "Can't be exhausted");
-                        AssertEqual(bTree, bTreeReady, flat, flatReady, message, !key.empty());
-
-                        if (!key) {
-                            break;
-                        }
-                        key.pop_back();
                     }
                 }
             }
@@ -1084,15 +1086,17 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
         conf.WriteBTreeIndex = true;
         TPartCook cook(lay, conf);
         
-        for (ui32 i : xrange(1u, rows + 1)) {
-            cook.Add(*TSchemedCookRow(*lay).Col(i / 7, i % 7));
+        // making part with key gaps
+        const TVector<ui32> secondCells = {1, 3, 4, 6, 7, 8, 10};
+        for (ui32 i : xrange(0u, rows)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i / 7, secondCells[i % 7]));
         }
 
         TPartEggs eggs = cook.Finish();
 
         const auto part = *eggs.Lone();
 
-        Cerr << DumpPart(part, 1) << Endl;
+        Cerr << DumpPart(part, 3) << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, levels);
 
@@ -1109,23 +1113,22 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     Y_UNIT_TEST(NoNodes) {
         NPage::TConf conf;
 
-        CheckPart(std::move(conf), 100, 0);
+        CheckPart(std::move(conf), 40, 0);
     }
 
     Y_UNIT_TEST(OneNode) {
         NPage::TConf conf;
         conf.Group(0).PageRows = 2;
 
-        CheckPart(std::move(conf), 100, 1);
+        CheckPart(std::move(conf), 40, 1);
     }
 
     Y_UNIT_TEST(FewNodes) {
         NPage::TConf conf;
         conf.Group(0).PageRows = 2;
-        conf.Group(0).BTreeIndexNodeKeysMin = 3;
-        conf.Group(0).BTreeIndexNodeKeysMax = 4;
+        conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
 
-        CheckPart(std::move(conf), 300, 3);
+        CheckPart(std::move(conf), 40, 3);
     }
 }
 
@@ -1175,6 +1178,21 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         Y_UNREACHABLE();
     }
 
+    bool DoChargeKeys(ICharge& charge, IPages& env, const TCells key1, const TCells key2, ui64 itemsLimit, ui64 bytesLimit,
+            bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 10) {
+        while (true) {
+            auto result = reverse
+                ? charge.DoReverse(key1, key2, 0, Max<TRowId>(), keyDefaults, itemsLimit, bytesLimit)
+                : charge.Do(key1, key2, 0, Max<TRowId>(), keyDefaults, itemsLimit, bytesLimit);
+            if (result.Ready) {
+                return result.Overshot;
+            }
+            TTouchEnv::LoadTouched(env, false);
+            UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
+        }
+        Y_UNREACHABLE();
+    }
+
     void CheckChargeRowId(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults, bool reverse) {
         for (TRowId rowId1 : xrange(part.Stat.Rows + 1)) {
             for (TRowId rowId2 : xrange(part.Stat.Rows + 1)) {
@@ -1190,6 +1208,37 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         }
     }
 
+    void CheckChargeKeys(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults, bool reverse) {
+        for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+            for (ui32 secondCellKey1 : xrange<ui32>(0, 12)) {
+                for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                    for (ui32 secondCellKey2 : xrange<ui32>(0, 12)) {
+                        TVector<TCell> key1{TCell::Make(firstCellKey1), TCell::Make(secondCellKey1)};
+                        TVector<TCell> key2{TCell::Make(firstCellKey2), TCell::Make(secondCellKey2)};
+
+                        TTouchEnv bTreeEnv, flatEnv;
+                        TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
+                        TCharge flat(&flatEnv, part, tags, true);
+
+                        TStringBuilder message = TStringBuilder() << (reverse ? "ChargeKeysReverse " : "ChargeKeys ");
+                        for (auto c : key1) {
+                            message << c.AsValue<ui32>() << " ";
+                        }
+                        for (auto c : key2) {
+                            message << c.AsValue<ui32>() << " ";
+                        }
+                            
+                        bool bTreeOvershot = DoChargeKeys(bTree, bTreeEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
+                        bool flatOvershot = DoChargeKeys(flat, flatEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
+                        
+                        UNIT_ASSERT_VALUES_EQUAL_C(bTreeOvershot, flatOvershot, message);
+                        AssertEqual(part, bTreeEnv, flatEnv, message);
+                    }
+                }
+            }
+        }
+    }
+
     void CheckPart(TConf&& conf, ui32 rows, ui32 levels) {
         TLayoutCook lay;
 
@@ -1201,8 +1250,10 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         conf.WriteBTreeIndex = true;
         TPartCook cook(lay, conf);
         
-        for (ui32 i : xrange(1u, rows + 1)) {
-            cook.Add(*TSchemedCookRow(*lay).Col(i / 7, i % 7));
+        // making part with key gaps
+        const TVector<ui32> secondCells = {1, 3, 4, 6, 7, 8, 10};
+        for (ui32 i : xrange(0u, rows)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i / 7, secondCells[i % 7]));
         }
 
         TPartEggs eggs = cook.Finish();
@@ -1225,23 +1276,22 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     Y_UNIT_TEST(NoNodes) {
         NPage::TConf conf;
 
-        CheckPart(std::move(conf), 100, 0);
+        CheckPart(std::move(conf), 40, 0);
     }
 
     Y_UNIT_TEST(OneNode) {
         NPage::TConf conf;
         conf.Group(0).PageRows = 2;
 
-        CheckPart(std::move(conf), 100, 1);
+        CheckPart(std::move(conf), 40, 1);
     }
 
     Y_UNIT_TEST(FewNodes) {
         NPage::TConf conf;
         conf.Group(0).PageRows = 2;
-        conf.Group(0).BTreeIndexNodeKeysMin = 3;
-        conf.Group(0).BTreeIndexNodeKeysMax = 4;
+        conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
 
-        CheckPart(std::move(conf), 300, 3);
+        CheckPart(std::move(conf), 40, 3);
     }
 }
 

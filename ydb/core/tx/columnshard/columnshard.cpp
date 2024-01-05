@@ -376,7 +376,11 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
         FillTxTableStats(tableStats);
         ConfigureStats(*columnStats, tableStats);
 
-        LOG_S_TRACE("Add stats for table, tableLocalID=" << tableLocalID);
+        {
+            // Workaround "reference to local binding declared in enclousing function" issue for clang14
+            ui64 id = tableLocalID;
+            LOG_S_TRACE("Add stats for table, tableLocalID=" << id);
+        }
     }
 }
 

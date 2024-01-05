@@ -84,6 +84,7 @@ target_link_libraries(ydb-core-testlib PUBLIC
   lib-deprecated-kicli
   cpp-client-ydb_driver
   client-ydb_persqueue_public-codecs
+  cpp-client-ydb_query
   cpp-client-ydb_table
   ydb-services-auth
   ydb-services-cms

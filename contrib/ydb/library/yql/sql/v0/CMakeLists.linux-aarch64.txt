@@ -34,6 +34,7 @@ target_link_libraries(yql-sql-v0 PUBLIC
   yql-parser-proto_ast
   parser-proto_ast-collect_issues
   proto_ast-gen-v0
+  proto_ast-gen-v0_proto_split
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(yql-sql-v0 PRIVATE

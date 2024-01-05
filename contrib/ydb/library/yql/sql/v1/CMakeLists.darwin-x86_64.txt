@@ -53,7 +53,7 @@ target_link_libraries(yql-sql-v1 PUBLIC
   parser-proto_ast-collect_issues
   proto_ast-gen-v1
   proto_ast-gen-v1_ansi
-  proto_ast-gen-v1_proto
+  proto_ast-gen-v1_proto_split
   yql-parser-pg_catalog
   sql-v1-lexer
   sql-v1-proto_parser

@@ -16,7 +16,11 @@ set(
 )
 set(
   PROTOBUF_HEADER_PATH
-  contrib/ydb/library/yql/parser/proto_ast/gen/v1_proto
+  contrib/ydb/library/yql/parser/proto_ast/gen/v1_proto_split
+)
+set(
+  PROTOBUF_SUFFIX_PATH
+  .pb.main.h
 )
 
 add_library(proto_ast-gen-v1)
@@ -29,7 +33,7 @@ target_include_directories(proto_ast-gen-v1 PUBLIC
 target_link_libraries(proto_ast-gen-v1 PUBLIC
   contrib-libs-cxxsupp
   yutil
-  proto_ast-gen-v1_proto
+  proto_ast-gen-v1_proto_split
 )
 target_sources(proto_ast-gen-v1 PRIVATE
   ${CMAKE_BINARY_DIR}/contrib/ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Parser.cpp

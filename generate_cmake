@@ -77,6 +77,17 @@ def generate_graph_for_platform(generate_graph_for_platform):
         # Fix
         "in $B/ydb/library/actors/dnsresolver/ut/library-cpp-actors-dnsresolver-ut",
         "in $B/ydb/library/pdisk_io/libydb-library-pdisk_io",
+        "skip unknown statement: ADD_YTEST vector of size",
+        "skip unknown statement: _REGISTER_NO_CHECK_IMPORTS vector of size",
+        "skip unknown statement: CHECK_CONTRIB_CREDITS vector of size",
+        "skip unknown statement: ASSERT vector of size",
+        "skip unknown statement: FILES vector of size",
+        "skip unknown statement: ADD_CHECK vector of size",
+        "skip unknown statement: COPY vector of size",
+        "skip unknown statement: PY_EXTRALIBS vector of size",
+        "skip unknown statement: LLVM_BC vector of size",
+        "skip unknown statement: SUPPRESSIONS vector of size",
+        ". It is not intended for export.",
     ]
 
     if platform == "windows-x86_64":
@@ -129,6 +140,7 @@ if __name__ == "__main__":
     ymake_binary_path = args.ymake_bin
     yexport_binary_path = args.yexport_bin
     debug = args.debug
+    keep_going = args.keep_going
 
     ydb_tmp_folder_path = tmp_folder_path + "/ydb"
     ydb_metadata_folder_path = tmp_folder_path + "/metadata"
@@ -154,6 +166,7 @@ if __name__ == "__main__":
         ("linux-aarch64", "default-linux-aarch64"),
         ("darwin-x86_64", "default-darwin-x86_64"),
         ("windows-x86_64", "default-win-x86_64"),
+        ("darwin-arm64", "default-darwin-arm64"),
     ]
 
     generate_graph_for_platform_commands = []
@@ -195,12 +208,14 @@ if __name__ == "__main__":
         for error in errors_for_platform[index]:
             print(error, file=sys.stderr)
 
-        sys.exit(1)
+        if not keep_going:
+            sys.exit(1)
 
-    yexport_command = f"{yexport_binary_path} --export-root \"{ydb_tmp_folder_path}\" --target YDB \
+    yexport_command = f"{yexport_binary_path} --export-root \"{root_folder}\" --target YDB \
             --semantic-graph \"{ydb_metadata_folder_path + '/sem.linux-x86_64.json'}\" --platforms linux-x86_64 \
             --semantic-graph \"{ydb_metadata_folder_path + '/sem.linux-aarch64.json'}\" --platforms linux-aarch64 \
             --semantic-graph \"{ydb_metadata_folder_path + '/sem.darwin-x86_64.json'}\" --platforms darwin-x86_64 \
+            --semantic-graph \"{ydb_metadata_folder_path + '/sem.darwin-arm64.json'}\" --platforms darwin-arm64 \
             --semantic-graph \"{ydb_metadata_folder_path + '/sem.windows-x86_64.json'}\" --platforms windows-x86_64"
 #    yexport_command = f"{yexport_binary_path} --export-root \"{ydb_tmp_folder_path}\" --target YDB \
 #            --semantic-graph \"{ydb_metadata_folder_path + '/sem.darwin-x86_64.json'}\" --platforms darwin-x86_64"
@@ -213,6 +228,8 @@ if __name__ == "__main__":
     if debug:
         print("yexport output")
         print(yexport_output)
+
+    sys.exit(0)
 
     rsync_command = f'rsync --recursive --delete  --perms\
         --exclude .git --exclude contrib --exclude library/cpp/actors\

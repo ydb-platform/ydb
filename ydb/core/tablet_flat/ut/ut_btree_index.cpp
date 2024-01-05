@@ -1271,6 +1271,9 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
         CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get(), false);
         CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get(), true);
+        CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get(), false);
+        CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get(), true);
+        // TODO: mixed
     }
 
     Y_UNIT_TEST(NoNodes) {

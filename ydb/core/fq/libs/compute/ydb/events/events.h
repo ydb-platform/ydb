@@ -58,6 +58,11 @@ struct TEvYdbCompute {
         EvInvalidateSynchronizationRequest,
         EvInvalidateSynchronizationResponse,
 
+        EvCpuLoadRequest,
+        EvCpuLoadResponse,
+        EvCpuQuotaRequest,
+        EvCpuQuotaResponse,
+
         EvEnd
     };
 
@@ -436,6 +441,46 @@ struct TEvYdbCompute {
             : Issues(std::move(issues))
         {}
 
+        NYql::TIssues Issues;
+    };
+
+    struct TEvCpuLoadRequest : public NActors::TEventLocal<TEvCpuLoadRequest, EvCpuLoadRequest> {
+        TEvCpuLoadRequest(const TString& scope)
+            : Scope(scope)
+        {}
+
+        TString Scope;
+    };
+
+    struct TEvCpuLoadResponse : public NActors::TEventLocal<TEvCpuLoadResponse, EvCpuLoadResponse> {
+        TEvCpuLoadResponse(double instantLoad = 0.0, double averageLoad = 0.0)
+            : InstantLoad(instantLoad), AverageLoad(averageLoad)
+        {}
+
+        TEvCpuLoadResponse(NYql::TIssues issues)
+            : InstantLoad(0.0), AverageLoad(0.0), Issues(std::move(issues))
+        {}
+
+        double InstantLoad;
+        double AverageLoad;
+        NYql::TIssues Issues;
+    };
+
+    struct TEvCpuQuotaRequest : public NActors::TEventLocal<TEvCpuQuotaRequest, EvCpuQuotaRequest> {
+        TEvCpuQuotaRequest(const TString& scope, double quota = 0.0)
+            : Scope(scope), Quota(quota)
+        {}
+
+        TString Scope;
+        double Quota; // if zero, default quota is used
+    };
+
+    struct TEvCpuQuotaResponse : public NActors::TEventLocal<TEvCpuQuotaResponse, EvCpuQuotaResponse> {
+        TEvCpuQuotaResponse(bool quotaGranted, NYql::TIssues issues = {})
+            : QuotaGranted(quotaGranted), Issues(std::move(issues))
+        {}
+
+        bool QuotaGranted;
         NYql::TIssues Issues;
     };
 };

@@ -850,7 +850,25 @@ IGraphTransformer::TStatus PgResultItemWrapper(const TExprNode::TPtr& input, TEx
         return IGraphTransformer::TStatus::Ok;
     }
 
-    if (!UpdateLambdaAllArgumentsTypes(lambda, { input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType() }, ctx.Expr)) {
+    const auto resultItemType =  input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+    if (!lambda->GetTypeAnn()) {
+        const auto columnStructType = resultItemType->Cast<TStructExprType>();
+        Y_ENSURE(columnStructType);
+        const auto& elems = columnStructType->GetItems();
+        Y_ENSURE(elems.size() == 1);
+        const auto columnType = elems[0]->GetItemType();
+
+        ui32 pgTypeId = NPg::UnknownOid;
+        bool convertToPg = false;
+        if (!ExtractPgType(columnType, pgTypeId, convertToPg, input->Pos(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (convertToPg) {
+            lambda->TailRef() = ctx.Expr.NewCallable(lambda->Tail().Pos(), "ToPg", { lambda->TailPtr() });
+        }
+    }
+
+    if (!UpdateLambdaAllArgumentsTypes(lambda, { resultItemType }, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 

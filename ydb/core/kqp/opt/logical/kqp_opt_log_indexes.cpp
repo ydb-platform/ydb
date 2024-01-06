@@ -346,7 +346,7 @@ TExprBase KqpRewriteIndexRead(const TExprBase& node, TExprContext& ctx, const TK
 }
 
 TExprBase KqpRewriteLookupIndex(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (!kqpCtx.IsScanQuery()) {
+    if (kqpCtx.IsScanQuery()) {
         // TODO: Enable index lookup for scan queries as we now support stream lookups.
         return node;
     }

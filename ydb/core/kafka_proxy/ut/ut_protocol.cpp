@@ -1516,7 +1516,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 } else if (group.GroupId == secondConsumerName) {
                     UNIT_ASSERT_VALUES_EQUAL(group.Topics[0].Partitions[0].CommittedOffset, 0);
                 }
-                //UNIT_ASSERT_VALUES_EQUAL(group.Topics[0].Partitions[0].ErrorCode, NONE_ERROR); //FIXME
+                UNIT_ASSERT_VALUES_EQUAL(group.Topics[0].Partitions[0].ErrorCode, NONE_ERROR);
             }
         }
     } // Y_UNIT_TEST(OffsetFetchScenario)

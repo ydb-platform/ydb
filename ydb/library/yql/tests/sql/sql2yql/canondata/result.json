@@ -2267,6 +2267,13 @@
             "uri": "https://{canondata_backend}/1936997/d01e529b02a008637591c42bdd9c20f7eeda6588/resource.tar.gz#test_sql2yql.test_aggregate-group_by_ru_join_simple_/sql.yql"
         }
     ],
+    "test_sql2yql.test[aggregate-group_by_ru_join_simple_fs_multiusage]": [
+        {
+            "checksum": "6e0fe40b211146a9bdab0d2e61d26168",
+            "size": 6000,
+            "uri": "https://{canondata_backend}/1599023/c4917fc01ae646b5e708e20b50ea7ae2325f5bb7/resource.tar.gz#test_sql2yql.test_aggregate-group_by_ru_join_simple_fs_multiusage_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[aggregate-group_by_ru_join_star]": [
         {
             "checksum": "1d817501fac482312d72ad2e4a7881ba",
@@ -9783,6 +9790,13 @@
             "checksum": "8876eead36b5d802dadedeff8c4ca00e",
             "size": 4384,
             "uri": "https://{canondata_backend}/1937027/973c239492ba32946806ddc66cf0af4b38c06ae8/resource.tar.gz#test_sql2yql.test_optimizers-length_over_merge_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[optimizers-length_over_merge_fs_multiusage]": [
+        {
+            "checksum": "a923d44d0dc694741762e7272690257f",
+            "size": 4487,
+            "uri": "https://{canondata_backend}/1599023/c4917fc01ae646b5e708e20b50ea7ae2325f5bb7/resource.tar.gz#test_sql2yql.test_optimizers-length_over_merge_fs_multiusage_/sql.yql"
         }
     ],
     "test_sql2yql.test[optimizers-multi_to_empty_constraint]": [
@@ -19557,6 +19571,13 @@
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_aggregate-group_by_ru_join_simple_/formatted.sql"
         }
     ],
+    "test_sql_format.test[aggregate-group_by_ru_join_simple_fs_multiusage]": [
+        {
+            "checksum": "0369dc43a2062b648a486f7efb2873d0",
+            "size": 334,
+            "uri": "https://{canondata_backend}/1599023/c4917fc01ae646b5e708e20b50ea7ae2325f5bb7/resource.tar.gz#test_sql_format.test_aggregate-group_by_ru_join_simple_fs_multiusage_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[aggregate-group_by_ru_join_star]": [
         {
             "checksum": "e4a4a97de8afd6e188163c71da45788d",
@@ -27073,6 +27094,13 @@
             "checksum": "1a04523cfc331b966e02957cac5c5f37",
             "size": 428,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_optimizers-length_over_merge_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[optimizers-length_over_merge_fs_multiusage]": [
+        {
+            "checksum": "81f76674682498288b92904264c7a0cd",
+            "size": 498,
+            "uri": "https://{canondata_backend}/1599023/c4917fc01ae646b5e708e20b50ea7ae2325f5bb7/resource.tar.gz#test_sql_format.test_optimizers-length_over_merge_fs_multiusage_/formatted.sql"
         }
     ],
     "test_sql_format.test[optimizers-multi_to_empty_constraint]": [

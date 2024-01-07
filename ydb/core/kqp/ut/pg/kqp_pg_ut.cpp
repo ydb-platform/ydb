@@ -2712,7 +2712,9 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
         {
             auto result = db.ExecuteQuery(R"(
-                SELECT left_table.*, right_table.val2 FROM left_table, right_table WHERE left_table.id=right_table.id
+                SELECT left_table.*, right_table.val2 FROM left_table, right_table
+                WHERE left_table.id=right_table.id
+                ORDER BY left_table.id
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 

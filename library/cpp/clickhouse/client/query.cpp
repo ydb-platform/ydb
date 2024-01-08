@@ -14,6 +14,12 @@ namespace NClickHouse {
     {
     }
 
+    TQuery::TQuery(const TString& query, const TString& query_id)
+        : Query_(query)
+        , QueryId_(query_id)
+    {
+    }
+
     TQuery::~TQuery() {
     }
 

@@ -2188,7 +2188,7 @@
         {
             "checksum": "3742490a569a528f4ebd4d94bab4c292",
             "size": 2840,
-            "uri": "https://{canondata_backend}/1889210/084e90712790a8b88d6411c0965093f72cfd32fb/resource.tar.gz#test.test_pg-pg_like--Debug_/opt.yql_patched"
+            "uri": "https://{canondata_backend}/1936842/a14fb7fde4c9241e57e966dab7c50e4eff784d7e/resource.tar.gz#test.test_pg-pg_like--Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg-pg_like--Plan]": [

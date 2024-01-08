@@ -41,6 +41,10 @@ public:
 
     constexpr operator int() const;
 
+    template <class E>
+    requires std::is_enum_v<E>
+    constexpr operator E() const;
+
     void Save(TStreamSaveContext& context) const;
     void Load(TStreamLoadContext& context);
 

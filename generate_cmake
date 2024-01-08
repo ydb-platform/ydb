@@ -40,41 +40,6 @@ def rmtree(path):
         pass
 
 
-def make_file_executable(file_path):
-    st = os.stat(file_path)
-    os.chmod(file_path, st.st_mode + stat.S_IEXEC)
-
-
-def get_binary_id(resource_file_path):
-    with open(resource_file_path) as file:
-        ymake_file_json = json.load(file)
-
-    linux_uri = str(ymake_file_json["by_platform"]["linux"]["uri"])
-    return linux_uri.split(":")[1]
-
-
-def download_binary(root_path, binary_name, binary_path):
-    root_binary_resource_file_path = (
-        f"{root_path}/build/external_resources/{binary_name}/resources.json"
-    )
-    tmp_binary_resource_file_path = binary_path + "_resources.json"
-
-    if compare_files(root_binary_resource_file_path, tmp_binary_resource_file_path):
-        print(f"Use {binary_name} binary from cache {binary_path}")
-    else:
-        binary_id = get_binary_id(root_binary_resource_file_path)
-        devtools_registry_s3_url = "https://devtools-registry.s3.yandex.net"
-        devtools_registry_s3_binary_url = f"{devtools_registry_s3_url}/{binary_id}"
-        print(
-            f"Download {binary_name} binary from {devtools_registry_s3_binary_url} into {binary_path}"
-        )
-        remove_file(binary_path)
-        urllib.request.urlretrieve(devtools_registry_s3_binary_url, binary_path)
-        make_file_executable(binary_path)
-
-    shutil.copy(root_binary_resource_file_path, tmp_binary_resource_file_path)
-
-
 def generate_graph_for_platform(generate_graph_for_platform):
     platform = generate_graph_for_platform[0]
     generate_graph_command = generate_graph_for_platform[1]
@@ -112,6 +77,17 @@ def generate_graph_for_platform(generate_graph_for_platform):
         # Fix
         "in $B/ydb/library/actors/dnsresolver/ut/library-cpp-actors-dnsresolver-ut",
         "in $B/ydb/library/pdisk_io/libydb-library-pdisk_io",
+        "skip unknown statement: ADD_YTEST vector of size",
+        "skip unknown statement: _REGISTER_NO_CHECK_IMPORTS vector of size",
+        "skip unknown statement: CHECK_CONTRIB_CREDITS vector of size",
+        "skip unknown statement: ASSERT vector of size",
+        "skip unknown statement: FILES vector of size",
+        "skip unknown statement: ADD_CHECK vector of size",
+        "skip unknown statement: COPY vector of size",
+        "skip unknown statement: PY_EXTRALIBS vector of size",
+        "skip unknown statement: LLVM_BC vector of size",
+        "skip unknown statement: SUPPRESSIONS vector of size",
+        ". It is not intended for export.",
     ]
 
     if platform == "windows-x86_64":
@@ -146,6 +122,8 @@ if __name__ == "__main__":
     parser.add_argument("--yexport_bin", help="Path to yexport binary")
     parser.add_argument("--tmp", help="Path to tmp dir")
     parser.add_argument(
+        "-k", "--keep-going", action="store_true", default=False, help="Ignore unknown build graph errors and try to perform export")
+    parser.add_argument(
         "--debug", action="store_true", default=False, help="Run script in debug mode"
     )
 
@@ -162,34 +140,33 @@ if __name__ == "__main__":
     ymake_binary_path = args.ymake_bin
     yexport_binary_path = args.yexport_bin
     debug = args.debug
+    keep_going = args.keep_going
 
     ydb_tmp_folder_path = tmp_folder_path + "/ydb"
     ydb_metadata_folder_path = tmp_folder_path + "/metadata"
-    ydb_bin_folder_path = tmp_folder_path + "/bin"
     plugins_folder_path = ydb_tmp_folder_path + "/build/plugins"
 
     mkdir(tmp_folder_path)
     mkdir(ydb_metadata_folder_path)
-    mkdir(ydb_bin_folder_path)
 
     root_folder = os.getcwd()
 
     if ymake_binary_path is None:
-        ymake_binary_path = ydb_bin_folder_path + "/ymake"
-        download_binary(root_folder, "ymake", ymake_binary_path)
+        ymake_binary_path = root_folder + "/ya tool ymake"
 
     if yexport_binary_path is None:
-        yexport_binary_path = ydb_bin_folder_path + "/yexport"
-        download_binary(root_folder, "yexport", yexport_binary_path)
-
-    rmtree(ydb_tmp_folder_path)
-    shutil.copytree(root_folder, ydb_tmp_folder_path)
+        libiconv_path="contrib/libs/libiconv/dynamic"
+        compile_libiconv_command = f"{root_folder}/ya make -r {libiconv_path}"
+        print("Compliling libiconv...")
+        subprocess.check_output(compile_libiconv_command, shell=True)
+        yexport_binary_path = f"LD_LIBRARY_PATH={libiconv_path} {root_folder}/ya tool yexport"
 
     platforms = [
         ("linux-x86_64", "default-linux-x86_64"),
         ("linux-aarch64", "default-linux-aarch64"),
         ("darwin-x86_64", "default-darwin-x86_64"),
         ("windows-x86_64", "default-win-x86_64"),
+        ("darwin-arm64", "default-darwin-arm64"),
     ]
 
     generate_graph_for_platform_commands = []
@@ -208,7 +185,7 @@ if __name__ == "__main__":
         # In original script there are targets kikimr/docs/ru/docs_oss ydb ydb/tests/oss/launch library/cpp/actors tools/rescompiler/bin
         generate_graph_command = f'{ymake_binary_path} --build-root "{ydb_tmp_folder_path}" --config "{dump_export_path}"\
             --plugins-root "{plugins_folder_path}" --xs --xx --sem-graph --keep-going\
-            ydb ydb/tests/oss/launch library/cpp/actors tools/rescompiler/bin > {graph_export_path}'
+            ydb ydb/tests/oss/launch tools/rescompiler/bin > {graph_export_path}'
         print(f"Generate graph command {generate_graph_command}")
 
         generate_graph_for_platform_commands.append((platform, generate_graph_command))
@@ -231,13 +208,17 @@ if __name__ == "__main__":
         for error in errors_for_platform[index]:
             print(error, file=sys.stderr)
 
-        sys.exit(1)
+        if not keep_going:
+            sys.exit(1)
 
-    yexport_command = f"{yexport_binary_path} --export-root \"{ydb_tmp_folder_path}\" --target YDB \
+    yexport_command = f"{yexport_binary_path} --export-root \"{root_folder}\" --target YDB \
             --semantic-graph \"{ydb_metadata_folder_path + '/sem.linux-x86_64.json'}\" --platforms linux-x86_64 \
             --semantic-graph \"{ydb_metadata_folder_path + '/sem.linux-aarch64.json'}\" --platforms linux-aarch64 \
             --semantic-graph \"{ydb_metadata_folder_path + '/sem.darwin-x86_64.json'}\" --platforms darwin-x86_64 \
+            --semantic-graph \"{ydb_metadata_folder_path + '/sem.darwin-arm64.json'}\" --platforms darwin-arm64 \
             --semantic-graph \"{ydb_metadata_folder_path + '/sem.windows-x86_64.json'}\" --platforms windows-x86_64"
+#    yexport_command = f"{yexport_binary_path} --export-root \"{ydb_tmp_folder_path}\" --target YDB \
+#            --semantic-graph \"{ydb_metadata_folder_path + '/sem.darwin-x86_64.json'}\" --platforms darwin-x86_64"
     print(f"yexport command {yexport_command}")
 
     yexport_output = subprocess.check_output(
@@ -247,6 +228,8 @@ if __name__ == "__main__":
     if debug:
         print("yexport output")
         print(yexport_output)
+
+    sys.exit(0)
 
     rsync_command = f'rsync --recursive --delete  --perms\
         --exclude .git --exclude contrib --exclude library/cpp/actors\

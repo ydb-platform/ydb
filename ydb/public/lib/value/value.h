@@ -89,8 +89,6 @@ public:
     NScheme::TTypeId GetDataType() const;
     // gets text representation of simple 'Data' types
     TString GetDataText() const;
-    // gets text representation of 'Pg' types
-    TString GetPgText() const;
     // returns text representation of value's type
     template <typename Format> TString GetTypeText(const Format& format = Format()) const;
     // returns text representation of value itself

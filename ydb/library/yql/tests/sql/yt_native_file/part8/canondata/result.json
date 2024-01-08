@@ -1922,7 +1922,7 @@
         {
             "checksum": "c484d53d7542ce062e03f08caecec024",
             "size": 2775,
-            "uri": "https://{canondata_backend}/1924537/21587f2d9f655668db9501751a9b543d6e1990b8/resource.tar.gz#test.test_pg-pg_like--Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1871182/75f5386bcbf85fa82201b8bb64c02bed6a84203f/resource.tar.gz#test.test_pg-pg_like--Debug_/opt.yql"
         }
     ],
     "test.test[pg-pg_like--Plan]": [

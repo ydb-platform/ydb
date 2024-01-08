@@ -25,11 +25,15 @@
 // TODO: limit number of messages per second
 // TODO: make TLogComponentLevelRequest/Response network messages
 
-#define IS_LOG_PRIORITY_ENABLED(priority, component) \
-    [p = static_cast<::NActors::NLog::EPriority>(priority), c = static_cast<::NActors::NLog::EComponent>(component)]() -> bool { \
-        ::NActors::TActivationContext *context = ::NActors::TlsActivationContext; \
-        return !context || context->LoggerSettings()->Satisfies(p, c, 0ull); \
-    }()
+#define IS_LOG_PRIORITY_ENABLED(priority, component)                                   \
+    ::NActors::IsLogPriorityEnabled(static_cast<::NActors::NLog::EPriority>(priority), \
+        static_cast<::NActors::NLog::EComponent>(component))
+
+#define IS_CTX_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component, sampleBy)                               \
+    ::NActors::IsLogPriorityEnabled(static_cast<::NActors::NLog::TSettings*>((actorCtxOrSystem).LoggerSettings()), \
+        static_cast<::NActors::NLog::EPriority>(priority),                                                         \
+        static_cast<::NActors::NLog::EComponent>(component),                                                       \
+        sampleBy)
 
 #define IS_EMERG_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_EMERG, component)
 #define IS_ALERT_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_ALERT, component)
@@ -43,21 +47,21 @@
 
 #define LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, ...)                                               \
     do {                                                                                                                       \
-        ::NActors::NLog::TSettings* mSettings = static_cast<::NActors::NLog::TSettings*>((actorCtxOrSystem).LoggerSettings()); \
-        ::NActors::NLog::EPriority mPriority = static_cast<::NActors::NLog::EPriority>(priority);                              \
-        ::NActors::NLog::EComponent mComponent = static_cast<::NActors::NLog::EComponent>(component);                          \
-        if (mSettings && mSettings->Satisfies(mPriority, mComponent, sampleBy)) {                                              \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component, sampleBy)) {                                    \
             ::NActors::MemLogAdapter(                                                                                          \
                 actorCtxOrSystem, priority, component, __VA_ARGS__);                                                           \
         }                                                                                                                      \
     } while (0) /**/
 
 #define LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream)      \
-    LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, [&]() -> TString { \
-        TStringBuilder logStringBuilder;                                                   \
-        logStringBuilder << stream;                                                        \
-        return std::move(logStringBuilder);                                                \
-    }())
+    do {                                                                                                                       \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component, sampleBy)) {                                    \
+            TStringBuilder logStringBuilder;                                                                                   \
+            logStringBuilder << stream;                                                                                        \
+            ::NActors::MemLogAdapter(                                                                                          \
+                actorCtxOrSystem, priority, component, std::move(logStringBuilder));                                           \
+        }                                                                                                                      \
+    } while (0) /**/
 
 #define LOG_LOG(actorCtxOrSystem, priority, component, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, __VA_ARGS__)
 #define LOG_LOG_S(actorCtxOrSystem, priority, component, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, stream)
@@ -326,6 +330,15 @@ namespace NActors {
             vsprintf(dst, format, params);
         }
     } // namespace NDetail
+
+    inline bool IsLogPriorityEnabled(NLog::TSettings* settings, NLog::EPriority proirity, NLog::EComponent component, ui64 sampleBy = 0) {
+        return settings && settings->Satisfies(proirity, component, sampleBy);
+    }
+
+    inline bool IsLogPriorityEnabled(NLog::EPriority priority, NLog::EComponent component, ui64 sampleBy = 0) {
+        TActivationContext* context = TlsActivationContext;
+        return !context || IsLogPriorityEnabled(context->LoggerSettings(), priority, component, sampleBy);
+    }
 
     template <typename TCtx>
     inline void DeliverLogMessage(TCtx& ctx, NLog::EPriority mPriority, NLog::EComponent mComponent, TString &&str)

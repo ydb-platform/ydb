@@ -760,22 +760,22 @@ TEST(TAsyncSlruGhostCacheTest, MoveAssignCookie)
 
     // Ensure that all the necessary items are present in large ghost, but absent in main
     // cache and small ghost.
-     for (int index = 0; index < 5; ++index) {
+    for (int index = 0; index < 5; ++index) {
         auto cookie = cache->BeginInsert(index);
         ASSERT_TRUE(cookie.IsActive());
         cookie.EndInsert(New<TSimpleCachedValue>(
             /*key*/ index,
             /*value*/ 42,
             /*weight*/ 1));
-     }
-     {
+    }
+    {
         auto cookie = cache->BeginInsert(43);
         ASSERT_TRUE(cookie.IsActive());
         cookie.EndInsert(New<TSimpleCachedValue>(
             /*key*/ 43,
             /*value*/ 100500,
             /*weight*/ 101));
-     }
+    }
 
     for (int index = 0; index < 5; ++index) {
         auto otherCookie = cache->BeginInsert(index);

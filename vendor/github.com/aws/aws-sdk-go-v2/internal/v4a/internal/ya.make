@@ -1,4 +1,0 @@
-RECURSE(
-    crypto
-    v4
-)

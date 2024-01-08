@@ -17,7 +17,7 @@ namespace NKikimr::NColumnShard {
 void TColumnShard::CleanupActors(const TActorContext& ctx) {
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationWriteActorId, new TEvents::TEvPoisonPill);
-    
+
     StoragesManager->Stop();
     if (Tiers) {
         Tiers->Stop();
@@ -307,10 +307,10 @@ void TColumnShard::ConfigureStats(const NOlap::TColumnEngineStats& indexStats, :
 
     tabletStats->SetRowCount(activeIndexStats.Rows);
     tabletStats->SetDataSize(activeIndexStats.Bytes + TabletCounters->Simple()[COUNTER_COMMITTED_BYTES].Get());
-    
+
     // TODO: we need row/dataSize counters for evicted data (managed by tablet but stored outside)
     //tabletStats->SetIndexSize(); // TODO: calc size of internal tables
-    
+
     tabletStats->SetLastAccessTime(LastAccessTime.MilliSeconds());
     tabletStats->SetLastUpdateTime(lastIndexUpdate.GetPlanStep());
 }
@@ -361,13 +361,13 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
         auto* periodicTableStats = ev->Record.AddTables();
         periodicTableStats->SetDatashardId(TabletID());
         periodicTableStats->SetTableLocalId(tableLocalID);
-        
+
         periodicTableStats->SetShardState(2); // NKikimrTxDataShard.EDatashardState.Ready
         periodicTableStats->SetGeneration(Executor()->Generation());
         periodicTableStats->SetRound(StatsReportRound++);
         periodicTableStats->SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
         periodicTableStats->SetStartTime(StartTime().MilliSeconds());
-        
+
         if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {
             resourceMetrics->Fill(*periodicTableStats->MutableTabletMetrics());
         }
@@ -407,7 +407,7 @@ void TColumnShard::SendPeriodicStats() {
 
     FillOlapStats(ctx, ev);
     FillColumnTableStats(ctx, ev);
-    
+
     NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
 }
 

@@ -430,8 +430,10 @@ std::vector<TString> TConnection::DiscoverProxiesViaServiceDiscovery()
         THROW_ERROR_EXCEPTION("No service discovery configured");
     }
 
+    const auto& clusters = Config_->ProxyEndpoints->Clusters;
     std::vector<TFuture<TEndpointSet>> asyncEndpointSets;
-    for (const auto& cluster : Config_->ProxyEndpoints->Clusters) {
+    asyncEndpointSets.reserve(clusters.size());
+    for (const auto& cluster : clusters) {
         asyncEndpointSets.push_back(ServiceDiscovery_->ResolveEndpoints(
             cluster,
             Config_->ProxyEndpoints->EndpointSetId));
@@ -448,7 +450,7 @@ std::vector<TString> TConnection::DiscoverProxiesViaServiceDiscovery()
             YT_LOG_WARNING(
                 endpointSets[i],
                 "Could not resolve endpoints from cluster (Cluster: %v, EndpointSetId: %v)",
-                Config_->ProxyEndpoints->Clusters[i],
+                clusters[i],
                 Config_->ProxyEndpoints->EndpointSetId);
             continue;
         }

@@ -160,6 +160,7 @@ class TCompletionChunkRead : public TCompletionAction {
     TAtomic Deletes;
     std::function<void()> OnDestroy;
     ui64 ChunkNonce;
+    TMutex SpanStackLock;
 
     const ui64 DoubleFreeCanary;
 public:

@@ -9,7 +9,9 @@ namespace NPDisk {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void TRequestBase::AbortDelete(TRequestBase* request, TActorSystem* actorSystem) {
-    request->Span.EndError("Abort");
+    while (auto span = request->SpanStack.Pop()) {
+        span.EndError("Abort");
+    }
     switch(request->GetType()) {
     case ERequestType::RequestChunkRead:
     {

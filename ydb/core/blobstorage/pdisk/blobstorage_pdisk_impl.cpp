@@ -892,7 +892,7 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
     const ui32 count = evChunkWrite->PartsPtr->Size();
     for (ui32 partIdx = evChunkWrite->CurrentPart; partIdx < count; ++partIdx) {
         ui32 remainingPartSize = (*evChunkWrite->PartsPtr)[partIdx].second - evChunkWrite->CurrentPartOffset;
-        auto traceId = evChunkWrite->Span.GetTraceId();
+        auto traceId = evChunkWrite->SpanStack.GetTraceId();
         if (bytesAvailable < remainingPartSize) {
             ui32 sizeToWrite = bytesAvailable;
             if (sizeToWrite > 0) {
@@ -939,13 +939,13 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
             << " Marker# BPD79");
 
     if (!writer.IsEmptySector()) {
-        auto traceId = evChunkWrite->Span.GetTraceId();
+        auto traceId = evChunkWrite->SpanStack.GetTraceId();
         *Mon.BandwidthPChunkPadding += writer.SectorBytesFree;
         writer.WriteZeroes(writer.SectorBytesFree, evChunkWrite->ReqId, &traceId);
         LOG_INFO(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " chunkIdx# %" PRIu32
             " was zero-padded after writing", (ui32)PDiskId, (ui32)chunkIdx);
     }
-    auto traceId = evChunkWrite->Span.GetTraceId();
+    auto traceId = evChunkWrite->SpanStack.GetTraceId();
     evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);
     writer.Flush(evChunkWrite->ReqId, &traceId, evChunkWrite->Completion.Release());
 
@@ -1056,7 +1056,7 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
     completion->CostNs = DriveModel.TimeForSizeNs(bytesToRead, read->ChunkIdx, TDriveModel::OP_TYPE_READ);
     Y_ABORT_UNLESS(bytesToRead <= completion->GetBuffer()->Size());
     ui8 *data = completion->GetBuffer()->Data();
-    auto traceId = read->Span.GetTraceId();
+    auto traceId = read->SpanStack.GetTraceId();
     BlockDevice->PreadAsync(data, bytesToRead, readOffset, completion.Release(),
             read->ReqId, &traceId);
     // TODO: align the data on SectorSize, not PAGE_SIZE
@@ -1350,7 +1350,7 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
     for (TChunkIdx chunkIdx : chunks) {
         ui64 chunkNonce = SysLogRecord.Nonces.Value[NonceData];
         SysLogRecord.Nonces.Value[NonceData] += dataChunkSizeSectors;
-        auto traceId = req->Span.GetTraceId();
+        auto traceId = req->SpanStack.GetTraceId();
         OnNonceChange(NonceData, req->ReqId, &traceId);
         // Remember who owns the sector, save chunk Nonce in order to be able to continue writing the chunk
         TChunkState &state = ChunkState[chunkIdx];
@@ -2246,6 +2246,8 @@ void TPDisk::ProcessChunkWriteQueue() {
     NHPTimer::STime now = HPNow();
     for (auto it = JointChunkWrites.begin(); it != JointChunkWrites.end(); ++it) {
         TRequestBase *req = (*it);
+        req->SpanStack.PopOk();
+        req->SpanStack.Push(TWilson::PDisk, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
         switch (req->GetType()) {
             case ERequestType::RequestChunkWritePiece:
             {
@@ -2275,6 +2277,8 @@ void TPDisk::ProcessChunkReadQueue() {
 
     for (auto& req : JointChunkReads) {
 
+        req->SpanStack.PopOk();
+        req->SpanStack.Push(TWilson::PDisk, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
         switch (req->GetType()) {
             case ERequestType::RequestChunkReadPiece:
             {
@@ -2345,6 +2349,8 @@ void TPDisk::ProcessChunkTrimQueue() {
     Y_ABORT_UNLESS(JointChunkTrims.size() <= 1);
     for (auto it = JointChunkTrims.begin(); it != JointChunkTrims.end(); ++it) {
         TChunkTrim *trim = (*it);
+        trim->SpanStack.PopOk();
+        trim->SpanStack.Push(TWilson::PDisk, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
         ui64 chunkOffset = Format.ChunkSize * ui64(trim->ChunkIdx);
         ui64 offset = chunkOffset + trim->Offset;
         ui64 trimSize = trim->Size;
@@ -2501,7 +2507,7 @@ void TPDisk::ProcessFastOperationsQueue() {
                 OnLogCommitDone(static_cast<TLogCommitDone&>(*req));
                 break;
             case ERequestType::RequestTryTrimChunk:
-                TryTrimChunk(true, static_cast<TTryTrimChunk&>(*req).TrimSize, req->Span);
+                TryTrimChunk(true, static_cast<TTryTrimChunk&>(*req).TrimSize, req->SpanStack.PeekTop() ? *req->SpanStack.PeekTop() : static_cast<const NWilson::TSpan&>(NWilson::TSpan{}));
                 break;
             case ERequestType::RequestReleaseChunks:
                 MarkChunksAsReleased(static_cast<TReleaseChunks&>(*req));
@@ -2519,6 +2525,7 @@ void TPDisk::ProcessChunkForgetQueue() {
         return;
 
     for (auto& req : JointChunkForgets) {
+        req->SpanStack.PopOk();
         ChunkForget(*req);
     }
 
@@ -2751,7 +2758,7 @@ void TPDisk::PrepareLogError(TLogWrite *logWrite, TStringStream& err, NKikimrPro
         << " lsn# " << logWrite->Lsn;
     LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, err.Str());
 
-    logWrite->Span.EndError(err.Str());
+    logWrite->SpanStack.PopError(err.Str());
     logWrite->Result.Reset(new NPDisk::TEvLogResult(status,
             GetStatusFlags(logWrite->Owner, logWrite->OwnerGroupType), err.Str()));
     logWrite->Result->Results.push_back(NPDisk::TEvLogResult::TRecord(logWrite->Lsn, logWrite->Cookie));
@@ -3121,7 +3128,6 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
 }
 
 void TPDisk::PushRequestToForseti(TRequestBase *request) {
-    request->Span.Event("PushToForseti", {});
     if (request->GateId != GateFastOperation) {
         bool isAdded = false;
 
@@ -3160,9 +3166,9 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                     && static_cast<TRequestBase *>(job->Payload)->GetType() == ERequestType::RequestLogWrite) {
                 TLogWrite &batch = *static_cast<TLogWrite*>(job->Payload);
 
-                request->Span.Event("AddToBatch", NWilson::TKeyValueList{{
-                    { "Batch.ReqId", static_cast<i64>(batch.ReqId.Id) },
-                }});
+                if (auto span = request->SpanStack.Push(TWilson::PDisk, "PDisk.InForseti.InBatch")) {
+                    span->Attribute("Batch.ReqId", static_cast<i64>(batch.ReqId.Id));
+                }
                 batch.AddToBatch(static_cast<TLogWrite*>(request));
                 ui64 prevCost = job->Cost;
                 job->Cost += request->Cost;
@@ -3186,7 +3192,7 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                 SplitChunkJobSize(whole->TotalSize, &smallJobSize, &largeJobSize, &smallJobCount);
                 for (ui32 idx = 0; idx < smallJobCount; ++idx) {
                     // Schedule small job.
-                    auto span = request->Span.CreateChild(TWilson::PDisk, "PDisk.ChunkWritePiece", NWilson::EFlags::AUTO_END);
+                    auto span = request->SpanStack.CreateChild(TWilson::PDisk, "PDisk.ChunkWritePiece", NWilson::EFlags::AUTO_END);
                     span.Attribute("small_job_idx", idx)
                         .Attribute("is_last_piece", false);
                     TChunkWritePiece *piece = new TChunkWritePiece(whole, idx * smallJobSize, smallJobSize, std::move(span));
@@ -3194,7 +3200,7 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                     AddJobToForseti(cbs, piece, request->JobKind);
                 }
                 // Schedule large job (there always is one)
-                auto span = request->Span.CreateChild(TWilson::PDisk, "PDisk.ChunkWritePiece", NWilson::EFlags::AUTO_END);
+                auto span = request->SpanStack.CreateChild(TWilson::PDisk, "PDisk.ChunkWritePiece", NWilson::EFlags::AUTO_END);
                 span.Attribute("is_last_piece", true);
                 TChunkWritePiece *piece = new TChunkWritePiece(whole, smallJobCount * smallJobSize, largeJobSize, std::move(span));
                 piece->EstimateCost(DriveModel);
@@ -3214,7 +3220,7 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                 ui32 largeJobSize = totalSectors - smallJobSize * smallJobCount;
 
                 for (ui32 idx = 0; idx < smallJobCount; ++idx) {
-                    auto span = request->Span.CreateChild(TWilson::PDisk, "PDisk.ChunkReadPiece", NWilson::EFlags::AUTO_END);
+                    auto span = request->SpanStack.CreateChild(TWilson::PDisk, "PDisk.ChunkReadPiece", NWilson::EFlags::AUTO_END);
                     span.Attribute("small_job_idx", idx)
                         .Attribute("is_last_piece", false);
                     // Schedule small job.
@@ -3227,8 +3233,7 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                     AddJobToForseti(cbs, piece, request->JobKind);
                 }
                 // Schedule large job (there always is one)
-                NWilson::TSpan span(TWilson::PDisk, request->Span.GetTraceId(),
-                        "PDisk.ChunkReadPiece", NWilson::EFlags::NONE, request->Span.GetActorSystem());
+                auto span = request->SpanStack.CreateChild(TWilson::PDisk, "PDisk.ChunkReadPiece");
                 span.Attribute("is_last_piece", true);
                 auto piece = new TChunkReadPiece(read, smallJobCount * smallJobSize,
                         largeJobSize * Format.SectorSize, true, std::move(span));
@@ -3243,7 +3248,6 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
             }
         }
     } else {
-        request->Span.Event("PushToFastOperationsQueue", {});
         FastOperationsQueue.push_back(std::unique_ptr<TRequestBase>(request));
         LOG_DEBUG(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " ReqId# %" PRIu64
                 " PushRequestToForseti Push to FastOperationsQueue.size# %" PRIu64,
@@ -3265,6 +3269,7 @@ void TPDisk::SplitChunkJobSize(ui32 totalSize, ui32 *outSmallJobSize, ui32 *outL
 void TPDisk::AddJobToForseti(NSchLab::TCbs *cbs, TRequestBase *request, NSchLab::EJobKind jobKind) {
     LWTRACK(PDiskAddToScheduler, request->Orbit, PDiskId, request->ReqId.Id, HPSecondsFloat(request->CreationTime),
             request->Owner, request->IsFast, request->PriorityClass);
+    request->SpanStack.Push(TWilson::PDisk, "PDisk.InForseti");
     TIntrusivePtr<NSchLab::TJob> job = ForsetiScheduler.CreateJob();
     job->Payload = request;
     job->Cost = request->Cost;
@@ -3291,25 +3296,29 @@ void TPDisk::RouteRequest(TRequestBase *request) {
         case ERequestType::RequestLogReadResultProcess:
             [[fallthrough]];
         case ERequestType::RequestLogSectorRestore:
-            request->Span.Event("PushToJointLogReads", {});
+            request->SpanStack.PopOk();
+            request->SpanStack.Push(TWilson::PDisk, "PDisk.InJointLogReads");
             JointLogReads.push_back(request);
             break;
         case ERequestType::RequestChunkReadPiece:
         {
             TChunkReadPiece *piece = static_cast<TChunkReadPiece*>(request);
-            request->Span.Event("PushToJointChunkReads", {});
+            request->SpanStack.PopOk();
+            request->SpanStack.Push(TWilson::PDisk, "PDisk.InJointChunkReads");
             JointChunkReads.emplace_back(piece->SelfPointer.Get());
             piece->SelfPointer.Reset();
             // FIXME(cthulhu): Unreserve() for TChunkReadPiece is called while processing to avoid requeueing issues
             break;
         }
         case ERequestType::RequestChunkWritePiece:
-            request->Span.Event("PushToJointChunkWrites", {});
+            request->SpanStack.PopOk();
+            request->SpanStack.Push(TWilson::PDisk, "PDisk.InJointChunkWrites");
             JointChunkWrites.push_back(request);
             break;
         case ERequestType::RequestChunkTrim:
         {
-            request->Span.Event("PushToJointChunkTrims", {});
+            request->SpanStack.PopOk();
+            request->SpanStack.Push(TWilson::PDisk, "PDisk.InJointChunkTrims");
             TChunkTrim *trim = static_cast<TChunkTrim*>(request);
             JointChunkTrims.push_back(trim);
             break;
@@ -3320,10 +3329,12 @@ void TPDisk::RouteRequest(TRequestBase *request) {
             while (log) {
                 TLogWrite *batch = log->PopFromBatch();
 
-                log->Span.Event("PushToJointLogWrites", {});
+                log->SpanStack.PopOk();
+                if (auto span = log->SpanStack.Push(TWilson::PDisk, "PDisk.InJointLogWrites")) {
+                    span->Attribute("HasCommitRecord", log->Signature.HasCommitRecord());
+                }
                 JointLogWrites.push_back(log);
                 if (log->Signature.HasCommitRecord()) {
-                    log->Span.Event("PushToJointCommits", {});
                     JointCommits.push_back(log);
                 }
                 log = batch;
@@ -3332,7 +3343,8 @@ void TPDisk::RouteRequest(TRequestBase *request) {
         }
         case ERequestType::RequestChunkForget:
         {
-            request->Span.Event("PushToJointChunkForgets", {});
+            request->SpanStack.PopOk();
+            request->SpanStack.Push(TWilson::PDisk, "PDisk.InJointChunkForgets");
             TChunkForget *forget = static_cast<TChunkForget*>(request);
             JointChunkForgets.push_back(std::unique_ptr<TChunkForget>(forget));
             break;
@@ -3423,11 +3435,9 @@ void TPDisk::EnqueueAll() {
                 TYardControl &evControl = *static_cast<TYardControl*>(request);
                 switch (evControl.Action) {
                     case NPDisk::TEvYardControl::ActionPause:
-                        request->Span.Event("PushToPausedQueue", {});
                         PausedQueue.push_back(request);
                         break;
                     case NPDisk::TEvYardControl::ActionStep:
-                        request->Span.Event("PushToPausedQueue", {});
                         PausedQueue.push_back(request);
                         ActorSystem->Send(evControl.Sender, new NPDisk::TEvYardControlResult(
                             NKikimrProto::OK, evControl.Cookie, TString()));
@@ -3448,7 +3458,6 @@ void TPDisk::EnqueueAll() {
                         break;
                 }
             } else {
-                request->Span.Event("PushToPausedQueue", {});
                 PausedQueue.push_back(request);
             }
         } else {

@@ -344,6 +344,12 @@ void TCompletionChunkRead::ReplyError(TActorSystem *actorSystem, TString reason)
 // Returns true if there is some pending requests to wait
 bool TCompletionChunkRead::PartReadComplete(TActorSystem *actorSystem) {
     TAtomicBase partsPending = AtomicDecrement(PartsPending);
+    {
+        TGuard lk(SpanStackLock);
+        if (auto span = Read->SpanStack.PeekTop()) {
+            span->Event("PartReadComplete");
+        }
+    }
     if (partsPending == 0) {
         if (AtomicGet(Deletes) == 0) {
             Exec(actorSystem);

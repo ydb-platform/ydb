@@ -62,6 +62,7 @@ jobs:
         sanitizer: ${{ inputs.sanitizer }}
         ccache_remote_path: ${{ vars.REMOTE_CACHE_URL && format('http://{0}{1}', secrets.REMOTE_CACHE_AUTH, vars.REMOTE_CACHE_URL) || ''}}
         extra_compile_flags: ${{ inputs.extra_compile_flags }}
+        ref: cmakebuild
     - name: Run tests
       uses: ./.github/actions/test
       with:

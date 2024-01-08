@@ -78,16 +78,14 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
             // Prepare batch
             batch = NArrow::DeserializeBatch(itBlobData->second, indexInfo.ArrowSchema());
             Blobs.erase(itBlobData);
-            AFL_VERIFY(batch)("event", "cannot_parse")
-                ("data_snapshot", TStringBuilder() << inserted.GetSnapshot())
-                ("index_snapshot", TStringBuilder() << blobSchema->GetSnapshot());
+            AFL_VERIFY(batch)("event", "cannot_parse")("data_snapshot", TStringBuilder() << inserted.GetSnapshot())("index_snapshot", TStringBuilder() << blobSchema->GetSnapshot());
             ;
         }
 
         batch = AddSpecials(batch, indexInfo, inserted);
         batch = resultSchema->NormalizeBatch(*blobSchema, batch);
         pathBatches[inserted.PathId].push_back(batch);
-        Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(pathBatches[inserted.PathId].back(), resultSchema->GetIndexInfo().GetReplaceKey()));
+        AFL_VERIFY(NArrow::IsSortedAndUnique(pathBatches[inserted.PathId].back(), resultSchema->GetIndexInfo().GetReplaceKey()));
     }
 
     Y_ABORT_UNLESS(Blobs.empty());

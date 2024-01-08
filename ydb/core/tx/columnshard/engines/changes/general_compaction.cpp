@@ -72,7 +72,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
                 NArrow::NConstruction::IArrayBuilder::TPtr column = std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::UInt32Type>>>(portionRecordIndexFieldName);
                 batch = NArrow::TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), portionRecordIndexField, column->BuildArray(batch->num_rows())));
             }
-            Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, resultSchema->GetIndexInfo().GetReplaceKey()));
+            AFL_VERIFY(NArrow::IsSortedAndUnique(batch, resultSchema->GetIndexInfo().GetReplaceKey()));
             mergeStream.AddSource(batch, nullptr);
         }
         batchResults = mergeStream.DrainAllParts(CheckPoints, indexFields);
@@ -112,7 +112,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         std::map<std::string, std::vector<TColumnPortionResult>> columnChunks;
         ui32 batchIdx = 0;
         for (auto&& batchResult : batchResults) {
-            const ui32 portionRecordsCountLimit = batchResult->num_rows() / (batchResult->num_rows() / GetSplitSettings().GetExpectedRecordsCountOnPage() + 1) + 1;
+            const ui32 portionRecordsCountLimit = std::max<ui32>(1, batchResult->num_rows() / (std::max<ui32>(1, batchResult->num_rows() / GetSplitSettings().GetExpectedRecordsCountOnPage())));
             TColumnMergeContext context(columnId, resultSchema, portionRecordsCountLimit, GetSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo, SaverContext);
             TMergedColumn mColumn(context);
 

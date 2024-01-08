@@ -118,6 +118,7 @@ std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(cons
     std::vector<std::vector<IPortionColumnChunk::TPtr>> chunkByBlobs;
     std::shared_ptr<arrow::RecordBatch> portionBatch;
     while (limiter.Next(chunkByBlobs, portionBatch)) {
+        AFL_VERIFY(NArrow::IsSortedAndUnique(portionBatch, resultSchema->GetIndexInfo().GetReplaceKey()));
         TPortionInfoWithBlobs infoWithBlob = TPortionInfoWithBlobs::BuildByBlobs(chunkByBlobs, nullptr, granule, snapshot, SaverContext.GetStorageOperator());
         infoWithBlob.GetPortionInfo().AddMetadata(*resultSchema, portionBatch, SaverContext.GetTierName());
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion_appended", infoWithBlob.GetPortionInfo().DebugString());

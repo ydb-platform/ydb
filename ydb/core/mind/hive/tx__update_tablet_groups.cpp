@@ -162,8 +162,6 @@ public:
                 fromGeneration = 0;
             } else if (channel->History.back().GroupID == group->GetGroupID()) {
                 // We decided to keep the group the same
-                // Do nothing, except set new timestamp
-                channel->History.back().Timestamp = ctx.Now();
                 continue;
             } else {
                 needToIncreaseGeneration = true;

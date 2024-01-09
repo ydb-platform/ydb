@@ -2828,6 +2828,25 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 tabletB = tablets[1];
             }
         }
+
+        // If assured space is not set, usage is always set to 1
+        auto groupMetricsExchange = MakeHolder<TEvBlobStorage::TEvControllerGroupMetricsExchange>();
+        for (const auto& [group, tablets] : groupToTablets) {
+            NKikimrBlobStorage::TGroupMetrics* metrics = groupMetricsExchange->Record.AddGroupMetrics();
+
+            metrics->SetGroupId(group);
+            metrics->MutableGroupParameters()->SetGroupID(group);
+            metrics->MutableGroupParameters()->SetStoragePoolName("def1");
+            metrics->MutableGroupParameters()->MutableAssuredResources()->SetSpace(300'000'000);
+        }
+
+        runtime.SendToPipe(MakeBSControllerID(0), sender, groupMetricsExchange.Release(), 0, GetPipeConfigWithRetries());
+        {
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerGroupMetricsExchange));
+            runtime.DispatchEvents(options);
+        }
+
         TChannelsBindings channels = BINDED_CHANNELS;
         for (auto& bind : channels) {
             bind.SetSize(200'000'000);

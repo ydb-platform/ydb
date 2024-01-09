@@ -621,10 +621,10 @@ TEST_F(TSchedulerTest, TestWaitUntilSet)
     auto p1 = NewPromise<void>();
     auto f1 = p1.ToFuture();
 
-    BIND([=] () {
+    YT_UNUSED_FUTURE(BIND([=] () {
         Sleep(SleepQuantum);
         p1.Set();
-    }).AsyncVia(Queue1->GetInvoker()).Run();
+    }).AsyncVia(Queue1->GetInvoker()).Run());
 
     WaitUntilSet(f1);
     EXPECT_TRUE(f1.IsSet());
@@ -737,25 +737,25 @@ TEST_F(TSchedulerTest, CancelInApply)
     BIND([=] () {
         auto promise = NewPromise<void>();
 
-        promise.ToFuture().Apply(BIND([] {
+        YT_UNUSED_FUTURE(promise.ToFuture().Apply(BIND([] {
             auto canceler = NYT::NConcurrency::GetCurrentFiberCanceler();
             canceler(TError("kek"));
 
             auto p = NewPromise<void>();
             WaitFor(p.ToFuture())
                 .ThrowOnError();
-        }));
+        })));
 
         promise.Set();
 
-        promise.ToFuture().Apply(BIND([] {
+        YT_UNUSED_FUTURE(promise.ToFuture().Apply(BIND([] {
             auto canceler = NYT::NConcurrency::GetCurrentFiberCanceler();
             canceler(TError("kek"));
 
             auto p = NewPromise<void>();
             WaitFor(p.ToFuture())
                 .ThrowOnError();
-        }));
+        })));
     })
         .AsyncVia(invoker)
         .Run()
@@ -1106,12 +1106,12 @@ TEST_W(TSchedulerTest, FutureUpdatedRaceInWaitFor_YT_18899)
         auto promise = NewPromise<void>();
         auto modifiedFuture = promise.ToFuture();
 
-        modifiedFuture.Apply(
+        YT_UNUSED_FUTURE(modifiedFuture.Apply(
             BIND([&] {
                 modifiedFuture = MakeFuture(TError{"error that should not be seen"});
             })
                 .AsyncVia(serializedInvoker)
-        );
+        ));
 
         NThreading::TCountDownLatch latch{1};
 
@@ -1128,14 +1128,14 @@ TEST_W(TSchedulerTest, FutureUpdatedRaceInWaitFor_YT_18899)
         // Wait until serialized executor starts executing action.
         latch.Wait();
 
-        BIND([&] {
+        YT_UNUSED_FUTURE(BIND([&] {
             // N.B. waiting action is inside WairFor now, because:
             //   - we know that waiting action had started execution before this action was scheduled
             //   - this action is executed inside the same serialized invoker.
             promise.Set();
         })
             .AsyncVia(serializedInvoker)
-            .Run();
+            .Run());
 
         ASSERT_NO_THROW(testResultFuture
             .Get()

@@ -88,7 +88,7 @@ public:
     {
         EXPECT_EQ(NumPartsExpecting, std::ssize(message));
         auto replyMessage = Serialize("42");
-        replyBus->Send(replyMessage, NBus::TSendOptions(EDeliveryTrackingLevel::None));
+        YT_UNUSED_FUTURE(replyBus->Send(replyMessage, NBus::TSendOptions(EDeliveryTrackingLevel::None)));
     }
 private:
     int NumPartsExpecting;

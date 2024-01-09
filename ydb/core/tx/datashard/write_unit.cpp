@@ -90,7 +90,7 @@ public:
         }
         
         self->IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
-        self->IncCounter(COUNTER_WRITE_ROWS_BYTES, matrix.GetBuffer().size());
+        self->IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());
 
         writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildCommited(self->TabletID(), writeOp->GetTxId()));
 

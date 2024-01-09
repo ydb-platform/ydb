@@ -1253,6 +1253,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         // UNIT_ASSERT_VALUES_EQUAL_C(bTreeOvershot, flatOvershot, message);
                         Y_UNUSED(bTreeOvershot);
                         Y_UNUSED(flatOvershot);
+
                         AssertEqual(part, bTreeEnv, flatEnv, message);
                     }
                 }
@@ -1269,7 +1270,6 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
             .Key({0, 1});
 
         conf.WriteBTreeIndex = true;
-        conf.WriteLastFlatIndexKey = false; // because we don't have it in B-tree index
         TPartCook cook(lay, conf);
         
         // making part with key gaps

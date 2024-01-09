@@ -17,6 +17,8 @@ NKikimrSchemeOp::TPersQueueGroupDescription CreateConfig(bool SplitMergeEnabled)
     NKikimrSchemeOp::TPersQueueGroupDescription result;
     NKikimrPQ::TPQTabletConfig* config =  result.MutablePQTabletConfig();
 
+    result.SetBalancerTabletID(999);
+
     auto* partitionStrategy = config->MutablePartitionStrategy();
     partitionStrategy->SetMinPartitionCount(3);
     partitionStrategy->SetMaxPartitionCount(SplitMergeEnabled ? 10 : 3);

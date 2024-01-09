@@ -133,6 +133,7 @@ class TPQRBHelper {
 public:
     TPQRBHelper(ui64 balancerTabletId)
         : BalancerTabletId(balancerTabletId) {
+            Cerr << ">>>>> balancerTabletId = " << balancerTabletId << Endl;
     }
 
     std::optional<ui32> PartitionId() const {
@@ -263,7 +264,8 @@ public:
         , SourceId(sourceId)
         , PreferedPartition(preferedPartition)
         , Chooser(chooser)
-        , TableHelper(fullConverter->GetClientsideName(), fullConverter->GetTopicForSrcIdHash()) {
+        , TableHelper(fullConverter->GetClientsideName(), fullConverter->GetTopicForSrcIdHash())
+        , PartitionHelper() {
     }
 
     TActorIdentity SelfId() const {
@@ -339,6 +341,7 @@ protected:
 protected:
     void SendSelectRequest(const NActors::TActorContext& ctx) {
         TThis::Become(&TThis::StateSelect);
+        DEBUG("Select from the table");
         TableHelper.SendSelectRequest(ctx);
     }
 
@@ -367,6 +370,7 @@ protected:
 protected:
     void SendUpdateRequests(const TActorContext& ctx) {
         TThis::Become(&TThis::StateUpdate);
+        DEBUG("Update the table");
         TableHelper.SendUpdateRequest(Partition->PartitionId, ctx);
     }
 
@@ -408,11 +412,15 @@ protected:
 
 protected:
     void StartGetOwnership(const TActorContext &ctx) {
+        if (!Partition) {
+            return ReplyError(ErrorCode::INITIALIZING, "Partition not choosed", ctx);
+        }
+
         TThis::Become(&TThis::StateOwnership);
         TRACE("GetOwnership Partition TabletId=" << Partition->TabletId);
 
-        PartitionHelper.Open(Partition->TabletId, ctx);
-        PartitionHelper.SendGetOwnershipRequest(Partition->PartitionId, SourceId, ctx);
+        //PartitionHelper.Open(Partition->TabletId, ctx);
+        //PartitionHelper.SendGetOwnershipRequest(Partition->PartitionId, SourceId, ctx);
     }
 
     void HandleOwnership(TEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -456,6 +464,7 @@ protected:
 protected:
     void StartIdle() {
         TThis::Become(&TThis::StateIdle);        
+        DEBUG("Start idle");
     }
 
     void HandleIdle(TEvPartitionChooser::TEvRefreshRequest::TPtr&, const TActorContext& ctx) {
@@ -518,8 +527,8 @@ protected:
 
 #undef LOG_PREFIX
 #define LOG_PREFIX "TPartitionChooser " << SelfId()                                \
-                    << " (SourceId=" << TParentActor::SourceId                     \
-                    << ", PreferedPartition=" << TParentActor::PreferedPartition   \
+                    << " (SourceId=" << TThis::SourceId                     \
+                    << ", PreferedPartition=" << TThis::PreferedPartition   \
                     << ") "
 
 template<typename TPipeCreator>
@@ -541,8 +550,8 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        TParentActor::Initialize(ctx);
-        TParentActor::InitTable(ctx);
+        TThis::Initialize(ctx);
+        TThis::InitTable(ctx);
     }
 
     TActorIdentity SelfId() const {
@@ -579,8 +588,8 @@ private:
 
     void Handle(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const TActorContext& ctx) {
         PartitionId = PQRBHelper.Handle(ev, ctx);
-        DEBUG("Received partition " << PartitionId << " from PQRB for SourceId=" << TParentActor::SourceId);
-        Partition = TParentActor::Chooser->GetPartition(PQRBHelper.PartitionId().value());
+        DEBUG("Received partition " << PartitionId << " from PQRB for SourceId=" << TThis::SourceId);
+        Partition = TThis::Chooser->GetPartition(PQRBHelper.PartitionId().value());
 
         OnPartitionChosen(ctx);
     }
@@ -589,14 +598,14 @@ private:
         Y_UNUSED(ev);
 
         if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
-            TParentActor::ReplyError(ErrorCode::INITIALIZING, "Pipe connection fail", ctx);
+            TThis::ReplyError(ErrorCode::INITIALIZING, "Pipe connection fail", ctx);
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx) {
         Y_UNUSED(ev);
 
-        TParentActor::ReplyError(ErrorCode::INITIALIZING, "Pipe destroyed", ctx);
+        TThis::ReplyError(ErrorCode::INITIALIZING, "Pipe destroyed", ctx);
     }
 
     STATEFN(StatePQRB) {
@@ -611,35 +620,35 @@ private:
 
 private:
     void OnPartitionChosen(const TActorContext& ctx) {
-        if (!Partition && TParentActor::PreferedPartition) {
-            return TParentActor::ReplyError(ErrorCode::BAD_REQUEST,
-                            TStringBuilder() << "Prefered partition " << (TParentActor::PreferedPartition.value() + 1) << " is not exists or inactive.",
+        if (!Partition && TThis::PreferedPartition) {
+            return TThis::ReplyError(ErrorCode::BAD_REQUEST,
+                            TStringBuilder() << "Prefered partition " << (TThis::PreferedPartition.value() + 1) << " is not exists or inactive.",
                             ctx);
         }
 
         if (!Partition) {
-            return TParentActor::ReplyError(ErrorCode::INITIALIZING, "Can't choose partition", ctx);
+            return TThis::ReplyError(ErrorCode::INITIALIZING, "Can't choose partition", ctx);
         }
 
-        if (TParentActor::PreferedPartition && Partition->PartitionId != TParentActor::PreferedPartition.value()) {
-            return TParentActor::ReplyError(ErrorCode::BAD_REQUEST,
-                            TStringBuilder() << "MessageGroupId " << TParentActor::SourceId << " is already bound to PartitionGroupId "
-                                        << (Partition->PartitionId + 1) << ", but client provided " << (TParentActor::PreferedPartition.value() + 1)
+        if (TThis::PreferedPartition && Partition->PartitionId != TThis::PreferedPartition.value()) {
+            return TThis::ReplyError(ErrorCode::BAD_REQUEST,
+                            TStringBuilder() << "MessageGroupId " << TThis::SourceId << " is already bound to PartitionGroupId "
+                                        << (Partition->PartitionId + 1) << ", but client provided " << (TThis::PreferedPartition.value() + 1)
                                         << ". MessageGroupId->PartitionGroupId binding cannot be changed, either use "
                                         "another MessageGroupId, specify PartitionGroupId " << (Partition->PartitionId + 1)
                                         << ", or do not specify PartitionGroupId at all.",
                             ctx);
         }
 
-        TParentActor::StartGetOwnership(ctx);
+        TThis::StartGetOwnership(ctx);
     }
 
     std::pair<bool, const TPartitionInfo*> ChoosePartitionSync(const TActorContext& ctx) const {
         const auto& pqConfig = AppData(ctx)->PQConfig;
-        if (TParentActor::PreferedPartition) {
-            return {false, TParentActor::Chooser->GetPartition(TParentActor::PreferedPartition.value())};
-        } else if (pqConfig.GetTopicsAreFirstClassCitizen() && TParentActor::SourceId) {
-            return {false, TParentActor::Chooser->GetPartition(TParentActor::SourceId)};
+        if (TThis::PreferedPartition) {
+            return {false, TThis::Chooser->GetPartition(TThis::PreferedPartition.value())};
+        } else if (pqConfig.GetTopicsAreFirstClassCitizen() && TThis::SourceId) {
+            return {false, TThis::Chooser->GetPartition(TThis::SourceId)};
         } else {
             return {true, nullptr};
         }

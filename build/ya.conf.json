@@ -15,6 +15,49 @@
                 }
             }
         },
+        "black": {
+            "executable": {
+                "black": [
+                    "black"
+                ]
+            },
+            "formula": {
+                "by_platform": {
+                    "darwin-arm64": {
+                        "uri": "sbr:5599877541"
+                    },
+                    "darwin-x86_64": {
+                        "uri": "sbr:5599878022"
+                    },
+                    "linux-aarch64": {
+                        "uri": "sbr:5599877008"
+                    },
+                    "linux-x86_64": {
+                        "uri": "sbr:5599878769"
+                    },
+                    "win32-x86_64": {
+                        "uri": "sbr:5599878473"
+                    }
+                }
+            }
+        },
+        "clang-format": {
+            "executable": {
+                "clang-format": [
+                    "clang-format"
+                ]
+            },
+            "formula": {
+                "by_platform": {
+                    "darwin-x86_64": {
+                        "uri": "sbr:4111727026"
+                    },
+                    "linux-x86_64": {
+                        "uri": "sbr:4111727778"
+                    }
+                }
+            }
+        },
         "clang16": {
             "executable": {
                 "c++": [
@@ -181,6 +224,92 @@
                 "atop": {
                     "bottle": "atop",
                     "executable": "atop"
+                }
+            }
+        },
+        "black": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "x86_64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "black": {
+                    "bottle": "black",
+                    "executable": "black"
+                }
+            }
+        },
+        "clang-format": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "x86_64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "clang-format": {
+                    "bottle": "clang-format",
+                    "executable": "clang-format"
                 }
             }
         },
@@ -1186,6 +1315,9 @@
         "atop": {
             "description": "Advanced System & Process Monitor"
         },
+        "black": {
+            "description": "Python styler, Python 3 only"
+        },
         "c++": {
             "description": "Run C++ compiler"
         },
@@ -1194,6 +1326,9 @@
         },
         "cc": {
             "description": "Run C compiler"
+        },
+        "clang-format": {
+            "description": "Run Clang-Format source code formatter"
         },
         "clang-rename": {
             "description": "Run Clang-Rename refactoring tool"

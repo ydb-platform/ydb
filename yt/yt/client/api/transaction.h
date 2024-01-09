@@ -1,6 +1,8 @@
 #pragma once
 
 #include "client.h"
+#include "dynamic_table_transaction.h"
+#include "queue_transaction.h"
 
 #include <yt/yt/client/table_client/unversioned_row.h>
 #include <yt/yt/client/table_client/versioned_row.h>
@@ -94,54 +96,6 @@ struct TTransactionFlushResult
     std::vector<NElection::TCellId> ParticipantCellIds;
 };
 
-//! Either a write or delete.
-struct TRowModification
-{
-    //! Discriminates between writes and deletes.
-    ERowModificationType Type;
-    //! Either a row (for write; versioned or unversioned) or a key (for delete; always unversioned).
-    NTableClient::TTypeErasedRow Row;
-    //! Locks.
-    NTableClient::TLockMask Locks;
-};
-
-struct TModifyRowsOptions
-{
-    //! If this happens to be a modification of a replicated table,
-    //! controls if at least one sync replica is required.
-    bool RequireSyncReplica = true;
-
-    //! For chaos replicated tables indicates if it is necessary to explore other replicas.
-    bool TopmostTransaction = true;
-
-    //! For chaos replicas pass replication card to ensure that all data is sent using same meta info.
-    NChaosClient::TReplicationCardPtr ReplicationCard;
-
-    //! For writes to replicas, this is the id of the replica at the upstream cluster.
-    NTabletClient::TTableReplicaId UpstreamReplicaId;
-
-    //! Modifications are sent asynchronously. Sequential numbering is
-    //! required to restore their order.
-    //!
-    //! This parameter is only used by native client (in particular within RPC proxy server).
-    std::optional<i64> SequenceNumber;
-
-    //! Modifications can be sent from several sources in case of several clients
-    //! attached to the same transaction.
-    //!
-    //! Modifications within one source will be serialized by this source sequence numbers.
-    //! Modifications from different sources will be serialized arbitrarily, that is why
-    //! different sources must send independent modifications.
-    //!
-    //! If sequence number is missing, source id is ignored.
-    //!
-    //! This parameter is only used by native client (in particular within RPC proxy server).
-    i64 SequenceNumberSourceId = 0;
-
-    //! If set treat missing key columns as null.
-    bool AllowMissingKeyColumns = false;
-};
-
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Represents a client-controlled transaction.
@@ -156,6 +110,8 @@ struct TModifyRowsOptions
  */
 struct ITransaction
     : public virtual IClientBase
+    , public virtual IDynamicTableTransaction
+    , public virtual IQueueTransaction
 {
     virtual IClientPtr GetClient() const = 0;
     virtual NTransactionClient::ETransactionType GetType() const = 0;
@@ -191,81 +147,6 @@ struct ITransaction
     const TDerivedTransaction* As() const;
     template <class TDerivedTransaction>
     const TDerivedTransaction* TryAs() const;
-
-    // Tables.
-
-    void WriteRows(
-        const NYPath::TYPath& path,
-        NTableClient::TNameTablePtr nameTable,
-        TSharedRange<NTableClient::TUnversionedRow> rows,
-        const TModifyRowsOptions& options = {},
-        NTableClient::ELockType lockType = NTableClient::ELockType::Exclusive);
-
-    void WriteRows(
-        const NYPath::TYPath& path,
-        NTableClient::TNameTablePtr nameTable,
-        TSharedRange<NTableClient::TVersionedRow> rows,
-        const TModifyRowsOptions& options = {});
-
-    void DeleteRows(
-        const NYPath::TYPath& path,
-        NTableClient::TNameTablePtr nameTable,
-        TSharedRange<NTableClient::TLegacyKey> keys,
-        const TModifyRowsOptions& options = {});
-
-    void LockRows(
-        const NYPath::TYPath& path,
-        NTableClient::TNameTablePtr nameTable,
-        TSharedRange<NTableClient::TLegacyKey> keys,
-        NTableClient::TLockMask lockMask);
-
-    void LockRows(
-        const NYPath::TYPath& path,
-        NTableClient::TNameTablePtr nameTable,
-        TSharedRange<NTableClient::TLegacyKey> keys,
-        NTableClient::ELockType lockType = NTableClient::ELockType::SharedStrong);
-
-    void LockRows(
-        const NYPath::TYPath& path,
-        NTableClient::TNameTablePtr nameTable,
-        TSharedRange<NTableClient::TLegacyKey> keys,
-        const std::vector<TString>& locks,
-        NTableClient::ELockType lockType = NTableClient::ELockType::SharedStrong);
-
-    virtual void ModifyRows(
-        const NYPath::TYPath& path,
-        NTableClient::TNameTablePtr nameTable,
-        TSharedRange<TRowModification> modifications,
-        const TModifyRowsOptions& options = TModifyRowsOptions()) = 0;
-
-    // Consumers.
-
-    // TODO(nadya73): Remove it: YT-20712
-    void AdvanceConsumer(
-        const NYPath::TYPath& path,
-        int partitionIndex,
-        std::optional<i64> oldOffset,
-        i64 newOffset);
-
-    // TODO(nadya73): Remove it: YT-20712
-    void AdvanceConsumer(
-        const NYPath::TRichYPath& consumerPath,
-        const NYPath::TRichYPath& queuePath,
-        int partitionIndex,
-        std::optional<i64> oldOffset,
-        i64 newOffset);
-
-    //! Advance the consumer's offset for the given partition with index #partitionIndex, setting it to #newOffset.
-    //!
-    //! If #oldOffset is specified, the current offset is read inside this transaction and compared with #oldOffset.
-    //! If they are equal, the new offset is written, otherwise an exception is thrown.
-    virtual TFuture<void> AdvanceConsumer(
-        const NYPath::TRichYPath& consumerPath,
-        const NYPath::TRichYPath& queuePath,
-        int partitionIndex,
-        std::optional<i64> oldOffset,
-        i64 newOffset,
-        const TAdvanceConsumerOptions& options) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(ITransaction)

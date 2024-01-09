@@ -16,6 +16,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/core/base
     ydb/core/protos
+    ydb/core/graph/api
     ydb/library/aclib/protos
 )
 

@@ -21,6 +21,24 @@ public:
         return true;
     }
 
+    static TString DumpMetricsIndex(const std::unordered_map<TString, ui64>& metricsIndex) {
+        TStringBuilder str;
+        str << metricsIndex.size();
+        if (!metricsIndex.empty()) {
+            str << " (";
+            bool wasItem = false;
+            for (const auto& [name, idx] : metricsIndex) {
+                if (wasItem) {
+                    str << ", ";
+                }
+                str << name;
+                wasItem = true;
+            }
+            str << ")";
+        }
+        return str;
+    }
+
     void Complete(const TActorContext& ctx) override {
         BLOG_D("TTxMonitoring::Complete");
         TStringBuilder html;
@@ -47,12 +65,24 @@ public:
         }
         html << "</td></tr>";
 
-        html << "<tr><td>Memory.MetricsSize</td><td>" << Self->MemoryBackend.MetricsIndex.size() << "</td></tr>";
+        html << "<tr><td>Memory.MetricsSize</td><td>" << DumpMetricsIndex(Self->MemoryBackend.MetricsIndex) << "</td></tr>";
         html << "<tr><td>Memory.RecordsSize</td><td>" << Self->MemoryBackend.MetricsValues.size() << "</td></tr>";
 
-        html << "<tr><td>Local.MetricsSize</td><td>" << Self->LocalBackend.MetricsIndex.size() << "</td></tr>";
-        html << "<tr><td>StartTimestamp</td><td>" << Self->StartTimestamp << "</td></tr>";
-        html << "<tr><td>ClearTimestamp</td><td>" << Self->ClearTimestamp << "</td></tr>";
+        html << "<tr><td>Local.MetricsSize</td><td>" << DumpMetricsIndex(Self->LocalBackend.MetricsIndex) << "</td></tr>";
+        html << "<tr><td>StartTimestamp</td><td>" << Self->StartTimestamp.ToIsoStringLocalUpToSeconds() << "</td></tr>";
+        html << "<tr><td>ClearTimestamp</td><td>" << Self->ClearTimestamp.ToIsoStringLocalUpToSeconds() << "</td></tr>";
+        html << "<tr><td>CurrentTimestamp</td><td>" << Self->MetricsData.Timestamp.ToIsoStringLocalUpToSeconds() << "</td></tr>";
+
+        html << "<tr><td style='vertical-align:top'>CurrentMetricsData</td><td>";
+        bool wasLine = false;
+        for (const auto& [name, value] : Self->MetricsData.Values) {
+            if (wasLine) {
+                html << "<br>";
+            }
+            html << name << "=" << value;
+            wasLine = true;
+        }
+        html << "</td></tr>";
 
         html << "</table>";
         html << "</html>";

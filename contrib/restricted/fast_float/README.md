@@ -1,20 +1,23 @@
 
 ## fast_float number parsing library: 4x faster than strtod
 [![Fuzzing Status](https://oss-fuzz-build-logs.storage.googleapis.com/badges/fast_float.svg)](https://bugs.chromium.org/p/oss-fuzz/issues/list?sort=-opened&can=1&q=proj:fast_float)
-[![VS17-CI](https://github.com/fastfloat/fast_float/actions/workflows/vs17-ci.yml/badge.svg)](https://github.com/fastfloat/fast_float/actions/workflows/vs17-ci.yml)
 [![Ubuntu 22.04 CI (GCC 11)](https://github.com/fastfloat/fast_float/actions/workflows/ubuntu22.yml/badge.svg)](https://github.com/fastfloat/fast_float/actions/workflows/ubuntu22.yml)
 
 The fast_float library provides fast header-only implementations for the C++ from_chars
-functions for `float` and `double` types.  These functions convert ASCII strings representing
-decimal values (e.g., `1.3e10`) into binary types. We provide exact rounding (including
+functions for `float` and `double` types as well as integer types.  These functions convert ASCII strings representing decimal values (e.g., `1.3e10`) into binary types. We provide exact rounding (including
 round to even). In our experience, these `fast_float` functions many times faster than comparable number-parsing functions from existing C++ standard libraries.
 
-Specifically, `fast_float` provides the following two functions with a C++17-like syntax (the library itself only requires C++11):
+Specifically, `fast_float` provides the following two functions to parse floating-point numbers with a C++17-like syntax (the library itself only requires C++11):
 
 ```C++
 from_chars_result from_chars(const char* first, const char* last, float& value, ...);
 from_chars_result from_chars(const char* first, const char* last, double& value, ...);
 ```
+
+You can also parse integer types:
+
+
+
 
 The return type (`from_chars_result`) is defined as the struct:
 ```C++
@@ -103,6 +106,43 @@ Furthermore, we have the following restrictions:
 We support Visual Studio, macOS, Linux, freeBSD. We support big and little endian. We support 32-bit and 64-bit systems.
 
 We assume that the rounding mode is set to nearest (`std::fegetround() == FE_TONEAREST`).
+
+
+## Integer types
+
+You can also parse integer types using different bases (e.g., 2, 10, 16). The following code will
+print the number 22250738585072012 three times:
+
+
+```C++
+  uint64_t i;
+  const char str[] = "22250738585072012";
+  auto answer = fast_float::from_chars(str, str + strlen(str), i);
+  if (answer.ec != std::errc()) {
+    std::cerr << "parsing failure\n";
+    return EXIT_FAILURE;
+  }
+  std::cout << "parsed the number "<< i << std::endl;
+
+  const char binstr[] = "1001111000011001110110111001001010110100111000110001100";
+
+  answer = fast_float::from_chars(binstr, binstr + strlen(binstr), i, 2);
+  if (answer.ec != std::errc()) {
+    std::cerr << "parsing failure\n";
+    return EXIT_FAILURE;
+  }
+  std::cout << "parsed the number "<< i << std::endl;
+
+
+  const char hexstr[] = "4f0cedc95a718c";
+
+  answer = fast_float::from_chars(hexstr, hexstr + strlen(hexstr), i, 16);
+  if (answer.ec != std::errc()) {
+    std::cerr << "parsing failure\n";
+    return EXIT_FAILURE;
+  }
+  std::cout << "parsed the number "<< i << std::endl;
+```
 
 ## C++20: compile-time evaluation (constexpr)
 
@@ -331,7 +371,7 @@ the command line help.
 
 You may directly download automatically generated single-header files:
 
-https://github.com/fastfloat/fast_float/releases/download/v5.3.0/fast_float.h
+https://github.com/fastfloat/fast_float/releases/download/v6.0.0/fast_float.h
 
 ## Credit
 

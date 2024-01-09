@@ -15,7 +15,7 @@ bool TSpecialKeys::DeserializeFromString(const TString& data) {
     return !!Data;
 }
 
-std::optional<NKikimr::NArrow::TReplaceKey> TSpecialKeys::GetKeyByIndex(const ui32 position, const std::shared_ptr<arrow::Schema>& schema) const {
+NKikimr::NArrow::TReplaceKey TSpecialKeys::GetKeyByIndex(const ui32 position, const std::shared_ptr<arrow::Schema>& schema) const {
     Y_ABORT_UNLESS(position < Data->num_rows());
     if (schema) {
         return NArrow::TReplaceKey::FromBatch(Data, schema, position);

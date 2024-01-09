@@ -1901,6 +1901,7 @@ private:
 
         TVDiskAvailabilityTiming() = default;
         TVDiskAvailabilityTiming(const TVDiskAvailabilityTiming&) = default;
+        TVDiskAvailabilityTiming& operator=(const TVDiskAvailabilityTiming&) = default;
 
         TVDiskAvailabilityTiming(const TVSlotInfo& vslot)
             : VSlotId(vslot.VSlotId)

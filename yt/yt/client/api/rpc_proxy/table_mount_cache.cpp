@@ -73,6 +73,7 @@ private:
                     tableInfo->PhysicalPath = path;
                 }
 
+                tableInfo->Tablets.reserve(rsp->tablets_size());
                 for (const auto& protoTabletInfo : rsp->tablets()) {
                     auto tabletInfo = New<NTabletClient::TTabletInfo>();
                     FromProto(tabletInfo.Get(), protoTabletInfo);

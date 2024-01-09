@@ -34,7 +34,7 @@ std::pair<THyperLogLog<8>, int> GenerateHyperLogLog(
         hll.Add(FarmFingerprint(n));
     }
 
-    return std::make_pair(hll, cardinality);
+    return std::pair(hll, cardinality);
 }
 
 TEST_P(THyperLogLogTest, Random)

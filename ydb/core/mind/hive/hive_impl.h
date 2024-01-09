@@ -633,6 +633,8 @@ public:
     TTabletCategoryInfo& GetTabletCategory(TTabletCategoryId tabletCategoryId);
     void KillNode(TNodeId nodeId, const TActorId& local);
     void AddToBootQueue(TTabletInfo* tablet);
+    void UpdateDomainTabletsTotal(const TSubDomainKey& objectDomain, i64 tabletsTotalDiff);
+    void UpdateDomainTabletsAlive(const TSubDomainKey& objectDomain, i64 tabletsAliveDiff, const TSubDomainKey& tabletNodeDomain);
     void SetCounterTabletsTotal(ui64 tabletsTotal);
     void UpdateCounterTabletsTotal(i64 tabletsTotalDiff);
     void UpdateCounterTabletsAlive(i64 tabletsAliveDiff);

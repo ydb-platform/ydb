@@ -18,7 +18,13 @@ namespace {
         {"Inner",EJoinKind::InnerJoin}, 
         {"Left",EJoinKind::LeftJoin}, 
         {"Right",EJoinKind::RightJoin}, 
-        {"Outer",EJoinKind::OuterJoin}};
+        {"Full",EJoinKind::OuterJoin},
+        {"LeftOnly",EJoinKind::LeftOnly},
+        {"RightOnly",EJoinKind::RightOnly},
+        {"Exclusion",EJoinKind::Exclusion},
+        {"LeftSemi",EJoinKind::LeftSemi},
+        {"RightSemi",EJoinKind::RightSemi},
+        {"Cross",EJoinKind::Cross}};
 }
 
 EJoinKind ConvertToJoinKind(const TString& joinString) {

@@ -101,6 +101,8 @@ public:
             ui64 datashardId = partitions.Get(tabletsOrder[i].second).GetDatashardId();
             SendRequestToPipe(ConnectTabletPipe(datashardId), request.Release());
         }
+
+        RequestDone();
     }
 
     void Handle(TEvDataShard::TEvGetDataHistogramResponse::TPtr& ev) {

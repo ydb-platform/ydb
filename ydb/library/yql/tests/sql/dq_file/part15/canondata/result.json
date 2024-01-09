@@ -870,9 +870,9 @@
     ],
     "test.test[expr-to_hashed_set_dict_key-default.txt-Debug]": [
         {
-            "checksum": "3e4f29d9220ccb3fb4b02608a38c7c99",
-            "size": 1661,
-            "uri": "https://{canondata_backend}/1600758/aad142702907f13e911494c1a7b312bad34f692a/resource.tar.gz#test.test_expr-to_hashed_set_dict_key-default.txt-Debug_/opt.yql_patched"
+            "checksum": "4f6985589c6a2a816b7546a25a8a52da",
+            "size": 1960,
+            "uri": "https://{canondata_backend}/1936273/4c8b3d0f8db4e00cc925f14c59f460eb215abd5e/resource.tar.gz#test.test_expr-to_hashed_set_dict_key-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[expr-to_hashed_set_dict_key-default.txt-Plan]": [

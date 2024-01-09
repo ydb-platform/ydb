@@ -1125,14 +1125,14 @@ TEST_P(TLoggingTagsTest, All)
 
 INSTANTIATE_TEST_SUITE_P(ValueParametrized, TLoggingTagsTest,
     ::testing::Values(
-        std::make_tuple(false, false, false, "Log message"),
-        std::make_tuple(false, false,  true, "Log message (TraceContextTag)"),
-        std::make_tuple(false,  true, false, "Log message (LoggerTag)"),
-        std::make_tuple(false,  true,  true, "Log message (LoggerTag, TraceContextTag)"),
-        std::make_tuple( true, false, false, "Log message (Value: 123)"),
-        std::make_tuple( true, false,  true, "Log message (Value: 123, TraceContextTag)"),
-        std::make_tuple( true,  true, false, "Log message (Value: 123, LoggerTag)"),
-        std::make_tuple( true,  true,  true, "Log message (Value: 123, LoggerTag, TraceContextTag)")));
+        std::tuple(false, false, false, "Log message"),
+        std::tuple(false, false,  true, "Log message (TraceContextTag)"),
+        std::tuple(false,  true, false, "Log message (LoggerTag)"),
+        std::tuple(false,  true,  true, "Log message (LoggerTag, TraceContextTag)"),
+        std::tuple( true, false, false, "Log message (Value: 123)"),
+        std::tuple( true, false,  true, "Log message (Value: 123, TraceContextTag)"),
+        std::tuple( true,  true, false, "Log message (Value: 123, LoggerTag)"),
+        std::tuple( true,  true,  true, "Log message (Value: 123, LoggerTag, TraceContextTag)")));
 
 ////////////////////////////////////////////////////////////////////////////////
 

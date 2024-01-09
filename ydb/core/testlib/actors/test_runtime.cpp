@@ -239,13 +239,13 @@ namespace NActors {
         GrabEdgeEventRethrow<TEvents::TEvWakeup>(SleepEdgeActor);
     }
 
-    void TTestActorRuntime::SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex, const NKikimr::NTabletPipe::TClientConfig& pipeConfig, TActorId clientId, ui64 cookie) {
+    void TTestActorRuntime::SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex, const NKikimr::NTabletPipe::TClientConfig& pipeConfig, TActorId clientId, ui64 cookie, NWilson::TTraceId traceId) {
         bool newPipe = (clientId == TActorId());
         if (newPipe) {
             clientId = ConnectToPipe(tabletId, sender, nodeIndex, pipeConfig);
         }
 
-        SendToPipe(clientId, sender, payload, nodeIndex, cookie);
+        SendToPipe(clientId, sender, payload, nodeIndex, cookie, std::move(traceId));
 
         if (newPipe) {
             ClosePipe(clientId, sender, nodeIndex);
@@ -253,8 +253,8 @@ namespace NActors {
     }
 
     void TTestActorRuntime::SendToPipe(TActorId clientId, const TActorId& sender, IEventBase* payload,
-                                       ui32 nodeIndex, ui64 cookie) {
-        auto pipeEv = new IEventHandle(clientId, sender, payload, 0, cookie);
+                                       ui32 nodeIndex, ui64 cookie, NWilson::TTraceId traceId) {
+        auto pipeEv = new IEventHandle(clientId, sender, payload, 0, cookie, nullptr, std::move(traceId));
         pipeEv->Rewrite(NKikimr::TEvTabletPipe::EvSend, clientId);
         Send(pipeEv, nodeIndex, true);
     }

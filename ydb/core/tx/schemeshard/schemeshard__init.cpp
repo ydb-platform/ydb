@@ -3928,11 +3928,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Self->TabletCounters->Simple()[COUNTER_GRAPHSHARD_COUNT].Add(1);
                 break;
             default:
-                Y_FAIL_S("dont know how to interpret tablet type"
+                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                         "dont know how to interpret tablet type"
                          << ", type id: " << (ui32)si.second.TabletType
                          << ", pathId: " << pathId
                          << ", shardId: " << shardIdx
                          << ", tabletId: " << tabletId);
+                break;
             }
         }
 

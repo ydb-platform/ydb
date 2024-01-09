@@ -51,7 +51,8 @@ public:
         html << "<tr><td>Memory.RecordsSize</td><td>" << Self->MemoryBackend.MetricsValues.size() << "</td></tr>";
 
         html << "<tr><td>Local.MetricsSize</td><td>" << Self->LocalBackend.MetricsIndex.size() << "</td></tr>";
-        html << "<tr><td>Local.StartTimestamp</td><td>" << Self->StartTimestamp << "</td></tr>";
+        html << "<tr><td>StartTimestamp</td><td>" << Self->StartTimestamp << "</td></tr>";
+        html << "<tr><td>ClearTimestamp</td><td>" << Self->ClearTimestamp << "</td></tr>";
 
         html << "</table>";
         html << "</html>";

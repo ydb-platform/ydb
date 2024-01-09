@@ -78,7 +78,7 @@ TNodeDescriptor::TNodeDescriptor()
 { }
 
 TNodeDescriptor::TNodeDescriptor(const TString& defaultAddress)
-    : Addresses_{std::make_pair(DefaultNetworkName, defaultAddress)}
+    : Addresses_{std::pair(DefaultNetworkName, defaultAddress)}
     , DefaultAddress_(defaultAddress)
 { }
 

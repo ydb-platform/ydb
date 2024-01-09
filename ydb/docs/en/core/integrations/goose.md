@@ -31,15 +31,15 @@ To connect to YDB you should use a connection string like
 ```
 
 Where:
-- `<protocol>` - connection protocol (`grpc` for an unsecured connection or `grpcs` for a secure (`TLS`) connection). At the same time, for a secure connection (with `TLS`) you should explicitly connect `YDB` certificates, for example like this: `export YDB_SSL_ROOT_CERTIFICATES_FILE=/path/to/ydb/certs/CA.pem`.
-- `<host>` - connection address to YDB.
+- `<protocol>` - connection protocol (`grpc` for an unsecured connection or `grpcs` for a secure (`TLS`) connection). The secure connection (with `TLS`) requires certificates. You should declare certificates like this: `export YDB_SSL_ROOT_CERTIFICATES_FILE=/path/to/ydb/certs/CA.pem`.
+- `<host>` - connection address of YDB.
 - `<port>` - port for connecting to YDB.
-- `<database_path>` - path to the database in the YDB cluster.
+- `<database_path>` - database in the YDB cluster.
 - `go_query_mode=scripting` - special `scripting` mode for executing queries by default in the YDB driver. In this mode, all requests from goose are sent to the YDB `scripting` service, which allows processing of both `DDL` and `DML` `SQL` statements.
 - `go_fake_tx=scripting` - support for transaction emulation in query execution mode through the YDB `scripting` service. The fact is that in YDB, executing `DDL` `SQL` statements in a transaction is impossible (or incurs significant overhead). In particular, the `scripting` service does not allow interactive transactions (with explicit `Begin`+`Commit`/`Rollback`). Accordingly, the transaction emulation mode does not actually do anything (`nop`) on the `Begin`+`Commit`/`Rollback` calls from `goose`. This trick can, in rare cases, cause an individual migration step to end up in an intermediate state. The YDB team is working on a new `query` service that should help remove this risk.
 - `go_query_bind=declare,numeric` - support for bindings of auto-inference of YQL types from query parameters (`declare`) and support for bindings of numbered parameters (`numeric`). The fact is that `YQL` is a strongly typed language that requires you to explicitly specify the types of query parameters in the body of the `SQL` query itself using the special `DECLARE` statement. Also, `YQL` only supports named query parameters (for example, `$my_arg`), while the `goose` core generates `SQL` queries with numbered parameters (`$1`, `$2`, etc.) . The `declare` and `numeric` bindings modify the original queries from `goose` at the YDB driver level, which ultimately allowed `goose` to be built into.
 
-If connecting to a broken YDB docker container, the connection string should look like:
+If connecting to a local YDB docker container, the connection string should look like:
 
 ```
 grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric

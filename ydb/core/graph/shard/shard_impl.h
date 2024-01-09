@@ -43,7 +43,7 @@ public:
     STATEFN(StateWork);
 
     // how often we could issue a clear operation
-    static constexpr TDuration DURATION_CLEAR_PERIOD = TDuration::Minutes(10);
+    static constexpr TDuration DURATION_CLEAR_PERIOD = TDuration::Minutes(1);
     // after what size of metrics data we issue a clear operation
     static constexpr TDuration DURATION_CLEAR_TRIGGER = TDuration::Hours(25);
     // the maximum size of metrics data to keep

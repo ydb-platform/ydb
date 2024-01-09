@@ -345,6 +345,7 @@ private:
                     else {
                         TArgContext c = std::get<TArgContext>(input);
                         writer.BeginObject();
+                      
                         auto input = LambdaInputs.find(c);
                         if (input != LambdaInputs.end()){
                             if (std::holds_alternative<ui32>(input->second)) {
@@ -1056,7 +1057,7 @@ private:
     TVector<std::variant<ui32, TArgContext>> Visit(const TCoFlatMapBase& flatMap, TQueryPlanNode& planNode) {
         auto flatMapInputs = Visit(flatMap.Input().Ptr(), planNode);
 
-        if (flatMapInputs.size() == 1) {
+        if (flatMapInputs.size() >= 1) {
             auto input = flatMapInputs[0];
             auto newContext = CurrentArgContext.AddArg(flatMap.Lambda().Args().Arg(0).Ptr().Get());
 
@@ -1234,11 +1235,35 @@ private:
         return AddOperator(planNode, "Delete", std::move(op));
     }
 
+    TString MakeJoinCoditionString(const TCoAtomList& leftKeys, const TCoAtomList& rightKeys) {
+        TString result = "";
+
+        for (size_t i = 0; i < leftKeys.Size(); i ++ ) {
+            result += leftKeys.Item(i).StringValue();
+            if (i != leftKeys.Size()-1) {
+                result += ",";
+            }
+        }
+
+        result += " = ";
+
+        for (size_t i = 0; i < rightKeys.Size(); i ++ ) {
+            result += rightKeys.Item(i).StringValue();
+            if (i != rightKeys.Size()-1) {
+                result += ",";
+            }
+        }
+
+        return result;
+
+    }
+
     std::variant<ui32, TArgContext> Visit(const TCoFlatMapBase& flatMap, const TCoMapJoinCore& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (MapJoin)";
 
         TOperator op;
         op.Properties["Name"] = name;
+        op.Properties["Condition"] = MakeJoinCoditionString(join.LeftKeysColumns(), join.RightKeysColumns());
 
         AddOptimizerEstimates(op, join);
 
@@ -1254,6 +1279,8 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
+        op.Properties["Condition"] = MakeJoinCoditionString(join.LeftKeysColumns(), join.RightKeysColumns());
+
 
         AddOptimizerEstimates(op, join);
 
@@ -1291,6 +1318,8 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
+        op.Properties["Condition"] = MakeJoinCoditionString(join.LeftKeysColumns(), join.RightKeysColumns());
+
         auto operatorId = AddOperator(planNode, name, std::move(op));
 
         AddOptimizerEstimates(op, join);
@@ -1305,6 +1334,8 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
+        op.Properties["Condition"] = MakeJoinCoditionString(join.LeftKeysColumns(), join.RightKeysColumns());
+
 
         AddOptimizerEstimates(op, join);
 

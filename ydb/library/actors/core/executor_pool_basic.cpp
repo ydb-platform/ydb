@@ -168,7 +168,7 @@ namespace NActors {
         }
 
         if (workerId >= 0) {
-            Threads[workerId].ExchangeState(EThreadState::None);
+            Threads[workerId].UnsetWork();
         }
 
         TAtomic x = AtomicGet(Semaphore);
@@ -192,7 +192,7 @@ namespace NActors {
             } else {
                 if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
                     if (workerId >= 0) {
-                        Threads[workerId].ExchangeState(EThreadState::Work);
+                        Threads[workerId].SetWork();
                     }
                     AtomicDecrement(Semaphore);
                     TlsThreadContext->Timers.HPNow = GetCycleCountFast();
@@ -244,36 +244,14 @@ namespace NActors {
 
     inline void TBasicExecutorPool::WakeUpLoop(i16 currentThreadCount) {
         for (i16 i = 0;;) {
-            TExecutorThreadCtx& threadCtx = Threads[i];
-            EThreadState state = threadCtx.GetState<EThreadState>();
-            switch (state) {
-                case EThreadState::None:
-                case EThreadState::Work:
-                    if (++i >= MaxThreadCount - SharedExecutorsCount) {
-                        i = 0;
-                    }
-                    break;
-                case EThreadState::Spin:
-                case EThreadState::Sleep:
-                    if (threadCtx.ReplaceState<EThreadState>(state, EThreadState::None)) {
-                        if (state  == EThreadState::Sleep) {
-                            ui64 beforeUnpark = GetCycleCountFast();
-                            threadCtx.StartWakingTs = beforeUnpark;
-                            if (TlsThreadContext && TlsThreadContext->WaitingStats) {
-                                threadCtx.WaitingPad.Unpark();
-                                TlsThreadContext->WaitingStats->AddWakingUp(GetCycleCountFast() - beforeUnpark);
-                            } else {
-                                threadCtx.WaitingPad.Unpark();
-                            }
-                        }
-                        if (i >= currentThreadCount) {
-                            AtomicIncrement(WrongWakenedThreadCount);
-                        }
-                        return;
-                    }
-                    break;
-                default:
-                    Y_ABORT();
+            if (Threads[i].WakeUp()) {
+                if (i >= currentThreadCount) {
+                    AtomicIncrement(WrongWakenedThreadCount);
+                }
+                return;
+            }
+            if (++i >= MaxThreadCount - SharedExecutorsCount) {
+                i = 0;
             }
         }
     }
@@ -406,7 +384,7 @@ namespace NActors {
                         EventsPerMailbox));
             } else {
                 Threads[i].Thread.Reset(
-                    new TExecutorThread(
+                    new TSharedExecutorThread(
                         i,
                         actorSystem,
                         &Threads[i],
@@ -438,7 +416,7 @@ namespace NActors {
         StopFlag.store(true, std::memory_order_release);
         for (i16 i = 0; i != PoolThreads; ++i) {
             Threads[i].Thread->StopFlag.store(true, std::memory_order_release);
-            Threads[i].WaitingPad.Interrupt();
+            Threads[i].Interrupt();
         }
     }
 
@@ -609,6 +587,34 @@ namespace NActors {
             Spin(spinThresholdCycles, stopFlag);
         }
         return Sleep(stopFlag);
+    }
+
+    bool TExecutorThreadCtx::WakeUp() {
+        for (ui32 i = 0; i < 2; ++i) {
+            EThreadState state = GetState<EThreadState>();
+            switch (state) {
+                case EThreadState::None:
+                case EThreadState::Work:
+                    return false;
+                case EThreadState::Spin:
+                case EThreadState::Sleep:
+                    if (ReplaceState<EThreadState>(state, EThreadState::None)) {
+                        if (state == EThreadState::Sleep) {
+                            ui64 beforeUnpark = GetCycleCountFast();
+                            StartWakingTs = beforeUnpark;
+                            WaitingPad.Unpark();
+                            if (TlsThreadContext && TlsThreadContext->WaitingStats) {
+                                TlsThreadContext->WaitingStats->AddWakingUp(GetCycleCountFast() - beforeUnpark);
+                            }
+                        }
+                        return true;
+                    }
+                    break;
+                default:
+                    Y_ABORT();
+            }
+        }
+        return false;
     }
 
 }

@@ -17,7 +17,7 @@ namespace NActors {
     struct TExecutorThreadCtx;
     class TExecutorPoolBaseMailboxed;
 
-    class TExecutorThread: public ISimpleThread {
+    class TGenericExecutorThread: public ISimpleThread {
         enum class EState : ui64 {
             Running = 0,
             NeedToReloadPools,
@@ -33,7 +33,7 @@ namespace NActors {
             TDuration::MilliSeconds(10);
         static constexpr ui32 DEFAULT_EVENTS_PER_MAILBOX = 100;
 
-        TExecutorThread(TWorkerId workerId,
+        TGenericExecutorThread(TWorkerId workerId,
                         TWorkerId cpuId,
                         TActorSystem* actorSystem,
                         IExecutorPool* executorPool,
@@ -43,39 +43,7 @@ namespace NActors {
                         TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
                         ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX);
 
-        TExecutorThread(TWorkerId workerId,
-                        TWorkerId cpuId,
-                        TActorSystem* actorSystem,
-                        IExecutorPool* executorPool,
-                        TMailboxTable* mailboxTable,
-                        const TString& threadName,
-                        TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
-                        ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX)
-            : TExecutorThread(workerId, cpuId, actorSystem, executorPool, mailboxTable, nullptr, threadName, timePerMailbox, eventsPerMailbox)
-        {}
-
-        TExecutorThread(TWorkerId workerId,
-                        TActorSystem* actorSystem,
-                        IExecutorPool* executorPool,
-                        TMailboxTable* mailboxTable,
-                        TExecutorThreadCtx *threadCtx,
-                        const TString& threadName,
-                        TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
-                        ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX)
-            : TExecutorThread(workerId, 0, actorSystem, executorPool, mailboxTable, threadCtx, threadName, timePerMailbox, eventsPerMailbox)
-        {}
-
-        TExecutorThread(TWorkerId workerId,
-                        TActorSystem* actorSystem,
-                        IExecutorPool* executorPool,
-                        TMailboxTable* mailboxTable,
-                        const TString& threadName,
-                        TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
-                        ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX)
-            : TExecutorThread(workerId, 0, actorSystem, executorPool, mailboxTable, nullptr, threadName, timePerMailbox, eventsPerMailbox)
-        {}
-
-        TExecutorThread(TWorkerId workerId,
+        TGenericExecutorThread(TWorkerId workerId,
                     TActorSystem* actorSystem,
                     TExecutorThreadCtx *threadCtx,
                     i16 poolCount,
@@ -84,7 +52,7 @@ namespace NActors {
                     TDuration timePerMailbox,
                     ui32 eventsPerMailbox);
 
-        virtual ~TExecutorThread();
+        virtual ~TGenericExecutorThread();
 
         void UpdatePools();
 
@@ -147,6 +115,63 @@ namespace NActors {
 
         std::atomic<EState> NeedToReloadPools = EState::NeedToReloadPools;
         std::vector<TExecutorThreadStats> SharedStats;
+    };
+
+    class TExecutorThread: public TGenericExecutorThread {
+    public:
+        TExecutorThread(TWorkerId workerId,
+                        TWorkerId cpuId,
+                        TActorSystem* actorSystem,
+                        IExecutorPool* executorPool,
+                        TMailboxTable* mailboxTable,
+                        TExecutorThreadCtx *threadCtx,
+                        const TString& threadName,
+                        TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
+                        ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX)
+            : TGenericExecutorThread(workerId, cpuId, actorSystem, executorPool, mailboxTable, threadCtx, threadName, timePerMailbox, eventsPerMailbox)
+        {}
+
+        TExecutorThread(TWorkerId workerId,
+                        TWorkerId cpuId,
+                        TActorSystem* actorSystem,
+                        IExecutorPool* executorPool,
+                        TMailboxTable* mailboxTable,
+                        const TString& threadName,
+                        TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
+                        ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX)
+            : TGenericExecutorThread(workerId, cpuId, actorSystem, executorPool, mailboxTable, nullptr, threadName, timePerMailbox, eventsPerMailbox)
+        {}
+
+        TExecutorThread(TWorkerId workerId,
+                        TActorSystem* actorSystem,
+                        IExecutorPool* executorPool,
+                        TMailboxTable* mailboxTable,
+                        TExecutorThreadCtx *threadCtx,
+                        const TString& threadName,
+                        TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
+                        ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX)
+            : TGenericExecutorThread(workerId, 0, actorSystem, executorPool, mailboxTable, threadCtx, threadName, timePerMailbox, eventsPerMailbox)
+        {}
+
+        virtual ~TExecutorThread()
+        {}
+    };
+
+    class TSharedExecutorThread: public TGenericExecutorThread {
+    public:
+        TSharedExecutorThread(TWorkerId workerId,
+                    TActorSystem* actorSystem,
+                    TExecutorThreadCtx *threadCtx,
+                    i16 poolCount,
+                    const TString& threadName,
+                    ui64 softProcessingDurationTs,
+                    TDuration timePerMailbox,
+                    ui32 eventsPerMailbox)
+            : TGenericExecutorThread(workerId, actorSystem, threadCtx, poolCount, threadName, softProcessingDurationTs, timePerMailbox, eventsPerMailbox)
+        {}
+
+        virtual ~TSharedExecutorThread()
+        {}
     };
 
     template <typename TMailbox>

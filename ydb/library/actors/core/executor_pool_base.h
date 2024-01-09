@@ -27,7 +27,7 @@ namespace NActors {
         TMutex StuckObserverMutex;
         std::vector<IActor*> Actors;
         mutable std::vector<std::tuple<ui32, double>> DeadActorsUsage;
-        friend class TExecutorThread;
+        friend class TGenericExecutorThread;
         void RecalculateStuckActors(TExecutorThreadStats& stats) const;
 #endif
         TAtomic RegisterRevolvingCounter = 0;

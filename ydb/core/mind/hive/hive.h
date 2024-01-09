@@ -3,6 +3,7 @@
 
 #include <util/generic/queue.h>
 #include <util/random/random.h>
+#include <util/system/type_name.h>
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/statestorage.h>
@@ -109,7 +110,7 @@ struct ISubActor {
     virtual void Cleanup() = 0;
 
     virtual TString GetDescription() const {
-        return {};
+        return TypeName(*this);
     }
 
     virtual TSubActorId GetId() const = 0;

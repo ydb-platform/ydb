@@ -872,7 +872,7 @@ bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* 
         if (!EnsureAtom(*op, ctx)) {
             return false;
         }
-        if (!op->IsAtom({"eq", "neq", "lt", "lte", "gt", "gte", "string_contains", "starts_with", "ends_with", "+", "-", "*", "/", "%"})) {
+        if (!op->IsAtom({"eq", "neq", "lt", "lte", "gt", "gte", "string_contains", "starts_with", "ends_with", "+", "-", "*", "/", "%", "??"})) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
                 TStringBuilder() << "Unexpected OLAP binary operation: " << op->Content()
             ));

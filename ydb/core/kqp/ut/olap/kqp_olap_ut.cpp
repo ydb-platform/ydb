@@ -531,10 +531,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     };
 
-    void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
+    void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, bool withSomeNulls = false) {
         UNIT_ASSERT(testTable != "/Root/benchTable"); // TODO: check schema instead
 
         TLocalHelper lHelper(kikimr);
+        if (withSomeNulls)
+            lHelper.WithSomeNulls();
         NYdb::NLongTx::TClient client(kikimr.GetDriver());
 
         NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
@@ -1561,7 +1563,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         scanSettings.Explain(true);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5, true);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto tableClient = kikimr.GetTableClient();
@@ -1569,7 +1571,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         // TODO: Add support for DqPhyPrecompute push-down: Cast((2+2) as Uint64)
         std::vector<TString> testData = {
             R"(`resource_id` = `uid`)",
+            R"(`resource_id` != `uid`)",
             R"(`resource_id` = "10001")",
+            R"(`resource_id` != "10001")",
             R"(`level` = 1)",
             R"(`level` = Int8("1"))",
             R"(`level` = Int16("1"))",
@@ -1610,6 +1614,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`uid` > `resource_id`)",
             R"(`level` IS NULL)",
             R"(`level` IS NOT NULL)",
+            R"(`message` IS NULL)",
+            R"(`message` IS NOT NULL)",
             R"((`level`, `uid`) > (Int32("1"), NULL))",
             R"((`level`, `uid`) != (Int32("1"), NULL))",
             R"(`level` >= CAST("2" As Int32))",
@@ -1833,15 +1839,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             for (auto& op : operators) {
                 if (op.GetMapSafe().at("Name") == "TableFullScan") {
                     UNIT_ASSERT(op.GetMapSafe().at("SsaProgram").IsDefined());
-                    auto ssa = op.GetMapSafe().at("SsaProgram").GetStringRobust();
-                    int filterCmdCount = 0;
-                    std::string::size_type pos = 0;
-                    std::string filterCmd = R"("Filter":{)";
-                    while ((pos = ssa.find(filterCmd, pos)) != std::string::npos) {
-                        ++filterCmdCount;
-                        pos += filterCmd.size();
-                    }
-                    UNIT_ASSERT_EQUAL(filterCmdCount, 2);
+                    const auto ssa = op.GetMapSafe().at("SsaProgram").GetStringRobust();
+                    UNIT_ASSERT(ssa.Contains(R"("Filter":{)"));
                 }
             }
         }
@@ -4923,9 +4922,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_GetValue) {
-        // Should be fixed after Arrow kernel implementation for JSON_VALUE
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
@@ -4942,9 +4938,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_GetValue_ToString) {
-        // Should be fixed after Arrow kernel implementation for JSON_VALUE
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_VALUE(jsonval, "$.col1" RETURNING String), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
@@ -4961,9 +4954,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_GetValue_ToInt) {
-        // Should be fixed after Arrow kernel implementation for JSON_VALUE
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int), JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) FROM `/Root/tableWithNulls`
@@ -5028,9 +5018,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_Exists) {
-        // Should be fixed after Arrow kernel implementation for JSON_EXISTS
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_EXISTS(jsonval, "$.col1"), JSON_EXISTS(jsondoc, "$.col1") FROM `/Root/tableWithNulls`

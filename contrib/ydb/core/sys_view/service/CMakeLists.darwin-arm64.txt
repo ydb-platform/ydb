@@ -15,6 +15,7 @@ target_link_libraries(core-sys_view-service PUBLIC
   library-actors-core
   ydb-core-base
   ydb-core-protos
+  core-graph-api
   library-aclib-protos
 )
 target_sources(core-sys_view-service PRIVATE

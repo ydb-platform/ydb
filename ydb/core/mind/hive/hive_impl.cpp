@@ -2314,6 +2314,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
                 .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
                 .MaxInFlight = GetBalancerInflight(),
                 .FilterNodeIds = std::move(objectToBalance.Nodes),
+                .ResourceToBalance = EResourceToBalance::Counter,
                 .FilterObjectId = objectToBalance.ObjectId,
             });
             return;

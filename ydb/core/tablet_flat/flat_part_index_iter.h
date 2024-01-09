@@ -161,7 +161,7 @@ private:
         auto page = Env->TryGetPage(Part, pageId);
         if (page) {
             Index = TIndex(*page);
-            Y_VERIFY_DEBUG_S(EndRowId == Index->GetEndRowId() || Index->GetEndRowId() == Max<TRowId>(), "EndRowId mismatch " << EndRowId << " != " << Index->GetEndRowId() << " (group " << GroupId.Historic << "/" << GroupId.Index <<")");
+            Y_VERIFY_DEBUG_S(EndRowId == Index->GetEndRowId(), "EndRowId mismatch " << EndRowId << " != " << Index->GetEndRowId() << " (group " << GroupId.Historic << "/" << GroupId.Index <<")");
             return &*Index;
         }
         return { };

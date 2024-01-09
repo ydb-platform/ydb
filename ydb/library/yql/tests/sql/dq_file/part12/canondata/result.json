@@ -1282,9 +1282,9 @@
     ],
     "test.test[join-inmem_with_set_key_any--Debug]": [
         {
-            "checksum": "f358a04c22f3bbdb6284c9ee2bb7992e",
-            "size": 1791,
-            "uri": "https://{canondata_backend}/1880306/234eadcde1cd54bffae64f4516628981e02b093d/resource.tar.gz#test.test_join-inmem_with_set_key_any--Debug_/opt.yql_patched"
+            "checksum": "0edaf3acbdc3244f85b9ce47868fac9b",
+            "size": 2837,
+            "uri": "https://{canondata_backend}/1903885/6dbb180a1fb0bec551465ca4925bd6f374b599c7/resource.tar.gz#test.test_join-inmem_with_set_key_any--Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-inmem_with_set_key_any--Plan]": [

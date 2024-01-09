@@ -16,27 +16,31 @@ TString GetByKeyOrDefault(const NYql::TCreateObjectSettings& container, const TS
     return value ? *value : TString{};
 }
 
-void CheckFeatureFlag(TInternalModificationContext& context) {
+TYqlConclusionStatus CheckFeatureFlag(TInternalModificationContext& context) {
     auto* const actorSystem = context.GetExternalData().GetActorSystem();
     if (!actorSystem) {
-        ythrow TSystemError() << "This place needs an actor system. Please contact internal support";
+        ythrow yexception() << "This place needs an actor system. Please contact internal support";
     }
-    if (!AppData(actorSystem)->FeatureFlags.GetEnableViews()) {
-        ythrow TSystemError() << "Views are disabled. Please contact your system administrator to enable it";
+    return AppData(actorSystem)->FeatureFlags.GetEnableViews()
+        ? TYqlConclusionStatus::Success()
+        : TYqlConclusionStatus::Fail("Views are disabled. Please contact your system administrator to enable the feature");
+}
+
+std::pair<TString, TString> SplitPathByDb(const TString& objectId,
+                                          const TString& database) {
+    std::pair<TString, TString> pathPair;
+    TString error;
+    if (!TrySplitPathByDb(objectId, database, pathPair, error)) {
+        ythrow TBadArgumentException() << error;
     }
+    return pathPair;
 }
 
 void FillCreateViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
-                           const NYql::TCreateObjectSettings& settings,
-                           TInternalModificationContext& context) {
+                            const NYql::TCreateObjectSettings& settings,
+                            const TString& database) {
 
-    std::pair<TString, TString> pathPair;
-    {
-        TString error;
-        if (!TrySplitPathByDb(settings.GetObjectId(), context.GetExternalData().GetDatabase(), pathPair, error)) {
-            ythrow TBadArgumentException() << error;
-        }
-    }
+    const auto pathPair = SplitPathByDb(settings.GetObjectId(), database);
     modifyScheme.SetWorkingDir(pathPair.first);
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateView);
 
@@ -51,15 +55,9 @@ void FillCreateViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
 
 void FillDropViewProposal(NKikimrSchemeOp::TModifyScheme& modifyScheme,
                          const NYql::TDropObjectSettings& settings,
-                         TInternalModificationContext& context) {
+                         const TString& database) {
 
-    std::pair<TString, TString> pathPair;
-    {
-        TString error;
-        if (!TrySplitPathByDb(settings.GetObjectId(), context.GetExternalData().GetDatabase(), pathPair, error)) {
-            ythrow TBadArgumentException() << error;
-        }
-    }
+    const auto pathPair = SplitPathByDb(settings.GetObjectId(), database);
     modifyScheme.SetWorkingDir(pathPair.first);
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropView);
 
@@ -92,7 +90,7 @@ NThreading::TFuture<TYqlConclusionStatus> CreateView(const NYql::TCreateObjectSe
         proposal->Record.SetUserToken(context.GetExternalData().GetUserToken()->GetSerializedToken());
     }
     auto& schemeTx = *proposal->Record.MutableTransaction()->MutableModifyScheme();
-    FillCreateViewProposal(schemeTx, settings, context);
+    FillCreateViewProposal(schemeTx, settings, context.GetExternalData().GetDatabase());
 
     return SendSchemeRequest(proposal.Release(), context.GetExternalData().GetActorSystem(), true);
 }
@@ -105,7 +103,7 @@ NThreading::TFuture<TYqlConclusionStatus> DropView(const NYql::TDropObjectSettin
         proposal->Record.SetUserToken(context.GetExternalData().GetUserToken()->GetSerializedToken());
     }
     auto& schemeTx = *proposal->Record.MutableTransaction()->MutableModifyScheme();
-    FillDropViewProposal(schemeTx, settings, context);
+    FillDropViewProposal(schemeTx, settings, context.GetExternalData().GetDatabase());
 
     return SendSchemeRequest(proposal.Release(), context.GetExternalData().GetActorSystem(), false);
 }
@@ -113,13 +111,13 @@ NThreading::TFuture<TYqlConclusionStatus> DropView(const NYql::TDropObjectSettin
 void PrepareCreateView(NKqpProto::TKqpSchemeOperation& schemeOperation,
                        const NYql::TObjectSettingsImpl& settings,
                        TInternalModificationContext& context) {
-    FillCreateViewProposal(*schemeOperation.MutableCreateView(), settings, context);
+    FillCreateViewProposal(*schemeOperation.MutableCreateView(), settings, context.GetExternalData().GetDatabase());
 }
 
 void PrepareDropView(NKqpProto::TKqpSchemeOperation& schemeOperation,
                      const NYql::TObjectSettingsImpl& settings,
                      TInternalModificationContext& context) {
-    FillDropViewProposal(*schemeOperation.MutableDropView(), settings, context);
+    FillDropViewProposal(*schemeOperation.MutableDropView(), settings, context.GetExternalData().GetDatabase());
 }
 
 }
@@ -129,21 +127,28 @@ NThreading::TFuture<TYqlConclusionStatus> TViewManager::DoModify(const NYql::TOb
                                                                  const NMetadata::IClassBehaviour::TPtr& manager,
                                                                  TInternalModificationContext& context) const {
     Y_UNUSED(nodeId, manager);
+    const auto makeFuture = [](const TYqlConclusionStatus& status) {
+        return NThreading::MakeFuture<TYqlConclusionStatus>(status);
+    };
 
     try {
-        CheckFeatureFlag(context);
+        if (const auto status = CheckFeatureFlag(context); status.IsFail()) {
+            return makeFuture(status);
+        }
         switch (context.GetActivityType()) {
             case EActivityType::Alter:
+                return makeFuture(TYqlConclusionStatus::Fail("Alter operation for VIEW objects is not implemented"));
             case EActivityType::Upsert:
+                return makeFuture(TYqlConclusionStatus::Fail("Upsert operation for VIEW objects is not implemented"));
             case EActivityType::Undefined:
-                ythrow TBadArgumentException() << "not implemented";
+                return makeFuture(TYqlConclusionStatus::Fail("Undefined operation for a VIEW object"));
             case EActivityType::Create:
                 return CreateView(settings, context);
             case EActivityType::Drop:
                 return DropView(settings, context);
         }
     } catch (...) {
-        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(CurrentExceptionMessage()));
+        return makeFuture(TYqlConclusionStatus::Fail(CurrentExceptionMessage()));
     }
 }
 
@@ -154,14 +159,16 @@ TViewManager::TYqlConclusionStatus TViewManager::DoPrepare(NKqpProto::TKqpScheme
     Y_UNUSED(manager);
 
     try {
-        CheckFeatureFlag(context);
+        if (const auto status = CheckFeatureFlag(context); status.IsFail()) {
+            return status;
+        }
         switch (context.GetActivityType()) {
             case EActivityType::Undefined:
-                ythrow TBadArgumentException() << "Undefined operation for a VIEW object";
+                return TYqlConclusionStatus::Fail("Undefined operation for a VIEW object");
             case EActivityType::Upsert:
-                ythrow TBadArgumentException() << "Upsert operation for VIEW objects is not implemented";
+                return TYqlConclusionStatus::Fail("Upsert operation for VIEW objects is not implemented");
             case EActivityType::Alter:
-                ythrow TBadArgumentException() << "Alter operation for VIEW objects is not implemented";
+                return TYqlConclusionStatus::Fail("Alter operation for VIEW objects is not implemented");
             case EActivityType::Create:
                 PrepareCreateView(schemeOperation, settings, context);
                 break;

@@ -58,7 +58,7 @@ void AddChild(const TExprNode::TPtr& parent, const TExprNode::TPtr& newChild) {
 }
 
 void ChangeChild(const TExprNode::TPtr& parent, ui32 index, const TExprNode::TPtr& newChild) {
-    Y_ENSURE(parent->ChildrenSize() > index);
+    YQL_ENSURE(parent->ChildrenSize() > index);
 
     auto childrenToChange = parent->ChildrenList();
     childrenToChange[index] = newChild;
@@ -121,10 +121,10 @@ TExprNode::TPtr FindTopLevelRead(const TExprNode::TPtr& queryGraph) {
         return nullptr;
     }
 
-    Y_ENSURE(CheckTopLevelness(*lastReadInTopologicalOrder, queryGraph),
-             "Info for developers: assumption that there is only one top level Read! is wrong\
-             for the expression graph of the query stored in the view:\n"
-                 << queryGraph->Dump());
+    YQL_ENSURE(CheckTopLevelness(*lastReadInTopologicalOrder, queryGraph),
+               "Info for developers: assumption that there is only one top level Read! is wrong "
+               "for the expression graph of the query stored in the view:\n"
+                   << queryGraph->Dump());
 
     return *lastReadInTopologicalOrder;
 }

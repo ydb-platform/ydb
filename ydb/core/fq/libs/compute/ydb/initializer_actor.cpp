@@ -75,7 +75,7 @@ public:
         LOG_I("Start initializer actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
         if (!Params.RequestStartedAt) {
             Become(&TInitializerActor::StateFunc);
-            Send(NFq::ComputeDatabaseControlPlaneServiceActorId(), new TEvYdbCompute::TEvCpuQuotaRequest(Params.Scope.ToString()));
+            Send(NFq::ComputeDatabaseControlPlaneServiceActorId(), new TEvYdbCompute::TEvCpuQuotaRequest(Params.Scope.ToString(), Params.Deadline));
         } else {
             LOG_I("Query has been initialized (did nothing)");
             Send(Parent, new TEvYdbCompute::TEvInitializerResponse({}, NYdb::EStatus::SUCCESS));
@@ -90,14 +90,14 @@ public:
 
     void Handle(TEvYdbCompute::TEvCpuQuotaResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
-        if (response.QuotaGranted) {
+        if (response.Status == NYdb::EStatus::SUCCESS) {
             auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
             pingCounters->InFly->Inc();
             Fq::Private::PingTaskRequest pingTaskRequest;
             *pingTaskRequest.mutable_started_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(TInstant::Now().MilliSeconds());
             Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
         } else {
-            Send(Parent, new TEvYdbCompute::TEvInitializerResponse(response.Issues, NYdb::EStatus::OVERLOADED));
+            Send(Parent, new TEvYdbCompute::TEvInitializerResponse(response.Issues, response.Status));
             FailedAndPassAway();
         }
     }

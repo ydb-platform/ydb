@@ -467,20 +467,21 @@ struct TEvYdbCompute {
     };
 
     struct TEvCpuQuotaRequest : public NActors::TEventLocal<TEvCpuQuotaRequest, EvCpuQuotaRequest> {
-        TEvCpuQuotaRequest(const TString& scope, double quota = 0.0)
-            : Scope(scope), Quota(quota)
+        TEvCpuQuotaRequest(const TString& scope, TInstant deadline = TInstant::Zero(), double quota = 0.0)
+            : Scope(scope), Deadline(deadline), Quota(quota)
         {}
 
         TString Scope;
+        TInstant Deadline;
         double Quota; // if zero, default quota is used
     };
 
     struct TEvCpuQuotaResponse : public NActors::TEventLocal<TEvCpuQuotaResponse, EvCpuQuotaResponse> {
-        TEvCpuQuotaResponse(bool quotaGranted, NYql::TIssues issues = {})
-            : QuotaGranted(quotaGranted), Issues(std::move(issues))
+        TEvCpuQuotaResponse(NYdb::EStatus status = NYdb::EStatus::SUCCESS, NYql::TIssues issues = {})
+            : Status(status), Issues(std::move(issues))
         {}
 
-        bool QuotaGranted;
+        NYdb::EStatus Status;
         NYql::TIssues Issues;
     };
 };

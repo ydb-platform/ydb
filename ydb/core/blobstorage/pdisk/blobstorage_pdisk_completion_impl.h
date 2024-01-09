@@ -160,7 +160,6 @@ class TCompletionChunkRead : public TCompletionAction {
     TAtomic Deletes;
     std::function<void()> OnDestroy;
     ui64 ChunkNonce;
-    TMutex SpanStackLock;
 
     const ui64 DoubleFreeCanary;
 public:
@@ -216,10 +215,11 @@ class TCompletionChunkReadPart : public TCompletionAction {
     TBuffer::TPtr Buffer;
     bool IsTheLastPart;
     TControlWrapper UseT1ha0Hasher;
+    NWilson::TSpan Span;
 public:
     TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, ui64 rawReadSize, ui64 payloadReadSize,
             ui64 commonBufferOffset, TCompletionChunkRead *cumulativeCompletion, bool isTheLastPart,
-            const TControlWrapper& useT1ha0Hasher);
+            const TControlWrapper& useT1ha0Hasher, NWilson::TSpan&& span);
 
 
     bool CanHandleResult() const override {

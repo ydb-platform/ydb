@@ -221,7 +221,7 @@ public:
         , CompletionAction(ev->Get()->CompletionAction)
         , ReqId(ev->Get()->ReqId)
     {
-        if (auto span = SpanStack.PeekTop(); span) {
+        if (auto span = SpanStack.PeekTop()) {
             (*span)
                 .Attribute("size", ev->Get()->Size)
                 .Attribute("offset", static_cast<i64>(ev->Get()->Offset))

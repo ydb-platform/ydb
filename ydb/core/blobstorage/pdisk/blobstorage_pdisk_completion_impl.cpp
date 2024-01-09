@@ -116,7 +116,7 @@ void TCompletionLogWrite::Release(TActorSystem *actorSystem) {
 
 TCompletionChunkReadPart::TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, ui64 rawReadSize,
         ui64 payloadReadSize, ui64 commonBufferOffset, TCompletionChunkRead *cumulativeCompletion, bool isTheLastPart,
-        const TControlWrapper& useT1ha0Hasher)
+        const TControlWrapper& useT1ha0Hasher, NWilson::TSpan&& span)
     : TCompletionAction()
     , PDisk(pDisk)
     , Read(read)
@@ -127,6 +127,7 @@ TCompletionChunkReadPart::TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<
     , Buffer(PDisk->BufferPool->Pop())
     , IsTheLastPart(isTheLastPart)
     , UseT1ha0Hasher(useT1ha0Hasher)
+    , Span(std::move(span))
 {
     if (!IsTheLastPart) {
         CumulativeCompletion->AddPart();
@@ -145,6 +146,7 @@ TBuffer *TCompletionChunkReadPart::GetBuffer() {
 }
 
 void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
+    Span.Event("exec", {});
     Y_ABORT_UNLESS(actorSystem);
     Y_ABORT_UNLESS(CumulativeCompletion);
     if (TCompletionAction::Result != EIoResult::Ok) {
@@ -344,12 +346,6 @@ void TCompletionChunkRead::ReplyError(TActorSystem *actorSystem, TString reason)
 // Returns true if there is some pending requests to wait
 bool TCompletionChunkRead::PartReadComplete(TActorSystem *actorSystem) {
     TAtomicBase partsPending = AtomicDecrement(PartsPending);
-    {
-        TGuard lk(SpanStackLock);
-        if (auto span = Read->SpanStack.PeekTop()) {
-            span->Event("PartReadComplete");
-        }
-    }
     if (partsPending == 0) {
         if (AtomicGet(Deletes) == 0) {
             Exec(actorSystem);

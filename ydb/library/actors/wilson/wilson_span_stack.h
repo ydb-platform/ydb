@@ -81,4 +81,4 @@ namespace NWilson {
         std::unique_ptr<TStackNode> Top;
     };
 
-} //namespace NWilson
+} // NWilson

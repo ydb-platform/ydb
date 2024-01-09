@@ -11,6 +11,7 @@ SRCS(
     string/printf_ut.cpp
     string/split_ut.cpp
     string/strip_ut.cpp
+    string/strspn_ut.cpp
     string/subst_ut.cpp
     string/type_ut.cpp
     string/util_ut.cpp

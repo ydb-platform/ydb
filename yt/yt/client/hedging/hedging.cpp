@@ -88,7 +88,7 @@ public:
     RETRYABLE_METHOD(TFuture<NYson::TYsonString>, ListNode, (const NYPath::TYPath&, const TListNodeOptions&));
     RETRYABLE_METHOD(TFuture<bool>, NodeExists, (const NYPath::TYPath&, const TNodeExistsOptions&));
     RETRYABLE_METHOD(TFuture<IFileReaderPtr>, CreateFileReader, (const NYPath::TYPath&, const TFileReaderOptions&));
-    RETRYABLE_METHOD(TFuture<std::vector<TUnversionedLookupRowsResult>>, MultiLookup, (const std::vector<TMultiLookupSubrequest>&, const TMultiLookupOptions&));
+    RETRYABLE_METHOD(TFuture<std::vector<TUnversionedLookupRowsResult>>, MultiLookupRows, (const std::vector<TMultiLookupSubrequest>&, const TMultiLookupOptions&));
 
     // Unsupported methods.
     UNSUPPORTED_METHOD(TFuture<ITransactionPtr>, StartTransaction, (NTransactionClient::ETransactionType, const TTransactionStartOptions&));

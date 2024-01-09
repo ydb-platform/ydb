@@ -358,6 +358,8 @@ struct TListJobsResult
 
 struct IOperationClient
 {
+    virtual ~IOperationClient() = default;
+
     virtual TFuture<NScheduler::TOperationId> StartOperation(
         NScheduler::EOperationType type,
         const NYson::TYsonString& spec,

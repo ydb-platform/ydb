@@ -74,6 +74,8 @@ struct TTransactionAttachOptions
 
 struct ITransactionClientBase
 {
+    virtual ~ITransactionClientBase() = default;
+
     virtual TFuture<ITransactionPtr> StartTransaction(
         NTransactionClient::ETransactionType type,
         const TTransactionStartOptions& options = {}) = 0;
@@ -83,6 +85,8 @@ struct ITransactionClientBase
 
 struct ITransactionClient
 {
+    virtual ~ITransactionClient() = default;
+
     virtual ITransactionPtr AttachTransaction(
         NTransactionClient::TTransactionId transactionId,
         const TTransactionAttachOptions& options = {}) = 0;

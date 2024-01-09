@@ -144,6 +144,8 @@ struct TAlterQueryOptions
 
 struct IQueryTrackerClient
 {
+    virtual ~IQueryTrackerClient() = default;
+
     virtual TFuture<NQueryTrackerClient::TQueryId> StartQuery(
         NQueryTrackerClient::EQueryEngine engine,
         const TString& query,

@@ -9,6 +9,7 @@
 
 #include <yt/yt/client/table_client/adapters.h>
 #include <yt/yt/client/table_client/blob_reader.h>
+#include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/row_buffer.h>
 #include <yt/yt/client/table_client/table_consumer.h>
 #include <yt/yt/client/table_client/table_output.h>

@@ -34,6 +34,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
         READ_CONFIG_COOKIE  = 3,
         WRITE_STATE_COOKIE  = 4,
         WRITE_TX_COOKIE = 5,
+        PERSIST_WRITEID_COOKIE = 6,
     };
 
     void CreatedHook(const TActorContext& ctx) override;
@@ -103,6 +104,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     void ReadTxInfo(const NKikimrClient::TKeyValueResponse::TReadResult& read,
                     const TActorContext& ctx);
+    void ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResult& read,
+                      const TActorContext& ctx);
     void ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read,
                     const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
                     const TActorContext& ctx);
@@ -173,6 +176,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     static constexpr const char * KeyConfig() { return "_config"; }
     static constexpr const char * KeyState() { return "_state"; }
     static constexpr const char * KeyTxInfo() { return "_txinfo"; }
+    static constexpr const char * KeyTxWrites() { return "_txwrites"; }
 
     static NTabletPipe::TClientConfig GetPipeClientConfig();
 
@@ -189,6 +193,15 @@ private:
     bool InitCompleted = false;
     THashMap<TPartitionId, TPartitionInfo> Partitions;
     THashMap<TString, TIntrusivePtr<TEvTabletCounters::TInFlightCookie>> CounterEventsInflight;
+
+    struct TTxWriteInfo {
+        THashMap<ui32, ui32> Partitions;
+        TMaybe<ui64> TxId;
+    };
+
+    THashMap<ui64, TTxWriteInfo> TxWrites;
+    THashMap<ui32, TPartitionInfo> ShadowPartitions; // TxWrites -> shadowPartitionId -> ShadowPartitions
+    ui32 NextShadowPartitionId = 100'000;
 
     TActorId CacheActor;
 
@@ -288,6 +301,7 @@ private:
     void ProcessConfigTx(const TActorContext& ctx,
                          TEvKeyValue::TEvRequest* request);
     void AddCmdWriteTabletTxInfo(NKikimrClient::TKeyValueRequest& request);
+    void AddCmdWriteTabletTxWrites(NKikimrClient::TKeyValueRequest& request);
 
     void ScheduleProposeTransactionResult(const TDistributedTransaction& tx);
 
@@ -408,6 +422,41 @@ private:
     TMaybe<ui64> TabletGeneration;
 
     TPartitionId MakePartitionId(ui32 originalPartitionId, TMaybe<ui64> writeId) const;
+
+    void InitPlanStep(const NKikimrPQ::TTabletTxInfo& info);
+    void InitPlanStep();
+    void SavePlanStep(NKikimrPQ::TTabletTxInfo& info);
+
+    void InitTxWrites(const NKikimrPQ::TTabletTxWrites& info);
+    void InitTxWrites();
+    void SaveTxWrites(NKikimrPQ::TTabletTxWrites& info);
+
+    void HandleShadowPartition(const ui64 responseCookie,
+                               const NKikimrClient::TPersQueuePartitionRequest& req,
+                               const TActorId& sender,
+                               const TActorContext& ctx);
+
+    void TryPersistWriteId(const TActorContext& ctx);
+    void BeginPersistWriteId(const ui64 responseCookie,
+                             const NKikimrClient::TPersQueuePartitionRequest& req,
+                             const TActorContext& ctx,
+                             const TActorId& sender);
+    void EndPersistWriteId(const NKikimrClient::TResponse& resp,
+                           const TActorContext& ctx);
+
+    void ForwardReserveBytesRequestsToShadowPartitions(const TActorContext& ctx);
+    void CreateShadowPartition(ui32 shadowPartitionId,
+                               const TActorContext& ctx);
+
+    struct TReserveBytesRequestParams {
+        ui64 Cookie;
+        NKikimrClient::TPersQueuePartitionRequest Request;
+        TActorId Sender;
+    };
+
+    TDeque<TReserveBytesRequestParams> ReserveBytesRequestQueue;
+    TVector<TReserveBytesRequestParams> ReserveBytesRequestParams;
+    bool PendingPersistWriteId = false;
 };
 
 

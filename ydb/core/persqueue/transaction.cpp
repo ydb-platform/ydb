@@ -2,7 +2,7 @@
 #include "utils.h"
 
 namespace NKikimr::NPQ {
- 
+
 TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& tx) :
     TDistributedTransaction()
 {
@@ -44,6 +44,10 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
 
     Y_ABORT_UNLESS(tx.HasSourceActor());
     SourceActor = ActorIdFromProto(tx.GetSourceActor());
+
+    if (tx.HasWriteId()) {
+        WriteId = tx.GetWriteId();
+    }
 }
 
 void TDistributedTransaction::InitDataTransaction(const NKikimrPQ::TTransaction& tx)
@@ -132,6 +136,8 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransac
     }
 
     InitPartitions(txBody.GetOperations());
+
+    WriteId = txBody.HasWriteId() ? txBody.GetWriteId() : Max<ui64>();
 
     PartitionRepliesCount = 0;
     PartitionRepliesExpected = 0;
@@ -333,6 +339,9 @@ void TDistributedTransaction::AddCmdWriteDataTx(NKikimrPQ::TTransaction& tx)
     }
     if (ParticipantsDecision != NKikimrTx::TReadSetData::DECISION_UNKNOWN) {
         tx.SetAggrPredicate(ParticipantsDecision == NKikimrTx::TReadSetData::DECISION_COMMIT);
+    }
+    if (WriteId != Max<ui64>()) {
+        tx.SetWriteId(WriteId);
     }
 }
 
